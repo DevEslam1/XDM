@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'file_utils.dart';
 import 'package:dmx/core/services/logging_service.dart';
+import '../services/site_intelligence/site_intelligence_service.dart';
 
 bool isHttpUrl(String value) {
   final uri = Uri.tryParse(value.trim());
@@ -32,6 +33,10 @@ String? extractUrlFromText(String text) {
 bool isMagnetUrl(String value) {
   final clean = value.trim();
   if (!clean.toLowerCase().startsWith('magnet:')) return false;
+
+  // Enhance: accept tracker-only magnets common on some indexers
+  if (clean.contains('tr=') && !clean.contains('xt=')) return true;
+
   final parsed = parseMagnetUrl(clean);
   final infoHash = parsed['infoHash'];
   if (infoHash == null || infoHash.isEmpty) return false;
@@ -80,8 +85,15 @@ bool isValidTransmissionUrl(String value) {
   return isHttpUrl(trimmed) ||
       isMagnetUrl(trimmed) ||
       isTorrentFileUrl(trimmed) ||
-      trimmed.toLowerCase().endsWith('.torrent');
+      trimmed.toLowerCase().endsWith('.torrent') ||
+      (trimmed.toLowerCase().startsWith('magnet:') && trimmed.contains('tr='));
 }
+
+UrlAnalysisResult analyzeUrl(String url) =>
+    SiteIntelligenceService().analyzeUrl(url);
+
+MagnetAnalysis analyzeMagnet(String url) =>
+    SiteIntelligenceService().analyzeMagnet(url);
 
 Map<String, String> parseMagnetUrl(String magnetUrl) {
   final Map<String, String> result = {};

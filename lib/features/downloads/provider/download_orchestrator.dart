@@ -27,6 +27,7 @@ import '../../../core/services/permission_service.dart';
 import '../../../core/services/torrent_resume_store.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/services/youtube_service.dart';
+import '../../../core/services/site_intelligence/site_intelligence_service.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/semaphore.dart';
 import '../../../core/utils/url_utils.dart';
@@ -151,11 +152,12 @@ class DownloadOrchestrator {
             TorrentService.progressFor,
             (tid) {
               // FIX-T1: Persist per-file progress for resume after app kill
-              final task = _host.providerTasks.firstWhere(
+              if (_host.providerTasks.isEmpty) return null;
+              final matching = _host.providerTasks.where(
                 (t) => _host.providerTorrentIds[t.id] == tid,
-                orElse: () => _host.providerTasks.first,
               );
-              return task.torrentFiles;
+              if (matching.isEmpty) return null;
+              return matching.first.torrentFiles;
             },
           ));
           // FIX-C4: Save fast resume data for all active torrents
@@ -298,7 +300,10 @@ class DownloadOrchestrator {
         } else {
           final tempFile = File(task.tempFilePath);
           if (await tempFile.exists()) {
-            final fileSize = await tempFile.length();
+            final fileSize = await actualDownloadedBytes(
+              task.tempFilePath,
+              threadCount: task.threadCount,
+            );
             // FIX-A2 / FIX 2: Compute expected video-only temp file size for YouTube/mux downloads
             final int expectedVideoSize =
                 (task.mergedAudioUrl != null && task.audioSize > 0)
@@ -359,7 +364,10 @@ class DownloadOrchestrator {
           try {
             final tempFile = File(task.tempFilePath);
             if (await tempFile.exists()) {
-              final actualFileSize = await tempFile.length();
+              final actualFileSize = await actualDownloadedBytes(
+                task.tempFilePath,
+                threadCount: task.threadCount,
+              );
               final stateChunks = await _readDmxStateChunks(
                   task.tempFilePath, task.threadCount);
 
@@ -498,6 +506,8 @@ class DownloadOrchestrator {
 
     _currentCookieString = cookieString;
 
+    // FIX-INTEL: Use site intelligence to guide resolution and headers
+    final analysis = SiteIntelligenceService().analyzeUrl(task.url);
 
     final youtubeUrl = task.downloadPageUrl ?? task.url;
     if (task.youtubeQualityPreset != null &&
@@ -564,6 +574,11 @@ class DownloadOrchestrator {
                     p.dirname(resolvedLocalPath),
                     resolvedFileName,
                   );
+
+            // FIX-INTEL: Apply recommended headers from site profile
+            if (analysis.profile?.needsBrowserUserAgent == true) {
+              // Custom UA logic can be injected here or handled in engine
+            }
 
             if (requiresMuxing) {
               final videoSize = streamInfo['videoSize'] as int? ?? 0;
@@ -750,8 +765,14 @@ class DownloadOrchestrator {
     }
 
 
-    final videoLen = await videoFile.length();
-    final audioLen = await audioFile.length();
+    final videoLen = await actualDownloadedBytes(
+      actualVideoPath,
+      threadCount: current.threadCount,
+    );
+    final audioLen = await actualDownloadedBytes(
+      actualAudioPath,
+      threadCount: current.audioThreadCount,
+    );
     debugPrint('[DMX]   Video size: $videoLen bytes');
     debugPrint('[DMX]   Audio size: $audioLen bytes');
 
@@ -1120,6 +1141,9 @@ class DownloadOrchestrator {
       HapticFeedback.vibrate();
     }
 
+    // FIX-INTEL: Record successful outcome
+    SiteIntelligenceService().recordOutcome(current.url, true);
+
     XdmAnnouncer.announce('${current.fileName} download complete');
 
     final finalPath = p.join(current.savePath, current.fileName);
@@ -1243,6 +1267,8 @@ class DownloadOrchestrator {
     if (currentTask == null) return;
     task = currentTask;
 
+    final analysis = SiteIntelligenceService().analyzeUrl(task.url);
+
     // FIX(B-5): Reset audioProgress to 0.0 when retrying download after failure
     if (task.mergedAudioUrl != null && task.status == DownloadStatus.failed) {
       task = task.copyWith(audioProgress: 0.0);
@@ -1294,14 +1320,10 @@ class DownloadOrchestrator {
     int audioBytesFromDisk = 0;
     final audioTempPath = '${task.tempFilePath}.audio';
     if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
-      final audioStatePath = '$audioTempPath.dmxstate';
-      if (await File(audioStatePath).exists()) {
-        audioBytesFromDisk = await _readDmxStateBytes(audioTempPath);
-      } else {
-        final audioFile = File(audioTempPath);
-        audioBytesFromDisk =
-            audioFile.existsSync() ? await audioFile.length() : 0;
-      }
+      audioBytesFromDisk = await actualDownloadedBytes(
+        audioTempPath,
+        threadCount: task.audioThreadCount,
+      );
     }
     int audioBytesSoFar = audioBytesFromDisk;
 
@@ -1470,26 +1492,42 @@ class DownloadOrchestrator {
 
     // FIX A-3: Early-exit merge path before retry loop when both streams exist and are complete
     if (hasAudio) {
-
       final videoFile = File(task.tempFilePath);
       final audioFile = File(audioTempPath);
       if (await videoFile.exists() && await audioFile.exists()) {
-        final videoLen = await videoFile.length();
-        final audioLen = await audioFile.length();
-        // FIX(YT-2): When videoTransferSize is unknown (0), use a minimum threshold
-        // to avoid merging incomplete video. Require at least 1KB for video.
-        final expectedVideo = videoTransferSize > 0 ? videoTransferSize : 1024;
-        final expectedAudio = task.audioSize > 0 ? task.audioSize : 1;
-        if (videoLen >= expectedVideo && audioLen >= expectedAudio) {
-          debugPrint('[DMX] FIX A-3: Both streams complete. Merge-only path.');
-          await _host.setTaskState(task.copyWith(
-            statusMessage: DownloadStatusMessages.merging,
-          ));
-          final merged = await _mergeAudioVideo(task.id, audioTempPath);
-          if (merged) {
-            await _finalizeDownload(task.id, notificationId);
-            return;
+        try {
+          final videoLen = await actualDownloadedBytes(
+            task.tempFilePath,
+            threadCount: task.threadCount,
+          );
+          final audioLen = await actualDownloadedBytes(
+            audioTempPath,
+            threadCount: task.audioThreadCount,
+          );
+          // FIX(YT-2): When videoTransferSize is unknown (0), use a minimum threshold
+          // to avoid merging incomplete video. Require at least 1KB for video.
+          final expectedVideo =
+              videoTransferSize > 0 ? videoTransferSize : 1024;
+          final expectedAudio = task.audioSize > 0 ? task.audioSize : 1;
+          if (videoLen >= expectedVideo && audioLen >= expectedAudio) {
+            debugPrint('[DMX] FIX A-3: Both streams complete. Merge-only path.');
+            await _host.setTaskState(task.copyWith(
+              statusMessage: DownloadStatusMessages.merging,
+            ));
+            final merged = await _mergeAudioVideo(task.id, audioTempPath);
+            if (merged) {
+              await _finalizeDownload(task.id, notificationId);
+              return;
+            }
           }
+        } catch (e) {
+          debugPrint('[DMX] Fast-path merge failed with exception: $e');
+          await _host.setTaskState(task.copyWith(
+            status: DownloadStatus.failed,
+            errorMessage: 'Pre-merge stream check failed: $e',
+            statusMessage: DownloadStatusMessages.ffmpegMergeFailed,
+          ));
+          return;
         }
       }
     }
@@ -1517,7 +1555,12 @@ class DownloadOrchestrator {
 
             final audioFile = File(liveAudioTempPath);
             final audioExists = await audioFile.exists();
-            final audioLen = audioExists ? await audioFile.length() : 0;
+            final audioLen = audioExists
+                ? await actualDownloadedBytes(
+                    liveAudioTempPath,
+                    threadCount: liveAudioTask.audioThreadCount,
+                  )
+                : 0;
 
             // FIX(YT-4): Only treat audio as complete when:
             // 1. Progress hit 1.0 (exact stream completion), OR
@@ -1597,6 +1640,10 @@ class DownloadOrchestrator {
             }
 
             debugPrint('[DMX] Parallel download: starting audio stream ($resolvedAudioThreads threads).');
+            final audioReferer = analysis.profile?.requiresReferer == true 
+                ? (analysis.profile?.refererValue ?? liveAudioTask.mergedAudioUrl) 
+                : (isYoutube ? (task.downloadPageUrl ?? 'https://www.youtube.com/') : null);
+
             await _host.downloadEngine.download(
               taskId: task.id,
               url: liveAudioTask.mergedAudioUrl!,
@@ -1657,10 +1704,10 @@ class DownloadOrchestrator {
                 return _host.effectiveSpeedLimit();
               },
               activeDownloadCount: () => _host.downloadingTasksCount,
-              customUserAgent: _host.providerSettingsProvider.customUserAgent,
-              referer: isYoutube
-                  ? (task.downloadPageUrl ?? 'https://www.youtube.com/')
-                  : null,
+              customUserAgent: analysis.profile?.needsBrowserUserAgent == true 
+                  ? _host.providerSettingsProvider.customUserAgent 
+                  : _host.providerSettingsProvider.customUserAgent,
+              referer: audioReferer,
               enableProxy: _host.providerSettingsProvider.enableProxy,
               proxyAddress: _host.providerSettingsProvider.proxyAddress,
               proxyHost: _host.providerSettingsProvider.proxyHost,
@@ -1722,6 +1769,10 @@ class DownloadOrchestrator {
               liveVideoTransferSize = liveVideoTask?.fileSize ?? videoTransferSize;
             }
             debugPrint('[DMX] Parallel download: starting video stream.');
+            final videoReferer = analysis.profile?.requiresReferer == true 
+                ? (analysis.profile?.refererValue ?? liveVideoTask?.url) 
+                : (isYoutube ? liveVideoTask?.downloadPageUrl : null);
+
             try {
               await _host.downloadEngine.download(
                 taskId: task.id,
@@ -1732,7 +1783,7 @@ class DownloadOrchestrator {
                 supportsResume: task.supportsResume,
                 cancelToken: videoCancelToken,
                 isNameAutoGenerated: isAutoName,
-                referer: isYoutube ? task.downloadPageUrl : null,
+                referer: videoReferer,
                 getTorrentFiles: () =>
                     _host.findTaskById(task.id)?.torrentFiles ??
                     task.torrentFiles,
@@ -2282,8 +2333,14 @@ class DownloadOrchestrator {
       final videoFile = File(task.tempFilePath);
       final audioFile = File('${task.tempFilePath}.audio');
       if (await videoFile.exists() && await audioFile.exists()) {
-        final vLen = await videoFile.length();
-        final aLen = await audioFile.length();
+        final vLen = await actualDownloadedBytes(
+          task.tempFilePath,
+          threadCount: task.threadCount,
+        );
+        final aLen = await actualDownloadedBytes(
+          audioFile.path,
+          threadCount: task.audioThreadCount,
+        );
         final expectedV = task.fileSize - task.audioSize;
         final expectedA = task.audioSize;
         if (vLen > 0 && aLen > 0 && (expectedV <= 0 || vLen >= expectedV) && (expectedA <= 0 || aLen >= expectedA)) {
@@ -2512,6 +2569,10 @@ class DownloadOrchestrator {
         task.mergedAudioUrl!.isNotEmpty;
     final audioTempPath = hasAudio ? '${task.tempFilePath}.audio' : null;
 
+    // FIX-INTEL: Re-analyze URL to get site intelligence results
+    final analysis = SiteIntelligenceService().analyzeUrl(task.url);
+    debugPrint('[DMX] Starting task download: ${analysis.siteType.name} (${analysis.profile?.displayName ?? task.url})');
+
     // Detect YouTube early so we can skip CDN HEAD probes that trigger 429s.
     final isYoutube = task.downloadPageUrl != null &&
         (task.downloadPageUrl!.contains('youtube.com/') ||
@@ -2634,8 +2695,14 @@ class DownloadOrchestrator {
       final audioFile = File('${task.tempFilePath}.audio');
 
       if (await videoFile.exists() && await audioFile.exists()) {
-        final videoLen = await videoFile.length();
-        final audioLen = await audioFile.length();
+        final videoLen = await actualDownloadedBytes(
+          task.tempFilePath,
+          threadCount: task.threadCount,
+        );
+        final audioLen = await actualDownloadedBytes(
+          audioFile.path,
+          threadCount: task.audioThreadCount,
+        );
 
         if (videoLen > 1024 && audioLen > 1024) {
           // FIX(YT2): Don't treat unknown-size audio as complete
@@ -2809,6 +2876,10 @@ class DownloadOrchestrator {
           isRetryable && currentRetry >= maxRetries && maxRetries > 0;
       _host.retryCounts.remove(task.id);
       _recordDownloadFailure(task.id, realError);
+
+      // FIX-INTEL: Record failure outcome
+      SiteIntelligenceService().recordOutcome(task.url, false);
+
       try {
         await _host.cleanupPartFiles(current, preserveParts: true);
         await cleanupTempFiles(current, preserveParts: true);

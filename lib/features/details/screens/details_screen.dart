@@ -44,6 +44,7 @@ import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
 
 import '../../../shared/mixins/pausable_loop_animation.dart';
 
@@ -4840,6 +4841,7 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
 
     final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
 
 
 
@@ -4862,6 +4864,20 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
           ),
 
           const SizedBox(height: 14),
+
+          if (task.siteDisplayName != null)
+            _MetaRow(
+              label: isRtl ? 'الموقع' : 'SITE',
+              value: '${task.siteDisplayName} (${task.siteType?.replaceAll(RegExp(r'(?=[A-Z])'), ' ').toUpperCase() ?? "UNKNOWN"})',
+              isDark: isDark,
+            ),
+
+          if (task.contentHint != null)
+            _MetaRow(
+              label: isRtl ? 'نوع المحتوى' : 'CONTENT HINT',
+              value: task.contentHint!.replaceAll(RegExp(r'(?=[A-Z])'), ' ').toUpperCase(),
+              isDark: isDark,
+            ),
 
           _MetaRow(
 
@@ -5292,6 +5308,34 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
             isDark: isDark,
 
           ),
+
+          Builder(builder: (context) {
+            final reliability = SiteIntelligenceService().getReliability(Uri.tryParse(task.url)?.host ?? '');
+            if (reliability == null) return const SizedBox.shrink();
+            
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 12),
+                Text(
+                  isRtl ? 'موثوقية الموقع' : 'SITE RELIABILITY',
+                  style: AppTheme.microLabel(isDark: isDark, size: 8),
+                ),
+                const SizedBox(height: 8),
+                _MetaRow(
+                  label: isRtl ? 'نسبة النجاح' : 'Success Rate',
+                  value: '${reliability.score}% (${reliability.successes}/${reliability.totalAttempts} attempts)',
+                  isDark: isDark,
+                ),
+                if (reliability.averageSpeedMbps > 0)
+                  _MetaRow(
+                    label: isRtl ? 'متوسط السرعة' : 'Avg Speed',
+                    value: '${reliability.averageSpeedMbps.toStringAsFixed(1)} Mbps',
+                    isDark: isDark,
+                  ),
+              ],
+            );
+          }),
 
           Builder(builder: (context) {
 

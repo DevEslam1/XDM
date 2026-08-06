@@ -34,6 +34,7 @@ import '../models/download_task.dart';
 import 'download_orchestrator.dart';
 import 'network_monitor.dart';
 import 'notification_coordinator.dart';
+import '../../../core/services/site_intelligence/site_intelligence_service.dart';
 import 'schedule_manager.dart';
 import 'mixins/download_filter_mixin.dart';
 import 'mixins/download_queue_mixin.dart';
@@ -573,8 +574,11 @@ class DownloadProvider extends ChangeNotifier
       return task.copyWith(audioProgress: 0.0);
     }
 
+    final audioLen = await actualDownloadedBytes(
+      audioFile.path,
+      threadCount: task.audioThreadCount > 0 ? task.audioThreadCount : 1,
+    );
     if (task.audioSize > 0) {
-      final audioLen = await audioFile.length();
       final expectedBytes = (task.audioProgress * task.audioSize).toInt();
       if (audioLen < expectedBytes) {
         debugPrint('[DMX] Audio file shorter than progress ($audioLen < $expectedBytes). Resetting audio progress.');
@@ -585,7 +589,6 @@ class DownloadProvider extends ChangeNotifier
       final fraction = (audioLen / task.audioSize).clamp(0.0, 1.0);
       return task.copyWith(audioProgress: fraction);
     } else {
-      final audioLen = await audioFile.length();
       if (audioLen == 0 && !await audioStateFile.exists()) {
         return task.copyWith(audioProgress: 0.0);
       }
@@ -665,15 +668,10 @@ class DownloadProvider extends ChangeNotifier
     int audioBytes = 0;
     if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
       final audioPath = '${task.tempFilePath}.audio';
-      final audioStatePath = '$audioPath.dmxstate';
-      if (await File(audioStatePath).exists()) {
-        audioBytes = await _readDmxStateBytes(audioPath);
-      } else {
-        final audioState = await _statPartialFileIsolate(audioPath);
-        if (audioState.exists) {
-          audioBytes = audioState.targetSize;
-        }
-      }
+      audioBytes = await actualDownloadedBytes(
+        audioPath,
+        threadCount: task.audioThreadCount > 0 ? task.audioThreadCount : 1,
+      );
     }
 
     return videoBytes + audioBytes;
@@ -1269,6 +1267,9 @@ class DownloadProvider extends ChangeNotifier
       throw Exception('This download is already active in the queue.');
     }
 
+    // FIX-INTEL: Analyze URL for site intelligence and smart category resolution
+    final analysis = SiteIntelligenceService().analyzeUrl(url);
+
     final defaultDirectory =
         _settingsProvider.customDownloadPath?.isNotEmpty == true
             ? _settingsProvider.customDownloadPath!
@@ -1322,7 +1323,12 @@ class DownloadProvider extends ChangeNotifier
 
       resolvedCategory = (category.trim().isNotEmpty && category != 'Auto')
           ? category
-          : (catCandidate != 'Other' ? catCandidate : 'Video');
+          : resolveCategorySmart(
+              url: url,
+              fileName: fileName,
+              siteType: analysis.siteType,
+              contentHint: analysis.contentHint,
+            );
 
       supportsResume = true;
     } else {
@@ -1336,7 +1342,12 @@ class DownloadProvider extends ChangeNotifier
 
       resolvedCategory = (category.trim().isNotEmpty && category != 'Auto')
           ? category
-          : categoryFromFileName(fileName);
+          : resolveCategorySmart(
+              url: url,
+              fileName: fileName,
+              siteType: analysis.siteType,
+              contentHint: analysis.contentHint,
+            );
 
       supportsResume = true;
     }
@@ -1441,6 +1452,10 @@ class DownloadProvider extends ChangeNotifier
       playlistId: playlistId,
       playlistTitle: playlistTitle,
       thumbnailUrl: thumbnailUrl,
+      // FIX-INTEL: Store site intelligence results on the task
+      siteType: analysis.siteType.name,
+      siteDisplayName: analysis.profile?.displayName,
+      contentHint: analysis.contentHint.name,
     );
 
     _tasks.insert(0, task);
@@ -1774,9 +1789,9 @@ class DownloadProvider extends ChangeNotifier
     // FIX(P1): Include audio bytes in the paused downloadedBytes total
     int audioBytesOnDisk = 0;
     if (latest.mergedAudioUrl != null && latest.mergedAudioUrl!.isNotEmpty) {
-      audioBytesOnDisk = await _readDmxStateBytes(
+      audioBytesOnDisk = await actualDownloadedBytes(
         '${latest.tempFilePath}.audio',
-        threadCount: 2,
+        threadCount: latest.audioThreadCount > 0 ? latest.audioThreadCount : 1,
       );
     }
     final totalBytes = stateBytes + audioBytesOnDisk;
@@ -2048,7 +2063,10 @@ class DownloadProvider extends ChangeNotifier
       } else {
         final audioFile = File(audioStatePath);
         if (await audioFile.exists()) {
-          final audioFileLen = await audioFile.length();
+          final audioFileLen = await actualDownloadedBytes(
+            audioStatePath,
+            threadCount: task.audioThreadCount > 0 ? task.audioThreadCount : 1,
+          );
           if (audioFileLen > 0 && task.audioSize > 0) {
             validatedAudioProgress =
                 (audioFileLen / task.audioSize).clamp(0.0, 1.0);

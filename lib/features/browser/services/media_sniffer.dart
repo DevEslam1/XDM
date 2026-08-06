@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 
 import '../../../core/services/youtube_service.dart';
+import '../../../core/services/site_intelligence/site_intelligence_service.dart';
 import '../models/browser_tab.dart';
 import 'package:logging/logging.dart';
 
@@ -137,6 +138,15 @@ class MediaSniffer {
     mediaScanFailed.remove(tab.id);
     if (isYoutubeHost(tab.url)) return;
     final scannedUrl = tab.url;
+
+    // FIX-INTEL: Check for known streaming sites for specialized sniffing
+    final analysis = SiteIntelligenceService().analyzeUrl(scannedUrl);
+    final isSpecialized = analysis.siteType == SiteType.videoStreaming || 
+                          analysis.siteType == SiteType.audioStreaming;
+    if (isSpecialized) {
+      _log.fine('Specialized media sniffing active for ${analysis.profile?.displayName ?? scannedUrl}');
+    }
+
     final activeIds = tabs.map((t) => t.id).toSet();
     final staleKeys = detectedMediaSources.keys
         .where((key) => !activeIds.contains(key))

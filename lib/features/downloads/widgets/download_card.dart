@@ -1199,16 +1199,29 @@ class _FileCard extends StatelessWidget with HapticHelper {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            task.fileName,
-                            textDirection: TextDirection.ltr,
-                            style: AppTheme.dataStyle(
-                              isDark: isDark,
-                              size: compact ? 13 : 14,
-                              weight: FontWeight.w700,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  task.fileName,
+                                  textDirection: TextDirection.ltr,
+                                  style: AppTheme.dataStyle(
+                                    isDark: isDark,
+                                    size: compact ? 13 : 14,
+                                    weight: FontWeight.w700,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (task.siteDisplayName != null) ...[
+                                const SizedBox(width: 4),
+                                _SiteBadge(
+                                  name: task.siteDisplayName!,
+                                  isDark: isDark,
+                                ),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 5),
                           Wrap(
@@ -1383,16 +1396,29 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            task.fileName,
-                            textDirection: TextDirection.ltr,
-                            style: AppTheme.dataStyle(
-                              isDark: isDark,
-                              size: compact ? 13 : 14,
-                              weight: FontWeight.w700,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  task.fileName,
+                                  textDirection: TextDirection.ltr,
+                                  style: AppTheme.dataStyle(
+                                    isDark: isDark,
+                                    size: compact ? 13 : 14,
+                                    weight: FontWeight.w700,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (task.siteDisplayName != null) ...[
+                                const SizedBox(width: 4),
+                                _SiteBadge(
+                                  name: task.siteDisplayName!,
+                                  isDark: isDark,
+                                ),
+                              ],
+                            ],
                           ),
                           SizedBox(height: compact ? 2 : 3),
                           Wrap(
@@ -1586,17 +1612,30 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                widget.task.fileName,
-                                textDirection: TextDirection.ltr,
-                                style: AppTheme.dataStyle(
-                                  isDark: isDark,
-                                  size: widget.compact ? 13 : 14,
-                                  weight: FontWeight.w700,
+                              Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  widget.task.fileName,
+                                  textDirection: TextDirection.ltr,
+                                  style: AppTheme.dataStyle(
+                                    isDark: isDark,
+                                    size: widget.compact ? 13 : 14,
+                                    weight: FontWeight.w700,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
                               ),
+                              if (widget.task.siteDisplayName != null) ...[
+                                const SizedBox(width: 4),
+                                _SiteBadge(
+                                  name: widget.task.siteDisplayName!,
+                                  isDark: isDark,
+                                ),
+                              ],
+                            ],
+                          ),
                               const SizedBox(height: 5),
                               Wrap(
                                 spacing: 6,
@@ -2999,4 +3038,35 @@ class _SparklinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SparklinePainter oldDelegate) => true;
+}
+
+class _SiteBadge extends StatelessWidget {
+  final String name;
+  final bool isDark;
+
+  const _SiteBadge({required this.name, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: isDark ? Colors.white24 : Colors.black12,
+          width: 0.5,
+        ),
+      ),
+      child: Text(
+        name.toUpperCase(),
+        style: TextStyle(
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
+          color: isDark ? Colors.white70 : Colors.black54,
+        ),
+      ),
+    );
+  }
 }

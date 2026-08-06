@@ -1,4 +1,5 @@
 import 'package:logging/logging.dart';
+import '../../../core/services/site_intelligence/site_intelligence_service.dart';
 
 enum DetectedMediaKind {
   video,
@@ -114,6 +115,36 @@ class BrowserDetector {
   }
 
   static DetectedMedia? detect(String url) {
+    final analysis = SiteIntelligenceService().analyzeUrl(url);
+
+    if (analysis.siteType == SiteType.magnetSource) {
+      return DetectedMedia(kind: DetectedMediaKind.magnet, url: url);
+    }
+
+    if (analysis.contentHint != ContentHint.unknown) {
+      final kind = switch (analysis.contentHint) {
+        ContentHint.videoFile ||
+        ContentHint.videoStream =>
+          DetectedMediaKind.video,
+        ContentHint.audioFile ||
+        ContentHint.audioStream =>
+          DetectedMediaKind.audio,
+        ContentHint.image => DetectedMediaKind.image,
+        ContentHint.document => DetectedMediaKind.document,
+        ContentHint.archiveFile => DetectedMediaKind.archive,
+        ContentHint.softwarePackage => DetectedMediaKind.executable,
+        _ => DetectedMediaKind.unknown,
+      };
+
+      if (kind != DetectedMediaKind.unknown) {
+        return DetectedMedia(
+          kind: kind,
+          url: url,
+          suggestedFileName: analysis.detectedFileName,
+        );
+      }
+    }
+
     final lower = url.toLowerCase();
     if (lower.startsWith('magnet:')) {
       return DetectedMedia(kind: DetectedMediaKind.magnet, url: url);

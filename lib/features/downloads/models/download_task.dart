@@ -68,6 +68,11 @@ class DownloadTask {
   final String? expectedSha256;
   final List<String>? mirrorUrls;
 
+  // Smart Site Intelligence fields
+  final String? siteType;
+  final String? siteDisplayName;
+  final String? contentHint;
+
   DownloadTask({
     required this.id,
     required this.fileName,
@@ -113,6 +118,9 @@ class DownloadTask {
     this.thumbnailUrl,
     this.expectedSha256,
     this.mirrorUrls,
+    this.siteType,
+    this.siteDisplayName,
+    this.contentHint,
   });
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
@@ -345,8 +353,12 @@ class DownloadTask {
     String? playlistId,
     String? playlistTitle,
     String? thumbnailUrl,
+    bool clearThumbnail = false,
     String? expectedSha256,
     List<String>? mirrorUrls,
+    String? siteType,
+    String? siteDisplayName,
+    String? contentHint,
   }) {
     return DownloadTask(
       id: id,
@@ -398,9 +410,12 @@ class DownloadTask {
       queueOrder: queueOrder ?? this.queueOrder,
       playlistId: playlistId ?? this.playlistId,
       playlistTitle: playlistTitle ?? this.playlistTitle,
-      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+      thumbnailUrl: clearThumbnail ? null : (thumbnailUrl ?? this.thumbnailUrl),
       expectedSha256: expectedSha256 ?? this.expectedSha256,
       mirrorUrls: mirrorUrls ?? this.mirrorUrls,
+      siteType: siteType ?? this.siteType,
+      siteDisplayName: siteDisplayName ?? this.siteDisplayName,
+      contentHint: contentHint ?? this.contentHint,
     );
   }
 
@@ -450,6 +465,9 @@ class DownloadTask {
       'thumbnailUrl': thumbnailUrl,
       'expectedSha256': expectedSha256,
       'mirrorUrls': mirrorUrls,
+      'siteType': siteType,
+      'siteDisplayName': siteDisplayName,
+      'contentHint': contentHint,
     };
   }
 
@@ -577,6 +595,9 @@ class DownloadTask {
       mirrorUrls: map['mirrorUrls'] is List
           ? (map['mirrorUrls'] as List).map((e) => e.toString()).toList()
           : null,
+      siteType: map['siteType'] as String?,
+      siteDisplayName: map['siteDisplayName'] as String?,
+      contentHint: map['contentHint'] as String?,
     );
   }
 

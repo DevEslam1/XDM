@@ -1,0 +1,543 @@
+import 'dart:convert';
+import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../logging_service.dart';
+import 'url_patterns.dart';
+import 'site_registry.dart';
+
+final _log = LoggingService.logger('SiteIntelligenceService');
+
+enum SiteType {
+  fileHosting,
+  videoStreaming,
+  audioStreaming,
+  socialMedia,
+  torrentSite,
+  magnetSource,
+  cloudStorage,
+  softwareRepo,
+  archiveSite,
+  genericDirect,
+  genericWebpage,
+}
+
+enum ContentHint {
+  videoFile,
+  audioFile,
+  videoStream,
+  audioStream,
+  archiveFile,
+  softwarePackage,
+  document,
+  image,
+  mixedMedia,
+  unknown,
+}
+
+enum DownloadStrategy {
+  directHttp,
+  resumableHttp,
+  multiThread,
+  browserRequired,
+  apiExtraction,
+  magnetDht,
+  redirectFollow,
+  tokenRefresh,
+}
+
+class SiteProfile {
+  final String domain;
+  final SiteType type;
+  final String? displayName;
+  final bool requiresCookies;
+  final bool requiresReferer;
+  final String? refererValue;
+  final Map<String, String> extraHeaders;
+  final bool supportsRangeRequests;
+  final bool needsBrowserUserAgent;
+  final ContentHint contentHint;
+  final DownloadStrategy strategy;
+  final List<String> urlPatterns;
+  final Duration? tokenExpiry;
+  final bool urlsExpire;
+  final int reliabilityScore;
+
+  const SiteProfile({
+    required this.domain,
+    required this.type,
+    this.displayName,
+    this.requiresCookies = false,
+    this.requiresReferer = false,
+    this.refererValue,
+    this.extraHeaders = const {},
+    this.supportsRangeRequests = false,
+    this.needsBrowserUserAgent = false,
+    this.contentHint = ContentHint.unknown,
+    this.strategy = DownloadStrategy.directHttp,
+    this.urlPatterns = const [],
+    this.tokenExpiry,
+    this.urlsExpire = false,
+    this.reliabilityScore = 100,
+  });
+}
+
+class UrlAnalysisResult {
+  final SiteType siteType;
+  final SiteProfile? profile;
+  final ContentHint contentHint;
+  final DownloadStrategy recommendedStrategy;
+  final String? detectedFileName;
+  final String? detectedExtension;
+  final String? detectedQuality;
+  final bool isExpiredOrSigned;
+  final Map<String, String> recommendedHeaders;
+  final String inferredCategory;
+  final double confidence;
+
+  UrlAnalysisResult({
+    required this.siteType,
+    this.profile,
+    required this.contentHint,
+    required this.recommendedStrategy,
+    this.detectedFileName,
+    this.detectedExtension,
+    this.detectedQuality,
+    this.isExpiredOrSigned = false,
+    this.recommendedHeaders = const {},
+    required this.inferredCategory,
+    this.confidence = 0.5,
+  });
+}
+
+enum MagnetQuality {
+  excellent,
+  good,
+  fair,
+  poor,
+}
+
+class MagnetAnalysis {
+  final String? displayName;
+  final String? infoHash;
+  final List<String> trackers;
+  final int trackerCount;
+  final MagnetQuality quality;
+  final ContentHint contentHint;
+  final String inferredCategory;
+  final String? inferredQuality;
+  final bool isVideoContent;
+  final bool isAudioContent;
+  final bool isSoftware;
+  final List<String> contentKeywords;
+
+  MagnetAnalysis({
+    this.displayName,
+    this.infoHash,
+    required this.trackers,
+    required this.trackerCount,
+    required this.quality,
+    required this.contentHint,
+    required this.inferredCategory,
+    this.inferredQuality,
+    this.isVideoContent = false,
+    this.isAudioContent = false,
+    this.isSoftware = false,
+    this.contentKeywords = const [],
+  });
+}
+
+class SiteReliability {
+  final String domain;
+  int totalAttempts;
+  int successes;
+  int failures;
+  double averageSpeedMbps;
+  DateTime? lastSuccess;
+  DateTime? lastFailure;
+  String? lastError;
+
+  SiteReliability({
+    required this.domain,
+    this.totalAttempts = 0,
+    this.successes = 0,
+    this.failures = 0,
+    this.averageSpeedMbps = 0,
+    this.lastSuccess,
+    this.lastFailure,
+    this.lastError,
+  });
+
+  int get score {
+    if (totalAttempts == 0) return 100;
+    return ((successes / totalAttempts) * 100).round();
+  }
+
+  Map<String, dynamic> toJson() => {
+        'domain': domain,
+        'totalAttempts': totalAttempts,
+        'successes': successes,
+        'failures': failures,
+        'averageSpeedMbps': averageSpeedMbps,
+        'lastSuccess': lastSuccess?.toIso8601String(),
+        'lastFailure': lastFailure?.toIso8601String(),
+        'lastError': lastError,
+      };
+
+  factory SiteReliability.fromJson(Map<String, dynamic> json) =>
+      SiteReliability(
+        domain: json['domain'] as String,
+        totalAttempts: json['totalAttempts'] as int? ?? 0,
+        successes: json['successes'] as int? ?? 0,
+        failures: json['failures'] as int? ?? 0,
+        averageSpeedMbps: (json['averageSpeedMbps'] as num?)?.toDouble() ?? 0,
+        lastSuccess: json['lastSuccess'] != null
+            ? DateTime.tryParse(json['lastSuccess'] as String)
+            : null,
+        lastFailure: json['lastFailure'] != null
+            ? DateTime.tryParse(json['lastFailure'] as String)
+            : null,
+        lastError: json['lastError'] as String?,
+      );
+}
+
+class SiteIntelligenceService {
+  static final SiteIntelligenceService _instance =
+      SiteIntelligenceService._internal();
+  factory SiteIntelligenceService() => _instance;
+  SiteIntelligenceService._internal();
+
+  static const _reliabilityKey = 'site_reliability_data';
+  final Map<String, SiteReliability> _reliability = {};
+  bool _loaded = false;
+
+  Future<void> init() async {
+    if (_loaded) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_reliabilityKey);
+      if (raw != null) {
+        final Map<String, dynamic> map = jsonDecode(raw);
+        map.forEach((k, v) {
+          _reliability[k] = SiteReliability.fromJson(v as Map<String, dynamic>);
+        });
+      }
+    } catch (e) {
+      _log.warning('Failed to load reliability data: $e');
+    }
+    _loaded = true;
+  }
+
+  Future<void> _persist() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw =
+          jsonEncode(_reliability.map((k, v) => MapEntry(k, v.toJson())));
+      await prefs.setString(_reliabilityKey, raw);
+    } catch (e) {
+      _log.warning('Failed to persist reliability data: $e');
+    }
+  }
+
+  UrlAnalysisResult analyzeUrl(String url) {
+    final cleanUrl = url.trim();
+    if (cleanUrl.isEmpty) return _fallbackResult();
+
+    // 1. Magnet Check
+    if (cleanUrl.startsWith('magnet:')) {
+      final magnet = analyzeMagnet(cleanUrl);
+      return UrlAnalysisResult(
+        siteType: SiteType.magnetSource,
+        contentHint: magnet.contentHint,
+        recommendedStrategy: DownloadStrategy.magnetDht,
+        inferredCategory: magnet.inferredCategory,
+        detectedFileName: magnet.displayName,
+        confidence: 1.0,
+      );
+    }
+
+    final uri = Uri.tryParse(
+        cleanUrl.startsWith('http') ? cleanUrl : 'https://$cleanUrl');
+    if (uri == null) return _fallbackResult();
+
+    final host = uri.host.toLowerCase();
+
+    // 2. Exact host match from registry
+    SiteProfile? profile;
+    String? matchedDomain;
+
+    // Check direct domain and subdomains
+    final parts = host.split('.');
+    for (int i = 0; i < parts.length - 1; i++) {
+      final candidate = parts.sublist(i).join('.');
+      if (SiteRegistry.registry.containsKey(candidate)) {
+        profile = SiteRegistry.registry[candidate];
+        matchedDomain = candidate;
+        _log.fine('Matched site profile for domain: $matchedDomain');
+        break;
+      }
+    }
+
+    // 3. Pattern analysis
+    String? fileName = p.basename(uri.path);
+    if (fileName == '/' || fileName.isEmpty) fileName = null;
+
+    final String? extension = fileName != null ? p.extension(fileName) : null;
+    String? quality;
+    final qualityMatch = UrlPatterns.qualityRegex.firstMatch(cleanUrl);
+    if (qualityMatch != null) {
+      quality = qualityMatch.group(0);
+    }
+
+    bool urlsExpire = profile?.urlsExpire ?? false;
+    final hasExpiryParam = uri.queryParameters.keys
+        .any((p) => UrlPatterns.expiryParams.contains(p.toLowerCase()));
+    if (hasExpiryParam) urlsExpire = true;
+
+    SiteType siteType = profile?.type ?? SiteType.genericWebpage;
+    ContentHint contentHint = profile?.contentHint ?? ContentHint.unknown;
+    final DownloadStrategy strategy =
+        profile?.strategy ?? DownloadStrategy.directHttp;
+    double confidence = profile != null ? 0.9 : 0.4;
+
+    // 4. Heuristics for unknown sites
+    if (profile == null) {
+      if (extension != null && extension.isNotEmpty) {
+        siteType = SiteType.genericDirect;
+        confidence = 0.7;
+        if (UrlPatterns.videoExtensions.contains(extension)) {
+          contentHint = ContentHint.videoFile;
+        } else if (UrlPatterns.audioExtensions.contains(extension)) {
+          contentHint = ContentHint.audioFile;
+        } else if (UrlPatterns.archiveExtensions.contains(extension)) {
+          contentHint = ContentHint.archiveFile;
+        } else if (UrlPatterns.softwareExtensions.contains(extension)) {
+          contentHint = ContentHint.softwarePackage;
+        } else if (UrlPatterns.documentExtensions.contains(extension)) {
+          contentHint = ContentHint.document;
+        } else if (UrlPatterns.imageExtensions.contains(extension)) {
+          contentHint = ContentHint.image;
+        }
+      }
+    }
+
+    final headers = <String, String>{};
+    if (profile != null) {
+      headers.addAll(profile.extraHeaders);
+      if (profile.requiresReferer) {
+        headers['Referer'] =
+            profile.refererValue ?? '${uri.scheme}://${uri.host}/';
+      }
+    }
+
+    final category = resolveCategory(
+      url: cleanUrl,
+      fileName: fileName,
+      siteType: siteType,
+      contentHint: contentHint,
+    );
+
+    return UrlAnalysisResult(
+      siteType: siteType,
+      profile: profile,
+      contentHint: contentHint,
+      recommendedStrategy: strategy,
+      detectedFileName: fileName,
+      detectedExtension: extension,
+      detectedQuality: quality,
+      isExpiredOrSigned: urlsExpire,
+      recommendedHeaders: headers,
+      inferredCategory: category,
+      confidence: confidence,
+    );
+  }
+
+  MagnetAnalysis analyzeMagnet(String url) {
+    final hashMatch = UrlPatterns.magnetHashRegex.firstMatch(url);
+    final nameMatch = UrlPatterns.magnetNameRegex.firstMatch(url);
+    final trackerMatches = UrlPatterns.magnetTrackerRegex.allMatches(url);
+
+    final infoHash = hashMatch?.group(1);
+    final String? name =
+        nameMatch != null ? Uri.decodeComponent(nameMatch.group(1)!) : null;
+    final trackers =
+        trackerMatches.map((m) => Uri.decodeComponent(m.group(1)!)).toList();
+
+    MagnetQuality quality = MagnetQuality.poor;
+    if (trackers.length >= 5) {
+      quality = MagnetQuality.excellent;
+    } else if (trackers.length >= 3) {
+      quality = MagnetQuality.good;
+    } else if (trackers.isNotEmpty) {
+      quality = MagnetQuality.fair;
+    }
+
+    ContentHint contentHint = ContentHint.unknown;
+    String? inferredQuality;
+    bool isVideo = false;
+    bool isAudio = false;
+    bool isSoftware = false;
+    final keywords = <String>[];
+
+    if (name != null) {
+      final lowerName = name.toLowerCase();
+
+      // Extract quality
+      final qMatch = UrlPatterns.qualityRegex.firstMatch(name);
+      if (qMatch != null) inferredQuality = qMatch.group(0);
+
+      // Heuristics
+      if (UrlPatterns.videoCodecRegex.hasMatch(lowerName) ||
+          UrlPatterns.sourceRegex.hasMatch(lowerName) ||
+          UrlPatterns.videoExtensions.any((ext) => lowerName.contains(ext))) {
+        contentHint = ContentHint.videoFile;
+        isVideo = true;
+      } else if (UrlPatterns.audioCodecRegex.hasMatch(lowerName) ||
+          UrlPatterns.audioExtensions.any((ext) => lowerName.contains(ext))) {
+        contentHint = ContentHint.audioFile;
+        isAudio = true;
+      } else if (UrlPatterns.softwareExtensions
+              .any((ext) => lowerName.contains(ext)) ||
+          lowerName.contains('repack') ||
+          lowerName.contains('crack')) {
+        contentHint = ContentHint.softwarePackage;
+        isSoftware = true;
+      }
+    }
+
+    final category = resolveCategory(
+      url: url,
+      siteType: SiteType.magnetSource,
+      contentHint: contentHint,
+      magnetName: name,
+    );
+
+    return MagnetAnalysis(
+      displayName: name,
+      infoHash: infoHash,
+      trackers: trackers,
+      trackerCount: trackers.length,
+      quality: quality,
+      contentHint: contentHint,
+      inferredCategory: category,
+      inferredQuality: inferredQuality,
+      isVideoContent: isVideo,
+      isAudioContent: isAudio,
+      isSoftware: isSoftware,
+      contentKeywords: keywords,
+    );
+  }
+
+  String resolveCategory({
+    required String url,
+    String? fileName,
+    SiteType? siteType,
+    ContentHint? contentHint,
+    String? magnetName,
+  }) {
+    // 1. Explicit content hint
+    if (contentHint != null) {
+      switch (contentHint) {
+        case ContentHint.videoFile:
+        case ContentHint.videoStream:
+          return 'Video';
+        case ContentHint.audioFile:
+        case ContentHint.audioStream:
+          return 'Audio';
+        case ContentHint.archiveFile:
+          return 'Archive';
+        case ContentHint.softwarePackage:
+          return 'APK';
+        case ContentHint.document:
+          return 'Document';
+        case ContentHint.image:
+          return 'Image';
+        default:
+          break;
+      }
+    }
+
+    // 2. Site type implication
+    if (siteType != null) {
+      if (siteType == SiteType.videoStreaming) return 'Video';
+      if (siteType == SiteType.audioStreaming) return 'Audio';
+    }
+
+    // 3. URL/Name keywords
+    final searchArea =
+        '${url.toLowerCase()} ${fileName?.toLowerCase() ?? ""} ${magnetName?.toLowerCase() ?? ""}';
+    if (searchArea.contains('movie') ||
+        searchArea.contains('season') ||
+        searchArea.contains('episode') ||
+        searchArea.contains('1080p') ||
+        searchArea.contains('720p')) {
+      return 'Video';
+    }
+    if (searchArea.contains('music') ||
+        searchArea.contains('album') ||
+        searchArea.contains('track') ||
+        searchArea.contains('flac') ||
+        searchArea.contains('mp3')) {
+      return 'Audio';
+    }
+    if (searchArea.contains('setup') ||
+        searchArea.contains('installer') ||
+        searchArea.contains('.apk')) {
+      return 'APK';
+    }
+    if (searchArea.contains('doc') ||
+        searchArea.contains('pdf') ||
+        searchArea.contains('ebook')) {
+      return 'Document';
+    }
+
+    // 4. Extension fallback
+    if (fileName != null) {
+      final ext = p.extension(fileName).toLowerCase();
+      if (UrlPatterns.videoExtensions.contains(ext)) return 'Video';
+      if (UrlPatterns.audioExtensions.contains(ext)) return 'Audio';
+      if (UrlPatterns.archiveExtensions.contains(ext)) return 'Archive';
+      if (UrlPatterns.softwareExtensions.contains(ext)) return 'APK';
+      if (UrlPatterns.documentExtensions.contains(ext)) return 'Document';
+      if (UrlPatterns.imageExtensions.contains(ext)) return 'Image';
+    }
+
+    return 'Other';
+  }
+
+  void recordOutcome(String url, bool success, [double? speedMbps]) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    final host = uri.host.toLowerCase();
+    if (host.isEmpty) return;
+
+    final stat =
+        _reliability.putIfAbsent(host, () => SiteReliability(domain: host));
+    stat.totalAttempts++;
+    if (success) {
+      stat.successes++;
+      stat.lastSuccess = DateTime.now();
+      if (speedMbps != null && speedMbps > 0) {
+        if (stat.averageSpeedMbps == 0) {
+          stat.averageSpeedMbps = speedMbps;
+        } else {
+          stat.averageSpeedMbps =
+              (stat.averageSpeedMbps * 0.8) + (speedMbps * 0.2);
+        }
+      }
+    } else {
+      stat.failures++;
+      stat.lastFailure = DateTime.now();
+    }
+    _persist();
+  }
+
+  SiteReliability? getReliability(String host) =>
+      _reliability[host.toLowerCase()];
+
+  UrlAnalysisResult _fallbackResult() => UrlAnalysisResult(
+        siteType: SiteType.genericWebpage,
+        contentHint: ContentHint.unknown,
+        recommendedStrategy: DownloadStrategy.directHttp,
+        inferredCategory: 'Other',
+      );
+}

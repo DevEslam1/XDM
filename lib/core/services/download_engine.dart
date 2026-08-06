@@ -1596,42 +1596,33 @@ class DownloadEngine {
           : rawDownloaded;
       final downloadedBytes = clampedDownloaded;
 
-      // FIX(2): Only estimate when we don't have true per-file progress.
-      // When progressEstimated is false from the file mapping, we have real data.
-      final bool hasTruePerFileProgress = resolvedFiles != null &&
-          resolvedFiles.isNotEmpty &&
-          resolvedFiles.any(
-            (f) => (f['progressEstimated'] as bool? ?? true) == false,
-          );
-      // FIX E-1: Only estimate per-file progress when engine has downloaded bytes > 0
-      final bool needsEstimation = resolvedFiles != null &&
-          resolvedFiles.isNotEmpty &&
-          !hasTruePerFileProgress &&
-          downloadedBytes > 0;
-      if (needsEstimation) {
-        _distributeDownloadedBytesByPriority(resolvedFiles, downloadedBytes);
-        // FIX-T-03: Cap estimated per-file bytes to file length
-        for (final f in resolvedFiles) {
+      final filesNeedingEstimate = (resolvedFiles ?? [])
+          .where((f) => (f['progressEstimated'] as bool? ?? true) == true)
+          .toList();
+      if (filesNeedingEstimate.isNotEmpty && downloadedBytes > 0) {
+        final confirmedBytes = (resolvedFiles ?? [])
+            .where((f) => (f['progressEstimated'] as bool? ?? true) == false)
+            .fold<int>(0, (s, f) => s + ((f['downloadedBytes'] as int?) ?? 0));
+        final remainingForEstimate =
+            (downloadedBytes - confirmedBytes).clamp(0, downloadedBytes);
+        _distributeDownloadedBytesByPriority(filesNeedingEstimate, remainingForEstimate);
+        for (final f in filesNeedingEstimate) {
           final len = (f['length'] as num?)?.toInt() ?? 0;
           final cur = (f['downloadedBytes'] as int?) ?? 0;
-          if (cur > len && len > 0) {
-            f['downloadedBytes'] = len;
-          }
-        }
-        // FIX-AUDIT-5: Reconcile — force the per-file sum to match the
-        // authoritative overall downloadedBytes from libtorrent.
-        final estimatedSum = resolvedFiles.fold<int>(
-          0, (s, f) => s + ((f['downloadedBytes'] as int?) ?? 0));
-        if (estimatedSum != downloadedBytes && estimatedSum > 0) {
-          final scale = downloadedBytes / estimatedSum;
-          for (final f in resolvedFiles) {
-            final len = (f['length'] as num?)?.toInt() ?? 0;
-            final cur = (f['downloadedBytes'] as int?) ?? 0;
-            f['downloadedBytes'] = (cur * scale).round().clamp(0, len);
-          }
-        }
-        for (final f in resolvedFiles) {
+          if (cur > len && len > 0) f['downloadedBytes'] = len;
           f['progressEstimated'] = true;
+        }
+      }
+
+      // Reconcile total sum (confirmed + estimated) to match libtorrent's authoritative total
+      final totalSum = (resolvedFiles ?? [])
+          .fold<int>(0, (s, f) => s + ((f['downloadedBytes'] as int?) ?? 0));
+      if (totalSum != downloadedBytes && totalSum > 0) {
+        final scale = downloadedBytes / totalSum;
+        for (final f in filesNeedingEstimate) {
+          final len = (f['length'] as num?)?.toInt() ?? 0;
+          final cur = (f['downloadedBytes'] as int?) ?? 0;
+          f['downloadedBytes'] = (cur * scale).round().clamp(0, len);
         }
       }
 
@@ -4016,3 +4007,72 @@ class _RangeSample {
   final int length;
   const _RangeSample(this.start, this.length);
 }
+
+/// Returns the number of bytes actually written to [path], accounting for
+/// pre-allocated (sparse-by-length) files from multi-threaded downloads.
+///
+/// Consults the `.dmxstate` chunk-progress data (and `.journal` fallback) when
+/// present or when [threadCount] > 1, and falls back to raw file length only
+/// when no sidecar state exists and [threadCount] <= 1.
+Future<int> actualDownloadedBytes(
+  String path, {
+  required int threadCount,
+}) async {
+  final stateFile = File('$path.dmxstate');
+  int stateTotal = 0;
+  bool hasStateFile = false;
+
+  if (await stateFile.exists()) {
+    try {
+      final content = await stateFile.readAsString();
+      final decoded = jsonDecode(content);
+      if (decoded is Map) {
+        final progressList = decoded['progress'] as List?;
+        if (progressList != null) {
+          BigInt total = BigInt.zero;
+          for (final chunk in progressList) {
+            total += BigInt.from((chunk as num).toInt());
+          }
+          stateTotal = total.toInt();
+          hasStateFile = true;
+        }
+      }
+    } catch (e) {
+      debugPrint('[DMX] actualDownloadedBytes failed to read state for $path: $e');
+    }
+  }
+
+  final journalPath = '$path.journal';
+  final journalFile = File(journalPath);
+  if (await journalFile.exists()) {
+    try {
+      final journalBytes = await DownloadJournal.recover(journalPath);
+      if (journalBytes != null && journalBytes.isNotEmpty) {
+        final journalTotal = journalBytes.fold<int>(0, (sum, b) => sum + b);
+        if (journalTotal > stateTotal) {
+          return journalTotal;
+        }
+      }
+    } catch (e) {
+      debugPrint('[DMX] actualDownloadedBytes journal read failed for $path: $e');
+    }
+  }
+
+  if (hasStateFile) {
+    return stateTotal;
+  }
+
+  // Multi-threaded file without state file or journal: temp file is pre-allocated size,
+  // NOT downloaded bytes. Return 0.
+  if (threadCount > 1) {
+    return 0;
+  }
+
+  // Single-threaded: file length is accurate if file exists.
+  final f = File(path);
+  if (await f.exists()) {
+    return await f.length();
+  }
+  return 0;
+}
+

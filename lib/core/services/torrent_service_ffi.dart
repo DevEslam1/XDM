@@ -870,11 +870,12 @@ class TorrentService {
             if (rawBytes >= 0) {
               resolvedDownloadedBytes = rawBytes.clamp(0, f.size);
             } else {
-              // ── FIX-5: -1 means libtorrent has no data yet ──
-              resolvedDownloadedBytes = 0;
+              // -1 means libtorrent has no data yet — keep sentinel, do NOT collapse to 0
+              resolvedDownloadedBytes = -1;
             }
           } else {
-            resolvedDownloadedBytes = 0;
+            // Per-file progress unsupported/unavailable for this torrent — keep sentinel
+            resolvedDownloadedBytes = -1;
           }
 
           return TorrentFileItem(

@@ -74,6 +74,10 @@ import '../../../core/services/download_engine.dart';
 
 
 
+import '../../../core/services/site_intelligence/site_intelligence_service.dart';
+
+
+
 import '../../downloads/provider/download_provider.dart';
 
 
@@ -144,30 +148,31 @@ class AddDownloadDialog extends StatefulWidget {
 
 
   const AddDownloadDialog({
-
-
-
     super.key,
-
-
-
     this.prefilledUrl,
-
-
-
     this.prefilledName,
-
-
-
     this.downloadPageUrl,
-
-
-
     this.isShareLaunch = false,
-
-
-
   });
+
+  static Future<T?> show<T>(
+    BuildContext context, {
+    String? prefilledUrl,
+    String? prefilledName,
+    String? downloadPageUrl,
+    bool isShareLaunch = false,
+  }) {
+    return showDialog<T>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => AddDownloadDialog(
+        prefilledUrl: prefilledUrl,
+        prefilledName: prefilledName,
+        downloadPageUrl: downloadPageUrl,
+        isShareLaunch: isShareLaunch,
+      ),
+    );
+  }
 
 
 
@@ -384,6 +389,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
 
   String _lastCheckedUrl = '';
+
+
+
+  UrlAnalysisResult? _urlAnalysis;
 
 
 
@@ -676,6 +685,15 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
 
     _ytDebounceTimer?.cancel();
+
+
+
+    // FIX-INTEL: Update URL analysis on every change
+    if (url.isNotEmpty) {
+      _urlAnalysis = SiteIntelligenceService().analyzeUrl(url);
+    } else {
+      _urlAnalysis = null;
+    }
 
 
 
@@ -5800,6 +5818,15 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
 
 
+                          // FIX-INTEL: Show site intelligence chip
+                          if (_urlAnalysis != null && _urlController.text.isNotEmpty)
+                             Padding(
+                              padding: const EdgeInsets.only(top: 6, bottom: 2),
+                              child: _IntelligenceChip(analysis: _urlAnalysis!, isDark: isDark),
+                            ),
+
+
+
                           // live validation readout
 
 
@@ -9980,6 +10007,65 @@ class _HeaderAction extends StatelessWidget {
 
 
 
+class _IntelligenceChip extends StatelessWidget {
+  final UrlAnalysisResult analysis;
+  final bool isDark;
+
+  const _IntelligenceChip({required this.analysis, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = (analysis.siteType == SiteType.videoStreaming || analysis.contentHint == ContentHint.videoFile) 
+        ? AppTheme.neonBlue 
+        : (analysis.siteType == SiteType.magnetSource ? AppTheme.neonViolet : AppTheme.neonGreen);
+    
+    final icon = (analysis.siteType == SiteType.videoStreaming || analysis.contentHint == ContentHint.videoFile) 
+        ? Icons.play_circle_outline 
+        : (analysis.siteType == SiteType.magnetSource ? Icons.link_rounded : Icons.info_outline);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: accent.withValues(alpha: 0.3), width: 0.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: accent),
+          const SizedBox(width: 6),
+          Text(
+            '${analysis.profile?.displayName ?? analysis.siteType.name.toUpperCase()} • ${analysis.contentHint.name.replaceAll(RegExp(r"(?=[A-Z])"), " ").toUpperCase()}',
+            style: TextStyle(
+              color: accent,
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
+          if (analysis.detectedQuality != null) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                analysis.detectedQuality!,
+                style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: Colors.white),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+
+
 
 
 
@@ -11086,144 +11172,43 @@ class _TorrentFilesPanel extends StatelessWidget {
 
                 final length = (file['length'] as num?)?.toInt() ?? 0;
 
-
-
-                return CheckboxListTile(
-
-
-
-                  dense: true,
-
-
-
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-
-
-
-                  activeColor: violet,
-
-
-
-                  value: isSelected,
-
-
-
-                  title: Text(
-
-
-
-                    fileName,
-
-
-
-                    maxLines: 1,
-
-
-
-                    overflow: TextOverflow.ellipsis,
-
-
-
-                    style: TextStyle(
-
-
-
-                      color: isSelected
-
-
-
-                          ? (isDark
-
-
-
-                              ? AppTheme.textPrimary
-
-
-
-                              : AppTheme.lightTextPrimary)
-
-
-
-                          : (isDark
-
-
-
-                              ? AppTheme.textSecondary
-
-
-
-                              : AppTheme.lightTextSecondary),
-
-
-
-                      fontSize: 12,
-
-
-
-                      fontWeight:
-
-
-
-                          isSelected ? FontWeight.w600 : FontWeight.normal,
-
-
-
-                      decoration:
-
-
-
-                          isSelected ? null : TextDecoration.lineThrough,
-
-
-
+                return Material(
+                  color: Colors.transparent,
+                  child: CheckboxListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    activeColor: violet,
+                    value: isSelected,
+                    title: Text(
+                      fileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isSelected
+                            ? (isDark
+                                ? AppTheme.textPrimary
+                                : AppTheme.lightTextPrimary)
+                            : (isDark
+                                ? AppTheme.textSecondary
+                                : AppTheme.lightTextSecondary),
+                        fontSize: 12,
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.normal,
+                        decoration:
+                            isSelected ? null : TextDecoration.lineThrough,
+                      ),
                     ),
-
-
-
-                  ),
-
-
-
-                  subtitle: Text(
-
-
-
-                    formatBytes(length.toDouble()),
-
-
-
-                    style: TextStyle(
-
-
-
-                      color:
-
-
-
-                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-
-
-
-                      fontSize: 10,
-
-
-
-                      fontFamily: 'monospace',
-
-
-
+                    subtitle: Text(
+                      formatBytes(length.toDouble()),
+                      style: TextStyle(
+                        color:
+                            isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                        fontSize: 10,
+                        fontFamily: 'monospace',
+                      ),
                     ),
-
-
-
+                    onChanged: (val) => onToggle(idx, val ?? true),
                   ),
-
-
-
-                  onChanged: (val) => onToggle(idx, val ?? true),
-
-
-
                 );
 
 

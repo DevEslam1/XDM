@@ -20,12 +20,14 @@ import '../../../core/services/user_script_manager.dart' hide UserScript;
 import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
+import '../../../core/utils/url_utils.dart';
 import '../../../shared/mixins/pausable_loop_animation.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
+import '../../add_download/widgets/add_download_dialog.dart';
 import '../../add_download/widgets/youtube_playlist_sheet.dart';
 import '../../add_download/widgets/media_quality_sheet.dart';
 import '../../downloads/models/download_task.dart';
@@ -137,6 +139,9 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   final AdBlockerDelegate _adBlocker = AdBlockerDelegate();
   final RedirectGuard _redirectGuard = RedirectGuard.instance;
+
+  String? _lastInterceptedUrl;
+  DateTime? _lastInterceptedTime;
 
   void _ensureTabsExist() {
     if (_tabs.isEmpty && !_isRestoring) {
@@ -551,6 +556,16 @@ class _BrowserScreenState extends State<BrowserScreen>
 
 
   void _onPageStart(BrowserTab tab, String url) {
+    if (url.startsWith('magnet:') || isMagnetUrl(url)) {
+      _log.info('[Browser] Stopped webview from navigating to magnet scheme: $url');
+      tab.controller?.stopLoading();
+      if (mounted) {
+        setState(() {
+          tab.isLoading = false;
+        });
+      }
+      return;
+    }
     tab.hasCrashed = false;
     tab.isTimedOut = false;
     _loadingTimeoutTimers[tab.id]?.cancel();
@@ -712,6 +727,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _onUrlChange(BrowserTab tab, String url) {
+    if (url.startsWith('magnet:') || isMagnetUrl(url)) return;
     final cleanUrl = _cleanUrl(url);
     if (tab.url == cleanUrl) return;
     if (mounted) {
@@ -907,6 +923,12 @@ class _BrowserScreenState extends State<BrowserScreen>
     final url = message.message.trim();
     if (url.isEmpty || url == 'about:blank') return;
 
+    if (url.startsWith('magnet:') || isMagnetUrl(url)) {
+      _log.info('[Browser] Intercepted magnet URL in popup: $url');
+      _showInterceptionSheet(context, url);
+      return;
+    }
+
     if (_adBlocker.shouldBlock(url)) {
       _log.warning('[AdBlocker] Blocked popup: $url');
       // E9: Blocked Popup Feedback
@@ -1032,6 +1054,11 @@ class _BrowserScreenState extends State<BrowserScreen>
   void _openInNewTab(String url,
       {bool isIncognito = false, bool switchToTab = false}) {
     if (!mounted || url.isEmpty) return;
+    if (url.startsWith('magnet:') || isMagnetUrl(url)) {
+      _log.info('[Browser] Intercepted magnet URL in _openInNewTab: $url');
+      _showInterceptionSheet(context, url);
+      return;
+    }
     _redirectGuard.markUserInitiated(url);
     setState(() {
       final newTab = _createNewTab(
@@ -1364,6 +1391,13 @@ class _BrowserScreenState extends State<BrowserScreen>
     final parsed = Uri.tryParse(url);
     final targetUrl = parsed != null ? parsed.toString() : url;
 
+    if (targetUrl.startsWith('magnet:') || isMagnetUrl(targetUrl)) {
+      _log.info('[Browser] Intercepted magnet URL from URL bar input: $targetUrl');
+      _urlController.text = activeTab.isHome ? '' : activeTab.url;
+      _showInterceptionSheet(context, targetUrl);
+      return;
+    }
+
     setState(() {
       activeTab.isHome = false;
       activeTab.url = targetUrl;
@@ -1693,11 +1727,22 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _showInterceptionSheet(BuildContext context, String downloadUrl) {
+    final now = DateTime.now();
+    if (_lastInterceptedUrl == downloadUrl &&
+        _lastInterceptedTime != null &&
+        now.difference(_lastInterceptedTime!) < const Duration(seconds: 2)) {
+      _log.info('[Browser] Skipping duplicate interception sheet for: $downloadUrl');
+      return;
+    }
+    _lastInterceptedUrl = downloadUrl;
+    _lastInterceptedTime = now;
+
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     triggerHaptic(settings);
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final isMagnetSignal = downloadUrl.startsWith('magnet:') || isMagnetUrl(downloadUrl);
     final detected = BrowserDetector.detect(downloadUrl);
     final kindLabel =
         detected == null ? 'FILE' : detected.kind.name.toUpperCase();
@@ -1878,6 +1923,11 @@ class _BrowserScreenState extends State<BrowserScreen>
                                 ),
                                 onPressed: () {
                                   Navigator.pop(context);
+                                  if (isMagnetSignal) {
+                                    AddDownloadDialog.show(context,
+                                        prefilledUrl: downloadUrl);
+                                    return;
+                                  }
                                   if (_currentTabIndex >= 0 &&
                                       _currentTabIndex < _tabs.length) {
                                     final activeTab = _tabs[_currentTabIndex];
@@ -1889,7 +1939,9 @@ class _BrowserScreenState extends State<BrowserScreen>
                                   }
                                 },
                                 child: Text(
-                                  L10n.of(context, 'browser_continue_browsing'),
+                                  isMagnetSignal
+                                      ? (isRtl ? 'اختيار الملفات' : 'CHOOSE FILES')
+                                      : L10n.of(context, 'browser_continue_browsing'),
                                   style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
@@ -4456,6 +4508,21 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                     error) {
                                                               _log.warning(
                                                                   '[Browser] WebResourceError on tab ${tab.id}: ${error.description}');
+                                                              final errUrl =
+                                                                  request.url.toString();
+                                                              if (errUrl.startsWith('magnet:') ||
+                                                                  isMagnetUrl(errUrl)) {
+                                                                _log.info(
+                                                                    '[Browser] WebResourceError ignored for magnet link: $errUrl');
+                                                                controller.stopLoading();
+                                                                if (mounted) {
+                                                                  setState(() {
+                                                                    tab.isLoading =
+                                                                        false;
+                                                                  });
+                                                                }
+                                                                return;
+                                                              }
                                                               if (mounted &&
                                                                   request.isForMainFrame ==
                                                                       true) {
@@ -4517,6 +4584,15 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                           .url
                                                                           ?.toString() ??
                                                                       '';
+                                                              if (url.startsWith('magnet:') ||
+                                                                  isMagnetUrl(url)) {
+                                                                _log.info(
+                                                                    '[Browser] Intercepted magnet link in navigation: $url');
+                                                                _showInterceptionSheet(
+                                                                    context, url);
+                                                                return NavigationActionPolicy
+                                                                    .CANCEL;
+                                                              }
                                                               if (navigationAction
                                                                       .isForMainFrame ==
                                                                   true) {

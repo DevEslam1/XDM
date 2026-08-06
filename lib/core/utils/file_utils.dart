@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:synchronized/synchronized.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:path/path.dart' as p;
+import '../services/site_intelligence/site_intelligence_service.dart';
 
 const List<String> videoExtensions = [
   'mp4',
@@ -52,7 +53,33 @@ String formatBytes(num bytes) {
   return '${bytes.toStringAsFixed(0)} B';
 }
 
-String categoryFromFileName(String fileName) {
+String categoryFromFileName(String fileName, {SiteType? siteType, ContentHint? contentHint}) {
+  if (contentHint != null) {
+    switch (contentHint) {
+      case ContentHint.videoFile:
+      case ContentHint.videoStream:
+        return 'Video';
+      case ContentHint.audioFile:
+      case ContentHint.audioStream:
+        return 'Audio';
+      case ContentHint.archiveFile:
+        return 'Archive';
+      case ContentHint.softwarePackage:
+        return 'APK';
+      case ContentHint.document:
+        return 'Document';
+      case ContentHint.image:
+        return 'Image';
+      default:
+        break;
+    }
+  }
+
+  if (siteType != null) {
+    if (siteType == SiteType.videoStreaming) return 'Video';
+    if (siteType == SiteType.audioStreaming) return 'Audio';
+  }
+
   final extension = p.extension(fileName).replaceFirst('.', '').toLowerCase();
   if (videoExtensions.contains(extension)) return 'Video';
   if (audioExtensions.contains(extension)) return 'Audio';
@@ -60,6 +87,22 @@ String categoryFromFileName(String fileName) {
   if (archiveExtensions.contains(extension)) return 'Archive';
   if (extension == 'apk') return 'APK';
   return 'Other';
+}
+
+String resolveCategorySmart({
+  required String url,
+  String? fileName,
+  SiteType? siteType,
+  ContentHint? contentHint,
+  String? magnetName,
+}) {
+  return SiteIntelligenceService().resolveCategory(
+    url: url,
+    fileName: fileName,
+    siteType: siteType,
+    contentHint: contentHint,
+    magnetName: magnetName,
+  );
 }
 
 const _windowsReserved = {
