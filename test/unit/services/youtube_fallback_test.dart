@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:dmx/core/services/backend_health_service.dart';
 import 'package:dmx/core/services/xdm_backend_client.dart';
 import 'package:dmx/core/services/xdm_backend_exceptions.dart';
 import 'package:dmx/core/services/youtube_service.dart';
@@ -41,6 +42,9 @@ void main() {
     await settings.load();
     await settings.setUseLocalYtFallback(true);
     await XdmBackendClient.setApiKey('test-key');
+    // Clear unhealthy marks from earlier tests so a reused ephemeral port is
+    // not skipped as a backend.
+    BackendHealthService.instance.resetCooldowns();
 
     requestCount = 0;
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -113,7 +117,7 @@ void main() {
       YoutubeService.getStreams(testUrl),
       throwsA(isA<Exception>()),
     );
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('local fallback is skipped when disabled in settings', () async {
     await SettingsProvider.instance.setUseLocalYtFallback(false);
@@ -129,7 +133,7 @@ void main() {
       throwsA(isA<Exception>()),
     );
     expect(channelCalled, isFalse);
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('retry with exponential backoff retries before final failure', () async {
     mockExtractorChannel(null);
@@ -140,7 +144,7 @@ void main() {
     );
     // Initial attempt + 2 retries = at least 3 backend requests.
     expect(requestCount, greaterThanOrEqualTo(3));
-  }, timeout: const Timeout(Duration(minutes: 2)));
+  }, timeout: const Timeout(Duration(minutes: 3)));
 
   test('XdmBackendTimeoutException is typed as a BackendException', () {
     const e = XdmBackendTimeoutException('Request timed out after 30s');

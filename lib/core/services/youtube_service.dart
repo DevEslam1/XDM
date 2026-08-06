@@ -603,9 +603,14 @@ class YoutubeService {
       final fallback = await _tryLocalFallback(url);
       if (fallback != null) return fallback;
       rethrow;
-    } on BackendNetworkException catch (e) {
+    } on BackendException catch (e) {
+      // Any backend exception (unreachable, server error, not-found, auth)
+      // hands off to the on-device extractor. The multi-backend failover in
+      // XdmBackendClient maps the final failure to one of these types, so a
+      // narrow catch (timeout/network only) would skip the fallback whenever
+      // the last backend answers with, e.g., a 404.
       debugPrint(
-        '[YoutubeService] Backend unreachable, trying local fallback: $e',
+        '[YoutubeService] Backend error, trying local fallback: $e',
       );
       final fallback = await _tryLocalFallback(url);
       if (fallback != null) return fallback;

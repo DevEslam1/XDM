@@ -212,6 +212,11 @@ class XdmBackendClient {
       final uniqueBackends = backendUrls.toSet().toList();
 
       Object? lastError;
+      // When ANY backend failed with a network/server error (timeout, refused,
+      // 5xx), surface that instead of the last 404 the failover chain saw. A
+      // 404 from a fallback backend must not mask the real "backend
+      // unreachable" condition that should trigger retry + local fallback.
+      var sawNetworkFailure = false;
 
       for (var baseUrl in uniqueBackends) {
         if (baseUrl.endsWith('/')) baseUrl = baseUrl.substring(0, baseUrl.length - 1);
@@ -220,8 +225,10 @@ class XdmBackendClient {
         final endpoints = ['/api/streams', '/streams'];
         
         for (final endpoint in endpoints) {
+          // C3: hoisted so the finally clause can close the throwaway client.
+          Dio? dio;
           try {
-            final dio = Dio(BaseOptions(
+            dio = Dio(BaseOptions(
               baseUrl: baseUrl,
               connectTimeout: const Duration(seconds: 30),
               receiveTimeout: const Duration(seconds: 60),
@@ -254,31 +261,48 @@ class XdmBackendClient {
               lastError = Exception('Invalid response format');
               continue;
             }
-          } catch (e) {
-            lastError = e;
-            _log.warning('Backend $baseUrl endpoint $endpoint failed: $e');
-            
-            if (e is DioException) {
-              final statusCode = e.response?.statusCode;
-              if (statusCode == 404) {
-                // Try next endpoint on the same backend
-                continue;
-              }
-              if (statusCode != null && statusCode >= 400 && statusCode < 500) {
-                if (statusCode == 451 || statusCode == 400) {
-                  throw _handleDioError(e, baseUrl);
-                }
-              } else {
-                BackendHealthService.instance.markUnhealthy(baseUrl);
-              }
-            } else {
-              BackendHealthService.instance.markUnhealthy(baseUrl);
-            }
-            // Move to next endpoint or backend
+            // C3: this throwaway-per-backend/endpoint Dio must be closed so
+            // its connection pool doesn't leak sockets during playlist batch
+            // enqueues (50+ videos).
+      } catch (e) {
+        lastError = e;
+        _log.warning('Backend $baseUrl endpoint $endpoint failed: $e');
+        
+        if (e is DioException) {
+          final statusCode = e.response?.statusCode;
+          if (statusCode == 404) {
+            // Try next endpoint on the same backend
+            continue;
           }
+          if (statusCode != null && statusCode >= 400 && statusCode < 500) {
+            if (statusCode == 451 || statusCode == 400) {
+              throw _handleDioError(e, baseUrl);
+            }
+          } else {
+            BackendHealthService.instance.markUnhealthy(baseUrl);
+            sawNetworkFailure = true;
+          }
+          if (e.type == DioExceptionType.connectionTimeout ||
+              e.type == DioExceptionType.receiveTimeout ||
+              e.type == DioExceptionType.sendTimeout ||
+              e.type == DioExceptionType.connectionError) {
+            sawNetworkFailure = true;
+          }
+        } else {
+          BackendHealthService.instance.markUnhealthy(baseUrl);
+          sawNetworkFailure = true;
+        }
+        // Move to next endpoint or backend
+      } finally {
+        dio?.close(force: true); // C3: close the throwaway Dio's connection pool
+      }
         }
       }
-      throw _handleDioError(lastError ?? Exception('All backends failed'), uniqueBackends.isNotEmpty ? uniqueBackends.first : null);
+      throw _handleDioError(
+        lastError ?? Exception('All backends failed'),
+        uniqueBackends.isNotEmpty ? uniqueBackends.first : null,
+        sawNetworkFailure,
+      );
     });
   }
 
@@ -317,8 +341,10 @@ class XdmBackendClient {
         final endpoints = ['/api/playlist', '/playlist'];
         
         for (final endpoint in endpoints) {
+          // C3: hoisted so the finally clause can close the throwaway client.
+          Dio? dio;
           try {
-            final dio = Dio(BaseOptions(
+            dio = Dio(BaseOptions(
               baseUrl: baseUrl,
               connectTimeout: const Duration(seconds: 30),
               receiveTimeout: const Duration(seconds: 60),
@@ -341,6 +367,7 @@ class XdmBackendClient {
             final data = response.data ?? {};
             BackendHealthService.instance.markHealthy(baseUrl);
             return data;
+            // C3: close the throwaway Dio's connection pool.
           } catch (e) {
             lastError = e;
             _log.warning('Backend $baseUrl endpoint $endpoint failed for playlist: $e');
@@ -357,6 +384,8 @@ class XdmBackendClient {
             } else {
               BackendHealthService.instance.markUnhealthy(baseUrl);
             }
+          } finally {
+            dio?.close(force: true); // C3: close the throwaway Dio's connection pool
           }
         }
       }
@@ -385,8 +414,10 @@ class XdmBackendClient {
         final endpoints = ['/api/search', '/search'];
         
         for (final endpoint in endpoints) {
+          // C3: hoisted so the finally clause can close the throwaway client.
+          Dio? dio;
           try {
-            final dio = Dio(BaseOptions(
+            dio = Dio(BaseOptions(
               baseUrl: baseUrl,
               connectTimeout: const Duration(seconds: 30),
               receiveTimeout: const Duration(seconds: 60),
@@ -407,6 +438,7 @@ class XdmBackendClient {
             final results = data['results'] as List?;
             if (results == null) return [];
             return results.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+            // C3: close the throwaway Dio's connection pool.
           } catch (e) {
             lastError = e;
             _log.warning('Backend $baseUrl endpoint $endpoint failed for search: $e');
@@ -418,6 +450,8 @@ class XdmBackendClient {
             } else {
               BackendHealthService.instance.markUnhealthy(baseUrl);
             }
+          } finally {
+            dio?.close(force: true); // C3: close the throwaway Dio's connection pool
           }
         }
       }
@@ -425,8 +459,22 @@ class XdmBackendClient {
     });
   }
 
-  BackendException _handleDioError(Object error, [String? failingUrl]) {
+  BackendException _handleDioError(
+    Object error,
+    [String? failingUrl, bool sawNetworkFailure = false]) {
     if (error is BackendException) return error;
+
+    // When the failover chain saw any network/server failure, prefer a
+    // network exception over a later 4xx (e.g. a fallback backend's 404).
+    // Network failures are transient (retryable, trigger local fallback);
+    // a "not found" would otherwise suppress the retry entirely.
+    if (sawNetworkFailure &&
+        error is DioException &&
+        (error.response?.statusCode ?? 0) < 500) {
+      return const BackendNetworkException(
+        'Cannot reach download backend. Check your connection.',
+      );
+    }
     
     final targetUrl = failingUrl ?? _dio.options.baseUrl;
     

@@ -461,8 +461,12 @@ class TorrentService {
                   stateLabel: value.state.label,
                   numSeeds: value.numSeeds,
                   numPeers: value.numPeers,
-                  piecesHave: (safeProgress * 1000).round(),
-                  piecesTotal: 1000,
+                  // H5: The plugin's public TorrentInfo model does not expose
+                  // real piece counts (numPieces/piecesDone live only in the
+                  // raw FFI struct), so do NOT fabricate a "1000-piece" total.
+                  // Consumers must treat piecesTotal == 0 as "unknown".
+                  piecesHave: 0,
+                  piecesTotal: 0,
                   downloadPayloadRate: value.downloadRate,
                   uploadPayloadRate: value.uploadRate,
                   totalPayloadDownload: value.totalDone,

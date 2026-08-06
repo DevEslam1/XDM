@@ -266,9 +266,27 @@ class DownloadOrchestrator {
             final decoded = jsonDecode(content);
             if (decoded is Map) {
               final savedSize = (decoded['totalSize'] as num?)?.toInt() ?? -1;
+              // C1: The .dmxstate stores the VIDEO-ONLY transfer size for
+              // muxed (YouTube) tasks, while task.fileSize holds the combined
+              // video+audio total. Comparing video-only against the combined
+              // total (with a fixed 2 KB tolerance) wipes video progress on
+              // every resume. Compare against the expected video size using a
+              // percentage-based tolerance instead.
+              final expectedVideoSize =
+                  (task.hasMergedAudio &&
+                          task.audioSize > 0 &&
+                          task.fileSize > task.audioSize)
+                      ? task.fileSize - task.audioSize
+                      : task.fileSize;
+              final tolerance = expectedVideoSize > 0
+                  ? (expectedVideoSize * 0.001).clamp(
+                      2048.0,
+                      10 * 1024 * 1024,
+                    )
+                  : 2048.0;
               if (savedSize > 0 &&
-                  task.fileSize > 0 &&
-                  (savedSize - task.fileSize).abs() > 2048) {
+                  expectedVideoSize > 0 &&
+                  (savedSize - expectedVideoSize).abs() > tolerance) {
                 debugPrint(
                     '[DMX] Size mismatch in resume state, resetting progress');
               } else {
@@ -478,6 +496,12 @@ class DownloadOrchestrator {
       await _startTaskBody(task);
     } finally {
       _startingTaskIds.remove(task.id);
+      // M6: _startTaskBody may return early without consuming a slot (task no
+      // longer queued, stream resolution rejected, cancelled mid-gap). Re-pump
+      // the queue so the freed concurrency slot is handed to the next queued
+      // task instead of idling until an unrelated event triggers a pump.
+      // pumpQueue() coalesces re-entry and early-exits when the cap is met.
+      _host.pumpQueue();
     }
   }
 
@@ -534,7 +558,14 @@ class DownloadOrchestrator {
         if (videoId != null) {
           final isRetry = (_host.retryCounts[task.id] ?? 0) > 0 ||
               task.status == DownloadStatus.failed;
-          if (isRetry && task.downloadPageUrl != null) {
+          // H2: Resuming with stored progress must not burn an engine attempt
+          // on an expired stream URL. Refresh the video/audio URLs proactively
+          // before the engine starts so a stale signed URL cannot kill the
+          // resume mid-way.
+          final isResumingWithProgress = task.downloadedBytes > 0 ||
+              (task.chunks.isNotEmpty && task.chunks.any((c) => c > 0));
+          if ((isRetry || isResumingWithProgress) &&
+              task.downloadPageUrl != null) {
             try {
               final fresh = await YoutubeService.getFreshStreams(task.downloadPageUrl!);
               if (fresh != null && fresh['url'] != null) {
@@ -650,7 +681,8 @@ class DownloadOrchestrator {
             '[DMX] YoutubeService stream resolution error ($e); proceeding with pre-resolved stream URL.',
           );
         } else {
-          final isRetryable = isRetryableError(e);
+          final isRetryable = isRetryableError(e) ||
+              (_isYouTubeTask(task) && _isYouTubeStreamError(e));
           final maxRetries =
               _host.providerSettingsProvider.autoRetryEnabled && isRetryable
                   ? _host.providerSettingsProvider.maxRetries
@@ -804,10 +836,28 @@ class DownloadOrchestrator {
     debugPrint('[DMX]   Audio size: $audioLen bytes');
 
     if (videoLen == 0) {
-      throw Exception('Video file is empty: $actualVideoPath');
+      debugPrint('[DMX] FIX-B4: video file empty: $actualVideoPath');
+      await _host.setTaskState(
+        current.copyWith(
+          status: DownloadStatus.failed,
+          statusMessage: DownloadStatusMessages.ffmpegMergeFailed,
+          errorMessage:
+              '${DownloadStatusMessages.ffmpegMergeFailed}Video file is empty. Please retry the download.',
+        ),
+      );
+      return false;
     }
     if (audioLen == 0) {
-      throw Exception('Audio file is empty: $actualAudioPath');
+      debugPrint('[DMX] FIX-B4: audio file empty: $actualAudioPath');
+      await _host.setTaskState(
+        current.copyWith(
+          status: DownloadStatus.failed,
+          statusMessage: DownloadStatusMessages.ffmpegMergeFailed,
+          errorMessage:
+              '${DownloadStatusMessages.ffmpegMergeFailed}Audio file is empty. Please retry the download.',
+        ),
+      );
+      return false;
     }
 
 
@@ -817,10 +867,21 @@ class DownloadOrchestrator {
       final deficit = expectedAudioSize - audioLen;
       final deficitPct =
           (deficit / expectedAudioSize * 100).toStringAsFixed(1);
-      throw Exception(
-        'Audio file incomplete: $audioLen / $expectedAudioSize bytes '
-        '($deficitPct% missing). File: $actualAudioPath',
+      debugPrint(
+        '[DMX] FIX-1: audio file incomplete: $audioLen / $expectedAudioSize '
+        'bytes ($deficitPct% missing). Failing merge.',
       );
+      await _host.setTaskState(
+        current.copyWith(
+          status: DownloadStatus.failed,
+          statusMessage: DownloadStatusMessages.ffmpegMergeFailed,
+          errorMessage:
+              '${DownloadStatusMessages.ffmpegMergeFailed}Audio file incomplete: '
+              '$audioLen / $expectedAudioSize bytes '
+              '($deficitPct% missing). Please retry the download.',
+        ),
+      );
+      return false;
     }
 
     // FIX-10: Validate video file size before merge
@@ -829,10 +890,20 @@ class DownloadOrchestrator {
         : 0;
     if (expectedVideoSize > 0 &&
         videoLen < (expectedVideoSize * 0.95).toInt()) {
-      throw Exception(
-        'Video file incomplete: $videoLen / $expectedVideoSize bytes. '
-        'File: $actualVideoPath',
+      debugPrint(
+        '[DMX] FIX-10: video file incomplete: $videoLen / $expectedVideoSize '
+        'bytes. Failing merge.',
       );
+      await _host.setTaskState(
+        current.copyWith(
+          status: DownloadStatus.failed,
+          statusMessage: DownloadStatusMessages.ffmpegMergeFailed,
+          errorMessage:
+              '${DownloadStatusMessages.ffmpegMergeFailed}Video file incomplete: '
+              '$videoLen / $expectedVideoSize bytes. Please retry the download.',
+        ),
+      );
+      return false;
     }
 
     Duration? expectedDuration;
@@ -1538,7 +1609,14 @@ class DownloadOrchestrator {
           final expectedVideo =
               videoTransferSize > 0 ? videoTransferSize : 1024;
           final expectedAudio = task.audioSize > 0 ? task.audioSize : 1;
-          if (videoLen >= expectedVideo && audioLen >= expectedAudio) {
+          // M4: When the video transfer size is unknown, the 1KB heuristic
+          // must not be trusted alone — a pre-allocated temp file reports its
+          // full length. Require a .dmxstate so the byte count is proven.
+          final videoSizeProven = videoTransferSize > 0 ||
+              await File('${task.tempFilePath}.dmxstate').exists();
+          if (videoSizeProven &&
+              videoLen >= expectedVideo &&
+              audioLen >= expectedAudio) {
             debugPrint('[DMX] FIX A-3: Both streams complete. Merge-only path.');
             await _host.setTaskState(task.copyWith(
               statusMessage: DownloadStatusMessages.merging,
@@ -1706,8 +1784,17 @@ class DownloadOrchestrator {
                 if (size == 0 && progress.fileSize > 0) {
                   final idx = _host.providerTasks.indexWhere((x) => x.id == task.id);
                   if (idx != -1) {
-                    _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
+                    final updated = _host.providerTasks[idx].copyWith(
                       audioSize: progress.fileSize,
+                    );
+                    _host.providerTasks[idx] = updated;
+                    // H3: Persist the discovered audio size immediately so a
+                    // crash doesn't leave audioSize == 0 across a restart
+                    // (which would corrupt the combined size denominator).
+                    unawaited(
+                      _host.providerDatabaseService
+                          .saveTask(updated)
+                          .catchError((_) {}),
                     );
                   }
                 }
@@ -2273,6 +2360,7 @@ class DownloadOrchestrator {
   }
 
   Future<void> _startTaskBody(DownloadTask task) async {
+    try {
     // C-1 FIX: Re-check live status before starting
     final liveTask = _host.findTaskById(task.id);
     if (liveTask == null || liveTask.status != DownloadStatus.queued) {
@@ -2304,6 +2392,15 @@ class DownloadOrchestrator {
     } catch (e) {
       debugPrint('[FIX-H1] Chunk clamping error: $e');
     }
+    // FIX-9: After any chunk redistribution, keep sum(chunks) aligned with
+    // downloadedBytes/fileSize so bar segments stay consistent.
+    task = task.copyWith(
+      chunks: normalizeChunks(
+        task.chunks,
+        task.fileSize,
+        task.downloadedBytes,
+      ),
+    );
 
     final hasWifiOrEthernet = _host.networkMonitor.hasWifiOrEthernet;
     if (_host.providerSettingsProvider.wifiOnly && !hasWifiOrEthernet) {
@@ -2862,7 +2959,8 @@ class DownloadOrchestrator {
       // Audio sidecar intentionally preserved on failure.
       // Retry / resume can continue from the existing .audio + .audio.dmxstate.
 
-      final isRetryable = isRetryableError(realError);
+      final isRetryable = isRetryableError(realError) ||
+          (_isYouTubeTask(task) && _isYouTubeStreamError(realError));
       final maxRetries =
           _host.providerSettingsProvider.autoRetryEnabled && isRetryable
               ? _host.providerSettingsProvider.maxRetries
@@ -2970,6 +3068,23 @@ class DownloadOrchestrator {
       }
     });
     _host.activeFutures[task.id] = downloadFuture;
+    } catch (e, st) {
+      // FIX-1: _startTaskBody must never leave a task stuck in queued or leak
+      // the _startingTaskIds entry. Any unhandled exception (disk full, resolve
+      // failure) marks the task failed and frees the concurrency slot.
+      debugPrint('[DMX] _startTaskBody unexpected error for ${task.id}: $e');
+      debugPrint('[DMX] _startTaskBody stack: $st');
+      final live = _host.findTaskById(task.id);
+      if (live != null && live.status == DownloadStatus.queued) {
+        await _host.setTaskState(live.copyWith(
+          status: DownloadStatus.failed,
+          errorMessage: 'Start failed: $e',
+          speed: 0,
+          clearEta: true,
+        ));
+      }
+      _host.pumpQueue();
+    }
   }
 
   /// A torrent handle is reusable only while the native session still owns
@@ -3126,13 +3241,38 @@ class DownloadOrchestrator {
             statusCode == 404 ||
             statusCode == 410 ||
             statusCode == 416) {
-          // FIX-10: 403/410 for YouTube are often expired stream URLs → retryable
-          if (statusCode == 403 || statusCode == 410) return true;
+          // A generic 403/410 (auth/access denied) must NOT be retried. The
+          // YouTube-only case (expired stream URL) is handled by
+          // _isYouTubeStreamError at the task-aware call sites below.
           return false;
         }
       }
     }
     return true;
+  }
+
+  /// True for 403/410 HTTP errors that usually mean an expired YouTube
+  /// stream URL or a bot-check page. Only meaningful for YouTube tasks; a
+  /// generic 403 (access denied) on a plain HTTP download must not be
+  /// retried.
+  static bool _isYouTubeStreamError(Object error) {
+    if (error is DioException) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 403 || statusCode == 410) return true;
+    }
+    final msg = error.toString().toLowerCase();
+    return msg.contains('html_instead_of_media') ||
+        msg.contains('html instead of media') ||
+        msg.contains('sign in to confirm') ||
+        msg.contains('bot');
+  }
+
+  /// Whether [task] belongs to a YouTube download. Used to scope the
+  /// expired-stream retry (403/410) to YouTube tasks only.
+  static bool _isYouTubeTask(DownloadTask task) {
+    if (task.youtubeQualityPreset != null) return true;
+    final url = '${task.url} ${task.downloadPageUrl ?? ''}'.toLowerCase();
+    return url.contains('youtube.com') || url.contains('youtu.be');
   }
 
   /// Evicts stale cookies from the cache.
@@ -3213,6 +3353,7 @@ class DownloadOrchestrator {
   }) async {
     final List<File> sidecars = [
       File('${task.tempFilePath}.journal'), // always safe to delete
+      File('${task.tempFilePath}.audio.journal'), // M1: always safe to delete
     ];
 
     if (!preserveParts) {
@@ -3261,6 +3402,7 @@ class DownloadOrchestrator {
       // When preserving, keep .dmxstate / .audio / .audio.dmxstate / .merged
       final sidecars = <File>[
         File('${task.tempFilePath}.journal'), // always safe to delete
+        File('${task.tempFilePath}.audio.journal'), // M1: always safe to delete
       ];
 
       if (!preserveParts) {
@@ -3401,6 +3543,23 @@ class DownloadOrchestrator {
     }
     return 0;
 
+  }
+
+  /// FIX-9: Normalizes a chunk list so its sum equals `downloadedBytes /
+  /// fileSize * chunks.length`. Adaptive thread redistribution can otherwise
+  /// drift the per-chunk percentages, producing inconsistent bar segments.
+  static List<double> normalizeChunks(
+    List<double> chunks,
+    int fileSize,
+    int downloadedBytes,
+  ) {
+    if (fileSize <= 0 || chunks.isEmpty) return chunks;
+    final targetSum =
+        (downloadedBytes / fileSize).clamp(0.0, 1.0) * chunks.length;
+    final currentSum = chunks.fold<double>(0.0, (s, c) => s + c);
+    if (currentSum <= 0 || targetSum <= 0) return chunks;
+    final scale = targetSum / currentSum;
+    return chunks.map((c) => (c * scale).clamp(0.0, 1.0)).toList();
   }
 
   /// Reads per-chunk progress percentages from a `.dmxstate` sidecar file.

@@ -149,8 +149,23 @@ class TorrentResumeStore {
   /// Stable key for a torrent source. Native torrent IDs are process-local and
   /// change after restart, so fast-resume data must also be addressable by the
   /// magnet URI or torrent-file source.
-  static String stableSourceKey(String source) =>
-      sha256.convert(utf8.encode(source.trim())).toString();
+  static String stableSourceKey(String source) {
+    final trimmed = source.trim();
+    // M3: Magnet trackers are often reordered/normalized, which changes the
+    // raw magnet URL and orphans any key derived from it. Key by the immutable
+    // infoHash (xt=urn:btih:/btmh:) when present, falling back to a hash of
+    // the full source only for non-magnet torrent-file sources.
+    if (trimmed.toLowerCase().startsWith('magnet:')) {
+      final xt = RegExp(
+        r'xt=urn:bt(?:ih|mh):([a-zA-Z0-9]+)',
+        caseSensitive: false,
+      ).firstMatch(trimmed);
+      if (xt != null && xt.group(1) != null) {
+        return 'magnet:bt:${xt.group(1)!.toLowerCase()}';
+      }
+    }
+    return sha256.convert(utf8.encode(trimmed)).toString();
+  }
 
   static String _binaryPathForSource(String source) =>
       p.join(_basePath!, 'resume_source_${stableSourceKey(source)}_fast.bin');

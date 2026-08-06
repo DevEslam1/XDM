@@ -2725,13 +2725,14 @@ void _showTorrentProperties(
                 ),
                 const SizedBox(height: 10),
                 if (stats != null) ...[
-                  _propRow(
-                    isRtl ? 'القطع المكتملة' : 'Pieces',
-                    '${stats.piecesHave} / ${stats.piecesTotal}',
-                    textClr,
-                    secClr,
-                    isRtl,
-                  ),
+                  if (stats.piecesTotal > 0)
+                    _propRow(
+                      isRtl ? 'القطع المكتملة' : 'Pieces',
+                      '${stats.piecesHave} / ${stats.piecesTotal}',
+                      textClr,
+                      secClr,
+                      isRtl,
+                    ),
                   _propRow(
                     isRtl ? 'المُتتبع' : 'Current Tracker',
                     stats.currentTracker.isNotEmpty

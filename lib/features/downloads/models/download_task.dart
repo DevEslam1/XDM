@@ -169,8 +169,12 @@ class DownloadTask {
   /// Combined total payload size for this task (video + audio if YouTube, or resolvedFileSize).
   int get combinedTotalSize {
     if (hasMergedAudio && audioSize > 0) {
-      // fileSize already = videoSize + audioSize (set in _resolveStreamUrl)
-      if (fileSize > 0) return fileSize;
+      // C4: fileSize is the combined video+audio total where it can be proven
+      // (set in _resolveStreamUrl). If only a video-only size was stored,
+      // add audio back on so the audio stream is never missing from the
+      // denominator and progress can't hit 100% before audio finishes.
+      if (fileSize > audioSize) return fileSize;
+      if (fileSize > 0) return fileSize + audioSize;
       return audioSize; // video size unknown; use audio as partial total
     }
     return resolvedFileSize;
@@ -180,10 +184,10 @@ class DownloadTask {
   int get combinedDownloadedBytes {
     final total = combinedTotalSize;
     final raw = downloadedBytes < 0 ? 0 : downloadedBytes;
-    if (hasMergedAudio && audioSize > 0) {
-      // downloadedBytes already includes audio (written by pushCombinedProgress)
-      return total > 0 ? raw.clamp(0, total) : raw;
-    }
+    // FIX-7: Always clamp when the total is known. Plain HTTP downloads can
+    // briefly exceed fileSize (over-long Range reads), which otherwise shows
+    // >100% in progress widgets and inflates backup exports.
+    if (total > 0) return raw.clamp(0, total);
     return raw;
   }
 
