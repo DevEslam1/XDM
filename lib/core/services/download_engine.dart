@@ -1112,6 +1112,13 @@ class DownloadEngine {
         getTorrentFiles,
         knownFileSize,
       );
+    } catch (e) {
+      if (!cancelToken.isCancelled) {
+        try {
+          TorrentService.removeTorrent(id, deleteFiles: false);
+        } catch (_) {}
+      }
+      rethrow;
     } finally {
       _activeTorrentIds.remove(id);
       // FIX-TOR-04: Clean up static maps on torrent removal or completion
@@ -1429,15 +1436,28 @@ class DownloadEngine {
   }
 
   static void _distributeEstimatedBytes(
-      List<Map<String, dynamic>> files, int downloadedBytes) {
+      List<Map<String, dynamic>> files, int totalDownloadedBytes) {
     final needing = files
         .where((f) => (f['progressEstimated'] as bool? ?? true) == true)
         .toList();
     if (needing.isEmpty) return;
 
+    final totalNeedingSize = needing.fold<int>(
+      0,
+      (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0),
+    );
+
     for (var i = 0; i < needing.length; i++) {
-      // FIX-TOR-02: Prefer native data. If no data, keep at 0 and flag as estimated.
-      needing[i]['downloadedBytes'] = 0;
+      final length = (needing[i]['length'] as num?)?.toInt() ?? 0;
+      if (length <= 0) {
+        needing[i]['downloadedBytes'] = 0;
+      } else if (totalNeedingSize > 0 && totalDownloadedBytes > 0) {
+        final estimated =
+            ((length / totalNeedingSize) * totalDownloadedBytes).round();
+        needing[i]['downloadedBytes'] = estimated.clamp(0, length);
+      } else {
+        needing[i]['downloadedBytes'] = 0;
+      }
       needing[i]['progressEstimated'] = true;
     }
   }

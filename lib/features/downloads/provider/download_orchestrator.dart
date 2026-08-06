@@ -338,12 +338,16 @@ class DownloadOrchestrator {
   int get pendingStartCount => _startingTaskIds.length;
   bool isTaskPendingStart(String taskId) => _startingTaskIds.contains(taskId);
 
-  // QUEUE-FIX-5: Return bool indicating if startTask was accepted
   bool startTask(DownloadTask task) {
     if (_host.cancelTokens.containsKey(task.id)) return false;
     if (_startingTaskIds.contains(task.id)) return false;
     _startingTaskIds.add(task.id);
-    unawaited(_runStartTaskBody(task));
+    try {
+      unawaited(_runStartTaskBody(task));
+    } catch (_) {
+      _startingTaskIds.remove(task.id);
+      rethrow;
+    }
     return true;
   }
 
@@ -1785,6 +1789,7 @@ class DownloadOrchestrator {
               adaptiveThreads: _host.providerSettingsProvider.adaptiveThreads,
               speedLimitKbps: task.speedLimitKbps,
               onProgress: (progress) {
+                if (audioCancelToken.isCancelled || cancelToken.isCancelled) return;
                 final t = _host.findTaskById(task.id);
                 if (t == null || t.status != DownloadStatus.downloading) return;
                 audioBytesSoFar = progress.downloadedBytes;

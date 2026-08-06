@@ -708,7 +708,7 @@ class _ChunkedProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chunks = task.chunks;
+    final chunks = task.sanitizedChunks;
     final Widget bar;
     if (task.isTorrent || chunks.length <= 1 || task.hasMergedAudio) {
       final provider = context.read<DownloadProvider>();
@@ -724,7 +724,7 @@ class _ChunkedProgressBar extends StatelessWidget {
         child: Selector<DownloadProvider, List<double>>(
           selector: (_, p) {
             final t = p.taskById(task.id);
-            return t?.chunks ?? [];
+            return t?.sanitizedChunks ?? [];
           },
           builder: (_, liveChunks, __) {
             final activeChunks = liveChunks.isNotEmpty ? liveChunks : chunks;

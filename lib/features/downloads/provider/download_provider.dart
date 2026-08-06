@@ -1276,13 +1276,20 @@ class DownloadProvider extends ChangeNotifier
       throw Exception('This download is already active in the queue.');
     }
 
+    final targetSaveDir = savePath.isNotEmpty
+        ? savePath
+        : (_settingsProvider.customDownloadPath?.isNotEmpty == true
+            ? _settingsProvider.customDownloadPath!
+            : await _permissionService.defaultDownloadDirectory());
+
+    if (size > 0 && !await _downloadEngine.hasEnoughDiskSpace(targetSaveDir, size)) {
+      throw const InsufficientStorageException();
+    }
+
     // FIX-INTEL: Analyze URL for site intelligence and smart category resolution
     final analysis = SiteIntelligenceService().analyzeUrl(url);
 
-    final defaultDirectory =
-        _settingsProvider.customDownloadPath?.isNotEmpty == true
-            ? _settingsProvider.customDownloadPath!
-            : await _permissionService.defaultDownloadDirectory();
+    final defaultDirectory = targetSaveDir;
 
     final bool isMagnet = url.trim().toLowerCase().startsWith('magnet:');
     final bool isTorrent = isTorrentUrl(url, fileName: name);
@@ -4178,7 +4185,8 @@ class DownloadProvider extends ChangeNotifier
         final meta = await _downloadEngine.resolveMetadata(url: newUrl);
         if (meta.fileSize > 0 &&
             task.fileSize > 0 &&
-            (meta.fileSize - task.fileSize).abs() > 2048) {
+            (meta.fileSize - task.fileSize).abs() >
+                max(100 * 1024, (task.fileSize * 0.05).toInt())) {
           await startOverTask(id, newUrl, newAudioUrl: newAudioUrl);
           return;
         }

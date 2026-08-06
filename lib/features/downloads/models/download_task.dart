@@ -189,11 +189,9 @@ class DownloadTask {
     final total = combinedTotalSize;
     var raw = downloadedBytes < 0 ? 0 : downloadedBytes;
     if (hasMergedAudio) {
-      // FIX: if downloadedBytes already includes audio (post-pause),
-      // do NOT add audio again. Detect via a flag or by checking
-      // whether downloadedBytes > fileSize (video-only size).
-      final videoOnly =
-          videoStreamSize > 0 ? videoStreamSize : fileSize - audioSize;
+      final videoOnly = videoStreamSize > 0
+          ? videoStreamSize
+          : (fileSize > audioSize ? fileSize - audioSize : 0);
       if (videoOnly > 0 && raw > videoOnly) {
         // Already includes audio — do not add again
       } else if (audioSize > 0) {
@@ -206,6 +204,17 @@ class DownloadTask {
     }
     if (total > 0) return raw.clamp(0, total);
     return raw;
+  }
+
+  /// Sanitized chunk progress ratios matching current threadCount.
+  List<double> get sanitizedChunks {
+    final count = threadCount > 0 ? threadCount : 1;
+    if (chunks.length == count) return chunks;
+    if (chunks.isEmpty) return List<double>.filled(count, 0.0);
+    if (chunks.length < count) {
+      return [...chunks, ...List<double>.filled(count - chunks.length, 0.0)];
+    }
+    return chunks.sublist(0, count);
   }
 
   double get progress {
