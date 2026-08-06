@@ -709,9 +709,22 @@ class DownloadEngine {
 
     final int defaultCount =
         SettingsProvider.instance.effectiveDefaultThreadCount;
-    final int effectiveThreadCount =
-        (threadCount > 0 ? threadCount : defaultCount)
-            .clamp(1, PowerMonitor.maxAllowedThreads);
+    final int effectiveThreadCount = (() {
+      final base = (threadCount > 0 ? threadCount : defaultCount)
+          .clamp(1, PowerMonitor.maxAllowedThreads);
+      if (adaptiveThreads) {
+        // Use the monitor's recommendation from the previous session, if any.
+        final recommended = _httpEngine.recommendedThreads(taskId, base);
+        if (recommended != base) {
+          debugPrint(
+            '[AdaptiveThreads] task $taskId: using recommended '
+            '$recommended threads (was $base)',
+          );
+        }
+        return recommended;
+      }
+      return base;
+    })();
 
     int resolvedFileSize = knownFileSize;
     bool resolvedSupportsResume = supportsResume;
@@ -835,8 +848,10 @@ class DownloadEngine {
     );
 
     if (adaptiveThreads) {
-      // TODO(adaptive-threads): wire up recordSample and startAdaptiveMonitorIfEnabled
-      debugPrint('[DMX] adaptiveThreads requested but monitor not yet wired');
+      // Start the periodic plateau-detection monitor for this task.
+      // It observes speed samples and publishes a thread-count recommendation
+      // that will be applied the next time this task starts (see above).
+      _httpEngine.startAdaptiveMonitorForTask(taskId, effectiveThreadCount);
     }
 
     final pool = await _ensurePool();
@@ -884,7 +899,14 @@ class DownloadEngine {
         case 'progress':
           resetInactivityTimer();
           final p = message.data;
-          // TODO(adaptive-threads): wire up recordSample here with speed and threadCount
+          if (adaptiveThreads) {
+            // Feed live throughput into the adaptive monitor so plateau
+            // detection can fire and update the recommendation.
+            final speed = (p['speed'] as num?)?.toDouble() ?? 0.0;
+            if (speed > 0) {
+              _httpEngine.recordSample(taskId, speed, effectiveThreadCount);
+            }
+          }
           onProgress(DownloadProgress(
             downloadedBytes: (p['downloadedBytes'] as num?)?.toInt() ?? 0,
             fileSize: (p['fileSize'] as num?)?.toInt() ?? 0,
@@ -916,6 +938,13 @@ class DownloadEngine {
       await sub.cancel();
       job.dispose();
       _activeCancelTokens.remove(cancelToken);
+      if (adaptiveThreads) {
+        // Keep the tracker alive so recommendedThreads() can be read on the
+        // next start, but stop the periodic timer if no other tasks are tracked.
+        if (_httpEngine.activeTrackerCount == 0) {
+          _httpEngine.stopAdaptiveThreadMonitor();
+        }
+      }
     }
   }
 

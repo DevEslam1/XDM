@@ -77,6 +77,17 @@ class HttpDownloadEngine {
     );
   }
 
+  /// Starts the adaptive monitor for a task identified by [taskId] with the
+  /// given initial [threadCount]. Use this when a full [DownloadTask] is not
+  /// available (e.g. from inside [DownloadEngine.download]).
+  void startAdaptiveMonitorForTask(String taskId, int threadCount) {
+    _trackers.putIfAbsent(taskId, () => _AdaptiveTracker(threadCount));
+    _monitorTimer ??= Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _evaluate(),
+    );
+  }
+
   /// Called by transfer jobs with each progress sample.
   void recordSample(String taskId, double bytesPerSec, int threads) {
     _trackers[taskId]?.add(bytesPerSec, threads);
@@ -88,6 +99,9 @@ class HttpDownloadEngine {
     if (t == null) return fallback;
     return t.recommendation.clamp(1, fallback);
   }
+
+  /// Number of tasks currently being tracked by the adaptive monitor.
+  int get activeTrackerCount => _trackers.length;
 
   void stopFor(String taskId) => _trackers.remove(taskId);
 
