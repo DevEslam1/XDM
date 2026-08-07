@@ -230,41 +230,54 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
               ),
             );
 
-            return Scaffold(
-              backgroundColor: AppTheme.getBackground(
-                isDark,
-                isAmoled: settingsTuple.isAmoled,
+            return PopScope(
+              canPop: currentIndex == 0,
+              onPopInvokedWithResult: (didPop, result) async {
+                if (didPop) return;
+                if (currentIndex == 2) {
+                  Provider.of<DownloadProvider>(context, listen: false)
+                      .setActiveTabIndex(0);
+                } else if (currentIndex == 1) {
+                  Provider.of<DownloadProvider>(context, listen: false)
+                      .setActiveTabIndex(0);
+                }
+              },
+              child: Scaffold(
+                backgroundColor: AppTheme.getBackground(
+                  isDark,
+                  isAmoled: settingsTuple.isAmoled,
+                ),
+                extendBody: true,
+                body: screenType == ScreenType.desktop
+                    ? Row(
+                        children: [
+                          _NavigationRailWidget(
+                            settingsTuple: settingsTuple,
+                            isDark: isDark,
+                            isRtl: isRtl,
+                            currentIndex: currentIndex,
+                          ),
+                          const VerticalDivider(width: 1),
+                          Expanded(child: bodyContent),
+                        ],
+                      )
+                    : bodyContent,
+                bottomNavigationBar: screenType == ScreenType.phone
+                    ? _PhoneBottomNavBar(
+                        settingsTuple: settingsTuple,
+                        isDark: isDark,
+                        isRtl: isRtl,
+                        navState: navState,
+                      )
+                    : screenType == ScreenType.tablet
+                        ? _TabletFloatingNavBar(
+                            settingsTuple: settingsTuple,
+                            isDark: isDark,
+                            isRtl: isRtl,
+                            navState: navState,
+                          )
+                        : null,
               ),
-              extendBody: true,
-              body: screenType == ScreenType.desktop
-                  ? Row(
-                      children: [
-                        _NavigationRailWidget(
-                          settingsTuple: settingsTuple,
-                          isDark: isDark,
-                          isRtl: isRtl,
-                          currentIndex: currentIndex,
-                        ),
-                        const VerticalDivider(width: 1),
-                        Expanded(child: bodyContent),
-                      ],
-                    )
-                  : bodyContent,
-              bottomNavigationBar: screenType == ScreenType.phone
-                  ? _PhoneBottomNavBar(
-                      settingsTuple: settingsTuple,
-                      isDark: isDark,
-                      isRtl: isRtl,
-                      navState: navState,
-                    )
-                  : screenType == ScreenType.tablet
-                      ? _TabletFloatingNavBar(
-                          settingsTuple: settingsTuple,
-                          isDark: isDark,
-                          isRtl: isRtl,
-                          navState: navState,
-                        )
-                      : null,
             );
           },
         );

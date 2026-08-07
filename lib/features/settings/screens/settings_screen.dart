@@ -8,6 +8,7 @@ import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../provider/settings_provider.dart';
+import '../../downloads/provider/download_provider.dart';
 import 'appearance_settings_page.dart';
 import 'downloads_settings_page.dart';
 import 'network_settings_page.dart';
@@ -551,6 +552,20 @@ class _SettingsScreenState extends State<SettingsScreen>
           ),
           centerTitle: true,
           automaticallyImplyLeading: false,
+          leading: isDesktop
+              ? null
+              : IconButton(
+                  icon: Icon(
+                    isRtl
+                        ? Icons.arrow_forward_rounded
+                        : Icons.arrow_back_rounded,
+                    color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                  ),
+                  onPressed: () {
+                    triggerHaptic(settings);
+                    context.read<DownloadProvider>().setActiveTabIndex(0);
+                  },
+                ),
         ),
         body: Directionality(
           textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,

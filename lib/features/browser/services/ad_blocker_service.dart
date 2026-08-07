@@ -749,13 +749,11 @@ div[class*="modal-ad"]:not(#page-manager),
 [class*="push-notification"], [class*="notification-prompt"],
 [class*="exit-intent"], [class*="exit-popup"],
 [class*="welcome-ad"], [class*="splash-ad"],
-[class*="adblock"], [id*="adblock"],
-[class*="ad-block"], [id*="ad-block"],
-[class*="anti-ad"], [id*="anti-ad"],
-[class*="antiad"], [id*="antiad"],
-[class*="blocker"], [id*="blocker"],
-[class*="ad-detector"], [id*="ad-detector"],
-[class*="block-ad"], [id*="block-ad"]
+.adblock, .ad-block, .anti-ad, .antiad, .ad-detector, .block-ad,
+[class*="adblock-warning"], [class*="adblock-overlay"], [class*="adblock-modal"], [class*="adblock-popup"],
+[class*="anti-adblock"], [class*="antiadblock"],
+[id*="adblock-warning"], [id*="adblock-overlay"], [id*="adblock-modal"],
+[id*="anti-adblock"], [id*="antiadblock"]
 { visibility: hidden !important;
   height: 0 !important;
   overflow: hidden !important;
@@ -1222,6 +1220,87 @@ body {
 
   /// Anti-detect JS: fakes ad SDK globals, intercepts fetch/XHR/MO,
   /// and neutralises bait elements.
+  String _compileScriptlet(String rule) {
+    final parts = rule.split(',');
+    if (parts.isEmpty) return '';
+    final action = parts[0].trim();
+
+    if (action == 'set-constant' && parts.length >= 3) {
+      final target = parts[1].trim();
+      final value = parts[2].trim();
+      if (_isValidScriptletTarget(target) && _isValidScriptletValue(value)) {
+        return '  try { window.$target = $value; } catch(e) {}';
+      }
+    } else if ((action == 'abort-on-property-read' || action == 'aopr') && parts.length >= 2) {
+      final target = parts[1].trim();
+      if (_isValidScriptletTarget(target)) {
+        return '''
+  try {
+    var parts = "$target".split(".");
+    var parent = window;
+    for (var i = 0; i < parts.length - 1; i++) {
+      if (!parent[parts[i]]) parent[parts[i]] = {};
+      parent = parent[parts[i]];
+    }
+    var prop = parts[parts.length - 1];
+    Object.defineProperty(parent, prop, {
+      get: function() { throw new ReferenceError("AdBlock abort-on-property-read: " + "$target"); },
+      set: function(v) {},
+      configurable: true
+    });
+  } catch(e) {}''';
+      }
+    } else if ((action == 'abort-on-property-write' || action == 'aopw') && parts.length >= 2) {
+      final target = parts[1].trim();
+      if (_isValidScriptletTarget(target)) {
+        return '''
+  try {
+    var parts = "$target".split(".");
+    var parent = window;
+    for (var i = 0; i < parts.length - 1; i++) {
+      if (!parent[parts[i]]) parent[parts[i]] = {};
+      parent = parent[parts[i]];
+    }
+    var prop = parts[parts.length - 1];
+    Object.defineProperty(parent, prop, {
+      get: function() { return undefined; },
+      set: function(v) { throw new TypeError("AdBlock abort-on-property-write: " + "$target"); },
+      configurable: true
+    });
+  } catch(e) {}''';
+      }
+    } else if ((action == 'noopfn' || action == 'noopFunc') && parts.length >= 2) {
+      final target = parts[1].trim();
+      if (_isValidScriptletTarget(target)) {
+        return '''
+  try {
+    var parts = "$target".split(".");
+    var parent = window;
+    for (var i = 0; i < parts.length - 1; i++) {
+      if (!parent[parts[i]]) parent[parts[i]] = {};
+      parent = parent[parts[i]];
+    }
+    parent[parts[parts.length - 1]] = function() {};
+  } catch(e) {}''';
+      }
+    } else if ((action == 'prevent-addEventListener' || action == 'prevent-cb') && parts.length >= 2) {
+      final target = parts[1].trim();
+      if (RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(target)) {
+        return '''
+  try {
+    var _origAddEL = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function(type, listener, options) {
+      if (type === "$target") return;
+      return _origAddEL.apply(this, arguments);
+    };
+  } catch(e) {}''';
+      }
+    }
+    return '';
+  }
+
+  /// Anti-detect JS: fakes ad SDK globals, intercepts fetch/XHR/MO,
+  /// and neutralises bait elements.
   String get antiDetectJs {
     final base = _antiDetectJs;
     final scriptlets = _updater.scriptletRules;
@@ -1234,20 +1313,9 @@ body {
       sb.write(base.substring(0, idx));
       sb.writeln('  /* ==== SCRIPTLETS ==== */');
       for (final s in scriptlets) {
-        if (s.contains('set-constant')) {
-          final parts = s.split(',');
-          if (parts.length >= 3) {
-            final target = parts[1].trim();
-            final value = parts[2].trim();
-            if (!_isValidScriptletTarget(target)) {
-              _log.warning('set-constant: rejected unsafe target "$target"');
-            } else if (!_isValidScriptletValue(value)) {
-              _log.warning(
-                  'set-constant: rejected unsafe value "$value" for target "$target"');
-            } else {
-              sb.writeln('  try { window.$target = $value; } catch(e) {}');
-            }
-          }
+        final compiled = _compileScriptlet(s);
+        if (compiled.isNotEmpty) {
+          sb.writeln(compiled);
         }
       }
       sb.write(iifeEnd);
@@ -1257,20 +1325,9 @@ body {
     sb.write(base);
     sb.writeln('\n  /* ==== SCRIPTLETS ==== */');
     for (final s in scriptlets) {
-      if (s.contains('set-constant')) {
-        final parts = s.split(',');
-        if (parts.length >= 3) {
-          final target = parts[1].trim();
-          final value = parts[2].trim();
-          if (!_isValidScriptletTarget(target)) {
-            _log.warning('set-constant: rejected unsafe target "$target"');
-          } else if (!_isValidScriptletValue(value)) {
-            _log.warning(
-                'set-constant: rejected unsafe value "$value" for target "$target"');
-          } else {
-            sb.writeln('  try { window.$target = $value; } catch(e) {}');
-          }
-        }
+      final compiled = _compileScriptlet(s);
+      if (compiled.isNotEmpty) {
+        sb.writeln(compiled);
       }
     }
     return sb.toString();

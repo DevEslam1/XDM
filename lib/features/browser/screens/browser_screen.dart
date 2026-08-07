@@ -1486,6 +1486,17 @@ class _BrowserScreenState extends State<BrowserScreen>
     return false;
   }
 
+  void _switchToTabRelative(int offset) {
+    if (_tabs.length <= 1) return;
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    triggerHaptic(settings);
+    setState(() {
+      final newIndex = (_currentTabIndex + offset) % _tabs.length;
+      _currentTabIndex = newIndex;
+      _urlController.text = _tabs[newIndex].url;
+    });
+  }
+
   Future<void> _goForward() async {
     if (_tabs.isEmpty ||
         _currentTabIndex < 0 ||
@@ -3842,9 +3853,20 @@ class _BrowserScreenState extends State<BrowserScreen>
                             ),
                           ),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                          child: Row(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onHorizontalDragEnd: (details) {
+                            if (_isFocused) return;
+                            if (details.primaryVelocity == null) return;
+                            if (details.primaryVelocity! > 0) {
+                              _switchToTabRelative(-1);
+                            } else if (details.primaryVelocity! < 0) {
+                              _switchToTabRelative(1);
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                            child: Row(
                             children: [
                               IconButton(
                                 icon:
@@ -4366,6 +4388,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                               ),
                             ],
                           ),
+                        ),
                         ),
                       ),
                     ),
