@@ -564,6 +564,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         setState(() {
           tab.isLoading = false;
         });
+        AddDownloadDialog.show(context, prefilledUrl: url);
       }
       return;
     }
@@ -926,7 +927,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
     if (url.startsWith('magnet:') || isMagnetUrl(url)) {
       _log.info('[Browser] Intercepted magnet URL in popup: $url');
-      _showInterceptionSheet(context, url);
+      AddDownloadDialog.show(context, prefilledUrl: url);
       return;
     }
 
@@ -1057,7 +1058,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (!mounted || url.isEmpty) return;
     if (url.startsWith('magnet:') || isMagnetUrl(url)) {
       _log.info('[Browser] Intercepted magnet URL in _openInNewTab: $url');
-      _showInterceptionSheet(context, url);
+      AddDownloadDialog.show(context, prefilledUrl: url);
       return;
     }
     _redirectGuard.markUserInitiated(url);
@@ -1438,7 +1439,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (targetUrl.startsWith('magnet:') || isMagnetUrl(targetUrl)) {
       _log.info('[Browser] Intercepted magnet URL from URL bar input: $targetUrl');
       _urlController.text = activeTab.isHome ? '' : activeTab.url;
-      _showInterceptionSheet(context, targetUrl);
+      AddDownloadDialog.show(context, prefilledUrl: targetUrl);
       return;
     }
 
@@ -1787,6 +1788,10 @@ class _BrowserScreenState extends State<BrowserScreen>
     final isRtl = L10n.isRtl(context);
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final isMagnetSignal = downloadUrl.startsWith('magnet:') || isMagnetUrl(downloadUrl);
+    if (isMagnetSignal) {
+      AddDownloadDialog.show(context, prefilledUrl: downloadUrl);
+      return;
+    }
     final detected = BrowserDetector.detect(downloadUrl);
     final kindLabel =
         detected == null ? 'FILE' : detected.kind.name.toUpperCase();
@@ -2869,10 +2874,14 @@ class _BrowserScreenState extends State<BrowserScreen>
                                             decoration: BoxDecoration(
                                               color: tab.isIncognito
                                                   ? (isDark
-                                                      ? const Color(0xFF16121F)
+                                                      ? (settings.isAmoledMode
+                                                          ? AppTheme.amoledSurfaceRaised
+                                                          : const Color(0xFF16121F))
                                                       : const Color(0xFFF3EEFA))
                                                   : (isDark
-                                                      ? AppTheme.cardBg
+                                                      ? (settings.isAmoledMode
+                                                          ? AppTheme.amoledCardBg
+                                                          : AppTheme.cardBg)
                                                       : AppTheme.lightCardBg),
                                               borderRadius:
                                                   BorderRadius.circular(16),
@@ -3636,9 +3645,13 @@ class _BrowserScreenState extends State<BrowserScreen>
                                             settings.incognitoEnabled)
                                         ? const Color(0xFF1A1A2E)
                                         : isDark
-                                            ? (_isFocused
-                                                ? const Color(0xFF141424)
-                                                : const Color(0xFF0F0F16))
+                                            ? (settings.isAmoledMode
+                                                ? (_isFocused
+                                                    ? AppTheme.amoledSurfaceRaised
+                                                    : AppTheme.amoledBackground)
+                                                : (_isFocused
+                                                    ? const Color(0xFF141424)
+                                                    : const Color(0xFF0F0F16)))
                                             : (_isFocused
                                                 ? AppTheme.lightNeonBlue
                                                     .withValues(alpha: 0.08)

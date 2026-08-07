@@ -191,13 +191,21 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
           sigmaY: 15,
           child: Container(
             decoration: BoxDecoration(
-              color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                  .withValues(alpha: 0.92),
+              color: (isDark
+                      ? (settings.isAmoledMode
+                          ? AppTheme.amoledSurface
+                          : AppTheme.surface)
+                      : AppTheme.lightSurface)
+                  .withValues(alpha: settings.isAmoledMode ? 1.0 : 0.92),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(28),
               ),
               border: Border(
-                top: BorderSide(color: accent.withValues(alpha: 0.4), width: 1),
+                top: BorderSide(
+                    color: isDark && settings.isAmoledMode
+                        ? AppTheme.amoledBorder
+                        : accent.withValues(alpha: 0.4),
+                    width: 1),
               ),
             ),
             child: SafeArea(

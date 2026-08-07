@@ -369,6 +369,19 @@ class _SettingsScreenState extends State<SettingsScreen>
     final screenType = getScreenType(context);
     final isDesktop = screenType == ScreenType.desktop;
 
+    if (_pageController.hasClients &&
+        _pageController.page != null &&
+        _pageController.page!.round() != _selectedCategoryIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            _pageController.hasClients &&
+            _pageController.page != null &&
+            _pageController.page!.round() != _selectedCategoryIndex) {
+          _pageController.jumpToPage(_selectedCategoryIndex);
+        }
+      });
+    }
+
     final categories = [
       _CategoryMeta(
         id: 'appearance',

@@ -77,10 +77,11 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final isAmoled = settings.isAmoledMode;
     final manager = context.watch<UserScriptManager>();
 
     return Scaffold(
-      backgroundColor: isDark ? AppTheme.background : AppTheme.lightBackground,
+      backgroundColor: AppTheme.getBackground(isDark, isAmoled: isAmoled),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -135,12 +136,13 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
                 final script = manager.scripts[i];
                 return Container(
                   decoration: BoxDecoration(
-                    color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg)
-                        .withValues(alpha: 0.4),
+                    color: isDark
+                        ? (isAmoled ? AppTheme.amoledCardBg : AppTheme.glassBg.withValues(alpha: 0.4))
+                        : AppTheme.lightGlassBg.withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isDark
-                          ? AppTheme.glassBorder
+                          ? (isAmoled ? AppTheme.amoledBorder : AppTheme.glassBorder)
                           : AppTheme.lightGlassBorder,
                       width: 0.6,
                     ),

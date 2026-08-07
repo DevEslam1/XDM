@@ -220,15 +220,21 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
             sigmaY: 15,
             child: Container(
               decoration: BoxDecoration(
-                color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                    .withValues(alpha: 0.95),
+                color: (isDark
+                        ? (settings.isAmoledMode
+                            ? AppTheme.amoledSurface
+                            : AppTheme.surface)
+                        : AppTheme.lightSurface)
+                    .withValues(alpha: settings.isAmoledMode ? 1.0 : 0.95),
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(28),
                 ),
                 border: Border(
                   top: BorderSide(
                     color: isDark
-                        ? AppTheme.glassBorder
+                        ? (settings.isAmoledMode
+                            ? AppTheme.amoledBorder
+                            : AppTheme.glassBorder)
                         : AppTheme.lightGlassBorder,
                     width: 0.8,
                   ),

@@ -85,6 +85,7 @@ class BrowserTabBar extends StatelessWidget {
                   isActive: isActive,
                   accent: tabAccent,
                   isDark: isDark,
+                  isAmoled: isAmoled,
                   showClose: tabs.length > 1,
                   onTap: () {
                     HapticFeedback.selectionClick();
@@ -120,6 +121,7 @@ class _TabChip extends StatelessWidget {
   final bool isActive;
   final Color accent;
   final bool isDark;
+  final bool isAmoled;
   final bool showClose;
   final VoidCallback onTap;
   final VoidCallback onClose;
@@ -129,6 +131,7 @@ class _TabChip extends StatelessWidget {
     required this.isActive,
     required this.accent,
     required this.isDark,
+    this.isAmoled = false,
     required this.showClose,
     required this.onTap,
     required this.onClose,
@@ -148,14 +151,19 @@ class _TabChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: isActive
               ? accent.withValues(alpha: isDark ? 0.14 : 0.10)
-              : (isDark ? AppTheme.cardBg : AppTheme.lightCardBg).withValues(
+              : (isDark
+                      ? (isAmoled ? AppTheme.amoledCardBg : AppTheme.cardBg)
+                      : AppTheme.lightCardBg)
+                  .withValues(
                   alpha: 0.5,
                 ),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isActive
                 ? accent.withValues(alpha: 0.5)
-                : (isDark ? AppTheme.border : AppTheme.lightBorder),
+                : (isDark
+                    ? (isAmoled ? AppTheme.amoledBorder : AppTheme.border)
+                    : AppTheme.lightBorder),
             width: isActive ? 1.2 : 0.8,
           ),
         ),

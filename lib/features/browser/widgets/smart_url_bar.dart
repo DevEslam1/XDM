@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
+import '../../settings/provider/settings_provider.dart';
 
 enum SuggestionType { url, search }
 
@@ -108,6 +110,7 @@ class _SmartUrlBarState extends State<SmartUrlBar> {
   @override
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
+    final isAmoled = context.watch<SettingsProvider>().isAmoledMode;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -128,7 +131,9 @@ class _SmartUrlBarState extends State<SmartUrlBar> {
               borderSide: BorderSide.none,
             ),
             filled: true,
-            fillColor: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
+            fillColor: isDark
+                ? (isAmoled ? AppTheme.amoledBackground : const Color(0xFF0F0F16))
+                : const Color(0xFFF1F5F9),
           ),
           onSubmitted: (val) {
             setState(() => _showSuggestions = false);
@@ -142,7 +147,9 @@ class _SmartUrlBarState extends State<SmartUrlBar> {
           Container(
             margin: const EdgeInsets.only(top: 4),
             decoration: BoxDecoration(
-              color: isDark ? AppTheme.surface : Colors.white,
+              color: isDark
+                  ? (isAmoled ? AppTheme.amoledSurface : AppTheme.surface)
+                  : Colors.white,
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(

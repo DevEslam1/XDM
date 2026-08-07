@@ -365,6 +365,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
 
   bool _isResolvingLink = false;
+  bool _isSubmitting = false;
 
 
 
@@ -2422,9 +2423,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
 
   Future<void> _handleDuplicateOrSubmit() async {
-
-
-
+    if (_isSubmitting) return;
+    setState(() => _isSubmitting = true);
     final settings = context.read<SettingsProvider>();
 
 
@@ -4009,14 +4009,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
 
 
+      if (mounted) setState(() => _isSubmitting = false);
       Navigator.pop(context);
-
-
-
     }
-
-
-
+    if (mounted) setState(() => _isSubmitting = false);
   }
 
 
@@ -4211,49 +4207,16 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
 
               AbsorbPointer(
-
-
-
-                absorbing: _isResolvingLink,
-
-
-
+                absorbing: _isResolvingLink || _isSubmitting,
                 child: SingleChildScrollView(
-
-
-
                   child: Padding(
-
-
-
                     padding: EdgeInsets.only(
-
-
-
                       left: 24,
-
-
-
                       right: 24,
-
-
-
                       top: 22,
-
-
-
                       bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
-
-
-
                     ),
-
-
-
                     child: Form(
-
-
-
                       key: _formKey,
 
 
@@ -9367,31 +9330,59 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
 
 
-                                onPressed: () {
+                                onPressed: (_isResolvingLink || _isSubmitting)
 
 
 
-                                  if (_formKey.currentState!.validate()) {
+                                    ? null
 
 
 
-                                    _handleDuplicateOrSubmit();
+                                    : () {
 
 
 
-                                  }
+                                        if (_formKey.currentState!.validate()) {
 
 
 
-                                },
+                                          _handleDuplicateOrSubmit();
 
 
 
-                                text: L10n.of(context, 'add_btn'),
+                                        }
+
+
+
+                                      },
+
+
+
+                                text: _isResolvingLink
+
+
+
+                                    ? (L10n.isRtl(context) ? 'إنتظار الاتصال...' : 'Connecting...')
+
+
+
+                                    : _isSubmitting
+
+
+
+                                        ? (L10n.isRtl(context) ? 'جاري الإضافة...' : 'Adding...')
+
+
+
+                                        : L10n.of(context, 'add_btn'),
 
 
 
                                 icon: Icons.add_circle_outline,
+
+
+
+                                isLoading: _isResolvingLink || _isSubmitting,
 
 
 

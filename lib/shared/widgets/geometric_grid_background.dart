@@ -100,10 +100,6 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground> {
     final gridOpacity = context.select((SettingsProvider s) => s.gridOpacity);
     final bgColor = AppTheme.getBackground(isDark, isAmoled: isAmoled);
 
-    if (classicUi) {
-      return Container(color: bgColor, child: widget.child);
-    }
-
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
@@ -111,20 +107,22 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground> {
     return Stack(
       children: [
         Positioned.fill(
-          child: RepaintBoundary(
-            child: CustomPaint(
-              painter: _AmbientBlobPainter(
-                progress: _progress,
-                isDark: isDark,
-                intensity: gridOpacity / 40.0,
-                bgColor: bgColor,
-                violetClr: violetClr,
-                blueClr: blueClr,
-                greenClr: greenClr,
-              ),
-              size: Size.infinite,
-            ),
-          ),
+          child: classicUi
+              ? Container(color: bgColor)
+              : RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _AmbientBlobPainter(
+                      progress: _progress,
+                      isDark: isDark,
+                      intensity: gridOpacity / 40.0,
+                      bgColor: bgColor,
+                      violetClr: violetClr,
+                      blueClr: blueClr,
+                      greenClr: greenClr,
+                    ),
+                    size: Size.infinite,
+                  ),
+                ),
         ),
         Positioned.fill(
           child: RepaintBoundary(

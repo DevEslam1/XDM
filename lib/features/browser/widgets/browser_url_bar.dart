@@ -101,7 +101,7 @@ class BrowserUrlBar extends StatelessWidget {
                     height: 38,
                     decoration: BoxDecoration(
                       color: isDark
-                          ? const Color(0xFF0F0F16)
+                          ? (isAmoled ? AppTheme.amoledSurface : const Color(0xFF0F0F16))
                           : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(

@@ -53,5 +53,27 @@ void main() {
       expect(settings.isDarkMode, isTrue);
       expect(settings.isAmoledMode, isTrue);
     });
+
+    testWidgets('enabling battery saver mode keeps power tab active and page visible', (tester) async {
+      final settings = createMockSettingsProvider();
+      await tester.pumpWidget(createTestApp(
+        child: const SettingsScreen(),
+        settingsProvider: settings,
+      ));
+      await tester.pumpAndSettle();
+
+      final powerChip = find.text('Power & Perf');
+      if (powerChip.evaluate().isNotEmpty) {
+        await tester.tap(powerChip);
+        await tester.pumpAndSettle();
+      }
+
+      await settings.setBatterySaverMode(true);
+      await tester.pumpAndSettle();
+
+      expect(settings.batterySaverMode, isTrue);
+      expect(settings.activeSettingsTabIndex, equals(5));
+      expect(find.byType(SettingsScreen), findsOneWidget);
+    });
   });
 }
