@@ -504,23 +504,29 @@ class DownloadOrchestrator {
             }
 
             String resolvedFileName;
+            final isVideo = type != 'audio';
+            final targetExt = isVideo ? 'mp4' : ext;
             if (type == 'audio') {
               resolvedFileName =
                   title.isNotEmpty ? '$title.$ext' : task.fileName;
             } else {
               final qLabel = streamInfo['quality'] as String? ?? '';
               resolvedFileName = title.isNotEmpty && qLabel.isNotEmpty
-                  ? '$title [$qLabel].$ext'
-                  : (title.isNotEmpty ? '$title.$ext' : task.fileName);
+                  ? '$title [$qLabel].$targetExt'
+                  : (title.isNotEmpty ? '$title.$targetExt' : task.fileName);
             }
             resolvedFileName = safeFileName(resolvedFileName);
 
-            final resolvedLocalPath = task.localFilePath.isNotEmpty
+            var resolvedLocalPath = task.localFilePath.isNotEmpty
                 ? task.localFilePath
                 : await getUniqueFilePath(
                     task.savePath,
                     resolvedFileName,
                   );
+            if (isVideo && p.extension(resolvedLocalPath).toLowerCase() == '.webm') {
+              resolvedLocalPath =
+                  '${p.withoutExtension(resolvedLocalPath)}.mp4';
+            }
             final resolvedTempPath = task.tempFilePath.isNotEmpty
                 ? task.tempFilePath
                 : _host.downloadEngine.buildTempFilePath(
@@ -614,6 +620,7 @@ class DownloadOrchestrator {
             debugPrint(
               '[DMX] YoutubeService.getStreamForVideo returned null; proceeding with pre-resolved stream URL.',
             );
+            return task;
           } else {
             throw Exception('Stream not available');
           }
@@ -623,6 +630,7 @@ class DownloadOrchestrator {
           debugPrint(
             '[DMX] YoutubeService stream resolution error ($e); proceeding with pre-resolved stream URL.',
           );
+          return task;
         } else {
           final isRetryable = isRetryableError(e) ||
               (_isYouTubeTask(task) && _isYouTubeStreamError(e));

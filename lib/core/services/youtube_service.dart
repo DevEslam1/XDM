@@ -504,6 +504,15 @@ class YoutubeService {
       }
       results.add(resultEntry);
     }
+
+    results.sort((a, b) {
+      final aExt = (a['ext'] as String? ?? '').toLowerCase();
+      final bExt = (b['ext'] as String? ?? '').toLowerCase();
+      if (aExt == 'mp4' && bExt != 'mp4') return -1;
+      if (bExt == 'mp4' && aExt != 'mp4') return 1;
+      return 0;
+    });
+
     return results;
   }
 
@@ -725,14 +734,30 @@ class YoutubeService {
         return streams.isNotEmpty ? streams.first : null;
       }
 
+      bool isMp4(Map<String, dynamic> s) {
+        final ext = (s['ext'] as String? ?? '').toLowerCase();
+        final format = (s['format'] as String? ?? '').toLowerCase();
+        return ext == 'mp4' || format.contains('mp4') || format.contains('avc');
+      }
+
+      Map<String, dynamic>? pickBest(Iterable<Map<String, dynamic>> list) {
+        if (list.isEmpty) return null;
+        final mp4s = list.where(isMp4);
+        return mp4s.isNotEmpty ? mp4s.first : list.first;
+      }
+
       if (preset == 'best_combined' || preset == 'best') {
         final combinedStreams =
             streams.where((s) => s['type'] == 'combined').toList();
-        if (combinedStreams.isNotEmpty) return combinedStreams.first;
+        final bestCombined = pickBest(combinedStreams);
+        if (bestCombined != null) return bestCombined;
+
         final muxedStreams =
             streams.where((s) => s['type'] == 'muxed').toList();
-        if (muxedStreams.isNotEmpty) return muxedStreams.first;
-        return streams.isNotEmpty ? streams.first : null;
+        final bestMuxed = pickBest(muxedStreams);
+        if (bestMuxed != null) return bestMuxed;
+
+        return pickBest(streams);
       }
 
       final reqHeight = parseQualityHeight(preset);
@@ -742,14 +767,16 @@ class YoutubeService {
         final exactCombined = combinedStreams.where(
           (s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight,
         );
-        if (exactCombined.isNotEmpty) return exactCombined.first;
+        final bestExactCombined = pickBest(exactCombined);
+        if (bestExactCombined != null) return bestExactCombined;
 
         final muxedStreams =
             streams.where((s) => s['type'] == 'muxed').toList();
         final exactMuxed = muxedStreams.where(
           (s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight,
         );
-        if (exactMuxed.isNotEmpty) return exactMuxed.first;
+        final bestExactMuxed = pickBest(exactMuxed);
+        if (bestExactMuxed != null) return bestExactMuxed;
 
         final lowerCombined = combinedStreams
             .where(
@@ -763,7 +790,8 @@ class YoutubeService {
               b['quality'] as String? ?? '',
             ).compareTo(parseQualityHeight(a['quality'] as String? ?? '')),
           );
-        if (lowerCombined.isNotEmpty) return lowerCombined.first;
+        final bestLowerCombined = pickBest(lowerCombined);
+        if (bestLowerCombined != null) return bestLowerCombined;
 
         final lowerMuxed = muxedStreams
             .where(
@@ -777,13 +805,14 @@ class YoutubeService {
               b['quality'] as String? ?? '',
             ).compareTo(parseQualityHeight(a['quality'] as String? ?? '')),
           );
-        if (lowerMuxed.isNotEmpty) return lowerMuxed.first;
+        final bestLowerMuxed = pickBest(lowerMuxed);
+        if (bestLowerMuxed != null) return bestLowerMuxed;
 
-        if (combinedStreams.isNotEmpty) return combinedStreams.last;
-        if (muxedStreams.isNotEmpty) return muxedStreams.last;
+        if (combinedStreams.isNotEmpty) return pickBest(combinedStreams) ?? combinedStreams.last;
+        if (muxedStreams.isNotEmpty) return pickBest(muxedStreams) ?? muxedStreams.last;
       }
 
-      return streams.isNotEmpty ? streams.first : null;
+      return pickBest(streams) ?? (streams.isNotEmpty ? streams.first : null);
     } catch (e) {
       debugPrint('YoutubeService.getStreamForVideo error for $videoId: $e');
       throw Exception(_parseErrorMessage(e));

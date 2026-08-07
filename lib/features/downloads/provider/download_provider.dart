@@ -2240,7 +2240,7 @@ class DownloadProvider extends ChangeNotifier
                   );
                   if (videoLen > 0) {
                     // Check if new audio mime is compatible with video container
-                    final newAudioUri = Uri.tryParse(freshAudioUrl ?? '');
+                    final newAudioUri = Uri.tryParse(freshAudioUrl);
                     final newAudioMime = newAudioUri?.queryParameters['mime'];
                     if (newAudioMime != null &&
                         !newAudioMime.startsWith('audio/mp4') &&

@@ -204,14 +204,23 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
         videosByHeight[key] = Map<String, dynamic>.from(s);
       } else {
         final existing = videosByHeight[key]!;
-        final existingSize = (existing['videoSize'] as int? ?? 0) > 0
-            ? (existing['videoSize'] as int)
-            : (existing['size'] as int? ?? 0);
-        final currentSize = (s['videoSize'] as int? ?? 0) > 0
-            ? (s['videoSize'] as int)
-            : (s['size'] as int? ?? 0);
-        if (currentSize > existingSize) {
+        final existingExt = (existing['ext'] as String? ?? '').toLowerCase();
+        final currentExt = (s['ext'] as String? ?? '').toLowerCase();
+
+        if (currentExt == 'mp4' && existingExt != 'mp4') {
           videosByHeight[key] = Map<String, dynamic>.from(s);
+        } else if (existingExt == 'mp4' && currentExt != 'mp4') {
+          // Keep existing MP4 stream
+        } else {
+          final existingSize = (existing['videoSize'] as int? ?? 0) > 0
+              ? (existing['videoSize'] as int)
+              : (existing['size'] as int? ?? 0);
+          final currentSize = (s['videoSize'] as int? ?? 0) > 0
+              ? (s['videoSize'] as int)
+              : (s['size'] as int? ?? 0);
+          if (currentSize > existingSize) {
+            videosByHeight[key] = Map<String, dynamic>.from(s);
+          }
         }
       }
     }
