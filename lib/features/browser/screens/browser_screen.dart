@@ -91,9 +91,23 @@ class _BrowserScreenState extends State<BrowserScreen>
     updateNavState: _updateNavState,
   );
 
+  final List<String> _tabIdHistory = [];
+
   List<BrowserTab> get _tabs => _tabManager.tabs;
   int get _currentTabIndex => _tabManager.currentIndex;
-  set _currentTabIndex(int value) => _tabManager.currentIndex = value;
+  set _currentTabIndex(int value) {
+    if (value >= 0 && value < _tabs.length) {
+      final oldActiveTab = _tabs.length > _currentTabIndex && _currentTabIndex >= 0
+          ? _tabs[_currentTabIndex]
+          : null;
+      if (oldActiveTab != null && oldActiveTab.id != _tabs[value].id) {
+        if (_tabIdHistory.isEmpty || _tabIdHistory.last != oldActiveTab.id) {
+          _tabIdHistory.add(oldActiveTab.id);
+        }
+      }
+    }
+    _tabManager.currentIndex = value;
+  }
 
   final TextEditingController _urlController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
@@ -1455,6 +1469,21 @@ class _BrowserScreenState extends State<BrowserScreen>
         });
       }
     }
+  }
+
+  bool _switchToPreviousTab() {
+    _tabIdHistory.removeWhere((id) => !_tabs.any((t) => t.id == id));
+    if (_tabIdHistory.isNotEmpty) {
+      final prevId = _tabIdHistory.removeLast();
+      final idx = _tabs.indexWhere((t) => t.id == prevId);
+      if (idx != -1) {
+        setState(() {
+          _currentTabIndex = idx;
+        });
+        return true;
+      }
+    }
+    return false;
   }
 
   Future<void> _goForward() async {
@@ -3747,7 +3776,10 @@ class _BrowserScreenState extends State<BrowserScreen>
           if (canGoBack) {
             await _goBack();
           } else {
-            downloadProvider.setActiveTabIndex(0);
+            final switched = _switchToPreviousTab();
+            if (!switched) {
+              downloadProvider.setActiveTabIndex(0);
+            }
           }
         },
         child: GeometricGridBackground(

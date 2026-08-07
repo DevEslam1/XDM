@@ -233,6 +233,10 @@ $customJs
           'var s=document.createElement("style");s.textContent=${jsonEncode(css)};document.head.appendChild(s);');
     }
 
+    if (adBlocker.isEnabled) {
+      scripts.add(adBlocker.lateJs);
+    }
+
     // Desktop mode script
     if (settings.desktopMode) {
       scripts.add(kDesktopModeScript);

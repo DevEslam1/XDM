@@ -66,6 +66,36 @@ class AdBlockFilterUpdater {
           'https://raw.githubusercontent.com/AdguardTeam/AdguardFilters/master/Filters/filter_15_DnsFilter/filter.txt',
       type: FilterType.ads,
     ),
+    _FilterSource(
+      name: 'AdAway',
+      url: 'https://adaway.org/hosts.txt',
+      type: FilterType.ads,
+    ),
+    _FilterSource(
+      name: 'uBlock-Filters',
+      url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt',
+      type: FilterType.ads,
+    ),
+    _FilterSource(
+      name: 'uBlock-Badware',
+      url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/badware.txt',
+      type: FilterType.ads,
+    ),
+    _FilterSource(
+      name: 'uBlock-Privacy',
+      url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt',
+      type: FilterType.tracking,
+    ),
+    _FilterSource(
+      name: 'uBlock-Unbreak',
+      url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt',
+      type: FilterType.ads,
+    ),
+    _FilterSource(
+      name: 'uBlock-QuickFixes',
+      url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt',
+      type: FilterType.ads,
+    ),
   ];
 
   static const _lastUpdateKey = 'adblock_last_update_ms';
@@ -398,6 +428,19 @@ class AdBlockFilterUpdater {
       if (blocked.length >= _maxDomains) break;
       if (line.isEmpty || line.length > _maxLineLength) continue;
 
+      final trimmed = line.trim();
+      // Parse hosts file line format: "127.0.0.1 domain.com" or "0.0.0.0 domain.com"
+      if (trimmed.startsWith('127.0.0.1') || trimmed.startsWith('0.0.0.0')) {
+        final parts = trimmed.split(RegExp(r'\s+'));
+        if (parts.length >= 2) {
+          final domain = parts[1].trim().toLowerCase();
+          if (RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$').hasMatch(domain)) {
+            blocked.add(domain);
+            continue;
+          }
+        }
+      }
+
       // Comments (ABP format uses !, hosts/plain lists use #)
       // NB: `##.class` cosmetic rules also start with '#', so only treat
       // lines that start with a bare '#' (not '##') as comments.
@@ -466,7 +509,6 @@ class AdBlockFilterUpdater {
 
       // Plain domain-per-line format (Peter Lowe list, hosts files, etc.)
       // Accept lines that look like bare hostnames: e.g. "ads.example.com"
-      final trimmed = line.trim();
       if (RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$')
           .hasMatch(trimmed)) {
         final domain = trimmed.toLowerCase();

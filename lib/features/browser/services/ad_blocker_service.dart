@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
@@ -749,10 +749,13 @@ div[class*="modal-ad"]:not(#page-manager),
 [class*="push-notification"], [class*="notification-prompt"],
 [class*="exit-intent"], [class*="exit-popup"],
 [class*="welcome-ad"], [class*="splash-ad"],
-[class*="adblock-overlay"], [id*="adblock-overlay"],
-[class*="adblock-modal"], [id*="adblock-modal"],
-[class*="anti-adblock"], [id*="anti-adblock"],
-[class*="quick-adblock"], [id*="quick-adblock"]
+[class*="adblock"], [id*="adblock"],
+[class*="ad-block"], [id*="ad-block"],
+[class*="anti-ad"], [id*="anti-ad"],
+[class*="antiad"], [id*="antiad"],
+[class*="blocker"], [id*="blocker"],
+[class*="ad-detector"], [id*="ad-detector"],
+[class*="block-ad"], [id*="block-ad"]
 { visibility: hidden !important;
   height: 0 !important;
   overflow: hidden !important;
@@ -1038,6 +1041,9 @@ body {
       'القائمة البيضاء',
       'ادوات منع',
       'أدوات منع',
+      'تعطيل مانع',
+      'ايقاف مانع',
+      'إيقاف مانع',
       'quick adblock detection'
     ];
 
@@ -1045,17 +1051,34 @@ body {
       var nodes = document.querySelectorAll('div, section, aside, article, p, span, h1, h2, h3, h4, a, button, .alert, .warning, .notice, [class*="block"], [class*="ad"], [class*="modal"], [class*="popup"], [class*="overlay"]');
       for (var i = 0; i < nodes.length; i++) {
         var el = nodes[i];
-        if (el.children.length > 6) continue;
+        if (el.children.length > 25) continue;
         var txt = (el.textContent || '').toLowerCase();
         for (var j = 0; j < targets.length; j++) {
           if (txt.indexOf(targets[j]) !== -1) {
             var cur = el;
-            while (cur && cur.parentElement && cur.parentElement !== document.body && cur.parentElement !== document.documentElement) {
+            var targetToHide = el;
+            var depth = 0;
+            // Climb up to find fixed/absolute overlays or modal container
+            while (cur && cur.parentElement && cur.parentElement !== document.body && cur.parentElement !== document.documentElement && depth < 8) {
+              var style = window.getComputedStyle(cur);
+              var cls = (cur.className || '');
+              var id = (cur.id || '');
+              if (typeof cls === 'string') cls = cls.toLowerCase();
+              if (typeof id === 'string') id = id.toLowerCase();
+              
+              if (style.position === 'fixed' || style.position === 'absolute' ||
+                  cls.indexOf('modal') !== -1 || cls.indexOf('popup') !== -1 ||
+                  cls.indexOf('overlay') !== -1 || cls.indexOf('adblock') !== -1 ||
+                  id.indexOf('modal') !== -1 || id.indexOf('popup') !== -1 ||
+                  id.indexOf('overlay') !== -1 || id.indexOf('adblock') !== -1) {
+                targetToHide = cur;
+              }
               cur = cur.parentElement;
+              depth++;
             }
-            if (cur && cur !== document.body && cur !== document.documentElement) {
-              _stealthHide(cur);
-              try { cur.style.setProperty('display', 'none', 'important'); } catch(e) {}
+            if (targetToHide && targetToHide !== document.body && targetToHide !== document.documentElement) {
+              _stealthHide(targetToHide);
+              try { targetToHide.style.setProperty('display', 'none', 'important'); } catch(e) {}
             }
             try {
               if (document.body) {
@@ -1278,6 +1301,13 @@ body {
     window.adBlockDetected = false;
     window.noAdBlock = true;
     window.isAdBlocked = false;
+    window.isAdBlockActive = false;
+    window.adblock = false;
+    window.adBlock = false;
+    window.adblocker = false;
+    window.AdBlocker = false;
+    window.isAdblocker = false;
+    window.isAdBlocker = false;
     window.__cmpLoaded = true;
     window.__tcfapi = function(cmd, v, cb) {
       if (typeof cb === 'function') cb({ cmpLoaded: true, gdprApplies: false }, true);
@@ -1356,7 +1386,9 @@ body {
      getComputedStyle().display or offsetHeight. */
   try {
     var _bait = ['adsbox','ad-banner','ads','ad-test','banner-ad',
-      'advertising','ad-slot','advert','sponsored-ad','native-ad'];
+      'advertising','ad-slot','advert','sponsored-ad','native-ad',
+      'adv-','ad-','ads-','sponsored','popup-ad','popunder',
+      'overlay-ad','interstitial','adsbygoogle','adsbygoogle-noablate'];
     function _isBait(el) {
       if (!el || !el.getAttribute) return false;
       var cls = (el.getAttribute('class') || '').toLowerCase();
@@ -1374,8 +1406,8 @@ body {
           get: function(target, prop) {
             if (prop === 'display')    return 'block';
             if (prop === 'visibility') return 'visible';
-            if (prop === 'height')     return '1px';
-            if (prop === 'width')      return '1px';
+            if (prop === 'height')     return '250px';
+            if (prop === 'width')      return '300px';
             if (prop === 'opacity')    return '1';
             var val = target[prop];
             return (typeof val === 'function') ? val.bind(target) : val;
@@ -1395,15 +1427,17 @@ body {
         configurable: true
       });
     };
-    _patchProp(Element.prototype, 'offsetHeight', 1);
-    _patchProp(Element.prototype, 'offsetWidth',  1);
+    _patchProp(Element.prototype, 'offsetHeight', 250);
+    _patchProp(Element.prototype, 'offsetWidth',  300);
+    _patchProp(Element.prototype, 'clientHeight', 250);
+    _patchProp(Element.prototype, 'clientWidth',  300);
     var _origGBR = Element.prototype.getBoundingClientRect;
     Element.prototype.getBoundingClientRect = function() {
       var rect = _origGBR.call(this);
       if (_isBait(this)) {
         return {
-          top: 0, left: 0, right: 1, bottom: 1,
-          width: 1, height: 1, x: 0, y: 0,
+          top: 0, left: 0, right: 300, bottom: 250,
+          width: 300, height: 250, x: 0, y: 0,
           toJSON: function() { return this; }
         };
       }
