@@ -172,7 +172,11 @@ class DownloadTask {
   bool get hasUnknownSize => resolvedFileSize <= 0;
 
   // FIX(05): Audio progress computed getters
-  double get audioProgressPercent => audioProgress.clamp(0.0, 1.0);
+  double get audioProgressPercent {
+    if (audioSize > 0) return (audioDownloadedBytes / audioSize).clamp(0.0, 1.0);
+    if (audioDownloadedBytes > 0) return audioProgress.clamp(0.0, 1.0);
+    return 0.0;
+  }
   String get audioProgressString =>
       '${(audioProgressPercent * 100).toStringAsFixed(1)}%';
   bool get isAudioComplete => audioProgress >= 1.0;
@@ -187,13 +191,15 @@ class DownloadTask {
   bool get isTotalSizePartial =>
       hasMergedAudio && fileSize <= 0 && audioSize > 0;
 
-  /// Combined total payload size for this task (video + audio if YouTube, or resolvedFileSize).
+  // FIX-AUDIT-09: Unambiguous total size calculation
   int get combinedTotalSize {
     if (hasMergedAudio && audioSize > 0) {
+      // If we know the video-only size, use the explicit sum
       if (videoStreamSize > 0) return videoStreamSize + audioSize;
+      // fileSize is the authoritative combined total when set by stream resolution
       if (fileSize > 0) return fileSize;
-      // Growing estimate so bar is not stuck at 0
-      return max(downloadedBytes, 1) + audioSize;
+      // FIX-H2: Use max(downloadedBytes, audioSize) + audioSize so denominator is fixed
+      return max(downloadedBytes, audioSize) + audioSize;
     }
     return resolvedFileSize;
   }
@@ -206,14 +212,19 @@ class DownloadTask {
       final videoOnly = videoStreamSize > 0
           ? videoStreamSize
           : (fileSize > audioSize ? fileSize - audioSize : 0);
-      if (videoOnly > 0 && raw > videoOnly) {
-        // Already includes audio — do not add again
-      } else if (audioSize > 0) {
-        if (audioProgress > 0) {
+      // FIX-AUDIT-A2: Only add audio if downloadedBytes represents video-only
+      if (videoOnly > 0 && raw <= videoOnly) {
+        // downloadedBytes is video-only, safe to add audio
+        if (audioSize > 0) {
           raw += (audioProgress * audioSize).round();
         } else if (audioDownloadedBytes > 0) {
           raw += audioDownloadedBytes;
         }
+      } else if (videoOnly > 0 && raw > videoOnly) {
+        // downloadedBytes already includes audio — do not add again
+      } else if (audioDownloadedBytes > 0) {
+        // FIX F9: Count audio bytes even when audioSize is unknown (0)
+        raw += audioDownloadedBytes;
       }
     }
     if (total > 0) return raw.clamp(0, total);
@@ -223,19 +234,26 @@ class DownloadTask {
   /// Sanitized chunk progress ratios matching current threadCount.
   List<double> get sanitizedChunks {
     final count = threadCount > 0 ? threadCount : 1;
-    if (chunks.length == count) return chunks;
-    if (chunks.isEmpty) return List<double>.filled(count, 0.0);
-    if (chunks.length < count) {
-      return [...chunks, ...List<double>.filled(count - chunks.length, 0.0)];
+    List<double> result;
+    if (chunks.length == count) {
+      result = chunks;
+    } else if (chunks.isEmpty) {
+      result = List<double>.filled(count, 0.0);
+    } else if (chunks.length < count) {
+      result = [...chunks, ...List<double>.filled(count - chunks.length, 0.0)];
+    } else {
+      result = chunks.sublist(0, count);
     }
-    return chunks.sublist(0, count);
+    // FIX-L2: Clamp chunk ratios
+    return result.map((c) => c.clamp(0.0, 1.0)).toList();
   }
 
   double get progress {
     if (status == DownloadStatus.completed) return 1.0;
     final total = combinedTotalSize;
     if (total <= 0) {
-      return downloadedBytes > 0 ? -1.0 : 0.0;
+      // FIX-H6: return 0.0; use hasUnknownSize for indeterminate state
+      return 0.0;
     }
     return (combinedDownloadedBytes / total).clamp(0.0, 1.0);
   }
@@ -412,7 +430,7 @@ class DownloadTask {
       id: id,
       fileName: fileName ?? this.fileName,
       url: url ?? this.url,
-      fileSize: fileSize ?? this.fileSize,
+      fileSize: max(0, fileSize ?? this.fileSize), // FIX-L1
       downloadedBytes: downloadedBytes ?? this.downloadedBytes,
       speed: speed ?? this.speed,
       eta: clearEta ? null : (eta ?? this.eta),

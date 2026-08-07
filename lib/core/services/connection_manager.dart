@@ -87,8 +87,13 @@ class ConnectionManager {
   }
 
   static Future<ProtocolSupport> detectBestProtocol(String url) async {
+    final cached = ProtocolCache.get(url);
+    if (cached != null) return cached;
     final isH2 = await detectHttp2(url);
-    if (isH2) return ProtocolSupport.http2;
+    if (isH2) {
+      await ProtocolCache.record(url, ProtocolSupport.http2);
+      return ProtocolSupport.http2;
+    }
     return ProtocolSupport.http11;
   }
 }

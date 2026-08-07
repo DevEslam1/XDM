@@ -46,6 +46,9 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.selectedTaskIds.isEmpty) {
+      return const SizedBox.shrink();
+    }
     final theme = Theme.of(context);
     final count = widget.selectedTaskIds.length;
 

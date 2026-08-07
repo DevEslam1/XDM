@@ -472,7 +472,7 @@ mixin DownloadTorrentMixin {
         uploadedBytes: stats.totalPayloadUpload,
         downloadedBytes: stats.totalPayloadDownload > 0
             ? stats.totalPayloadDownload
-            : (task.fileSize > 0 ? task.fileSize : 0),
+            : task.downloadedBytes, // FIX-L3: use actual downloaded bytes
         shareRatioLimit: settings.shareRatioLimit,
         maxSeedingMinutes: settings.maxSeedingTimeMinutes,
         completedAt: task.completedAt,

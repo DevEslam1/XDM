@@ -176,12 +176,34 @@ class DownloadCommand {
 // ── Pool ────────────────────────────────────────────────────────────────────
 
 class DownloadIsolatePool {
-  DownloadIsolatePool({int size = 4, bool powerAware = false}) : _size = size;
+  DownloadIsolatePool({int size = 4, bool powerAware = false})
+      : _size = size,
+        _powerAware = powerAware;
 
   final int _size;
+  final bool _powerAware;
   final List<_Worker> _workers = [];
-  final Queue<PoolJob> _queue = Queue();
+  final List<PoolJob> _queue = [];
   bool _shuttingDown = false;
+  int _seq = 0;
+
+  /// Up to two concurrent jobs per worker isolate at full power; drop to one
+  /// when battery saver is in aggressive mode.
+  int get maxJobsPerWorker =>
+      PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ? 1 : 2;
+
+  /// Effective pool capacity surface. In power-aware mode an aggressive
+  /// battery collapse is reflected even before isolates are physically
+  /// re-spawned.
+  int get workerCount {
+    final live = _workers.length;
+    if (live <= 0) return 0;
+    if (_powerAware &&
+        PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
+      return 1;
+    }
+    return live;
+  }
 
   Future<void> init() async {
     for (var i = 0; i < _size; i++) {
@@ -209,23 +231,32 @@ class DownloadIsolatePool {
     if (_shuttingDown || _workers.isEmpty) {
       throw const IsolateSpawnTimeoutException();
     }
-    final job = PoolJob._(this, command);
+    final job = PoolJob._(this, command, _seq++);
     if (_shuttingDown) {
       scheduleMicrotask(() => job._deliverError(
           'workerDied', 'Engine is shutting down', null));
       return job;
     }
-    final idle = _workers.where((w) => !w.dead && w.job == null).toList();
-    if (idle.isNotEmpty) {
-      _dispatch(idle.first, job);
-    } else {
-      _queue.add(job);
-    }
+    _dispatch(job, priority);
     return job;
   }
 
-  void _dispatch(_Worker worker, PoolJob job) {
-    worker.job = job;
+  void _dispatch(PoolJob job, int priority) {
+    job.priority = priority;
+    final slots = maxJobsPerWorker;
+    _Worker? worker;
+    for (final w in _workers) {
+      if (!w.dead && w.commandPort != null && w.activeJobs < slots) {
+        worker = w;
+        break;
+      }
+    }
+    if (worker == null) {
+      _queue.add(job);
+      return;
+    }
+    worker.activeJobs++;
+    worker.pending.add(job);
     job._worker = worker;
     worker.commandPort?.send({
       't': 'job',
@@ -240,29 +271,82 @@ class DownloadIsolatePool {
     switch (msg['t']) {
       case 'hello':
         worker.commandPort = msg['port'] as SendPort;
-        // Drain anything queued before the worker said hello.
-        final waiting = _queue.isNotEmpty ? _queue.removeFirst() : null;
-        if (waiting != null) _dispatch(worker, waiting);
+        // Drain anything queued before the worker said hello — highest priority
+        // first, up to that worker's available slots.
+        _drain();
       case 'idle':
-        worker.job = null;
-        if (_queue.isNotEmpty) _dispatch(worker, _queue.removeFirst());
+        worker.activeJobs = (worker.activeJobs - 1).clamp(0, 1 << 30);
+        final doneId = msg['jobId'];
+        worker.pending
+            .removeWhere((j) => j.command.taskId == doneId);
+        _drain();
       case 'limits':
         break;
     }
   }
 
+  void _drain() {
+    if (_queue.isEmpty) return;
+    var idx = 0;
+    while (idx < _queue.length) {
+      final slots = maxJobsPerWorker;
+      _Worker? worker;
+      for (final w in _workers) {
+        if (!w.dead && w.commandPort != null && w.activeJobs < slots) {
+          worker = w;
+          break;
+        }
+      }
+      if (worker == null) return;
+      final job = _removeHighestPriority();
+      if (job == null) return;
+      worker.activeJobs++;
+      worker.pending.add(job);
+      job._worker = worker;
+      worker.commandPort!.send({
+        't': 'job',
+        'jobId': job.command.taskId,
+        'reply': job._incoming.sendPort,
+        'cmd': job.command.toMap(),
+      });
+      idx++;
+    }
+  }
+
+  /// Returns the queued job with the highest priority, breaking ties by
+  /// submission order (earliest first).
+  PoolJob? _removeHighestPriority() {
+    if (_queue.isEmpty) return null;
+    var best = 0;
+    for (var i = 1; i < _queue.length; i++) {
+      final a = _queue[best];
+      final b = _queue[i];
+      if (b.priority > a.priority ||
+          (b.priority == a.priority && b.seq < a.seq)) {
+        best = i;
+      }
+    }
+    return _queue.removeAt(best);
+  }
+
   void _onWorkerCrash(_Worker worker, dynamic err) {
     worker.dead = true;
-    final job = worker.job;
-    worker.job = null;
+    final jobs = List<PoolJob>.from(worker.pending);
+    worker.pending.clear();
+    worker.activeJobs = 0;
     // Surface the crash as a task-level error — never a silent stall.
-    job?._deliverError('workerDied', 'Worker isolate died: $err', null);
+    for (final job in jobs) {
+      job._deliverError('workerDied', 'Worker isolate died: $err', null);
+    }
     worker.inbox.close();
     worker.errorPort.close();
     worker.isolate.kill(priority: Isolate.immediate);
     if (!_shuttingDown) {
       _workers.remove(worker);
-      _spawnWorker(_workers.length).then(_workers.add);
+      _spawnWorker(_workers.length).then((w) {
+        _workers.add(w);
+        _drain();
+      });
     }
   }
 
@@ -291,8 +375,6 @@ class DownloadIsolatePool {
     _workers.clear();
   }
 
-  int get workerCount => _workers.length;
-  int get maxJobsPerWorker => 1;
   Future<void> drain({Duration? timeout}) async {
     await shutdown();
   }
@@ -316,12 +398,13 @@ class _Worker {
   final ReceivePort inbox;
   final ReceivePort errorPort;
   SendPort? commandPort;
-  PoolJob? job;
+  final List<PoolJob> pending = [];
+  int activeJobs = 0;
   bool dead = false;
 }
 
 class PoolJob {
-  PoolJob._(this._pool, this.command) {
+  PoolJob._(this._pool, this.command, this._seq) {
     messages = _incoming
         .map(EngineMessage.tryDecode)
         .where((m) {
@@ -337,6 +420,9 @@ class PoolJob {
 
   final DownloadIsolatePool _pool;
   final DownloadCommand command;
+  final int _seq;
+  int priority = 0;
+  int get seq => _seq;
   final ReceivePort _incoming = ReceivePort();
   _Worker? _worker;
   late final Stream<EngineMessage> messages;
@@ -382,14 +468,16 @@ Future<void> _workerEntry(SendPort poolPort) async {
             Map<String, dynamic>.from(raw['cmd'] as Map));
         final job = HttpTransferJob(cmd, reply);
         _runningJobs[jobId] = job;
-        try {
-          await job.run();
-        } catch (e) {
-          job.sendUnhandledError(e);
-        } finally {
-          _runningJobs.remove(jobId);
-          poolPort.send({'t': 'idle', 'jobId': jobId});
-        }
+        Future(() async {
+          try {
+            await job.run();
+          } catch (e) {
+            job.sendUnhandledError(e);
+          } finally {
+            _runningJobs.remove(jobId);
+            poolPort.send({'t': 'idle', 'jobId': jobId});
+          }
+        });
       case 'cancel':
         _runningJobs[raw['jobId'] as String]?.requestCancel();
       case 'limits':
@@ -590,6 +678,11 @@ class HttpTransferJob {
             for (var i = 0; i < _state!.chunks.length; i++) {
               _state!.chunks[i] = ChunkState(start: _state!.chunks[i].start, end: _state!.chunks[i].end);
             }
+            // FIX F4: Delete temp file on size change so single-stream doesn't resume stale bytes
+            try {
+              final f = File(cmd.tempFilePath);
+              if (await f.exists()) await f.delete();
+            } catch (_) {}
             await StateStore.save(cmd.tempFilePath, _state!);
             throw _FileChangedOnServerException();
           }
@@ -605,6 +698,11 @@ class HttpTransferJob {
           for (final c in _state!.chunks) {
             c.downloaded = 0;
           }
+          // FIX F4: Delete temp file on identity change
+          try {
+            final f = File(cmd.tempFilePath);
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
           _state!.etag = newEtag;
           _state!.lastModified = newLm;
           _state!.migrationNote =
@@ -630,6 +728,11 @@ class HttpTransferJob {
     }
     st.chunks = ChunkScheduler.singleStream(st.totalSize);
     st.threadCount = 1;
+    // FIX F3: Remove pre-allocated temp file so single-stream does not treat its length as completed progress
+    try {
+      final f = File(cmd.tempFilePath);
+      if (f.existsSync()) f.deleteSync();
+    } catch (_) {}
   }
 
   // ── Multi-threaded execution ─────────────────────────────────────────────
@@ -982,6 +1085,15 @@ class HttpTransferJob {
         }
         if (response.statusCode == 200 && resumeFrom > 0) {
           await response.data?.stream.listen((_) {}).cancel();
+          for (final p in [
+            '${cmd.tempFilePath}.dmxstate',
+            '${cmd.tempFilePath}.dmxstate.tmp',
+          ]) {
+            try {
+              final f = File(p);
+              if (await f.exists()) await f.delete();
+            } catch (_) {}
+          }
           throw DioException(
             requestOptions: response.requestOptions,
             type: DioExceptionType.badResponse,
@@ -1054,18 +1166,32 @@ class HttpTransferJob {
             message: 'Empty response body.',
           );
         }
-        await for (final piece in stream) {
-          _throwIfCancelled();
-          final sleepMs =
-              await governor.acquire(piece.length, taskId: cmd.taskId);
-          if (sleepMs > 0) {
-            await _cancellableDelay(Duration(milliseconds: sleepMs));
+        // FIX-AUDIT-02: Flush and save state on cancel to preserve latest progress
+        try {
+          await for (final piece in stream) {
             _throwIfCancelled();
+            final sleepMs =
+                await governor.acquire(piece.length, taskId: cmd.taskId);
+            if (sleepMs > 0) {
+              await _cancellableDelay(Duration(milliseconds: sleepMs));
+              _throwIfCancelled();
+            }
+            sink.add(piece);
+            chunk.downloaded += piece.length;
+            _bytesSinceSave += piece.length;
+            await _throttledSaveAndReport(null);
           }
-          sink.add(piece);
-          chunk.downloaded += piece.length;
-          _bytesSinceSave += piece.length;
-          await _throttledSaveAndReport(null);
+        } on DioException catch (e) {
+          if (e.type == DioExceptionType.cancel) {
+            try {
+              await sink.flush();
+            } catch (_) {}
+            try {
+              await StateStore.save(cmd.tempFilePath, _state!);
+            } catch (_) {}
+            rethrow;
+          }
+          rethrow;
         }
         await sink.flush();
         await sink.close();
@@ -1136,20 +1262,27 @@ class HttpTransferJob {
     _emitProgress(0, statusMessage: 'Completed');
 
     if (cmd.tempFilePath != cmd.localFilePath) {
-      final finalFile = File(cmd.localFilePath);
-      await finalFile.parent.create(recursive: true);
-      if (await finalFile.exists()) await finalFile.delete();
-      try {
-        await File(cmd.tempFilePath).rename(cmd.localFilePath);
-      } catch (e) {
-        await File(cmd.tempFilePath).copy(cmd.localFilePath);
-        final copiedLen = await File(cmd.localFilePath).length();
-        final origLen = await File(cmd.tempFilePath).length();
-        if (copiedLen == origLen) {
-          await File(cmd.tempFilePath).delete();
-        } else {
-          throw const DownloadIntegrityException(
-              'File copy verification failed on rename fallback.');
+      // FIX-C2: Skip rename if final file already exists (merge path)
+      final tempExists = await File(cmd.tempFilePath).exists();
+      if (!tempExists) {
+        // File already moved by merge — skip rename entirely
+        debugPrint('[DMX] FIX-C2: temp file gone, skipping rename');
+      } else {
+        final finalFile = File(cmd.localFilePath);
+        await finalFile.parent.create(recursive: true);
+        if (await finalFile.exists()) await finalFile.delete();
+        try {
+          await File(cmd.tempFilePath).rename(cmd.localFilePath);
+        } catch (e) {
+          await File(cmd.tempFilePath).copy(cmd.localFilePath);
+          final copiedLen = await File(cmd.localFilePath).length();
+          final origLen = await File(cmd.tempFilePath).length();
+          if (copiedLen == origLen) {
+            await File(cmd.tempFilePath).delete();
+          } else {
+            throw const DownloadIntegrityException(
+                'File copy verification failed on rename fallback.');
+          }
         }
       }
     }

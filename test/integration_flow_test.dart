@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' as drift;
@@ -93,8 +94,37 @@ class FakeDownloadEngine extends DownloadEngine {
     startedUrls.add(url);
     knownFileSizes[url] = knownFileSize;
     final completer = Completer<void>();
+    var cancelled = false;
+
+    void writeOutput(String path, int size) {
+      if (path.isEmpty) return;
+      try {
+        final f = File(path);
+        f.createSync(recursive: true);
+        f.writeAsBytesSync(List.filled(size > 0 ? size : 10, 0));
+        File('$path.dmxstate').writeAsStringSync(
+          jsonEncode({
+            'chunks': [
+              {'downloaded': size > 0 ? size : 10},
+            ],
+          }),
+        );
+      } catch (_) {}
+    }
+
+    if (cancelToken.isCancelled) {
+      cancelled = true;
+      completer.completeError(
+        DioException(
+          requestOptions: RequestOptions(path: url),
+          type: DioExceptionType.cancel,
+        ),
+      );
+      return completer.future;
+    }
 
     Timer(const Duration(milliseconds: 10), () {
+      if (cancelled) return;
       onProgress(DownloadProgress(
         downloadedBytes: 50,
         fileSize: knownFileSize,
@@ -103,25 +133,23 @@ class FakeDownloadEngine extends DownloadEngine {
       ));
     });
 
-    Timer(const Duration(milliseconds: 20), () {
+    Timer(const Duration(milliseconds: 800), () {
+      if (cancelled || completer.isCompleted) return;
       onProgress(DownloadProgress(
         downloadedBytes: knownFileSize,
         fileSize: knownFileSize,
         speed: 1000,
         eta: 0,
       ));
-      try {
-        final f = File(tempFilePath);
-        f.createSync(recursive: true);
-        f.writeAsBytesSync(
-            List.filled(knownFileSize > 0 ? knownFileSize : 10, 0));
-      } catch (_) {}
+      writeOutput(tempFilePath, knownFileSize);
+      writeOutput(localFilePath, knownFileSize);
       if (!completer.isCompleted) {
         completer.complete();
       }
     });
 
     cancelToken.whenCancel.then((_) {
+      cancelled = true;
       if (!completer.isCompleted) {
         completer.completeError(
           DioException(

@@ -196,6 +196,14 @@ class $DownloadTasksTable extends DownloadTasks
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       defaultValue: const Constant(0));
+  static const VerificationMeta _audioDownloadedBytesMeta =
+      const VerificationMeta('audioDownloadedBytes');
+  @override
+  late final GeneratedColumn<int> audioDownloadedBytes = GeneratedColumn<int>(
+      'audio_downloaded_bytes', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   static const VerificationMeta _videoStreamSizeMeta =
       const VerificationMeta('videoStreamSize');
   @override
@@ -261,6 +269,14 @@ class $DownloadTasksTable extends DownloadTasks
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("is_app_update" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _uploadedBytesMeta =
+      const VerificationMeta('uploadedBytes');
+  @override
+  late final GeneratedColumn<int> uploadedBytes = GeneratedColumn<int>(
+      'uploaded_bytes', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   static const VerificationMeta _priorityMeta =
       const VerificationMeta('priority');
   @override
@@ -319,6 +335,7 @@ class $DownloadTasksTable extends DownloadTasks
         downloadPageUrl,
         mergedAudioUrl,
         audioSize,
+        audioDownloadedBytes,
         videoStreamSize,
         audioProgress,
         pausedByUser,
@@ -328,6 +345,7 @@ class $DownloadTasksTable extends DownloadTasks
         playlistTitle,
         thumbnailUrl,
         isAppUpdate,
+        uploadedBytes,
         priority,
         queueOrder,
         expectedSha256,
@@ -496,6 +514,12 @@ class $DownloadTasksTable extends DownloadTasks
       context.handle(_audioSizeMeta,
           audioSize.isAcceptableOrUnknown(data['audio_size']!, _audioSizeMeta));
     }
+    if (data.containsKey('audio_downloaded_bytes')) {
+      context.handle(
+          _audioDownloadedBytesMeta,
+          audioDownloadedBytes.isAcceptableOrUnknown(
+              data['audio_downloaded_bytes']!, _audioDownloadedBytesMeta));
+    }
     if (data.containsKey('video_stream_size')) {
       context.handle(
           _videoStreamSizeMeta,
@@ -547,6 +571,12 @@ class $DownloadTasksTable extends DownloadTasks
           _isAppUpdateMeta,
           isAppUpdate.isAcceptableOrUnknown(
               data['is_app_update']!, _isAppUpdateMeta));
+    }
+    if (data.containsKey('uploaded_bytes')) {
+      context.handle(
+          _uploadedBytesMeta,
+          uploadedBytes.isAcceptableOrUnknown(
+              data['uploaded_bytes']!, _uploadedBytesMeta));
     }
     if (data.containsKey('priority')) {
       context.handle(_priorityMeta,
@@ -631,6 +661,8 @@ class $DownloadTasksTable extends DownloadTasks
           DriftSqlType.string, data['${effectivePrefix}merged_audio_url']),
       audioSize: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}audio_size'])!,
+      audioDownloadedBytes: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}audio_downloaded_bytes'])!,
       videoStreamSize: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}video_stream_size'])!,
       audioProgress: attachedDatabase.typeMapping
@@ -650,6 +682,8 @@ class $DownloadTasksTable extends DownloadTasks
           .read(DriftSqlType.string, data['${effectivePrefix}thumbnail_url']),
       isAppUpdate: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_app_update'])!,
+      uploadedBytes: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}uploaded_bytes'])!,
       priority: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}priority'])!,
       queueOrder: attachedDatabase.typeMapping
@@ -705,6 +739,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final String? downloadPageUrl;
   final String? mergedAudioUrl;
   final int audioSize;
+  final int audioDownloadedBytes;
   final int videoStreamSize;
   final double audioProgress;
   final bool pausedByUser;
@@ -714,6 +749,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final String? playlistTitle;
   final String? thumbnailUrl;
   final bool isAppUpdate;
+  final int uploadedBytes;
   final int priority;
   final int queueOrder;
   final String? expectedSha256;
@@ -747,6 +783,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       this.downloadPageUrl,
       this.mergedAudioUrl,
       required this.audioSize,
+      required this.audioDownloadedBytes,
       required this.videoStreamSize,
       required this.audioProgress,
       required this.pausedByUser,
@@ -756,6 +793,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       this.playlistTitle,
       this.thumbnailUrl,
       required this.isAppUpdate,
+      required this.uploadedBytes,
       required this.priority,
       required this.queueOrder,
       this.expectedSha256,
@@ -809,6 +847,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       map['merged_audio_url'] = Variable<String>(mergedAudioUrl);
     }
     map['audio_size'] = Variable<int>(audioSize);
+    map['audio_downloaded_bytes'] = Variable<int>(audioDownloadedBytes);
     map['video_stream_size'] = Variable<int>(videoStreamSize);
     map['audio_progress'] = Variable<double>(audioProgress);
     map['paused_by_user'] = Variable<bool>(pausedByUser);
@@ -828,6 +867,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       map['thumbnail_url'] = Variable<String>(thumbnailUrl);
     }
     map['is_app_update'] = Variable<bool>(isAppUpdate);
+    map['uploaded_bytes'] = Variable<int>(uploadedBytes);
     map['priority'] = Variable<int>(priority);
     map['queue_order'] = Variable<int>(queueOrder);
     if (!nullToAbsent || expectedSha256 != null) {
@@ -883,6 +923,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ? const Value.absent()
           : Value(mergedAudioUrl),
       audioSize: Value(audioSize),
+      audioDownloadedBytes: Value(audioDownloadedBytes),
       videoStreamSize: Value(videoStreamSize),
       audioProgress: Value(audioProgress),
       pausedByUser: Value(pausedByUser),
@@ -901,6 +942,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ? const Value.absent()
           : Value(thumbnailUrl),
       isAppUpdate: Value(isAppUpdate),
+      uploadedBytes: Value(uploadedBytes),
       priority: Value(priority),
       queueOrder: Value(queueOrder),
       expectedSha256: expectedSha256 == null && nullToAbsent
@@ -945,6 +987,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       downloadPageUrl: serializer.fromJson<String?>(json['downloadPageUrl']),
       mergedAudioUrl: serializer.fromJson<String?>(json['mergedAudioUrl']),
       audioSize: serializer.fromJson<int>(json['audioSize']),
+      audioDownloadedBytes:
+          serializer.fromJson<int>(json['audioDownloadedBytes']),
       videoStreamSize: serializer.fromJson<int>(json['videoStreamSize']),
       audioProgress: serializer.fromJson<double>(json['audioProgress']),
       pausedByUser: serializer.fromJson<bool>(json['pausedByUser']),
@@ -955,6 +999,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       playlistTitle: serializer.fromJson<String?>(json['playlistTitle']),
       thumbnailUrl: serializer.fromJson<String?>(json['thumbnailUrl']),
       isAppUpdate: serializer.fromJson<bool>(json['isAppUpdate']),
+      uploadedBytes: serializer.fromJson<int>(json['uploadedBytes']),
       priority: serializer.fromJson<int>(json['priority']),
       queueOrder: serializer.fromJson<int>(json['queueOrder']),
       expectedSha256: serializer.fromJson<String?>(json['expectedSha256']),
@@ -994,6 +1039,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'downloadPageUrl': serializer.toJson<String?>(downloadPageUrl),
       'mergedAudioUrl': serializer.toJson<String?>(mergedAudioUrl),
       'audioSize': serializer.toJson<int>(audioSize),
+      'audioDownloadedBytes': serializer.toJson<int>(audioDownloadedBytes),
       'videoStreamSize': serializer.toJson<int>(videoStreamSize),
       'audioProgress': serializer.toJson<double>(audioProgress),
       'pausedByUser': serializer.toJson<bool>(pausedByUser),
@@ -1003,6 +1049,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'playlistTitle': serializer.toJson<String?>(playlistTitle),
       'thumbnailUrl': serializer.toJson<String?>(thumbnailUrl),
       'isAppUpdate': serializer.toJson<bool>(isAppUpdate),
+      'uploadedBytes': serializer.toJson<int>(uploadedBytes),
       'priority': serializer.toJson<int>(priority),
       'queueOrder': serializer.toJson<int>(queueOrder),
       'expectedSha256': serializer.toJson<String?>(expectedSha256),
@@ -1040,6 +1087,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           Value<String?> downloadPageUrl = const Value.absent(),
           Value<String?> mergedAudioUrl = const Value.absent(),
           int? audioSize,
+          int? audioDownloadedBytes,
           int? videoStreamSize,
           double? audioProgress,
           bool? pausedByUser,
@@ -1049,6 +1097,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           Value<String?> playlistTitle = const Value.absent(),
           Value<String?> thumbnailUrl = const Value.absent(),
           bool? isAppUpdate,
+          int? uploadedBytes,
           int? priority,
           int? queueOrder,
           Value<String?> expectedSha256 = const Value.absent(),
@@ -1087,6 +1136,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         mergedAudioUrl:
             mergedAudioUrl.present ? mergedAudioUrl.value : this.mergedAudioUrl,
         audioSize: audioSize ?? this.audioSize,
+        audioDownloadedBytes: audioDownloadedBytes ?? this.audioDownloadedBytes,
         videoStreamSize: videoStreamSize ?? this.videoStreamSize,
         audioProgress: audioProgress ?? this.audioProgress,
         pausedByUser: pausedByUser ?? this.pausedByUser,
@@ -1100,6 +1150,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         thumbnailUrl:
             thumbnailUrl.present ? thumbnailUrl.value : this.thumbnailUrl,
         isAppUpdate: isAppUpdate ?? this.isAppUpdate,
+        uploadedBytes: uploadedBytes ?? this.uploadedBytes,
         priority: priority ?? this.priority,
         queueOrder: queueOrder ?? this.queueOrder,
         expectedSha256:
@@ -1163,6 +1214,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ? data.mergedAudioUrl.value
           : this.mergedAudioUrl,
       audioSize: data.audioSize.present ? data.audioSize.value : this.audioSize,
+      audioDownloadedBytes: data.audioDownloadedBytes.present
+          ? data.audioDownloadedBytes.value
+          : this.audioDownloadedBytes,
       videoStreamSize: data.videoStreamSize.present
           ? data.videoStreamSize.value
           : this.videoStreamSize,
@@ -1186,6 +1240,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           : this.thumbnailUrl,
       isAppUpdate:
           data.isAppUpdate.present ? data.isAppUpdate.value : this.isAppUpdate,
+      uploadedBytes: data.uploadedBytes.present
+          ? data.uploadedBytes.value
+          : this.uploadedBytes,
       priority: data.priority.present ? data.priority.value : this.priority,
       queueOrder:
           data.queueOrder.present ? data.queueOrder.value : this.queueOrder,
@@ -1228,6 +1285,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('downloadPageUrl: $downloadPageUrl, ')
           ..write('mergedAudioUrl: $mergedAudioUrl, ')
           ..write('audioSize: $audioSize, ')
+          ..write('audioDownloadedBytes: $audioDownloadedBytes, ')
           ..write('videoStreamSize: $videoStreamSize, ')
           ..write('audioProgress: $audioProgress, ')
           ..write('pausedByUser: $pausedByUser, ')
@@ -1237,6 +1295,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('playlistTitle: $playlistTitle, ')
           ..write('thumbnailUrl: $thumbnailUrl, ')
           ..write('isAppUpdate: $isAppUpdate, ')
+          ..write('uploadedBytes: $uploadedBytes, ')
           ..write('priority: $priority, ')
           ..write('queueOrder: $queueOrder, ')
           ..write('expectedSha256: $expectedSha256, ')
@@ -1275,6 +1334,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         downloadPageUrl,
         mergedAudioUrl,
         audioSize,
+        audioDownloadedBytes,
         videoStreamSize,
         audioProgress,
         pausedByUser,
@@ -1284,6 +1344,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         playlistTitle,
         thumbnailUrl,
         isAppUpdate,
+        uploadedBytes,
         priority,
         queueOrder,
         expectedSha256,
@@ -1321,6 +1382,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.downloadPageUrl == this.downloadPageUrl &&
           other.mergedAudioUrl == this.mergedAudioUrl &&
           other.audioSize == this.audioSize &&
+          other.audioDownloadedBytes == this.audioDownloadedBytes &&
           other.videoStreamSize == this.videoStreamSize &&
           other.audioProgress == this.audioProgress &&
           other.pausedByUser == this.pausedByUser &&
@@ -1330,6 +1392,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.playlistTitle == this.playlistTitle &&
           other.thumbnailUrl == this.thumbnailUrl &&
           other.isAppUpdate == this.isAppUpdate &&
+          other.uploadedBytes == this.uploadedBytes &&
           other.priority == this.priority &&
           other.queueOrder == this.queueOrder &&
           other.expectedSha256 == this.expectedSha256 &&
@@ -1365,6 +1428,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<String?> downloadPageUrl;
   final Value<String?> mergedAudioUrl;
   final Value<int> audioSize;
+  final Value<int> audioDownloadedBytes;
   final Value<int> videoStreamSize;
   final Value<double> audioProgress;
   final Value<bool> pausedByUser;
@@ -1374,6 +1438,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<String?> playlistTitle;
   final Value<String?> thumbnailUrl;
   final Value<bool> isAppUpdate;
+  final Value<int> uploadedBytes;
   final Value<int> priority;
   final Value<int> queueOrder;
   final Value<String?> expectedSha256;
@@ -1408,6 +1473,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.downloadPageUrl = const Value.absent(),
     this.mergedAudioUrl = const Value.absent(),
     this.audioSize = const Value.absent(),
+    this.audioDownloadedBytes = const Value.absent(),
     this.videoStreamSize = const Value.absent(),
     this.audioProgress = const Value.absent(),
     this.pausedByUser = const Value.absent(),
@@ -1417,6 +1483,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.playlistTitle = const Value.absent(),
     this.thumbnailUrl = const Value.absent(),
     this.isAppUpdate = const Value.absent(),
+    this.uploadedBytes = const Value.absent(),
     this.priority = const Value.absent(),
     this.queueOrder = const Value.absent(),
     this.expectedSha256 = const Value.absent(),
@@ -1452,6 +1519,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.downloadPageUrl = const Value.absent(),
     this.mergedAudioUrl = const Value.absent(),
     this.audioSize = const Value.absent(),
+    this.audioDownloadedBytes = const Value.absent(),
     this.videoStreamSize = const Value.absent(),
     this.audioProgress = const Value.absent(),
     this.pausedByUser = const Value.absent(),
@@ -1461,6 +1529,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.playlistTitle = const Value.absent(),
     this.thumbnailUrl = const Value.absent(),
     this.isAppUpdate = const Value.absent(),
+    this.uploadedBytes = const Value.absent(),
     this.priority = const Value.absent(),
     this.queueOrder = const Value.absent(),
     this.expectedSha256 = const Value.absent(),
@@ -1506,6 +1575,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<String>? downloadPageUrl,
     Expression<String>? mergedAudioUrl,
     Expression<int>? audioSize,
+    Expression<int>? audioDownloadedBytes,
     Expression<int>? videoStreamSize,
     Expression<double>? audioProgress,
     Expression<bool>? pausedByUser,
@@ -1515,6 +1585,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<String>? playlistTitle,
     Expression<String>? thumbnailUrl,
     Expression<bool>? isAppUpdate,
+    Expression<int>? uploadedBytes,
     Expression<int>? priority,
     Expression<int>? queueOrder,
     Expression<String>? expectedSha256,
@@ -1550,6 +1621,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (downloadPageUrl != null) 'download_page_url': downloadPageUrl,
       if (mergedAudioUrl != null) 'merged_audio_url': mergedAudioUrl,
       if (audioSize != null) 'audio_size': audioSize,
+      if (audioDownloadedBytes != null)
+        'audio_downloaded_bytes': audioDownloadedBytes,
       if (videoStreamSize != null) 'video_stream_size': videoStreamSize,
       if (audioProgress != null) 'audio_progress': audioProgress,
       if (pausedByUser != null) 'paused_by_user': pausedByUser,
@@ -1560,6 +1633,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (playlistTitle != null) 'playlist_title': playlistTitle,
       if (thumbnailUrl != null) 'thumbnail_url': thumbnailUrl,
       if (isAppUpdate != null) 'is_app_update': isAppUpdate,
+      if (uploadedBytes != null) 'uploaded_bytes': uploadedBytes,
       if (priority != null) 'priority': priority,
       if (queueOrder != null) 'queue_order': queueOrder,
       if (expectedSha256 != null) 'expected_sha256': expectedSha256,
@@ -1597,6 +1671,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       Value<String?>? downloadPageUrl,
       Value<String?>? mergedAudioUrl,
       Value<int>? audioSize,
+      Value<int>? audioDownloadedBytes,
       Value<int>? videoStreamSize,
       Value<double>? audioProgress,
       Value<bool>? pausedByUser,
@@ -1606,6 +1681,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       Value<String?>? playlistTitle,
       Value<String?>? thumbnailUrl,
       Value<bool>? isAppUpdate,
+      Value<int>? uploadedBytes,
       Value<int>? priority,
       Value<int>? queueOrder,
       Value<String?>? expectedSha256,
@@ -1640,6 +1716,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       downloadPageUrl: downloadPageUrl ?? this.downloadPageUrl,
       mergedAudioUrl: mergedAudioUrl ?? this.mergedAudioUrl,
       audioSize: audioSize ?? this.audioSize,
+      audioDownloadedBytes: audioDownloadedBytes ?? this.audioDownloadedBytes,
       videoStreamSize: videoStreamSize ?? this.videoStreamSize,
       audioProgress: audioProgress ?? this.audioProgress,
       pausedByUser: pausedByUser ?? this.pausedByUser,
@@ -1649,6 +1726,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       playlistTitle: playlistTitle ?? this.playlistTitle,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       isAppUpdate: isAppUpdate ?? this.isAppUpdate,
+      uploadedBytes: uploadedBytes ?? this.uploadedBytes,
       priority: priority ?? this.priority,
       queueOrder: queueOrder ?? this.queueOrder,
       expectedSha256: expectedSha256 ?? this.expectedSha256,
@@ -1746,6 +1824,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     if (audioSize.present) {
       map['audio_size'] = Variable<int>(audioSize.value);
     }
+    if (audioDownloadedBytes.present) {
+      map['audio_downloaded_bytes'] = Variable<int>(audioDownloadedBytes.value);
+    }
     if (videoStreamSize.present) {
       map['video_stream_size'] = Variable<int>(videoStreamSize.value);
     }
@@ -1773,6 +1854,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     }
     if (isAppUpdate.present) {
       map['is_app_update'] = Variable<bool>(isAppUpdate.value);
+    }
+    if (uploadedBytes.present) {
+      map['uploaded_bytes'] = Variable<int>(uploadedBytes.value);
     }
     if (priority.present) {
       map['priority'] = Variable<int>(priority.value);
@@ -1824,6 +1908,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('downloadPageUrl: $downloadPageUrl, ')
           ..write('mergedAudioUrl: $mergedAudioUrl, ')
           ..write('audioSize: $audioSize, ')
+          ..write('audioDownloadedBytes: $audioDownloadedBytes, ')
           ..write('videoStreamSize: $videoStreamSize, ')
           ..write('audioProgress: $audioProgress, ')
           ..write('pausedByUser: $pausedByUser, ')
@@ -1833,6 +1918,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('playlistTitle: $playlistTitle, ')
           ..write('thumbnailUrl: $thumbnailUrl, ')
           ..write('isAppUpdate: $isAppUpdate, ')
+          ..write('uploadedBytes: $uploadedBytes, ')
           ..write('priority: $priority, ')
           ..write('queueOrder: $queueOrder, ')
           ..write('expectedSha256: $expectedSha256, ')
@@ -2794,6 +2880,7 @@ typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
   Value<String?> downloadPageUrl,
   Value<String?> mergedAudioUrl,
   Value<int> audioSize,
+  Value<int> audioDownloadedBytes,
   Value<int> videoStreamSize,
   Value<double> audioProgress,
   Value<bool> pausedByUser,
@@ -2803,6 +2890,7 @@ typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
   Value<String?> playlistTitle,
   Value<String?> thumbnailUrl,
   Value<bool> isAppUpdate,
+  Value<int> uploadedBytes,
   Value<int> priority,
   Value<int> queueOrder,
   Value<String?> expectedSha256,
@@ -2839,6 +2927,7 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
   Value<String?> downloadPageUrl,
   Value<String?> mergedAudioUrl,
   Value<int> audioSize,
+  Value<int> audioDownloadedBytes,
   Value<int> videoStreamSize,
   Value<double> audioProgress,
   Value<bool> pausedByUser,
@@ -2848,6 +2937,7 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
   Value<String?> playlistTitle,
   Value<String?> thumbnailUrl,
   Value<bool> isAppUpdate,
+  Value<int> uploadedBytes,
   Value<int> priority,
   Value<int> queueOrder,
   Value<String?> expectedSha256,
@@ -2961,6 +3051,10 @@ class $$DownloadTasksTableFilterComposer
   ColumnFilters<int> get audioSize => $composableBuilder(
       column: $table.audioSize, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<int> get audioDownloadedBytes => $composableBuilder(
+      column: $table.audioDownloadedBytes,
+      builder: (column) => ColumnFilters(column));
+
   ColumnFilters<int> get videoStreamSize => $composableBuilder(
       column: $table.videoStreamSize,
       builder: (column) => ColumnFilters(column));
@@ -2989,6 +3083,9 @@ class $$DownloadTasksTableFilterComposer
 
   ColumnFilters<bool> get isAppUpdate => $composableBuilder(
       column: $table.isAppUpdate, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get uploadedBytes => $composableBuilder(
+      column: $table.uploadedBytes, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get priority => $composableBuilder(
       column: $table.priority, builder: (column) => ColumnFilters(column));
@@ -3111,6 +3208,10 @@ class $$DownloadTasksTableOrderingComposer
   ColumnOrderings<int> get audioSize => $composableBuilder(
       column: $table.audioSize, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get audioDownloadedBytes => $composableBuilder(
+      column: $table.audioDownloadedBytes,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get videoStreamSize => $composableBuilder(
       column: $table.videoStreamSize,
       builder: (column) => ColumnOrderings(column));
@@ -3143,6 +3244,10 @@ class $$DownloadTasksTableOrderingComposer
 
   ColumnOrderings<bool> get isAppUpdate => $composableBuilder(
       column: $table.isAppUpdate, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get uploadedBytes => $composableBuilder(
+      column: $table.uploadedBytes,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get priority => $composableBuilder(
       column: $table.priority, builder: (column) => ColumnOrderings(column));
@@ -3252,6 +3357,9 @@ class $$DownloadTasksTableAnnotationComposer
   GeneratedColumn<int> get audioSize =>
       $composableBuilder(column: $table.audioSize, builder: (column) => column);
 
+  GeneratedColumn<int> get audioDownloadedBytes => $composableBuilder(
+      column: $table.audioDownloadedBytes, builder: (column) => column);
+
   GeneratedColumn<int> get videoStreamSize => $composableBuilder(
       column: $table.videoStreamSize, builder: (column) => column);
 
@@ -3278,6 +3386,9 @@ class $$DownloadTasksTableAnnotationComposer
 
   GeneratedColumn<bool> get isAppUpdate => $composableBuilder(
       column: $table.isAppUpdate, builder: (column) => column);
+
+  GeneratedColumn<int> get uploadedBytes => $composableBuilder(
+      column: $table.uploadedBytes, builder: (column) => column);
 
   GeneratedColumn<int> get priority =>
       $composableBuilder(column: $table.priority, builder: (column) => column);
@@ -3348,6 +3459,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<String?> downloadPageUrl = const Value.absent(),
             Value<String?> mergedAudioUrl = const Value.absent(),
             Value<int> audioSize = const Value.absent(),
+            Value<int> audioDownloadedBytes = const Value.absent(),
             Value<int> videoStreamSize = const Value.absent(),
             Value<double> audioProgress = const Value.absent(),
             Value<bool> pausedByUser = const Value.absent(),
@@ -3357,6 +3469,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<String?> playlistTitle = const Value.absent(),
             Value<String?> thumbnailUrl = const Value.absent(),
             Value<bool> isAppUpdate = const Value.absent(),
+            Value<int> uploadedBytes = const Value.absent(),
             Value<int> priority = const Value.absent(),
             Value<int> queueOrder = const Value.absent(),
             Value<String?> expectedSha256 = const Value.absent(),
@@ -3392,6 +3505,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             downloadPageUrl: downloadPageUrl,
             mergedAudioUrl: mergedAudioUrl,
             audioSize: audioSize,
+            audioDownloadedBytes: audioDownloadedBytes,
             videoStreamSize: videoStreamSize,
             audioProgress: audioProgress,
             pausedByUser: pausedByUser,
@@ -3401,6 +3515,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             playlistTitle: playlistTitle,
             thumbnailUrl: thumbnailUrl,
             isAppUpdate: isAppUpdate,
+            uploadedBytes: uploadedBytes,
             priority: priority,
             queueOrder: queueOrder,
             expectedSha256: expectedSha256,
@@ -3437,6 +3552,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<String?> downloadPageUrl = const Value.absent(),
             Value<String?> mergedAudioUrl = const Value.absent(),
             Value<int> audioSize = const Value.absent(),
+            Value<int> audioDownloadedBytes = const Value.absent(),
             Value<int> videoStreamSize = const Value.absent(),
             Value<double> audioProgress = const Value.absent(),
             Value<bool> pausedByUser = const Value.absent(),
@@ -3446,6 +3562,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<String?> playlistTitle = const Value.absent(),
             Value<String?> thumbnailUrl = const Value.absent(),
             Value<bool> isAppUpdate = const Value.absent(),
+            Value<int> uploadedBytes = const Value.absent(),
             Value<int> priority = const Value.absent(),
             Value<int> queueOrder = const Value.absent(),
             Value<String?> expectedSha256 = const Value.absent(),
@@ -3481,6 +3598,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             downloadPageUrl: downloadPageUrl,
             mergedAudioUrl: mergedAudioUrl,
             audioSize: audioSize,
+            audioDownloadedBytes: audioDownloadedBytes,
             videoStreamSize: videoStreamSize,
             audioProgress: audioProgress,
             pausedByUser: pausedByUser,
@@ -3490,6 +3608,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             playlistTitle: playlistTitle,
             thumbnailUrl: thumbnailUrl,
             isAppUpdate: isAppUpdate,
+            uploadedBytes: uploadedBytes,
             priority: priority,
             queueOrder: queueOrder,
             expectedSha256: expectedSha256,

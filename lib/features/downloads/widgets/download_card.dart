@@ -647,10 +647,15 @@ class _TelemetryStrip extends StatelessWidget {
       );
     }
 
-    // Paused / Queued / Failed:
-    final speedText = task.status == DownloadStatus.queued
-        ? 'Queued'
-        : (task.status == DownloadStatus.paused ? 'Paused' : '—');
+    // FIX-AUDIT-C3: Update speed text for paused/queued/merging/failed
+    final speedText = switch (task.status) {
+      DownloadStatus.queued => 'Queued',
+      DownloadStatus.paused => 'Paused',
+      DownloadStatus.downloading => task.speedFormatted,
+      DownloadStatus.completed => seeding ? '${formatBytes(seedingUploadSpeed)}/s' : 'Done',
+      DownloadStatus.failed => '—',
+      DownloadStatus.merging => 'Merging…',
+    };
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -2068,8 +2073,10 @@ class _TorrentFileRow extends StatelessWidget {
                             radius: 1,
                           ),
                         ),
-                        FractionallySizedBox(
-                          widthFactor: p,
+                        AnimatedFractionallySizedBox(
+                          widthFactor: p.clamp(0.0, 1.0),
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
                           child: Container(
                             height: 2,
                             decoration: BoxDecoration(

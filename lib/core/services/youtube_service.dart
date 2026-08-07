@@ -975,28 +975,37 @@ class YoutubeService {
             oldType = 'video_only';
           }
 
-          var first = streams.firstWhere(
-            (s) => s['src'] != null && s['type'] == oldType,
-            orElse: () => <String, dynamic>{},
-          );
-
-          if (first.isEmpty) {
-            debugPrint(
-              '[YouTube] refreshStreamUrl: No itag/quality match found. '
-              'Falling back to first stream (quality may differ).',
-            );
-            first = streams.firstWhere(
-              (s) => s['src'] != null,
-              orElse: () => <String, dynamic>{},
-            );
-            if (first.isNotEmpty) {
-              debugPrint(
-                '[YouTubeService] refreshStreamUrl warning: Stream type changed from "$oldType" to "${first['type']}".',
-              );
-            }
+          // FIX-17: Prefer same-type fallback, then closest quality.
+          // Avoids grabbing a completely different quality/type stream.
+          final sameType = streams
+              .where((s) => s['type'] == oldType && s['src'] != null)
+              .toList();
+          if (sameType.isNotEmpty) {
+            sameType.sort((a, b) =>
+                (parseQualityHeight(b['quality']?.toString() ?? '') -
+                        parseQualityHeight(oldQuality ?? ''))
+                    .abs() -
+                (parseQualityHeight(a['quality']?.toString() ?? '') -
+                        parseQualityHeight(oldQuality ?? ''))
+                    .abs());
+            return {
+              'url': sameType.first['src'] as String?,
+              'audioUrl': sameType.first['audioSrc'] as String?,
+            };
           }
 
+          debugPrint(
+            '[YouTube] refreshStreamUrl: No itag/quality/same-type match found. '
+            'Falling back to any stream (quality may differ).',
+          );
+          final first = streams.firstWhere(
+            (s) => s['src'] != null,
+            orElse: () => <String, dynamic>{},
+          );
           if (first.isNotEmpty) {
+            debugPrint(
+              '[YouTubeService] refreshStreamUrl warning: Stream type changed from "$oldType" to "${first['type']}".',
+            );
             return {
               'url': first['src'] as String?,
               'audioUrl': first['audioSrc'] as String?,

@@ -1060,7 +1060,8 @@ void main() {
       expect(audioFile.existsSync(), isTrue);
       expect(customPartFile.existsSync(), isTrue);
 
-      await DownloadEngine.cleanupOrphanFiles(baseTempPath);
+      await DownloadEngine.cleanupOrphanFiles(baseTempPath,
+          mergeConfirmed: true);
 
       expect(partFile.existsSync(), isFalse);
       expect(stateFile.existsSync(), isFalse);

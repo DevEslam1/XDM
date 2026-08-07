@@ -868,8 +868,8 @@ void main() {
     final updated = provider.tasks.firstWhere((t) => t.id == 'prealloc-test-1');
     expect(updated.downloadedBytes, 0);
 
-    await tempFile.delete();
-    await stateFile.delete();
+    try { await tempFile.delete(); } catch (_) {}
+    try { if (await stateFile.exists()) await stateFile.delete(); } catch (_) {}
   });
 
   test(

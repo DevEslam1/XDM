@@ -298,6 +298,9 @@ class TorrentService {
   static final Map<int, double> _latestProgress = {};
   static final Map<int, String> _torrentSources = {};
   static final Map<int, List<int>> _cachedPrioritiesSnapshot = {};
+  // FIX-22: Latest full update info per torrent, used to poll engine state
+  // after pausing so resume data is captured only once truly paused/flushed.
+  static final Map<int, TorrentUpdateInfo> _latestStats = {};
 
   static final ValueNotifier<bool> isAvailable = ValueNotifier(false);
 
@@ -450,6 +453,7 @@ class TorrentService {
             final removedIds = previousIds.difference(_activeTorrentIds);
             for (final removedId in removedIds) {
               _latestProgress.remove(removedId);
+              _latestStats.remove(removedId); // FIX-22
               _torrentSources.remove(removedId);
               _cachedPrioritiesSnapshot.remove(removedId);
             }
@@ -458,34 +462,33 @@ class TorrentService {
               final safeProgress = value.progress.isFinite
                   ? value.progress.clamp(0.0, 1.0)
                   : 0.0;
-              return MapEntry(
-                key,
-                TorrentUpdateInfo(
-                  id: value.id,
-                  name: value.name,
-                  progress: value.progress,
-                  downloadRate: value.downloadRate,
-                  uploadRate: value.uploadRate,
-                  totalDone: value.totalDone,
-                  totalWanted: value.totalWanted,
-                  totalWantedDone: (safeProgress * value.totalWanted).toInt(),
-                  hasMetadata: value.hasMetadata,
-                  stateLabel: value.state.label,
-                  numSeeds: value.numSeeds,
-                  numPeers: value.numPeers,
-                  piecesHave: _estimatePiecesHave(value),
-                  piecesTotal: _estimatePiecesTotal(value),
-                  downloadPayloadRate: value.downloadRate,
-                  uploadPayloadRate: value.uploadRate,
-                  totalPayloadDownload: value.totalDone,
-                  totalPayloadUpload: value.totalUploaded,
-                  currentTracker: '',
-                  nextAnnounceSeconds: 0,
-                  distributedCopies: 0.0,
-                  fileProgress: const [],
-                  filePriorities: const [],
-                ),
+              final info = TorrentUpdateInfo(
+                id: value.id,
+                name: value.name,
+                progress: value.progress,
+                downloadRate: value.downloadRate,
+                uploadRate: value.uploadRate,
+                totalDone: value.totalDone,
+                totalWanted: value.totalWanted,
+                totalWantedDone: (safeProgress * value.totalWanted).toInt(),
+                hasMetadata: value.hasMetadata,
+                stateLabel: value.state.label,
+                numSeeds: value.numSeeds,
+                numPeers: value.numPeers,
+                piecesHave: _estimatePiecesHave(value),
+                piecesTotal: _estimatePiecesTotal(value),
+                downloadPayloadRate: value.downloadRate,
+                uploadPayloadRate: value.uploadRate,
+                totalPayloadDownload: value.totalDone,
+                totalPayloadUpload: value.totalUploaded,
+                currentTracker: '',
+                nextAnnounceSeconds: 0,
+                distributedCopies: 0.0,
+                fileProgress: const [],
+                filePriorities: const [],
               );
+              _latestStats[value.id] = info; // FIX-22
+              return MapEntry(key, info);
             });
             if (!controller!.isClosed) controller.add(mapped);
           } catch (e) {
@@ -818,7 +821,22 @@ class TorrentService {
         }
 
         LibtorrentFlutter.instance.pauseTorrent(id);
-        await Future.delayed(const Duration(milliseconds: 200));
+        // FIX-22: Poll until the engine reports paused/stopped (max 2s) so the
+        // fast-resume bytes captured below reflect a fully flushed state rather
+        // than a mid-flush snapshot.
+        final deadline = DateTime.now().add(const Duration(seconds: 2));
+        bool isPaused = false;
+        while (!isPaused && DateTime.now().isBefore(deadline)) {
+          await Future.delayed(const Duration(milliseconds: 100));
+          try {
+            final stats = _latestStats[id];
+            isPaused = stats == null ||
+                stats.stateLabel.toLowerCase().contains('paused') ||
+                stats.stateLabel.toLowerCase().contains('stopped');
+          } catch (_) {
+            isPaused = true;
+          }
+        }
 
         // Persist native fast-resume bytes under the stable source key.
         // Best-effort: never throw out of pauseTorrent.

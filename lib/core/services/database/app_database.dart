@@ -162,6 +162,8 @@ class DownloadTasks extends Table {
   TextColumn get downloadPageUrl => text().nullable()();
   TextColumn get mergedAudioUrl => text().nullable()();
   IntColumn get audioSize => integer().withDefault(const Constant(0))();
+  IntColumn get audioDownloadedBytes =>
+      integer().withDefault(const Constant(0))(); // FIX-AUDIT-01
   IntColumn get videoStreamSize => integer().withDefault(const Constant(0))(); // FIX-B4
   RealColumn get audioProgress => real().withDefault(const Constant(0.0))();
   BoolColumn get pausedByUser => boolean().withDefault(const Constant(false))();
@@ -171,6 +173,8 @@ class DownloadTasks extends Table {
   TextColumn get playlistTitle => text().nullable()();
   TextColumn get thumbnailUrl => text().nullable()();
   BoolColumn get isAppUpdate => boolean().withDefault(const Constant(false))();
+  IntColumn get uploadedBytes =>
+      integer().withDefault(const Constant(0))(); // FIX F5
   IntColumn get priority => integer().withDefault(const Constant(0))();
   IntColumn get queueOrder => integer().withDefault(const Constant(0))(); // FIX(13)
   TextColumn get expectedSha256 => text().nullable()();
@@ -237,7 +241,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 14; // FIX-B4
+  int get schemaVersion => 16; // FIX F5
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -594,6 +598,18 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               'ALTER TABLE download_tasks ADD COLUMN video_stream_size INTEGER NOT NULL DEFAULT 0',
             ); // FIX-B4
+          }
+          if (from < 15) {
+            // Migration 14 -> 15: Add audioDownloadedBytes column (FIX-AUDIT-01)
+            await customStatement(
+              'ALTER TABLE download_tasks ADD COLUMN audio_downloaded_bytes INTEGER NOT NULL DEFAULT 0',
+            );
+          }
+          if (from < 16) {
+            // Migration 15 -> 16: Add uploadedBytes column (FIX F5)
+            await customStatement(
+              'ALTER TABLE download_tasks ADD COLUMN uploaded_bytes INTEGER NOT NULL DEFAULT 0',
+            );
           }
         },
       );

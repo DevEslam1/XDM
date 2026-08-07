@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
@@ -886,6 +887,12 @@ class DownloadEngine {
     void requestCancel() {
       cancelRequested = true;
       job.cancel();
+      // A cancel must never leave a completed final file behind (even if the
+      // worker already renamed the temp path in a race with the cancel).
+      try {
+        final f = File(localFilePath);
+        if (f.existsSync()) f.deleteSync();
+      } catch (_) {}
     }
 
     cancelToken.whenCancel.then((_) => requestCancel());
@@ -921,7 +928,25 @@ class DownloadEngine {
           ));
         case 'done':
           inactivityTimer?.cancel();
-          if (!completer.isCompleted) completer.complete();
+          if (cancelRequested || cancelToken.isCancelled) {
+            // Completion raced with a cancel. Honor the cancel so a cancelled
+            // task is never surfaced as "complete" and never leaves a final
+            // file behind. Any temp/state the worker removed stays removed;
+            // a final file already renamed in the race is dropped.
+            try {
+              final finalFile = File(localFilePath);
+              if (finalFile.existsSync()) finalFile.deleteSync();
+            } catch (_) {}
+            if (!completer.isCompleted) {
+              completer.completeError(DioException(
+                requestOptions: RequestOptions(path: punyUrl),
+                type: DioExceptionType.cancel,
+                message: 'Download cancelled.',
+              ));
+            }
+          } else if (!completer.isCompleted) {
+            completer.complete();
+          }
         case 'error':
           inactivityTimer?.cancel();
           if (!completer.isCompleted) {
@@ -1091,6 +1116,11 @@ class DownloadEngine {
               '[DMX] stored resume data rejected by engine — rechecking');
         }
         TorrentService.recheckTorrent(id);
+        // FIX-24: Scale the recheck timeout with file size so large torrents
+        // have time to finish hash rechecking.
+        final recheckTimeout = Duration(
+          minutes: max(5, (knownFileSize ~/ (100 * 1024 * 1024)) + 5),
+        );
         await _waitForState(
           id,
           cancelToken,
@@ -1098,7 +1128,7 @@ class DownloadEngine {
               !label.contains('checking') &&
               !label.contains('metadata') &&
               !label.contains('allocating'),
-          timeout: const Duration(minutes: 5),
+          timeout: recheckTimeout,
         );
       }
       if (cancelToken.isCancelled) return;
@@ -1162,7 +1192,7 @@ class DownloadEngine {
       elapsed += 10;
       onProgress(DownloadProgress(
         downloadedBytes: 0,
-        fileSize: 0,
+        fileSize: initialFileSize > 0 ? initialFileSize : 0, // FIX-L4: pass size
         speed: 0,
         eta: null,
         statusMessage: 'Fetching metadata… (${elapsed}s / 300s)',
@@ -1300,15 +1330,22 @@ class DownloadEngine {
         }
       }
 
-      final int calculatedTotal = (resolvedFiles != null)
-          ? resolvedFiles
-              .where((f) => f['selected'] == true)
-              .fold<int>(0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0))
-          : 0;
-      final totalSize = torrent.totalWanted > 0
-          ? torrent.totalWanted
-          : (calculatedTotal > 0
-              ? calculatedTotal
+      // FIX-21: Use per-file sums as primary source for aggregate size/bytes
+      int calculatedTotal = 0;
+      int calculatedDownloaded = 0;
+      if (resolvedFiles != null) {
+        for (final f in resolvedFiles) {
+          if (f['selected'] == true) {
+            calculatedTotal += (f['length'] as num?)?.toInt() ?? 0;
+            calculatedDownloaded +=
+                (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+          }
+        }
+      }
+      final totalSize = calculatedTotal > 0
+          ? calculatedTotal
+          : (torrent.totalWanted > 0
+              ? torrent.totalWanted
               : (knownFileSize > 0 ? knownFileSize : 0));
 
       // FIX T-1: While metadata is unknown, show indeterminate state
@@ -1324,9 +1361,12 @@ class DownloadEngine {
         return; // skip normal progress emission
       }
 
-      final rawDownloaded = torrent.totalWantedDone > 0
-          ? torrent.totalWantedDone
-          : torrent.totalDone;  // fallback to totalDone
+      // FIX-21: Prefer per-file downloaded sum, then engine aggregates
+      final rawDownloaded = calculatedDownloaded > 0
+          ? calculatedDownloaded
+          : (torrent.totalWantedDone > 0
+              ? torrent.totalWantedDone
+              : torrent.totalDone); // fallback to totalDone
       final downloadedBytes =
           totalSize > 0 ? min(rawDownloaded, totalSize) : rawDownloaded;
 
@@ -1679,26 +1719,40 @@ Dio buildTransferDio({
   return client;
 }
 
-/// THE single byte-counting entry point used by orchestrator/provider.
-/// Loads (migrating if needed), reconciles against disk, returns proven bytes.
+// FIX-M3: Read-only path that does not create .dmxstate file
+// FIX-03: Apply missing-state file length fallback for ALL thread counts
 Future<int> actualDownloadedBytes(
   String path, {
   required int threadCount,
 }) async {
   try {
-    final result = await StateStore.loadOrCreate(
-      path,
-      url: '',
-      threadCount: threadCount,
-      knownFileSize: 0,
-    );
-    return result.state.downloadedBytes;
+    final stateFile = File('$path.dmxstate');
+    if (!await stateFile.exists()) {
+      final f = File(path);
+      return await f.exists() ? await f.length() : 0;
+    }
+    final content = await stateFile.readAsString();
+    final decoded = jsonDecode(content);
+    if (decoded is Map && decoded['chunks'] is List) {
+      final chunks = decoded['chunks'] as List;
+      return chunks.fold<int>(
+        0,
+        (s, c) =>
+            s + ((c is Map ? (c['downloaded'] as num?)?.toInt() : 0) ?? 0),
+      );
+    }
+    if (decoded is Map && decoded['progress'] is List) {
+      final progress = decoded['progress'] as List;
+      return progress.fold<int>(
+        0,
+        (s, c) => s + ((c is num) ? c.toInt() : 0),
+      );
+    }
+    return 0;
   } catch (e) {
     debugPrint('[DMX] actualDownloadedBytes failed for $path: $e');
-    if (threadCount <= 1) {
-      final f = File(path);
-      if (await f.exists()) return f.length();
-    }
+    final f = File(path);
+    if (await f.exists()) return f.length();
     return 0;
   }
 }

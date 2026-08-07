@@ -35,6 +35,10 @@ class TorrentResumeStore {
   }
 
   static String _stableKey(String sourceUrl) {
+    // FIX-23: Magnet URLs already key on the info-hash (stable across
+    // mirrors/redirects). TODO: For .torrent file URLs, extract the info-hash
+    // from the file/magnet bytes when available for stable keying across
+    // mirror switches. URL-based keying is acceptable for MVP.
     if (sourceUrl.startsWith('magnet:')) {
       final match = RegExp(r'xt=urn:btih:([^&]+)').firstMatch(sourceUrl);
       if (match != null) {

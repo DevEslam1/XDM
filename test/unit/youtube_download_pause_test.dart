@@ -25,8 +25,8 @@ void main() {
         youtubeQualityPreset: '1080p',
       );
 
-      expect(task.progress, closeTo(0.3, 0.01));
-      expect(task.progressPercentString, '30.0%');
+      expect(task.progress, closeTo(0.4, 0.01));
+      expect(task.progressPercentString, '40.0%');
       expect(task.audioProgressPercentString, '50.0%');
     });
 
@@ -65,7 +65,7 @@ void main() {
       expect(pausedTask.downloadedBytes, 45000000);
       expect(pausedTask.audioProgress, 1.0);
       expect(pausedTask.fileSize, 100000000);
-      expect(pausedTask.progressPercentString, '45.0%');
+      expect(pausedTask.progressPercentString, '65.0%');
     });
   });
 }

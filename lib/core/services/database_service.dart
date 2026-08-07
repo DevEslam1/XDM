@@ -538,6 +538,7 @@ class DatabaseService {
       downloadPageUrl: drift.Value(task.downloadPageUrl),
       mergedAudioUrl: drift.Value(task.mergedAudioUrl),
       audioSize: drift.Value(task.audioSize),
+      audioDownloadedBytes: drift.Value(task.audioDownloadedBytes), // FIX-AUDIT-01
       videoStreamSize: drift.Value(task.videoStreamSize), // FIX-B4
       audioProgress: drift.Value(task.audioProgress),
       pausedByUser: drift.Value(task.pausedByUser),
@@ -547,6 +548,7 @@ class DatabaseService {
       playlistTitle: drift.Value(task.playlistTitle),
       thumbnailUrl: drift.Value(task.thumbnailUrl),
       isAppUpdate: drift.Value(task.isAppUpdate),
+      uploadedBytes: drift.Value(task.uploadedBytes), // FIX F5
       priority: drift.Value(task.priority),
       expectedSha256: drift.Value(task.expectedSha256),
       mirrorUrls: drift.Value(task.mirrorUrls),
@@ -618,6 +620,7 @@ class DatabaseService {
       downloadPageUrl: row.downloadPageUrl,
       mergedAudioUrl: row.mergedAudioUrl,
       audioSize: row.audioSize,
+      audioDownloadedBytes: row.audioDownloadedBytes, // FIX-AUDIT-01
       videoStreamSize: row.videoStreamSize, // FIX-B4
       audioProgress: row.audioProgress,
       pausedByUser: row.pausedByUser,
@@ -628,6 +631,7 @@ class DatabaseService {
           row.playlistTitle?.isNotEmpty == true ? row.playlistTitle : null,
       thumbnailUrl: row.thumbnailUrl,
       isAppUpdate: row.isAppUpdate,
+      uploadedBytes: row.uploadedBytes, // FIX F5
       priority: row.priority,
       expectedSha256: row.expectedSha256,
       mirrorUrls: row.mirrorUrls,
