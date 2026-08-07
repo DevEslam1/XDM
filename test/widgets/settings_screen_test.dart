@@ -57,16 +57,12 @@ void main() {
     testWidgets('enabling battery saver mode keeps power tab active and page visible', (tester) async {
       final settings = createMockSettingsProvider();
       await tester.pumpWidget(createTestApp(
-        child: const SettingsScreen(),
+        child: const SettingsScreen(initialSection: 'power'),
         settingsProvider: settings,
       ));
       await tester.pumpAndSettle();
 
-      final powerChip = find.text('Power & Perf');
-      if (powerChip.evaluate().isNotEmpty) {
-        await tester.tap(powerChip);
-        await tester.pumpAndSettle();
-      }
+      expect(settings.activeSettingsTabIndex, equals(5));
 
       await settings.setBatterySaverMode(true);
       await tester.pumpAndSettle();

@@ -3640,7 +3640,7 @@ class DownloadOrchestrator {
     if (msg.contains('merge') ||
         msg.contains('ffmpeg') ||
         msg.contains('missing') ||
-        msg.contains('not found')) {
+        (msg.contains('not found') && !msg.contains('stream') && !msg.contains('youtube'))) {
       return false;
     }
     // FIX-10: YouTube stream expiry and bot detection are transient
@@ -3674,19 +3674,22 @@ class DownloadOrchestrator {
   }
 
   /// True for 403/410 HTTP errors that usually mean an expired YouTube
-  /// stream URL or a bot-check page. Only meaningful for YouTube tasks; a
-  /// generic 403 (access denied) on a plain HTTP download must not be
-  /// retried.
+  /// stream URL or a bot-check page, or backend cold-start errors.
+  /// Only meaningful for YouTube tasks.
   static bool _isYouTubeStreamError(Object error) {
     if (error is DioException) {
       final statusCode = error.response?.statusCode;
-      if (statusCode == 403 || statusCode == 410) return true;
+      if (statusCode == 403 || statusCode == 410 || statusCode == 404 || (statusCode != null && statusCode >= 500)) return true;
     }
     final msg = error.toString().toLowerCase();
     return msg.contains('html_instead_of_media') ||
         msg.contains('html instead of media') ||
         msg.contains('sign in to confirm') ||
-        msg.contains('bot');
+        msg.contains('bot') ||
+        msg.contains('stream') ||
+        msg.contains('backend') ||
+        msg.contains('cannot reach') ||
+        msg.contains('failed to load youtube');
   }
 
   /// Whether [task] belongs to a YouTube download. Used to scope the

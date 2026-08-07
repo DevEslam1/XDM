@@ -468,9 +468,7 @@ class XdmBackendClient {
     // network exception over a later 4xx (e.g. a fallback backend's 404).
     // Network failures are transient (retryable, trigger local fallback);
     // a "not found" would otherwise suppress the retry entirely.
-    if (sawNetworkFailure &&
-        error is DioException &&
-        (error.response?.statusCode ?? 0) < 500) {
+    if (sawNetworkFailure) {
       return const BackendNetworkException(
         'Cannot reach download backend. Check your connection.',
       );

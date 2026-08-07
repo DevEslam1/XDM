@@ -3328,9 +3328,12 @@ class DownloadProvider extends ChangeNotifier
       _lastTorrentFileDiskSync.remove(id);
 
       if (_cancelTokens.containsKey(id)) {
-        try {
-          _cancelTokens[id]?.cancel('failed');
-        } catch (_) {}
+        final token = _cancelTokens[id];
+        if (token != null && !token.isCancelled) {
+          try {
+            token.cancel('failed');
+          } catch (_) {}
+        }
         _cancelTokens.remove(id);
       }
       final torrentId = _torrentIds[id];

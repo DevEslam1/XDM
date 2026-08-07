@@ -669,11 +669,11 @@ class YoutubeService {
     }
   }
 
-  // FIX-6: Increase retries to 3 and backoff to 3s, 6s, 12s for cold starts
+  // Retry stream resolution for transient errors and cold starts
   static Future<List<Map<String, dynamic>>?> _resolveWithRetry(
     String url, {
     String? cookies,
-    int maxRetries = 3,  // ← was 2
+    int maxRetries = 3,
   }) async {
     for (int attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -682,21 +682,15 @@ class YoutubeService {
 
         // result is null or empty — apply backoff before next attempt
         if (attempt < maxRetries) {
-          final delay = Duration(seconds: 3 * (attempt + 1));
+          final delay = Duration(seconds: 2 * (attempt + 1));
           await Future.delayed(delay);
         }
         continue;
       } catch (e) {
-        final transient = e is XdmBackendTimeoutException ||
-            e is BackendNetworkException ||
-            (e is DioException &&
-                (e.type == DioExceptionType.connectionTimeout ||
-                    e.type == DioExceptionType.receiveTimeout ||
-                    e.type == DioExceptionType.sendTimeout ||
-                    e.type == DioExceptionType.connectionError));
-        if (attempt == maxRetries || !transient) rethrow;
-        // Longer backoff: 3s, 6s, 12s (Cloud Run cold start needs time)
-        final delay = Duration(seconds: 3 * (attempt + 1));
+        final isPermanent = e is BackendUnauthorizedException;
+        if (attempt == maxRetries || isPermanent) rethrow;
+        // Backoff: 2s, 4s, 6s (Cloud Run cold start needs time to spin up)
+        final delay = Duration(seconds: 2 * (attempt + 1));
         debugPrint(
           '[YoutubeService] Backend attempt ${attempt + 1} failed, '
           'retrying in ${delay.inSeconds}s: $e',

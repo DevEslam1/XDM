@@ -507,7 +507,7 @@ class _PermissionCard extends StatelessWidget {
             )
           else
             Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (isPermanentlyDenied) ...[

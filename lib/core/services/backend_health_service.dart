@@ -35,7 +35,7 @@ class BackendHealthService {
   ];
 
   final Map<String, DateTime> _unhealthyCooldowns = {};
-  Duration cooldownDuration = const Duration(minutes: 10);
+  Duration cooldownDuration = const Duration(seconds: 30);
   String? _lastHealthyBaseUrl;
 
   List<BackendConfig> get backends => List.unmodifiable(_backends);
@@ -62,9 +62,10 @@ class BackendHealthService {
     return healthy.isNotEmpty ? healthy : List.from(_backends);
   }
 
-  void markUnhealthy(String baseUrl) {
-    _unhealthyCooldowns[baseUrl] = DateTime.now().add(cooldownDuration);
-    _log.warning('P0-1: Marked backend unhealthy ($baseUrl) for ${cooldownDuration.inMinutes}m');
+  void markUnhealthy(String baseUrl, [Duration? customDuration]) {
+    final duration = customDuration ?? cooldownDuration;
+    _unhealthyCooldowns[baseUrl] = DateTime.now().add(duration);
+    _log.warning('P0-1: Marked backend unhealthy ($baseUrl) for ${duration.inSeconds}s');
   }
 
   void markHealthy(String baseUrl) {
