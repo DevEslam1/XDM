@@ -2005,8 +2005,10 @@ class _TorrentFileRow extends StatelessWidget {
     }
     final selected = file['selected'] == true;
     final length = (file['length'] as num?)?.toInt() ?? 0;
-    final downloaded = ((file['downloadedBytes'] as num?)?.toInt() ?? 0).clamp(0, length > 0 ? length : 0); // FIX-T-1 / FIX-UI-1
-    final p = length > 0 ? (downloaded / length).clamp(0.0, 1.0) : 0.0;
+    final safeLength = length < 0 ? 0 : length;
+    final rawBytes = (file['downloadedBytes'] as num?)?.toInt() ?? 0;
+    final downloaded = safeLength > 0 ? rawBytes.clamp(0, safeLength) : 0;
+    final p = safeLength > 0 ? (downloaded / safeLength).clamp(0.0, 1.0) : 0.0;
     final done = selected && p >= 1.0;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;

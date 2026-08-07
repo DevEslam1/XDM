@@ -18,6 +18,18 @@ abstract final class DownloadStatusMessages {
   static const forbidden = 'Forbidden';
 }
 
+enum FailureCategory {
+  network,
+  serverError,
+  authError,
+  diskFull,
+  integrityError,
+  fileChanged,
+  mergeFailed,
+  torrentError,
+  unknown,
+}
+
 enum DownloadStatus { queued, downloading, paused, completed, failed, merging } // FIX-B11
 
 enum SortOption { dateAdded, fileSize, fileName, status, manual } // FIX(13)
@@ -37,6 +49,7 @@ class DownloadTask {
   final String tempFilePath;
   final String? errorMessage;
   final String? statusMessage;
+  final FailureCategory? failureCategory;
   final int threadCount;
   final List<double> chunks;
   final DateTime createdAt;
@@ -91,6 +104,7 @@ class DownloadTask {
     required this.tempFilePath,
     this.errorMessage,
     this.statusMessage,
+    this.failureCategory,
     required this.threadCount,
     required this.chunks,
     required this.createdAt,
@@ -348,6 +362,8 @@ class DownloadTask {
     bool clearError = false,
     String? statusMessage,
     bool clearStatusMessage = false,
+    FailureCategory? failureCategory,
+    bool clearFailureCategory = false,
     int? threadCount,
     List<double>? chunks,
     DateTime? updatedAt,
@@ -408,6 +424,9 @@ class DownloadTask {
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       statusMessage:
           clearStatusMessage ? null : (statusMessage ?? this.statusMessage),
+      failureCategory: clearFailureCategory
+          ? null
+          : (failureCategory ?? this.failureCategory),
       threadCount: threadCount ?? this.threadCount,
       chunks: chunks ?? this.chunks,
       createdAt: createdAt,
@@ -470,6 +489,7 @@ class DownloadTask {
       'tempFilePath': tempFilePath,
       'errorMessage': errorMessage,
       'statusMessage': statusMessage,
+      'failureCategory': failureCategory?.name,
       'threadCount': threadCount,
       'chunks': chunks,
       'createdAt': createdAt.millisecondsSinceEpoch,
@@ -598,6 +618,12 @@ class DownloadTask {
       tempFilePath: map['tempFilePath'] as String? ?? '',
       errorMessage: errorMessage,
       statusMessage: map['statusMessage'] as String?,
+      failureCategory: map['failureCategory'] != null
+          ? FailureCategory.values.firstWhere(
+              (v) => v.name == map['failureCategory'],
+              orElse: () => FailureCategory.unknown,
+            )
+          : null,
       threadCount: threadCount,
       chunks: chunks,
       createdAt: _parseFlexDate(map['createdAt']),

@@ -261,10 +261,25 @@ int scanFolderBytesSync(String path) {
               try {
                 final raf = file.openSync();
                 final probeSize = diskLen < 4096 ? diskLen : 4096;
-                final probe = raf.readSync(probeSize);
+                final headProbe = raf.readSync(probeSize);
+                final headHasContent = headProbe.any((b) => b != 0);
+
+                bool tailHasContent = headHasContent;
+                if (diskLen > 8192) {
+                  raf.setPositionSync(diskLen - 4096);
+                  final tailProbe = raf.readSync(4096);
+                  tailHasContent = tailProbe.any((b) => b != 0);
+                }
                 raf.closeSync();
-                final hasContent = probe.any((b) => b != 0);
-                if (hasContent) {
+
+                final isPartial = headHasContent && !tailHasContent;
+                if (isPartial) {
+                  downloaded = (diskLen * 0.5).round();
+                  LoggingService.logger('FileUtils').info(
+                    '[FileUtils] File "$relPath" appears partially downloaded '
+                    '(head has data, tail is zeros). Estimated 50%.',
+                  );
+                } else if (headHasContent && tailHasContent) {
                   downloaded = length;
                 } else {
                   downloaded = 0;

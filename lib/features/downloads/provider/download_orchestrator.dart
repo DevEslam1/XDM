@@ -1008,16 +1008,34 @@ class DownloadOrchestrator {
 
   /// FIX-B2: Re-attempt merge only when both video and audio files already exist on disk
   Future<void> retryMergeOnly(DownloadTask task) async {
+    final audioTempPath = '${task.tempFilePath}.audio';
+    final videoExists = (await File(task.tempFilePath).exists()) ||
+        (await File(task.localFilePath).exists());
+    final audioExists = await File(audioTempPath).exists();
+
+    if (!videoExists || !audioExists) {
+      debugPrint(
+        '[DMX] FIX-N4: Cannot retry merge for ${task.id}: '
+        'video=$videoExists, audio=$audioExists',
+      );
+      await _host.setTaskState(task.copyWith(
+        status: DownloadStatus.failed,
+        statusMessage: 'MERGE_FAILED',
+        errorMessage: 'Missing ${!videoExists ? "video" : "audio"} file. '
+            'Please re-download.',
+      ));
+      return;
+    }
+
     final notificationId = _host.notifications.idFor(task.id);
     await _host.setTaskState(
       task.copyWith(
-        status: DownloadStatus.merging, // FIX-B11
+        status: DownloadStatus.merging,
         statusMessage: 'Merging video and audio...',
         clearError: true,
       ),
     );
 
-    final audioTempPath = '${task.tempFilePath}.audio';
     final mergeOk = await _mergeAudioVideo(task.id, audioTempPath);
 
     if (mergeOk) {
@@ -1478,14 +1496,16 @@ class DownloadOrchestrator {
         // Prevents permanent freeze from a single inflated report.
         final cachedMax = _sessionCachedTotalSize[task.id] ?? 0;
         final int totalSize;
-        if (calculatedTotal > cachedMax) {
-          // Growing: accept but cap growth at 2x to prevent runaway
-          totalSize = calculatedTotal.clamp(
-              0, cachedMax > 0 ? cachedMax * 2 : calculatedTotal);
-        } else if (cachedMax > 0 && calculatedTotal < cachedMax) {
-          // Shrinking: allow if within 5% tolerance (server correction),
-          // otherwise keep the larger value.
-          final tolerance = (cachedMax * 0.05).round();
+        if (cachedMax == 0) {
+          totalSize = calculatedTotal;
+        } else if (calculatedTotal > cachedMax) {
+          // Growing: accept new value but cap growth at 20% per tick to prevent jumps
+          final maxAllowed = (cachedMax * 1.20).round();
+          totalSize = calculatedTotal > maxAllowed ? maxAllowed : calculatedTotal;
+        } else if (calculatedTotal < cachedMax) {
+          // Shrinking: allow if within 10% tolerance (server correction),
+          // otherwise keep the larger value to prevent backward jumps
+          final tolerance = (cachedMax * 0.10).round();
           totalSize = (cachedMax - calculatedTotal <= tolerance)
               ? calculatedTotal
               : cachedMax;
@@ -1541,7 +1561,11 @@ class DownloadOrchestrator {
           speed: combinedSpeed,
           eta: calculatedEta,
           clearEta: calculatedEta == null,
-          chunks: chunksOverride ?? base.chunks,
+          chunks: normalizeChunks(
+            chunksOverride ?? base.chunks,
+            effectiveVideoSize > 0 ? effectiveVideoSize : totalSize,
+            hasAudio ? videoBytesSoFar : totalDownloaded,
+          ),
           supportsResume: supportsResumeOverride ?? base.supportsResume,
           torrentFiles: torrentFilesOverride ?? base.torrentFiles,
           statusMessage: (statusMessageOverride == 'Completed' &&
@@ -2843,11 +2867,15 @@ class DownloadOrchestrator {
       if (hasAudio && task.audioSize > 0 && task.fileSize > task.audioSize) {
         videoTransferSize = task.fileSize - task.audioSize;
       } else if (hasAudio && task.audioSize > 0 && task.fileSize > 0) {
-        // fileSize may only represent the video portion (backend returned total=videoSize)
-        // or total is equal to audioSize — treat fileSize as total and subtract audio.
         videoTransferSize = (task.fileSize - task.audioSize).clamp(
           0,
           task.fileSize,
+        );
+      } else if (hasAudio && task.audioSize <= 0) {
+        videoTransferSize = task.fileSize;
+        debugPrint(
+          '[DMX] FIX-C2: audioSize unknown for ${task.id}, '
+          'using fileSize=$videoTransferSize as video transfer upper bound',
         );
       } else {
         videoTransferSize = task.fileSize;

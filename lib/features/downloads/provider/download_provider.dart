@@ -587,23 +587,13 @@ class DownloadProvider extends ChangeNotifier
       audioFile.path,
       threadCount: task.audioThreadCount > 0 ? task.audioThreadCount : 1,
     );
-    if (task.audioSize > 0) {
-      final expectedBytes = (task.audioProgress * task.audioSize).toInt();
-      if (audioLen < expectedBytes) {
-        debugPrint('[DMX] Audio file shorter than progress ($audioLen < $expectedBytes). Resetting audio progress.');
-        try { await audioFile.delete(); } catch (_) {}
-        try { await audioStateFile.delete(); } catch (_) {}
-        return task.copyWith(audioProgress: 0.0);
-      }
-      final fraction = (audioLen / task.audioSize).clamp(0.0, 1.0);
-      return task.copyWith(audioProgress: fraction);
-    } else {
-      if (audioLen == 0 && !await audioStateFile.exists()) {
-        return task.copyWith(audioProgress: 0.0);
-      }
+    if (audioLen > 0 && task.audioSize > 0) {
+      final recovered = (audioLen / task.audioSize).clamp(0.0, 1.0);
+      return task.copyWith(audioProgress: recovered);
+    } else if (audioLen > 0 && task.audioSize <= 0) {
+      return task.copyWith(audioProgress: 0.5);
     }
-
-    return task;
+    return task.copyWith(audioProgress: 0.0);
   }
 
   Future<int?> _actualPartialBytes(DownloadTask task) async {
@@ -1599,34 +1589,77 @@ class DownloadProvider extends ChangeNotifier
       final torrentId = _torrentIds[id];
       if (torrentId != null) {
         if (TorrentService.isTorrentAlive(torrentId)) {
-          // FIX-P-04: Pause native handle FIRST, then read files
           await TorrentService.pauseTorrent(torrentId);
-          await Future.delayed(const Duration(milliseconds: 200));
+
+          // B4 FIX: Poll until the torrent reports paused (max 2s timeout)
+          final pauseDeadline = DateTime.now().add(const Duration(seconds: 2));
+          bool isPaused = false;
+          while (!isPaused && DateTime.now().isBefore(pauseDeadline)) {
+            await Future.delayed(const Duration(milliseconds: 100));
+            try {
+              final latestStats = _latestTorrentStats[torrentId];
+              final stateLabel = latestStats?.stateLabel.toLowerCase() ?? '';
+              isPaused = stateLabel.contains('paused') ||
+                  stateLabel.contains('stopped') ||
+                  !TorrentService.isTorrentAlive(torrentId);
+            } catch (_) {
+              isPaused = true;
+            }
+          }
+          if (!isPaused) {
+            debugPrint(
+              '[DMX] B4 FIX: Torrent $torrentId did not confirm pause within 2s, proceeding anyway',
+            );
+          }
 
           if (task.status == DownloadStatus.downloading) {
             try {
+              // B5 FIX: Index-based matching — libtorrent file order is stable
               final liveFiles = TorrentService.getFiles(torrentId);
-              if (liveFiles.isNotEmpty && task.torrentFiles != null) {
-                final liveMap = {for (final lf in liveFiles) lf.name: lf};
-                final updatedFiles = task.torrentFiles!.map((f) {
-                  final name = f['name'] as String? ?? '';
-                  final match = liveMap[name];
-                  if (match != null) {
+              if (liveFiles.isNotEmpty &&
+                  task.torrentFiles != null &&
+                  liveFiles.length == task.torrentFiles!.length) {
+                final updatedFiles = List<Map<String, dynamic>>.generate(
+                  task.torrentFiles!.length,
+                  (i) {
+                    final stored = task.torrentFiles![i];
+                    final live = liveFiles[i];
                     return {
-                      ...f,
-                      'downloadedBytes': match.downloadedBytes >= 0
-                          ? match.downloadedBytes
+                      ...stored,
+                      'downloadedBytes': live.downloadedBytes >= 0
+                          ? live.downloadedBytes
                           : 0,
-                      'progressEstimated': match.downloadedBytes < 0,
+                      'progressEstimated': live.downloadedBytes < 0,
                     };
-                  }
-                  return f;
-                }).toList();
+                  },
+                );
                 task = task.copyWith(torrentFiles: updatedFiles);
+              } else if (liveFiles.isNotEmpty && task.torrentFiles != null) {
+                debugPrint(
+                  '[DMX] B5 FIX: File count mismatch (stored=${task.torrentFiles!.length}, '
+                  'live=${liveFiles.length}), skipping snapshot',
+                );
+              }
+
+              // B7 FIX: Recompute torrent aggregate downloadedBytes from per-file
+              if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+                final recomputedTotal =
+                    task.torrentFiles!.fold<int>(0, (sum, f) {
+                  if (f['selected'] != false) {
+                    final bytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                    return sum + (bytes > 0 ? bytes : 0);
+                  }
+                  return sum;
+                });
+                if (recomputedTotal > 0) {
+                  task = task.copyWith(downloadedBytes: recomputedTotal);
+                  debugPrint(
+                    '[DMX] B7 FIX: Recomputed torrent aggregate: $recomputedTotal bytes',
+                  );
+                }
               }
             } catch (e) {
-              debugPrint(
-                  '[DMX] FIX(T-1): Failed to snapshot per-file bytes: $e');
+              debugPrint('[DMX] B5 FIX: Failed to snapshot per-file bytes: $e');
             }
           }
 
@@ -1708,6 +1741,7 @@ class DownloadProvider extends ChangeNotifier
           }
 
           _cancelTokens.remove(id);
+          _activeFutures.remove(id);
         }
       }
 
@@ -2006,6 +2040,14 @@ class DownloadProvider extends ChangeNotifier
         task.status != DownloadStatus.failed &&
         !isStoppedSeedingTorrent) {
       return;
+    }
+
+    if (task.isTorrent) {
+      final torrentId = _torrentIds[task.id];
+      if (torrentId != null && !TorrentService.isTorrentAlive(torrentId)) {
+        _torrentIds.remove(task.id);
+        debugPrint('[DMX] B1 FIX: Removed stale torrent handle $torrentId for task ${task.id}');
+      }
     }
 
     if (isStoppedSeedingTorrent) {
@@ -2479,21 +2521,24 @@ class DownloadProvider extends ChangeNotifier
         }
       }
 
-      // FIX T-5: Clear torrent handle and resume data on retry
       if (task.isTorrent) {
         final tid = _torrentIds[task.id];
-        if (tid != null && TorrentService.isTorrentAlive(tid)) {
-          try {
-            TorrentService.pauseTorrent(tid);
-            TorrentService.removeTorrent(tid, deleteFiles: false);
-          } catch (_) {}
-          _torrentIds.remove(task.id);
+        if (tid != null) {
+          final latestStats = _latestTorrentStats[tid];
+          final isError = latestStats != null &&
+              latestStats.stateLabel.toLowerCase().contains('error');
+          if (isError || !TorrentService.isTorrentAlive(tid)) {
+            try {
+              if (TorrentService.isTorrentAlive(tid)) {
+                TorrentService.pauseTorrent(tid);
+                TorrentService.removeTorrent(tid, deleteFiles: false);
+              }
+            } catch (_) {}
+            _torrentIds.remove(task.id);
+            debugPrint('[DMX] B2 FIX: Cleared errored torrent handle $tid for retry');
+          }
         }
-        try {
-          await TorrentResumeStore.deleteResumeDataForSource(task.url);
-        } catch (e) {
-          debugPrint('[DMX] T-05: Failed to clear torrent resume data: $e');
-        }
+        unawaited(TorrentResumeStore.deleteResumeDataForSource(task.url));
       }
     }
 

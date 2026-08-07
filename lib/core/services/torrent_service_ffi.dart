@@ -473,12 +473,8 @@ class TorrentService {
                   stateLabel: value.state.label,
                   numSeeds: value.numSeeds,
                   numPeers: value.numPeers,
-                  // H5: The plugin's public TorrentInfo model does not expose
-                  // real piece counts (numPieces/piecesDone live only in the
-                  // raw FFI struct), so do NOT fabricate a "1000-piece" total.
-                  // Consumers must treat piecesTotal == 0 as "unknown".
-                  piecesHave: 0,
-                  piecesTotal: 0,
+                  piecesHave: _estimatePiecesHave(value),
+                  piecesTotal: _estimatePiecesTotal(value),
                   downloadPayloadRate: value.downloadRate,
                   uploadPayloadRate: value.uploadRate,
                   totalPayloadDownload: value.totalDone,
@@ -529,6 +525,40 @@ class TorrentService {
       }
       _trackingCompleter = null;
     }
+  }
+
+  static int _estimatePiecesTotal(Object torrentInfo) {
+    try {
+      final dynamic raw = torrentInfo;
+      final numPieces = raw.numPieces;
+      if (numPieces is int && numPieces > 0) return numPieces;
+    } catch (_) {}
+    const defaultPieceSize = 256 * 1024;
+    try {
+      final dynamic raw = torrentInfo;
+      final totalWanted = (raw.totalWanted as num?)?.toInt() ?? 0;
+      if (totalWanted > 0) {
+        return (totalWanted / defaultPieceSize).ceil();
+      }
+    } catch (_) {}
+    return 0;
+  }
+
+  static int _estimatePiecesHave(Object torrentInfo) {
+    try {
+      final dynamic raw = torrentInfo;
+      final piecesDone = raw.piecesDone;
+      if (piecesDone is int && piecesDone > 0) return piecesDone;
+    } catch (_) {}
+    final total = _estimatePiecesTotal(torrentInfo);
+    try {
+      final dynamic raw = torrentInfo;
+      final progress = (raw.progress as num?)?.toDouble() ?? 0.0;
+      if (total > 0 && progress > 0) {
+        return (progress * total).round();
+      }
+    } catch (_) {}
+    return 0;
   }
 
   /// Attempts to save native fast-resume data for [torrentId].
