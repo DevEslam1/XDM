@@ -604,6 +604,34 @@ class HttpTransferJob {
         knownFileSize: cmd.knownFileSize,
       );
       _state = load.state;
+      // FIX H-R1: If the persisted chunk count differs from the requested
+      // thread count, redistribute saved progress proportionally so the
+      // user does not lose downloaded bytes.
+      if (_state!.chunks.isNotEmpty &&
+          _state!.chunks.length != cmd.threadCount &&
+          _state!.downloadedBytes > 0) {
+        final savedBytes = _state!.downloadedBytes;
+        final total = _state!.totalSize;
+        final newChunks = ChunkScheduler.plan(
+          totalSize: total,
+          threadCount: cmd.threadCount,
+        );
+        // Distribute saved bytes evenly across the new chunk layout
+        final perChunk = total > 0
+            ? (savedBytes / cmd.threadCount)
+            : 0;
+        for (var i = 0; i < newChunks.length; i++) {
+          newChunks[i].downloaded = perChunk.toInt().clamp(
+            0,
+            newChunks[i].size >= 0 ? newChunks[i].size : 0,
+          );
+        }
+        _state!.chunks = newChunks;
+        debugPrint(
+          '[FIX H-R1] Redistributed $savedBytes bytes from '
+          '${load.state.chunks.length} → ${cmd.threadCount} chunks',
+        );
+      }
       if (_state!.totalSize <= 0 && cmd.knownFileSize > 0) {
         _state!.totalSize = cmd.knownFileSize;
       }

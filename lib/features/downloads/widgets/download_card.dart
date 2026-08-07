@@ -736,7 +736,8 @@ class _ChunkedProgressBar extends StatelessWidget {
             return Row(
               children: List.generate(activeChunks.length, (i) {
                 // FIX-UI-01: Clamp chunk values to [0, 1]
-                final p = activeChunks[i].clamp(0.0, 1.0);
+                final raw = activeChunks[i];
+                final p = raw.isNaN ? 0.0 : raw.clamp(0.0, 1.0);
                 return Expanded(
                   child: Padding(
                     padding: EdgeInsets.only(
@@ -2189,13 +2190,14 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
       widget.items.where((t) => t.status == DownloadStatus.completed).length;
 
   double get _overallProgress {
-    final total = widget.items.fold<int>(0, (s, t) => s + t.resolvedFileSize);
+    // FIX-UI-01: Guard against zero/negative totals and clamp the
+    // numerator so the bar never exceeds 100%.
+    final total = widget.items.fold<int>(
+        0, (s, t) => s + (t.resolvedFileSize > 0 ? t.resolvedFileSize : 0));
     if (total <= 0) return 0.0;
     final done = widget.items.fold<int>(
         0,
-        (s, t) =>
-            s +
-            t.displayDownloadedBytes); // FIX-01: Clamp downloadedBytes in playlist sum
+        (s, t) => s + t.displayDownloadedBytes.clamp(0, t.resolvedFileSize > 0 ? t.resolvedFileSize : 0));
     return (done / total).clamp(0.0, 1.0);
   }
 

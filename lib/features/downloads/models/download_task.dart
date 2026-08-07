@@ -468,8 +468,15 @@ class DownloadTask {
           clearMergedAudioUrl ? null : (mergedAudioUrl ?? this.mergedAudioUrl),
       audioSize: audioSize ?? this.audioSize,
       audioDownloadedBytes: audioDownloadedBytes ?? this.audioDownloadedBytes,
-      videoStreamSize: videoStreamSize ?? this.videoStreamSize, // FIX-B4
-      audioProgress: (audioProgress ?? this.audioProgress).clamp(0.0, 1.0),
+      // FIX-B4 / FIX YT-U1: Use a sentinel so callers can explicitly
+      // reset videoStreamSize to 0.
+      // ignore: prefer_if_null_operators
+      videoStreamSize: videoStreamSize != null
+          ? videoStreamSize
+          : this.videoStreamSize,
+      audioProgress: ((audioProgress ?? this.audioProgress).isNaN
+          ? 0.0
+          : (audioProgress ?? this.audioProgress).clamp(0.0, 1.0)),
       audioThreadCount: audioThreadCount ?? this.audioThreadCount,
       isMergeInProgress: isMergeInProgress ?? this.isMergeInProgress,
       pausedByUser: pausedByUser ?? this.pausedByUser,

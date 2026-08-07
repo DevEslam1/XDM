@@ -1688,11 +1688,18 @@ class DownloadProvider extends ChangeNotifier
                 final updatedFiles = task.torrentFiles!.map((stored) {
                   final live = liveByName[stored['name'] as String? ?? ''];
                   if (live == null) return stored;
+                  // FIX T-P1: Preserve the previously stored byte count when the
+                  // engine has no data yet (downloadedBytes == -1) to prevent a
+                  // progress regression on resume.
+                  final prevBytes = (stored['downloadedBytes'] as num?)?.toInt() ?? 0;
+                  final liveBytes = live.downloadedBytes;
+                  final resolvedBytes = liveBytes >= 0
+                      ? liveBytes
+                      : prevBytes; // keep last known value
                   return {
                     ...stored,
-                    'downloadedBytes':
-                        live.downloadedBytes >= 0 ? live.downloadedBytes : 0,
-                    'progressEstimated': live.downloadedBytes < 0,
+                    'downloadedBytes': resolvedBytes,
+                    'progressEstimated': liveBytes < 0,
                   };
                 }).toList();
                 task = task.copyWith(torrentFiles: updatedFiles);
@@ -2175,11 +2182,18 @@ class DownloadProvider extends ChangeNotifier
             final newItag = newUri?.queryParameters['itag'];
             final oldMime = oldUri?.queryParameters['mime'];
             final newMime = newUri?.queryParameters['mime'];
+            // FIX YT-R2: Also compare host+path so a completely different CDN
+            // endpoint is detected even when query parameters are absent.
+            final oldUri2 = Uri.tryParse(task.url);
+            final newUri2 = Uri.tryParse(freshUrl);
+            final hostPathChanged = (oldUri2?.host != newUri2?.host) ||
+                (oldUri2?.path != newUri2?.path);
             final identityChanged =
                 (oldItag != null && newItag != null && oldItag != newItag) ||
-                    (oldMime != null &&
-                        newMime != null &&
-                        oldMime != newMime);
+                (oldMime != null &&
+                    newMime != null &&
+                    oldMime != newMime) ||
+                hostPathChanged;
             if (identityChanged) {
               debugPrint(
                   '[DMX] YT-5 FIX: Stream identity changed on refresh, resetting progress');
@@ -3187,10 +3201,14 @@ class DownloadProvider extends ChangeNotifier
       updated = updated.copyWith(downloadedBytes: updated.fileSize);
     }
 
-    // FIX-X-01: Clamp audioProgress
-    if (updated.audioProgress < 0.0 || updated.audioProgress > 1.0) {
+    // FIX-X-01: Clamp audioProgress, guarding NaN
+    if (updated.audioProgress.isNaN ||
+        updated.audioProgress < 0.0 ||
+        updated.audioProgress > 1.0) {
       updated = updated.copyWith(
-        audioProgress: updated.audioProgress.clamp(0.0, 1.0),
+        audioProgress: updated.audioProgress.isNaN
+            ? 0.0
+            : updated.audioProgress.clamp(0.0, 1.0),
       );
     }
 
@@ -4284,6 +4302,11 @@ class DownloadProvider extends ChangeNotifier
         audioProgress: (audioChanged || sizeChanged || isProtocolSwitch)
             ? 0.0
             : task.audioProgress,
+        // FIX YT-U1: Reset videoStreamSize when the stream identity changed
+        // so the combined size denominator is recalculated from the new stream.
+        videoStreamSize: (sizeChanged || isProtocolSwitch || streamIdentityChanged)
+            ? 0
+            : task.videoStreamSize,
         youtubeQualityPreset: (shouldClearYoutubeState || isProtocolSwitch)
             ? null
             : task.youtubeQualityPreset,

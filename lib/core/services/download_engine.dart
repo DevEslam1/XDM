@@ -1312,7 +1312,13 @@ class DownloadEngine {
                   : f.safeDownloadedBytes;
               isEstimated = false;
             } else {
-              resolvedBytes = 0;
+              // FIX T-S1: Preserve the previously stored byte count instead of
+              // resetting to 0. The proportional estimator in
+              // _distributeEstimatedBytes will refine it once the engine
+              // reports real data.
+              final prevStored =
+                  (existing?['downloadedBytes'] as num?)?.toInt() ?? 0;
+              resolvedBytes = prevStored;
               isEstimated = true;
             }
             return <String, dynamic>{
@@ -1353,7 +1359,9 @@ class DownloadEngine {
         onProgress(DownloadProgress(
           downloadedBytes: 0,   // suppress until metadata arrives
           fileSize: 0,
-          speed: torrent.downloadRate.toDouble(),
+          speed: (stateLabel == 'seeding')
+              ? torrent.uploadRate.toDouble()
+              : torrent.downloadRate.toDouble(),
           eta: null,
           fileName: resolvedName,
           statusMessage: 'Fetching metadata…',
@@ -1402,7 +1410,11 @@ class DownloadEngine {
       final isCompleted =
           isFullyDownloaded && !isCheckingOrMetadata && isStableFinished;
 
-      final speed = torrent.downloadRate.toDouble();
+      // FIX F-1: Report upload speed while seeding, download speed otherwise.
+      final isSeedingNow = stateLabel == 'seeding';
+      final speed = isSeedingNow
+          ? torrent.uploadRate.toDouble()
+          : torrent.downloadRate.toDouble();
       final remaining =
           totalSize > downloadedBytes ? totalSize - downloadedBytes : 0;
       final eta = speed.isFinite && speed > 0 && remaining > 0

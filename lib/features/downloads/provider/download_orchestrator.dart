@@ -1090,6 +1090,24 @@ class DownloadOrchestrator {
       ));
       return;
     }
+    // FIX YT-RT1: Verify the audio file has actual content before
+    // attempting the merge. An empty or zero-byte file will produce
+    // a corrupt output.
+    final audioFileForCheck = File(audioTempPath);
+    final audioLen = await audioFileForCheck.length();
+    if (audioLen == 0) {
+      debugPrint(
+        '[DMX] FIX YT-RT1: Audio file is empty for ${task.id}, '
+        'cannot merge.',
+      );
+      await _host.setTaskState(task.copyWith(
+        status: DownloadStatus.failed,
+        statusMessage: 'MERGE_FAILED',
+        errorMessage:
+            'Audio file is empty (0 bytes). Please re-download the audio.',
+      ));
+      return;
+    }
 
     final notificationId = _host.notifications.idFor(task.id);
     await _host.setTaskState(
@@ -1565,18 +1583,20 @@ class DownloadOrchestrator {
         // FIX-MERGE-5: Guard pushCombinedProgress against cancelled tasks
         if (base.status != DownloadStatus.downloading) return;
 
-        // FIX 4: Freeze denominator when audioSize > 0 and keep totalSize monotonic
+        // FIX YT-S1: When both runtime sizes are unknown, subtract audioSize
+        // from fileSize to avoid double-counting the audio contribution.
+        final effectiveVideoSize = videoSizeSoFar > 0
+            ? videoSizeSoFar
+            : (videoTransferSize > 0
+                ? videoTransferSize
+                : (hasAudio && base.audioSize > 0
+                    ? (base.fileSize - base.audioSize).clamp(0, base.fileSize)
+                    : base.fileSize));
         final audioContribution = hasAudio
             ? (base.audioSize > 0
                 ? base.audioSize
                 : (audioBytesSoFar > 0 ? audioBytesSoFar : 0))
             : 0;
-        // FIX-06: Fall back to task.fileSize when both video sizes are 0 so
-        // the progress denominator never collapses to just the audio share.
-        final effectiveVideoSize = videoSizeSoFar > 0
-            ? videoSizeSoFar
-            : (videoTransferSize > 0 ? videoTransferSize : task.fileSize);
-        // FIX YT-2: Clamp total to be monotonic — never shrink mid-session
         final calculatedTotal = effectiveVideoSize + audioContribution;
         final cachedMax = _sessionCachedTotalSize[task.id] ?? 0;
         final int totalSize;
@@ -1616,13 +1636,15 @@ class DownloadOrchestrator {
           }
         }
 
-        // FIX-02: Derive audioProgress directly, capping at 0.95 until audioDone is true
+        // FIX YT-S2: When audioSize is unknown, estimate progress from the
+        // ratio of audio bytes to the total audio contribution so the bar
+        // actually moves during the session.
         final computedAudioProgress = audioDone
             ? 1.0
             : ((hasAudio && base.audioSize > 0)
                 ? (audioBytesSoFar / base.audioSize).clamp(0.0, 1.0)
-                : (hasAudio && audioBytesSoFar > 0
-                    ? base.audioProgress.clamp(0.0, 0.95)
+                : (hasAudio && audioBytesSoFar > 0 && audioContribution > 0
+                    ? (audioBytesSoFar / audioContribution).clamp(0.0, 0.95)
                     : base.audioProgress));
 
         final updated = base.copyWith(
@@ -3141,6 +3163,19 @@ class DownloadOrchestrator {
           ),
         );
         await _host.setTaskState(task);
+        // FIX H-S1: Delete the stale temp file and state sidecars so the
+        // engine starts fresh instead of reconciling against old bytes.
+        for (final p in [
+          task.tempFilePath,
+          '${task.tempFilePath}.dmxstate',
+          '${task.tempFilePath}.dmxstate.tmp',
+          '${task.tempFilePath}.journal',
+        ]) {
+          try {
+            final f = File(p);
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
+        }
       }
 
       final downloadFuture = _executeDownload(
@@ -3754,10 +3789,15 @@ class DownloadOrchestrator {
     int downloadedBytes,
   ) {
     if (fileSize <= 0 || chunks.isEmpty) return chunks;
+    // FIX-09: Sanitize NaN/Infinity chunks before normalizing.
+    final safeChunks = chunks.map((c) {
+      if (c.isNaN || c.isInfinite) return 0.0;
+      return c.clamp(0.0, 1.0);
+    }).toList();
     final targetSum =
-        (downloadedBytes / fileSize).clamp(0.0, 1.0) * chunks.length;
+        (downloadedBytes / fileSize).clamp(0.0, 1.0) * safeChunks.length;
     // Lock completed chunks
-    final locked = chunks.map((c) => c >= 0.999 ? 1.0 : c).toList();
+    final locked = safeChunks.map((c) => c >= 0.999 ? 1.0 : c).toList();
     final lockedSum =
         locked.where((c) => c >= 1.0).fold<double>(0.0, (s, c) => s + c);
     final remainingTarget =
