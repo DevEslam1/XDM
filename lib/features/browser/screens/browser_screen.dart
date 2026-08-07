@@ -4879,9 +4879,27 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                               final url = request
                                                                   .url
                                                                   .toString();
-                                                              if (_adBlocker
-                                                                  .shouldBlock(
-                                                                      url)) {
+                                                              final currentUrl = await controller.getUrl();
+                                                              final mainHost = currentUrl?.host.toLowerCase() ?? '';
+                                                              final requestHost = request.url.host.toLowerCase();
+
+                                                              // First-party bypass: Never block requests made to first-party hosts or their subdomains
+                                                              bool isFirstParty = false;
+                                                              if (mainHost.isNotEmpty && requestHost.isNotEmpty) {
+                                                                if (requestHost == mainHost ||
+                                                                    requestHost.endsWith('.$mainHost') ||
+                                                                    mainHost.endsWith('.$requestHost')) {
+                                                                  isFirstParty = true;
+                                                                }
+                                                                // sister domains check (e.g. akw.to <-> akwam.to, akoam.com)
+                                                                if (!isFirstParty &&
+                                                                    ((mainHost.contains('akw') && requestHost.contains('akw')) ||
+                                                                     (mainHost.contains('akoam') && requestHost.contains('akoam')))) {
+                                                                  isFirstParty = true;
+                                                                }
+                                                              }
+
+                                                              if (!isFirstParty && _adBlocker.shouldBlock(url)) {
                                                                 // E10: Blocked Ads Count Indicator
                                                                 _blockedAdsCount++;
                                                                 return WebResourceResponse(
