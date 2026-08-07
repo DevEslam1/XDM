@@ -566,6 +566,34 @@ class DownloadProvider extends ChangeNotifier
     final audioStateFile = File('$audioPath.dmxstate');
     final audioFile = File(audioPath);
 
+    // FIX-S5: Detect audio format change on URL refresh via itag sidecar
+    final oldItag = Uri.tryParse(task.mergedAudioUrl!)?.queryParameters['itag'];
+    final itagFile = File('$audioPath.itag');
+    if (await itagFile.exists()) {
+      final savedItag = (await itagFile.readAsString()).trim();
+      if (oldItag != null && savedItag != oldItag) {
+        debugPrint('[DMX] S5: Audio itag changed ($savedItag → $oldItag), resetting audio state');
+        for (final p in [
+          audioPath,
+          '$audioPath.dmxstate',
+          '$audioPath.dmxstate.tmp',
+          '$audioPath.journal',
+          '$audioPath.itag',
+        ]) {
+          try {
+            final f = File(p);
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
+        }
+        return task.copyWith(audioProgress: 0.0, audioDownloadedBytes: 0);
+      }
+    }
+    if (oldItag != null) {
+      try {
+        await itagFile.writeAsString(oldItag);
+      } catch (_) {}
+    }
+
     if (await audioStateFile.exists()) {
       try {
         final content = await audioStateFile.readAsString();
@@ -580,20 +608,38 @@ class DownloadProvider extends ChangeNotifier
       if (await audioStateFile.exists()) {
         try { await audioStateFile.delete(); } catch (_) {}
       }
-      return task.copyWith(audioProgress: 0.0);
+      return task.copyWith(audioProgress: 0.0, audioDownloadedBytes: 0);
     }
 
-    final audioLen = await actualDownloadedBytes(
+    final audioBytes = await actualDownloadedBytes(
       audioFile.path,
       threadCount: task.audioThreadCount > 0 ? task.audioThreadCount : 1,
     );
-    if (audioLen > 0 && task.audioSize > 0) {
-      final recovered = (audioLen / task.audioSize).clamp(0.0, 1.0);
-      return task.copyWith(audioProgress: recovered);
-    } else if (audioLen > 0 && task.audioSize <= 0) {
-      return task.copyWith(audioProgress: 0.5);
+
+    // FIX-C3: Guard against pre-allocated empty audio file
+    if (task.audioSize > 0 && audioBytes >= task.audioSize) {
+      try {
+        final raf = await audioFile.open(mode: FileMode.read);
+        final readLen = min(1024, task.audioSize);
+        final probe = await raf.read(readLen);
+        await raf.close();
+        final hasContent = probe.any((b) => b != 0);
+        if (!hasContent) {
+          debugPrint('[DMX] FIX-C3: Audio file is pre-allocated but empty, resetting');
+          return task.copyWith(audioProgress: 0.0, audioDownloadedBytes: 0);
+        }
+      } catch (e) {
+        debugPrint('[DMX] FIX-C3: Probe empty check error: $e');
+      }
     }
-    return task.copyWith(audioProgress: 0.0);
+
+    if (task.audioSize > 0 && audioBytes > 0) {
+      final recovered = (audioBytes / task.audioSize).clamp(0.0, 1.0);
+      return task.copyWith(audioProgress: recovered, audioDownloadedBytes: audioBytes);
+    } else if (audioBytes > 0 && task.audioSize <= 0) {
+      return task.copyWith(audioProgress: 0.5, audioDownloadedBytes: audioBytes);
+    }
+    return task.copyWith(audioProgress: 0.0, audioDownloadedBytes: 0);
   }
 
   Future<int?> _actualPartialBytes(DownloadTask task) async {
@@ -2406,10 +2452,18 @@ class DownloadProvider extends ChangeNotifier
     // FIX(D1): If the failure was "file changed on server", the saved
     // progress is invalid. Delete state files so retry starts fresh.
     final errMsg = task.errorMessage?.toLowerCase() ?? '';
-    if (errMsg.contains('file changed') ||
-        errMsg.contains('filechangedonserver')) {
+    final shouldClearState = errMsg.contains('file changed') ||
+        errMsg.contains('filechangedonserver') ||
+        errMsg.contains('403') ||
+        errMsg.contains('410') ||
+        errMsg.contains('forbidden') ||
+        errMsg.contains('gone') ||
+        errMsg.contains('expired') ||
+        errMsg.contains('sign in to confirm');
+
+    if (shouldClearState) {
       debugPrint(
-        '[DMX] FIX(D1): File-changed error detected. '
+        '[DMX] S1 FIX: Unrecoverable/expired error detected. '
         'Clearing state for fresh retry.',
       );
       for (final path in [

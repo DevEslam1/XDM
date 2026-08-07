@@ -428,7 +428,8 @@ class HttpTransferJob {
   final Queue<_SpeedSample> _speedSamples = Queue();
 
   static const int _stateSaveIntervalMs = 2000;
-  static const int _stateSaveByteThreshold = 1024 * 1024;
+  // FIX H-2: Lower byte threshold to reduce worst-case loss window
+  static const int _stateSaveByteThreshold = 256 * 1024; // 256 KB
 
   void requestCancel() {
     _cancelRequested = true;
@@ -832,8 +833,14 @@ class HttpTransferJob {
         }
         failover.reportSuccess();
         attempts = 0;
-        if (!chunk.isComplete) {
-          // Stream ended early: loop re-issues the Range from the new offset.
+        if (chunk.isComplete) {
+          // FIX H-2: Force save at every chunk boundary completion
+          try {
+            await writer.flushAll();
+            await StateStore.save(cmd.tempFilePath, _state!);
+          } catch (e) {
+            debugPrint('[DMX] H-2: chunk-boundary save failed: $e');
+          }
         }
       } on DioException catch (e) {
         if (e.type == DioExceptionType.cancel) rethrow;

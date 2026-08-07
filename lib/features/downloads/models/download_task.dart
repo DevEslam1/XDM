@@ -644,7 +644,7 @@ class DownloadTask {
       mergedAudioUrl: map['mergedAudioUrl'] as String?,
       audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
       audioDownloadedBytes: (map['audioDownloadedBytes'] as num?)?.toInt() ?? 0,
-      videoStreamSize: (map['videoStreamSize'] as num?)?.toInt() ?? 0, // FIX-B4
+      videoStreamSize: max(0, (map['videoStreamSize'] as num?)?.toInt() ?? 0), // FIX-B4 / FIX-M6
       audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
       audioThreadCount: (map['audioThreadCount'] as num?)?.toInt() ?? 2,
       pausedByUser: map['pausedByUser'] as bool? ?? false,

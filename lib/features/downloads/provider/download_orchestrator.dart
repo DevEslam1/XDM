@@ -429,9 +429,21 @@ class DownloadOrchestrator {
               final fresh =
                   await YoutubeService.getFreshStreams(task.downloadPageUrl!, preferredType: task.youtubePreferredType);
               if (fresh != null && fresh['url'] != null) {
+                final freshUrl = fresh['url'].toString();
+                final freshAudioUrl = fresh['audioUrl']?.toString();
+                final videoUrlChanged = freshUrl != task.url;
+                final audioUrlChanged = freshAudioUrl != null &&
+                    freshAudioUrl != task.mergedAudioUrl;
+
                 task = task.copyWith(
-                  url: fresh['url'] as String,
-                  mergedAudioUrl: fresh['audioUrl'],
+                  url: videoUrlChanged ? freshUrl : task.url,
+                  mergedAudioUrl: freshAudioUrl ?? task.mergedAudioUrl,
+                  downloadedBytes: videoUrlChanged ? 0 : task.downloadedBytes,
+                  chunks: videoUrlChanged
+                      ? List<double>.filled(
+                          task.threadCount > 0 ? task.threadCount : 1, 0.0)
+                      : task.chunks,
+                  audioProgress: audioUrlChanged ? 0.0 : task.audioProgress,
                 );
               }
             } catch (e) {
@@ -719,6 +731,17 @@ class DownloadOrchestrator {
 
       final mergedPath =
           '${p.withoutExtension(actualVideoPath)}$videoExt.merged$videoExt';
+
+      final mergedFile = File(mergedPath);
+      if (await mergedFile.exists()) {
+        final mergedLen = await mergedFile.length();
+        if (mergedLen > 1024) {
+          debugPrint(
+            '[DMX] FIX-S2: Merge output already exists ($mergedLen bytes), skipping FFmpeg execution',
+          );
+          return true;
+        }
+      }
 
       await _host.setTaskState(current.copyWith(
         statusMessage: DownloadStatusMessages.merging,
@@ -1182,7 +1205,7 @@ class DownloadOrchestrator {
       final file = File(current.localFilePath);
       if (await file.exists()) {
         final actualSize = await file.length();
-        if (actualSize < current.fileSize) {
+        if (!current.hasMergedAudio && actualSize < current.fileSize) {
           await _host.setTaskState(
             current.copyWith(
               status: DownloadStatus.failed,
@@ -1491,29 +1514,15 @@ class DownloadOrchestrator {
             : 0;
         final effectiveVideoSize =
             videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize;
+        // FIX YT-2: Clamp total to be monotonic — never shrink mid-session
         final calculatedTotal = effectiveVideoSize + audioContribution;
-        // FIX-B13: Allow denominator correction within 5% tolerance.
-        // Prevents permanent freeze from a single inflated report.
         final cachedMax = _sessionCachedTotalSize[task.id] ?? 0;
         final int totalSize;
-        if (cachedMax == 0) {
+        if (calculatedTotal > cachedMax) {
           totalSize = calculatedTotal;
-        } else if (calculatedTotal > cachedMax) {
-          // Growing: accept new value but cap growth at 20% per tick to prevent jumps
-          final maxAllowed = (cachedMax * 1.20).round();
-          totalSize = calculatedTotal > maxAllowed ? maxAllowed : calculatedTotal;
-        } else if (calculatedTotal < cachedMax) {
-          // Shrinking: allow if within 10% tolerance (server correction),
-          // otherwise keep the larger value to prevent backward jumps
-          final tolerance = (cachedMax * 0.10).round();
-          totalSize = (cachedMax - calculatedTotal <= tolerance)
-              ? calculatedTotal
-              : cachedMax;
+          _sessionCachedTotalSize[task.id] = calculatedTotal;
         } else {
-          totalSize = calculatedTotal;
-        }
-        if (totalSize > 0) {
-          _sessionCachedTotalSize[task.id] = totalSize;
+          totalSize = cachedMax > 0 ? cachedMax : calculatedTotal; // never shrink
         }
 
         final totalDownloaded = (audioBytesSoFar + videoBytesSoFar).clamp(
@@ -1600,6 +1609,9 @@ class DownloadOrchestrator {
           unawaited(BackgroundService.sendHeartbeat());
         } else {
           _host.providerTasks[index] = updated;
+          if (base.fileSize == 0 && updated.fileSize > 0) {
+            unawaited(_host.setTaskState(updated));
+          }
           _host.pushProgressTick(task.id, updated.progress, updated.speed);
           _host.pendingProgressUpdates.add(task.id);
         }
@@ -2917,6 +2929,41 @@ class DownloadOrchestrator {
         videoTransferSize = task.fileSize;
       }
       if (videoTransferSize < 0) videoTransferSize = 0; // FIX-10
+
+      // FIX H-1: When new server omits Content-Length AND the resource
+      // host or path changed, the old progress cannot be trusted.
+      if (videoTransferSize <= 0 && task.downloadedBytes > 0) {
+        final cleanUrl = task.url.trim();
+        final oldUri = Uri.tryParse(task.url);
+        final newUri = Uri.tryParse(cleanUrl);
+        final hostChanged = oldUri?.host != newUri?.host;
+        final pathChanged = oldUri?.path != newUri?.path;
+        if (hostChanged || pathChanged) {
+          debugPrint(
+            '[DMX] H-1 FIX: Resource changed and size unknown. Resetting progress.',
+          );
+          task = task.copyWith(
+            downloadedBytes: 0,
+            chunks: List<double>.filled(
+              task.threadCount > 0 ? task.threadCount : 1,
+              0.0,
+            ),
+            clearError: true,
+            clearStatusMessage: true,
+          );
+          await _host.setTaskState(task);
+          // Also delete stale state sidecars so old ETag cannot corrupt resume
+          for (final p in [
+            '${task.tempFilePath}.dmxstate',
+            '${task.tempFilePath}.dmxstate.tmp',
+          ]) {
+            try {
+              final f = File(p);
+              if (await f.exists()) await f.delete();
+            } catch (_) {}
+          }
+        }
+      }
 
       // Validate resume state before starting
       task = await validateResumeState(task);

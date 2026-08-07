@@ -1191,11 +1191,48 @@ class DownloadEngine {
     }
   }
 
+  // FIX T-2: Log mismatch and attempt name-based reconciliation
   void _applyFilePriorities(
-      int id, List<Map<String, dynamic>>? currentTorrentFiles) {
+    int id, List<Map<String, dynamic>>? currentTorrentFiles,
+  ) {
     if (currentTorrentFiles == null || currentTorrentFiles.isEmpty) return;
     final engineFileCount = TorrentService.getFileCount(id);
-    if (engineFileCount != currentTorrentFiles.length) return;
+    if (engineFileCount != currentTorrentFiles.length) {
+      debugPrint(
+        '[DMX] T-2 FIX: File count mismatch (stored='
+        '${currentTorrentFiles.length}, engine=$engineFileCount). '
+        'Attempting name-based reconciliation...',
+      );
+      // Try to match by filename and apply priorities to matched files
+      final engineFiles = TorrentService.getFiles(id);
+      final storedByName = {
+        for (final f in currentTorrentFiles)
+          (f['name'] as String? ?? ''): f,
+      };
+      final priorities = <int>[];
+      for (final ef in engineFiles) {
+        final stored = storedByName[ef.name];
+        if (stored != null) {
+          final selected = stored['selected'] as bool? ?? true;
+          priorities.add(selected ? (stored['priority'] as int? ?? 4) : 0);
+        } else {
+          priorities.add(4); // default: select unknown files
+        }
+      }
+      if (priorities.length == engineFileCount) {
+        TorrentService.setFilePriorities(id, priorities);
+        debugPrint('[DMX] T-2 FIX: Applied reconciled priorities.');
+      } else {
+        debugPrint(
+          '[DMX] T-2 FIX: Reconciliation failed. Selecting all files.',
+        );
+        TorrentService.setFilePriorities(
+          id, List.filled(engineFileCount, 4),
+        );
+      }
+      return;
+    }
+    // Normal path (counts match)
     final priorities = currentTorrentFiles.map((f) {
       final selected = f['selected'] as bool? ?? true;
       if (!selected) return 0;
@@ -1274,16 +1311,17 @@ class DownloadEngine {
               ? calculatedTotal
               : (knownFileSize > 0 ? knownFileSize : 0));
 
-      if (!torrent.hasMetadata && totalSize <= 0) {
+      // FIX T-1: While metadata is unknown, show indeterminate state
+      if (totalSize <= 0) {
         onProgress(DownloadProgress(
-          downloadedBytes: 0,
+          downloadedBytes: 0,   // suppress until metadata arrives
           fileSize: 0,
-          speed: 0,
+          speed: torrent.downloadRate.toDouble(),
           eta: null,
-          statusMessage: 'Fetching metadata…',
           fileName: resolvedName,
+          statusMessage: 'Fetching metadata…',
         ));
-        return;
+        return; // skip normal progress emission
       }
 
       final rawDownloaded = torrent.totalWantedDone > 0
