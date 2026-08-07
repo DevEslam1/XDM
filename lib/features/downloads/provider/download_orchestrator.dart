@@ -2134,7 +2134,12 @@ class DownloadOrchestrator {
             debugPrint('[DMX] Parallel download: starting video stream.');
             final videoReferer = analysis.profile?.requiresReferer == true
                 ? (analysis.profile?.refererValue ?? liveVideoTask?.url)
-                : (isYoutube ? liveVideoTask?.downloadPageUrl : null);
+                : (isYoutube
+                    ? liveVideoTask?.downloadPageUrl
+                    : (liveVideoTask?.downloadPageUrl ??
+                        (liveVideoTask != null && liveVideoTask.url.isNotEmpty
+                            ? liveVideoTask.url
+                            : null)));
 
             try {
               await _host.downloadEngine.download(
