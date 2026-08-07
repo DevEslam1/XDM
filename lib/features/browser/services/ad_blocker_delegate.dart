@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../models/browser_tab.dart';
@@ -33,7 +34,8 @@ class AdBlockerDelegate {
   String get dynamicDomainsJson => _adBlocker.dynamicDomainsJson;
 
   void addListener(VoidCallback listener) => _adBlocker.addListener(listener);
-  void removeListener(VoidCallback listener) => _adBlocker.removeListener(listener);
+  void removeListener(VoidCallback listener) =>
+      _adBlocker.removeListener(listener);
 
   Future<void> init() => _adBlocker.init();
 
@@ -51,22 +53,43 @@ class AdBlockerDelegate {
   bool shouldBlock(String url) =>
       _adBlocker.isEnabled && _adBlocker.shouldBlockUrl(url);
 
+  /// Records a manually blocked request (e.g. cancelled iframe navigation).
+  void recordBlocked(String url) => _adBlocker.recordBlockedRequest(url);
+
+  // ---------------------------------------------------------------------------
+  // Safe JS evaluator — swallows MissingPluginException (disposed WebView),
+  // PlatformException, and any other errors silently.
+  // ---------------------------------------------------------------------------
+  Future<void> _eval(InAppWebViewController? ctrl, String source,
+      String tag) async {
+    if (ctrl == null) return;
+    try {
+      await ctrl.evaluateJavascript(source: source);
+    } on MissingPluginException {
+      // WebView channel was disposed (e.g. hot restart) — ignore silently.
+    } catch (e) {
+      _log.warning('[ad_blocker_delegate] $tag failed: $e');
+    }
+  }
+
   /// Injects the stealth anti-detection layer — must be called **first**,
   /// before `injectEarly`, so fake ad globals are defined before any page
   /// script runs.
   void injectAntiDetect(BrowserTab tab) {
     if (!_adBlocker.isEnabled) return;
-    
-    final setupScript = 'window.__xdmDynamicAdDomains = ${_adBlocker.dynamicDomainsJson};';
+    final ctrl = tab.controller;
+    if (ctrl == null) return;
+
+    final setupScript =
+        'window.__xdmDynamicAdDomains = ${_adBlocker.dynamicDomainsJson};';
 
     // Anti-detect JS: fakes ad SDK globals, intercepts fetch/XHR/MO
-    tab.controller?.evaluateJavascript(source: '$setupScript\n${_adBlocker.antiDetectJs}').catchError((e, st) =>
-        _log.warning('[ad_blocker_delegate] antiDetectJs failed', e, st));
+    _eval(ctrl, '$setupScript\n${_adBlocker.antiDetectJs}', 'antiDetectJs');
 
     // Anti-detect CSS: keeps bait elements measurable but invisible.
     // Retries until <head> exists (it may not yet at onPageStarted).
     final cssJson = jsonEncode(_adBlocker.antiDetectCss);
-    tab.controller?.evaluateJavascript(source: '''
+    _eval(ctrl, '''
       (function() {
         var css = $cssJson;
         var applied = false;
@@ -93,18 +116,18 @@ class AdBlockerDelegate {
           }, 20);
         }
       })();
-    ''').catchError((e,
-            st) =>
-        _log.warning('[ad_blocker_delegate] antiDetectCss failed', e, st));
+    ''', 'antiDetectCss');
   }
 
   /// Injects the early-phase blocking script (call from `onPageStarted`).
   /// Always call `injectAntiDetect` before this.
   void injectEarly(BrowserTab tab) {
     if (!_adBlocker.isEnabled) return;
-    final setupScript = 'window.__xdmDynamicAdDomains = ${_adBlocker.dynamicDomainsJson};';
-    tab.controller?.evaluateJavascript(source: '$setupScript\n${_adBlocker.earlyJs}').catchError(
-        (e, st) => _log.warning('[ad_blocker_delegate] earlyJs failed', e, st));
+    final ctrl = tab.controller;
+    if (ctrl == null) return;
+    final setupScript =
+        'window.__xdmDynamicAdDomains = ${_adBlocker.dynamicDomainsJson};';
+    _eval(ctrl, '$setupScript\n${_adBlocker.earlyJs}', 'earlyJs');
   }
 
   String cssRulesForUrl(String url) => _adBlocker.cssRulesForUrl(url);
@@ -112,29 +135,27 @@ class AdBlockerDelegate {
   /// Injects cosmetic CSS + late-phase scripts (call from `onPageFinished`).
   void injectInto(BrowserTab tab) {
     if (!_adBlocker.isEnabled) return;
+    final ctrl = tab.controller;
+    if (ctrl == null) return;
     final url = tab.url;
 
     final cssJson = jsonEncode(cssRulesForUrl(url));
-    tab.controller?.evaluateJavascript(source: '''
+    _eval(ctrl, '''
       (function() {
         var s = document.getElementById('xdm-adblock-css');
         if (!s) {
           s = document.createElement('style');
           s.id = 'xdm-adblock-css';
-          document.head.appendChild(s);
+          if (document.head) document.head.appendChild(s);
         }
         s.textContent = $cssJson;
       })();
-    ''').catchError((e,
-            st) =>
-        _log.warning('[ad_blocker_delegate] CSS failed', e, st));
+    ''', 'CSS');
 
-    tab.controller?.evaluateJavascript(source: _adBlocker.lateJs).catchError(
-        (e, st) => _log.warning('[ad_blocker_delegate] lateJs failed', e, st));
+    _eval(ctrl, _adBlocker.lateJs, 'lateJs');
 
     if (AdBlockerService.isYoutubePage(url)) {
-      tab.controller?.evaluateJavascript(source: _adBlocker.youtubeJs).catchError((e, st) =>
-          _log.warning('[ad_blocker_delegate] youtubeJs failed', e, st));
+      _eval(ctrl, _adBlocker.youtubeJs, 'youtubeJs');
     }
   }
 }

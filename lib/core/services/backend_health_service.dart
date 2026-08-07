@@ -65,7 +65,8 @@ class BackendHealthService {
   void markUnhealthy(String baseUrl, [Duration? customDuration]) {
     final duration = customDuration ?? cooldownDuration;
     _unhealthyCooldowns[baseUrl] = DateTime.now().add(duration);
-    _log.warning('P0-1: Marked backend unhealthy ($baseUrl) for ${duration.inSeconds}s');
+    _log.warning(
+        'P0-1: Marked backend unhealthy ($baseUrl) for ${duration.inSeconds}s');
   }
 
   void markHealthy(String baseUrl) {

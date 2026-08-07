@@ -70,7 +70,6 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
     }
   }
 
-
   void _stopPulse() {
     _controller?.dispose();
     _controller = null;

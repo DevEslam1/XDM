@@ -308,7 +308,8 @@ class NotificationCoordinator {
       languageCode: _settingsProvider.languageCode,
       payload: payload,
       hasMultipleActive: multiple,
-      groupKey: _groupKey, // FIX(14): always use group key for consistent threadIdentifier
+      groupKey:
+          _groupKey, // FIX(14): always use group key for consistent threadIdentifier
     );
     if (multiple) {
       _postGroupSummary(activeCount);

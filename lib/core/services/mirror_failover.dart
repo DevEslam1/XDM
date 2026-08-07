@@ -55,9 +55,10 @@ class MirrorFailover {
   }
 
   Future<String?> run(Future<void> Function(String url) action) async {
-    final validUrls = _urls.where((u) => !MirrorHealthStore.isBlacklisted(u)).toList();
+    final validUrls =
+        _urls.where((u) => !MirrorHealthStore.isBlacklisted(u)).toList();
     final candidateUrls = validUrls.isNotEmpty ? validUrls : _urls;
-    
+
     for (final url in candidateUrls) {
       if (url != candidateUrls.first) {
         _switches++;
@@ -70,7 +71,11 @@ class MirrorFailover {
         await MirrorHealthStore.recordFailure(url);
         if (e is DioException) {
           final status = e.response?.statusCode;
-          if (status != null && status >= 400 && status < 500 && status != 408 && status != 429) {
+          if (status != null &&
+              status >= 400 &&
+              status < 500 &&
+              status != 408 &&
+              status != 429) {
             return null;
           }
         }

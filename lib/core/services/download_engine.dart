@@ -1192,7 +1192,8 @@ class DownloadEngine {
       elapsed += 10;
       onProgress(DownloadProgress(
         downloadedBytes: 0,
-        fileSize: initialFileSize > 0 ? initialFileSize : 0, // FIX-L4: pass size
+        fileSize:
+            initialFileSize > 0 ? initialFileSize : 0, // FIX-L4: pass size
         speed: 0,
         eta: null,
         statusMessage: 'Fetching metadata… (${elapsed}s / 300s)',
@@ -1223,7 +1224,8 @@ class DownloadEngine {
 
   // FIX T-2: Log mismatch and attempt name-based reconciliation
   void _applyFilePriorities(
-    int id, List<Map<String, dynamic>>? currentTorrentFiles,
+    int id,
+    List<Map<String, dynamic>>? currentTorrentFiles,
   ) {
     if (currentTorrentFiles == null || currentTorrentFiles.isEmpty) return;
     final engineFileCount = TorrentService.getFileCount(id);
@@ -1236,8 +1238,7 @@ class DownloadEngine {
       // Try to match by filename and apply priorities to matched files
       final engineFiles = TorrentService.getFiles(id);
       final storedByName = {
-        for (final f in currentTorrentFiles)
-          (f['name'] as String? ?? ''): f,
+        for (final f in currentTorrentFiles) (f['name'] as String? ?? ''): f,
       };
       final priorities = <int>[];
       for (final ef in engineFiles) {
@@ -1257,7 +1258,8 @@ class DownloadEngine {
           '[DMX] T-2 FIX: Reconciliation failed. Selecting all files.',
         );
         TorrentService.setFilePriorities(
-          id, List.filled(engineFileCount, 4),
+          id,
+          List.filled(engineFileCount, 4),
         );
       }
       return;
@@ -1309,20 +1311,19 @@ class DownloadEngine {
           }
 
           resolvedFiles = files.map((f) {
-            final existing = existingFiles
-                .cast<Map<String, dynamic>?>()
-                .firstWhere(
-                  (e) => normalizeName(e?['name'] as String? ?? '') ==
-                      normalizeName(f.name),
-                  orElse: () => null,
-                );
+            final existing =
+                existingFiles.cast<Map<String, dynamic>?>().firstWhere(
+                      (e) =>
+                          normalizeName(e?['name'] as String? ?? '') ==
+                          normalizeName(f.name),
+                      orElse: () => null,
+                    );
             int resolvedBytes;
             bool isEstimated;
             if (f.hasProgressData) {
               // BUG 8 FIX: When f.size == 0, return 0 instead of unclamped safeDownloadedBytes
-              resolvedBytes = f.size > 0
-                  ? f.safeDownloadedBytes.clamp(0, f.size)
-                  : 0;
+              resolvedBytes =
+                  f.size > 0 ? f.safeDownloadedBytes.clamp(0, f.size) : 0;
               isEstimated = false;
             } else {
               // FIX T-S1: Preserve the previously stored byte count instead of
@@ -1373,7 +1374,7 @@ class DownloadEngine {
       // FIX T-1: While metadata is unknown, show indeterminate state
       if (totalSize <= 0) {
         onProgress(DownloadProgress(
-          downloadedBytes: 0,   // suppress until metadata arrives
+          downloadedBytes: 0, // suppress until metadata arrives
           fileSize: 0,
           speed: (stateLabel == 'seeding')
               ? torrent.uploadRate.toDouble()
@@ -1766,7 +1767,9 @@ Future<int> actualDownloadedBytes(
   try {
     final stateFile = File('$path.dmxstate');
     if (!await stateFile.exists()) {
-      if (threadCount > 1) return 0; // BUG 2 FIX: Pre-allocated file length is meaningless for multi-thread
+      if (threadCount > 1) {
+        return 0; // BUG 2 FIX: Pre-allocated file length is meaningless for multi-thread
+      }
       final f = File(path);
       return await f.exists() ? await f.length() : 0;
     }
@@ -1790,7 +1793,9 @@ Future<int> actualDownloadedBytes(
     return 0;
   } catch (e) {
     debugPrint('[DMX] actualDownloadedBytes failed for $path: $e');
-    if (threadCount > 1) return 0; // BUG 2 FIX: Pre-allocated file length is meaningless for multi-thread
+    if (threadCount > 1) {
+      return 0; // BUG 2 FIX: Pre-allocated file length is meaningless for multi-thread
+    }
     final f = File(path);
     if (await f.exists()) return f.length();
     return 0;

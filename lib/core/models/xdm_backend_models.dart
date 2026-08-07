@@ -1,4 +1,3 @@
-
 /// Backend API exception with detailed error messages.
 class ApiException implements Exception {
   final int statusCode;
@@ -10,7 +9,9 @@ class ApiException implements Exception {
       return 'YouTube requires sign-in. Try again later.';
     }
     if (body.contains('age')) return 'This video is age-restricted.';
-    if (body.contains('geo')) return 'This video is not available in your region.';
+    if (body.contains('geo')) {
+      return 'This video is not available in your region.';
+    }
     if (body.contains('No streams')) return 'No downloadable streams found.';
     return 'Error $statusCode: $body';
   }
@@ -38,7 +39,8 @@ class VideoStreams {
         title = json['title']?.toString() ?? '',
         id = json['id']?.toString(),
         streams = ((json['streams'] as List?) ?? [])
-            .map((e) => StreamEntry.fromJson(Map<String, dynamic>.from(e as Map)))
+            .map((e) =>
+                StreamEntry.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList();
 
   Map<String, dynamic> toJson() => {
@@ -89,7 +91,8 @@ class StreamEntry {
         audioSize = _toInt(json['audioSize']),
         size = _toInt(json['size']),
         ext = json['ext']?.toString() ?? 'mp4',
-        formatId = json['format_id']?.toString() ?? json['formatId']?.toString() ?? '',
+        formatId =
+            json['format_id']?.toString() ?? json['formatId']?.toString() ?? '',
         videoId = json['videoId']?.toString(),
         manifestType = json['manifestType']?.toString() ?? '';
 
@@ -135,12 +138,23 @@ class PlaylistInfo {
   });
 
   PlaylistInfo.fromJson(Map<String, dynamic> json)
-      : title = (json['info'] is Map ? (json['info'] as Map)['title']?.toString() : null) ?? json['title']?.toString() ?? '',
-        author = (json['info'] is Map ? (json['info'] as Map)['author']?.toString() : null) ?? json['author']?.toString() ?? '',
-        videoCount = _toInt(json['info'] is Map ? (json['info'] as Map)['videoCount'] : json['videoCount']),
+      : title = (json['info'] is Map
+                ? (json['info'] as Map)['title']?.toString()
+                : null) ??
+            json['title']?.toString() ??
+            '',
+        author = (json['info'] is Map
+                ? (json['info'] as Map)['author']?.toString()
+                : null) ??
+            json['author']?.toString() ??
+            '',
+        videoCount = _toInt(json['info'] is Map
+            ? (json['info'] as Map)['videoCount']
+            : json['videoCount']),
         note = json['note']?.toString(),
         videos = ((json['videos'] as List?) ?? [])
-            .map((e) => PlaylistVideo.fromJson(Map<String, dynamic>.from(e as Map)))
+            .map((e) =>
+                PlaylistVideo.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList();
 
   static int _toInt(dynamic val) {

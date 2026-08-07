@@ -58,7 +58,8 @@ class SingleInstanceService {
       if (!parentDir.existsSync()) {
         parentDir.createSync(recursive: true);
       }
-      if ((Platform.isLinux || Platform.isMacOS) && _overrideTokenFile == null) {
+      if ((Platform.isLinux || Platform.isMacOS) &&
+          _overrideTokenFile == null) {
         try {
           await Process.run('chmod', ['700', parentDir.path]);
         } catch (e) {

@@ -95,7 +95,6 @@ Future<void> main(List<String> args) async {
       }
     };
 
-
     await PowerMonitor.init();
     await ProtocolCache.init();
 
@@ -402,8 +401,9 @@ class DmxApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             navigatorKey: DmxApp.navigatorKey,
             theme: AppTheme.lightTheme,
-            darkTheme:
-                settings.isAmoledMode ? AppTheme.amoledTheme : AppTheme.darkTheme,
+            darkTheme: settings.isAmoledMode
+                ? AppTheme.amoledTheme
+                : AppTheme.darkTheme,
             themeMode: settings.currentThemeMode,
             locale: Locale(settings.languageCode),
             home: settings.showOnboarding
@@ -487,13 +487,15 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
           // FIX-T1: Persist per-file progress
           try {
             final files = TorrentService.getFiles(tid);
-            return files.map((f) => {
-              'name': f.name,
-              'length': f.size,
-              'downloadedBytes': f.downloadedBytes,
-              'selected': f.selected,
-              'priority': f.priority,
-            }).toList();
+            return files
+                .map((f) => {
+                      'name': f.name,
+                      'length': f.size,
+                      'downloadedBytes': f.downloadedBytes,
+                      'selected': f.selected,
+                      'priority': f.priority,
+                    })
+                .toList();
           } catch (_) {
             return null;
           }
@@ -755,4 +757,3 @@ class _FpsOverlayState extends State<_FpsOverlay> {
     );
   }
 }
-

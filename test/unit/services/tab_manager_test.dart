@@ -39,7 +39,8 @@ void main() {
     });
 
     test('data: scheme is rejected', () {
-      expect(isSafeRestoredUrl('data:text/html,<script>alert(1)</script>'), isFalse);
+      expect(isSafeRestoredUrl('data:text/html,<script>alert(1)</script>'),
+          isFalse);
     });
 
     test('ftp:// scheme is rejected', () {

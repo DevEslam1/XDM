@@ -15,7 +15,6 @@ import 'package:logging/logging.dart';
 /// tab's WebView. It does NOT manage UI: the host screen listens through
 /// [onStateChanged] and renders FABs/sheets from the exposed maps.
 class MediaSniffer {
-
   static final _log = Logger('MediaSniffer');
   MediaSniffer({
     required this.isActive,
@@ -59,7 +58,8 @@ class MediaSniffer {
 
   int get totalDetectedCount =>
       detectedDownloadUrls.length +
-      detectedMediaSources.values.fold<int>(0, (sum, list) => sum + list.length) +
+      detectedMediaSources.values
+          .fold<int>(0, (sum, list) => sum + list.length) +
       detectedPlaylistUrls.length;
 
   void clearAll() {
@@ -141,10 +141,11 @@ class MediaSniffer {
 
     // FIX-INTEL: Check for known streaming sites for specialized sniffing
     final analysis = SiteIntelligenceService().analyzeUrl(scannedUrl);
-    final isSpecialized = analysis.siteType == SiteType.videoStreaming || 
-                          analysis.siteType == SiteType.audioStreaming;
+    final isSpecialized = analysis.siteType == SiteType.videoStreaming ||
+        analysis.siteType == SiteType.audioStreaming;
     if (isSpecialized) {
-      _log.fine('Specialized media sniffing active for ${analysis.profile?.displayName ?? scannedUrl}');
+      _log.fine(
+          'Specialized media sniffing active for ${analysis.profile?.displayName ?? scannedUrl}');
     }
 
     final activeIds = tabs.map((t) => t.id).toSet();
@@ -308,7 +309,8 @@ class MediaSniffer {
         }
       }
     } on TimeoutException {
-      _log.warning('[DMX Browser] Media scan JS injection timed out for tab ${tab.id}');
+      _log.warning(
+          '[DMX Browser] Media scan JS injection timed out for tab ${tab.id}');
       if (isActive() && containsTab(tab)) {
         _update(() {
           mediaScanFailed[tab.id] = true;

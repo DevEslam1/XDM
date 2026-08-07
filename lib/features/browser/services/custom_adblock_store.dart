@@ -41,7 +41,7 @@ class CustomAdBlockStore {
   String _sanitizeHost(String input) {
     var host = input.trim().toLowerCase();
     if (host.isEmpty) return '';
-    
+
     // Strip scheme if present
     if (host.contains('://')) {
       try {
@@ -51,17 +51,17 @@ class CustomAdBlockStore {
         host = host.split('://').last;
       }
     }
-    
+
     // Strip path/query/fragment
     final slashIdx = host.indexOf('/');
     if (slashIdx != -1) host = host.substring(0, slashIdx);
-    
+
     // Strip port
     final colonIdx = host.indexOf(':');
     if (colonIdx != -1) host = host.substring(0, colonIdx);
 
     host = host.trim();
-    
+
     // Basic hostname validation
     if (RegExp(r'^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$').hasMatch(host)) {
       return host;
@@ -105,7 +105,7 @@ class CustomAdBlockStore {
   bool contains(String host) {
     if (host.isEmpty) return false;
     final lower = host.toLowerCase();
-    
+
     if (_hosts.contains(lower)) return true;
 
     // Subdomain walk-up logic (reuse AdBlockFilterUpdater pattern)

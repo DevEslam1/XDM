@@ -17,10 +17,10 @@ class FrameWatchdog {
   static int _total = 0;
   static DateTime _windowStart = DateTime.now();
   static const _window = Duration(seconds: 30);
-  
+
   static double _refreshRate = 60.0;
   static double get frameBudgetMs => 1000.0 / _refreshRate;
-  
+
   static double get _budgetMs => frameBudgetMs;
   static const _alertThreshold = PerformanceBudget.maxJankRatio;
   static bool _isRunning = false;
@@ -112,4 +112,3 @@ class FrameWatchdog {
     SchedulerBinding.instance.removeTimingsCallback(_onTimings);
   }
 }
-

@@ -47,7 +47,9 @@ class PowerSettingsPage extends StatelessWidget with HapticHelper {
           ),
           const SizedBox(height: 12),
           SettingsSectionHeader(
-            title: isRtl ? 'تحسينات الأداء والذاكرة' : 'Power & Performance Tuning',
+            title: isRtl
+                ? 'تحسينات الأداء والذاكرة'
+                : 'Power & Performance Tuning',
             accentColor: accent,
             isDark: isDark,
           ),
@@ -56,7 +58,8 @@ class PowerSettingsPage extends StatelessWidget with HapticHelper {
             children: [
               SwitchTile(
                 accentColor: accent,
-                title: isRtl ? 'حوض المعالجات الذكي' : 'Power-Aware Isolate Pool',
+                title:
+                    isRtl ? 'حوض المعالجات الذكي' : 'Power-Aware Isolate Pool',
                 subtitle: isRtl
                     ? 'تعديل عدد معالجات الخلفية تلقائياً بناءً على مستوى البطارية'
                     : 'Dynamically scale isolate worker pool based on battery level',
@@ -80,7 +83,9 @@ class PowerSettingsPage extends StatelessWidget with HapticHelper {
               ),
               SwitchTile(
                 accentColor: accent,
-                title: isRtl ? 'توفير البطارية عند التقطيع' : 'Auto Battery Saver on Jank',
+                title: isRtl
+                    ? 'توفير البطارية عند التقطيع'
+                    : 'Auto Battery Saver on Jank',
                 subtitle: isRtl
                     ? 'تفعيل موفر البطارية تلقائياً عند سقوط الفريمات المتكرر'
                     : 'Auto-enable Battery Saver mode if 3 consecutive frame windows drop below 92% FPS',
@@ -104,7 +109,9 @@ class PowerSettingsPage extends StatelessWidget with HapticHelper {
               ),
               SwitchTile(
                 accentColor: accent,
-                title: isRtl ? 'خنق سرعة الشبكة حسب الطاقة' : 'Power Bandwidth Throttling',
+                title: isRtl
+                    ? 'خنق سرعة الشبكة حسب الطاقة'
+                    : 'Power Bandwidth Throttling',
                 subtitle: isRtl
                     ? 'تخفيض السرعة تلقائياً في وضع البطارية المنخفضة'
                     : 'Throttle max throughput on low battery to conserve energy',

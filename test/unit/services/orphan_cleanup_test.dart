@@ -21,7 +21,7 @@ void main() {
     // 1. Setup active paths (as if they were in provider task list)
     final activeVideo = '${tempDir.path}/active_video.mp4';
     final activeAudio = '${tempDir.path}/active_audio.mp4';
-    
+
     final activePaths = <String>{
       p.canonicalize('$activeVideo.dmxpart'),
       p.canonicalize(activeVideo),
@@ -33,7 +33,7 @@ void main() {
     final activePart = File('$activeVideo.dmxpart')..createSync();
     final activeState = File('$activeVideo.dmxstate')..createSync();
     final activeJournal = File('$activeVideo.journal')..createSync();
-    
+
     final activeAudioPart = File('$activeAudio.audio')..createSync();
     final activeAudioState = File('$activeAudio.audio.dmxstate')..createSync();
 
@@ -44,26 +44,28 @@ void main() {
     final orphanPart = File('$orphanVideo.dmxpart')..createSync();
     final orphanState = File('$orphanVideo.dmxstate')..createSync();
     final orphanJournal = File('$orphanVideo.journal')..createSync();
-    
+
     final orphanAudioPart = File('$orphanAudio.audio')..createSync();
     final orphanAudioState = File('$orphanAudio.audio.dmxstate')..createSync();
 
     // 4. Create non-temporary normal files (should NEVER be deleted)
-    final normalFile = File('${tempDir.path}/important_document.pdf')..createSync();
+    final normalFile = File('${tempDir.path}/important_document.pdf')
+      ..createSync();
 
     // 5. Run the cleanup algorithm
     final dir = Directory(tempDir.path);
     await for (final entity in dir.list()) {
       if (entity is! File) continue;
       final name = p.canonicalize(entity.path);
-      
+
       final isOrphan = (name.endsWith('.dmxpart') ||
-                        name.endsWith('.dmxstate') ||
-                        name.endsWith('.journal') ||
-                        name.endsWith('.audio') ||
-                        name.endsWith('.audio.dmxstate')) &&
-                       !activePaths.any((pPath) => name.startsWith(pPath.replaceAll('.dmxpart', '').replaceAll('.dmxstate', '')));
-                       
+              name.endsWith('.dmxstate') ||
+              name.endsWith('.journal') ||
+              name.endsWith('.audio') ||
+              name.endsWith('.audio.dmxstate')) &&
+          !activePaths.any((pPath) => name.startsWith(
+              pPath.replaceAll('.dmxpart', '').replaceAll('.dmxstate', '')));
+
       if (isOrphan) {
         await entity.delete();
       }

@@ -120,7 +120,8 @@ void main() {
     await server.close();
   });
 
-  test('powerAware pool size reduces at battery 15% and restores at 50%', () async {
+  test('powerAware pool size reduces at battery 15% and restores at 50%',
+      () async {
     final pool = DownloadIsolatePool(size: 4, powerAware: true);
     await pool.init();
     expect(pool.workerCount, equals(4));
@@ -150,4 +151,3 @@ void main() {
     await pool.shutdown();
   });
 }
-

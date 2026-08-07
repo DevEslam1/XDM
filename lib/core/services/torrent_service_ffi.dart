@@ -265,7 +265,8 @@ class _CapabilityGate {
     if (!sequentialDownloadSupported) return;
     try {
       // ignore: avoid_dynamic_calls
-      (LibtorrentFlutter.instance as dynamic).setSequentialDownload(id, enabled);
+      (LibtorrentFlutter.instance as dynamic)
+          .setSequentialDownload(id, enabled);
     } catch (e) {
       _log.warning('setSequentialDownload failed for id $id: $e');
     }
@@ -682,7 +683,8 @@ class TorrentService {
       if (id >= 0) {
         _activeTorrentIds.add(id);
         _torrentSources[id] = magnetUri;
-        unawaited(_tryLoadFastResumeForSource(id, magnetUri)); // FIX-02: kept async
+        unawaited(
+            _tryLoadFastResumeForSource(id, magnetUri)); // FIX-02: kept async
       }
       return id;
     } catch (e) {
@@ -750,7 +752,8 @@ class TorrentService {
       if (id >= 0) {
         _activeTorrentIds.add(id);
         _torrentSources[id] = source;
-        unawaited(_tryLoadFastResumeForSource(id, source)); // FIX-02: kept async
+        unawaited(
+            _tryLoadFastResumeForSource(id, source)); // FIX-02: kept async
       }
       return id;
     } catch (e) {
@@ -767,8 +770,7 @@ class TorrentService {
       final resumeBytes =
           await TorrentResumeStore.loadResumeDataForSource(source);
       if (resumeBytes != null && resumeBytes.isNotEmpty) {
-        final loaded =
-            _CapabilityGate.instance.loadResumeData(id, resumeBytes);
+        final loaded = _CapabilityGate.instance.loadResumeData(id, resumeBytes);
         if (loaded) {
           _log.fine(
             'Fast-resume data loaded successfully for torrent $id ($source)',
@@ -848,7 +850,8 @@ class TorrentService {
             await TorrentResumeStore.saveAndWait(
               torrentId: id,
               sourceUrl: source,
-              fetchResumeData: () => _CapabilityGate.instance.saveResumeData(id),
+              fetchResumeData: () =>
+                  _CapabilityGate.instance.saveResumeData(id),
               files: torrentFiles,
             );
           }
@@ -963,7 +966,6 @@ class TorrentService {
                 : true,
           );
         });
-
       } catch (e) {
         _log.warning('getFiles failed for id $id: $e');
       }

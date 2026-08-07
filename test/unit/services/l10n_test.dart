@@ -10,7 +10,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('L10n Localization Unit Tests', () {
-    test('CI Lint: All keys in app_en.dart exist in AR, DE, ES, FR with non-empty values', () {
+    test(
+        'CI Lint: All keys in app_en.dart exist in AR, DE, ES, FR with non-empty values',
+        () {
       final otherLocales = <String, Map<String, String>>{
         'ar': arTranslations,
         'de': deTranslations,
@@ -51,24 +53,30 @@ void main() {
     });
 
     test('Parameterized string substitution works for dynamic values', () {
-      final res5 = L10n.translate('en', 'delete_downloads_count', args: {'count': 5});
+      final res5 =
+          L10n.translate('en', 'delete_downloads_count', args: {'count': 5});
       expect(res5, equals('Delete 5 Downloads?'));
 
-      final resAr = L10n.translate('ar', 'delete_downloads_count', args: {'count': 3});
+      final resAr =
+          L10n.translate('ar', 'delete_downloads_count', args: {'count': 3});
       expect(resAr, equals('حذف 3 تنزيل؟'));
     });
 
     test('Plural / singular rules work correctly for count = 0, 1, 2, 100', () {
-      final singular = L10n.translate('en', 'items_count_plural', args: {'count': 1});
+      final singular =
+          L10n.translate('en', 'items_count_plural', args: {'count': 1});
       expect(singular, equals('1 item'));
 
-      final plural0 = L10n.translate('en', 'items_count_plural', args: {'count': 0});
+      final plural0 =
+          L10n.translate('en', 'items_count_plural', args: {'count': 0});
       expect(plural0, equals('0 items'));
 
-      final plural2 = L10n.translate('en', 'items_count_plural', args: {'count': 2});
+      final plural2 =
+          L10n.translate('en', 'items_count_plural', args: {'count': 2});
       expect(plural2, equals('2 items'));
 
-      final plural100 = L10n.translate('en', 'items_count_plural', args: {'count': 100});
+      final plural100 =
+          L10n.translate('en', 'items_count_plural', args: {'count': 100});
       expect(plural100, equals('100 items'));
     });
   });

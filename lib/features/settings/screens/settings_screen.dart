@@ -107,13 +107,39 @@ class _SettingsScreenState extends State<SettingsScreen>
   int _mapSectionToIndex(String? section) {
     if (section == null) return 0;
     final s = section.toLowerCase().trim();
-    if (s.contains('appear') || s.contains('visual') || s.contains('theme') || s == '07') return 0;
-    if (s.contains('download') || s.contains('engine') || s.contains('bandwidth') || s == '01' || s == '02') return 1;
-    if (s.contains('net') || s.contains('proxy') || s.contains('dns') || s.contains('sec') || s == '03' || s == '08') return 2;
+    if (s.contains('appear') ||
+        s.contains('visual') ||
+        s.contains('theme') ||
+        s == '07') {
+      return 0;
+    }
+    if (s.contains('download') ||
+        s.contains('engine') ||
+        s.contains('bandwidth') ||
+        s == '01' ||
+        s == '02') {
+      return 1;
+    }
+    if (s.contains('net') ||
+        s.contains('proxy') ||
+        s.contains('dns') ||
+        s.contains('sec') ||
+        s == '03' ||
+        s == '08') {
+      return 2;
+    }
     if (s.contains('notif') || s.contains('alert') || s == '04') return 3;
     if (s.contains('torrent') || s == '05') return 4;
-    if (s.contains('power') || s.contains('perf') || s.contains('battery')) return 5;
-    if (s.contains('adv') || s.contains('back') || s.contains('comm') || s == '06' || s == '09') return 6;
+    if (s.contains('power') || s.contains('perf') || s.contains('battery')) {
+      return 5;
+    }
+    if (s.contains('adv') ||
+        s.contains('back') ||
+        s.contains('comm') ||
+        s == '06' ||
+        s == '09') {
+      return 6;
+    }
     return 0;
   }
 
@@ -159,7 +185,16 @@ class _SettingsScreenState extends State<SettingsScreen>
         subtitle: isRtl
             ? 'فاتح / داكن / أسود (AMOLED) / تتبع النظام'
             : 'Light / Dark / AMOLED / Follow System',
-        keywords: const ['theme', 'dark', 'light', 'amoled', 'black', 'mode', 'system', 'color'],
+        keywords: const [
+          'theme',
+          'dark',
+          'light',
+          'amoled',
+          'black',
+          'mode',
+          'system',
+          'color'
+        ],
         accentColor: amber,
         builder: (ctx) => DropdownTile<String>(
           accentColor: amber,
@@ -240,7 +275,8 @@ class _SettingsScreenState extends State<SettingsScreen>
           value: settings.maxDownloads,
           items: const [1, 2, 3, 5, 8],
           batterySaverOverride: settings.batterySaverMode,
-          onChanged: (val) => val != null ? settings.setMaxDownloads(val) : null,
+          onChanged: (val) =>
+              val != null ? settings.setMaxDownloads(val) : null,
         ),
       ),
       _SettingSearchEntry(
@@ -281,11 +317,19 @@ class _SettingsScreenState extends State<SettingsScreen>
 
       // Category 3: Notifications
       _SettingSearchEntry(
-        categoryTitle: isRtl ? 'الإشعارات والتنبيهات' : 'Notifications & Alerts',
+        categoryTitle:
+            isRtl ? 'الإشعارات والتنبيهات' : 'Notifications & Alerts',
         categoryIndex: 3,
         settingTitle: 'Global Notifications',
         subtitle: 'Show download progress bars in system tray',
-        keywords: const ['notification', 'alert', 'chime', 'sound', 'haptics', 'quiet'],
+        keywords: const [
+          'notification',
+          'alert',
+          'chime',
+          'sound',
+          'haptics',
+          'quiet'
+        ],
         accentColor: violet,
         builder: (ctx) => SwitchTile(
           accentColor: violet,
@@ -302,7 +346,17 @@ class _SettingsScreenState extends State<SettingsScreen>
         categoryIndex: 4,
         settingTitle: 'Enable DHT',
         subtitle: 'Peer discovery via decentralized DHT network',
-        keywords: const ['torrent', 'dht', 'upnp', 'nat-pmp', 'pex', 'lpd', 'seeding', 'ratio', 'sequential'],
+        keywords: const [
+          'torrent',
+          'dht',
+          'upnp',
+          'nat-pmp',
+          'pex',
+          'lpd',
+          'seeding',
+          'ratio',
+          'sequential'
+        ],
         accentColor: green,
         builder: (ctx) => SwitchTile(
           accentColor: green,
@@ -318,13 +372,24 @@ class _SettingsScreenState extends State<SettingsScreen>
         categoryTitle: isRtl ? 'الأداء والطاقة' : 'Power & Performance',
         categoryIndex: 5,
         settingTitle: 'Battery Saver Mode',
-        subtitle: 'Limits downloads to 1, threads to 2, and forces Classic UI mode',
-        keywords: const ['power', 'performance', 'battery', 'saver', 'jank', 'thermal', 'isolate', 'threads'],
+        subtitle:
+            'Limits downloads to 1, threads to 2, and forces Classic UI mode',
+        keywords: const [
+          'power',
+          'performance',
+          'battery',
+          'saver',
+          'jank',
+          'thermal',
+          'isolate',
+          'threads'
+        ],
         accentColor: orange,
         builder: (ctx) => SwitchTile(
           accentColor: orange,
           title: 'Battery Saver Mode',
-          subtitle: 'Limits downloads to 1, threads to 2, and forces Classic UI mode',
+          subtitle:
+              'Limits downloads to 1, threads to 2, and forces Classic UI mode',
           value: settings.batterySaverMode,
           onChanged: (val) => settings.setBatterySaverMode(val),
         ),
@@ -336,7 +401,16 @@ class _SettingsScreenState extends State<SettingsScreen>
         categoryIndex: 2,
         settingTitle: L10n.of(context, 'settings_update_adblock_hosts'),
         subtitle: L10n.of(context, 'settings_enable_adblock_sub'),
-        keywords: const ['adblock', 'ad', 'block', 'hosts', 'filter', 'easylist', 'tracking', 'update'],
+        keywords: const [
+          'adblock',
+          'ad',
+          'block',
+          'hosts',
+          'filter',
+          'easylist',
+          'tracking',
+          'update'
+        ],
         accentColor: cyan,
         builder: (ctx) => const NetworkSettingsPage(),
       ),
@@ -347,7 +421,16 @@ class _SettingsScreenState extends State<SettingsScreen>
         categoryIndex: 6,
         settingTitle: 'Enable Developer Mode',
         subtitle: 'Unlocks advanced debugging, SSL bypass, internal logs',
-        keywords: const ['developer', 'dev', 'ssl', 'backend', 'yt-dlp', 'schedule', 'backup', 'reset'],
+        keywords: const [
+          'developer',
+          'dev',
+          'ssl',
+          'backend',
+          'yt-dlp',
+          'schedule',
+          'backup',
+          'reset'
+        ],
         accentColor: red,
         builder: (ctx) => SwitchTile(
           accentColor: red,
@@ -485,8 +568,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                           ),
                       textSelectionTheme: TextSelectionThemeData(
                         cursorColor: filterAccentClr,
-                        selectionColor:
-                            filterAccentClr.withValues(alpha: 0.3),
+                        selectionColor: filterAccentClr.withValues(alpha: 0.3),
                         selectionHandleColor: filterAccentClr,
                       ),
                     ),
@@ -494,7 +576,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                       duration: const Duration(milliseconds: 200),
                       height: 44,
                       decoration: BoxDecoration(
-                        color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                        color:
+                            isDark ? AppTheme.surface : AppTheme.lightSurface,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: _searchFocusNode.hasFocus
@@ -560,7 +643,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                 // Search Overlay Mode vs Nav Mode
                 if (_searchQuery.isNotEmpty)
                   Expanded(
-                    child: _buildSearchResultsView(context, settings, isDark, isRtl),
+                    child: _buildSearchResultsView(
+                        context, settings, isDark, isRtl),
                   )
                 else
                   Expanded(
@@ -573,13 +657,16 @@ class _SettingsScreenState extends State<SettingsScreen>
                                 onDestinationSelected: _onCategorySelected,
                                 backgroundColor: isDark
                                     ? AppTheme.surface.withValues(alpha: 0.7)
-                                    : AppTheme.lightSurface.withValues(alpha: 0.7),
+                                    : AppTheme.lightSurface
+                                        .withValues(alpha: 0.7),
                                 labelType: NavigationRailLabelType.all,
                                 selectedIconTheme: IconThemeData(
-                                  color: categories[_selectedCategoryIndex].color,
+                                  color:
+                                      categories[_selectedCategoryIndex].color,
                                 ),
                                 selectedLabelTextStyle: TextStyle(
-                                  color: categories[_selectedCategoryIndex].color,
+                                  color:
+                                      categories[_selectedCategoryIndex].color,
                                   fontWeight: FontWeight.bold,
                                   fontFamily: 'Space Grotesk',
                                   fontSize: 12,
@@ -625,26 +712,36 @@ class _SettingsScreenState extends State<SettingsScreen>
                               SingleChildScrollView(
                                 scrollDirection: Axis.horizontal,
                                 physics: const BouncingScrollPhysics(),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 4),
                                 child: Row(
-                                  children: List.generate(categories.length, (i) {
+                                  children:
+                                      List.generate(categories.length, (i) {
                                     final cat = categories[i];
-                                    final selected = i == _selectedCategoryIndex;
+                                    final selected =
+                                        i == _selectedCategoryIndex;
                                     return Padding(
-                                      padding: const EdgeInsets.only(right: 8.0),
+                                      padding:
+                                          const EdgeInsets.only(right: 8.0),
                                       child: ChoiceChip(
                                         showCheckmark: false,
                                         avatar: Icon(
                                           cat.icon,
                                           size: 16,
-                                          color: selected ? Colors.white : cat.color,
+                                          color: selected
+                                              ? Colors.white
+                                              : cat.color,
                                         ),
                                         label: Text(cat.title),
                                         labelStyle: TextStyle(
-                                          color: selected ? Colors.white : cat.color,
+                                          color: selected
+                                              ? Colors.white
+                                              : cat.color,
                                           fontFamily: 'Space Grotesk',
                                           fontSize: 12,
-                                          fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                                          fontWeight: selected
+                                              ? FontWeight.bold
+                                              : FontWeight.w500,
                                         ),
                                         selected: selected,
                                         selectedColor: cat.color,
@@ -652,10 +749,14 @@ class _SettingsScreenState extends State<SettingsScreen>
                                             ? AppTheme.surface
                                             : AppTheme.lightSurface,
                                         side: BorderSide(
-                                          color: selected ? cat.color : cat.color.withValues(alpha: 0.3),
+                                          color: selected
+                                              ? cat.color
+                                              : cat.color
+                                                  .withValues(alpha: 0.3),
                                           width: 1,
                                         ),
-                                        onSelected: (_) => _onCategorySelected(i),
+                                        onSelected: (_) =>
+                                            _onCategorySelected(i),
                                       ),
                                     );
                                   }),
@@ -667,7 +768,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                                   controller: _pageController,
                                   physics: const BouncingScrollPhysics(),
                                   onPageChanged: (idx) {
-                                    setState(() => _selectedCategoryIndex = idx);
+                                    setState(
+                                        () => _selectedCategoryIndex = idx);
                                     context
                                         .read<SettingsProvider>()
                                         .setActiveSettingsTabIndex(idx);
@@ -710,7 +812,8 @@ class _SettingsScreenState extends State<SettingsScreen>
         child: EmptyStateView(
           icon: Icons.search_off_rounded,
           title: 'No settings found for "$_searchQuery"',
-          subtitle: 'Try keywords like "proxy", "threads", "schedule", or "dht".',
+          subtitle:
+              'Try keywords like "proxy", "threads", "schedule", or "dht".',
         ),
       );
     }
@@ -732,7 +835,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                   _onCategorySelected(entry.categoryIndex);
                 },
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                   child: Row(
                     children: [
                       Text(
@@ -745,7 +849,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Icon(Icons.arrow_forward_ios_rounded, size: 10, color: entry.accentColor),
+                      Icon(Icons.arrow_forward_ios_rounded,
+                          size: 10, color: entry.accentColor),
                     ],
                   ),
                 ),

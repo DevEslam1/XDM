@@ -53,7 +53,8 @@ String formatBytes(num bytes) {
   return '${bytes.toStringAsFixed(0)} B';
 }
 
-String categoryFromFileName(String fileName, {SiteType? siteType, ContentHint? contentHint}) {
+String categoryFromFileName(String fileName,
+    {SiteType? siteType, ContentHint? contentHint}) {
   if (contentHint != null) {
     switch (contentHint) {
       case ContentHint.videoFile:
@@ -307,7 +308,6 @@ int scanFolderBytesSync(String path) {
   }).toList();
   return (total: total, files: files);
 }
-
 
 Future<void> deleteDownloadParts(String tempFilePath) async {
   try {

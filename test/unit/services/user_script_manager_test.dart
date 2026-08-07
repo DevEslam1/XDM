@@ -135,7 +135,9 @@ void main() {
     expect(restored.enabled, script.enabled);
   });
 
-  test('sandbox string neutralizes DOM write when domWrite permission is absent', () async {
+  test(
+      'sandbox string neutralizes DOM write when domWrite permission is absent',
+      () async {
     const script = UserScript(
       id: 'no_dom',
       name: 'No DOM Write',

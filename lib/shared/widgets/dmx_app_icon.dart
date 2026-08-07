@@ -20,8 +20,10 @@ class DmxAppIcon extends StatefulWidget {
 }
 
 class _DmxAppIconState extends State<DmxAppIcon>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver, PausableLoopAnimation<DmxAppIcon> {
-
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        PausableLoopAnimation<DmxAppIcon> {
   late final AnimationController _ring;
 
   @override
@@ -43,7 +45,6 @@ class _DmxAppIconState extends State<DmxAppIcon>
     _ring.dispose();
     super.dispose();
   }
-
 
   @override
   Widget build(BuildContext context) {

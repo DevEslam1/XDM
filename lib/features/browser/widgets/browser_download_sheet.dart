@@ -76,9 +76,11 @@ class BrowserDownloadSheet extends StatefulWidget {
 }
 
 class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
-    with SingleTickerProviderStateMixin, HapticHelper, WidgetsBindingObserver, PausableLoopAnimation<BrowserDownloadSheet> {
-
-
+    with
+        SingleTickerProviderStateMixin,
+        HapticHelper,
+        WidgetsBindingObserver,
+        PausableLoopAnimation<BrowserDownloadSheet> {
   bool _isSubmitting = false;
 
   late final AnimationController _pulse = AnimationController(
@@ -101,7 +103,6 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
     _pulse.dispose();
     super.dispose();
   }
-
 
   DetectedMediaKind get _kind =>
       BrowserDetector.detect(widget.url)?.kind ?? DetectedMediaKind.unknown;

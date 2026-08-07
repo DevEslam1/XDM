@@ -538,7 +538,8 @@ class DatabaseService {
       downloadPageUrl: drift.Value(task.downloadPageUrl),
       mergedAudioUrl: drift.Value(task.mergedAudioUrl),
       audioSize: drift.Value(task.audioSize),
-      audioDownloadedBytes: drift.Value(task.audioDownloadedBytes), // FIX-AUDIT-01
+      audioDownloadedBytes:
+          drift.Value(task.audioDownloadedBytes), // FIX-AUDIT-01
       videoStreamSize: drift.Value(task.videoStreamSize), // FIX-B4
       audioProgress: drift.Value(task.audioProgress),
       pausedByUser: drift.Value(task.pausedByUser),

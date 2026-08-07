@@ -155,12 +155,12 @@ Color _statusColor(DownloadStatus status, bool isDark) {
       isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
     DownloadStatus.downloading =>
       isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
-    DownloadStatus.paused =>
-      isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+    DownloadStatus.paused => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
     DownloadStatus.completed =>
       isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
     DownloadStatus.failed => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-    DownloadStatus.merging => isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber, // FIX-B11
+    DownloadStatus.merging =>
+      isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber, // FIX-B11
   };
 }
 
@@ -437,8 +437,7 @@ class _StatusChipState extends State<_StatusChip>
           Tooltip(
             message: formatLocalizedDateTime(context, task.scheduledAt!),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: AppTheme.chipDecoration(
                 color: AppTheme.neonAmber,
                 isDark: isDark,
@@ -513,7 +512,8 @@ class _TelemetryStrip extends StatelessWidget {
     final isCompleted = task.status == DownloadStatus.completed && !seeding;
     final isDownloading = task.status == DownloadStatus.downloading || seeding;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     final proto = ProtocolCache.get(task.url);
     final protoLabel = switch (proto) {
@@ -614,7 +614,8 @@ class _TelemetryStrip extends StatelessWidget {
                     final provider = context.watch<DownloadProvider>();
                     final history = provider.getSpeedHistory(task.id);
                     if (history.length >= 2) {
-                      return _CardSparklineGraph(history: history, color: accent);
+                      return _CardSparklineGraph(
+                          history: history, color: accent);
                     }
                     return const SizedBox.shrink();
                   },
@@ -652,7 +653,8 @@ class _TelemetryStrip extends StatelessWidget {
       DownloadStatus.queued => 'Queued',
       DownloadStatus.paused => 'Paused',
       DownloadStatus.downloading => task.speedFormatted,
-      DownloadStatus.completed => seeding ? '${formatBytes(seedingUploadSpeed)}/s' : 'Done',
+      DownloadStatus.completed =>
+        seeding ? '${formatBytes(seedingUploadSpeed)}/s' : 'Done',
       DownloadStatus.failed => '—',
       DownloadStatus.merging => 'Merging…',
     };
@@ -1122,13 +1124,21 @@ IconData _statusMessageIcon(String? message) {
   if (message == null) return Icons.info_outline_rounded;
   final m = message.toLowerCase();
   if (m.contains('wifi')) return Icons.wifi_off_rounded;
-  if (m.contains('network') || m.contains('waiting')) return Icons.signal_wifi_bad_rounded;
+  if (m.contains('network') || m.contains('waiting')) {
+    return Icons.signal_wifi_bad_rounded;
+  }
   if (m.contains('merg')) return Icons.merge_type_rounded;
   if (m.contains('forbidden') || m.contains('403')) return Icons.block_rounded;
-  if (m.contains('retry') || m.contains('retrying')) return Icons.refresh_rounded;
+  if (m.contains('retry') || m.contains('retrying')) {
+    return Icons.refresh_rounded;
+  }
   if (m.contains('schedul')) return Icons.schedule_rounded;
-  if (m.contains('paused') || m.contains('orphan')) return Icons.pause_circle_outline_rounded;
-  if (m.contains('error') || m.contains('fail')) return Icons.error_outline_rounded;
+  if (m.contains('paused') || m.contains('orphan')) {
+    return Icons.pause_circle_outline_rounded;
+  }
+  if (m.contains('error') || m.contains('fail')) {
+    return Icons.error_outline_rounded;
+  }
   return Icons.info_outline_rounded;
 }
 
@@ -1295,7 +1305,8 @@ class _FileCard extends StatelessWidget with HapticHelper {
                   ],
                 ),
                 const SizedBox(height: 8),
-                _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
+                _TelemetryStrip(
+                    task: task, isDark: isDark, accent: statusColor),
                 const SizedBox(height: 8),
                 _ProgressRow(task: task, isDark: isDark, color: statusColor),
                 if (task.statusMessage != null &&
@@ -1303,7 +1314,8 @@ class _FileCard extends StatelessWidget with HapticHelper {
                     task.status != DownloadStatus.completed)
                   _NoticeRow(
                     text: task.statusMessage!,
-                    color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                    color:
+                        isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
                     icon: _statusMessageIcon(task.statusMessage),
                     isDark: isDark,
                   ),
@@ -1532,7 +1544,8 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                   ],
                 ),
                 SizedBox(height: compact ? 2 : 4),
-                _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
+                _TelemetryStrip(
+                    task: task, isDark: isDark, accent: statusColor),
                 SizedBox(height: compact ? 2 : 4),
                 _ProgressRow(task: task, isDark: isDark, color: statusColor),
                 if (task.statusMessage != null &&
@@ -1540,7 +1553,8 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                     task.status != DownloadStatus.completed)
                   _NoticeRow(
                     text: task.statusMessage!,
-                    color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                    color:
+                        isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
                     icon: _statusMessageIcon(task.statusMessage),
                     isDark: isDark,
                   ),
@@ -1657,29 +1671,29 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  widget.task.fileName,
-                                  textDirection: TextDirection.ltr,
-                                  style: AppTheme.dataStyle(
-                                    isDark: isDark,
-                                    size: widget.compact ? 13 : 14,
-                                    weight: FontWeight.w700,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      widget.task.fileName,
+                                      textDirection: TextDirection.ltr,
+                                      style: AppTheme.dataStyle(
+                                        isDark: isDark,
+                                        size: widget.compact ? 13 : 14,
+                                        weight: FontWeight.w700,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                  if (widget.task.siteDisplayName != null) ...[
+                                    const SizedBox(width: 4),
+                                    _SiteBadge(
+                                      name: widget.task.siteDisplayName!,
+                                      isDark: isDark,
+                                    ),
+                                  ],
+                                ],
                               ),
-                              if (widget.task.siteDisplayName != null) ...[
-                                const SizedBox(width: 4),
-                                _SiteBadge(
-                                  name: widget.task.siteDisplayName!,
-                                  isDark: isDark,
-                                ),
-                              ],
-                            ],
-                          ),
                               const SizedBox(height: 5),
                               Wrap(
                                 spacing: 6,
@@ -1700,7 +1714,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                                             ? (isRtl ? 'مشاركة' : 'SEEDING')
                                             : null),
                                   ),
-  
+
                                   _PeerChip(
                                     icon: Icons.arrow_upward_rounded,
                                     label: '${stats.seeds}',
@@ -1795,7 +1809,9 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                             value: widget.task.seedingEnabled,
                             onChanged: (val) {
                               triggerHaptic(settings);
-                              context.read<DownloadProvider>().updateTaskSeeding(
+                              context
+                                  .read<DownloadProvider>()
+                                  .updateTaskSeeding(
                                     widget.task.id,
                                     enabled: val,
                                   );
@@ -1850,9 +1866,9 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
   Widget build(BuildContext context) {
     try {
       final files = widget.task.torrentFiles ?? [];
-      final isChecking =
-          widget.task.statusMessage?.contains('checking') == true ||
-              widget.task.statusMessage?.contains('Checking') == true; // FIX-B10
+      final isChecking = widget.task.statusMessage?.contains('checking') ==
+              true ||
+          widget.task.statusMessage?.contains('Checking') == true; // FIX-B10
       final displayFiles = files.map((f) {
         final selected = f['selected'] == true;
         final length = (f['length'] as num?)?.toInt() ?? 0;
@@ -2197,7 +2213,10 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
     if (total <= 0) return 0.0;
     final done = widget.items.fold<int>(
         0,
-        (s, t) => s + t.displayDownloadedBytes.clamp(0, t.resolvedFileSize > 0 ? t.resolvedFileSize : 0));
+        (s, t) =>
+            s +
+            t.displayDownloadedBytes
+                .clamp(0, t.resolvedFileSize > 0 ? t.resolvedFileSize : 0));
     return (done / total).clamp(0.0, 1.0);
   }
 

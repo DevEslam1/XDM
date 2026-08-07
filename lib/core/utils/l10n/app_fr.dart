@@ -10,9 +10,12 @@ const Map<String, String> frTranslations = {
   'settings_auto_resume': 'Reprise automatique',
   'settings_auto_resume_sub': 'Reprendre les téléchargements au démarrage',
   'settings_adaptive_threads': 'Nombre de threads adaptatif',
-  'settings_adaptive_threads_sub': 'Ajuster automatiquement le nombre de threads selon la vitesse de téléchargement',
-  'settings_auto_verify_checksum': 'Vérifier automatiquement l\'intégrité du fichier',
-  'settings_auto_verify_checksum_sub': 'Calculer le hachage SHA-256 après chaque téléchargement',
+  'settings_adaptive_threads_sub':
+      'Ajuster automatiquement le nombre de threads selon la vitesse de téléchargement',
+  'settings_auto_verify_checksum':
+      'Vérifier automatiquement l\'intégrité du fichier',
+  'settings_auto_verify_checksum_sub':
+      'Calculer le hachage SHA-256 après chaque téléchargement',
   'settings_max_channels': 'Téléchargements simultanés max',
   'settings_max_channels_sub': 'Limiter les téléchargements parallèles',
   'settings_bandwidth': 'Réseau et limites de vitesse',
@@ -54,7 +57,8 @@ const Map<String, String> frTranslations = {
   'add_download_empty_url': 'Lien URL requis',
   'add_download_invalid_url': 'URL HTTP/HTTPS non valide',
   'delete_title': 'Supprimer le téléchargement',
-  'delete_desc': 'Voulez-vous vraiment supprimer ce téléchargement de la liste ?',
+  'delete_desc':
+      'Voulez-vous vraiment supprimer ce téléchargement de la liste ?',
   'delete_btn': 'Supprimer',
   'cancel_btn': 'Annuler',
   'delete_files_label': 'Supprimer les fichiers/parties téléchargés du disque',
@@ -66,11 +70,13 @@ const Map<String, String> frTranslations = {
   'pause_all_btn': 'Tout mettre en pause',
   'resume_all_btn': 'Tout reprendre',
   'clipboard_detected': 'Lien détecté dans le presse-papiers',
-  'clipboard_desc': 'XDM a détecté un lien de téléchargement dans le presse-papiers :',
+  'clipboard_desc':
+      'XDM a détecté un lien de téléchargement dans le presse-papiers :',
   'clipboard_ignore': 'Ignorer',
   'clipboard_establish': 'Télécharger',
   'onboarding_title_0': 'Personnalisez-le',
-  'onboarding_sub_0': 'Choisissez la langue, le thème et le style d\'interface.',
+  'onboarding_sub_0':
+      'Choisissez la langue, le thème et le style d\'interface.',
   'onboarding_setup_language': 'LANGUE',
   'onboarding_setup_theme': 'THÈME',
   'onboarding_setup_mode': 'INTERFACE',
@@ -81,34 +87,43 @@ const Map<String, String> frTranslations = {
   'onboarding_mode_modern': 'Moderne',
   'onboarding_mode_classic': 'Classique',
   'onboarding_title_1': 'Moteur de vitesse',
-  'onboarding_sub_1': 'Téléchargements multi-threads avec reprise intelligente.',
+  'onboarding_sub_1':
+      'Téléchargements multi-threads avec reprise intelligente.',
   'onboarding_title_2': 'N\'importe quel site',
-  'onboarding_sub_2': 'Téléchargez depuis YouTube, Facebook, Twitter, TikTok et plus.',
+  'onboarding_sub_2':
+      'Téléchargez depuis YouTube, Facebook, Twitter, TikTok et plus.',
   'onboarding_title_3': 'Prêt pour les torrents',
-  'onboarding_sub_3': 'Prise en charge complète du torrent avec DHT et chiffrement.',
+  'onboarding_sub_3':
+      'Prise en charge complète du torrent avec DHT et chiffrement.',
   'onboarding_title_4': 'Contrôle intelligent',
   'onboarding_sub_4': 'Catégorisation automatique et planification.',
   'onboarding_start': 'Démarrer',
   'onboarding_next': 'Suivant',
   'onboarding_skip': 'Passer',
   'permission_title': 'Autorisations de l\'application',
-  'permission_subtitle': 'Autorisez les permissions suivantes pour une meilleure expérience',
+  'permission_subtitle':
+      'Autorisez les permissions suivantes pour une meilleure expérience',
   'permission_storage_title': 'Stockage',
-  'permission_storage_desc': 'Enregistrer les fichiers téléchargés sur votre appareil',
+  'permission_storage_desc':
+      'Enregistrer les fichiers téléchargés sur votre appareil',
   'permission_notifications_title': 'Notifications',
-  'permission_notifications_desc': 'Recevez une notification une fois les téléchargements terminés',
+  'permission_notifications_desc':
+      'Recevez une notification une fois les téléchargements terminés',
   'permission_battery_title': 'Optimisation de la batterie',
-  'permission_battery_desc': 'Autoriser les téléchargements ininterrompus en arrière-plan',
+  'permission_battery_desc':
+      'Autoriser les téléchargements ininterrompus en arrière-plan',
   'permission_battery_opening': 'Ouverture des paramètres système…',
   'permission_continue': 'Continuer',
   'permission_allow': 'Autoriser',
   'permission_open_settings': 'Ouvrir les paramètres',
-  'permission_permanently_denied': 'Autorisation refusée de manière permanente. Veuillez l\\\\\\\'activer dans les paramètres système.',
+  'permission_permanently_denied':
+      'Autorisation refusée de manière permanente. Veuillez l\\\\\\\'activer dans les paramètres système.',
   'permission_download_location_title': 'Emplacement de téléchargement',
   'permission_download_location_desc': 'Choisissez où enregistrer vos fichiers',
   'permission_download_location_button': 'Choisir un dossier',
   'permission_download_location_change': 'Changer',
-  'permission_download_location_required': 'Choisissez un dossier de téléchargement pour continuer',
+  'permission_download_location_required':
+      'Choisissez un dossier de téléchargement pour continuer',
   'details_title': 'Détails du téléchargement',
   'details_channels': 'Connexions',
   'details_active_threads': 'Threads actifs',
@@ -125,7 +140,8 @@ const Map<String, String> frTranslations = {
   'details_established': 'Ajouté le',
   'details_inactive_eta': 'ETA : inactif',
   'details_threads_warning_title': 'Restructurer les threads de connexion ?',
-  'details_threads_warning_desc': 'Changer les threads réinitialisera la progression.',
+  'details_threads_warning_desc':
+      'Changer les threads réinitialisera la progression.',
   'sort_date': 'Date',
   'sort_status': 'Statut',
   'sort_tooltip': 'Trier',
@@ -159,20 +175,25 @@ const Map<String, String> frTranslations = {
   'settings_proxy_sub': 'Rediriger les flux de données de connexion',
   'settings_proxy_address': 'Adresse proxy (IP:Port)',
   'settings_bypass_ssl': 'Faire confiance à tous les certificats SSL',
-  'settings_bypass_ssl_sub': 'Contourner la validation SSL (AVERTISSEMENT : Risque MITM)',
+  'settings_bypass_ssl_sub':
+      'Contourner la validation SSL (AVERTISSEMENT : Risque MITM)',
   'bypass_ssl_dialog_title': 'Désactiver la vérification SSL ?',
-  'bypass_ssl_dialog_body': 'Cela expose tous les téléchargements à des attaques ',
+  'bypass_ssl_dialog_body':
+      'Cela expose tous les téléchargements à des attaques ',
   'bypass_ssl_dialog_confirm': 'Je comprends le risque',
   'settings_https_only': 'Mode HTTPS uniquement',
-  'settings_https_only_sub': 'Mettre à niveau toute navigation http:// vers https:// si possible',
+  'settings_https_only_sub':
+      'Mettre à niveau toute navigation http:// vers https:// si possible',
   'settings_reduce_visuals': 'Réduire les effets visuels',
-  'settings_reduce_visuals_sub': 'Désactiver le flou et le rayonnement pour de meilleures performances',
+  'settings_reduce_visuals_sub':
+      'Désactiver le flou et le rayonnement pour de meilleures performances',
   'settings_classic_ui': 'Mode d\'interface classique',
   'settings_classic_ui_sub': 'Passer au design d\'interface native plate',
   'settings_cleanup': 'Nettoyage automatique des journaux',
   'settings_cleanup_sub': 'Purger l\'historique des tâches terminées',
   'settings_subfolders': 'Dossiers catégorisés',
-  'settings_subfolders_sub': 'Enregistrer les fichiers classés dans des sous-dossiers',
+  'settings_subfolders_sub':
+      'Enregistrer les fichiers classés dans des sous-dossiers',
   'settings_backup_title': 'Sauvegardes du système',
   'settings_backup_sub': 'Archiver et récupérer les journaux de téléchargement',
   'settings_export': 'Exporter la sauvegarde',
@@ -186,7 +207,8 @@ const Map<String, String> frTranslations = {
   'tap_to_copy': 'Appuyez pour copier',
   'tap_to_open': 'Appuyez pour ouvrir',
   'copied': 'Copié dans le presse-papiers !',
-  'settings_auto_retry': 'Réessayer automatiquement les téléchargements échoués',
+  'settings_auto_retry':
+      'Réessayer automatiquement les téléchargements échoués',
   'settings_auto_retry_sub': 'Réessayer automatiquement en cas d\'échec',
   'settings_retry_max': 'Tentatives de réessai max',
   'settings_retry_max_sub': 'Nombre de tentatives de réessai automatiques',
@@ -247,7 +269,8 @@ const Map<String, String> frTranslations = {
   'overall_progress': 'Progression globale',
   'transferred': 'Transféré',
   'confirm_close_tab_title': 'Confirmer la fermeture de l\'onglet',
-  'confirm_close_tab_desc': 'Cet onglet a un téléchargement actif. Fermer quand même ?',
+  'confirm_close_tab_desc':
+      'Cet onglet a un téléchargement actif. Fermer quand même ?',
   'file_name_label': 'Nom du fichier :',
   'save_path_label': 'Chemin d\'enregistrement :',
   'filename_empty_error': 'Le nom du fichier ne peut pas être vide',
@@ -264,7 +287,8 @@ const Map<String, String> frTranslations = {
   'video_label': 'VIDÉO',
   'audio_label': 'AUDIO',
   'quality_label': 'QUALITÉ',
-  'yt_legal_warning': 'Avis : Téléchargez du contenu uniquement si vous en avez le droit.',
+  'yt_legal_warning':
+      'Avis : Téléchargez du contenu uniquement si vous en avez le droit.',
   'browser_new_tab': 'Nouvel onglet',
   'browser_dashboard': 'Tableau de bord',
   'browser_bookmark_saved': 'Favori enregistré',
@@ -287,7 +311,8 @@ const Map<String, String> frTranslations = {
   'browser_download_resumed': 'Téléchargement repris.',
   'browser_transmission_established': 'TRANSMISSION ÉTABLIE.',
   'browser_intercepted_signal': 'SIGNAL DE TÉLÉCHARGEMENT INTERCEPTÉ',
-  'browser_xdm_scanner': 'Le scanner XDM a intercepté un signal de téléchargement :',
+  'browser_xdm_scanner':
+      'Le scanner XDM a intercepté un signal de téléchargement :',
   'browser_continue_browsing': 'CONTINUER LA NAVIGATION',
   'browser_download_btn': 'TÉLÉCHARGER',
   'redirect_intercepted': 'Redirection interceptée',
@@ -328,7 +353,8 @@ const Map<String, String> frTranslations = {
   'browser_stream_sniffer_status': 'STATUT DU DÉTECTEUR DE FLUX',
   'browser_auto_intercept_active': 'INTERCEPTION AUTOMATIQUE ACTIVES',
   'browser_auto_intercept_off': 'INTERCEPTION AUTOMATIQUE DÉSACTIVÉE',
-  'browser_sniff_description': 'Détecte dynamiquement les fichiers médias et documents',
+  'browser_sniff_description':
+      'Détecte dynamiquement les fichiers médias et documents',
   'browser_quick_signals': 'ACCÈS RAPIDE (FAVORIS)',
   'browser_menu_reload': 'Recharger',
   'browser_menu_bookmark_page': 'Ajouter cette page aux favoris',
@@ -345,7 +371,8 @@ const Map<String, String> frTranslations = {
   'browser_menu_exit_incognito': 'Quitter le mode privé',
   'browser_menu_new_incognito': 'Nouvel onglet privé',
   'browser_download_choice': 'Que souhaitez-vous télécharger ?',
-  'browser_single_and_playlist': 'Ce lien contient une vidéo individuelle et une liste de lecture.',
+  'browser_single_and_playlist':
+      'Ce lien contient une vidéo individuelle et une liste de lecture.',
   'browser_single_video': 'Vidéo unique',
   'browser_entire_playlist': 'Liste de lecture complète',
   'browser_fab_playlist': 'LISTE DE LECTURE',
@@ -353,7 +380,8 @@ const Map<String, String> frTranslations = {
   'browser_fab_youtube_retry': 'YOUTUBE (RÉESSAYER)',
   'browser_fab_downloads': 'TÉLÉCHARGEMENTS',
   'browser_js_css_injector': 'INJECTEUR JS / CSS',
-  'browser_js_css_warning': 'AVERTISSEMENT : Le code s\'exécute sur les pages web.',
+  'browser_js_css_warning':
+      'AVERTISSEMENT : Le code s\'exécute sur les pages web.',
   'browser_javascript': 'JavaScript',
   'browser_css_style': 'Style CSS',
   'browser_cancel_uppercase': 'ANNULER',
@@ -374,7 +402,8 @@ const Map<String, String> frTranslations = {
   'browser_no_downloads_desc': 'Les fichiers téléchargés apparaîtront ici.',
   'browser_clear_history_title': 'EFFACER L\'HISTORIQUE ?',
   'browser_clear_history_desc': 'Voulez-vous vraiment effacer l\'historique ?',
-  'browser_clear_history_content': 'Voulez-vous vraiment effacer tout l\'historique de navigation ?',
+  'browser_clear_history_content':
+      'Voulez-vous vraiment effacer tout l\'historique de navigation ?',
   'browser_export_failed': 'Échec de l\'exportation',
   'browser_copied_url_for': 'URL copiée pour :',
   'browser_status_done': 'TERMINÉ',
@@ -387,7 +416,8 @@ const Map<String, String> frTranslations = {
   'browser_edit_bookmark': 'Modifier le favori',
   'browser_delete': 'Supprimer',
   'browser_no_bookmarks': 'Pas encore de favoris',
-  'browser_no_bookmarks_desc': 'Appuyez sur + pour enregistrer vos sites préférés',
+  'browser_no_bookmarks_desc':
+      'Appuyez sur + pour enregistrer vos sites préférés',
   'browser_title_label': 'Titre',
   'browser_url_label': 'URL',
   'browser_folder_optional': 'Dossier (optionnel)',
@@ -398,7 +428,8 @@ const Map<String, String> frTranslations = {
   'browser_add_script': 'Ajouter un script',
   'browser_edit_script': 'Modifier le script',
   'browser_no_scripts': 'Pas encore de scripts',
-  'browser_no_scripts_desc': 'Ajouter du JS ou CSS qui s\'exécute sur les pages',
+  'browser_no_scripts_desc':
+      'Ajouter du JS ou CSS qui s\'exécute sur les pages',
   'browser_script_name': 'Nom',
   'browser_script_url_pattern': 'Modèle d\'URL (ex. *://*.example.com/*)',
   'browser_script_code': 'Code',
@@ -407,16 +438,20 @@ const Map<String, String> frTranslations = {
   'browser_script_css': 'CSS',
   'settings_adblock_title': 'BLOQUEUR DE PUBLICITÉS & FILTRES',
   'settings_enable_adblock': 'ACTIVER LE BLOQUEUR DE PUB',
-  'settings_enable_adblock_sub': 'Bloquer les publicités, fenêtres surgissantes et scripts de suivi',
+  'settings_enable_adblock_sub':
+      'Bloquer les publicités, fenêtres surgissantes et scripts de suivi',
   'settings_adblock_rules': 'Règles de filtrage chargées',
   'settings_update_adblock_hosts': 'METTRE À JOUR ADBLOCK',
   'settings_updating_adblock_hosts': 'MISE À JOUR...',
-  'settings_adblock_updating_msg': 'Téléchargement et mise à jour des filtres AdBlock (EasyList)...',
+  'settings_adblock_updating_msg':
+      'Téléchargement et mise à jour des filtres AdBlock (EasyList)...',
   'settings_adblock_success_msg': 'Filtres AdBlock mis à jour avec succès !',
-  'settings_adblock_failed_msg': 'Échec de la mise à jour AdBlock. Vérifiez votre connexion.',
+  'settings_adblock_failed_msg':
+      'Échec de la mise à jour AdBlock. Vérifiez votre connexion.',
   'settings_accessibility_title': 'CONTRÔLES D\\\\\\\'ACCESSIBILITÉ',
   'settings_text_scaling': 'MISE À L\\\\\\\'ÉCHELLE DU TEXTE',
-  'settings_text_scaling_sub': 'Ajuster dynamiquement la taille de la police dans l\\\\\\\'application',
+  'settings_text_scaling_sub':
+      'Ajuster dynamiquement la taille de la police dans l\\\\\\\'application',
   'search_settings_hint': 'Rechercher dans les paramètres...',
   'double_tap_details_hint': 'Appuyez deux fois pour voir les détails',
   'update_changelog': 'Nouveautés :',
@@ -462,16 +497,19 @@ const Map<String, String> frTranslations = {
   'clipboard_link_detected': 'Lien détecté dans le presse-papiers',
   'download_action': 'Télécharger',
   'start_btn': 'Démarrer',
-  'file_missing_msg': 'Fichier manquant sur le disque, déplacé vers l\\\\\\\'onglet Échecs',
+  'file_missing_msg':
+      'Fichier manquant sur le disque, déplacé vers l\\\\\\\'onglet Échecs',
   'settings_dark_mode': 'Mode sombre',
   'settings_dark_mode_sub': 'Activer le thème sombre',
   'settings_language': 'Langue',
-  'settings_language_sub': 'Sélectionner la langue d\'affichage de l\'application',
+  'settings_language_sub':
+      'Sélectionner la langue d\'affichage de l\'application',
   'settings_haptics': 'Retour haptique',
   'settings_haptics_sub': 'Vibrer lors des interactions',
   'settings_visuals': 'Effets visuels',
   'settings_network_sec': 'Réseau et sécurité',
-  'settings_speed_limit_sub': 'Définir la limite globale de vitesse de téléchargement',
+  'settings_speed_limit_sub':
+      'Définir la limite globale de vitesse de téléchargement',
   'browser_clear_btn': 'Effacer',
   'copy_diagnostics': 'COPIER LE DIAGNOSTIC',
   'block_element': 'Bloquer l\'élément',

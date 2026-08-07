@@ -13,7 +13,10 @@ class _TestWidget extends StatefulWidget {
 }
 
 class _TestWidgetState extends State<_TestWidget>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver, PausableLoopAnimation<_TestWidget> {
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        PausableLoopAnimation<_TestWidget> {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 1),
@@ -72,7 +75,8 @@ void main() {
       expect(state.loopWanted, isFalse);
     });
 
-    testWidgets('App backgrounded -> loopWanted/sync pauses loop', (tester) async {
+    testWidgets('App backgrounded -> loopWanted/sync pauses loop',
+        (tester) async {
       await settings.setBatterySaverMode(false);
 
       await tester.pumpWidget(
@@ -90,7 +94,8 @@ void main() {
       expect(state.loopController.isAnimating, isFalse);
     });
 
-    testWidgets('Battery saver off + app foreground -> loopWanted returns true', (tester) async {
+    testWidgets('Battery saver off + app foreground -> loopWanted returns true',
+        (tester) async {
       await settings.setBatterySaverMode(false);
 
       await tester.pumpWidget(

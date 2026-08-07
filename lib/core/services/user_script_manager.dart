@@ -31,7 +31,10 @@ class UserScript {
     this.isCss = false,
     this.enabled = true,
     // FIX(#4): Default to safe DOM-only permissions for new scripts
-    this.permissions = const {ScriptPermission.domRead, ScriptPermission.domWrite},
+    this.permissions = const {
+      ScriptPermission.domRead,
+      ScriptPermission.domWrite
+    },
   });
 
   UserScript copyWith({
@@ -141,27 +144,31 @@ class UserScriptManager extends ChangeNotifier {
   // FIX(#4): Security validation for script code
   void _validateScript(UserScript script) {
     if (script.isCss) return;
-    
+
     final code = script.code;
     // 1. Size check
     if (code.length > 50000) {
       throw Exception('Script too large (max 50,000 characters)');
     }
-    
+
     // 2. Native bridge attempt detection
-    if (code.contains('flutter_inappwebview') || 
-        code.contains('callHandler') || 
+    if (code.contains('flutter_inappwebview') ||
+        code.contains('callHandler') ||
         code.contains('postMessage')) {
-      _log.severe('Security Violation: Native bridge access detected in script "${script.name}"');
-      throw Exception('Scripts are not allowed to access native application bridges.');
+      _log.severe(
+          'Security Violation: Native bridge access detected in script "${script.name}"');
+      throw Exception(
+          'Scripts are not allowed to access native application bridges.');
     }
-    
+
     // 3. Execution bypass detection
-    if (code.contains('eval(') || 
-        code.contains('new Function(') || 
+    if (code.contains('eval(') ||
+        code.contains('new Function(') ||
         code.contains('importScripts(')) {
-      _log.severe('Security Violation: Execution bypass detected in script "${script.name}"');
-      throw Exception('Dynamic code execution (eval, new Function) is prohibited for security.');
+      _log.severe(
+          'Security Violation: Execution bypass detected in script "${script.name}"');
+      throw Exception(
+          'Dynamic code execution (eval, new Function) is prohibited for security.');
     }
   }
 
@@ -217,12 +224,22 @@ class UserScriptManager extends ChangeNotifier {
 
   // FIX(#4): Build a robust Proxy-based sandbox to isolate user scripts
   String _buildSandbox(UserScript script) {
-    final marker = 'xdm_user_script_${script.id.replaceAll(RegExp('[^A-Za-z0-9_]'), '_')}';
+    final marker =
+        'xdm_user_script_${script.id.replaceAll(RegExp('[^A-Za-z0-9_]'), '_')}';
     final perms = script.permissions;
 
     final blockedList = [
-      if (!perms.contains(ScriptPermission.network)) ...['fetch', 'XMLHttpRequest', 'WebSocket', 'navigator.sendBeacon'],
-      if (!perms.contains(ScriptPermission.storage)) ...['localStorage', 'sessionStorage', 'indexedDB'],
+      if (!perms.contains(ScriptPermission.network)) ...[
+        'fetch',
+        'XMLHttpRequest',
+        'WebSocket',
+        'navigator.sendBeacon'
+      ],
+      if (!perms.contains(ScriptPermission.storage)) ...[
+        'localStorage',
+        'sessionStorage',
+        'indexedDB'
+      ],
       'eval', 'Function', 'importScripts', // Always blocked
     ];
 

@@ -7,6 +7,7 @@ import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../provider/settings_provider.dart';
+
 /// Unified container for grouping setting tiles inside a single clean card
 class SettingsSectionGroup extends StatelessWidget {
   final List<Widget> children;
@@ -45,9 +46,8 @@ class SettingsSectionGroup extends StatelessWidget {
               Divider(
                 height: 1,
                 thickness: 1,
-                color: isDark
-                    ? AppTheme.borderSubtle
-                    : AppTheme.lightBorderSubtle,
+                color:
+                    isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
                 indent: 16,
                 endIndent: 16,
               ),

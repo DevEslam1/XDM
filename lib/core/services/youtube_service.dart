@@ -108,7 +108,9 @@ class YoutubeService {
         try {
           final cookies = await cookieManager.getCookies(url: WebUri(u));
           for (final c in cookies) {
-            if (c.name.isNotEmpty && c.value != null && c.value.toString().isNotEmpty) {
+            if (c.name.isNotEmpty &&
+                c.value != null &&
+                c.value.toString().isNotEmpty) {
               allCookies[c.name] = c.value.toString();
             }
           }
@@ -640,17 +642,21 @@ class YoutubeService {
   }
 
   // FIX-3: Fix _tryLocalFallback log and handling for PlatformException/MissingPluginException
-  static Future<List<Map<String, dynamic>>?> _tryLocalFallback(String url) async {
+  static Future<List<Map<String, dynamic>>?> _tryLocalFallback(
+      String url) async {
     if (!SettingsProvider.instance.useLocalYtFallback) {
-      debugPrint('[YoutubeService] Local fallback disabled in settings; skipping.');
+      debugPrint(
+          '[YoutubeService] Local fallback disabled in settings; skipping.');
       return null;
     }
     try {
-      final result = await _platformChannel.invokeListMethod<dynamic>('getStreams', {
+      final result =
+          await _platformChannel.invokeListMethod<dynamic>('getStreams', {
         'url': url,
       });
       if (result == null || result.isEmpty) return null;
-      final streams = result.whereType<Map>()
+      final streams = result
+          .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
       if (streams.isEmpty) return null;
@@ -802,8 +808,12 @@ class YoutubeService {
         final bestLowerMuxed = pickBest(lowerMuxed);
         if (bestLowerMuxed != null) return bestLowerMuxed;
 
-        if (combinedStreams.isNotEmpty) return pickBest(combinedStreams) ?? combinedStreams.last;
-        if (muxedStreams.isNotEmpty) return pickBest(muxedStreams) ?? muxedStreams.last;
+        if (combinedStreams.isNotEmpty) {
+          return pickBest(combinedStreams) ?? combinedStreams.last;
+        }
+        if (muxedStreams.isNotEmpty) {
+          return pickBest(muxedStreams) ?? muxedStreams.last;
+        }
       }
 
       return pickBest(streams) ?? (streams.isNotEmpty ? streams.first : null);
@@ -1054,7 +1064,8 @@ class YoutubeService {
       final streams = await getStreams(downloadPageUrl);
       if (streams.isNotEmpty) {
         if (preferredType != null) {
-          final matched = streams.where((s) => s['type'] == preferredType).toList();
+          final matched =
+              streams.where((s) => s['type'] == preferredType).toList();
           if (matched.isNotEmpty) {
             final best = matched.firstWhere(
               (s) => s['src'] != null,

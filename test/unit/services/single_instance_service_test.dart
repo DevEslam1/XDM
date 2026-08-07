@@ -21,25 +21,32 @@ void main() {
 
   group('SingleInstanceService Unit Tests', () {
     test('Two instances: second detects primary and exits', () async {
-      final primary = SingleInstanceService.createForTest(customTokenFile: tokenFile);
+      final primary =
+          SingleInstanceService.createForTest(customTokenFile: tokenFile);
       final isPrimary1 = await primary.initialize([]);
       expect(isPrimary1, isTrue);
       expect(await tokenFile.exists(), isTrue);
 
-      final secondary = SingleInstanceService.createForTest(customTokenFile: tokenFile);
-      final isPrimary2 = await secondary.initialize(['https://example.com/test.iso']);
+      final secondary =
+          SingleInstanceService.createForTest(customTokenFile: tokenFile);
+      final isPrimary2 =
+          await secondary.initialize(['https://example.com/test.iso']);
       expect(isPrimary2, isFalse);
 
       primary.dispose();
       secondary.dispose();
     });
 
-    test('Primary dies (no heartbeat / stale): second promotes itself', () async {
+    test('Primary dies (no heartbeat / stale): second promotes itself',
+        () async {
       // Simulate dead primary with stale heartbeat timestamp (100 seconds ago)
-      final staleTimestamp = DateTime.now().subtract(const Duration(seconds: 100)).millisecondsSinceEpoch;
+      final staleTimestamp = DateTime.now()
+          .subtract(const Duration(seconds: 100))
+          .millisecondsSinceEpoch;
       await tokenFile.writeAsString('staleToken\n37128\n$staleTimestamp');
 
-      final secondary = SingleInstanceService.createForTest(customTokenFile: tokenFile);
+      final secondary =
+          SingleInstanceService.createForTest(customTokenFile: tokenFile);
       final isPrimary = await secondary.initialize([]);
       expect(isPrimary, isTrue);
 
@@ -47,7 +54,8 @@ void main() {
     });
 
     test('Token file is cleaned up on dispose', () async {
-      final service = SingleInstanceService.createForTest(customTokenFile: tokenFile);
+      final service =
+          SingleInstanceService.createForTest(customTokenFile: tokenFile);
       await service.initialize([]);
       expect(await tokenFile.exists(), isTrue);
 

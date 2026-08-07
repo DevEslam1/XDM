@@ -14,6 +14,7 @@ enum FilterType { ads, tracking }
 class _FilterSource {
   final String name;
   final String url;
+
   /// Optional fallback URL tried when [url] fails (e.g. CDN mirror).
   final String? fallbackUrl;
   final FilterType type;
@@ -53,13 +54,16 @@ class AdBlockFilterUpdater {
     ),
     _FilterSource(
       name: 'PeterLowe',
-      url: 'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext',
+      url:
+          'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext',
       type: FilterType.ads,
     ),
     _FilterSource(
       name: 'AdGuardDNS',
-      url: 'https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt',
-      fallbackUrl: 'https://raw.githubusercontent.com/AdguardTeam/AdguardFilters/master/Filters/filter_15_DnsFilter/filter.txt',
+      url:
+          'https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt',
+      fallbackUrl:
+          'https://raw.githubusercontent.com/AdguardTeam/AdguardFilters/master/Filters/filter_15_DnsFilter/filter.txt',
       type: FilterType.ads,
     ),
   ];
@@ -144,9 +148,8 @@ class AdBlockFilterUpdater {
     final prefs = await SharedPreferences.getInstance();
     final lastUpdate = prefs.getInt(_lastUpdateKey) ?? 0;
     if (lastUpdate == 0) return true;
-    final daysSince =
-        (DateTime.now().millisecondsSinceEpoch - lastUpdate) ~/
-            (1000 * 60 * 60 * 24);
+    final daysSince = (DateTime.now().millisecondsSinceEpoch - lastUpdate) ~/
+        (1000 * 60 * 60 * 24);
     return daysSince >= _updateIntervalDays;
   }
 
@@ -212,7 +215,8 @@ class AdBlockFilterUpdater {
         final uri = Uri.parse(url);
         final request = await client.getUrl(uri);
         _kDownloadHeaders.forEach(request.headers.set);
-        final response = await request.close().timeout(const Duration(seconds: 90));
+        final response =
+            await request.close().timeout(const Duration(seconds: 90));
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
           _log.warning(
@@ -233,7 +237,8 @@ class AdBlockFilterUpdater {
         // Reject suspiciously small responses (< 1 KB → probably an error page)
         final size = await file.length();
         if (size < 1024) {
-          _log.warning('_httpDownload: response too small ($size bytes) for $url');
+          _log.warning(
+              '_httpDownload: response too small ($size bytes) for $url');
           if (await file.exists()) await file.delete();
           return false;
         }
@@ -265,7 +270,8 @@ class AdBlockFilterUpdater {
           ok = await _httpDownload(source.fallbackUrl!, tempPath);
         }
         if (!ok) {
-          _log.warning('Failed to download source ${source.name} (all URLs failed)');
+          _log.warning(
+              'Failed to download source ${source.name} (all URLs failed)');
           continue;
         }
 
@@ -329,8 +335,10 @@ class AdBlockFilterUpdater {
     final combinedTrackingExceptions = <String>{};
 
     for (final source in _sources) {
-      final blocked = prefs.getStringList('adblock_domains_blocked_${source.name}') ?? [];
-      final excepted = prefs.getStringList('adblock_domains_excepted_${source.name}') ?? [];
+      final blocked =
+          prefs.getStringList('adblock_domains_blocked_${source.name}') ?? [];
+      final excepted =
+          prefs.getStringList('adblock_domains_excepted_${source.name}') ?? [];
 
       if (source.type == FilterType.ads) {
         combinedAds.addAll(blocked);
@@ -342,8 +350,10 @@ class AdBlockFilterUpdater {
     }
 
     _downloadedDomains = combinedAds.difference(combinedAdsExceptions);
-    _downloadedTrackingDomains = combinedTracking.difference(combinedTrackingExceptions);
-    _allowListedDomains = combinedAdsExceptions.union(combinedTrackingExceptions);
+    _downloadedTrackingDomains =
+        combinedTracking.difference(combinedTrackingExceptions);
+    _allowListedDomains =
+        combinedAdsExceptions.union(combinedTrackingExceptions);
 
     // Save final merged sets
     await prefs.setStringList(
@@ -368,7 +378,8 @@ class AdBlockFilterUpdater {
     );
 
     // Save site-cosmetic rules map to preferences
-    final siteCosmeticsJson = jsonEncode(_siteCosmeticRules.map((k, v) => MapEntry(k, v.toList())));
+    final siteCosmeticsJson =
+        jsonEncode(_siteCosmeticRules.map((k, v) => MapEntry(k, v.toList())));
     await prefs.setString(_siteCosmeticKey, siteCosmeticsJson);
 
     await prefs.setStringList(
@@ -377,7 +388,8 @@ class AdBlockFilterUpdater {
     );
   }
 
-  Future<({Set<String> blocked, Set<String> excepted})> _parseFilterFile(File file, FilterType type) async {
+  Future<({Set<String> blocked, Set<String> excepted})> _parseFilterFile(
+      File file, FilterType type) async {
     final blocked = <String>{};
     final excepted = <String>{};
     final lines = await file.readAsLines();
@@ -474,7 +486,8 @@ class AdBlockFilterUpdater {
   }
 
   @visibleForTesting
-  Future<({Set<String> blocked, Set<String> excepted})> parseFilterFile(File file, FilterType type) =>
+  Future<({Set<String> blocked, Set<String> excepted})> parseFilterFile(
+          File file, FilterType type) =>
       _parseFilterFile(file, type);
 
   bool shouldBlock(String hostname) {

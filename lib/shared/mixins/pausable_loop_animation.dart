@@ -112,4 +112,3 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
     _sync();
   }
 }
-

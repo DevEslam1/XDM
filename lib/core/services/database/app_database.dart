@@ -164,7 +164,8 @@ class DownloadTasks extends Table {
   IntColumn get audioSize => integer().withDefault(const Constant(0))();
   IntColumn get audioDownloadedBytes =>
       integer().withDefault(const Constant(0))(); // FIX-AUDIT-01
-  IntColumn get videoStreamSize => integer().withDefault(const Constant(0))(); // FIX-B4
+  IntColumn get videoStreamSize =>
+      integer().withDefault(const Constant(0))(); // FIX-B4
   RealColumn get audioProgress => real().withDefault(const Constant(0.0))();
   BoolColumn get pausedByUser => boolean().withDefault(const Constant(false))();
   TextColumn get youtubeQualityPreset => text().nullable()();
@@ -176,7 +177,8 @@ class DownloadTasks extends Table {
   IntColumn get uploadedBytes =>
       integer().withDefault(const Constant(0))(); // FIX F5
   IntColumn get priority => integer().withDefault(const Constant(0))();
-  IntColumn get queueOrder => integer().withDefault(const Constant(0))(); // FIX(13)
+  IntColumn get queueOrder =>
+      integer().withDefault(const Constant(0))(); // FIX(13)
   TextColumn get expectedSha256 => text().nullable()();
   TextColumn get mirrorUrls => text()
       .map(const NullAwareTypeConverter.wrap(StringListConverter()))

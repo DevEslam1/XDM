@@ -99,8 +99,7 @@ class FilterChipsBar extends StatelessWidget {
                               ? AppTheme.neonGreen
                               : AppTheme.lightNeonGreen;
                           return Padding(
-                            padding:
-                                const EdgeInsetsDirectional.only(end: 8.0),
+                            padding: const EdgeInsetsDirectional.only(end: 8.0),
                             child: _CategoryChip(
                               label:
                                   '${L10n.of(context, 'cat_filter_label')}${category.toUpperCase()} ($count)',
@@ -244,9 +243,8 @@ class _StatusFilterButtons extends StatelessWidget {
 
     final iconColor = selected ? textColor : color;
 
-    final borderColor = selected
-        ? color
-        : color.withValues(alpha: isDark ? 0.30 : 0.35);
+    final borderColor =
+        selected ? color : color.withValues(alpha: isDark ? 0.30 : 0.35);
 
     final shadows = (selected && glow && !classicUi)
         ? [

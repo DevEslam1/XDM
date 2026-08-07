@@ -211,20 +211,24 @@ void main() {
           notifyListeners: () => notifyCalls++,
           pumpQueue: () => pumpQueueCalls++,
         );
-        final pastTime = DateTime.now().toUtc().subtract(const Duration(minutes: 5));
+        final pastTime =
+            DateTime.now().toUtc().subtract(const Duration(minutes: 5));
         tasks.add(_task('s9', DownloadStatus.paused, scheduledAt: pastTime));
 
         await unreadyManager.checkScheduledDownloads();
-        expect(tasks.first.status, DownloadStatus.paused); // Not promoted because unready
+        expect(tasks.first.status,
+            DownloadStatus.paused); // Not promoted because unready
 
         unreadyManager.markReady();
         await unreadyManager.checkScheduledDownloads();
-        expect(tasks.first.status, DownloadStatus.queued); // Promoted after ready
+        expect(
+            tasks.first.status, DownloadStatus.queued); // Promoted after ready
         unreadyManager.dispose();
       });
 
       test('SCHED-FIX-4: bails out early if disposed during loop', () async {
-        final pastTime = DateTime.now().toUtc().subtract(const Duration(minutes: 5));
+        final pastTime =
+            DateTime.now().toUtc().subtract(const Duration(minutes: 5));
         tasks.add(_task('s10', DownloadStatus.paused, scheduledAt: pastTime));
         disposed = true;
 

@@ -401,9 +401,8 @@ mixin DownloadTorrentMixin {
     final selectedSize = files
         .where((f) => f['selected'] == true)
         .fold(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
-    final selectedDownloaded = files
-        .where((f) => f['selected'] == true)
-        .fold(0, (sum, f) => sum + ((f['downloadedBytes'] as num?)?.toInt() ?? 0));
+    final selectedDownloaded = files.where((f) => f['selected'] == true).fold(
+        0, (sum, f) => sum + ((f['downloadedBytes'] as num?)?.toInt() ?? 0));
 
     String updatedCategory = task.category;
     if (task.category == 'Other' || task.category.isEmpty) {
@@ -422,7 +421,8 @@ mixin DownloadTorrentMixin {
 
     // FIX-02: Stamp files with lastFileSyncMs timestamp for DB/UI sync tracking
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final stampedFiles = files.map((f) => {...f, 'lastFileSyncMs': timestamp}).toList();
+    final stampedFiles =
+        files.map((f) => {...f, 'lastFileSyncMs': timestamp}).toList();
 
     final updated = task.copyWith(
       torrentFiles: stampedFiles,
@@ -430,7 +430,6 @@ mixin DownloadTorrentMixin {
       downloadedBytes: selectedDownloaded,
       category: updatedCategory,
     );
-
 
     providerTasks[index] = updated;
     filteredTasksDirty = true;
@@ -483,10 +482,12 @@ mixin DownloadTorrentMixin {
         completedAt: task.completedAt,
       );
 
-      if (stats.totalPayloadUpload >= 0 && stats.totalPayloadUpload != task.uploadedBytes) {
+      if (stats.totalPayloadUpload >= 0 &&
+          stats.totalPayloadUpload != task.uploadedBytes) {
         final idx = providerTasks.indexWhere((t) => t.id == task.id);
         if (idx != -1) {
-          providerTasks[idx] = providerTasks[idx].copyWith(uploadedBytes: stats.totalPayloadUpload);
+          providerTasks[idx] = providerTasks[idx]
+              .copyWith(uploadedBytes: stats.totalPayloadUpload);
         }
       }
 

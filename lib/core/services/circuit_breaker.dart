@@ -77,7 +77,8 @@ class CircuitBreaker {
     final now = _clock();
     if (_state != CircuitBreakerState.closed &&
         _lastFailureTimestamp != null &&
-        now.difference(_lastFailureTimestamp!) < const Duration(milliseconds: 500)) {
+        now.difference(_lastFailureTimestamp!) <
+            const Duration(milliseconds: 500)) {
       return;
     }
     _lastFailureTimestamp = now;

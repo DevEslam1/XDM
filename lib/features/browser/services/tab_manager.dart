@@ -23,7 +23,6 @@ typedef CreateTabCallback = BrowserTab Function(
 /// It is a plain Dart class: UI concerns (setState, URL bar sync, nav state)
 /// are reached through the host callbacks passed to the constructor.
 class TabManager {
-
   static final _log = Logger('TabManager');
   TabManager({
     required this.isActive,
@@ -140,7 +139,8 @@ class TabManager {
         }
       }
     } catch (e) {
-      _log.warning('[Browser] Drift restore failed, trying SharedPreferences: $e');
+      _log.warning(
+          '[Browser] Drift restore failed, trying SharedPreferences: $e');
     }
     // Fall back to SharedPreferences (legacy persistence)
     try {
@@ -254,7 +254,8 @@ class TabManager {
         final active = activeTab;
         if (active != null && active.url.isNotEmpty && !active.isHome) {
           try {
-            active.controller?.loadUrl(urlRequest: URLRequest(url: WebUri(active.url)));
+            active.controller
+                ?.loadUrl(urlRequest: URLRequest(url: WebUri(active.url)));
           } catch (e) {
             _log.warning('[Browser] Restored active tab load error: $e');
           }

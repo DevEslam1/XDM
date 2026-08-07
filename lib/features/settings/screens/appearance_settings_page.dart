@@ -70,7 +70,9 @@ class AppearanceSettingsPage extends StatelessWidget with HapticHelper {
               SwitchTile(
                 accentColor: accent,
                 title: isRtl ? 'تأثيرات التوهج النيون' : 'Neon Glow Effects',
-                subtitle: isRtl ? 'تمكين التوهج الملون حول الأزرار والبطاقات' : 'Enable glowing neon accents on interactive buttons and panels',
+                subtitle: isRtl
+                    ? 'تمكين التوهج الملون حول الأزرار والبطاقات'
+                    : 'Enable glowing neon accents on interactive buttons and panels',
                 value: settings.enableGlow,
                 onChanged: (val) {
                   settings.setEnableGlow(val);
@@ -79,7 +81,8 @@ class AppearanceSettingsPage extends StatelessWidget with HapticHelper {
               ),
               SliderTile(
                 accentColor: accent,
-                title: isRtl ? 'شفافية شبكة الخلفية' : 'Background Grid Opacity',
+                title:
+                    isRtl ? 'شفافية شبكة الخلفية' : 'Background Grid Opacity',
                 subtitle: '${settings.gridOpacity.round()}%',
                 value: settings.gridOpacity,
                 min: 0,
@@ -91,8 +94,11 @@ class AppearanceSettingsPage extends StatelessWidget with HapticHelper {
               ),
               SwitchTile(
                 accentColor: accent,
-                title: isRtl ? 'تقليل المؤثرات البصرية' : 'Reduce Visual Effects',
-                subtitle: isRtl ? 'تعطيل الخلفيات المتحركة لتوفير الأداء' : 'Disable animated grid lines and background blur for max performance',
+                title:
+                    isRtl ? 'تقليل المؤثرات البصرية' : 'Reduce Visual Effects',
+                subtitle: isRtl
+                    ? 'تعطيل الخلفيات المتحركة لتوفير الأداء'
+                    : 'Disable animated grid lines and background blur for max performance',
                 value: settings.reduceVisuals,
                 onChanged: (val) {
                   settings.setReduceVisuals(val);

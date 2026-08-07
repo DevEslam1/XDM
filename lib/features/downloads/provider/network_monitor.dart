@@ -56,7 +56,6 @@ class NetworkMonitor {
     _tasksPausedDueToWifiOnly.add(taskId);
   }
 
-
   void init() {
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
       results,

@@ -33,8 +33,10 @@ class NeonGlowButton extends StatefulWidget {
 }
 
 class _NeonGlowButtonState extends State<NeonGlowButton>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver, PausableLoopAnimation<NeonGlowButton> {
-
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        PausableLoopAnimation<NeonGlowButton> {
   late final AnimationController _shimmer;
   bool _pressed = false;
 
@@ -57,7 +59,6 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
     _shimmer.dispose();
     super.dispose();
   }
-
 
   @override
   Widget build(BuildContext context) {

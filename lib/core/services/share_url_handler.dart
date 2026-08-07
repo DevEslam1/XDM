@@ -26,13 +26,15 @@ class ShareUrlHandler {
     final scheme = uri?.scheme.toLowerCase() ?? '';
     final allowedSchemes = {'http', 'https', 'magnet', 'file'};
     if (uri == null || !allowedSchemes.contains(scheme)) {
-      _log.warning('[ShareUrlHandler] Rejected URL with unsupported scheme "$scheme": $trimmedUrl');
+      _log.warning(
+          '[ShareUrlHandler] Rejected URL with unsupported scheme "$scheme": $trimmedUrl');
       debugPrint('[ShareUrlHandler] Rejected URL with scheme: ${uri?.scheme}');
       return;
     }
     // Reject file:// URLs from share intent for security
     if (uri.isScheme('file') && isShareLaunch) {
-      _log.warning('[ShareUrlHandler] Rejected file:// URL from share intent: $trimmedUrl');
+      _log.warning(
+          '[ShareUrlHandler] Rejected file:// URL from share intent: $trimmedUrl');
       debugPrint('[ShareUrlHandler] Rejected file:// URL from share intent');
       return;
     }

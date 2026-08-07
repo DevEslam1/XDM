@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
 
-
 /// Public status message constants used throughout the download pipeline.
 /// Extracted here for i18n readiness — replace with localized strings when
 /// internationalization is added.
@@ -30,7 +29,14 @@ enum FailureCategory {
   unknown,
 }
 
-enum DownloadStatus { queued, downloading, paused, completed, failed, merging } // FIX-B11
+enum DownloadStatus {
+  queued,
+  downloading,
+  paused,
+  completed,
+  failed,
+  merging
+} // FIX-B11
 
 enum SortOption { dateAdded, fileSize, fileName, status, manual } // FIX(13)
 
@@ -182,6 +188,7 @@ class DownloadTask {
     }
     return audioProgress.clamp(0.0, 1.0);
   }
+
   String get audioProgressString =>
       '${(audioProgressPercent * 100).toStringAsFixed(1)}%';
   bool get isAudioComplete => audioProgress >= 1.0;
@@ -273,7 +280,6 @@ class DownloadTask {
     if (total <= 0) return '0.0%';
     return '${(progress * 100).toStringAsFixed(1)}%';
   }
-
 
   String get speedFormatted {
     if (status != DownloadStatus.downloading &&
@@ -480,9 +486,7 @@ class DownloadTask {
       // FIX-B4 / FIX YT-U1: Use a sentinel so callers can explicitly
       // reset videoStreamSize to 0.
       // ignore: prefer_if_null_operators
-      videoStreamSize: videoStreamSize != null
-          ? videoStreamSize
-          : this.videoStreamSize,
+      videoStreamSize: videoStreamSize ?? this.videoStreamSize,
       audioProgress: ((audioProgress ?? this.audioProgress).isNaN
           ? 0.0
           : (audioProgress ?? this.audioProgress).clamp(0.0, 1.0)),
@@ -594,13 +598,12 @@ class DownloadTask {
     final rawChunks =
         (map['chunks'] is List ? (map['chunks'] as List) : const [0.0])
             .map((value) {
-              // FIX-M16: Guard against NaN / Infinity values that survive JSON
-              // round-trips (e.g. from `double.infinity` or `0/0` calculations).
-              final raw = (value as num?)?.toDouble() ?? 0.0;
-              if (raw.isNaN || raw.isInfinite) return 0.0;
-              return raw.clamp(0.0, 1.0);
-            })
-            .toList();
+      // FIX-M16: Guard against NaN / Infinity values that survive JSON
+      // round-trips (e.g. from `double.infinity` or `0/0` calculations).
+      final raw = (value as num?)?.toDouble() ?? 0.0;
+      if (raw.isNaN || raw.isInfinite) return 0.0;
+      return raw.clamp(0.0, 1.0);
+    }).toList();
 
     final threadCount =
         (map['threadCount'] as num?)?.toInt() ?? rawChunks.length;
@@ -678,7 +681,8 @@ class DownloadTask {
       mergedAudioUrl: map['mergedAudioUrl'] as String?,
       audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
       audioDownloadedBytes: (map['audioDownloadedBytes'] as num?)?.toInt() ?? 0,
-      videoStreamSize: max(0, (map['videoStreamSize'] as num?)?.toInt() ?? 0), // FIX-B4 / FIX-M6
+      videoStreamSize: max(
+          0, (map['videoStreamSize'] as num?)?.toInt() ?? 0), // FIX-B4 / FIX-M6
       audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
       audioThreadCount: (map['audioThreadCount'] as num?)?.toInt() ?? 2,
       pausedByUser: map['pausedByUser'] as bool? ?? false,
@@ -701,7 +705,8 @@ class DownloadTask {
   }
 
   // FIX 5: Helper getter for merged audio status
-  bool get hasMergedAudio => mergedAudioUrl != null && mergedAudioUrl!.isNotEmpty;
+  bool get hasMergedAudio =>
+      mergedAudioUrl != null && mergedAudioUrl!.isNotEmpty;
 
   // FIX(H-4): Expose displayDownloadedBytes clamped to combinedTotalSize for UI rendering
   int get displayDownloadedBytes {
@@ -712,12 +717,14 @@ class DownloadTask {
 
   String? get youtubePreferredType {
     if (mergedAudioUrl != null && mergedAudioUrl!.isNotEmpty) return 'combined';
-    if (youtubeQualityPreset == 'audio_only' || category.toLowerCase() == 'audio' || fileName.toLowerCase().endsWith('.mp3') || fileName.toLowerCase().endsWith('.m4a')) {
+    if (youtubeQualityPreset == 'audio_only' ||
+        category.toLowerCase() == 'audio' ||
+        fileName.toLowerCase().endsWith('.mp3') ||
+        fileName.toLowerCase().endsWith('.m4a')) {
       return 'audio';
     }
     return null;
   }
-
 
   // Identity equality based on [id] (plus playlist grouping keys) so cards
   // animate correctly in lists.
@@ -728,4 +735,3 @@ class DownloadTask {
   @override
   int get hashCode => id.hashCode;
 }
-

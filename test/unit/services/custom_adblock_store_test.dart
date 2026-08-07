@@ -20,7 +20,8 @@ void main() {
     });
 
     test('addHosts sanitizes and dedupes', () async {
-      await store.addHosts('HTTPS://Example.Com/path, google.com\n  another.com  ');
+      await store
+          .addHosts('HTTPS://Example.Com/path, google.com\n  another.com  ');
       expect(store.hosts, contains('example.com'));
       expect(store.hosts, contains('google.com'));
       expect(store.hosts, contains('another.com'));
@@ -38,7 +39,7 @@ void main() {
     test('persistence round-trip', () async {
       await store.addHosts('persist.me');
       await store.setUseCustomOnly(true);
-      
+
       // Re-init should load saved values
       await store.init();
       expect(store.hosts, contains('persist.me'));

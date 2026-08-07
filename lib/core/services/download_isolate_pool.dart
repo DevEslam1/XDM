@@ -221,7 +221,8 @@ class DownloadIsolatePool {
       onError: errorPort.sendPort,
       debugName: 'dmx-engine-worker-$index',
     );
-    final worker = _Worker(isolate: isolate, inbox: inbox, errorPort: errorPort);
+    final worker =
+        _Worker(isolate: isolate, inbox: inbox, errorPort: errorPort);
     inbox.listen((dynamic msg) => _onWorkerMessage(worker, msg));
     errorPort.listen((dynamic err) => _onWorkerCrash(worker, err));
     return worker;
@@ -233,8 +234,8 @@ class DownloadIsolatePool {
     }
     final job = PoolJob._(this, command, _seq++);
     if (_shuttingDown) {
-      scheduleMicrotask(() => job._deliverError(
-          'workerDied', 'Engine is shutting down', null));
+      scheduleMicrotask(() =>
+          job._deliverError('workerDied', 'Engine is shutting down', null));
       return job;
     }
     _dispatch(job, priority);
@@ -277,8 +278,7 @@ class DownloadIsolatePool {
       case 'idle':
         worker.activeJobs = (worker.activeJobs - 1).clamp(0, 1 << 30);
         final doneId = msg['jobId'];
-        worker.pending
-            .removeWhere((j) => j.command.taskId == doneId);
+        worker.pending.removeWhere((j) => j.command.taskId == doneId);
         _drain();
       case 'limits':
         break;
@@ -351,14 +351,14 @@ class DownloadIsolatePool {
   }
 
   void _cancelJob(PoolJob job) {
-    job._worker?.commandPort?.send(
-        {'t': 'cancel', 'jobId': job.command.taskId});
+    job._worker?.commandPort
+        ?.send({'t': 'cancel', 'jobId': job.command.taskId});
   }
 
   void updateSpeedLimit(int bytesPerSecond, int activeCount) {
     for (final w in _workers) {
-      w.commandPort?.send(
-          {'t': 'limits', 'bps': bytesPerSecond, 'active': activeCount});
+      w.commandPort
+          ?.send({'t': 'limits', 'bps': bytesPerSecond, 'active': activeCount});
     }
   }
 
@@ -378,6 +378,7 @@ class DownloadIsolatePool {
   Future<void> drain({Duration? timeout}) async {
     await shutdown();
   }
+
   void onMemoryPressure() {
     if (_workers.length > 1) {
       final w = _workers.removeLast();
@@ -482,7 +483,8 @@ Future<void> _workerEntry(SendPort poolPort) async {
         _runningJobs[raw['jobId'] as String]?.requestCancel();
       case 'limits':
         _workerGlobalLimitBps = (raw['bps'] as num?)?.toInt() ?? 0;
-        _workerGlobalActive = ((raw['active'] as num?)?.toInt() ?? 1).clamp(1, 1000);
+        _workerGlobalActive =
+            ((raw['active'] as num?)?.toInt() ?? 1).clamp(1, 1000);
       case 'shutdown':
         cmdPort.close();
         return;
@@ -617,14 +619,12 @@ class HttpTransferJob {
           threadCount: cmd.threadCount,
         );
         // Distribute saved bytes evenly across the new chunk layout
-        final perChunk = total > 0
-            ? (savedBytes / cmd.threadCount)
-            : 0;
+        final perChunk = total > 0 ? (savedBytes / cmd.threadCount) : 0;
         for (var i = 0; i < newChunks.length; i++) {
           newChunks[i].downloaded = perChunk.toInt().clamp(
-            0,
-            newChunks[i].size >= 0 ? newChunks[i].size : 0,
-          );
+                0,
+                newChunks[i].size >= 0 ? newChunks[i].size : 0,
+              );
         }
         _state!.chunks = newChunks;
         debugPrint(
@@ -697,14 +697,13 @@ class HttpTransferJob {
         final newLm = response.headers.value('last-modified');
         await response.data?.stream.listen((_) {}).cancel();
 
-        if (serverTotal != null &&
-            serverTotal > 0 &&
-            _state!.totalSize > 0) {
+        if (serverTotal != null && serverTotal > 0 && _state!.totalSize > 0) {
           final tolerance =
               (_state!.totalSize * 0.001).clamp(2048.0, 10 * 1024 * 1024);
           if ((serverTotal - _state!.totalSize).abs() > tolerance) {
             for (var i = 0; i < _state!.chunks.length; i++) {
-              _state!.chunks[i] = ChunkState(start: _state!.chunks[i].start, end: _state!.chunks[i].end);
+              _state!.chunks[i] = ChunkState(
+                  start: _state!.chunks[i].start, end: _state!.chunks[i].end);
             }
             // FIX F4: Delete temp file on size change so single-stream doesn't resume stale bytes
             try {
@@ -736,7 +735,8 @@ class HttpTransferJob {
           _state!.migrationNote =
               '${_state!.migrationNote ?? ''} identity_restart'.trim();
           await StateStore.save(cmd.tempFilePath, _state!);
-          _emitProgress(0, statusMessage: 'Source changed on server — restarting');
+          _emitProgress(0,
+              statusMessage: 'Source changed on server — restarting');
         } else {
           _state!.etag ??= newEtag;
           _state!.lastModified ??= newLm;
@@ -796,8 +796,7 @@ class HttpTransferJob {
       await _spotCheckResumedBytes(dio, st, writer);
     }
 
-    final failover = MirrorFailover(
-        [cmd.punyUrl, ...?cmd.mirrorUrls]);
+    final failover = MirrorFailover([cmd.punyUrl, ...?cmd.mirrorUrls]);
     final work = ChunkScheduler.pendingWork(st.chunks);
 
     try {
@@ -861,7 +860,9 @@ class HttpTransferJob {
         final resumeFrom = chunk.downloaded;
         final absStart = chunk.start + resumeFrom;
         final headers = <String, dynamic>{
-          'Range': chunk.end < 0 ? 'bytes=$absStart-' : 'bytes=$absStart-${chunk.end}',
+          'Range': chunk.end < 0
+              ? 'bytes=$absStart-'
+              : 'bytes=$absStart-${chunk.end}',
         };
         if (resumeFrom > 0) {
           final ifRange = _firstNonEmpty(_state!.etag, _state!.lastModified);
@@ -947,8 +948,8 @@ class HttpTransferJob {
         var sessionBytes = 0;
         await for (final piece in stream) {
           _throwIfCancelled();
-          final sleepMs = await governor.acquire(piece.length,
-              taskId: cmd.taskId);
+          final sleepMs =
+              await governor.acquire(piece.length, taskId: cmd.taskId);
           if (sleepMs > 0) {
             await _cancellableDelay(Duration(milliseconds: sleepMs));
             _throwIfCancelled();
@@ -980,8 +981,11 @@ class HttpTransferJob {
         if (e.message == 'HTML_INSTEAD_OF_MEDIA') rethrow;
         if (e.message?.startsWith('Server rejected resume') == true) rethrow;
         final status = e.response?.statusCode;
-        if (status != null && status >= 400 && status < 500 &&
-            status != 408 && status != 429) {
+        if (status != null &&
+            status >= 400 &&
+            status < 500 &&
+            status != 408 &&
+            status != 429) {
           rethrow; // 4xx (except timeouts/429) won't heal by retrying.
         }
         if (attempts >= maxAttempts) {
@@ -994,8 +998,8 @@ class HttpTransferJob {
           }
           rethrow;
         }
-        await _cancellableDelay(Duration(
-            seconds: (attempts * attempts * 2) + Random().nextInt(3)));
+        await _cancellableDelay(
+            Duration(seconds: (attempts * attempts * 2) + Random().nextInt(3)));
       } on PositionalFileWriterException {
         rethrow;
       } catch (e) {
@@ -1390,16 +1394,15 @@ class HttpTransferJob {
     var speed = 0.0;
     if (_speedSamples.length > 1) {
       final first = _speedSamples.first;
-      final elapsed = (_stopwatch.elapsedMilliseconds - first.timestampMs) / 1000;
+      final elapsed =
+          (_stopwatch.elapsedMilliseconds - first.timestampMs) / 1000;
       if (elapsed > 0) speed = (downloaded - first.bytes) / elapsed;
     }
     int? eta;
     final remaining = total - downloaded;
     if (speed.isFinite && speed > 0 && remaining > 0) {
       final raw = (remaining / speed).round().clamp(0, 86400 * 365);
-      eta = _lastEta == null
-          ? raw
-          : ((_lastEta! * 0.7) + (raw * 0.3)).round();
+      eta = _lastEta == null ? raw : ((_lastEta! * 0.7) + (raw * 0.3)).round();
       _lastEta = eta;
     } else {
       _lastEta = null;
@@ -1428,8 +1431,9 @@ class HttpTransferJob {
       if (allowUnknown) return;
       return;
     }
-    final match = RegExp(r'^bytes\s+(\d+)-(\d+)/(\d+|\*)$', caseSensitive: false)
-        .firstMatch(value.trim());
+    final match =
+        RegExp(r'^bytes\s+(\d+)-(\d+)/(\d+|\*)$', caseSensitive: false)
+            .firstMatch(value.trim());
     if (match == null) {
       if (allowUnknown) return;
       throw DioException(

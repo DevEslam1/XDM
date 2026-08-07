@@ -115,7 +115,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _powerBandwidthThrottlingKey = 'powerBandwidthThrottling';
   static const _resumeIntegrityCheckKey = 'resumeIntegrityCheck';
 
-
   static const _backendUrlKey = 'backend_url';
   static const _backendTokenKey = 'backend_token';
   static const _sendBrowserCookiesToBackendKey =
@@ -192,14 +191,16 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool enableProxy = false;
   String proxyAddress = '';
   bool bypassSSL = true;
-  bool developerMode = false; // P0-2: Gate advanced/risky options behind Developer Mode
+  bool developerMode =
+      false; // P0-2: Gate advanced/risky options behind Developer Mode
   bool httpsOnly = false;
   bool reduceVisuals = false;
   double textScaleFactor = 1.0;
   String customUserAgent = '';
   int cleanupDays = 0;
   bool categoryFolders = false;
-  bool antiFingerprinting = true; // Obscure browser WebView automation fingerprints
+  bool antiFingerprinting =
+      true; // Obscure browser WebView automation fingerprints
 
   static const _antiFingerprintingKey = 'antiFingerprinting';
 
@@ -342,7 +343,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool powerBandwidthThrottling = true;
   bool resumeIntegrityCheck = true;
 
-
   @override
   void didChangePlatformBrightness() {
     if (themeMode == 'system') {
@@ -397,7 +397,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     cleanupDays = _prefs.getInt(_cleanupDaysKey) ?? cleanupDays;
     if (![0, 7, 30].contains(cleanupDays)) cleanupDays = 0;
     categoryFolders = _prefs.getBool(_categoryFoldersKey) ?? categoryFolders;
-    antiFingerprinting = _prefs.getBool(_antiFingerprintingKey) ?? antiFingerprinting;
+    antiFingerprinting =
+        _prefs.getBool(_antiFingerprintingKey) ?? antiFingerprinting;
 
     backendUrl = _prefs.getString(_backendUrlKey) ?? backendUrl;
     backendToken = await _secureStorage.read(key: _backendTokenKey) ?? '';
@@ -579,7 +580,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-
   Future<void> setAutoStart(bool value) async {
     autoStart = value;
     await _prefs.setBool(_autoStartKey, value);
@@ -754,7 +754,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> confirmBypassSSL() async {
     if (!developerMode) return;
-    _log.warning('P0-2: WARNING: SSL certificate validation has been bypassed by user in Developer Mode');
+    _log.warning(
+        'P0-2: WARNING: SSL certificate validation has been bypassed by user in Developer Mode');
     bypassSSL = true;
     _pendingBypassSSLConfirmation = false;
     await _prefs.setBool(_bypassSSLKey, true);

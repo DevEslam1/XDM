@@ -36,9 +36,12 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
     super.initState();
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     _proxyHostController = TextEditingController(text: settings.proxyHost);
-    _proxyPortController = TextEditingController(text: settings.proxyPort.toString());
-    _proxyUsernameController = TextEditingController(text: settings.proxyUsername);
-    _proxyPasswordController = TextEditingController(text: settings.proxyPassword);
+    _proxyPortController =
+        TextEditingController(text: settings.proxyPort.toString());
+    _proxyUsernameController =
+        TextEditingController(text: settings.proxyUsername);
+    _proxyPasswordController =
+        TextEditingController(text: settings.proxyPassword);
     _backendUrlController = TextEditingController(text: settings.backendUrl);
   }
 
@@ -52,7 +55,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
     super.dispose();
   }
 
-  void _maybeConfirmBypassSSL(BuildContext context, SettingsProvider settings) async {
+  void _maybeConfirmBypassSSL(
+      BuildContext context, SettingsProvider settings) async {
     if (!settings.pendingBypassSSLConfirmation) return;
     final confirmed = await DmxConfirmDialog.show(
       context,
@@ -85,7 +89,9 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
         children: [
           // FIX-5: Extraction Backend Server Section & Test Button
           SettingsSectionHeader(
-            title: isRtl ? 'خادم الاستخراج الخادمي (Backend)' : 'Extraction Backend Server',
+            title: isRtl
+                ? 'خادم الاستخراج الخادمي (Backend)'
+                : 'Extraction Backend Server',
             accentColor: accent,
             isDark: isDark,
           ),
@@ -95,13 +101,15 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
               TextFieldTile(
                 accentColor: accent,
                 title: isRtl ? 'عنوان الخادم الخلفي' : 'Backend URL',
-                subtitle: 'e.g. https://xdm-backend-fallback.europe-west1.run.app',
+                subtitle:
+                    'e.g. https://xdm-backend-fallback.europe-west1.run.app',
                 controller: _backendUrlController,
                 onChanged: (val) => settings.setBackendUrl(val),
                 onSubmitted: (val) => settings.setBackendUrl(val),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
                 child: Row(
                   children: [
                     Expanded(
@@ -111,27 +119,37 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                         text: _testingBackend
                             ? (isRtl ? 'جاري الاختبار...' : 'TESTING...')
                             : (isRtl ? 'اختبار اتصال الخادم' : 'TEST BACKEND'),
-                        onPressed: _testingBackend ? null : () async {
-                          setState(() => _testingBackend = true);
-                          bool healthy = false;
-                          try {
-                            final res = await XdmBackendClient().health();
-                            healthy = res.isNotEmpty;
-                          } catch (_) {
-                            healthy = false;
-                          }
-                          if (!mounted || !context.mounted) return;
-                          setState(() => _testingBackend = false);
-                          ThemedSnackbar.show(
-                            context,
-                            message: healthy
-                                ? (isRtl ? 'الخادم يعمل بنجاح!' : 'Backend is reachable!')
-                                : (isRtl ? 'فشل الاتصال بالخادم' : 'Backend unreachable'),
-                            color: healthy ? AppTheme.neonGreen : AppTheme.neonRed,
-                            icon: healthy ? Icons.check_circle_outline : Icons.error_outline,
-                            isDarkMode: isDark,
-                          );
-                        },
+                        onPressed: _testingBackend
+                            ? null
+                            : () async {
+                                setState(() => _testingBackend = true);
+                                bool healthy = false;
+                                try {
+                                  final res = await XdmBackendClient().health();
+                                  healthy = res.isNotEmpty;
+                                } catch (_) {
+                                  healthy = false;
+                                }
+                                if (!mounted || !context.mounted) return;
+                                setState(() => _testingBackend = false);
+                                ThemedSnackbar.show(
+                                  context,
+                                  message: healthy
+                                      ? (isRtl
+                                          ? 'الخادم يعمل بنجاح!'
+                                          : 'Backend is reachable!')
+                                      : (isRtl
+                                          ? 'فشل الاتصال بالخادم'
+                                          : 'Backend unreachable'),
+                                  color: healthy
+                                      ? AppTheme.neonGreen
+                                      : AppTheme.neonRed,
+                                  icon: healthy
+                                      ? Icons.check_circle_outline
+                                      : Icons.error_outline,
+                                  isDarkMode: isDark,
+                                );
+                              },
                       ),
                     ),
                   ],
@@ -225,13 +243,16 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
           ),
           if (settings.enableProxy)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
               child: NeonGlowButton(
                 isFilled: false,
                 color: accent,
                 text: _testingProxy
                     ? (isRtl ? 'جاري الاختبار...' : 'TESTING PROXY...')
-                    : (isRtl ? 'اختبار اتصال البروكسي' : 'TEST PROXY CONNECTION'),
+                    : (isRtl
+                        ? 'اختبار اتصال البروكسي'
+                        : 'TEST PROXY CONNECTION'),
                 onPressed: _testingProxy
                     ? null
                     : () async {
@@ -250,10 +271,17 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                         ThemedSnackbar.show(
                           context,
                           message: success
-                              ? (isRtl ? 'اتصال البروكسي ناجح!' : 'Proxy connection successful!')
-                              : (isRtl ? 'فشل اتصال البروكسي' : 'Proxy connection failed'),
-                          color: success ? AppTheme.neonGreen : AppTheme.neonRed,
-                          icon: success ? Icons.check_circle_outline : Icons.error_outline,
+                              ? (isRtl
+                                  ? 'اتصال البروكسي ناجح!'
+                                  : 'Proxy connection successful!')
+                              : (isRtl
+                                  ? 'فشل اتصال البروكسي'
+                                  : 'Proxy connection failed'),
+                          color:
+                              success ? AppTheme.neonGreen : AppTheme.neonRed,
+                          icon: success
+                              ? Icons.check_circle_outline
+                              : Icons.error_outline,
                           isDarkMode: isDark,
                         );
                       },
@@ -270,7 +298,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
             children: [
               if (settings.developerMode)
                 SwitchTile(
-                  accentColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  accentColor:
+                      isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                   title: L10n.of(context, 'settings_bypass_ssl'),
                   subtitle: L10n.of(context, 'settings_bypass_ssl_sub'),
                   value: settings.bypassSSL,
@@ -329,14 +358,17 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
               ),
               if (AdBlockerService.instance.isEnabled) ...[
                 ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   title: Text(
                     L10n.of(context, 'settings_adblock_rules'),
                     style: TextStyle(
                       fontFamily: 'Space Grotesk',
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                      color: isDark
+                          ? AppTheme.textPrimary
+                          : AppTheme.lightTextPrimary,
                     ),
                   ),
                   subtitle: Text(
@@ -344,7 +376,9 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                     style: TextStyle(
                       fontFamily: 'Space Grotesk',
                       fontSize: 12,
-                      color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                      color: isDark
+                          ? AppTheme.textSecondary
+                          : AppTheme.lightTextSecondary,
                     ),
                   ),
                   trailing: Icon(
@@ -366,20 +400,25 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                             setState(() => _updatingAdblock = true);
                             ThemedSnackbar.show(
                               context,
-                              message: L10n.of(context, 'settings_adblock_updating_msg'),
+                              message: L10n.of(
+                                  context, 'settings_adblock_updating_msg'),
                               color: accent,
                               isDarkMode: isDark,
                               icon: Icons.sync,
                             );
                             try {
-                              final updated = await AdBlockerService.instance.updateFilters(force: true);
+                              final updated = await AdBlockerService.instance
+                                  .updateFilters(force: true);
                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                ScaffoldMessenger.of(context)
+                                    .hideCurrentSnackBar();
                                 ThemedSnackbar.show(
                                   context,
                                   message: updated
-                                      ? L10n.of(context, 'settings_adblock_success_msg')
-                                      : L10n.of(context, 'settings_adblock_success_msg'),
+                                      ? L10n.of(context,
+                                          'settings_adblock_success_msg')
+                                      : L10n.of(context,
+                                          'settings_adblock_success_msg'),
                                   color: AppTheme.neonGreen,
                                   icon: Icons.check_circle_outline,
                                   isDarkMode: isDark,
@@ -387,10 +426,12 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                               }
                             } catch (e) {
                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                ScaffoldMessenger.of(context)
+                                    .hideCurrentSnackBar();
                                 ThemedSnackbar.show(
                                   context,
-                                  message: L10n.of(context, 'settings_adblock_failed_msg'),
+                                  message: L10n.of(
+                                      context, 'settings_adblock_failed_msg'),
                                   color: AppTheme.neonRed,
                                   icon: Icons.error_outline,
                                   isDarkMode: isDark,

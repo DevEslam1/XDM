@@ -58,7 +58,6 @@ class PerformanceMonitor {
     return '60fps | $jankPct% jank | ${avgBuild}ms avg build';
   }
 
-
   /// Starts collecting frame timings. Idempotent.
   void start() {
     if (_listening) return;

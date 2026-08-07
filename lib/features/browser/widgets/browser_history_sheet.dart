@@ -745,7 +745,6 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     final id = item['id'] as int? ?? 0;
     final timeStr = _formatTimestamp(item['visitedAt']);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
@@ -754,13 +753,19 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       builder: (_, t, child) => Opacity(opacity: t, child: child),
       child: Container(
         decoration: BoxDecoration(
-          color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(
-            alpha: 0.4,
-          ),
+          color: isDark
+              ? (settings.isAmoledMode
+                  ? AppTheme.amoledCardBg
+                  : AppTheme.cardBg)
+              : AppTheme.lightCardBg,
           borderRadius: BorderRadius.circular(13),
           border: Border.all(
-            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-            width: 0.6,
+            color: isDark
+                ? (settings.isAmoledMode
+                    ? AppTheme.amoledBorder
+                    : AppTheme.border.withValues(alpha: 0.5))
+                : AppTheme.lightBorder,
+            width: 0.8,
           ),
         ),
         child: Material(
@@ -809,13 +814,21 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                           url,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: muted, fontSize: 10),
+                          style: TextStyle(
+                            color: isDark
+                                ? accent.withValues(alpha: 0.85)
+                                : AppTheme.lightNeonBlue,
+                            fontSize: 10.5,
+                          ),
                         ),
                         if (timeStr.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(
                             timeStr,
-                            style: TextStyle(color: muted, fontSize: 9),
+                            style: TextStyle(
+                              color: isDark ? Colors.white54 : Colors.black54,
+                              fontSize: 9.5,
+                            ),
                           ),
                         ],
                       ],
@@ -855,7 +868,6 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
   ) {
     final color = _statusColor(t.status, isDark);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final sizeStr = formatBytes(t.fileSize);
     final timeStr = _formatDateTime(t.completedAt ?? t.createdAt);
 
@@ -866,13 +878,15 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       builder: (_, o, child) => Opacity(opacity: o, child: child),
       child: Container(
         decoration: BoxDecoration(
-          color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(
-            alpha: 0.4,
-          ),
+          color: isDark
+              ? AppTheme.cardBg
+              : AppTheme.lightCardBg,
           borderRadius: BorderRadius.circular(13),
           border: Border.all(
-            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-            width: 0.6,
+            color: isDark
+                ? AppTheme.border.withValues(alpha: 0.5)
+                : AppTheme.lightBorder,
+            width: 0.8,
           ),
         ),
         child: Material(
@@ -935,10 +949,13 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'â€¢  $timeStr',
+                                '• $timeStr',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: muted, fontSize: 10),
+                                style: TextStyle(
+                                  color: isDark ? Colors.white54 : Colors.black54,
+                                  fontSize: 10,
+                                ),
                               ),
                             ),
                           ],

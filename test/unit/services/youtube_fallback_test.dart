@@ -90,8 +90,7 @@ void main() {
     final deadServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final deadPort = deadServer.port;
     await deadServer.close(force: true);
-    await SettingsProvider.instance
-        .setBackendUrl('http://127.0.0.1:$deadPort');
+    await SettingsProvider.instance.setBackendUrl('http://127.0.0.1:$deadPort');
 
     mockExtractorChannel([
       {

@@ -33,7 +33,8 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
             children: [
               SwitchTile(
                 accentColor: accent,
-                title: isRtl ? 'تمكين DHT' : 'Enable DHT (Distributed Hash Table)',
+                title:
+                    isRtl ? 'تمكين DHT' : 'Enable DHT (Distributed Hash Table)',
                 subtitle: isRtl
                     ? 'البحث عن الأقران بدون خادم تتبع مركزي'
                     : 'Peer discovery via decentralized DHT network',
@@ -69,7 +70,8 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
               ),
               SwitchTile(
                 accentColor: accent,
-                title: isRtl ? 'تمكين LPD' : 'Enable LPD (Local Peer Discovery)',
+                title:
+                    isRtl ? 'تمكين LPD' : 'Enable LPD (Local Peer Discovery)',
                 subtitle: isRtl
                     ? 'اكتشاف الأقران المتاحين على الشبكة المحلية'
                     : 'Discover peers on local area network',
@@ -140,7 +142,9 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
             children: [
               SwitchTile(
                 accentColor: accent,
-                title: isRtl ? 'تفعيل رفع التورنت (Seeding)' : 'Global Torrent Seeding',
+                title: isRtl
+                    ? 'تفعيل رفع التورنت (Seeding)'
+                    : 'Global Torrent Seeding',
                 subtitle: isRtl
                     ? 'مشاركة القطع المحملة مع شبكة التورنت'
                     : 'Upload completed pieces to support swarm health',
@@ -165,7 +169,9 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
               if (settings.globalTorrentSeedingLimited)
                 SliderTile(
                   accentColor: accent,
-                  title: isRtl ? 'أقصى سرعة رفع (KB/s)' : 'Max Upload Speed (KB/s)',
+                  title: isRtl
+                      ? 'أقصى سرعة رفع (KB/s)'
+                      : 'Max Upload Speed (KB/s)',
                   subtitle: '${settings.globalTorrentSeedingLimitKbps} KB/s',
                   value: settings.globalTorrentSeedingLimitKbps.toDouble(),
                   min: 100,
@@ -202,7 +208,8 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
               ),
               DropdownTile<int>(
                 accentColor: accent,
-                title: isRtl ? 'أقصى تحميلات تورنت نشطة' : 'Max Active Downloads',
+                title:
+                    isRtl ? 'أقصى تحميلات تورنت نشطة' : 'Max Active Downloads',
                 subtitle: '${settings.maxActiveDownloads} downloading',
                 value: settings.maxActiveDownloads,
                 items: const [1, 2, 3, 5, 10, 20],
@@ -228,8 +235,11 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
               ),
               SliderTile(
                 accentColor: accent,
-                title: isRtl ? 'حد نسبة المشاركة (Share Ratio)' : 'Share Ratio Limit',
-                subtitle: 'Ratio: ${settings.shareRatioLimit.toStringAsFixed(1)}x',
+                title: isRtl
+                    ? 'حد نسبة المشاركة (Share Ratio)'
+                    : 'Share Ratio Limit',
+                subtitle:
+                    'Ratio: ${settings.shareRatioLimit.toStringAsFixed(1)}x',
                 value: settings.shareRatioLimit,
                 min: 0.5,
                 max: 10.0,

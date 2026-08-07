@@ -189,12 +189,13 @@ class CategoriesScreen extends StatelessWidget {
                           }
                           Navigator.of(context).push(
                             PageRouteBuilder(
-                              pageBuilder: (ctx, animation, secondaryAnimation) =>
-                                  CategoryDetailScreen(
-                                    categoryName: name,
-                                    categoryColor: color,
-                                    categoryIcon: icon,
-                                  ),
+                              pageBuilder:
+                                  (ctx, animation, secondaryAnimation) =>
+                                      CategoryDetailScreen(
+                                categoryName: name,
+                                categoryColor: color,
+                                categoryIcon: icon,
+                              ),
                               transitionsBuilder:
                                   (ctx, animation, secondaryAnimation, child) {
                                 return FadeTransition(

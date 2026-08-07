@@ -19,7 +19,8 @@ class EmptyStateView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryColor = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final primaryColor =
+        isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final mutedColor = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final accentColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
 

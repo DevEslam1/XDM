@@ -32,8 +32,7 @@ void main() {
         expect(
           p.isWithin(savePath, joined) || joined == p.canonicalize(savePath),
           isTrue,
-          reason:
-              'safeFileName("$input") → "$safe" escapes savePath.\n'
+          reason: 'safeFileName("$input") → "$safe" escapes savePath.\n'
               '  joined canonical: $joined\n'
               '  savePath        : $savePath',
         );
@@ -72,15 +71,12 @@ void main() {
         // Simulates TASK 1: '$videoTitle [$displayQuality].$ext'
         const maliciousTitle = '../../secret/video';
         const qualityExt = '[1080p].mp4';
-        final fileName =
-            safeFileName('$maliciousTitle $qualityExt');
+        final fileName = safeFileName('$maliciousTitle $qualityExt');
         assertNoTraversal(maliciousTitle);
         // fileName itself must not escape
-        final joined =
-            p.canonicalize(p.join(savePath, fileName));
+        final joined = p.canonicalize(p.join(savePath, fileName));
         expect(
-          p.isWithin(savePath, joined) ||
-              joined == p.canonicalize(savePath),
+          p.isWithin(savePath, joined) || joined == p.canonicalize(savePath),
           isTrue,
           reason: 'Playlist fileName "$fileName" escapes savePath',
         );

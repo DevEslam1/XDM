@@ -137,12 +137,16 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
                 return Container(
                   decoration: BoxDecoration(
                     color: isDark
-                        ? (isAmoled ? AppTheme.amoledCardBg : AppTheme.glassBg.withValues(alpha: 0.4))
+                        ? (isAmoled
+                            ? AppTheme.amoledCardBg
+                            : AppTheme.glassBg.withValues(alpha: 0.4))
                         : AppTheme.lightGlassBg.withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isDark
-                          ? (isAmoled ? AppTheme.amoledBorder : AppTheme.glassBorder)
+                          ? (isAmoled
+                              ? AppTheme.amoledBorder
+                              : AppTheme.glassBorder)
                           : AppTheme.lightGlassBorder,
                       width: 0.6,
                     ),
@@ -241,7 +245,8 @@ class _ScriptResult {
   final String code;
   final bool isCss;
   final Set<ScriptPermission> permissions;
-  _ScriptResult(this.name, this.urlPattern, this.code, this.isCss, this.permissions);
+  _ScriptResult(
+      this.name, this.urlPattern, this.code, this.isCss, this.permissions);
 }
 
 class _ScriptEditorDialog extends StatefulWidget {
@@ -256,7 +261,10 @@ class _ScriptEditorDialog extends StatefulWidget {
     this.initialUrlPattern = '',
     this.initialCode = '',
     this.initialIsCss = false,
-    this.initialPermissions = const {ScriptPermission.domRead, ScriptPermission.domWrite},
+    this.initialPermissions = const {
+      ScriptPermission.domRead,
+      ScriptPermission.domWrite
+    },
   });
 
   @override
@@ -354,7 +362,9 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                  color: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
                 ),
               ),
               const SizedBox(height: 4),
@@ -364,7 +374,8 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
                 children: ScriptPermission.values.map((perm) {
                   final selected = _permissions.contains(perm);
                   return FilterChip(
-                    label: Text(perm.name, style: const TextStyle(fontSize: 11)),
+                    label:
+                        Text(perm.name, style: const TextStyle(fontSize: 11)),
                     selected: selected,
                     onSelected: (val) {
                       setState(() {

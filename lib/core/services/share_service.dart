@@ -142,4 +142,3 @@ class ShareService {
 
   bool get isInitialized => _initialized;
 }
-

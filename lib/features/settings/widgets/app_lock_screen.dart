@@ -116,7 +116,8 @@ class _AppLockScreenState extends State<AppLockScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           title: Text(
-            (widget.isSettingUp ? 'Set Security PIN' : 'Enter PIN').toUpperCase(),
+            (widget.isSettingUp ? 'Set Security PIN' : 'Enter PIN')
+                .toUpperCase(),
             style: TextStyle(
               fontFamily: 'Space Grotesk',
               fontWeight: FontWeight.bold,
@@ -170,7 +171,9 @@ class _AppLockScreenState extends State<AppLockScreen> {
                         controller: _pinController,
                         enabled: !_isLockedOut,
                         keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
                         obscureText: true,
                         maxLength: 6,
                         textAlign: TextAlign.center,
@@ -190,7 +193,9 @@ class _AppLockScreenState extends State<AppLockScreen> {
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+                              color: isDark
+                                  ? AppTheme.borderSubtle
+                                  : AppTheme.lightBorderSubtle,
                             ),
                           ),
                         ),
@@ -215,8 +220,6 @@ class _AppLockScreenState extends State<AppLockScreen> {
       ),
     );
 
-    return widget.isSettingUp
-        ? screen
-        : PopScope(canPop: false, child: screen);
+    return widget.isSettingUp ? screen : PopScope(canPop: false, child: screen);
   }
 }

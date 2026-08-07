@@ -126,8 +126,8 @@ class TransferState {
         totalSize: totalSize,
         threadCount: threadCount,
         chunks: chunks
-            .map((c) =>
-                ChunkState(start: c.start, end: c.end, downloaded: c.downloaded))
+            .map((c) => ChunkState(
+                start: c.start, end: c.end, downloaded: c.downloaded))
             .toList(),
         url: url,
         etag: etag,
@@ -141,7 +141,8 @@ class TransferState {
   /// structurally invalid (caller then falls back to legacy parsing).
   static TransferState? tryParseV3(Map<String, dynamic> json) {
     try {
-      final v = (json['v'] as num?)?.toInt() ?? (json['version'] as num?)?.toInt();
+      final v =
+          (json['v'] as num?)?.toInt() ?? (json['version'] as num?)?.toInt();
       if (v != currentVersion) return null;
       final rawChunks = json['chunks'];
       if (rawChunks is! List || rawChunks.isEmpty) return null;
@@ -152,7 +153,8 @@ class TransferState {
       if (chunks.isEmpty) return null;
       final statusName = json['status'] as String? ?? 'active';
       return TransferState(
-        totalSize: ((json['totalSize'] as num?)?.toInt() ?? 0).clamp(0, 1 << 62),
+        totalSize:
+            ((json['totalSize'] as num?)?.toInt() ?? 0).clamp(0, 1 << 62),
         threadCount: ((json['threadCount'] as num?)?.toInt() ?? chunks.length)
             .clamp(1, 64),
         chunks: chunks,
@@ -189,7 +191,8 @@ class TransferState {
       }
 
       final effectiveThreads = progress.length; // Use actual data length
-      final partSize = totalSize > 0 ? (totalSize / effectiveThreads).floor() : 0;
+      final partSize =
+          totalSize > 0 ? (totalSize / effectiveThreads).floor() : 0;
 
       final chunks = <ChunkState>[];
       for (int i = 0; i < effectiveThreads; i++) {
@@ -312,7 +315,8 @@ class StateStore {
               ChunkState(
                 start: 0,
                 end: knownFileSize > 0 ? knownFileSize - 1 : -1,
-                downloaded: knownFileSize > 0 ? len.clamp(0, knownFileSize) : len,
+                downloaded:
+                    knownFileSize > 0 ? len.clamp(0, knownFileSize) : len,
               ),
             ],
             url: url,
@@ -342,8 +346,7 @@ class StateStore {
               // Multi-thread downloads pre-allocate the file; raw file length is not
               // a reliable indicator of downloaded bytes without a state file.
               // Treat as fresh download.
-              return ChunkState(
-                  start: start, end: end, downloaded: 0);
+              return ChunkState(start: start, end: end, downloaded: 0);
             }),
             url: url,
             migrationNote: 'migrated_from_file_length_multithread',
@@ -423,8 +426,7 @@ class StateStore {
           .map((e) => e is num ? e.toInt() : 0)
           .map((b) => b < 0 ? 0 : b)
           .toList();
-      final threads =
-          (json['threadCount'] as num?)?.toInt() ?? hintThreads;
+      final threads = (json['threadCount'] as num?)?.toInt() ?? hintThreads;
       final state = _stateFromChunkBytes(
         tempFilePath: '',
         url: (json['url'] as String?) ?? '',

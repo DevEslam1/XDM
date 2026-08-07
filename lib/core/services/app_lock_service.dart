@@ -65,9 +65,8 @@ class AppLockService {
         0;
     final nextLevel = level + 1;
     final seconds = (30 * (1 << (nextLevel - 1))).clamp(30, 900);
-    final lockedUntil = DateTime.now()
-        .add(Duration(seconds: seconds))
-        .millisecondsSinceEpoch;
+    final lockedUntil =
+        DateTime.now().add(Duration(seconds: seconds)).millisecondsSinceEpoch;
     await _storage.write(key: _failedAttemptsKey, value: '0');
     await _storage.write(key: _lockoutLevelKey, value: nextLevel.toString());
     await _storage.write(

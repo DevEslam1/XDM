@@ -43,7 +43,9 @@ void main() {
   }
 
   group('Download Cycle Bug Fixes Unit Tests', () {
-    test('BUG 3: sanitizedChunks getter distributes progress when chunks list is empty', () {
+    test(
+        'BUG 3: sanitizedChunks getter distributes progress when chunks list is empty',
+        () {
       final task = createTestTask(
         id: 't_empty_chunks',
         fileName: 'test.mp4',
@@ -78,7 +80,9 @@ void main() {
       expect(sanitized[1], equals(0.5));
     });
 
-    test('BUG 3 (Audit Fix): combinedTotalSize returns 0 when videoStreamSize == 0 and fileSize <= 0 to trigger indeterminate state', () {
+    test(
+        'BUG 3 (Audit Fix): combinedTotalSize returns 0 when videoStreamSize == 0 and fileSize <= 0 to trigger indeterminate state',
+        () {
       final task = createTestTask(
         id: 't_unknown_size_av',
         fileName: 'yt.mp4',
@@ -109,7 +113,8 @@ void main() {
 
     test('FIX 19: normalizeChunks handles NaN/Infinity chunks gracefully', () {
       final chunks = [double.nan, double.infinity, 0.5, 1.0];
-      final normalized = DownloadOrchestrator.normalizeChunks(chunks, 1000, 500);
+      final normalized =
+          DownloadOrchestrator.normalizeChunks(chunks, 1000, 500);
 
       expect(normalized.length, equals(4));
       for (final c in normalized) {
@@ -119,7 +124,9 @@ void main() {
       }
     });
 
-    test('BUG 1: retryMergeOnly restores _video_only file when merge is retried', () async {
+    test(
+        'BUG 1: retryMergeOnly restores _video_only file when merge is retried',
+        () async {
       final tempDir = await Directory.systemTemp.createTemp('video_only_test_');
       try {
         final localPath = '${tempDir.path}/merged_video.mp4';

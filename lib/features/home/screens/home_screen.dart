@@ -156,81 +156,92 @@ class _HomeScreenState extends State<HomeScreen>
                       const SizedBox(height: 12),
                       // FIX(14): iOS has no persistent background downloads
                       ..._buildIosBackgroundBanner(isDark, isRtl),
-                       _stagger(0.0, _buildAnimatedSegmentedControl(
-                        context,
-                        isDark: isDark,
-                        isRtl: isRtl,
-                      )),
+                      _stagger(
+                          0.0,
+                          _buildAnimatedSegmentedControl(
+                            context,
+                            isDark: isDark,
+                            isRtl: isRtl,
+                          )),
                       const SizedBox(height: 12),
                       // Analytics Panel
-                      _stagger(0.08, AnimatedSize(
-                        duration: const Duration(milliseconds: 350),
-                        curve: Curves.easeOutCubic,
-                        alignment: Alignment.topCenter,
-                        child: _showAnalytics
-                            ? Padding(
-                                padding: EdgeInsets.only(
-                                  left: screenPadding(context).left,
-                                  right: screenPadding(context).left,
-                                  top: 4.0,
-                                  bottom: 20.0,
-                                ),
-                                child: Selector<DownloadProvider,
-                                    Map<String, double>>(
-                                  selector: (_, provider) =>
-                                      provider.categorySizes,
-                                  shouldRebuild: (prev, next) {
-                                    if (prev.length != next.length) {
-                                      return true;
-                                    }
-                                    for (final key in prev.keys) {
-                                      if (prev[key] != next[key]) {
-                                        return true;
-                                      }
-                                    }
-                                    return false;
-                                  },
-                                  builder: (context, categorySizes, _) =>
-                                      RepaintBoundary(
-                                    child: _RedesignedAnalyticsPanel(
-                                      categorySizes: categorySizes,
-                                      settings:
-                                          context.read<SettingsProvider>(),
+                      _stagger(
+                          0.08,
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 350),
+                            curve: Curves.easeOutCubic,
+                            alignment: Alignment.topCenter,
+                            child: _showAnalytics
+                                ? Padding(
+                                    padding: EdgeInsets.only(
+                                      left: screenPadding(context).left,
+                                      right: screenPadding(context).left,
+                                      top: 4.0,
+                                      bottom: 20.0,
                                     ),
-                                  ),
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      )),
+                                    child: Selector<DownloadProvider,
+                                        Map<String, double>>(
+                                      selector: (_, provider) =>
+                                          provider.categorySizes,
+                                      shouldRebuild: (prev, next) {
+                                        if (prev.length != next.length) {
+                                          return true;
+                                        }
+                                        for (final key in prev.keys) {
+                                          if (prev[key] != next[key]) {
+                                            return true;
+                                          }
+                                        }
+                                        return false;
+                                      },
+                                      builder: (context, categorySizes, _) =>
+                                          RepaintBoundary(
+                                        child: _RedesignedAnalyticsPanel(
+                                          categorySizes: categorySizes,
+                                          settings:
+                                              context.read<SettingsProvider>(),
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          )),
                       // Stats Panel (Active tab only)
-                      _stagger(0.12, AnimatedSize(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOutCubic,
-                        child: _selectedTab == 0
-                            ? Padding(
-                                padding: EdgeInsets.only(
-                                  left: screenPadding(context).left,
-                                  right: screenPadding(context).left,
-                                  top: 4.0,
-                                  bottom: 20.0,
-                                ),
-                                child: const DownloadStatsPanel(),
-                              )
-                            : const SizedBox.shrink(),
-                      )),
+                      _stagger(
+                          0.12,
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOutCubic,
+                            child: _selectedTab == 0
+                                ? Padding(
+                                    padding: EdgeInsets.only(
+                                      left: screenPadding(context).left,
+                                      right: screenPadding(context).left,
+                                      top: 4.0,
+                                      bottom: 20.0,
+                                    ),
+                                    child: const DownloadStatsPanel(),
+                                  )
+                                : const SizedBox.shrink(),
+                          )),
 
                       // Filter Chips
-                      _stagger(0.16, Padding(
-                        padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
-                        child: FilterChipsBar(isHistory: _selectedTab == 1),
-                      )),
+                      _stagger(
+                          0.16,
+                          Padding(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: screenPadding(context).left),
+                            child: FilterChipsBar(isHistory: _selectedTab == 1),
+                          )),
                       const SizedBox(height: 20),
                       // Section Header + Controls
-                      _stagger(0.20, _buildSectionHeader(
-                        context,
-                        isDark: isDark,
-                        isRtl: isRtl,
-                      )),
+                      _stagger(
+                          0.20,
+                          _buildSectionHeader(
+                            context,
+                            isDark: isDark,
+                            isRtl: isRtl,
+                          )),
                       const SizedBox(height: 12),
                       // Task List
                       Expanded(
@@ -262,7 +273,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   List<String> _visibleTaskIds(DownloadProvider provider) {
     return provider.filteredTasks
-        .where((task) => _selectedTab == 0 ? _isActiveTask(task) : !_isActiveTask(task))
+        .where((task) =>
+            _selectedTab == 0 ? _isActiveTask(task) : !_isActiveTask(task))
         .map((task) => task.id)
         .toList();
   }
@@ -289,7 +301,8 @@ class _HomeScreenState extends State<HomeScreen>
       ),
       actions: [
         TextButton(
-          onPressed: () => provider.selectAllTasks(visibleTaskIds: _visibleTaskIds(provider)),
+          onPressed: () => provider.selectAllTasks(
+              visibleTaskIds: _visibleTaskIds(provider)),
           child: Text(L10n.of(context, 'select_all_btn'),
               style: TextStyle(color: accentClr)),
         ),
@@ -377,7 +390,8 @@ class _HomeScreenState extends State<HomeScreen>
   /// FIX(14): persistent iOS-only banner.
   List<Widget> _buildIosBackgroundBanner(bool isDark, bool isRtl) {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return const [];
-    final accent = getActiveFilterColor(context.watch<DownloadProvider>(), isDark);
+    final accent =
+        getActiveFilterColor(context.watch<DownloadProvider>(), isDark);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     return [
       Padding(
@@ -586,14 +600,16 @@ class _HomeScreenState extends State<HomeScreen>
               !isSeeding;
         }).length;
         return Padding(
-          padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
+          padding:
+              EdgeInsets.symmetric(horizontal: screenPadding(context).left),
           child: Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
               color: isDark ? AppTheme.surface : AppTheme.lightSurface,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+                color:
+                    isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
                 width: 1.0,
               ),
             ),
@@ -642,9 +658,7 @@ class _HomeScreenState extends State<HomeScreen>
           curve: Curves.easeInOut,
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: selected
-                ? color
-                : Colors.transparent,
+            color: selected ? color : Colors.transparent,
             borderRadius: BorderRadius.circular(6),
           ),
           child: Row(
@@ -655,7 +669,9 @@ class _HomeScreenState extends State<HomeScreen>
                 style: TextStyle(
                   color: selected
                       ? Colors.white
-                      : (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+                      : (isDark
+                          ? AppTheme.textSecondary
+                          : AppTheme.lightTextSecondary),
                   fontFamily: 'Space Grotesk',
                   fontSize: responsiveFontSize(context, 12),
                   fontWeight: selected ? FontWeight.bold : FontWeight.w500,
@@ -675,14 +691,13 @@ class _HomeScreenState extends State<HomeScreen>
                     borderRadius: BorderRadius.circular(6),
                     border: selected
                         ? null
-                        : Border.all(color: color.withValues(alpha: 0.2), width: 0.8),
+                        : Border.all(
+                            color: color.withValues(alpha: 0.2), width: 0.8),
                   ),
                   child: Text(
                     count > 99 ? '99+' : formatLocalizedNumber(context, count),
                     style: TextStyle(
-                      color: selected
-                          ? Colors.white
-                          : color,
+                      color: selected ? Colors.white : color,
                       fontFamily: 'Space Grotesk',
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
@@ -904,7 +919,8 @@ class _HomeScreenState extends State<HomeScreen>
     bool isDark,
   ) {
     final isSelected = sortState.option == option;
-    final activeColor = getActiveFilterColor(context.read<DownloadProvider>(), isDark);
+    final activeColor =
+        getActiveFilterColor(context.read<DownloadProvider>(), isDark);
     final textColor = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     return PopupMenuItem<SortOption>(
       value: option,
@@ -1190,202 +1206,203 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
             );
           }).toList();
 
-    final activeFilterClr = getActiveFilterColor(context.watch<DownloadProvider>(), isDark);
+    final activeFilterClr =
+        getActiveFilterColor(context.watch<DownloadProvider>(), isDark);
     return DmxCardShell(
       accent: activeFilterClr,
       radius: 20,
       showRail: true,
       child: Padding(
         padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.storage_rounded,
-                size: 14,
-                color: activeFilterClr,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                L10n.of(context, 'storage_analytics'),
-                style: TextStyle(
-                  color: mutedClr,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.0,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.storage_rounded,
+                  size: 14,
+                  color: activeFilterClr,
                 ),
-              ),
-              const Spacer(),
-              Text(
-                totalSizeText,
-                style: TextStyle(
-                  color: textClr,
-                  fontSize: responsiveFontSize(context, 13),
-                  fontWeight: FontWeight.w800,
-                  fontFamily: 'Space Grotesk',
+                const SizedBox(width: 8),
+                Text(
+                  L10n.of(context, 'storage_analytics'),
+                  style: TextStyle(
+                    color: mutedClr,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              SizedBox(
-                width: 120,
-                height: 120,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.08),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                    PieChart(
-                      PieChartData(
-                        pieTouchData: PieTouchData(
-                          touchCallback:
-                              (FlTouchEvent event, pieTouchResponse) {
-                            if (!event.isInterestedForInteractions ||
-                                pieTouchResponse?.touchedSection == null) {
-                              return;
-                            }
-                            final touchedIndex = pieTouchResponse!
-                                .touchedSection!.touchedSectionIndex;
-                            if (touchedIndex >= 0 &&
-                                touchedIndex < activeCategoryNames.length) {
-                              context
-                                  .read<DownloadProvider>()
-                                  .toggleCategoryFilter(
-                                    activeCategoryNames[touchedIndex],
-                                  );
-                            }
-                          },
-                        ),
-                        sections: sections,
-                        centerSpaceRadius: 35,
-                        sectionsSpace: 2.0,
-                      ),
-                    ),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.donut_large_rounded,
-                          size: 18,
-                          color: mutedClr.withValues(alpha: 0.5),
-                        ),
-                      ],
-                    ),
-                  ],
+                const Spacer(),
+                Text(
+                  totalSizeText,
+                  style: TextStyle(
+                    color: textClr,
+                    fontSize: responsiveFontSize(context, 13),
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'Space Grotesk',
+                  ),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: hasNoData
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Text(
-                            L10n.of(context, 'no_data_available'),
-                            style: TextStyle(
-                              color: mutedClr,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                SizedBox(
+                  width: 120,
+                  height: 120,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.08),
+                              Colors.transparent,
+                            ],
                           ),
                         ),
-                      )
-                    : Column(
-                        children: categoryCards
-                            .where((card) => (sizes[card['name']] ?? 0.0) > 0)
-                            .take(4)
-                            .map((card) {
-                          final name = card['name'] as String;
-                          final sizeMb = sizes[name] ?? 0.0;
-                          final pct = totalSizeMb > 0
-                              ? (sizeMb / totalSizeMb) * 100
-                              : 0.0;
-                          final sizeText = sizeMb >= 1024
-                              ? '${(sizeMb / 1024).toStringAsFixed(1)}G'
-                              : '${sizeMb.toStringAsFixed(0)}M';
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 3,
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: card['color'] as Color,
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Icon(
-                                  card['icon'] as IconData,
-                                  size: 11,
-                                  color: (card['color'] as Color)
-                                      .withValues(alpha: 0.7),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    isRtl ? _translateCat(name) : name,
-                                    style: TextStyle(
-                                      color: textClr,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                Text(
-                                  '${pct.toStringAsFixed(0)}%',
-                                  style: TextStyle(
-                                    color: card['color'] as Color,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w700,
-                                    fontFamily: 'monospace',
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  sizeText,
-                                  style: TextStyle(
-                                    color: mutedClr,
-                                    fontSize: 9,
-                                    fontFamily: 'monospace',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
                       ),
-              ),
-            ],
-          ),
-        ],
+                      PieChart(
+                        PieChartData(
+                          pieTouchData: PieTouchData(
+                            touchCallback:
+                                (FlTouchEvent event, pieTouchResponse) {
+                              if (!event.isInterestedForInteractions ||
+                                  pieTouchResponse?.touchedSection == null) {
+                                return;
+                              }
+                              final touchedIndex = pieTouchResponse!
+                                  .touchedSection!.touchedSectionIndex;
+                              if (touchedIndex >= 0 &&
+                                  touchedIndex < activeCategoryNames.length) {
+                                context
+                                    .read<DownloadProvider>()
+                                    .toggleCategoryFilter(
+                                      activeCategoryNames[touchedIndex],
+                                    );
+                              }
+                            },
+                          ),
+                          sections: sections,
+                          centerSpaceRadius: 35,
+                          sectionsSpace: 2.0,
+                        ),
+                      ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.donut_large_rounded,
+                            size: 18,
+                            color: mutedClr.withValues(alpha: 0.5),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: hasNoData
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(
+                              L10n.of(context, 'no_data_available'),
+                              style: TextStyle(
+                                color: mutedClr,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Column(
+                          children: categoryCards
+                              .where((card) => (sizes[card['name']] ?? 0.0) > 0)
+                              .take(4)
+                              .map((card) {
+                            final name = card['name'] as String;
+                            final sizeMb = sizes[name] ?? 0.0;
+                            final pct = totalSizeMb > 0
+                                ? (sizeMb / totalSizeMb) * 100
+                                : 0.0;
+                            final sizeText = sizeMb >= 1024
+                                ? '${(sizeMb / 1024).toStringAsFixed(1)}G'
+                                : '${sizeMb.toStringAsFixed(0)}M';
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 3,
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: card['color'] as Color,
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Icon(
+                                    card['icon'] as IconData,
+                                    size: 11,
+                                    color: (card['color'] as Color)
+                                        .withValues(alpha: 0.7),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      isRtl ? _translateCat(name) : name,
+                                      style: TextStyle(
+                                        color: textClr,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${pct.toStringAsFixed(0)}%',
+                                    style: TextStyle(
+                                      color: card['color'] as Color,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                      fontFamily: 'monospace',
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    sizeText,
+                                    style: TextStyle(
+                                      color: mutedClr,
+                                      fontSize: 9,
+                                      fontFamily: 'monospace',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   String _translateCat(String name) {
     switch (name) {

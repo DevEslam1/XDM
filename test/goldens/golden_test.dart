@@ -8,7 +8,7 @@ import '../helpers/golden_helpers.dart';
 void main() {
   group('Golden Tests', () {
     // FIX(16): all tests now use centralized platform-detection logic in expectGolden
-    
+
     testWidgets('DownloadCard downloading state', (tester) async {
       final task = createTestTask(
         status: DownloadStatus.downloading,
@@ -61,7 +61,7 @@ void main() {
     });
 
     // FIX(16): Added new golden tests for missed states
-    
+
     testWidgets('DownloadCard paused state', (tester) async {
       final task = createTestTask(status: DownloadStatus.paused);
       await tester.pumpWidget(createTestApp(

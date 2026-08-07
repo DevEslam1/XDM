@@ -60,7 +60,8 @@ class PowerMonitor {
       return 1;
     }
     if (thermalThreadLimitingEnabled &&
-        (_thermal == ThermalStatus.severe || _thermal == ThermalStatus.critical)) {
+        (_thermal == ThermalStatus.severe ||
+            _thermal == ThermalStatus.critical)) {
       return kThermalLimitedMaxThreads;
     }
     return 16;
@@ -126,7 +127,6 @@ class PowerMonitor {
     return f.clamp(floor, 1.0);
   }
 
-
   static Future<void> init() async {
     try {
       _sub = _battery.onBatteryStateChanged.listen((s) {
@@ -175,4 +175,3 @@ class PowerMonitor {
     _thermalTimer?.cancel();
   }
 }
-

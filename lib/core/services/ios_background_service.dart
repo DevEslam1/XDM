@@ -132,7 +132,8 @@ class IosBackgroundService {
   static Future<bool> scheduleBackgroundDownload() async {
     if (!Platform.isIOS) return false;
     if (_isRegistered) {
-      debugPrint('[IosBackgroundService] BGTaskScheduler already registered. Skipping duplicate registration.');
+      debugPrint(
+          '[IosBackgroundService] BGTaskScheduler already registered. Skipping duplicate registration.');
       return true;
     }
     try {

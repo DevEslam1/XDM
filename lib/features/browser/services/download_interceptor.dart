@@ -156,7 +156,8 @@ class DownloadInterceptor {
     } else if (type == 'image') {
       resolvedCategory = 'Image';
     } else {
-      resolvedCategory = resolveCategorySmart(url: url, fileName: finalFileName);
+      resolvedCategory =
+          resolveCategorySmart(url: url, fileName: finalFileName);
     }
     try {
       final activeTab = resolveActiveTab();

@@ -57,8 +57,7 @@ class MirrorHealthStore {
   }
 
   /// Record a success — resets the failure count and clears blacklist.
-  static Future<void> recordSuccess(String url,
-      {double speedBps = 0.0}) async {
+  static Future<void> recordSuccess(String url, {double speedBps = 0.0}) async {
     _cache ??= {};
     final state = _cache!.putIfAbsent(url, () => _PersistedMirrorState());
     state.failures = 0;

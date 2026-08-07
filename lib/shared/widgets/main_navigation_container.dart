@@ -142,6 +142,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     );
     _lockScreenVisible = false;
   }
+
   Future<void> _saveTorrentResumeStateWithTimeout() async {
     try {
       await Future.any([
@@ -316,7 +317,12 @@ class _FadeIndexedStackState extends State<_FadeIndexedStack>
 }
 
 class _PhoneBottomNavBar extends StatelessWidget {
-  final ({bool isDark, bool isAmoled, bool classicUi, bool vibration}) settingsTuple;
+  final ({
+    bool isDark,
+    bool isAmoled,
+    bool classicUi,
+    bool vibration
+  }) settingsTuple;
   final ({int activeTabIndex, bool isNavbarVisible}) navState;
   final bool isDark;
   final bool isRtl;
@@ -419,7 +425,12 @@ class _PhoneBottomNavBar extends StatelessWidget {
 }
 
 class _TabletFloatingNavBar extends StatelessWidget {
-  final ({bool isDark, bool isAmoled, bool classicUi, bool vibration}) settingsTuple;
+  final ({
+    bool isDark,
+    bool isAmoled,
+    bool classicUi,
+    bool vibration
+  }) settingsTuple;
   final ({int activeTabIndex, bool isNavbarVisible}) navState;
   final bool isDark;
   final bool isRtl;
@@ -539,7 +550,12 @@ class _TabletFloatingNavBar extends StatelessWidget {
 }
 
 class _NavigationRailWidget extends StatelessWidget {
-  final ({bool isDark, bool isAmoled, bool classicUi, bool vibration}) settingsTuple;
+  final ({
+    bool isDark,
+    bool isAmoled,
+    bool classicUi,
+    bool vibration
+  }) settingsTuple;
   final bool isDark;
   final bool isRtl;
   final int currentIndex;
@@ -733,7 +749,12 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final IconData activeIcon;
   final String label;
-  final ({bool isDark, bool isAmoled, bool classicUi, bool vibration}) settingsTuple;
+  final ({
+    bool isDark,
+    bool isAmoled,
+    bool classicUi,
+    bool vibration
+  }) settingsTuple;
   final bool isDark;
   final int currentIndex;
 

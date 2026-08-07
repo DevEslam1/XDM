@@ -109,7 +109,8 @@ class DmxCardShell extends StatelessWidget {
                     bottomStart: Radius.circular(radius),
                   ),
                   boxShadow: [
-                    AppTheme.glow(resolvedAccent, alpha: 0.30, blur: 6, spread: 0),
+                    AppTheme.glow(resolvedAccent,
+                        alpha: 0.30, blur: 6, spread: 0),
                   ],
                 ),
               ),
@@ -467,9 +468,7 @@ class DmxConfirmDialog extends StatelessWidget {
       title: title,
       accentColor: accent,
       icon: icon ??
-          (isDestructive
-              ? Icons.warning_rounded
-              : Icons.help_outline_rounded),
+          (isDestructive ? Icons.warning_rounded : Icons.help_outline_rounded),
       content: Text(
         message,
         style: TextStyle(

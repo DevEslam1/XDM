@@ -41,12 +41,16 @@ void main() {
       await expectLater(TorrentService.ready, completes);
     });
 
-    test('TorrentService.hasResumeData returns false when no resume data exists', () async {
+    test(
+        'TorrentService.hasResumeData returns false when no resume data exists',
+        () async {
       final exists = await TorrentService.hasResumeData('non_existent_source');
       expect(exists, isFalse);
     });
 
-    test('TorrentService.shouldStopSeeding correctly calculates ratio and time limits', () {
+    test(
+        'TorrentService.shouldStopSeeding correctly calculates ratio and time limits',
+        () {
       // Under ratio limit and under max time -> false
       expect(
         TorrentService.shouldStopSeeding(
@@ -87,9 +91,10 @@ void main() {
     });
 
     test('TorrentService.addTracker ignores invalid schemes silently', () {
-      expect(() => TorrentService.addTracker(1, 'ftp://tracker.example.com'), returnsNormally);
-      expect(() => TorrentService.addTracker(1, 'http://tracker.example.com'), returnsNormally);
+      expect(() => TorrentService.addTracker(1, 'ftp://tracker.example.com'),
+          returnsNormally);
+      expect(() => TorrentService.addTracker(1, 'http://tracker.example.com'),
+          returnsNormally);
     });
   });
 }
-

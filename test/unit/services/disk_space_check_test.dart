@@ -7,7 +7,8 @@ void main() {
   group('Disk Space Check', () {
     test('hasEnoughDiskSpace returns true when space is sufficient', () async {
       final engine = DownloadEngine(enableCleanupTimer: false);
-      final tempDir = await Directory.systemTemp.createTemp('dmx_space_sufficient');
+      final tempDir =
+          await Directory.systemTemp.createTemp('dmx_space_sufficient');
       addTearDown(() {
         try {
           tempDir.deleteSync(recursive: true);
@@ -17,7 +18,8 @@ void main() {
       expect(result, isTrue);
     });
 
-    test('hasEnoughDiskSpace returns true when check fails gracefully', () async {
+    test('hasEnoughDiskSpace returns true when check fails gracefully',
+        () async {
       final engine = DownloadEngine(enableCleanupTimer: false);
       // Path that does not exist — the check must not crash and must allow
       // the download through (graceful fallback).

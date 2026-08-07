@@ -31,7 +31,8 @@ class CategoryDetailScreen extends StatelessWidget {
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     // Get all tasks in this category that are completed/failed
@@ -254,108 +255,108 @@ class _SummaryCard extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
-          children: [
-            // Pie Chart
-            SizedBox(
-              width: 80,
-              height: 80,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  PieChart(
-                    PieChartData(
-                      sections: sections,
-                      centerSpaceRadius: 25,
-                      sectionsSpace: 2,
+            children: [
+              // Pie Chart
+              SizedBox(
+                width: 80,
+                height: 80,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    PieChart(
+                      PieChartData(
+                        sections: sections,
+                        centerSpaceRadius: 25,
+                        sectionsSpace: 2,
+                      ),
                     ),
-                  ),
-                  Icon(
-                    Icons.folder_rounded,
-                    size: 14,
-                    color: categoryColor.withValues(alpha: 0.7),
-                  ),
-                ],
+                    Icon(
+                      Icons.folder_rounded,
+                      size: 14,
+                      color: categoryColor.withValues(alpha: 0.7),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 16),
+              const SizedBox(width: 16),
 
-            // Stats
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    totalSizeText,
-                    style: TextStyle(
-                      color: textClr,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      fontFamily: 'Space Grotesk',
+              // Stats
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      totalSizeText,
+                      style: TextStyle(
+                        color: textClr,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        fontFamily: 'Space Grotesk',
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '$fileCount ${L10n.of(context, 'category_files')}',
-                    style: TextStyle(
-                      color: mutedClr,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                    const SizedBox(height: 4),
+                    Text(
+                      '$fileCount ${L10n.of(context, 'category_files')}',
+                      style: TextStyle(
+                        color: mutedClr,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Legend
-                  Row(
-                    children: [
-                      if (completedCount > 0) ...[
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? AppTheme.neonGreen
-                                : AppTheme.lightNeonGreen,
-                            borderRadius: BorderRadius.circular(2),
+                    const SizedBox(height: 8),
+                    // Legend
+                    Row(
+                      children: [
+                        if (completedCount > 0) ...[
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppTheme.neonGreen
+                                  : AppTheme.lightNeonGreen,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '$completedCount done',
-                          style: TextStyle(
-                            color: secClr,
-                            fontSize: 10,
+                          const SizedBox(width: 4),
+                          Text(
+                            '$completedCount done',
+                            style: TextStyle(
+                              color: secClr,
+                              fontSize: 10,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
+                          const SizedBox(width: 10),
+                        ],
+                        if (failedCount > 0) ...[
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppTheme.neonRed
+                                  : AppTheme.lightNeonRed,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$failedCount failed',
+                            style: TextStyle(
+                              color: secClr,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
                       ],
-                      if (failedCount > 0) ...[
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? AppTheme.neonRed
-                                : AppTheme.lightNeonRed,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '$failedCount failed',
-                          style: TextStyle(
-                            color: secClr,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

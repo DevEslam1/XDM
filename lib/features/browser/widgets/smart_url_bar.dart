@@ -132,7 +132,9 @@ class _SmartUrlBarState extends State<SmartUrlBar> {
             ),
             filled: true,
             fillColor: isDark
-                ? (isAmoled ? AppTheme.amoledBackground : const Color(0xFF0F0F16))
+                ? (isAmoled
+                    ? AppTheme.amoledBackground
+                    : const Color(0xFF0F0F16))
                 : const Color(0xFFF1F5F9),
           ),
           onSubmitted: (val) {

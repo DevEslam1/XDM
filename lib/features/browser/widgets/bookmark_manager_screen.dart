@@ -37,7 +37,8 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
         _bookmarks = bms;
       });
     } catch (e) {
-      BookmarkManagerScreen._log.warning('[BookmarkManager] Failed to load bookmarks: $e');
+      BookmarkManagerScreen._log
+          .warning('[BookmarkManager] Failed to load bookmarks: $e');
       if (mounted) setState(() => _bookmarks = []);
     }
   }
@@ -89,7 +90,8 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
       await db.deleteBookmark(bm.id);
       await _load();
     } catch (e) {
-      BookmarkManagerScreen._log.warning('[BookmarkManager] Failed to delete bookmark: $e');
+      BookmarkManagerScreen._log
+          .warning('[BookmarkManager] Failed to delete bookmark: $e');
     }
   }
 
@@ -153,12 +155,16 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                 return Container(
                   decoration: BoxDecoration(
                     color: isDark
-                        ? (isAmoled ? AppTheme.amoledCardBg : AppTheme.glassBg.withValues(alpha: 0.4))
+                        ? (isAmoled
+                            ? AppTheme.amoledCardBg
+                            : AppTheme.glassBg.withValues(alpha: 0.4))
                         : AppTheme.lightGlassBg.withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isDark
-                          ? (isAmoled ? AppTheme.amoledBorder : AppTheme.glassBorder)
+                          ? (isAmoled
+                              ? AppTheme.amoledBorder
+                              : AppTheme.glassBorder)
                           : AppTheme.lightGlassBorder,
                       width: 0.6,
                     ),

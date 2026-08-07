@@ -92,9 +92,12 @@ mixin DownloadQueueMixin {
 
   /// Reorders tasks by their new index positions.
   /// Called from a ReorderableListView's onReorder callback.
-  Future<void> reorderTasks(List<DownloadTask> visibleTasks, int oldIndex, int newIndex) async {
+  Future<void> reorderTasks(
+      List<DownloadTask> visibleTasks, int oldIndex, int newIndex) async {
     // QUEUE-FIX-4: Guard: only allow reordering when the full unfiltered list is visible
-    if (statusFilter != 'All' || searchQuery.isNotEmpty || categoryFilters.isNotEmpty) {
+    if (statusFilter != 'All' ||
+        searchQuery.isNotEmpty ||
+        categoryFilters.isNotEmpty) {
       debugPrint('[Queue] Reorder blocked: filters active');
       return;
     }
@@ -138,7 +141,8 @@ mixin DownloadQueueMixin {
     }
     _queueProcessing = true;
     _needsRePump = false;
-    final effectiveOverride = maxConcurrentOverride ?? _pendingMaxConcurrentOverride;
+    final effectiveOverride =
+        maxConcurrentOverride ?? _pendingMaxConcurrentOverride;
     _pendingMaxConcurrentOverride = null;
     try {
       final settings = providerSettingsProvider;
@@ -184,13 +188,13 @@ mixin DownloadQueueMixin {
         final isRunning = providerTasks.any(
           (t) => t.id == task.id && t.status == DownloadStatus.downloading,
         );
-        final hasPendingOverride = effectiveThreadOverrides.containsKey(task.id);
+        final hasPendingOverride =
+            effectiveThreadOverrides.containsKey(task.id);
         final isPendingStart = isTaskPendingStart(task.id);
         if (isRunning || hasPendingOverride || isPendingStart) continue;
 
         // QUEUE-FIX-2: Unified denominator for slot check and thread budget using effectiveActive
-        final totalConcurrent =
-            max(1, effectiveActive + startedThisPass + 1);
+        final totalConcurrent = max(1, effectiveActive + startedThisPass + 1);
         final baseLimit = min(
           settings.maxTotalConnections ~/ totalConcurrent,
           settings.defaultThreadCount,
@@ -218,7 +222,8 @@ mixin DownloadQueueMixin {
         _needsRePump = false;
         final pendingOverride = _pendingMaxConcurrentOverride;
         _pendingMaxConcurrentOverride = null;
-        Future.microtask(() => pumpQueue(maxConcurrentOverride: pendingOverride));
+        Future.microtask(
+            () => pumpQueue(maxConcurrentOverride: pendingOverride));
       }
     }
   }

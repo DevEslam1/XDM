@@ -10,9 +10,12 @@ const Map<String, String> esTranslations = {
   'settings_auto_resume': 'Reanudar automáticamente',
   'settings_auto_resume_sub': 'Reanudar descargas incompletas al iniciar',
   'settings_adaptive_threads': 'Conteo adaptativo de hilos',
-  'settings_adaptive_threads_sub': 'Ajustar automáticamente el número de hilos según la velocidad de descarga',
-  'settings_auto_verify_checksum': 'Verificar automáticamente la integridad del archivo',
-  'settings_auto_verify_checksum_sub': 'Calcular el hash SHA-256 después de completar cada descarga',
+  'settings_adaptive_threads_sub':
+      'Ajustar automáticamente el número de hilos según la velocidad de descarga',
+  'settings_auto_verify_checksum':
+      'Verificar automáticamente la integridad del archivo',
+  'settings_auto_verify_checksum_sub':
+      'Calcular el hash SHA-256 después de completar cada descarga',
   'settings_max_channels': 'Descargas simultáneas máximas',
   'settings_max_channels_sub': 'Limitar descargas paralelas activas',
   'settings_bandwidth': 'Red y límites de velocidad',
@@ -92,23 +95,28 @@ const Map<String, String> esTranslations = {
   'onboarding_next': 'Siguiente',
   'onboarding_skip': 'Omitir',
   'permission_title': 'Permisos de la aplicación',
-  'permission_subtitle': 'Permite los siguientes permisos para la mejor experiencia',
+  'permission_subtitle':
+      'Permite los siguientes permisos para la mejor experiencia',
   'permission_storage_title': 'Almacenamiento',
   'permission_storage_desc': 'Guarda archivos descargados en tu dispositivo',
   'permission_notifications_title': 'Notificaciones',
-  'permission_notifications_desc': 'Recibe notificaciones cuando se completen las descargas',
+  'permission_notifications_desc':
+      'Recibe notificaciones cuando se completen las descargas',
   'permission_battery_title': 'Optimización de batería',
-  'permission_battery_desc': 'Permitir descargas sin interrupciones en segundo plano',
+  'permission_battery_desc':
+      'Permitir descargas sin interrupciones en segundo plano',
   'permission_battery_opening': 'Abriendo ajustes del sistema…',
   'permission_continue': 'Continuar',
   'permission_allow': 'Permitir',
   'permission_open_settings': 'Abrir Ajustes',
-  'permission_permanently_denied': 'Permiso denegado permanentemente. Por favor, habilítalo en la configuración del sistema.',
+  'permission_permanently_denied':
+      'Permiso denegado permanentemente. Por favor, habilítalo en la configuración del sistema.',
   'permission_download_location_title': 'Ubicación de descarga',
   'permission_download_location_desc': 'Elige dónde guardar tus archivos',
   'permission_download_location_button': 'Elegir carpeta',
   'permission_download_location_change': 'Cambiar',
-  'permission_download_location_required': 'Elige una carpeta de descarga para continuar',
+  'permission_download_location_required':
+      'Elige una carpeta de descarga para continuar',
   'details_title': 'Detalles de la descarga',
   'details_channels': 'Conexiones',
   'details_active_threads': 'Hilos activos',
@@ -125,7 +133,8 @@ const Map<String, String> esTranslations = {
   'details_established': 'Añadido el',
   'details_inactive_eta': 'ETA: inactivo',
   'details_threads_warning_title': '¿Reestructurar hilos de conexión?',
-  'details_threads_warning_desc': 'Cambiar los hilos reiniciará el progreso de la descarga.',
+  'details_threads_warning_desc':
+      'Cambiar los hilos reiniciará el progreso de la descarga.',
   'sort_date': 'Fecha',
   'sort_status': 'Estado',
   'sort_tooltip': 'Ordenar',
@@ -161,12 +170,15 @@ const Map<String, String> esTranslations = {
   'settings_bypass_ssl': 'Confiar en todos los certificados SSL',
   'settings_bypass_ssl_sub': 'Omitir validación SSL (ADVERTENCIA: Riesgo MITM)',
   'bypass_ssl_dialog_title': '¿Desactivar la verificación SSL?',
-  'bypass_ssl_dialog_body': 'Esto expone todas las descargas a ataques de intermediario. ',
+  'bypass_ssl_dialog_body':
+      'Esto expone todas las descargas a ataques de intermediario. ',
   'bypass_ssl_dialog_confirm': 'Entiendo el riesgo',
   'settings_https_only': 'Modo solo HTTPS',
-  'settings_https_only_sub': 'Actualizar toda navegación http:// a https:// cuando sea posible',
+  'settings_https_only_sub':
+      'Actualizar toda navegación http:// a https:// cuando sea posible',
   'settings_reduce_visuals': 'Reducir efectos visuales',
-  'settings_reduce_visuals_sub': 'Desactivar desfoque y destellos para mayor rendimiento',
+  'settings_reduce_visuals_sub':
+      'Desactivar desfoque y destellos para mayor rendimiento',
   'settings_classic_ui': 'Modo de interfaz clásica',
   'settings_classic_ui_sub': 'Cambiar a diseño plano de interfaz nativa',
   'settings_cleanup': 'Limpieza automática de registros',
@@ -247,7 +259,8 @@ const Map<String, String> esTranslations = {
   'overall_progress': 'Progreso general',
   'transferred': 'Transferido',
   'confirm_close_tab_title': 'Confirmar cierre de pestaña',
-  'confirm_close_tab_desc': 'Esta pestaña tiene una descarga activa. ¿Cerrar de todos modos?',
+  'confirm_close_tab_desc':
+      'Esta pestaña tiene una descarga activa. ¿Cerrar de todos modos?',
   'file_name_label': 'Nombre de archivo:',
   'save_path_label': 'Ruta de guardado:',
   'filename_empty_error': 'El nombre de archivo no puede estar vacío',
@@ -264,7 +277,8 @@ const Map<String, String> esTranslations = {
   'video_label': 'VÍDEO',
   'audio_label': 'AUDIO',
   'quality_label': 'CALIDAD',
-  'yt_legal_warning': 'Aviso: Descarga contenido solo si tienes derecho a ello.',
+  'yt_legal_warning':
+      'Aviso: Descarga contenido solo si tienes derecho a ello.',
   'browser_new_tab': 'Nueva pestaña',
   'browser_dashboard': 'Panel',
   'browser_bookmark_saved': 'Marcador guardado',
@@ -302,7 +316,8 @@ const Map<String, String> esTranslations = {
   'redirect_bg_opened': 'Pestaña abierta en segundo plano',
   'browser_select_video_quality': 'SELECCIONAR CALIDAD DE VÍDEO',
   'browser_alternative_stream': 'Transmisión alternativa',
-  'browser_no_alternative_streams': 'No se detectaron transmisiones alternativas',
+  'browser_no_alternative_streams':
+      'No se detectaron transmisiones alternativas',
   'browser_detected_media': 'MEDIOS DETECTADOS EN LA PÁGINA',
   'browser_media_stream': 'Transmisión de medios',
   'browser_video_stream_default': 'Transmisión de vídeo (Predeterminada)',
@@ -328,7 +343,8 @@ const Map<String, String> esTranslations = {
   'browser_stream_sniffer_status': 'ESTADO DEL DETECTOR DE TRANSMISIÓN',
   'browser_auto_intercept_active': 'INTERCEPTACIÓN AUTOMÁTICA ACTIVA',
   'browser_auto_intercept_off': 'INTERCEPTACIÓN AUTOMÁTICA DESACTIVADA',
-  'browser_sniff_description': 'Detecta archivos de medios y documentos dinámicamente',
+  'browser_sniff_description':
+      'Detecta archivos de medios y documentos dinámicamente',
   'browser_quick_signals': 'SEÑALES RÁPIDAS (MARCADORES)',
   'browser_menu_reload': 'Recargar',
   'browser_menu_bookmark_page': 'Añadir esta página a marcadores',
@@ -345,7 +361,8 @@ const Map<String, String> esTranslations = {
   'browser_menu_exit_incognito': 'Salir de incógnito',
   'browser_menu_new_incognito': 'Nueva pestaña de incógnito',
   'browser_download_choice': '¿Qué deseas descargar?',
-  'browser_single_and_playlist': 'Este enlace contiene un vídeo individual y una lista de reproducción.',
+  'browser_single_and_playlist':
+      'Este enlace contiene un vídeo individual y una lista de reproducción.',
   'browser_single_video': 'Vídeo individual',
   'browser_entire_playlist': 'Lista de reproducción completa',
   'browser_fab_playlist': 'LISTA DE REPRODUCCIÓN',
@@ -353,7 +370,8 @@ const Map<String, String> esTranslations = {
   'browser_fab_youtube_retry': 'YOUTUBE (REINTENTAR)',
   'browser_fab_downloads': 'DESCARGAS',
   'browser_js_css_injector': 'INYECTOR JS / CSS',
-  'browser_js_css_warning': 'ADVERTENCIA: El código se ejecuta en las páginas web.',
+  'browser_js_css_warning':
+      'ADVERTENCIA: El código se ejecuta en las páginas web.',
   'browser_javascript': 'JavaScript',
   'browser_css_style': 'Estilo CSS',
   'browser_cancel_uppercase': 'CANCELAR',
@@ -374,7 +392,8 @@ const Map<String, String> esTranslations = {
   'browser_no_downloads_desc': 'Los archivos descargados aparecerán aquí.',
   'browser_clear_history_title': '¿BORRAR HISTORIAL?',
   'browser_clear_history_desc': '¿Seguro que deseas borrar todo el historial?',
-  'browser_clear_history_content': '¿Seguro que deseas borrar todo el historial de navegación?',
+  'browser_clear_history_content':
+      '¿Seguro que deseas borrar todo el historial de navegación?',
   'browser_export_failed': 'Exportación fallida',
   'browser_copied_url_for': 'URL copiada para:',
   'browser_status_done': 'HECHO',
@@ -407,16 +426,21 @@ const Map<String, String> esTranslations = {
   'browser_script_css': 'CSS',
   'settings_adblock_title': 'BLOQUEADOR DE ANUNCIOS Y FILTROS',
   'settings_enable_adblock': 'ACTIVAR BLOQUEADOR DE ANUNCIOS',
-  'settings_enable_adblock_sub': 'Bloquear anuncios, ventanas emergentes y scripts de seguimiento en el navegador',
+  'settings_enable_adblock_sub':
+      'Bloquear anuncios, ventanas emergentes y scripts de seguimiento en el navegador',
   'settings_adblock_rules': 'Reglas de filtrado cargadas',
   'settings_update_adblock_hosts': 'ACTUALIZAR SERVIDORES ADBLOCK',
   'settings_updating_adblock_hosts': 'ACTUALIZANDO...',
-  'settings_adblock_updating_msg': 'Descargando y actualizando servidores de AdBlock (EasyList)...',
-  'settings_adblock_success_msg': '¡Servidores de AdBlock actualizados con éxito!',
-  'settings_adblock_failed_msg': 'No se pudieron actualizar los servidores de AdBlock. Verifique la conexión.',
+  'settings_adblock_updating_msg':
+      'Descargando y actualizando servidores de AdBlock (EasyList)...',
+  'settings_adblock_success_msg':
+      '¡Servidores de AdBlock actualizados con éxito!',
+  'settings_adblock_failed_msg':
+      'No se pudieron actualizar los servidores de AdBlock. Verifique la conexión.',
   'settings_accessibility_title': 'CONTROLES DE ACCESIBILIDAD',
   'settings_text_scaling': 'FACTOR DE ESCALA DE TEXTO',
-  'settings_text_scaling_sub': 'Ajustar el tamaño de fuente dinámicamente en la aplicación',
+  'settings_text_scaling_sub':
+      'Ajustar el tamaño de fuente dinámicamente en la aplicación',
   'search_settings_hint': 'Buscar en configuración...',
   'double_tap_details_hint': 'Toca dos veces para ver detalles',
   'update_changelog': 'Novedades:',
@@ -462,7 +486,8 @@ const Map<String, String> esTranslations = {
   'clipboard_link_detected': 'Enlace detectado en el portapapeles',
   'download_action': 'Descargar',
   'start_btn': 'Iniciar',
-  'file_missing_msg': 'Archivo no encontrado en el disco, movido a la pestaña de fallidos',
+  'file_missing_msg':
+      'Archivo no encontrado en el disco, movido a la pestaña de fallidos',
   'settings_dark_mode': 'Modo oscuro',
   'settings_dark_mode_sub': 'Activar estilo de tema oscuro',
   'settings_language': 'Idioma',
@@ -471,7 +496,8 @@ const Map<String, String> esTranslations = {
   'settings_haptics_sub': 'Vibrar en interacción',
   'settings_visuals': 'Efectos visuales',
   'settings_network_sec': 'Red y seguridad',
-  'settings_speed_limit_sub': 'Establecer límite de velocidad de descarga global',
+  'settings_speed_limit_sub':
+      'Establecer límite de velocidad de descarga global',
   'browser_clear_btn': 'Limpiar',
   'copy_diagnostics': 'COPIAR DIAGNÓSTICOS',
   'block_element': 'Bloquear elemento',

@@ -39,7 +39,6 @@ Widget createTestApp({
   ThemeData? theme,
   Locale? locale,
 }) {
-
   final db = databaseService ?? FakeDatabaseService();
   final provider = downloadProvider ?? createMockDownloadProvider(db: db);
   addTearDown(() {

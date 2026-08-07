@@ -45,8 +45,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     final isRtl = L10n.isRtl(context);
 
-    return Selector<SettingsProvider,
-        ({bool isDarkMode, bool isAmoledMode})>(
+    return Selector<SettingsProvider, ({bool isDarkMode, bool isAmoledMode})>(
       selector: (_, s) =>
           (isDarkMode: s.isDarkMode, isAmoledMode: s.isAmoledMode),
       builder: (context, settingsState, _) {
@@ -95,7 +94,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 backgroundColor: Colors.transparent,
                 appBar: AppBar(
                   backgroundColor: isDark
-                      ? (isAmoled ? AppTheme.amoledBackground : Colors.transparent)
+                      ? (isAmoled
+                          ? AppTheme.amoledBackground
+                          : Colors.transparent)
                       : Colors.transparent,
                   flexibleSpace: isAmoled
                       ? null
@@ -155,9 +156,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           child: Theme(
                             data: Theme.of(context).copyWith(
                               primaryColor: accentClr,
-                              colorScheme: Theme.of(context).colorScheme.copyWith(
-                                    primary: accentClr,
-                                  ),
+                              colorScheme:
+                                  Theme.of(context).colorScheme.copyWith(
+                                        primary: accentClr,
+                                      ),
                               textSelectionTheme: TextSelectionThemeData(
                                 cursorColor: accentClr,
                                 selectionColor:
@@ -182,7 +184,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 boxShadow: _searchFocusNode.hasFocus
                                     ? [
                                         BoxShadow(
-                                          color: accentClr.withValues(alpha: 0.3),
+                                          color:
+                                              accentClr.withValues(alpha: 0.3),
                                           blurRadius: 10,
                                           spreadRadius: 1,
                                         ),
@@ -200,8 +203,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 ),
                                 decoration: InputDecoration(
                                   isDense: true,
-                                  hintText: L10n.of(
-                                      context, 'search_settings_hint'),
+                                  hintText:
+                                      L10n.of(context, 'search_settings_hint'),
                                   hintStyle: TextStyle(
                                     color: mutedClr,
                                     fontSize: 12,

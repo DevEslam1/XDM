@@ -62,7 +62,9 @@ Future<void> showUpdateInfoDialog(
                 color: AppTheme.panelBg(isDark),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+                  color: isDark
+                      ? AppTheme.borderSubtle
+                      : AppTheme.lightBorderSubtle,
                 ),
               ),
               child: Text(
@@ -91,9 +93,7 @@ Future<void> showUpdateInfoDialog(
             label: isDownloaded
                 ? L10n.of(dialogCtx, 'btn_install_now')
                 : L10n.of(dialogCtx, 'update_now_btn'),
-            icon: isDownloaded
-                ? Icons.install_mobile
-                : Icons.download_rounded,
+            icon: isDownloaded ? Icons.install_mobile : Icons.download_rounded,
             color: accent,
             onPressed: () async {
               Navigator.pop(dialogCtx);

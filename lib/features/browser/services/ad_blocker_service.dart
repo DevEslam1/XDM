@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
@@ -50,11 +50,6 @@ class AdBlockerService {
 })();
 ''';
 
-  /// Native content blockers are intentionally disabled here. The downloaded
-  /// domain list can contain tens of thousands of entries; sending that list
-  /// to every native WebView is expensive and duplicates the Dart-side
-  /// [shouldBlockUrl] check used by shouldInterceptRequest.
-  List<ContentBlocker> get contentBlockers => const <ContentBlocker>[];
 
   final List<VoidCallback> _listeners = [];
   void addListener(VoidCallback listener) => _listeners.add(listener);
@@ -208,9 +203,9 @@ class AdBlockerService {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------
   // 1. DOMAIN BLOCKLIST
-  // ─────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------
 
   /// Checks if [host] is allow-listed via an exception rule (`@@`).
   bool isAllowListed(String host) {
@@ -233,7 +228,9 @@ class AdBlockerService {
     // Never block backend requests
     final isBackend = lower.contains('xdm-backend') ||
         (SettingsProvider.instance.backendUrl.isNotEmpty &&
-            lower.contains(Uri.tryParse(SettingsProvider.instance.backendUrl)?.host ?? ''));
+            lower.contains(
+                Uri.tryParse(SettingsProvider.instance.backendUrl)?.host ??
+                    ''));
     if (isBackend) return false;
 
     // Never block reCAPTCHA, Google authentication, gstatic, or core JS frameworks
@@ -319,8 +316,190 @@ class AdBlockerService {
     return false;
   }
 
+  /// Native WebView content blockers — the most effective blocking layer.
+  /// These intercept requests at the network level before any JS runs.
+  List<ContentBlocker> get contentBlockers {
+    if (!_enabled) return const <ContentBlocker>[];
+    return _nativeContentBlockers;
+  }
+
+  static final List<ContentBlocker> _nativeContentBlockers = [
+    // -- DoubleClick / Google Ads --
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*doubleclick\\.net.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*googlesyndication\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*googleadservices\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*googletagmanager\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*google-analytics\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    // -- Major Ad Networks --
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*adnxs\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*criteo\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*taboola\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*outbrain\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*pubmatic\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*openx\\.net.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*rubiconproject\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*casalemedia\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*smartadserver\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*adform\\.net.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    // -- Popup / Redirect Ad Networks --
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*popads\\.net.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*popcash\\.net.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*propellerads\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*exoclick\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*trafficjunky\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*trafficjunky\\.net.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*adsterra\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*hilltopads\\.net.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*juicyads\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*clickadu\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*onclickads\\.net.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*mgid\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*revcontent\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*amazon-adsystem\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*moatads\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*hotjar\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*quantserve\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*bidswitch\\.net.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*adskeeper\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    // -- Tracking / Analytics --
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*scorecardresearch\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*chartbeat\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*histats\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*newrelic\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*onesignal\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*pushcrew\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*pushengage\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+    ContentBlocker(
+      trigger: ContentBlockerTrigger(urlFilter: '.*pushails\\.com.*'),
+      action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+    ),
+  ];
+
   static const Set<String> _blockedDomains = {
-    // ── Google / DoubleClick ──
+    // -- Google / DoubleClick --
     'doubleclick.net',
     'googlesyndication.com',
     'googleadservices.com',
@@ -333,7 +512,7 @@ class AdBlockerService {
     'googleads.g.doubleclick.net',
     'stats.g.doubleclick.net',
 
-    // ── Major ad networks ──
+    // -- Major ad networks --
     'adnxs.com',
     'adsrvr.org',
     'adform.net',
@@ -414,11 +593,49 @@ class AdBlockerService {
     'xad.com',
     'yieldmo.com',
     'zedo.com',
+
+    // -- Additional high-volume ad/tracker domains --
+    'scorecardresearch.com',
+    'imrworldwide.com',
+    'krxd.net',
+    'rlcdn.com',
+    'demdex.net',
+    'bluekai.com',
+    'adtechus.com',
+    'yieldlab.net',
+    'yieldlab.de',
+    'emxdgt.com',
+    'sovrn.com',
+    'lijit.com',
+    '33across.com',
+    'appnexus.com',
+    'contextweb.com',
+    'indexexchange.com',
+    'sharethrough.com',
+    'triplelift.com',
+    'unrulymedia.com',
+    'springserve.com',
+    'vidazoo.com',
+    'spotxchange.com',
+    'spotx.tv',
+    'advertising.com',
+    'adtech.com',
+    'aolcloud.net',
+    'adap.tv',
+    'videologygroup.com',
+    'innovid.com',
+    'syndication.twitter.com',
+    'ads.twitter.com',
+    'ads.linkedin.com',
+    'connect.facebook.net',
+    'tr.snapchat.com',
+    'analytics.tiktok.com',
+    'imasdk.googleapis.com',
   };
 
-  // ─────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------
   // 2. CSS INJECTION – hide ad containers (stealthily)
-  // ─────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------
 
   /// CSS injected on every page load to hide known ad elements.
   /// Uses `visibility:hidden` instead of `display:none` so bait elements
@@ -449,7 +666,7 @@ class AdBlockerService {
   String get antiDetectCss => _antiDetectCss;
 
   static const String _antiDetectCss = '''
-/* ─── XDM Anti-Adblock: bait element stealth ─── */
+/* --- XDM Anti-Adblock: bait element stealth --- */
 #ad-test, #adsbox, #ads, #ad, .adsbox, .ads, .adsbygoogle-noablate,
 [id="ad-test"], [id="adsbox"], [class="ads"], [class="adsbox"] {
   opacity: 0 !important;
@@ -464,7 +681,7 @@ class AdBlockerService {
 ''';
 
   static const String _cssRules = '''
-/* ═══ GENERIC AD CONTAINERS ═══ */
+/* === GENERIC AD CONTAINERS === */
 [class*="ad-container"], [class*="ad-wrapper"], [class*="ad-banner"],
 [class*="ad-slot"], [class*="ad-unit"], [class*="ad-frame"],
 [class*="ad-box"], [class*="adblock"], [class*="adsbygoogle"],
@@ -496,7 +713,7 @@ iframe[src*="adskeeper"], iframe[src*="dianomi"],
 iframe[src*="infolinks"], iframe[src*="carbonads"],
 iframe[src*="pushails"], iframe[src*="onesignal"],
 iframe[src*="trckswrm"], iframe[src*="leadzu"],
-/* ═══ YOUTUBE ═══ */
+/* === YOUTUBE === */
 ytd-ad-slot-renderer, ytd-promoted-sparkles-web-renderer,
 ytd-merch-shelf-renderer, ytd-statement-banner-renderer,
 #masthead-ad, #player-ads, #video-masthead,
@@ -510,7 +727,7 @@ ytd-video-masthead-ad-v3-renderer,
 ytd-companion-slot-renderer,
 ytd-primetime-promo-renderer,
 ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
-/* ═══ MOVIE / STREAMING SITES ═══ */
+/* === MOVIE / STREAMING SITES === */
 [class*="ad-player-overlay"], [class*="preloader"],
 [class*="pre-roll"], [class*="preroll"], [class*="midroll"],
 [class*="countdown-overlay"], [class*="skip-ad"],
@@ -519,14 +736,14 @@ div[class*="ad-layer"]:not(#page-manager):not(ytd-app),
 div[class*="pop-overlay"]:not(#page-manager),
 div[class*="modal-ad"]:not(#page-manager),
 [class*="lightbox-ad"], [class*="full-page-ad"],
-/* ═══ MOD-APP / APK SITES ═══ */
+/* === MOD-APP / APK SITES === */
 [class*="download-ad"], [class*="dl-ad"],
 [class*="fake-download"], [class*="fake-button"],
 [class*="ad-download"], [class*="sponsored-dl"],
 [class*="promo-download"], [class*="ad-cta"],
 [class*="redirect-btn"], [class*="ad-redirect"],
 [class*="pop-redirect"], [class*="overlay-redirect"],
-/* ═══ GENERIC OVERLAYS / POPUPS / ANTI-ADBLOCK ═══ */
+/* === GENERIC OVERLAYS / POPUPS / ANTI-ADBLOCK === */
 [class*="cookie-consent"], [class*="cookie-banner"],
 [class*="newsletter-popup"], [class*="subscribe-popup"],
 [class*="push-notification"], [class*="notification-prompt"],
@@ -554,9 +771,9 @@ body {
 }
 ''';
 
-  // ─────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------
   // 3. JS INJECTION – runtime ad neutralisation
-  // ─────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------
 
   /// JS injected at `onPageStarted` to block popups and redirect chains
   /// before the page even renders. Also blocks ad iframe/script creation.
@@ -567,7 +784,7 @@ body {
   if (window.__xdmAdBlockEarly) return;
   window.__xdmAdBlockEarly = true;
 
-  /* ── Anti-Adblock Detection Neutrals & Fake Globals ── */
+  /* -- Anti-Adblock Detection Neutrals & Fake Globals -- */
   try {
     window.canRunAds = true;
     window.isAdBlockActive = false;
@@ -595,7 +812,7 @@ body {
     window.sniffAdBlock = new _FakeABDetector();
   } catch(e) {}
 
-  /* ── Shared ad-domain check ── */
+  /* -- Shared ad-domain check -- */
   var _adDomains = ['doubleclick','googlesyndication','googleadservices',
     'adnxs','criteo','pubmatic','openx','taboola','outbrain',
     'popads','popcash','exoclick','juicyads','trafficjunky',
@@ -619,7 +836,7 @@ body {
     return false;
   }
 
-  /* ── Route window.open popups to new tabs ── */
+  /* -- Route window.open popups to new tabs -- */
   window.open = function(url) {
     if (url && typeof url === 'string' && url.trim() !== '' && url !== 'about:blank') {
       try {
@@ -631,18 +848,18 @@ body {
     return null;
   };
 
-  /* ── Block alert/confirm/prompt spam ── */
+  /* -- Block alert/confirm/prompt spam -- */
   window.alert = function() {};
   window.confirm = function() { return false; };
   window.prompt = function() { return null; };
 
-  /* ── Block beforeunload tricks (used to trap users on ad pages) ── */
+  /* -- Block beforeunload tricks (used to trap users on ad pages) -- */
   Object.defineProperty(window, 'onbeforeunload', {
     get: function() { return null; },
     set: function() {}
   });
 
-  /* ── Neutralise ad redirect timers ── */
+  /* -- Neutralise ad redirect timers -- */
   var origSetTimeout = window.setTimeout;
   var origSetInterval = window.setInterval;
   window.setTimeout = function(fn, delay) {
@@ -658,7 +875,7 @@ body {
     return origSetInterval.call(window, fn, delay);
   };
 
-  /* ── Block ad iframes AND ad script tags from being created ── */
+  /* -- Block ad iframes AND ad script tags from being created -- */
   var origCreateElement = document.createElement.bind(document);
   document.createElement = function(tag) {
     var el = origCreateElement(tag);
@@ -702,8 +919,8 @@ body {
     }
   } catch(e) {}
 
-  /* ── Stealth-hide: keeps element in DOM so MutationObservers
-     don't see removals, but element is invisible to users ── */
+  /* -- Stealth-hide: keeps element in DOM so MutationObservers
+     don't see removals, but element is invisible to users -- */
   function _stealthHide(el) {
     try {
       el.style.setProperty('visibility', 'hidden', 'important');
@@ -715,7 +932,7 @@ body {
     } catch(e) {}
   }
 
-  /* ── Stealth-hide ad elements by selector ── */
+  /* -- Stealth-hide ad elements by selector -- */
   var selectors = [
     /* generic */
     '[class*="ad-container"]','[class*="ad-wrapper"]','[class*="ad-banner"]',
@@ -755,7 +972,7 @@ body {
     } catch(e) {}
   }
 
-  /* ── Stealth-hide fixed/absolute overlays covering the page ── */
+  /* -- Stealth-hide fixed/absolute overlays covering the page -- */
   if (!isYoutube) {
     try {
       if (document.querySelectorAll('*').length <= 5000) {
@@ -782,7 +999,7 @@ body {
     } catch(e) {}
   }
 
-  /* ── YouTube: skip video ads ── */
+  /* -- YouTube: skip video ads -- */
   try {
     var skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-skip-ad-button, button[class*="skip"]');
     if (skipBtn) skipBtn.click();
@@ -797,7 +1014,7 @@ body {
     observer.observe(document.body, { childList: true, subtree: true });
   } catch(e) {}
 
-  /* ── Anti-Adblock Banner Neutralizer (Akwam, EgyBest, etc.) ── */
+  /* -- Anti-Adblock Banner Neutralizer (Akwam, EgyBest, etc.) -- */
   function _neutralizeAntiAdblockBanners() {
     var targets = [
       'ad blocker',
@@ -912,7 +1129,7 @@ body {
     });
   } catch(e) {}
 
-  /* ── Restore YouTube page scroll ── */
+  /* -- Restore YouTube page scroll -- */
   try {
     // Fix body/html overflow
     if (window.getComputedStyle(document.body).overflow === 'hidden') {
@@ -948,9 +1165,9 @@ body {
 })();
 ''';
 
-  // ─────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------
   // 4. ANTI-DETECT STEALTH LAYER
-  // ─────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------
 
   /// Validates a `set-constant` scriptlet value against a strict allowlist
   /// to prevent arbitrary JavaScript injection from untrusted filter lists.
@@ -961,8 +1178,10 @@ body {
   ///   - Integer or decimal numbers: `0`, `1`, `-1`, `3.14`
   ///   - Double-quoted strings with no embedded quotes or backslashes
   static bool _isValidScriptletValue(String value) {
-    if (value == 'true' || value == 'false' ||
-        value == 'null' || value == 'undefined') {
+    if (value == 'true' ||
+        value == 'false' ||
+        value == 'null' ||
+        value == 'undefined') {
       return true;
     }
     // Numeric: optional minus, digits, optional decimal
@@ -990,7 +1209,7 @@ body {
     final sb = StringBuffer();
     if (idx != -1) {
       sb.write(base.substring(0, idx));
-      sb.writeln('  /* ════ SCRIPTLETS ════ */');
+      sb.writeln('  /* ==== SCRIPTLETS ==== */');
       for (final s in scriptlets) {
         if (s.contains('set-constant')) {
           final parts = s.split(',');
@@ -1000,7 +1219,8 @@ body {
             if (!_isValidScriptletTarget(target)) {
               _log.warning('set-constant: rejected unsafe target "$target"');
             } else if (!_isValidScriptletValue(value)) {
-              _log.warning('set-constant: rejected unsafe value "$value" for target "$target"');
+              _log.warning(
+                  'set-constant: rejected unsafe value "$value" for target "$target"');
             } else {
               sb.writeln('  try { window.$target = $value; } catch(e) {}');
             }
@@ -1012,7 +1232,7 @@ body {
     }
 
     sb.write(base);
-    sb.writeln('\n  /* ════ SCRIPTLETS ════ */');
+    sb.writeln('\n  /* ==== SCRIPTLETS ==== */');
     for (final s in scriptlets) {
       if (s.contains('set-constant')) {
         final parts = s.split(',');
@@ -1022,7 +1242,8 @@ body {
           if (!_isValidScriptletTarget(target)) {
             _log.warning('set-constant: rejected unsafe target "$target"');
           } else if (!_isValidScriptletValue(value)) {
-            _log.warning('set-constant: rejected unsafe value "$value" for target "$target"');
+            _log.warning(
+                'set-constant: rejected unsafe value "$value" for target "$target"');
           } else {
             sb.writeln('  try { window.$target = $value; } catch(e) {}');
           }
@@ -1038,7 +1259,7 @@ body {
   if (window.__xdmAntiDetect) return;
   window.__xdmAntiDetect = true;
 
-  /* ════ A. FAKE AD SDK GLOBALS ════
+  /* ==== A. FAKE AD SDK GLOBALS ====
      Sites check these to confirm "ads loaded ok". */
   try {
     if (!window.adsbygoogle) {
@@ -1076,7 +1297,7 @@ body {
     window._0x2649 = function(){ return true; }; // used by some obfuscated detectors
   } catch(e) {}
 
-  /* ════ B. INTERCEPT fetch() TO AD DOMAINS ════
+  /* ==== B. INTERCEPT fetch() TO AD DOMAINS ====
      Returns empty 200 so detector scripts think the ad loaded. */
   try {
     var _adDF = ['doubleclick','googlesyndication','googleadservices',
@@ -1130,7 +1351,7 @@ body {
     };
   } catch(e) {}
 
-  /* ════ C. NEUTRALISE BAIT-ELEMENT DETECTION ════
+  /* ==== C. NEUTRALISE BAIT-ELEMENT DETECTION ====
      Sites inject a <div class="ad-banner"> then check
      getComputedStyle().display or offsetHeight. */
   try {
@@ -1190,7 +1411,7 @@ body {
     };
   } catch(e) {}
 
-  /* ════ D. WRAP MutationObserver ════
+  /* ==== D. WRAP MutationObserver ====
      Swallows mutations on ad-related elements so sites
      cannot detect that our lateJs hid them. */
   try {
@@ -1216,7 +1437,7 @@ body {
     MutationObserver.prototype = _OrigMO.prototype;
   } catch(e) {}
 
-  /* ════ E. PATCH Performance.getEntries() ════
+  /* ==== E. PATCH Performance.getEntries() ====
      Removes ad-domain resource entries so sites cannot
      detect blocked requests via PerformanceResourceTiming. */
   try {
@@ -1238,7 +1459,7 @@ body {
     performance.getEntriesByName = function(n, t) { return _filterP(_pGEN(n, t)); };
   } catch(e) {}
 
-  /* ════ F. NEUTRALISE ANTI-ADBLOCK LIBRARIES ════
+  /* ==== F. NEUTRALISE ANTI-ADBLOCK LIBRARIES ====
      NOP known detector variables (BlockAdBlock, FuckAdBlock, etc.) */
   try {
     var _fakeABD = {
@@ -1271,7 +1492,7 @@ body {
     }
   } catch(e) {}
 
-  /* ════ G. STEALTH navigator.serviceWorker ════
+  /* ==== G. STEALTH navigator.serviceWorker ====
      Prevents sites from using service workers to probe
      adblock state or bypass blockers. */
   try {
@@ -1289,9 +1510,9 @@ body {
 })();
 """;
 
-  // ─────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------
   // Helpers
-  // ─────────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------
 
   /// Whether the given URL is a YouTube page (for targeted YT ad-skip JS).
   static bool isYoutubePage(String url) {

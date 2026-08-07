@@ -27,4 +27,3 @@ const List<String> kFallbackBackendBaseUrls = [
   'https://xdm-backend-10763667121.europe-west1.run.app',
   'https://xdm-backend-fallback.europe-west1.run.app',
 ];
-

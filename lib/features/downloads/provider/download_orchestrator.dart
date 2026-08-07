@@ -433,8 +433,9 @@ class DownloadOrchestrator {
           if ((isRetry || isResumingWithProgress) &&
               task.downloadPageUrl != null) {
             try {
-              final fresh =
-                  await YoutubeService.getFreshStreams(task.downloadPageUrl!, preferredType: task.youtubePreferredType);
+              final fresh = await YoutubeService.getFreshStreams(
+                  task.downloadPageUrl!,
+                  preferredType: task.youtubePreferredType);
               if (fresh != null && fresh['url'] != null) {
                 final freshUrl = fresh['url'].toString();
                 final freshAudioUrl = fresh['audioUrl']?.toString();
@@ -474,10 +475,16 @@ class DownloadOrchestrator {
             }
           }
 
-          final streamInfo = await YoutubeService.getStreamForVideo(
-            videoId,
-            task.youtubeQualityPreset,
-          );
+          Map<String, dynamic>? streamInfo;
+          try {
+            streamInfo = await YoutubeService.getStreamForVideo(
+              videoId,
+              task.youtubeQualityPreset,
+            );
+          } catch (e) {
+            debugPrint('[DMX] Pre-download stream resolution failed: $e');
+          }
+
           if (streamInfo != null) {
             final type = streamInfo['type'] as String? ?? 'muxed';
             final ext = streamInfo['ext'] as String? ?? 'mp4';
@@ -523,7 +530,8 @@ class DownloadOrchestrator {
                     task.savePath,
                     resolvedFileName,
                   );
-            if (isVideo && p.extension(resolvedLocalPath).toLowerCase() == '.webm') {
+            if (isVideo &&
+                p.extension(resolvedLocalPath).toLowerCase() == '.webm') {
               resolvedLocalPath =
                   '${p.withoutExtension(resolvedLocalPath)}.mp4';
             }
@@ -986,9 +994,8 @@ class DownloadOrchestrator {
         if (await mergedFile.exists()) {
           final mergedLen = await mergedFile.length();
           // FIX M-3: Require merged file to be at least 90% of expected size
-          final expectedMinSize = current.fileSize > 0
-              ? (current.fileSize * 0.9).toInt()
-              : 1024;
+          final expectedMinSize =
+              current.fileSize > 0 ? (current.fileSize * 0.9).toInt() : 1024;
           if (mergedLen < expectedMinSize) {
             debugPrint('[DMX] M-3: Merged file too small: '
                 '$mergedLen < $expectedMinSize. Deleting.');
@@ -1212,7 +1219,8 @@ class DownloadOrchestrator {
       if (!await outputFile.exists()) {
         await _host.setTaskState(current.copyWith(
           status: DownloadStatus.failed,
-          errorMessage: 'Output file missing after download/merge. Please retry.',
+          errorMessage:
+              'Output file missing after download/merge. Please retry.',
         ));
         return;
       }
@@ -1563,8 +1571,11 @@ class DownloadOrchestrator {
         : '.mp4';
     final videoOnlyPath =
         '${p.withoutExtension(task.localFilePath)}_video_only$ext';
-    if (File(videoOnlyPath).existsSync() && !File(task.localFilePath).existsSync()) {
-      try { await File(videoOnlyPath).rename(task.localFilePath); } catch (_) {}
+    if (File(videoOnlyPath).existsSync() &&
+        !File(task.localFilePath).existsSync()) {
+      try {
+        await File(videoOnlyPath).rename(task.localFilePath);
+      } catch (_) {}
     }
 
     int videoBytesFromDisk;
@@ -1643,7 +1654,8 @@ class DownloadOrchestrator {
           totalSize = calculatedTotal;
           _sessionCachedTotalSize[task.id] = calculatedTotal;
         } else {
-          totalSize = cachedMax > 0 ? cachedMax : calculatedTotal; // never shrink
+          totalSize =
+              cachedMax > 0 ? cachedMax : calculatedTotal; // never shrink
         }
 
         // FIX-09: Clamp numerator totalDownloaded
@@ -1968,7 +1980,9 @@ class DownloadOrchestrator {
               adaptiveThreads: _host.providerSettingsProvider.adaptiveThreads,
               speedLimitKbps: task.speedLimitKbps,
               onProgress: (progress) {
-                if (audioCancelToken.isCancelled || cancelToken.isCancelled) return;
+                if (audioCancelToken.isCancelled || cancelToken.isCancelled) {
+                  return;
+                }
                 final t = _host.findTaskById(task.id);
                 if (t == null || t.status != DownloadStatus.downloading) return;
                 audioBytesSoFar = progress.downloadedBytes;
@@ -2017,7 +2031,8 @@ class DownloadOrchestrator {
                 final audioNow = DateTime.now().millisecondsSinceEpoch;
                 if (audioNow - _lastAudioStateSaveMs >= 2000) {
                   _lastAudioStateSaveMs = audioNow;
-                  unawaited(_persistAudioState(liveAudioTempPath, progress.downloadedBytes, size));
+                  unawaited(_persistAudioState(
+                      liveAudioTempPath, progress.downloadedBytes, size));
                 }
               },
               speedLimitBytesPerSecond: () {
@@ -2086,7 +2101,8 @@ class DownloadOrchestrator {
               }
             }
             final currentTask = _host.findTaskById(task.id);
-            if (currentTask != null && currentTask.downloadedBytes > videoBytesSoFar) {
+            if (currentTask != null &&
+                currentTask.downloadedBytes > videoBytesSoFar) {
               videoBytesSoFar = currentTask.downloadedBytes;
             }
             pushCombinedProgress();
@@ -2382,7 +2398,8 @@ class DownloadOrchestrator {
                 debugPrint(
                     '[DMX] Stream expired for ${task.id}, re-resolving...');
                 final pageUrl = task.downloadPageUrl ?? task.url;
-                final fresh = await YoutubeService.getFreshStreams(pageUrl, preferredType: task.youtubePreferredType);
+                final fresh = await YoutubeService.getFreshStreams(pageUrl,
+                    preferredType: task.youtubePreferredType);
 
                 if (fresh != null && fresh['url'] != null) {
                   task = task.copyWith(url: fresh['url'] as String);
@@ -2445,10 +2462,11 @@ class DownloadOrchestrator {
             final videoFile = File(task.tempFilePath);
             final audioFile = File('${task.tempFilePath}.audio');
             if (await videoFile.exists() && await audioFile.exists()) {
-              final vLen = await actualDownloadedBytes(
-                task.tempFilePath, threadCount: streamThreadCount);
+              final vLen = await actualDownloadedBytes(task.tempFilePath,
+                  threadCount: streamThreadCount);
               final aLen = await actualDownloadedBytes(
-                '${task.tempFilePath}.audio', threadCount: task.audioThreadCount);
+                  '${task.tempFilePath}.audio',
+                  threadCount: task.audioThreadCount);
               if (vLen > 0 && aLen > 0) {
                 final current = _host.findTaskById(task.id);
                 if (current != null) {
@@ -2664,7 +2682,9 @@ class DownloadOrchestrator {
             task.downloadPageUrl!,
             preferredType: task.youtubePreferredType,
           );
-          if (fresh != null && fresh['url'] != null && fresh['url'] != task.url) {
+          if (fresh != null &&
+              fresh['url'] != null &&
+              fresh['url'] != task.url) {
             debugPrint('[DMX] R-2: Refreshing stale YouTube URL before start');
             task = task.copyWith(url: fresh['url'] as String);
             if (fresh['audioUrl'] != null) {
@@ -3033,8 +3053,9 @@ class DownloadOrchestrator {
           task.downloadPageUrl != null &&
           realTotalDownloaded > 0) {
         try {
-          final fresh =
-              await YoutubeService.getFreshStreams(task.downloadPageUrl!, preferredType: task.youtubePreferredType);
+          final fresh = await YoutubeService.getFreshStreams(
+              task.downloadPageUrl!,
+              preferredType: task.youtubePreferredType);
           if (fresh != null && fresh['url'] != null) {
             debugPrint(
                 '[DMX] Proactively refreshed YouTube stream URL on resume');
@@ -3640,7 +3661,9 @@ class DownloadOrchestrator {
     if (msg.contains('merge') ||
         msg.contains('ffmpeg') ||
         msg.contains('missing') ||
-        (msg.contains('not found') && !msg.contains('stream') && !msg.contains('youtube'))) {
+        (msg.contains('not found') &&
+            !msg.contains('stream') &&
+            !msg.contains('youtube'))) {
       return false;
     }
     // FIX-10: YouTube stream expiry and bot detection are transient
@@ -3679,7 +3702,12 @@ class DownloadOrchestrator {
   static bool _isYouTubeStreamError(Object error) {
     if (error is DioException) {
       final statusCode = error.response?.statusCode;
-      if (statusCode == 403 || statusCode == 410 || statusCode == 404 || (statusCode != null && statusCode >= 500)) return true;
+      if (statusCode == 403 ||
+          statusCode == 410 ||
+          statusCode == 404 ||
+          (statusCode != null && statusCode >= 500)) {
+        return true;
+      }
     }
     final msg = error.toString().toLowerCase();
     return msg.contains('html_instead_of_media') ||
@@ -3912,7 +3940,8 @@ class DownloadOrchestrator {
   // FIX-AUDIT-A1: Audio state persistence helper
   int _lastAudioStateSaveMs = 0;
 
-  Future<void> _persistAudioState(String audioPath, int downloaded, int totalSize) async {
+  Future<void> _persistAudioState(
+      String audioPath, int downloaded, int totalSize) async {
     try {
       final statePath = '$audioPath.dmxstate';
       final state = {
@@ -3924,7 +3953,11 @@ class DownloadOrchestrator {
         'status': 'active',
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
         'chunks': [
-          {'start': 0, 'end': totalSize > 0 ? totalSize - 1 : -1, 'downloaded': downloaded}
+          {
+            'start': 0,
+            'end': totalSize > 0 ? totalSize - 1 : -1,
+            'downloaded': downloaded
+          }
         ],
       };
       final tmpPath = '$statePath.tmp';

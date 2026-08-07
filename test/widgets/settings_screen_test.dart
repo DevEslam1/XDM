@@ -54,7 +54,9 @@ void main() {
       expect(settings.isAmoledMode, isTrue);
     });
 
-    testWidgets('enabling battery saver mode keeps power tab active and page visible', (tester) async {
+    testWidgets(
+        'enabling battery saver mode keeps power tab active and page visible',
+        (tester) async {
       final settings = createMockSettingsProvider();
       await tester.pumpWidget(createTestApp(
         child: const SettingsScreen(initialSection: 'power'),

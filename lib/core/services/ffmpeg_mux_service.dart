@@ -89,7 +89,6 @@ class FFmpegMuxService {
     }
   }
 
-
   static List<String> _buildArgs({
     required String videoPath,
     required String audioPath,
@@ -196,8 +195,9 @@ class FFmpegMuxService {
       final hasAudio = logs.contains('codec_type=audio');
       final durMatch = RegExp(r'duration=([\d.]+)').firstMatch(logs);
       final duration = double.tryParse(durMatch?.group(1) ?? '') ?? 0;
-      final sizeOk =
-          path.isNotEmpty && await file.exists() && (await file.length()) > 1024;
+      final sizeOk = path.isNotEmpty &&
+          await file.exists() &&
+          (await file.length()) > 1024;
 
       final expectedSecs = expectedDuration != null
           ? expectedDuration.inMilliseconds / 1000.0
@@ -321,7 +321,8 @@ class FFmpegMuxService {
 
         if (ReturnCode.isSuccess(returnCode)) {
           final targetExpectedDuration = expectedDuration ?? totalDuration;
-          if (await _validateOutput(outputPath, expectedDuration: targetExpectedDuration)) {
+          if (await _validateOutput(outputPath,
+              expectedDuration: targetExpectedDuration)) {
             _log.info('Merge strategy $strategy succeeded: $outputPath');
             await cleanUpInputs();
             return true;
@@ -332,7 +333,6 @@ class FFmpegMuxService {
         _log.warning('Merge strategy $strategy failed: $e');
       }
     }
-
 
     // Clean up partial output if all strategies fail
     try {

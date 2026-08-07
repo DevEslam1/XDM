@@ -4,7 +4,6 @@ import 'package:logging/logging.dart';
 /// Detects cross-domain automatic redirects and manages user preferences
 /// for opening them in a new tab versus the current tab.
 class RedirectGuard {
-
   static final _log = Logger('RedirectGuard');
   RedirectGuard._();
   static final RedirectGuard instance = RedirectGuard._();

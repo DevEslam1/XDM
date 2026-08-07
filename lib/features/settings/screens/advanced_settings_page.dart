@@ -102,7 +102,8 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
     }
   }
 
-  void _showResetConfirmDialog(BuildContext context, SettingsProvider settings) async {
+  void _showResetConfirmDialog(
+      BuildContext context, SettingsProvider settings) async {
     final confirmed = await DmxConfirmDialog.show(
       context,
       title: L10n.of(context, 'settings_reset_confirm_title'),
@@ -149,7 +150,8 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
               SwitchTile(
                 accentColor: accent,
                 title: 'Enable Developer Mode',
-                subtitle: 'Unlocks advanced debugging, SSL configuration, and internal logs',
+                subtitle:
+                    'Unlocks advanced debugging, SSL configuration, and internal logs',
                 value: settings.developerMode,
                 onChanged: (val) {
                   settings.toggleDeveloperMode();
@@ -169,7 +171,9 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
           ),
           const SizedBox(height: 12),
           SettingsSectionHeader(
-            title: isRtl ? 'خادم اليوتيوب والوسائط' : 'YouTube & Extraction Backend',
+            title: isRtl
+                ? 'خادم اليوتيوب والوسائط'
+                : 'YouTube & Extraction Backend',
             accentColor: accent,
             isDark: isDark,
           ),
@@ -198,7 +202,8 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
               SwitchTile(
                 accentColor: accent,
                 title: L10n.of(context, 'settings_use_local_yt_fallback'),
-                subtitle: L10n.of(context, 'settings_use_local_yt_fallback_sub'),
+                subtitle:
+                    L10n.of(context, 'settings_use_local_yt_fallback_sub'),
                 value: settings.useLocalYtFallback,
                 onChanged: (val) {
                   settings.setUseLocalYtFallback(val);
@@ -207,7 +212,9 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
               ),
               SwitchTile(
                 accentColor: accent,
-                title: isRtl ? 'إرسال كوكيز المتصفح للخادم' : 'Send Cookies to Backend',
+                title: isRtl
+                    ? 'إرسال كوكيز المتصفح للخادم'
+                    : 'Send Cookies to Backend',
                 subtitle: isRtl
                     ? 'إرفاق جلسات المتصفح للوصول للفيديوهات الخاصة والمقيدة'
                     : 'Send browser session cookies for age-restricted / private media',
@@ -219,7 +226,9 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
               ),
               TextFieldTile(
                 accentColor: accent,
-                title: isRtl ? 'وكيل المستخدم المخصص (User-Agent)' : 'Custom User-Agent',
+                title: isRtl
+                    ? 'وكيل المستخدم المخصص (User-Agent)'
+                    : 'Custom User-Agent',
                 subtitle: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)...',
                 controller: _uaController,
                 onChanged: (val) => settings.setCustomUserAgent(val),
@@ -229,7 +238,8 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
           ),
           if (settings.useRemoteBackend)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
               child: NeonGlowButton(
                 isFilled: false,
                 color: accent,
@@ -254,10 +264,17 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
                         ThemedSnackbar.show(
                           context,
                           message: isHealthy
-                              ? (isRtl ? 'الخادم يعمل بنجاح!' : 'Backend health check passed!')
-                              : (isRtl ? 'فشل الاتصال بالخادم' : 'Backend health check failed'),
-                          color: isHealthy ? AppTheme.neonGreen : AppTheme.neonRed,
-                          icon: isHealthy ? Icons.check_circle_outline : Icons.error_outline,
+                              ? (isRtl
+                                  ? 'الخادم يعمل بنجاح!'
+                                  : 'Backend health check passed!')
+                              : (isRtl
+                                  ? 'فشل الاتصال بالخادم'
+                                  : 'Backend health check failed'),
+                          color:
+                              isHealthy ? AppTheme.neonGreen : AppTheme.neonRed,
+                          icon: isHealthy
+                              ? Icons.check_circle_outline
+                              : Icons.error_outline,
                           isDarkMode: isDark,
                         );
                       },
@@ -274,7 +291,8 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
             children: [
               SwitchTile(
                 accentColor: accent,
-                title: isRtl ? 'تفعيل جدولة السرعة' : 'Enable Bandwidth Schedule',
+                title:
+                    isRtl ? 'تفعيل جدولة السرعة' : 'Enable Bandwidth Schedule',
                 subtitle: isRtl
                     ? 'تطبيق حد سرعة مخصص خلال ساعات محددة تلقائياً'
                     : 'Automatically restrict download speed during scheduled hours',
@@ -334,15 +352,21 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
             accentColor: accent,
             children: [
               ActionSettingTile(
-                accentColor: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                title: isRtl ? 'تصدير النسخة الاحتياطية' : 'Export Settings Backup',
-                subtitle: 'Save all configurations and bookmarks to a JSON file',
+                accentColor:
+                    isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                title: isRtl
+                    ? 'تصدير النسخة الاحتياطية'
+                    : 'Export Settings Backup',
+                subtitle:
+                    'Save all configurations and bookmarks to a JSON file',
                 buttonText: 'EXPORT',
                 onTap: () => BackupHelper.exportBackup(context, settings),
               ),
               ActionSettingTile(
                 accentColor: accent,
-                title: isRtl ? 'استعادة النسخة الاحتياطية' : 'Import Settings Backup',
+                title: isRtl
+                    ? 'استعادة النسخة الاحتياطية'
+                    : 'Import Settings Backup',
                 subtitle: 'Restore settings and bookmarks from a backup file',
                 buttonText: 'IMPORT',
                 onTap: () => BackupHelper.importBackup(context, settings),
@@ -351,7 +375,8 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
           ),
           const SizedBox(height: 12),
           SettingsSectionHeader(
-            title: isRtl ? 'إعادة التعيين والمعلومات' : 'Reset & Developer Info',
+            title:
+                isRtl ? 'إعادة التعيين والمعلومات' : 'Reset & Developer Info',
             accentColor: AppTheme.neonRed,
             isDark: isDark,
           ),
@@ -362,7 +387,8 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
                 accentColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                 isDestructive: true,
                 title: isRtl ? 'إعادة تعيين الإعدادات' : 'Reset All Settings',
-                subtitle: 'Restore all application preferences to factory defaults',
+                subtitle:
+                    'Restore all application preferences to factory defaults',
                 buttonText: 'RESET',
                 onTap: () => _showResetConfirmDialog(context, settings),
               ),
@@ -408,7 +434,8 @@ class _DeveloperAboutCard extends StatelessWidget {
               Text(
                 'XDM (Extreme Download Manager)',
                 style: TextStyle(
-                  color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                  color:
+                      isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
                   fontFamily: 'Space Grotesk',
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
@@ -433,17 +460,25 @@ class _DeveloperAboutCard extends StatelessWidget {
               InkWell(
                 onTap: () => launchUrl(Uri.parse('mailto:$kDeveloperEmail')),
                 child: Chip(
-                  avatar: FaIcon(FontAwesomeIcons.google, size: 12, color: cyanClr),
-                  label: const Text(kDeveloperEmail, style: TextStyle(fontSize: 11)),
-                  backgroundColor: isDark ? AppTheme.surfaceRaised : AppTheme.lightSurfaceRaised,
+                  avatar:
+                      FaIcon(FontAwesomeIcons.google, size: 12, color: cyanClr),
+                  label: const Text(kDeveloperEmail,
+                      style: TextStyle(fontSize: 11)),
+                  backgroundColor: isDark
+                      ? AppTheme.surfaceRaised
+                      : AppTheme.lightSurfaceRaised,
                 ),
               ),
               InkWell(
                 onTap: () => launchUrl(Uri.parse('https://$kDeveloperGithub')),
                 child: Chip(
-                  avatar: FaIcon(FontAwesomeIcons.github, size: 12, color: cyanClr),
-                  label: const Text(kDeveloperGithub, style: TextStyle(fontSize: 11)),
-                  backgroundColor: isDark ? AppTheme.surfaceRaised : AppTheme.lightSurfaceRaised,
+                  avatar:
+                      FaIcon(FontAwesomeIcons.github, size: 12, color: cyanClr),
+                  label: const Text(kDeveloperGithub,
+                      style: TextStyle(fontSize: 11)),
+                  backgroundColor: isDark
+                      ? AppTheme.surfaceRaised
+                      : AppTheme.lightSurfaceRaised,
                 ),
               ),
             ],

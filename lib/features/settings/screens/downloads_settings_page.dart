@@ -107,7 +107,8 @@ class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
           ),
           const SizedBox(height: 12),
           SettingsSectionHeader(
-            title: isRtl ? 'سلامة الملفات وإعادة المحاولة' : 'Integrity & Retries',
+            title:
+                isRtl ? 'سلامة الملفات وإعادة المحاولة' : 'Integrity & Retries',
             accentColor: accent,
             isDark: isDark,
           ),
@@ -138,7 +139,9 @@ class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
               ),
               SwitchTile(
                 accentColor: accent,
-                title: isRtl ? 'إعادة المحاولة التلقائية' : 'Auto-retry Failed Downloads',
+                title: isRtl
+                    ? 'إعادة المحاولة التلقائية'
+                    : 'Auto-retry Failed Downloads',
                 subtitle: isRtl
                     ? 'إعادة محاولة التحميلات الفاشلة تلقائياً بزيادة زمنية'
                     : 'Automatically retry failed HTTP connections with exponential backoff',
@@ -150,7 +153,8 @@ class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
               ),
               DropdownTile<int>(
                 accentColor: accent,
-                title: isRtl ? 'أقصى عدد لمحاولات الإعادة' : 'Max Retry Attempts',
+                title:
+                    isRtl ? 'أقصى عدد لمحاولات الإعادة' : 'Max Retry Attempts',
                 subtitle: '${settings.maxRetries} attempts',
                 value: settings.maxRetries,
                 items: const [1, 2, 3, 5, 10],
@@ -193,10 +197,14 @@ class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
             children: [
               PathPickerTile(
                 accentColor: accent,
-                title: isRtl ? 'مجلد التحميل الافتراضي' : 'Default Download Folder',
+                title: isRtl
+                    ? 'مجلد التحميل الافتراضي'
+                    : 'Default Download Folder',
                 subtitle: settings.customDownloadPath?.isNotEmpty == true
                     ? settings.customDownloadPath!
-                    : (isRtl ? 'تلقائي (Downloads/XDM)' : 'Default (Downloads/XDM)'),
+                    : (isRtl
+                        ? 'تلقائي (Downloads/XDM)'
+                        : 'Default (Downloads/XDM)'),
                 onTap: () async {
                   triggerHaptic(settings);
                   final result = await FilePicker.getDirectoryPath();
@@ -213,7 +221,8 @@ class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
               ),
               SwitchTile(
                 accentColor: accent,
-                title: isRtl ? 'مجلدات فرعية حسب التصنيف' : 'Category Subfolders',
+                title:
+                    isRtl ? 'مجلدات فرعية حسب التصنيف' : 'Category Subfolders',
                 subtitle: isRtl
                     ? 'حفظ الملفات تلقائياً في مجلدات فرعية (Videos, Music, Documents...)'
                     : 'Automatically organize completed files into subfolders by category',
@@ -245,7 +254,9 @@ class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
               ),
               DropdownTile<int>(
                 accentColor: accent,
-                title: isRtl ? 'أقصى ملفات متزامنة لكل تورنت' : 'Max Concurrent Files Per Torrent',
+                title: isRtl
+                    ? 'أقصى ملفات متزامنة لكل تورنت'
+                    : 'Max Concurrent Files Per Torrent',
                 subtitle: settings.maxConcurrentFilesPerTorrent == 0
                     ? (isRtl ? 'غير محدود' : 'Unlimited (0)')
                     : '${settings.maxConcurrentFilesPerTorrent} files',

@@ -868,8 +868,12 @@ void main() {
     final updated = provider.tasks.firstWhere((t) => t.id == 'prealloc-test-1');
     expect(updated.downloadedBytes, 0);
 
-    try { await tempFile.delete(); } catch (_) {}
-    try { if (await stateFile.exists()) await stateFile.delete(); } catch (_) {}
+    try {
+      await tempFile.delete();
+    } catch (_) {}
+    try {
+      if (await stateFile.exists()) await stateFile.delete();
+    } catch (_) {}
   });
 
   test(
@@ -911,7 +915,8 @@ void main() {
   });
 
   group('Download Lifecycle Audit Fixes', () {
-    test('cancelTask sets pausedByUser true and _autoResumeIncomplete skips it', () async {
+    test('cancelTask sets pausedByUser true and _autoResumeIncomplete skips it',
+        () async {
       final (database, settings) = await _setupServices();
       final task = DownloadTask(
         id: 'cancel-audit-1',
@@ -941,13 +946,15 @@ void main() {
 
       await provider.cancelTask('cancel-audit-1');
 
-      final cancelledTask = provider.tasks.firstWhere((t) => t.id == 'cancel-audit-1');
+      final cancelledTask =
+          provider.tasks.firstWhere((t) => t.id == 'cancel-audit-1');
       expect(cancelledTask.status, DownloadStatus.failed);
       expect(cancelledTask.errorMessage, 'Transfer cancelled.');
       expect(cancelledTask.pausedByUser, isTrue);
     });
 
-    test('resumeTask on completed seeding torrent re-enables seeding', () async {
+    test('resumeTask on completed seeding torrent re-enables seeding',
+        () async {
       final (database, settings) = await _setupServices();
       final task = DownloadTask(
         id: 'seeding-resume-1',
@@ -978,15 +985,27 @@ void main() {
 
       await provider.resumeTask('seeding-resume-1');
 
-      final resumed = provider.tasks.firstWhere((t) => t.id == 'seeding-resume-1');
+      final resumed =
+          provider.tasks.firstWhere((t) => t.id == 'seeding-resume-1');
       expect(resumed.seedingEnabled, isTrue);
     });
 
-    test('torrentBytesFromFiles handles null/unset selected flag consistently', () {
+    test('torrentBytesFromFiles handles null/unset selected flag consistently',
+        () {
       final files = [
-        {'name': 'a.txt', 'downloadedBytes': 100, 'length': 200, 'selected': true},
+        {
+          'name': 'a.txt',
+          'downloadedBytes': 100,
+          'length': 200,
+          'selected': true
+        },
         {'name': 'b.txt', 'downloadedBytes': 300, 'length': 400},
-        {'name': 'c.txt', 'downloadedBytes': 500, 'length': 600, 'selected': false},
+        {
+          'name': 'c.txt',
+          'downloadedBytes': 500,
+          'length': 600,
+          'selected': false
+        },
       ];
 
       final downloaded = DownloadProvider.torrentBytesFromFiles(files);

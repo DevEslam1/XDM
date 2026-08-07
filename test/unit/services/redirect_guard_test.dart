@@ -4,23 +4,28 @@ import 'package:dmx/features/browser/services/redirect_guard.dart';
 void main() {
   group('RedirectGuard.extractDomain', () {
     test('simple domain', () {
-      expect(RedirectGuard.extractDomain('https://example.com/page'), 'example.com');
+      expect(RedirectGuard.extractDomain('https://example.com/page'),
+          'example.com');
     });
 
     test('strips www prefix', () {
-      expect(RedirectGuard.extractDomain('https://www.example.com'), 'example.com');
+      expect(RedirectGuard.extractDomain('https://www.example.com'),
+          'example.com');
     });
 
     test('subdomain returns root', () {
-      expect(RedirectGuard.extractDomain('https://sub.example.com'), 'example.com');
+      expect(RedirectGuard.extractDomain('https://sub.example.com'),
+          'example.com');
     });
 
     test('multi-part TLD co.uk', () {
-      expect(RedirectGuard.extractDomain('https://shop.bbc.co.uk'), 'bbc.co.uk');
+      expect(
+          RedirectGuard.extractDomain('https://shop.bbc.co.uk'), 'bbc.co.uk');
     });
 
     test('multi-part TLD com.au', () {
-      expect(RedirectGuard.extractDomain('https://news.abc.com.au'), 'abc.com.au');
+      expect(
+          RedirectGuard.extractDomain('https://news.abc.com.au'), 'abc.com.au');
     });
 
     test('empty string returns empty', () {

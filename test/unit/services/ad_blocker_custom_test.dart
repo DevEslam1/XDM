@@ -16,7 +16,7 @@ void main() {
       customStore = CustomAdBlockStore.instance;
       await customStore.init();
       await service.init();
-      
+
       // Clear custom store state
       for (var host in customStore.hosts.toList()) {
         await customStore.removeHost(host);
@@ -35,10 +35,10 @@ void main() {
 
       // Should block custom one
       expect(service.shouldBlockUrl('my-custom-ad.com'), isTrue);
-      
+
       // Should NOT block standard ones anymore
       expect(service.shouldBlockUrl('doubleclick.net'), isFalse);
-      
+
       // Toggle back
       await customStore.setUseCustomOnly(false);
       service.refresh();
@@ -51,7 +51,8 @@ void main() {
       expect(service.shouldBlockUrl('https://doubleclick.net/ad.js'), isTrue);
     });
 
-    test('running blockedCount and blockedCountNotifier update on block', () async {
+    test('running blockedCount and blockedCountNotifier update on block',
+        () async {
       service.resetStats();
       expect(service.blockedCount, 0);
 

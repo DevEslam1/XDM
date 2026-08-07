@@ -18,8 +18,10 @@ class SkeletonCard extends StatefulWidget {
 }
 
 class _SkeletonCardState extends State<SkeletonCard>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver, PausableLoopAnimation<SkeletonCard> {
-
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        PausableLoopAnimation<SkeletonCard> {
   late AnimationController _controller;
   late Animation<double> _animation;
 
@@ -45,7 +47,6 @@ class _SkeletonCardState extends State<SkeletonCard>
     _controller.dispose();
     super.dispose();
   }
-
 
   @override
   Widget build(BuildContext context) {

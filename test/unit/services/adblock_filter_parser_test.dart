@@ -62,7 +62,8 @@ void main() {
       expect(_isIntegrityOk(size, sample, lastGoodSize), isTrue);
     });
 
-    test('no previous size (first download) always passes size check', () async {
+    test('no previous size (first download) always passes size check',
+        () async {
       final content = '||ads.example.com^\n';
       final f = File(p.join(tempDir.path, 'first.txt'));
       await f.writeAsString(content);
@@ -106,7 +107,8 @@ void main() {
       final firstHostRef2 = updater.cosmeticRulesForHost('host0.com');
       expect(identical(firstHostRef1, firstHostRef2), isTrue);
 
-      final host1Ref1 = updater.cosmeticRulesForHost('host1.com'); // re-computed
+      final host1Ref1 =
+          updater.cosmeticRulesForHost('host1.com'); // re-computed
       final host1Ref2 = updater.cosmeticRulesForHost('host1.com'); // cached
       expect(identical(host1Ref1, host1Ref2), isTrue);
     });

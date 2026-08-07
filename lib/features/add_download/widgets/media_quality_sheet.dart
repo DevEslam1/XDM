@@ -102,27 +102,27 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
               ? 'تم الوصول إلى حد الطلبات. يرجى المحاولة لاحقاً.'
               : errorStr;
         } else if (errorStr.toLowerCase().contains('sign in') ||
-                   errorStr.toLowerCase().contains('bot') ||
-                   errorStr.toLowerCase().contains('confirm you\'re not a bot')) {
+            errorStr.toLowerCase().contains('bot') ||
+            errorStr.toLowerCase().contains('confirm you\'re not a bot')) {
           _errorMessage = L10n.isRtl(context)
               ? 'يتطلب يوتيوب تسجيل الدخول لتأكيد أنك لست روبوت.\n\n'
-                'يرجى تسجيل الدخول في حساب يوتيوب عبر المتصفح ثم الضغط على إعادة المحاولة.'
+                  'يرجى تسجيل الدخول في حساب يوتيوب عبر المتصفح ثم الضغط على إعادة المحاولة.'
               : 'YouTube requires sign-in to confirm you are not a bot.\n\n'
-                'Please sign in to YouTube in the browser view and tap Retry.';
+                  'Please sign in to YouTube in the browser view and tap Retry.';
         } else if (errorStr.contains('Cannot reach') ||
-                   errorStr.contains('backend') ||
-                   errorStr.contains('connection')) {
+            errorStr.contains('backend') ||
+            errorStr.contains('connection')) {
           _errorMessage = L10n.isRtl(context)
               ? 'تعذر الوصول إلى خادم الاستخراج.\n\n'
-                'الحلول الممكنة:\n'
-                '• تحقق من اتصال الإنترنت\n'
-                '• انتظر 30 ثانية (إقلاع الخادم البارد)\n'
-                '• الإعدادات ← الشبكة ← عنوان الخادم الخلفي ← تغيير'
+                  'الحلول الممكنة:\n'
+                  '• تحقق من اتصال الإنترنت\n'
+                  '• انتظر 30 ثانية (إقلاع الخادم البارد)\n'
+                  '• الإعدادات ← الشبكة ← عنوان الخادم الخلفي ← تغيير'
               : 'Cannot reach the extraction backend.\n\n'
-                'Possible fixes:\n'
-                '• Check your internet connection\n'
-                '• Wait 30s (server cold start)\n'
-                '• Settings → Network → Backend URL → change it';
+                  'Possible fixes:\n'
+                  '• Check your internet connection\n'
+                  '• Wait 30s (server cold start)\n'
+                  '• Settings → Network → Backend URL → change it';
         } else {
           _errorMessage = L10n.isRtl(context)
               ? 'فشل جلب البث: $errorStr'

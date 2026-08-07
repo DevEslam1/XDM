@@ -27,7 +27,8 @@ mixin DownloadFilterMixin {
   int _activeTabIndex = 0;
   bool _isNavbarVisible = true;
 
-  final Set<String> _selectedTaskIds = {}; // UI-9: Selection set for batch operations
+  final Set<String> _selectedTaskIds =
+      {}; // UI-9: Selection set for batch operations
 
   String? _browserUrlToLoad;
 

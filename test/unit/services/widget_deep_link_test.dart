@@ -7,7 +7,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('WidgetDeepLinkHandler Unit Tests', () {
-    testWidgets('Asserts every registered deep link route is handled without throwing', (tester) async {
+    testWidgets(
+        'Asserts every registered deep link route is handled without throwing',
+        (tester) async {
       final navKey = GlobalKey<NavigatorState>();
       WidgetDeepLinkHandler.navigatorKey = navKey;
 

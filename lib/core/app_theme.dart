@@ -149,8 +149,9 @@ class AppTheme {
       isDark ? dark : light;
 
   /// Panel background color used for inner form fields, well inputs, and option panels.
-  static Color panelBg(bool isDark, {bool isAmoled = false}) =>
-      isDark ? (isAmoled ? amoledBgSunken : const Color(0xFF0F0F16)) : const Color(0xFFF1F5F9);
+  static Color panelBg(bool isDark, {bool isAmoled = false}) => isDark
+      ? (isAmoled ? amoledBgSunken : const Color(0xFF0F0F16))
+      : const Color(0xFFF1F5F9);
 
   /// Background color considering theme mode and amoled flag.
   static Color getBackground(bool isDark, {bool isAmoled = false}) =>
@@ -431,7 +432,9 @@ class AppTheme {
       color: isDark ? (isAmoled ? amoledBgSunken : bgSunken) : lightBgSunken,
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(
-        color: isDark ? (isAmoled ? amoledBorderSubtle : borderSubtle) : lightBorderSubtle,
+        color: isDark
+            ? (isAmoled ? amoledBorderSubtle : borderSubtle)
+            : lightBorderSubtle,
         width: 0.8,
       ),
     );
@@ -556,9 +559,8 @@ class AppTheme {
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
       statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-      systemNavigationBarColor: isDark
-          ? (isAmoled ? amoledBackground : background)
-          : lightBackground,
+      systemNavigationBarColor:
+          isDark ? (isAmoled ? amoledBackground : background) : lightBackground,
       systemNavigationBarIconBrightness:
           isDark ? Brightness.light : Brightness.dark,
     );
@@ -576,25 +578,17 @@ class AppTheme {
       _cachedLightTheme ??= _buildTheme(isDark: false);
 
   static ThemeData _buildTheme({required bool isDark, bool isAmoled = false}) {
-    final bg = isDark
-        ? (isAmoled ? amoledBackground : background)
-        : lightBackground;
-    final surf = isDark
-        ? (isAmoled ? amoledSurface : surface)
-        : lightSurface;
-    final card = isDark
-        ? (isAmoled ? amoledCardBg : cardBg)
-        : lightCardBg;
-    final bdr = isDark
-        ? (isAmoled ? amoledBorder : border)
-        : lightBorder;
+    final bg =
+        isDark ? (isAmoled ? amoledBackground : background) : lightBackground;
+    final surf = isDark ? (isAmoled ? amoledSurface : surface) : lightSurface;
+    final card = isDark ? (isAmoled ? amoledCardBg : cardBg) : lightCardBg;
+    final bdr = isDark ? (isAmoled ? amoledBorder : border) : lightBorder;
     final primary = isDark ? neonBlue : lightNeonBlue;
     final secondary = isDark ? neonViolet : lightNeonViolet;
     final error = isDark ? neonRed : lightNeonRed;
     final muted = isDark ? textMuted : lightTextMuted;
-    final bgSunkenColor = isDark
-        ? (isAmoled ? amoledBgSunken : bgSunken)
-        : lightBgSunken;
+    final bgSunkenColor =
+        isDark ? (isAmoled ? amoledBgSunken : bgSunken) : lightBgSunken;
     final surfaceRaisedColor = isDark
         ? (isAmoled ? amoledSurfaceRaised : surfaceRaised)
         : lightSurfaceRaised;
@@ -605,7 +599,8 @@ class AppTheme {
       scaffoldBackgroundColor: bg,
       primaryColor: primary,
       focusColor: isDark ? focusRing : lightFocusRing,
-      highlightColor: (isDark ? focusRing : lightFocusRing).withValues(alpha: 0.12),
+      highlightColor:
+          (isDark ? focusRing : lightFocusRing).withValues(alpha: 0.12),
       disabledColor: isDark ? disabledTextDark : disabledTextLight,
       colorScheme: ColorScheme(
         brightness: isDark ? Brightness.dark : Brightness.light,

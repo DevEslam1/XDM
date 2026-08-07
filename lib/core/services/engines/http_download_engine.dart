@@ -142,8 +142,7 @@ class _AdaptiveTracker {
     final plateau = tail.every((s) => (s - avg).abs() / avg < 0.05);
     if (plateau && currentThreads > 1) {
       recommendation = (currentThreads / 2).ceil().clamp(1, currentThreads);
-      debugPrint(
-          '[AdaptiveThreads] plateau at ${avg ~/ 1024} KB/s with '
+      debugPrint('[AdaptiveThreads] plateau at ${avg ~/ 1024} KB/s with '
           '$currentThreads threads → next start uses $recommendation');
     }
   }

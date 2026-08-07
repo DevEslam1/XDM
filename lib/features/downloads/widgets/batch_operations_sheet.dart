@@ -106,114 +106,120 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
           ),
           const Divider(height: 24),
           // Action Buttons
-          if (widget.initialAction == null || widget.initialAction == BatchAction.resume) ...[
-          ListTile(
-            leading: const Icon(Icons.play_arrow_rounded, color: Colors.green),
-            title: Text(L10n.of(context, 'resume_selected')),
-            onTap: () async {
-              final navigator = Navigator.of(context);
-              final provider = context.read<DownloadProvider>();
-              final resumableIds = widget.selectedTaskIds.where((id) {
-                final matches = provider.tasks.where((t) => t.id == id);
-                if (matches.isEmpty) return false;
-                final status = matches.first.status;
-                return status == DownloadStatus.paused ||
-                    status == DownloadStatus.failed;
-              }).toList();
-              try {
-                await provider.resumeMultipleTasks(resumableIds);
-              } catch (e) {
-                debugPrint('[BatchOperations] Resume failed: $e');
-              }
-              if (!mounted) return;
-              navigator.pop();
-              widget.onCompleted?.call();
-            },
-          ),
-          ],
-          if (widget.initialAction == null || widget.initialAction == BatchAction.pause) ...[
-          ListTile(
-            leading: const Icon(Icons.pause_rounded, color: Colors.amber),
-            title: Text(L10n.of(context, 'pause_selected')),
-            onTap: () async {
-              final navigator = Navigator.of(context);
-              final provider = context.read<DownloadProvider>();
-              try {
-                await provider.pauseMultipleTasks(widget.selectedTaskIds);
-              } catch (e) {
-                debugPrint('[BatchOperations] Pause failed: $e');
-              }
-              if (!mounted) return;
-              navigator.pop();
-              widget.onCompleted?.call();
-            },
-          ),
-          ],
-          if (widget.initialAction == null || widget.initialAction == BatchAction.changeCategory) ...[
-          ListTile(
-            leading: const Icon(Icons.category_rounded, color: Colors.blue),
-            title: Text(L10n.of(context, 'change_category')),
-            onTap: () async {
-              final navigator = Navigator.of(context);
-              final provider = context.read<DownloadProvider>();
-              final category = await _showCategoryDialog(context);
-              if (!mounted || category == null) return;
-              try {
-                await provider.changeCategoryForMultipleTasks(
-                  widget.selectedTaskIds,
-                  category,
-                );
-              } catch (e) {
-                debugPrint('[BatchOperations] Category change failed: $e');
-              }
-              if (!mounted) return;
-              navigator.pop();
-              widget.onCompleted?.call();
-            },
-          ),
-          ],
-          if (widget.initialAction == null || widget.initialAction == BatchAction.delete) ...[
-          StatefulBuilder(
-            builder: (context, setCheckboxState) {
-              return CheckboxListTile(
-                value: _deleteFiles,
-                title: Text(L10n.of(context, 'delete_files_disk')),
-                controlAffinity: ListTileControlAffinity.leading,
-                activeColor: Colors.redAccent,
-                onChanged: (val) {
-                  setCheckboxState(() {
-                    _deleteFiles = val ?? false;
-                  });
-                },
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete_forever_rounded,
-                color: Colors.redAccent),
-            title: Text(
-              L10n.of(context, 'delete_downloads_count', args: {'count': count}),
-              style: const TextStyle(
-                  color: Colors.redAccent, fontWeight: FontWeight.bold),
+          if (widget.initialAction == null ||
+              widget.initialAction == BatchAction.resume) ...[
+            ListTile(
+              leading:
+                  const Icon(Icons.play_arrow_rounded, color: Colors.green),
+              title: Text(L10n.of(context, 'resume_selected')),
+              onTap: () async {
+                final navigator = Navigator.of(context);
+                final provider = context.read<DownloadProvider>();
+                final resumableIds = widget.selectedTaskIds.where((id) {
+                  final matches = provider.tasks.where((t) => t.id == id);
+                  if (matches.isEmpty) return false;
+                  final status = matches.first.status;
+                  return status == DownloadStatus.paused ||
+                      status == DownloadStatus.failed;
+                }).toList();
+                try {
+                  await provider.resumeMultipleTasks(resumableIds);
+                } catch (e) {
+                  debugPrint('[BatchOperations] Resume failed: $e');
+                }
+                if (!mounted) return;
+                navigator.pop();
+                widget.onCompleted?.call();
+              },
             ),
-            onTap: () async {
-              final navigator = Navigator.of(context);
-              final provider = context.read<DownloadProvider>();
-              final confirm = await _showDeleteConfirmDialog(context, count);
-              if (!mounted || confirm != true) return;
-              try {
-                await provider.deleteMultipleTasks(
-                  widget.selectedTaskIds,
-                  deleteFiles: _deleteFiles,
+          ],
+          if (widget.initialAction == null ||
+              widget.initialAction == BatchAction.pause) ...[
+            ListTile(
+              leading: const Icon(Icons.pause_rounded, color: Colors.amber),
+              title: Text(L10n.of(context, 'pause_selected')),
+              onTap: () async {
+                final navigator = Navigator.of(context);
+                final provider = context.read<DownloadProvider>();
+                try {
+                  await provider.pauseMultipleTasks(widget.selectedTaskIds);
+                } catch (e) {
+                  debugPrint('[BatchOperations] Pause failed: $e');
+                }
+                if (!mounted) return;
+                navigator.pop();
+                widget.onCompleted?.call();
+              },
+            ),
+          ],
+          if (widget.initialAction == null ||
+              widget.initialAction == BatchAction.changeCategory) ...[
+            ListTile(
+              leading: const Icon(Icons.category_rounded, color: Colors.blue),
+              title: Text(L10n.of(context, 'change_category')),
+              onTap: () async {
+                final navigator = Navigator.of(context);
+                final provider = context.read<DownloadProvider>();
+                final category = await _showCategoryDialog(context);
+                if (!mounted || category == null) return;
+                try {
+                  await provider.changeCategoryForMultipleTasks(
+                    widget.selectedTaskIds,
+                    category,
+                  );
+                } catch (e) {
+                  debugPrint('[BatchOperations] Category change failed: $e');
+                }
+                if (!mounted) return;
+                navigator.pop();
+                widget.onCompleted?.call();
+              },
+            ),
+          ],
+          if (widget.initialAction == null ||
+              widget.initialAction == BatchAction.delete) ...[
+            StatefulBuilder(
+              builder: (context, setCheckboxState) {
+                return CheckboxListTile(
+                  value: _deleteFiles,
+                  title: Text(L10n.of(context, 'delete_files_disk')),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  activeColor: Colors.redAccent,
+                  onChanged: (val) {
+                    setCheckboxState(() {
+                      _deleteFiles = val ?? false;
+                    });
+                  },
                 );
-              } catch (e) {
-                debugPrint('[BatchOperations] Delete failed: $e');
-              }
-              if (!mounted) return;
-              navigator.pop();
-              widget.onCompleted?.call();
-            },
-          ),
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_forever_rounded,
+                  color: Colors.redAccent),
+              title: Text(
+                L10n.of(context, 'delete_downloads_count',
+                    args: {'count': count}),
+                style: const TextStyle(
+                    color: Colors.redAccent, fontWeight: FontWeight.bold),
+              ),
+              onTap: () async {
+                final navigator = Navigator.of(context);
+                final provider = context.read<DownloadProvider>();
+                final confirm = await _showDeleteConfirmDialog(context, count);
+                if (!mounted || confirm != true) return;
+                try {
+                  await provider.deleteMultipleTasks(
+                    widget.selectedTaskIds,
+                    deleteFiles: _deleteFiles,
+                  );
+                } catch (e) {
+                  debugPrint('[BatchOperations] Delete failed: $e');
+                }
+                if (!mounted) return;
+                navigator.pop();
+                widget.onCompleted?.call();
+              },
+            ),
           ],
         ],
       ),
