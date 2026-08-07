@@ -191,7 +191,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   bool enableProxy = false;
   String proxyAddress = '';
-  bool bypassSSL = false;
+  bool bypassSSL = true;
   bool developerMode = false; // P0-2: Gate advanced/risky options behind Developer Mode
   bool httpsOnly = false;
   bool reduceVisuals = false;
@@ -211,9 +211,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void toggleDeveloperMode() {
     developerMode = !developerMode;
-    if (!developerMode) {
-      bypassSSL = false;
-    }
     notifyListeners();
   }
 
@@ -340,7 +337,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   bool powerAwareIsolatePool = true;
   bool thermalThreadLimiting = true;
-  bool jankAutoBatterySaver = true;
+  bool jankAutoBatterySaver = false;
   bool diskWriteBatching = true;
   bool powerBandwidthThrottling = true;
   bool resumeIntegrityCheck = true;
@@ -392,7 +389,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
     proxyAddress = _prefs.getString(_proxyAddressKey) ?? proxyAddress;
-    bypassSSL = _prefs.getBool(_bypassSSLKey) ?? bypassSSL;
+    bypassSSL = _prefs.getBool(_bypassSSLKey) ?? true;
     httpsOnly = _prefs.getBool(_httpsOnlyKey) ?? httpsOnly;
     reduceVisuals = _prefs.getBool(_reduceVisualsKey) ?? reduceVisuals;
     textScaleFactor = _prefs.getDouble(_textScaleFactorKey) ?? textScaleFactor;
@@ -493,7 +490,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     powerAwareIsolatePool = _prefs.getBool(_powerAwareIsolatePoolKey) ?? true;
     thermalThreadLimiting = _prefs.getBool(_thermalThreadLimitingKey) ?? true;
-    jankAutoBatterySaver = _prefs.getBool(_jankAutoBatterySaverKey) ?? true;
+    jankAutoBatterySaver = _prefs.getBool(_jankAutoBatterySaverKey) ?? false;
     diskWriteBatching = _prefs.getBool(_diskWriteBatchingKey) ?? true;
     powerBandwidthThrottling =
         _prefs.getBool(_powerBandwidthThrottlingKey) ?? true;
@@ -746,25 +743,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setBypassSSL(bool value) async {
-    // P0-2: Require developer mode for SSL bypass
-    if (!developerMode) {
-      _log.warning('P0-2: Attempted to toggle SSL bypass without developer mode enabled');
-      bypassSSL = false;
-      _pendingBypassSSLConfirmation = false;
-      await _prefs.setBool(_bypassSSLKey, false);
-      notifyListeners();
-      return;
-    }
-    if (value) {
-      // Require explicit confirmation before enabling — the UI checks this
-      // flag and shows a warning dialog; only confirmBypassSSL() enables it.
-      _pendingBypassSSLConfirmation = true;
-      notifyListeners();
-      return;
-    }
-    bypassSSL = false;
+    bypassSSL = value;
     _pendingBypassSSLConfirmation = false;
-    await _prefs.setBool(_bypassSSLKey, false);
+    await _prefs.setBool(_bypassSSLKey, value);
     notifyListeners();
   }
 
@@ -1085,7 +1066,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     int port,
     String username,
     String password, {
-    bool bypassSSL = false,
+    bool bypassSSL = true,
   }) async {
     final client = HttpClient();
     try {
@@ -1212,7 +1193,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     batterySaverMode = false;
     enableProxy = false;
     proxyAddress = '';
-    bypassSSL = false; // secure default — never auto-enable cert bypass
+    bypassSSL = true; // default: always trust SSL
     httpsOnly = false;
     _pendingBypassSSLConfirmation = false;
     reduceVisuals = false;

@@ -533,12 +533,14 @@ class TorrentService {
   static int _estimatePiecesTotal(Object torrentInfo) {
     try {
       final dynamic raw = torrentInfo;
+      // ignore: avoid_dynamic_calls
       final numPieces = raw.numPieces;
       if (numPieces is int && numPieces > 0) return numPieces;
     } catch (_) {}
     const defaultPieceSize = 256 * 1024;
     try {
       final dynamic raw = torrentInfo;
+      // ignore: avoid_dynamic_calls
       final totalWanted = (raw.totalWanted as num?)?.toInt() ?? 0;
       if (totalWanted > 0) {
         return (totalWanted / defaultPieceSize).ceil();
@@ -550,12 +552,14 @@ class TorrentService {
   static int _estimatePiecesHave(Object torrentInfo) {
     try {
       final dynamic raw = torrentInfo;
+      // ignore: avoid_dynamic_calls
       final piecesDone = raw.piecesDone;
       if (piecesDone is int && piecesDone > 0) return piecesDone;
     } catch (_) {}
     final total = _estimatePiecesTotal(torrentInfo);
     try {
       final dynamic raw = torrentInfo;
+      // ignore: avoid_dynamic_calls
       final progress = (raw.progress as num?)?.toDouble() ?? 0.0;
       if (total > 0 && progress > 0) {
         return (progress * total).round();
@@ -799,27 +803,6 @@ class TorrentService {
     if (!isInitialized || !isTorrentAlive(id)) return;
     if (id >= 0) {
       try {
-        // Snapshot torrent file priorities/selections BEFORE pausing so they
-        // survive a forced kill. getFiles() calls the native session which is
-        // still running at this point.
-        List<Map<String, dynamic>>? torrentFiles;
-        try {
-          final items = getFiles(id);
-          if (items.isNotEmpty) {
-            torrentFiles = items
-                .map((f) => {
-                      'name': f.name,
-                      'size': f.size,
-                      'priority': f.priority,
-                      'selected': f.selected,
-                      'downloadedBytes': f.safeDownloadedBytes,
-                    })
-                .toList();
-          }
-        } catch (e) {
-          _log.warning('getFiles snapshot failed for id $id (non-fatal): $e');
-        }
-
         LibtorrentFlutter.instance.pauseTorrent(id);
         // FIX-22: Poll until the engine reports paused/stopped (max 2s) so the
         // fast-resume bytes captured below reflect a fully flushed state rather
@@ -836,6 +819,25 @@ class TorrentService {
           } catch (_) {
             isPaused = true;
           }
+        }
+
+        // FIX T-9: Snapshot files AFTER pause-poll, not before
+        List<Map<String, dynamic>>? torrentFiles;
+        try {
+          final items = getFiles(id);
+          if (items.isNotEmpty) {
+            torrentFiles = items
+                .map((f) => {
+                      'name': f.name,
+                      'size': f.size,
+                      'priority': f.priority,
+                      'selected': f.selected,
+                      'downloadedBytes': f.safeDownloadedBytes,
+                    })
+                .toList();
+          }
+        } catch (e) {
+          _log.warning('getFiles snapshot failed for id $id (non-fatal): $e');
         }
 
         // Persist native fast-resume bytes under the stable source key.

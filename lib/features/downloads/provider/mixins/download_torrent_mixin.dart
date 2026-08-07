@@ -344,6 +344,7 @@ mixin DownloadTorrentMixin {
       seedingEnabled: newEnabled,
       seedingLimited: limited,
       seedingLimitKbps: limitKbps,
+      speed: newEnabled ? oldTask.speed : 0,
     );
     filteredTasksDirty = true;
     await providerDatabaseService.saveTask(providerTasks[index]);
@@ -396,10 +397,13 @@ mixin DownloadTorrentMixin {
 
     final task = providerTasks[index];
 
-    // Calculate new total size of selected files
+    // Calculate new total size and downloaded bytes of selected files
     final selectedSize = files
         .where((f) => f['selected'] == true)
         .fold(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
+    final selectedDownloaded = files
+        .where((f) => f['selected'] == true)
+        .fold(0, (sum, f) => sum + ((f['downloadedBytes'] as num?)?.toInt() ?? 0));
 
     String updatedCategory = task.category;
     if (task.category == 'Other' || task.category.isEmpty) {
@@ -423,6 +427,7 @@ mixin DownloadTorrentMixin {
     final updated = task.copyWith(
       torrentFiles: stampedFiles,
       fileSize: selectedSize > 0 ? selectedSize : task.fileSize,
+      downloadedBytes: selectedDownloaded,
       category: updatedCategory,
     );
 

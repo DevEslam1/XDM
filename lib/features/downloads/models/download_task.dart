@@ -173,9 +173,14 @@ class DownloadTask {
 
   // FIX(05): Audio progress computed getters
   double get audioProgressPercent {
-    if (audioSize > 0) return (audioDownloadedBytes / audioSize).clamp(0.0, 1.0);
-    if (audioDownloadedBytes > 0) return audioProgress.clamp(0.0, 1.0);
-    return 0.0;
+    // FIX Y-2: Prefer byte-based calculation when possible
+    if (audioSize > 0 && audioDownloadedBytes >= 0) {
+      return (audioDownloadedBytes / audioSize).clamp(0.0, 1.0);
+    }
+    if (audioDownloadedBytes > 0) {
+      return audioProgress.clamp(0.0, 1.0);
+    }
+    return audioProgress.clamp(0.0, 1.0);
   }
   String get audioProgressString =>
       '${(audioProgressPercent * 100).toStringAsFixed(1)}%';
@@ -198,10 +203,9 @@ class DownloadTask {
       if (videoStreamSize > 0) return videoStreamSize + audioSize;
       // fileSize is the authoritative combined total when set by stream resolution
       if (fileSize > 0) return fileSize;
-      // FIX-B8: Use downloadedBytes as video proxy; don't let denominator
-      // shrink below what's already downloaded
-      final videoEstimate = max(downloadedBytes - audioDownloadedBytes, 0);
-      return max(videoEstimate + audioSize, audioSize);
+      // BUG 3 FIX: Return 0 when both videoStreamSize and fileSize are 0
+      // to trigger indeterminate state instead of wrong denominator (audioSize only)
+      return 0;
     }
     return resolvedFileSize;
   }
@@ -214,20 +218,16 @@ class DownloadTask {
       final videoOnly = videoStreamSize > 0
           ? videoStreamSize
           : (fileSize > audioSize ? fileSize - audioSize : 0);
-      // FIX-AUDIT-A2: Only add audio if downloadedBytes represents video-only
-      if (videoOnly > 0 && raw <= videoOnly) {
-        // downloadedBytes is video-only, safe to add audio
+      // BUG 1 FIX: Only add audio if raw is strictly LESS than videoOnly
+      // (meaning downloadedBytes has NOT yet been updated to include audio)
+      if (videoOnly > 0 && raw < videoOnly) {
         if (audioSize > 0) {
           raw += (audioProgress * audioSize).round();
         } else if (audioDownloadedBytes > 0) {
           raw += audioDownloadedBytes;
         }
-      } else if (videoOnly > 0 && raw > videoOnly) {
-        // downloadedBytes already includes audio — do not add again
-      } else if (audioDownloadedBytes > 0) {
-        // FIX F9: Count audio bytes even when audioSize is unknown (0)
-        raw += audioDownloadedBytes;
       }
+      // If raw >= videoOnly, assume it already includes audio — don't add again
     }
     if (total > 0) return raw.clamp(0, total);
     return raw;

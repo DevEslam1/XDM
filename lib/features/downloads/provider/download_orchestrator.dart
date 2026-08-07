@@ -760,8 +760,9 @@ class DownloadOrchestrator {
           ? p.extension(actualVideoPath)
           : '.mp4';
 
-      final mergedPath =
-          '${p.withoutExtension(actualVideoPath)}$videoExt.merged$videoExt';
+      final mergedPath = actualVideoPath == current.localFilePath
+          ? '${current.tempFilePath}.merged$videoExt'
+          : '${p.withoutExtension(actualVideoPath)}$videoExt.merged$videoExt';
 
       final mergedFile = File(mergedPath);
       if (await mergedFile.exists()) {
@@ -976,9 +977,17 @@ class DownloadOrchestrator {
         final mergedFile = File(mergedPath);
         if (await mergedFile.exists()) {
           final mergedLen = await mergedFile.length();
-          // L-2 FIX: Basic post-merge validation
-          if (mergedLen < 1024) {
-            throw Exception('Merged file too small: $mergedLen bytes');
+          // FIX M-3: Require merged file to be at least 90% of expected size
+          final expectedMinSize = current.fileSize > 0
+              ? (current.fileSize * 0.9).toInt()
+              : 1024;
+          if (mergedLen < expectedMinSize) {
+            debugPrint('[DMX] M-3: Merged file too small: '
+                '$mergedLen < $expectedMinSize. Deleting.');
+            try {
+              await mergedFile.delete();
+            } catch (_) {}
+            return false;
           }
           debugPrint('[DMX] Merge successful: $mergedPath ($mergedLen bytes)');
           final targetFile = File(current.localFilePath);
@@ -1910,8 +1919,12 @@ class DownloadOrchestrator {
                 _host.providerTasks.indexWhere((x) => x.id == task.id);
             if (audioTaskIdx != -1) {
               final audioTask = _host.providerTasks[audioTaskIdx];
+              // BUG 6 FIX: Preserve recorded audioThreadCount if already set > 0
+              final stateThreadCount = audioTask.audioThreadCount > 0
+                  ? audioTask.audioThreadCount
+                  : resolvedAudioThreads;
               await _host.setTaskState(
-                audioTask.copyWith(audioThreadCount: resolvedAudioThreads),
+                audioTask.copyWith(audioThreadCount: stateThreadCount),
               );
             }
 
@@ -2063,6 +2076,10 @@ class DownloadOrchestrator {
                 _host.providerTasks[idx] =
                     _host.providerTasks[idx].copyWith(audioProgress: 1.0);
               }
+            }
+            final currentTask = _host.findTaskById(task.id);
+            if (currentTask != null && currentTask.downloadedBytes > videoBytesSoFar) {
+              videoBytesSoFar = currentTask.downloadedBytes;
             }
             pushCombinedProgress();
           }
@@ -2415,6 +2432,27 @@ class DownloadOrchestrator {
             if (e.type == DioExceptionType.cancel) {
               return;
             }
+
+            // FIX F-3: If video completed but audio failed, mark for merge retry
+            final videoFile = File(task.tempFilePath);
+            final audioFile = File('${task.tempFilePath}.audio');
+            if (await videoFile.exists() && await audioFile.exists()) {
+              final vLen = await actualDownloadedBytes(
+                task.tempFilePath, threadCount: streamThreadCount);
+              final aLen = await actualDownloadedBytes(
+                '${task.tempFilePath}.audio', threadCount: task.audioThreadCount);
+              if (vLen > 0 && aLen > 0) {
+                final current = _host.findTaskById(task.id);
+                if (current != null) {
+                  await _host.setTaskState(current.copyWith(
+                    statusMessage: 'MERGE_FAILED',
+                    errorMessage: 'Audio download failed but both files exist. '
+                        'Tap retry to attempt merge.',
+                  ));
+                }
+                return; // Don't rethrow — let retry handle merge
+              }
+            }
             rethrow;
           }
 
@@ -2608,6 +2646,29 @@ class DownloadOrchestrator {
       if (liveTask == null || liveTask.status != DownloadStatus.queued) {
         return; // Task was paused/deleted between pumpQueue filter and here
       }
+
+      // FIX R-2: Re-check YouTube URL freshness right before engine start
+      if (task.youtubeQualityPreset != null &&
+          task.downloadPageUrl != null &&
+          task.downloadPageUrl!.isNotEmpty) {
+        try {
+          final fresh = await YoutubeService.getFreshStreams(
+            task.downloadPageUrl!,
+            preferredType: task.youtubePreferredType,
+          );
+          if (fresh != null && fresh['url'] != null && fresh['url'] != task.url) {
+            debugPrint('[DMX] R-2: Refreshing stale YouTube URL before start');
+            task = task.copyWith(url: fresh['url'] as String);
+            if (fresh['audioUrl'] != null) {
+              task = task.copyWith(mergedAudioUrl: fresh['audioUrl']);
+            }
+            await _host.setTaskState(task);
+          }
+        } catch (e) {
+          debugPrint('[DMX] R-2: Pre-start YouTube refresh failed: $e');
+        }
+      }
+
       // FIX-AUDIT-03: Reset one-shot restart flag on every fresh start attempt
       _host.resumeRejectionRestarts.remove(task.id);
 

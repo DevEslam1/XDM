@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-import 'torrent_service.dart';
+import '../utils/bencode_decoder.dart';
 
 /// Crash-safe persistence for libtorrent fast-resume blobs.
 ///
@@ -35,17 +35,35 @@ class TorrentResumeStore {
   }
 
   static String _stableKey(String sourceUrl) {
-    // FIX-23: Magnet URLs already key on the info-hash (stable across
-    // mirrors/redirects). TODO: For .torrent file URLs, extract the info-hash
-    // from the file/magnet bytes when available for stable keying across
-    // mirror switches. URL-based keying is acceptable for MVP.
+    // Key on the info-hash when available (stable across mirrors/redirects)
     if (sourceUrl.startsWith('magnet:')) {
-      final match = RegExp(r'xt=urn:btih:([^&]+)').firstMatch(sourceUrl);
+      final match = RegExp(
+        r'xt=urn:bt(?:ih|mh):([a-zA-Z0-9]+)',
+        caseSensitive: false,
+      ).firstMatch(sourceUrl);
       if (match != null) {
         final infoHash = match.group(1)!;
         return sha256.convert(utf8.encode(infoHash.toLowerCase())).toString();
       }
     }
+
+    // For .torrent files, attempt to extract the info-hash from file bytes
+    try {
+      String filePath = sourceUrl;
+      if (filePath.startsWith('file://')) {
+        filePath = Uri.parse(filePath).toFilePath();
+      }
+      final file = File(filePath);
+      if (file.existsSync()) {
+        final bytes = file.readAsBytesSync();
+        final parsed = BencodeDecoder.parseTorrentBytes(bytes);
+        final infoHash = parsed?['infoHash'] as String?;
+        if (infoHash != null && infoHash.isNotEmpty) {
+          return sha256.convert(utf8.encode(infoHash.toLowerCase())).toString();
+        }
+      }
+    } catch (_) {}
+
     return sha256.convert(utf8.encode(sourceUrl)).toString();
   }
 
@@ -126,7 +144,7 @@ class TorrentResumeStore {
       await saveAndWait(
         torrentId: id,
         sourceUrl: source,
-        fetchResumeData: () => TorrentService.fetchResumeBytes(id),
+        fetchResumeData: () => progressFor(id),
         files: filesFor?.call(id),
       );
     }

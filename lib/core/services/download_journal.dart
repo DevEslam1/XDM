@@ -178,25 +178,35 @@ class TransferState {
       final progress = json['progress'] as List?;
       if (progress == null || progress.isEmpty) return null;
       final totalSize = (json['totalSize'] as num?)?.toInt() ?? 0;
-      final threadCount =
+      final storedThreadCount =
           (json['threadCount'] as num?)?.toInt() ?? progress.length;
 
-      final chunks = <ChunkState>[];
-      final partSize = totalSize > 0 ? (totalSize / threadCount).floor() : 0;
+      // FIX H-4: Warn if stored thread count differs from progress length
+      if (storedThreadCount != progress.length) {
+        debugPrint('[DmxState] V2 migration: threadCount mismatch '
+            '(stored=$storedThreadCount, progress.length=${progress.length}). '
+            'Using progress.length as authoritative count.');
+      }
 
-      for (int i = 0; i < progress.length; i++) {
+      final effectiveThreads = progress.length; // Use actual data length
+      final partSize = totalSize > 0 ? (totalSize / effectiveThreads).floor() : 0;
+
+      final chunks = <ChunkState>[];
+      for (int i = 0; i < effectiveThreads; i++) {
         final downloaded = (progress[i] as num?)?.toInt() ?? 0;
         final start = i * partSize;
-        final end = (i == threadCount - 1 && totalSize > 0)
+        final end = (i == effectiveThreads - 1 && totalSize > 0)
             ? totalSize - 1
             : (start + partSize - 1);
         chunks.add(ChunkState(
-            start: start, end: end, downloaded: downloaded.clamp(0, 1 << 62)));
+          start: start,
+          end: end,
+          downloaded: downloaded.clamp(0, 1 << 62),
+        ));
       }
-
       return TransferState(
         totalSize: totalSize,
-        threadCount: threadCount,
+        threadCount: effectiveThreads,
         chunks: chunks,
         url: json['url'] as String?,
         etag: json['etag'] as String?,

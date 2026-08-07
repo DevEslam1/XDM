@@ -232,7 +232,7 @@ class DownloadEngine {
     int? proxyPort,
     String? proxyUsername,
     String? proxyPassword,
-    bool bypassSSL = false,
+    bool bypassSSL = true,
     String? cookies,
     String? oauthToken,
   }) {
@@ -278,7 +278,7 @@ class DownloadEngine {
     int? proxyPort,
     String? proxyUsername,
     String? proxyPassword,
-    bool bypassSSL = false,
+    bool bypassSSL = true,
     String? cookies,
     String? oauthToken,
     CancelToken? cancelToken,
@@ -696,7 +696,7 @@ class DownloadEngine {
     int? proxyPort,
     String? proxyUsername,
     String? proxyPassword,
-    bool bypassSSL = false,
+    bool bypassSSL = true,
     String? cookies,
     String? oauthToken,
     List<Map<String, dynamic>>? Function()? getTorrentFiles,
@@ -1037,7 +1037,7 @@ class DownloadEngine {
     int? proxyPort,
     String? proxyUsername,
     String? proxyPassword,
-    bool bypassSSL = false,
+    bool bypassSSL = true,
   }) async {
     int id = torrentId ?? -1;
     if (id >= 0 && !TorrentService.isTorrentAlive(id)) {
@@ -1299,17 +1299,30 @@ class DownloadEngine {
         try {
           final files = TorrentService.getFiles(id);
           final existingFiles = getTorrentFiles?.call() ?? [];
+          // FIX T-2: Normalize file names for comparison (handles URL-encoding and slash normalization)
+          String normalizeName(String name) {
+            var decoded = name;
+            try {
+              decoded = Uri.decodeComponent(name.replaceAll('+', ' '));
+            } catch (_) {}
+            return decoded.replaceAll('\\', '/').trim().toLowerCase();
+          }
+
           resolvedFiles = files.map((f) {
             final existing = existingFiles
                 .cast<Map<String, dynamic>?>()
-                .firstWhere((e) => (e?['name'] as String?) == f.name,
-                    orElse: () => null);
+                .firstWhere(
+                  (e) => normalizeName(e?['name'] as String? ?? '') ==
+                      normalizeName(f.name),
+                  orElse: () => null,
+                );
             int resolvedBytes;
             bool isEstimated;
             if (f.hasProgressData) {
+              // BUG 8 FIX: When f.size == 0, return 0 instead of unclamped safeDownloadedBytes
               resolvedBytes = f.size > 0
                   ? f.safeDownloadedBytes.clamp(0, f.size)
-                  : f.safeDownloadedBytes;
+                  : 0;
               isEstimated = false;
             } else {
               // FIX T-S1: Preserve the previously stored byte count instead of
@@ -1336,15 +1349,18 @@ class DownloadEngine {
         }
       }
 
-      // FIX-21: Use per-file sums as primary source for aggregate size/bytes
+      // FIX-21 & FIX T-1: Prefer engine-reported per-file bytes over stored values
       int calculatedTotal = 0;
       int calculatedDownloaded = 0;
       if (resolvedFiles != null) {
         for (final f in resolvedFiles) {
           if (f['selected'] == true) {
             calculatedTotal += (f['length'] as num?)?.toInt() ?? 0;
-            calculatedDownloaded +=
-                (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+            final engineBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+            final isEstimated = f['progressEstimated'] == true;
+            if (!isEstimated && engineBytes >= 0) {
+              calculatedDownloaded += engineBytes;
+            }
           }
         }
       }
@@ -1532,6 +1548,16 @@ class DownloadEngine {
         .toList();
     if (needing.isEmpty) return;
 
+    // BUG 4 FIX: Subtract confirmed (non-estimated) bytes first
+    int confirmedBytes = 0;
+    for (final f in files) {
+      if ((f['progressEstimated'] as bool? ?? true) == false) {
+        confirmedBytes += (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+      }
+    }
+    final remainingForEstimation =
+        max(0, totalDownloadedBytes - confirmedBytes);
+
     final totalNeedingSize = needing.fold<int>(
       0,
       (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0),
@@ -1541,9 +1567,9 @@ class DownloadEngine {
       final length = (needing[i]['length'] as num?)?.toInt() ?? 0;
       if (length <= 0) {
         needing[i]['downloadedBytes'] = 0;
-      } else if (totalNeedingSize > 0 && totalDownloadedBytes > 0) {
+      } else if (totalNeedingSize > 0 && remainingForEstimation > 0) {
         final estimated =
-            ((length / totalNeedingSize) * totalDownloadedBytes).round();
+            ((length / totalNeedingSize) * remainingForEstimation).round();
         needing[i]['downloadedBytes'] = estimated.clamp(0, length);
       } else {
         needing[i]['downloadedBytes'] = 0;
@@ -1652,7 +1678,7 @@ Dio buildTransferDio({
   int? proxyPort,
   String? proxyUsername,
   String? proxyPassword,
-  bool bypassSSL = false,
+  bool bypassSSL = true,
   String? cookies,
   String? oauthToken,
 }) {
@@ -1740,6 +1766,7 @@ Future<int> actualDownloadedBytes(
   try {
     final stateFile = File('$path.dmxstate');
     if (!await stateFile.exists()) {
+      if (threadCount > 1) return 0; // BUG 2 FIX: Pre-allocated file length is meaningless for multi-thread
       final f = File(path);
       return await f.exists() ? await f.length() : 0;
     }
@@ -1763,6 +1790,7 @@ Future<int> actualDownloadedBytes(
     return 0;
   } catch (e) {
     debugPrint('[DMX] actualDownloadedBytes failed for $path: $e');
+    if (threadCount > 1) return 0; // BUG 2 FIX: Pre-allocated file length is meaningless for multi-thread
     final f = File(path);
     if (await f.exists()) return f.length();
     return 0;
