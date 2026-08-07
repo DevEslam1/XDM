@@ -25,6 +25,8 @@ class BrowserDownloadSheet extends StatefulWidget {
   final String? suggestedName;
   final VoidCallback? onQuality;
   final String? downloadPageUrl;
+  final VoidCallback? onOpenInNewTab;
+  final VoidCallback? onOpenInIncognito;
 
   /// Additional discovered sources (alternative qualities/streams) for the
   /// long-pressed media. Each is offered as its own download tile.
@@ -38,6 +40,8 @@ class BrowserDownloadSheet extends StatefulWidget {
     this.suggestedName,
     this.onQuality,
     this.downloadPageUrl,
+    this.onOpenInNewTab,
+    this.onOpenInIncognito,
     this.sources = const [],
   });
 
@@ -49,6 +53,8 @@ class BrowserDownloadSheet extends StatefulWidget {
     String? suggestedName,
     VoidCallback? onQuality,
     String? downloadPageUrl,
+    VoidCallback? onOpenInNewTab,
+    VoidCallback? onOpenInIncognito,
     List<MediaSourceItem> sources = const [],
   }) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
@@ -66,6 +72,8 @@ class BrowserDownloadSheet extends StatefulWidget {
         suggestedName: suggestedName,
         onQuality: onQuality,
         downloadPageUrl: downloadPageUrl,
+        onOpenInNewTab: onOpenInNewTab,
+        onOpenInIncognito: onOpenInIncognito,
         sources: sources,
       ),
     );
@@ -351,6 +359,48 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
                       ),
                     ),
                     const SizedBox(height: 20),
+                    // ── Link Navigation Actions ────────────────────
+                    if (widget.onOpenInNewTab != null ||
+                        widget.onOpenInIncognito != null) ...[
+                      Row(
+                        children: [
+                          if (widget.onOpenInNewTab != null)
+                            Expanded(
+                              child: _SheetButton(
+                                label: isRtl
+                                    ? 'فتح في علامة تبويب جديدة'
+                                    : 'OPEN IN NEW TAB',
+                                isDark: isDark,
+                                filled: false,
+                                accent: accent,
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  widget.onOpenInNewTab!();
+                                },
+                              ),
+                            ),
+                          if (widget.onOpenInNewTab != null &&
+                              widget.onOpenInIncognito != null)
+                            const SizedBox(width: 10),
+                          if (widget.onOpenInIncognito != null)
+                            Expanded(
+                              child: _SheetButton(
+                                label: isRtl
+                                    ? 'فتح في التصفح الخفي'
+                                    : 'OPEN IN INCOGNITO',
+                                isDark: isDark,
+                                filled: false,
+                                accent: accent,
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  widget.onOpenInIncognito!();
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                     // ── Additional sources (long-press multi-source) ──
                     if (widget.sources.isNotEmpty) ...[
                       Text(

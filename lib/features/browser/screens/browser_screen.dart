@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'package:dio/dio.dart' show Dio, DioException, Options, ResponseType;
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -951,10 +952,12 @@ class _BrowserScreenState extends State<BrowserScreen>
       return;
     }
 
-    // 3. Ad-blocker: silently drop popup URLs that are ad/tracking domains
+    // 3. Ad-blocker: drop popup ad URLs but silently follow redirect chain
+    // to rescue any download that sits behind the ad redirect.
     if (_adBlocker.isEnabled && _adBlocker.shouldBlock(url)) {
       _log.info('[Browser] Blocked ad popup URL: $url');
       _adBlocker.recordBlocked(url);
+      _followAndInterceptAdRedirect(url, parentTab);
       return;
     }
 
@@ -972,6 +975,71 @@ class _BrowserScreenState extends State<BrowserScreen>
       _showBarsNotifier.value = true;
     });
     _saveTabs();
+  }
+
+  /// Silently follows HTTP redirects from a blocked ad popup URL.
+  /// If the redirect chain ends at a downloadable file (APK, ZIP, video, etc.)
+  /// the XDM download sheet is shown instead of opening a tab.
+  Future<void> _followAndInterceptAdRedirect(
+      String adUrl, BrowserTab parentTab) async {
+    try {
+      final dio = Dio();
+      dio.options
+        ..connectTimeout = const Duration(seconds: 8)
+        ..receiveTimeout = const Duration(seconds: 8)
+        ..followRedirects = true
+        ..maxRedirects = 10
+        ..validateStatus = (s) => true;
+
+      // HEAD first — lightweight, follows redirects without downloading body
+      final response = await dio.head<void>(
+        adUrl,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {
+            'User-Agent':
+                'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+            'Accept': '*/*',
+          },
+        ),
+      );
+
+      final finalUrl =
+          response.realUri.toString().isNotEmpty
+              ? response.realUri.toString()
+              : (response.redirects.isNotEmpty
+                  ? response.redirects.last.location.toString()
+                  : adUrl);
+      final contentType = (response.headers.value('content-type') ?? '').toLowerCase();
+      final contentDisposition =
+          (response.headers.value('content-disposition') ?? '').toLowerCase();
+
+      final isDownload = contentDisposition.contains('attachment') ||
+          contentType.contains('application/octet-stream') ||
+          contentType.contains('application/vnd.android.package-archive') ||
+          contentType.contains('application/zip') ||
+          contentType.contains('application/x-zip') ||
+          contentType.contains('application/x-rar') ||
+          contentType.contains('video/') ||
+          contentType.contains('audio/') ||
+          BrowserDetector.isAutoDownloadable(finalUrl) ||
+          _interceptor.shouldIntercept(
+              tabUrl: parentTab.url, requestUrl: finalUrl);
+
+      if (isDownload && mounted) {
+        _log.info(
+            '[Browser] Ad redirect resolved to download: $finalUrl (type: $contentType)');
+        _showInterceptionSheet(context, finalUrl);
+      } else {
+        _log.fine(
+            '[Browser] Ad redirect did not lead to download (type: $contentType, url: $finalUrl)');
+      }
+    } on DioException catch (e) {
+      _log.fine('[Browser] Ad redirect follow failed: $e');
+    } catch (e) {
+      _log.fine('[Browser] Ad redirect follow error: $e');
+    }
   }
 
   void _handlePickerMessageForTab(
@@ -1772,6 +1840,11 @@ class _BrowserScreenState extends State<BrowserScreen>
         .toList();
     final sources = filterSourcesForTarget(discovered, url, type);
 
+    final cleanUrl = url.trim();
+    final isWebUrl = cleanUrl.startsWith('http://') ||
+        cleanUrl.startsWith('https://') ||
+        cleanUrl.startsWith('www.');
+
     BrowserDownloadSheet.show(
       context,
       url,
@@ -1780,6 +1853,38 @@ class _BrowserScreenState extends State<BrowserScreen>
       downloadPageUrl: tab.isHome ? null : tab.url,
       onQuality: hasMultipleQualities
           ? () => _showQualityPicker(tab.id, fallbackUrl: url)
+          : null,
+      onOpenInNewTab: isWebUrl
+          ? () {
+              _redirectGuard.markUserInitiated(cleanUrl);
+              setState(() {
+                final newTab = _createNewTab(
+                  initialUrl: cleanUrl,
+                  isIncognito: tab.isIncognito,
+                );
+                _tabs.add(newTab);
+                _currentTabIndex = _tabs.length - 1;
+                _urlController.text = cleanUrl;
+                _showBarsNotifier.value = true;
+              });
+              _saveTabs();
+            }
+          : null,
+      onOpenInIncognito: isWebUrl
+          ? () {
+              _redirectGuard.markUserInitiated(cleanUrl);
+              setState(() {
+                final newTab = _createNewTab(
+                  initialUrl: cleanUrl,
+                  isIncognito: true,
+                );
+                _tabs.add(newTab);
+                _currentTabIndex = _tabs.length - 1;
+                _urlController.text = cleanUrl;
+                _showBarsNotifier.value = true;
+              });
+              _saveTabs();
+            }
           : null,
       sources: sources,
     );
