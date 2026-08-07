@@ -924,6 +924,7 @@ class DownloadOrchestrator {
         return false;
       }
 
+      int lastMergeUpdateMs = 0;
       final success = await FFmpegMuxService.mergeVideoAudio(
         actualVideoPath,
         actualAudioPath,
@@ -931,6 +932,10 @@ class DownloadOrchestrator {
         deleteInputsIfTemp: false,
         expectedDuration: expectedDuration,
         onProgress: (double p) async {
+          // FIX-12: Throttle merge progress updates to at most twice per second
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
+          if (nowMs - lastMergeUpdateMs < 500) return;
+          lastMergeUpdateMs = nowMs;
           final live = _host.findTaskById(taskId);
           if (live != null &&
               (live.status == DownloadStatus.downloading ||
@@ -1530,6 +1535,7 @@ class DownloadOrchestrator {
       );
     }
     int audioBytesSoFar = audioBytesFromDisk;
+    bool audioDone = false; // FIX-02: Track audio stream completion state
 
     int videoBytesSoFar = videoBytesFromDisk; // FIX-B1
     // FIX-B8: Speed resets on resume — speed is a live metric, not persisted.
@@ -1581,6 +1587,7 @@ class DownloadOrchestrator {
           totalSize = cachedMax > 0 ? cachedMax : calculatedTotal; // never shrink
         }
 
+        // FIX-09: Clamp numerator totalDownloaded
         final totalDownloaded = (audioBytesSoFar + videoBytesSoFar).clamp(
             0, totalSize > 0 ? totalSize : (audioBytesSoFar + videoBytesSoFar));
         final instantSpeed = audioSpeedNow + videoSpeedNow;
@@ -1609,10 +1616,14 @@ class DownloadOrchestrator {
           }
         }
 
-        // FIX-B14: Derive audioProgress directly from audioBytesSoFar / audioSize
-        final computedAudioProgress = (hasAudio && base.audioSize > 0)
-            ? (audioBytesSoFar / base.audioSize).clamp(0.0, 1.0)
-            : (hasAudio && audioBytesSoFar > 0 ? 1.0 : base.audioProgress);
+        // FIX-02: Derive audioProgress directly, capping at 0.95 until audioDone is true
+        final computedAudioProgress = audioDone
+            ? 1.0
+            : ((hasAudio && base.audioSize > 0)
+                ? (audioBytesSoFar / base.audioSize).clamp(0.0, 1.0)
+                : (hasAudio && audioBytesSoFar > 0
+                    ? base.audioProgress.clamp(0.0, 0.95)
+                    : base.audioProgress));
 
         final updated = base.copyWith(
           fileName: fileNameOverride ?? base.fileName,
@@ -1801,6 +1812,7 @@ class DownloadOrchestrator {
               debugPrint(
                 '[DMX] Audio stream already complete ($audioLen bytes, progress: ${liveAudioTask.audioProgress}). Skipping audio re-download.',
               );
+              audioDone = true;
               audioBytesSoFar = liveAudioSize > 0 ? liveAudioSize : audioLen;
               audioSpeedNow = 0.0;
               final idx = _host.providerTasks.indexWhere(
@@ -1989,6 +2001,7 @@ class DownloadOrchestrator {
             }
 
             // Only mark 1.0 when we can confirm completeness
+            audioDone = true;
             if (task.audioSize > 0 && downloadedAudioLen < task.audioSize) {
               final frac =
                   (downloadedAudioLen / task.audioSize).clamp(0.0, 1.0);
@@ -3206,6 +3219,11 @@ class DownloadOrchestrator {
         await _host.flushPendingProgress(task.id);
         final current = _host.findTaskById(task.id);
         if (current == null) return;
+        // FIX-04: Do not overwrite user-paused or completed status on error catch
+        if (current.status == DownloadStatus.paused ||
+            current.status == DownloadStatus.completed) {
+          return;
+        }
 
         if (realError is DioException &&
             realError.type == DioExceptionType.cancel) {

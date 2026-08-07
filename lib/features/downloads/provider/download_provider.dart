@@ -2465,6 +2465,7 @@ class DownloadProvider extends ChangeNotifier
         task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty);
     if (shouldMergeRetry && videoExists && audioExists) {
       debugPrint('[DMX] FIX YT-4: Retrying merge only for task ${task.id}');
+      await _setTask(task.copyWith(isMergeInProgress: false)); // FIX-05: unstick flag
       await _orchestrator.retryMergeOnly(task);
       return;
     }
@@ -2718,9 +2719,10 @@ class DownloadProvider extends ChangeNotifier
     );
     var audioBytes = 0;
     if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
+      // FIX-13: Use task.audioThreadCount > 0 ? task.audioThreadCount : 1
       audioBytes = await _readDmxStateBytes(
         '${task.tempFilePath}.audio',
-        threadCount: task.audioThreadCount,
+        threadCount: task.audioThreadCount > 0 ? task.audioThreadCount : 1,
       );
     }
 
@@ -3765,6 +3767,26 @@ class DownloadProvider extends ChangeNotifier
     }
 
     try {
+      bool sameTorrent(String a, String b) {
+        if (a == b) return true; // FIX-10: File path / URL exact comparison
+        final ha = parseMagnetUrl(a)['infoHash']?.toString().toLowerCase();
+        final hb = parseMagnetUrl(b)['infoHash']?.toString().toLowerCase();
+        if (ha != null && hb != null && ha != hb) {
+          debugPrint('[DMX] M-5: Torrent hash changed from $ha to $hb');
+        }
+        if (ha != null && hb != null) return ha == hb;
+        // FIX-07: For .torrent file URLs: compare info-hash / file identity
+        if (a.endsWith('.torrent') && b.endsWith('.torrent')) {
+          if (a == b) return true;
+          try {
+            final fa = Uri.tryParse(a)?.toFilePath() ?? a;
+            final fb = Uri.tryParse(b)?.toFilePath() ?? b;
+            if (fa == fb) return true;
+          } catch (_) {}
+        }
+        return false;
+      }
+
       final wasTorrent = task.isTorrent;
       final isNewTorrent = cleanUrl.startsWith('magnet:') ||
           cleanUrl.toLowerCase().endsWith('.torrent');
@@ -3774,16 +3796,6 @@ class DownloadProvider extends ChangeNotifier
         if (torrentId != null) {
           TorrentService.removeTorrent(torrentId, deleteFiles: false);
           _torrentIds.remove(taskId);
-        }
-
-        bool sameTorrent(String a, String b) {
-          if (a == b) return true; // FIX-10: File path / URL exact comparison
-          final ha = parseMagnetUrl(a)['infoHash']?.toString().toLowerCase();
-          final hb = parseMagnetUrl(b)['infoHash']?.toString().toLowerCase();
-          if (ha != null && hb != null && ha != hb) {
-            debugPrint('[DMX] M-5: Torrent hash changed from $ha to $hb');
-          }
-          return ha != null && hb != null && ha == hb;
         }
 
 
@@ -3930,6 +3942,7 @@ class DownloadProvider extends ChangeNotifier
                 clearError: true,
               );
               _tasks[index] = updatedTask;
+              _orchestrator.clearSessionCachedTotalSize(taskId); // FIX-11
               await _databaseService.saveTask(updatedTask);
               notifyListeners();
               if (wasDownloading) {
@@ -4128,8 +4141,45 @@ class DownloadProvider extends ChangeNotifier
         }
       }
 
-      // FIX LU-1: Always delete .dmxstate when URL actually changed so old ETag doesn't corrupt resume
-      if (cleanUrl != task.url) {
+      // FIX-01: State file update logic for URL refresh vs manual URL change
+      if (isRefresh) {
+        if (streamIdentityChanged) {
+          // Stream identity changed on refresh -> delete state and part files
+          for (final path in [
+            task.tempFilePath,
+            '${task.tempFilePath}.dmxstate',
+            '${task.tempFilePath}.dmxstate.tmp',
+          ]) {
+            try {
+              final f = File(path);
+              if (await f.exists()) await f.delete();
+            } catch (_) {}
+          }
+        } else {
+          // Stream identity unchanged -> do NOT delete .dmxstate.
+          // Update url field, clear etag and lastModified, and write back atomically.
+          try {
+            final stateFile = File('${task.tempFilePath}.dmxstate');
+            if (await stateFile.exists()) {
+              final raw = await stateFile.readAsString();
+              final decoded = jsonDecode(raw);
+              if (decoded is Map<String, dynamic>) {
+                decoded['url'] = cleanUrl;
+                decoded['etag'] = null;
+                decoded['lastModified'] = null;
+                final tmpFile = File('${task.tempFilePath}.dmxstate.tmp');
+                await tmpFile.writeAsString(jsonEncode(decoded));
+                if (await tmpFile.exists()) {
+                  await tmpFile.rename(stateFile.path);
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint('[DMX] FIX-01: Failed atomic state update on refresh: $e');
+          }
+        }
+      } else if (cleanUrl != task.url && !isSameResource && !sameTorrent(task.url, cleanUrl)) {
+        // Only delete .dmxstate on manual URL change when not same resource
         for (final p in [
           '${task.tempFilePath}.dmxstate',
           '${task.tempFilePath}.dmxstate.tmp',
@@ -4143,7 +4193,7 @@ class DownloadProvider extends ChangeNotifier
 
       // FIX(U-1): Also delete the temp file and audio temp file when size changes
       if (sizeChanged) {
-        // FIX-08: Delete stale state files on size change
+        // Delete stale state files on size change
         for (final path in [
           task.tempFilePath,
           '${task.tempFilePath}.dmxstate',
@@ -4162,27 +4212,18 @@ class DownloadProvider extends ChangeNotifier
         }
       }
 
-      // FIX-7: delete stale state file so old ETag doesn't cause false restart
-      if (sizeChanged || cleanUrl != task.url) {
-        for (final path in [
-          '${task.tempFilePath}.dmxstate',
-          '${task.tempFilePath}.dmxstate.tmp',
-        ]) {
-          try {
-            final f = File(path);
-            if (await f.exists()) await f.delete();
-          } catch (_) {}
-        }
-      }
-
-
-
       final audioChanged = clearAudioUrl ||
-          streamIdentityChanged || // FIX-YT-5
+          streamIdentityChanged ||
           (newAudioUrl != null && newAudioUrl != task.mergedAudioUrl);
-      // FIX-D5: When the audio URL changes, delete all audio sidecar files
-      // to prevent the engine from resuming from stale/corrupt audio bytes.
-      if (audioChanged) {
+
+      // FIX-08: Only delete audio sidecars when the audio itag actually changed
+      final oldAudioItag = Uri.tryParse(task.mergedAudioUrl ?? '')
+          ?.queryParameters['itag'];
+      final newAudioItag = Uri.tryParse(newAudioUrl ?? '')
+          ?.queryParameters['itag'];
+      final audioItagChanged = oldAudioItag != null &&
+          newAudioItag != null && oldAudioItag != newAudioItag;
+      if (audioItagChanged) {
         for (final path in [
           '${task.tempFilePath}.audio',
           '${task.tempFilePath}.audio.dmxstate',

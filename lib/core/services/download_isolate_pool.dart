@@ -798,7 +798,9 @@ class HttpTransferJob {
     } catch (e) {
       // Persist whatever IS proven before surfacing the error — retry picks
       // up the surviving chunks.
-      if (e is! _RangeUnsupportedException) {
+      if (e is DioException && e.type == DioExceptionType.cancel) {
+        st.status = DmxStateStatus.paused;
+      } else if (e is! _RangeUnsupportedException) {
         st.status = DmxStateStatus.failed;
       }
       try {
@@ -1183,12 +1185,6 @@ class HttpTransferJob {
           }
         } on DioException catch (e) {
           if (e.type == DioExceptionType.cancel) {
-            try {
-              await sink.flush();
-            } catch (_) {}
-            try {
-              await StateStore.save(cmd.tempFilePath, _state!);
-            } catch (_) {}
             rethrow;
           }
           rethrow;
@@ -1230,7 +1226,12 @@ class HttpTransferJob {
             Duration(seconds: (attempts * attempts * 2) + Random().nextInt(3)));
       } finally {
         try {
+          await sink?.flush();
           await sink?.close();
+        } catch (_) {}
+        // FIX-14: Always save state on exit (cancel or error)
+        try {
+          await StateStore.save(cmd.tempFilePath, _state!);
         } catch (_) {}
       }
     }
