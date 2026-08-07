@@ -2337,7 +2337,7 @@ class DownloadOrchestrator {
                               progress.downloadedBytes >= base.fileSize))) {
                     resolvedFiles = resolvedFiles.map((f) {
                       final copy = Map<String, dynamic>.from(f);
-                      if (copy['selected'] != false) {
+                      if (isTorrentFileSelected(copy)) {
                         copy['downloadedBytes'] =
                             (copy['length'] as num?)?.toInt() ??
                                 (copy['size'] as num?)?.toInt() ??

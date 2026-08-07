@@ -1052,10 +1052,16 @@ class YoutubeService {
     return null;
   }
 
+  static Future<Map<String, String?>?> Function(String, {String? preferredType})? mockGetFreshStreams;
+
   static Future<Map<String, String?>?> getFreshStreams(
     String downloadPageUrl, {
     String? preferredType,
   }) async {
+    if (mockGetFreshStreams != null) {
+      return mockGetFreshStreams!(downloadPageUrl, preferredType: preferredType);
+    }
+
     final videoId = extractVideoId(downloadPageUrl) ??
         (downloadPageUrl.length == 11 ? downloadPageUrl : null);
     if (videoId == null) return null;

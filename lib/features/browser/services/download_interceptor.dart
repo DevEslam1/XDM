@@ -100,6 +100,32 @@ class DownloadInterceptor {
       !MediaSniffer.isYoutubeHost(tabUrl) &&
       BrowserDetector.isAutoDownloadable(requestUrl);
 
+  String? parseFilenameFromContentDispositionString(String value) {
+    if (value.isEmpty) return null;
+    // Check RFC 5987 filename*=charset'lang'encoded_value
+    final utf8Match = RegExp(
+      r"filename\*=(?:UTF-8|ISO-8859-1)''([^;\s]+)",
+      caseSensitive: false,
+    ).firstMatch(value);
+    if (utf8Match != null) {
+      try {
+        return safeFileName(Uri.decodeComponent(utf8Match.group(1)!));
+      } catch (_) {
+        return safeFileName(utf8Match.group(1)!);
+      }
+    }
+
+    final quotedMatch = RegExp(
+      r'filename="([^"]+)"|filename=([^";\s]+)',
+      caseSensitive: false,
+    ).firstMatch(value);
+    if (quotedMatch != null) {
+      final name = quotedMatch.group(1) ?? quotedMatch.group(2);
+      if (name != null) return safeFileName(name.trim());
+    }
+    return null;
+  }
+
   Future<InterceptDownloadResult> startDirectDownload(
     String url, {
     String? suggestedName,
@@ -108,6 +134,9 @@ class DownloadInterceptor {
     String? audioUrl,
     int? videoSize,
     int? audioSize,
+    String? mimeType,
+    int? contentLength,
+    String? contentDisposition,
   }) async {
     final downloadProvider = resolveDownloadProvider();
     final existingTasks =
@@ -130,11 +159,16 @@ class DownloadInterceptor {
     }
     String finalFileName = suggestedName ?? '';
     if (finalFileName.isEmpty) {
-      if (url.startsWith('magnet:')) {
-        final parsed = parseMagnetUrl(url);
-        finalFileName = parsed['name'] ?? 'Torrent download';
-      } else {
-        finalFileName = fileNameFromUrl(url);
+      if (contentDisposition != null && contentDisposition.isNotEmpty) {
+        finalFileName = parseFilenameFromContentDispositionString(contentDisposition) ?? '';
+      }
+      if (finalFileName.isEmpty) {
+        if (url.startsWith('magnet:')) {
+          final parsed = parseMagnetUrl(url);
+          finalFileName = parsed['name'] ?? 'Torrent download';
+        } else {
+          finalFileName = fileNameFromUrl(url);
+        }
       }
     }
     String numberedName = finalFileName;
@@ -149,15 +183,32 @@ class DownloadInterceptor {
     }
     finalFileName = numberedName;
     String resolvedCategory = '';
-    if (type == 'video') {
+    if (type == 'video' || (mimeType != null && mimeType.startsWith('video/'))) {
       resolvedCategory = 'Video';
-    } else if (type == 'audio') {
+    } else if (type == 'audio' || (mimeType != null && mimeType.startsWith('audio/'))) {
       resolvedCategory = 'Audio';
-    } else if (type == 'image') {
+    } else if (type == 'image' || (mimeType != null && mimeType.startsWith('image/'))) {
       resolvedCategory = 'Image';
     } else {
-      resolvedCategory =
-          resolveCategorySmart(url: url, fileName: finalFileName);
+      if (mimeType != null) {
+        final kind = BrowserDetector.detectFromContentType(mimeType);
+        if (kind != null) {
+          resolvedCategory = switch (kind) {
+            DetectedMediaKind.video => 'Video',
+            DetectedMediaKind.audio => 'Audio',
+            DetectedMediaKind.image => 'Image',
+            DetectedMediaKind.document => 'Document',
+            DetectedMediaKind.archive => 'Archive',
+            DetectedMediaKind.executable => 'Executable',
+            DetectedMediaKind.torrent => 'Torrent',
+            _ => '',
+          };
+        }
+      }
+      if (resolvedCategory.isEmpty) {
+        resolvedCategory =
+            resolveCategorySmart(url: url, fileName: finalFileName);
+      }
     }
     try {
       final activeTab = resolveActiveTab();
@@ -169,7 +220,7 @@ class DownloadInterceptor {
       await downloadProvider.addDownload(
         name: finalFileName,
         url: url,
-        size: videoSize ?? 0,
+        size: videoSize ?? contentLength ?? 0,
         category: resolvedCategory,
         savePath: '',
         downloadPageUrl: resolvedOriginUrl,

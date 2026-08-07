@@ -614,8 +614,15 @@ class _TelemetryStrip extends StatelessWidget {
                     final provider = context.watch<DownloadProvider>();
                     final history = provider.getSpeedHistory(task.id);
                     if (history.length >= 2) {
+                      final screenW = MediaQuery.sizeOf(context).width;
+                      final sparkWidth = screenW < 340
+                          ? 45.0
+                          : (screenW < 400 ? 60.0 : 80.0);
                       return _CardSparklineGraph(
-                          history: history, color: accent);
+                        history: history,
+                        color: accent,
+                        width: sparkWidth,
+                      );
                     }
                     return const SizedBox.shrink();
                   },
@@ -839,16 +846,20 @@ class _ProgressRow extends StatelessWidget {
             // Total percentage or byte count readout
             SizedBox(
               width: showIndeterminate ? 80 : 48,
-              child: Text(
-                showIndeterminate
-                    ? formatBytes(task.downloadedBytes)
-                    : task.progressPercentString,
-                textAlign: TextAlign.end,
-                style: AppTheme.dataStyle(
-                  isDark: isDark,
-                  size: showIndeterminate ? 11 : 13,
-                  weight: FontWeight.w800,
-                  color: color,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  showIndeterminate
+                      ? formatBytes(task.downloadedBytes)
+                      : task.progressPercentString,
+                  textAlign: TextAlign.end,
+                  style: AppTheme.dataStyle(
+                    isDark: isDark,
+                    size: showIndeterminate ? 11 : 13,
+                    weight: FontWeight.w800,
+                    color: color,
+                  ),
                 ),
               ),
             ),
@@ -1206,6 +1217,11 @@ class _FileCard extends StatelessWidget with HapticHelper {
     final statusColor = getEffectiveCardAccent(task, provider, isDark);
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
+    final isSmallScreen = MediaQuery.sizeOf(context).width < 360;
+    final horizPadding = isSmallScreen ? 10.0 : (compact ? 12.0 : 14.0);
+    final vertPadding = isSmallScreen ? 10.0 : (compact ? 10.0 : 14.0);
+    final itemGap = isSmallScreen ? 8.0 : 12.0;
+
     return _CardShell(
       accent: statusColor,
       isDark: isDark,
@@ -1220,8 +1236,8 @@ class _FileCard extends StatelessWidget with HapticHelper {
       child: ClipRect(
         child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: compact ? 12 : 14,
-            vertical: compact ? 10 : 14,
+            horizontal: horizPadding,
+            vertical: vertPadding,
           ),
           child: SingleChildScrollView(
             physics: const NeverScrollableScrollPhysics(),
@@ -1248,7 +1264,7 @@ class _FileCard extends StatelessWidget with HapticHelper {
                         size: compact ? 18 : 21,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: itemGap),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1333,7 +1349,7 @@ class _FileCard extends StatelessWidget with HapticHelper {
                     child: Align(
                       alignment: AlignmentDirectional.centerEnd,
                       child: Text(
-                        '${task.threadCount} CH • ${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
+                        '${task.threadCount} CH',
                         style: AppTheme.microLabel(
                           isDark: isDark,
                           color: mutedClr,
@@ -1385,6 +1401,11 @@ class _MediaCard extends StatelessWidget with HapticHelper {
         ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
         : (isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan);
 
+    final isSmallScreen = MediaQuery.sizeOf(context).width < 360;
+    final horizPadding = isSmallScreen ? 10.0 : (compact ? 12.0 : 14.0);
+    final vertPadding = isSmallScreen ? 10.0 : (compact ? 10.0 : 14.0);
+    final itemGap = isSmallScreen ? 8.0 : 12.0;
+
     return _CardShell(
       accent: statusColor,
       isDark: isDark,
@@ -1399,8 +1420,8 @@ class _MediaCard extends StatelessWidget with HapticHelper {
       child: ClipRect(
         child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: compact ? 12 : 14,
-            vertical: compact ? 10 : 14,
+            horizontal: horizPadding,
+            vertical: vertPadding,
           ),
           child: SingleChildScrollView(
             physics: const NeverScrollableScrollPhysics(),
@@ -1447,7 +1468,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                               size: compact ? 18 : 22,
                             ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: itemGap),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1613,9 +1634,14 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
       builder: (context, stats, _) {
         final fileCount = widget.task.torrentFiles?.length ?? 0;
         final selectedCount = widget.task.torrentFiles
-                ?.where((f) => f['selected'] == true)
+                ?.where((f) => isTorrentFileSelected(f))
                 .length ??
             0;
+
+        final isSmallScreen = MediaQuery.sizeOf(context).width < 360;
+        final horizPadding = isSmallScreen ? 10.0 : (widget.compact ? 12.0 : 14.0);
+        final vertPadding = isSmallScreen ? 10.0 : (widget.compact ? 10.0 : 14.0);
+        final itemGap = isSmallScreen ? 8.0 : 12.0;
 
         return _CardShell(
           accent: statusColor,
@@ -1634,8 +1660,8 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
           child: ClipRect(
             child: Padding(
               padding: EdgeInsets.symmetric(
-                horizontal: widget.compact ? 12 : 14,
-                vertical: widget.compact ? 10 : 14,
+                horizontal: horizPadding,
+                vertical: vertPadding,
               ),
               child: SingleChildScrollView(
                 physics: const NeverScrollableScrollPhysics(),
@@ -1665,7 +1691,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                             size: widget.compact ? 18 : 21,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        SizedBox(width: itemGap),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1870,7 +1896,7 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
               true ||
           widget.task.statusMessage?.contains('Checking') == true; // FIX-B10
       final displayFiles = files.map((f) {
-        final selected = f['selected'] == true;
+        final selected = isTorrentFileSelected(f);
         final length = (f['length'] as num?)?.toInt() ?? 0;
         final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
 
@@ -1896,7 +1922,7 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
-              'FILES • ${files.where((f) => f['selected'] == true).length}/${files.length}',
+              'FILES • ${files.where((f) => isTorrentFileSelected(f)).length}/${files.length}',
               style: AppTheme.microLabel(isDark: widget.isDark, size: 8),
             ),
           ),
@@ -2025,7 +2051,7 @@ class _TorrentFileRow extends StatelessWidget {
         ),
       );
     }
-    final selected = file['selected'] == true;
+    final selected = isTorrentFileSelected(file);
     final length = (file['length'] as num?)?.toInt() ?? 0;
     final safeLength = length < 0 ? 0 : length;
     final rawBytes = (file['downloadedBytes'] as num?)?.toInt() ?? 0;
@@ -3068,14 +3094,19 @@ Future<bool?> showDeleteConfirmationDialog(
 class _CardSparklineGraph extends StatelessWidget {
   final List<double> history;
   final Color color;
+  final double width;
 
-  const _CardSparklineGraph({required this.history, required this.color});
+  const _CardSparklineGraph({
+    required this.history,
+    required this.color,
+    this.width = 80.0,
+  });
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 24,
-      width: 80,
+      width: width,
       child: CustomPaint(
         painter: _SparklinePainter(history, color),
       ),

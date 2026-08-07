@@ -8,6 +8,7 @@ import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/permission_service.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:dmx/core/services/youtube_service.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter/services.dart';
@@ -17,14 +18,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 
 class MockConnectivityPlatform extends ConnectivityPlatform {
+  static List<ConnectivityResult> results = [ConnectivityResult.wifi];
+
   @override
   Future<List<ConnectivityResult>> checkConnectivity() async {
-    return [ConnectivityResult.wifi];
+    return results;
   }
 
   @override
   Stream<List<ConnectivityResult>> get onConnectivityChanged {
-    return Stream.value([ConnectivityResult.wifi]);
+    return Stream.value(results);
   }
 }
 
@@ -1031,6 +1034,276 @@ void main() {
         threadCount: 2,
       );
       expect(redistributed, [0.5, 0.5]);
+    });
+
+    test('Bug 3: _autoResumeIncomplete wifi-only and waiting-network pauses', () async {
+      MockConnectivityPlatform.results = [ConnectivityResult.none];
+      addTearDown(() {
+        MockConnectivityPlatform.results = [ConnectivityResult.wifi];
+      });
+
+      final (database, settings) = await _setupServices();
+      final now = DateTime.now();
+
+      final task1 = DownloadTask(
+        id: 'user_paused',
+        fileName: 'a.zip',
+        url: 'https://example.com/a.zip',
+        fileSize: 100,
+        downloadedBytes: 0,
+        category: 'Archive',
+        status: DownloadStatus.paused,
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: const [0.0],
+        createdAt: now,
+        updatedAt: now,
+        pausedByUser: true,
+      );
+
+      final task2 = DownloadTask(
+        id: 'waiting_wifi',
+        fileName: 'b.zip',
+        url: 'https://example.com/b.zip',
+        fileSize: 100,
+        downloadedBytes: 0,
+        category: 'Archive',
+        status: DownloadStatus.paused,
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: const [0.0],
+        createdAt: now,
+        updatedAt: now,
+        pausedByUser: false,
+        errorMessage: DownloadStatusMessages.waitingWifi,
+      );
+
+      final task3 = DownloadTask(
+        id: 'waiting_network',
+        fileName: 'c.zip',
+        url: 'https://example.com/c.zip',
+        fileSize: 100,
+        downloadedBytes: 0,
+        category: 'Archive',
+        status: DownloadStatus.paused,
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: const [0.0],
+        createdAt: now,
+        updatedAt: now,
+        pausedByUser: false,
+        errorMessage: DownloadStatusMessages.waitingNetwork,
+      );
+
+      final task4 = DownloadTask(
+        id: 'normal_paused',
+        fileName: 'd.zip',
+        url: 'https://example.com/d.zip',
+        fileSize: 100,
+        downloadedBytes: 10,
+        category: 'Archive',
+        status: DownloadStatus.paused,
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: const [0.1],
+        createdAt: now,
+        updatedAt: now,
+        pausedByUser: false,
+      );
+
+      await database.saveTask(task1);
+      await database.saveTask(task2);
+      await database.saveTask(task3);
+      await database.saveTask(task4);
+
+      final provider = DownloadProvider(
+        databaseService: database,
+        settingsProvider: settings,
+        downloadEngine: FakeDownloadEngine(),
+        permissionService: FakePermissionService(),
+      );
+      settings.autoStart = true;
+      await provider.load();
+
+      expect(provider.tasks.firstWhere((t) => t.id == 'user_paused').status, DownloadStatus.paused);
+      expect(provider.tasks.firstWhere((t) => t.id == 'waiting_wifi').status, DownloadStatus.paused);
+      expect(provider.tasks.firstWhere((t) => t.id == 'waiting_network').status, DownloadStatus.paused);
+      expect(provider.tasks.firstWhere((t) => t.id == 'normal_paused').status, DownloadStatus.queued);
+    });
+
+    test('Bug 4: retryTask resets metadata when isUnrecoverable is true', () async {
+      final (database, settings) = await _setupServices();
+      final now = DateTime.now();
+
+      final task = DownloadTask(
+        id: 'retry_unrecoverable',
+        fileName: 'checksum_fail.zip',
+        url: 'https://example.com/file.zip',
+        fileSize: 1000,
+        downloadedBytes: 500,
+        videoStreamSize: 800,
+        audioSize: 200,
+        audioDownloadedBytes: 100,
+        category: 'Archive',
+        status: DownloadStatus.failed,
+        errorMessage: 'Checksum verification failed',
+        savePath: 'build',
+        localFilePath: 'build/file.zip',
+        tempFilePath: 'build/file.zip.dmxpart',
+        threadCount: 2,
+        chunks: const [0.5, 0.5],
+        createdAt: now,
+        updatedAt: now,
+      );
+      await database.saveTask(task);
+
+      final provider = DownloadProvider(
+        databaseService: database,
+        settingsProvider: settings,
+        downloadEngine: FakeDownloadEngine(),
+        permissionService: FakePermissionService(),
+      );
+      settings.autoStart = false;
+      await provider.load();
+
+      await provider.retryTask('retry_unrecoverable');
+
+      final updatedTask = provider.tasks.firstWhere((t) => t.id == 'retry_unrecoverable');
+      expect(updatedTask.downloadedBytes, 0);
+      expect(updatedTask.videoStreamSize, 0);
+      expect(updatedTask.audioDownloadedBytes, 0);
+    });
+
+    test('Bug 6: youtubeStreamIdentityChanged detects actual stream changes', () {
+      const urlOld = 'https://r5---sn-5uaezney.googlevideo.com/videoplayback?expire=1627000000&itag=22&mime=video%2Fmp4';
+      const urlNewSame = 'https://r5---sn-5uaezney.googlevideo.com/videoplayback?expire=1627050000&itag=22&mime=video%2Fmp4';
+      const urlNewDiffItag = 'https://r5---sn-5uaezney.googlevideo.com/videoplayback?expire=1627050000&itag=137&mime=video%2Fmp4';
+      const urlNewDiffHost = 'https://r1---sn-abc.googlevideo.com/videoplayback?expire=1627050000&itag=22&mime=video%2Fmp4';
+
+      expect(DownloadProvider.youtubeStreamIdentityChanged(urlOld, urlNewSame), isFalse);
+      expect(DownloadProvider.youtubeStreamIdentityChanged(urlOld, urlNewDiffItag), isTrue);
+      expect(DownloadProvider.youtubeStreamIdentityChanged(urlOld, urlNewDiffHost), isTrue);
+    });
+
+    test('Bug 6 & 7: retryTask YouTube refresh handles same-identity and different-identity', () async {
+      final (database, settings) = await _setupServices();
+      final now = DateTime.now();
+
+      // Create dummy files for same-identity retry
+      final tempVideoSame = File('build/yt_same.mp4.dmxpart');
+      final tempStateSame = File('build/yt_same.mp4.dmxpart.dmxstate');
+      await tempVideoSame.create(recursive: true);
+      await tempVideoSame.writeAsBytes(List.filled(500, 0));
+      await tempStateSame.create(recursive: true);
+      await tempStateSame.writeAsString(jsonEncode({
+        'totalSize': 1000,
+        'threadCount': 1,
+        'progress': [500],
+      }));
+
+      final taskSame = DownloadTask(
+        id: 'yt_same_task',
+        fileName: 'yt_same.mp4',
+        url: 'https://googlevideo.com/playback?expire=1000&itag=22&mime=video%2Fmp4', // expired
+        fileSize: 1000,
+        downloadedBytes: 500,
+        category: 'Video',
+        status: DownloadStatus.failed,
+        savePath: 'build',
+        localFilePath: 'build/yt_same.mp4',
+        tempFilePath: 'build/yt_same.mp4.dmxpart',
+        threadCount: 1,
+        chunks: const [0.5],
+        createdAt: now,
+        updatedAt: now,
+        youtubeQualityPreset: '720p',
+        downloadPageUrl: 'https://youtube.com/watch?v=same',
+      );
+      await database.saveTask(taskSame);
+
+      // Create dummy files for diff-identity retry
+      final tempVideoDiff = File('build/yt_diff.mp4.dmxpart');
+      final tempStateDiff = File('build/yt_diff.mp4.dmxpart.dmxstate');
+      await tempVideoDiff.create(recursive: true);
+      await tempVideoDiff.writeAsBytes(List.filled(500, 0));
+      await tempStateDiff.create(recursive: true);
+      await tempStateDiff.writeAsString(jsonEncode({
+        'totalSize': 1000,
+        'threadCount': 1,
+        'progress': [500],
+      }));
+
+      final taskDiff = DownloadTask(
+        id: 'yt_diff_task',
+        fileName: 'yt_diff.mp4',
+        url: 'https://googlevideo.com/playback?expire=1000&itag=22&mime=video%2Fmp4', // expired
+        fileSize: 1000,
+        downloadedBytes: 500,
+        category: 'Video',
+        status: DownloadStatus.failed,
+        savePath: 'build',
+        localFilePath: 'build/yt_diff.mp4',
+        tempFilePath: 'build/yt_diff.mp4.dmxpart',
+        threadCount: 1,
+        chunks: const [0.5],
+        createdAt: now,
+        updatedAt: now,
+        youtubeQualityPreset: '720p',
+        downloadPageUrl: 'https://youtube.com/watch?v=diff',
+      );
+      await database.saveTask(taskDiff);
+
+      // Stub YoutubeService.getFreshStreams
+      YoutubeService.mockGetFreshStreams = (pageUrl, {preferredType}) async {
+        if (pageUrl.contains('same')) {
+          // returns same itag/mime, different signature/expire
+          return {
+            'url': 'https://googlevideo.com/playback?expire=999999&itag=22&mime=video%2Fmp4',
+            'audioUrl': null,
+          };
+        } else {
+          // returns different itag
+          return {
+            'url': 'https://googlevideo.com/playback?expire=999999&itag=137&mime=video%2Fmp4',
+            'audioUrl': null,
+          };
+        }
+      };
+
+      final provider = DownloadProvider(
+        databaseService: database,
+        settingsProvider: settings,
+        downloadEngine: FakeDownloadEngine(),
+        permissionService: FakePermissionService(),
+      );
+      settings.autoStart = false;
+      await provider.load();
+
+      // Retry same task -> should preserve downloadedBytes and files
+      await provider.retryTask('yt_same_task');
+      final updatedSame = provider.tasks.firstWhere((t) => t.id == 'yt_same_task');
+      expect(updatedSame.downloadedBytes, 500);
+      expect(await tempVideoSame.exists(), isTrue);
+
+      // Retry diff task -> should reset downloadedBytes to 0 and delete files
+      await provider.retryTask('yt_diff_task');
+      final updatedDiff = provider.tasks.firstWhere((t) => t.id == 'yt_diff_task');
+      expect(updatedDiff.downloadedBytes, 0);
+      expect(await tempVideoDiff.exists(), isFalse);
+      expect(await tempStateDiff.exists(), isFalse);
+
+      // Cleanup
+      if (await tempVideoSame.exists()) await tempVideoSame.delete();
+      if (await tempStateSame.exists()) await tempStateSame.delete();
+      YoutubeService.mockGetFreshStreams = null;
     });
   });
 }

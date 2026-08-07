@@ -339,3 +339,5 @@ Future<void> deleteDownloadParts(String tempFilePath) async {
     );
   }
 }
+
+bool isTorrentFileSelected(Map f) => f['selected'] != false;

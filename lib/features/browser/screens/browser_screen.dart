@@ -92,6 +92,14 @@ class _BrowserScreenState extends State<BrowserScreen>
   );
 
   final List<String> _tabIdHistory = [];
+  final Set<String> _recentDownloadUrls = {};
+
+  void _markUrlAsDownloaded(String url) {
+    _recentDownloadUrls.add(url);
+    Future.delayed(const Duration(seconds: 4), () {
+      _recentDownloadUrls.remove(url);
+    });
+  }
 
   List<BrowserTab> get _tabs => _tabManager.tabs;
   int get _currentTabIndex => _tabManager.currentIndex;
@@ -950,6 +958,11 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (!mounted) return;
     final url = message.message.trim();
     if (url.isEmpty || url == 'about:blank') return;
+
+    if (_recentDownloadUrls.contains(url)) {
+      _log.info('[Browser] Popup URL ignored because it was already handled as a download: $url');
+      return;
+    }
 
     // 1. Magnet URL check
     if (url.startsWith('magnet:') || isMagnetUrl(url)) {
@@ -4814,6 +4827,40 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                     url.toString());
                                                               }
                                                             },
+                                                             onDownloadStartRequest:
+                                                                 (controller,
+                                                                     downloadStartRequest) async {
+                                                               final url = downloadStartRequest.url.toString();
+                                                               _log.info('[Browser] onDownloadStartRequest: $url');
+                                                               _markUrlAsDownloaded(url);
+                                                               final isDark = Provider.of<SettingsProvider>(context, listen: false).isDarkMode;
+                                                               final result = await _interceptor.startDirectDownload(
+                                                                 url,
+                                                                 suggestedName: downloadStartRequest.suggestedFilename,
+                                                                 mimeType: downloadStartRequest.mimeType,
+                                                                 contentLength: downloadStartRequest.contentLength,
+                                                                 contentDisposition: downloadStartRequest.contentDisposition,
+                                                               );
+                                                               if (!context.mounted) return;
+                                                               if (result.status == InterceptDownloadStatus.queued) {
+                                                                 final filename = downloadStartRequest.suggestedFilename ?? fileNameFromUrl(url);
+                                                                 ThemedSnackbar.show(
+                                                                   context,
+                                                                   message: 'Download started: $filename',
+                                                                   icon: Icons.download_done_rounded,
+                                                                   color: AppTheme.neonGreen,
+                                                                   isDarkMode: isDark,
+                                                                 );
+                                                               } else if (result.status == InterceptDownloadStatus.alreadyInProgress) {
+                                                                 ThemedSnackbar.show(
+                                                                   context,
+                                                                   message: 'Download already in progress',
+                                                                   icon: Icons.info_outline,
+                                                                   color: AppTheme.neonAmber,
+                                                                   isDarkMode: isDark,
+                                                                 );
+                                                               }
+                                                             },
                                                             onReceivedError:
                                                                 (controller,
                                                                     request,
@@ -4930,6 +4977,11 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                               if (url.isEmpty) {
                                                                 return NavigationActionPolicy
                                                                     .ALLOW;
+                                                              }
+                                                              if (_recentDownloadUrls.contains(url)) {
+                                                                _log.info('[Browser] shouldOverrideUrlLoading: ignoring $url (already downloading)');
+                                                                return NavigationActionPolicy
+                                                                    .CANCEL;
                                                               }
 
                                                               // 0. Ad-blocker: cancel navigation-level ad redirects

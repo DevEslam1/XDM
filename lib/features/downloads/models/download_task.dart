@@ -162,7 +162,7 @@ class DownloadTask {
     // FIX-10: For torrents, prefer the torrentFiles sum as it's computed from actual metadata
     if (isTorrent && torrentFiles != null && torrentFiles!.isNotEmpty) {
       final sum = torrentFiles!
-          .where((f) => f['selected'] != false)
+          .where((f) => isTorrentFileSelected(f))
           .fold<int>(0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
       if (sum > 0) return sum;
     }
@@ -225,16 +225,21 @@ class DownloadTask {
       final videoOnly = videoStreamSize > 0
           ? videoStreamSize
           : (fileSize > audioSize ? fileSize - audioSize : 0);
-      // BUG 1 FIX: Only add audio if raw is strictly LESS than videoOnly
-      // (meaning downloadedBytes has NOT yet been updated to include audio)
-      if (videoOnly > 0 && raw < videoOnly) {
-        if (audioSize > 0) {
-          raw += (audioProgress * audioSize).round();
-        } else if (audioDownloadedBytes > 0) {
-          raw += audioDownloadedBytes;
+      if (videoOnly > 0) {
+        if (raw < videoOnly) {
+          if (audioSize > 0) {
+            raw += (audioProgress * audioSize).round();
+          } else if (audioDownloadedBytes > 0) {
+            raw += audioDownloadedBytes;
+          }
+        } else {
+          if (audioSize > 0) {
+            raw = videoOnly + (audioProgress * audioSize).round();
+          } else if (audioDownloadedBytes > 0) {
+            raw = videoOnly + audioDownloadedBytes;
+          }
         }
       }
-      // If raw >= videoOnly, assume it already includes audio — don't add again
     }
     if (total > 0) return raw.clamp(0, total);
     return raw;

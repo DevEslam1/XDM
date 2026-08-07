@@ -1244,7 +1244,7 @@ class DownloadEngine {
       for (final ef in engineFiles) {
         final stored = storedByName[ef.name];
         if (stored != null) {
-          final selected = stored['selected'] as bool? ?? true;
+          final selected = isTorrentFileSelected(stored);
           priorities.add(selected ? (stored['priority'] as int? ?? 4) : 0);
         } else {
           priorities.add(4); // default: select unknown files
@@ -1266,7 +1266,7 @@ class DownloadEngine {
     }
     // Normal path (counts match)
     final priorities = currentTorrentFiles.map((f) {
-      final selected = f['selected'] as bool? ?? true;
+      final selected = isTorrentFileSelected(f);
       if (!selected) return 0;
       return f['priority'] as int? ?? 4;
     }).toList();
@@ -1355,7 +1355,7 @@ class DownloadEngine {
       int calculatedDownloaded = 0;
       if (resolvedFiles != null) {
         for (final f in resolvedFiles) {
-          if (f['selected'] == true) {
+          if (isTorrentFileSelected(f)) {
             calculatedTotal += (f['length'] as num?)?.toInt() ?? 0;
             final engineBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
             final isEstimated = f['progressEstimated'] == true;
@@ -1506,7 +1506,7 @@ class DownloadEngine {
     final incompleteSet = <int>{};
     for (final idx in sortedIndices) {
       final f = files[idx];
-      final selected = f['selected'] as bool? ?? true;
+      final selected = isTorrentFileSelected(f);
       final length = (f['length'] as num?)?.toInt() ?? 0;
       final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
       if (selected && (length == 0 || downloaded < length)) {

@@ -779,7 +779,13 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '$count ${L10n.of(context, 'items_count')}',
+                    L10n.of(
+                      context,
+                      count == 1
+                          ? 'items_count_singular'
+                          : 'items_count_plural',
+                      args: {'count': count},
+                    ),
                     style: TextStyle(
                       color: mutedClr,
                       fontSize: 10,
@@ -1666,75 +1672,155 @@ class _DownloadTaskList extends StatelessWidget {
               },
             );
           } else {
-            contentWidget = ListView.separated(
-              padding: EdgeInsets.symmetric(
-                horizontal: screenPadding(context).left,
-              ),
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: BouncingScrollPhysics(),
-              ),
-              itemCount: renderItems.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final item = renderItems[index];
-                final isSelected =
-                    provider.selectedTaskIds.contains(item.task?.id);
-                Widget card;
-                if (item.isPlaylist) {
-                  card = PlaylistGroupCard(
-                    key: ValueKey('playlist_${item.playlistId}'),
-                    playlistId: item.playlistId!,
-                    title: item.title!,
-                    items: item.items!,
-                  );
-                } else {
-                  card = DownloadCard(
-                    key: ValueKey(item.task!.id),
-                    task: item.task!,
-                    compact: true,
-                    showDragHandle: false,
-                    index: index,
-                  );
-                }
+            final isTabletView = MediaQuery.sizeOf(context).width >= 600;
+            if (isTabletView) {
+              contentWidget = GridView.builder(
+                padding: EdgeInsets.symmetric(
+                  horizontal: screenPadding(context).left,
+                  vertical: 4,
+                ),
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 540,
+                  mainAxisExtent: 155,
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: renderItems.length,
+                itemBuilder: (context, index) {
+                  final item = renderItems[index];
+                  final isSelected =
+                      provider.selectedTaskIds.contains(item.task?.id);
+                  Widget card;
+                  if (item.isPlaylist) {
+                    card = PlaylistGroupCard(
+                      key: ValueKey('playlist_${item.playlistId}'),
+                      playlistId: item.playlistId!,
+                      title: item.title!,
+                      items: item.items!,
+                    );
+                  } else {
+                    card = DownloadCard(
+                      key: ValueKey(item.task!.id),
+                      task: item.task!,
+                      compact: true,
+                      showDragHandle: false,
+                      index: index,
+                    );
+                  }
 
-                if (!item.isPlaylist) {
-                  card = Row(
-                    children: [
-                      if (isInSelectionMode)
-                        Padding(
-                          padding: const EdgeInsetsDirectional.only(end: 8.0),
-                          child: Checkbox(
-                            value: isSelected,
-                            onChanged: (val) =>
-                                provider.toggleTaskSelection(item.task!.id),
-                            activeColor: isDark
-                                ? AppTheme.neonBlue
-                                : AppTheme.lightNeonBlue,
+                  if (!item.isPlaylist) {
+                    card = Row(
+                      children: [
+                        if (isInSelectionMode)
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(end: 8.0),
+                            child: Checkbox(
+                              value: isSelected,
+                              onChanged: (val) =>
+                                  provider.toggleTaskSelection(item.task!.id),
+                              activeColor: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
+                            ),
                           ),
-                        ),
-                      Expanded(child: card),
-                    ],
-                  );
-                  card = GestureDetector(
-                    onLongPress: () {
-                      if (!isInSelectionMode) {
-                        provider.toggleTaskSelection(item.task!.id);
-                      }
-                    },
-                    onTap: () {
-                      if (isInSelectionMode) {
-                        provider.toggleTaskSelection(item.task!.id);
-                      }
-                    },
-                    child: card,
-                  );
-                }
+                        Expanded(child: card),
+                      ],
+                    );
+                    card = GestureDetector(
+                      onLongPress: () {
+                        if (!isInSelectionMode) {
+                          provider.toggleTaskSelection(item.task!.id);
+                        }
+                      },
+                      onTap: () {
+                        if (isInSelectionMode) {
+                          provider.toggleTaskSelection(item.task!.id);
+                        }
+                      },
+                      child: card,
+                    );
+                  }
 
-                return RepaintBoundary(
-                  child: _staggeredItem(context, index, card),
-                );
-              },
-            );
+                  return RepaintBoundary(
+                    child: _staggeredItem(context, index, card),
+                  );
+                },
+              );
+            } else {
+              contentWidget = ListView.separated(
+                padding: EdgeInsets.symmetric(
+                  horizontal: screenPadding(context).left,
+                ),
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                itemCount: renderItems.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final item = renderItems[index];
+                  final isSelected =
+                      provider.selectedTaskIds.contains(item.task?.id);
+                  Widget card;
+                  if (item.isPlaylist) {
+                    card = PlaylistGroupCard(
+                      key: ValueKey('playlist_${item.playlistId}'),
+                      playlistId: item.playlistId!,
+                      title: item.title!,
+                      items: item.items!,
+                    );
+                  } else {
+                    card = DownloadCard(
+                      key: ValueKey(item.task!.id),
+                      task: item.task!,
+                      compact: true,
+                      showDragHandle: false,
+                      index: index,
+                    );
+                  }
+
+                  if (!item.isPlaylist) {
+                    card = Row(
+                      children: [
+                        if (isInSelectionMode)
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(end: 8.0),
+                            child: Checkbox(
+                              value: isSelected,
+                              onChanged: (val) =>
+                                  provider.toggleTaskSelection(item.task!.id),
+                              activeColor: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
+                            ),
+                          ),
+                        Expanded(child: card),
+                      ],
+                    );
+                    card = GestureDetector(
+                      onLongPress: () {
+                        if (!isInSelectionMode) {
+                          provider.toggleTaskSelection(item.task!.id);
+                        }
+                      },
+                      onTap: () {
+                        if (isInSelectionMode) {
+                          provider.toggleTaskSelection(item.task!.id);
+                        }
+                      },
+                      child: card,
+                    );
+                  }
+
+                  return RepaintBoundary(
+                    child: _staggeredItem(context, index, card),
+                  );
+                },
+              );
+            }
           }
           return Directionality(
             textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,

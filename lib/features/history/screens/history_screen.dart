@@ -299,15 +299,42 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     }
                                   },
                                 )
-                              : ListView.builder(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16.0),
-                                  physics: const BouncingScrollPhysics(),
-                                  itemCount: historyTasks.length,
-                                  itemBuilder: (context, index) {
-                                    return DownloadCard(
-                                      task: historyTasks[index],
-                                      compact: true,
+                              : Builder(
+                                  builder: (context) {
+                                    final isWide =
+                                        MediaQuery.sizeOf(context).width >= 600;
+                                    if (isWide) {
+                                      return GridView.builder(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16.0, vertical: 4.0),
+                                        physics: const BouncingScrollPhysics(),
+                                        gridDelegate:
+                                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                                          maxCrossAxisExtent: 540,
+                                          mainAxisExtent: 155,
+                                          crossAxisSpacing: 14,
+                                          mainAxisSpacing: 12,
+                                        ),
+                                        itemCount: historyTasks.length,
+                                        itemBuilder: (context, index) {
+                                          return DownloadCard(
+                                            task: historyTasks[index],
+                                            compact: true,
+                                          );
+                                        },
+                                      );
+                                    }
+                                    return ListView.builder(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16.0),
+                                      physics: const BouncingScrollPhysics(),
+                                      itemCount: historyTasks.length,
+                                      itemBuilder: (context, index) {
+                                        return DownloadCard(
+                                          task: historyTasks[index],
+                                          compact: true,
+                                        );
+                                      },
                                     );
                                   },
                                 ),

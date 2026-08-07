@@ -170,29 +170,30 @@ class BrowserDetector {
       }
     }
 
-    final isCleanDownloadRoute = (trimmedPath.endsWith('/download') ||
-            trimmedPath.endsWith('/downloads') ||
-            trimmedPath == '/download' ||
-            trimmedPath == '/downloads') &&
-        uri.query.isEmpty;
-
-    if (!isCleanDownloadRoute) {
-      final hasDownloadKeyword = lower.contains('/download') ||
-          lower.contains('download_file') ||
-          lower.contains('attachment') ||
-          lower.contains('?download') ||
-          lower.contains('&download') ||
-          lower.contains('?file=') ||
-          lower.contains('&file=');
-
-      if (hasDownloadKeyword) {
-        return DetectedMedia(
-          kind: DetectedMediaKind.unknown,
-          url: url,
-          suggestedFileName: _suggestName(url, ''),
-        );
-      }
-    }
+    // Ambiguous route/keyword matching commented out to prevent false positives on regular browsing pages.
+    // final isCleanDownloadRoute = (trimmedPath.endsWith('/download') ||
+    //         trimmedPath.endsWith('/downloads') ||
+    //         trimmedPath == '/download' ||
+    //         trimmedPath == '/downloads') &&
+    //     uri.query.isEmpty;
+    //
+    // if (!isCleanDownloadRoute) {
+    //   final hasDownloadKeyword = lower.contains('/download') ||
+    //       lower.contains('download_file') ||
+    //       lower.contains('attachment') ||
+    //       lower.contains('?download') ||
+    //       lower.contains('&download') ||
+    //       lower.contains('?file=') ||
+    //       lower.contains('&file=');
+    //
+    //   if (hasDownloadKeyword) {
+    //     return DetectedMedia(
+    //       kind: DetectedMediaKind.unknown,
+    //       url: url,
+    //       suggestedFileName: _suggestName(url, ''),
+    //     );
+    //   }
+    // }
 
     final webExtensions = [
       '.html',
@@ -213,13 +214,14 @@ class BrowserDetector {
   }
 
   static bool isAutoDownloadable(String url) {
+    if (url.startsWith('magnet:')) return true;
     final detected = detect(url);
     if (detected == null) return false;
-    if (detected.kind == DetectedMediaKind.image ||
-        detected.kind == DetectedMediaKind.unknown) {
-      return false;
-    }
-    return true;
+    // Only return true for explicit high-confidence direct download formats
+    return detected.kind == DetectedMediaKind.archive ||
+        detected.kind == DetectedMediaKind.executable ||
+        detected.kind == DetectedMediaKind.torrent ||
+        detected.kind == DetectedMediaKind.magnet;
   }
 
   static String _suggestName(String url, String ext) {

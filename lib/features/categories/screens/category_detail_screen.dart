@@ -160,21 +160,52 @@ class CategoryDetailScreen extends StatelessWidget {
                               : 'No files in this category',
                           accentColor: categoryColor,
                         )
-                      : ListView.separated(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 4,
-                          ),
-                          physics: const BouncingScrollPhysics(),
-                          itemCount: categoryTasks.length,
-                          separatorBuilder: (context, index) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final task = categoryTasks[index];
-                            return DownloadCard(
-                              key: ValueKey(task.id),
-                              task: task,
-                              compact: true,
+                      : Builder(
+                          builder: (context) {
+                            final isWide =
+                                MediaQuery.sizeOf(context).width >= 600;
+                            if (isWide) {
+                              return GridView.builder(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 4,
+                                ),
+                                physics: const BouncingScrollPhysics(),
+                                gridDelegate:
+                                    const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 540,
+                                  mainAxisExtent: 155,
+                                  crossAxisSpacing: 14,
+                                  mainAxisSpacing: 12,
+                                ),
+                                itemCount: categoryTasks.length,
+                                itemBuilder: (context, index) {
+                                  final task = categoryTasks[index];
+                                  return DownloadCard(
+                                    key: ValueKey(task.id),
+                                    task: task,
+                                    compact: true,
+                                  );
+                                },
+                              );
+                            }
+                            return ListView.separated(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 4,
+                              ),
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: categoryTasks.length,
+                              separatorBuilder: (context, index) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (context, index) {
+                                final task = categoryTasks[index];
+                                return DownloadCard(
+                                  key: ValueKey(task.id),
+                                  task: task,
+                                  compact: true,
+                                );
+                              },
                             );
                           },
                         ),

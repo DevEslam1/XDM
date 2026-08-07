@@ -92,7 +92,7 @@ mixin DownloadTorrentMixin {
         final fileCount = TorrentService.getFileCount(torrentId);
         if (fileCount == task.torrentFiles!.length) {
           final priorities = task.torrentFiles!.map((f) {
-            final selected = f['selected'] as bool? ?? true;
+            final selected = isTorrentFileSelected(f);
             if (!selected) return 0;
             return f['priority'] as int? ?? 4;
           }).toList();
@@ -185,7 +185,7 @@ mixin DownloadTorrentMixin {
   ) {
     return files.map((f) {
       final copy = Map<String, dynamic>.from(f);
-      if (copy['selected'] == true) {
+      if (isTorrentFileSelected(copy)) {
         copy['downloadedBytes'] = (copy['length'] as num?)?.toInt() ?? 0;
         copy['progressEstimated'] = false;
       } else {
@@ -399,14 +399,14 @@ mixin DownloadTorrentMixin {
 
     // Calculate new total size and downloaded bytes of selected files
     final selectedSize = files
-        .where((f) => f['selected'] == true)
+        .where((f) => isTorrentFileSelected(f))
         .fold(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
-    final selectedDownloaded = files.where((f) => f['selected'] == true).fold(
+    final selectedDownloaded = files.where((f) => isTorrentFileSelected(f)).fold(
         0, (sum, f) => sum + ((f['downloadedBytes'] as num?)?.toInt() ?? 0));
 
     String updatedCategory = task.category;
     if (task.category == 'Other' || task.category.isEmpty) {
-      final selectedFiles = files.where((f) => f['selected'] == true).toList();
+      final selectedFiles = files.where((f) => isTorrentFileSelected(f)).toList();
       final sample = selectedFiles.isNotEmpty
           ? selectedFiles.first
           : (files.isNotEmpty ? files.first : null);
@@ -442,7 +442,7 @@ mixin DownloadTorrentMixin {
         final nativeFiles = TorrentService.getFiles(torrentId);
         if (nativeFiles.length == files.length) {
           final priorities = files.map((f) {
-            final selected = f['selected'] as bool? ?? true;
+            final selected = isTorrentFileSelected(f);
             if (!selected) return 0;
             return f['priority'] as int? ?? 4;
           }).toList();

@@ -542,7 +542,7 @@ class DownloadProvider extends ChangeNotifier
   static int torrentBytesFromFiles(List<Map<String, dynamic>>? files) {
     if (files == null || files.isEmpty) return 0;
     return files.fold<int>(0, (sum, f) {
-      if (f['selected'] != false) {
+      if (isTorrentFileSelected(f)) {
         final bytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
         return sum + (bytes > 0 ? bytes : 0);
       }
@@ -553,7 +553,7 @@ class DownloadProvider extends ChangeNotifier
   static int torrentSelectedFilesTotalSize(List<Map<String, dynamic>>? files) {
     if (files == null || files.isEmpty) return 0;
     return files.fold<int>(0, (sum, f) {
-      if (f['selected'] != false) {
+      if (isTorrentFileSelected(f)) {
         return sum + ((f['length'] as num?)?.toInt() ?? 0);
       }
       return sum;
@@ -1405,7 +1405,7 @@ class DownloadProvider extends ChangeNotifier
           torrentFiles != null &&
           torrentFiles.isNotEmpty) {
         final firstFile = torrentFiles.firstWhere(
-          (f) => f['selected'] == true,
+          (f) => isTorrentFileSelected(f),
           orElse: () => torrentFiles.first,
         );
 
@@ -1783,7 +1783,7 @@ class DownloadProvider extends ChangeNotifier
 
             if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
               final recomputedTotal = task.torrentFiles!.fold<int>(0, (sum, f) {
-                if (f['selected'] != false) {
+                if (isTorrentFileSelected(f)) {
                   final bytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
                   return sum + (bytes > 0 ? bytes : 0);
                 }
@@ -1966,7 +1966,7 @@ class DownloadProvider extends ChangeNotifier
     );
     final safeBytes = diskBytes > 0 ? diskBytes : latest.downloadedBytes;
 
-    // FIX(P1): Include audio bytes in the paused downloadedBytes total
+    // Track audio bytes on disk separately; NOT folded into downloadedBytes (see FIX-P-01 below).
     int audioBytesOnDisk = 0;
     if (latest.mergedAudioUrl != null && latest.mergedAudioUrl!.isNotEmpty) {
       final audioStatePath = '${latest.tempFilePath}.audio';
@@ -2176,7 +2176,8 @@ class DownloadProvider extends ChangeNotifier
     // ═══ FIX YT-5: Proactive YouTube URL refresh on resume ═══
     if (task.youtubeQualityPreset != null &&
         task.downloadPageUrl != null &&
-        task.downloadPageUrl!.isNotEmpty) {
+        task.downloadPageUrl!.isNotEmpty &&
+        _isYoutubeUrlExpired(task.url)) {
       try {
         final fresh = await YoutubeService.getFreshStreams(
             task.downloadPageUrl!,
@@ -2190,38 +2191,27 @@ class DownloadProvider extends ChangeNotifier
           if (urlChanged || audioChanged) {
             debugPrint(
                 '[DMX] YT-5 FIX: Refreshed expired stream URL on resume');
-            if (urlChanged) {
+            final identityChanged = youtubeStreamIdentityChanged(task.url, freshUrl);
+            if (identityChanged) {
+              debugPrint(
+                  '[DMX] YT-5 FIX: Stream identity changed on refresh, resetting progress and deleting video temp file');
+              for (final p in [
+                task.tempFilePath,
+                '${task.tempFilePath}.dmxstate',
+                '${task.tempFilePath}.journal',
+              ]) {
+                try {
+                  final f = File(p);
+                  if (await f.exists()) await f.delete();
+                } catch (_) {}
+              }
+            } else if (urlChanged) {
               final stateFile = File('${task.tempFilePath}.dmxstate');
               if (await stateFile.exists()) {
                 try {
                   await stateFile.delete();
                 } catch (_) {}
               }
-            }
-            // FIX-5: A refreshed URL may point to a different stream format
-            // (itag/mime). Resuming with the old byte counts against a changed
-            // stream identity would corrupt the file. Detect format drift and
-            // zero the progress in that case.
-            final oldUri = Uri.tryParse(task.url);
-            final newUri = Uri.tryParse(freshUrl);
-            final oldItag = oldUri?.queryParameters['itag'];
-            final newItag = newUri?.queryParameters['itag'];
-            final oldMime = oldUri?.queryParameters['mime'];
-            final newMime = newUri?.queryParameters['mime'];
-            // FIX YT-R2: Also compare host+path so a completely different CDN
-            // endpoint is detected even when query parameters are absent.
-            final oldUri2 = Uri.tryParse(task.url);
-            final newUri2 = Uri.tryParse(freshUrl);
-            final hostPathChanged = (oldUri2?.host != newUri2?.host) ||
-                (oldUri2?.path != newUri2?.path);
-            final identityChanged = (oldItag != null &&
-                    newItag != null &&
-                    oldItag != newItag) ||
-                (oldMime != null && newMime != null && oldMime != newMime) ||
-                hostPathChanged;
-            if (identityChanged) {
-              debugPrint(
-                  '[DMX] YT-5 FIX: Stream identity changed on refresh, resetting progress');
             }
 
             // ── FIX YT-1: Independent audio identity validation ──
@@ -2558,6 +2548,18 @@ class DownloadProvider extends ChangeNotifier
     final status = classification.httpStatus;
     final errMsg = task.errorMessage?.toLowerCase() ?? '';
 
+    final isUnrecoverable = errMsg.contains('file changed') ||
+        errMsg.contains('filechangedonserver') ||
+        errMsg.contains('403') ||
+        errMsg.contains('410') ||
+        errMsg.contains('forbidden') ||
+        errMsg.contains('checksum') ||
+        errMsg.contains('sha-256') ||
+        errMsg.contains('too small') ||
+        errMsg.contains('incomplete') ||
+        errMsg.contains('not found') ||
+        errMsg.contains('missing');
+
     // Resource identity changed or non-resumeable auth/gone error force a clean state wipe:
     final shouldClearState = family == ErrorFamily.integrity ||
         family == ErrorFamily.auth ||
@@ -2570,7 +2572,9 @@ class DownloadProvider extends ChangeNotifier
         errMsg.contains('expired') ||
         errMsg.contains('sign in to confirm');
 
-    if (shouldClearState) {
+    final shouldResetAllProgressMetadata = shouldClearState || isUnrecoverable;
+
+    if (shouldResetAllProgressMetadata) {
       debugPrint(
         '[DMX] S1 FIX: Unrecoverable/expired error detected. '
         'Clearing state for fresh retry.',
@@ -2588,54 +2592,23 @@ class DownloadProvider extends ChangeNotifier
           if (await f.exists()) await f.delete();
         } catch (_) {}
       }
-      // Reset progress to zero
-      await _setTask(task.copyWith(
+      // Reset progress to zero locally
+      task = task.copyWith(
         downloadedBytes: 0,
         chunks: List<double>.filled(
             task.threadCount > 0 ? task.threadCount : 1, 0.0),
         audioProgress: 0.0,
-        audioDownloadedBytes: 0, // FIX-C3
-      ));
+        audioDownloadedBytes: 0,
+      );
     }
 
     // FIX-AUDIT-1: clear journal files on retry if task failed, preserving temp data and state files
     if (task.status == DownloadStatus.failed) {
-      final isUnrecoverable = errMsg.contains('file changed') ||
-          errMsg.contains('filechangedonserver') ||
-          errMsg.contains('403') ||
-          errMsg.contains('410') ||
-          errMsg.contains('forbidden') ||
-          errMsg.contains('checksum') ||
-          errMsg.contains('sha-256') ||
-          errMsg.contains('too small') ||
-          errMsg.contains('incomplete') ||
-          errMsg.contains('not found') ||
-          errMsg.contains('missing');
-
-      if (isUnrecoverable) {
-        // FIX RT-1: Always clear state on retry so a potentially-changed server file does not corrupt resume
-        final stateFile = File('${task.tempFilePath}.dmxstate');
-        if (await stateFile.exists()) {
-          try {
-            await stateFile.delete();
-          } catch (_) {}
-        }
-        task = task.copyWith(
-          downloadedBytes: 0,
-          chunks: List<double>.filled(
-              task.threadCount > 0 ? task.threadCount : 1, 0.0),
-          audioProgress: 0.0,
-          clearEta: true,
-          clearError: true,
-          clearStatusMessage: true,
-        );
-      } else {
-        task = task.copyWith(
-          clearEta: true,
-          clearError: true,
-          clearStatusMessage: true,
-        );
-      }
+      task = task.copyWith(
+        clearEta: true,
+        clearError: true,
+        clearStatusMessage: true,
+      );
 
       // FIX-AUDIT-B3: Reset audio progress on retry for YouTube tasks if audio file missing
       if (task.hasMergedAudio) {
@@ -2746,7 +2719,8 @@ class DownloadProvider extends ChangeNotifier
     // ═══ FIX RT-2: Refresh YouTube URL on retry ═══
     if (task.youtubeQualityPreset != null &&
         task.downloadPageUrl != null &&
-        task.downloadPageUrl!.isNotEmpty) {
+        task.downloadPageUrl!.isNotEmpty &&
+        _isYoutubeUrlExpired(task.url)) {
       try {
         final fresh = await YoutubeService.getFreshStreams(
           task.downloadPageUrl!,
@@ -2758,6 +2732,29 @@ class DownloadProvider extends ChangeNotifier
           final urlChanged = freshUrl != task.url;
           final audioChanged =
               freshAudioUrl != null && freshAudioUrl != task.mergedAudioUrl;
+
+          final identityChanged = youtubeStreamIdentityChanged(task.url, freshUrl);
+          if (identityChanged) {
+            debugPrint(
+                '[DMX] RT-2 FIX: Stream identity changed on refresh, resetting progress and deleting video temp file');
+            for (final p in [
+              task.tempFilePath,
+              '${task.tempFilePath}.dmxstate',
+              '${task.tempFilePath}.journal',
+            ]) {
+              try {
+                final f = File(p);
+                if (await f.exists()) await f.delete();
+              } catch (_) {}
+            }
+          } else if (urlChanged) {
+            final stateFile = File('${task.tempFilePath}.dmxstate');
+            if (await stateFile.exists()) {
+              try {
+                await stateFile.delete();
+              } catch (_) {}
+            }
+          }
 
           if (audioChanged) {
             for (final p in [
@@ -2776,8 +2773,8 @@ class DownloadProvider extends ChangeNotifier
           task = task.copyWith(
             url: urlChanged ? freshUrl : task.url,
             mergedAudioUrl: freshAudioUrl ?? task.mergedAudioUrl,
-            downloadedBytes: urlChanged ? 0 : task.downloadedBytes,
-            chunks: urlChanged
+            downloadedBytes: identityChanged ? 0 : task.downloadedBytes,
+            chunks: identityChanged
                 ? List<double>.filled(
                     task.threadCount > 0 ? task.threadCount : 1, 0.0)
                 : task.chunks,
@@ -2874,9 +2871,9 @@ class DownloadProvider extends ChangeNotifier
         clearFailureCategory: true, // FIX RT-1
         pausedByUser: false,
         videoStreamSize:
-            shouldClearState ? 0 : task.videoStreamSize, // FIX RT-4
+            shouldResetAllProgressMetadata ? 0 : task.videoStreamSize, // FIX RT-4
         audioDownloadedBytes:
-            shouldClearState ? 0 : task.audioDownloadedBytes, // FIX RT-4
+            shouldResetAllProgressMetadata ? 0 : task.audioDownloadedBytes, // FIX RT-4
       ),
     );
 
@@ -4836,6 +4833,7 @@ class DownloadProvider extends ChangeNotifier
           t.status == DownloadStatus.failed;
       final isNotUserPausedOrScheduled = !t.pausedByUser &&
           t.errorMessage != DownloadStatusMessages.waitingWifi &&
+          t.errorMessage != DownloadStatusMessages.waitingNetwork &&
           (t.scheduledAt == null || t.scheduledAt!.isBefore(DateTime.now()));
       return isPausedOrInterrupted && isNotUserPausedOrScheduled;
     }).toList();
@@ -4880,6 +4878,42 @@ class DownloadProvider extends ChangeNotifier
     if (updatedAny) {
       filteredTasksDirty = true;
       notifyListeners();
+    }
+  }
+
+  bool _isYoutubeUrlExpired(String url) {
+    try {
+      final uri = Uri.tryParse(url);
+      if (uri == null) return true;
+      final expireStr = uri.queryParameters['expire'];
+      if (expireStr == null) return false;
+      final expireTime = int.tryParse(expireStr);
+      if (expireTime == null) return false;
+      final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      return nowSecs > (expireTime - 300); // 5 minutes buffer
+    } catch (_) {
+      return true;
+    }
+  }
+
+  static bool youtubeStreamIdentityChanged(String oldUrl, String newUrl) {
+    try {
+      final oldUri = Uri.tryParse(oldUrl);
+      final newUri = Uri.tryParse(newUrl);
+      if (oldUri == null || newUri == null) return false;
+
+      final oldItag = oldUri.queryParameters['itag'];
+      final newItag = newUri.queryParameters['itag'];
+      final oldMime = oldUri.queryParameters['mime'];
+      final newMime = newUri.queryParameters['mime'];
+
+      final hostPathChanged = (oldUri.host != newUri.host) || (oldUri.path != newUri.path);
+
+      return (oldItag != null && newItag != null && oldItag != newItag) ||
+          (oldMime != null && newMime != null && oldMime != newMime) ||
+          hostPathChanged;
+    } catch (_) {
+      return false;
     }
   }
 }

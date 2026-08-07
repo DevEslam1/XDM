@@ -174,20 +174,20 @@ class PageIntentClassifier {
     ),
   ];
 
-  static final List<RegExp> _downloadPagePatterns = [
-    RegExp(
-      r'(\/download|\/downloads|\/dl\/|\/get\/|\/fetch\/|'
-      r'\/file\/|\/files\/|\/attachment|\/getfile|'
-      r'\/save\/|\/export\/|\/retrieve)',
-      caseSensitive: false,
-    ),
-    RegExp(
-      r'(download[_-]?(page|button|link|now|here|file)|'
-      r'click[_-]?to[_-]?download|free[_-]?download|'
-      r'start[_-]?download|direct[_-]?download)',
-      caseSensitive: false,
-    ),
-  ];
+  // static final List<RegExp> _downloadPagePatterns = [
+  //   RegExp(
+  //     r'(\/download|\/downloads|\/dl\/|\/get\/|\/fetch\/|'
+  //     r'\/file\/|\/files\/|\/attachment|\/getfile|'
+  //     r'\/save\/|\/export\/|\/retrieve)',
+  //     caseSensitive: false,
+  //   ),
+  //   RegExp(
+  //     r'(download[_-]?(page|button|link|now|here|file)|'
+  //     r'click[_-]?to[_-]?download|free[_-]?download|'
+  //     r'start[_-]?download|direct[_-]?download)',
+  //     caseSensitive: false,
+  //   ),
+  //   ];
 
   static final List<RegExp> _mediaPagePatterns = [
     RegExp(
@@ -297,9 +297,9 @@ class PageIntentClassifier {
       );
     }
 
-    // 6. Download pages / File hosting
-    final downloadClassification = _classifyDownloadPage(trimmed);
-    if (downloadClassification != null) return downloadClassification;
+    // 6. Download pages / File hosting (disabled pre-request guessing to prevent false positives)
+    // final downloadClassification = _classifyDownloadPage(trimmed);
+    // if (downloadClassification != null) return downloadClassification;
 
     // 7. Site Intelligence analysis
     final analysis = _intelligence.analyzeUrl(trimmed);
@@ -507,32 +507,32 @@ class PageIntentClassifier {
     return _authPagePatterns.any((p) => p.hasMatch(url));
   }
 
-  PageClassification? _classifyDownloadPage(String url) {
-    for (final pattern in _downloadPagePatterns) {
-      if (pattern.hasMatch(url)) {
-        return PageClassification(
-          intent: PageIntent.filePage,
-          action: PageAction.openSameTab,
-          url: url,
-          confidence: 0.75,
-          reason: 'Download page pattern matched',
-        );
-      }
-    }
-
-    final analysis = _intelligence.analyzeUrl(url);
-    if (analysis.siteType == SiteType.fileHosting) {
-      return PageClassification(
-        intent: PageIntent.filePage,
-        action: PageAction.openSameTab,
-        url: url,
-        confidence: 0.85,
-        reason: 'File hosting site: ${analysis.profile?.displayName}',
-      );
-    }
-
-    return null;
-  }
+  // PageClassification? _classifyDownloadPage(String url) {
+  //   for (final pattern in _downloadPagePatterns) {
+  //     if (pattern.hasMatch(url)) {
+  //       return PageClassification(
+  //         intent: PageIntent.filePage,
+  //         action: PageAction.openSameTab,
+  //         url: url,
+  //         confidence: 0.75,
+  //         reason: 'Download page pattern matched',
+  //       );
+  //     }
+  //   }
+  //
+  //   final analysis = _intelligence.analyzeUrl(url);
+  //   if (analysis.siteType == SiteType.fileHosting) {
+  //     return PageClassification(
+  //       intent: PageIntent.filePage,
+  //       action: PageAction.openSameTab,
+  //       url: url,
+  //       confidence: 0.85,
+  //       reason: 'File hosting site: ${analysis.profile?.displayName}',
+  //     );
+  //   }
+  //
+  //   return null;
+  // }
 
   PageClassification? _classifyMediaPage(String url) {
     for (final pattern in _mediaPagePatterns) {

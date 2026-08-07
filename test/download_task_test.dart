@@ -699,4 +699,70 @@ void main() {
       expect(task2.chunks, [0.5, 0.5]);
     });
   });
+
+  group('DMX Audit Bug Fixes', () {
+    test('Bug 1: combinedDownloadedBytes when video is 100% and audio is 40%', () {
+      final task = DownloadTask(
+        id: 'bug1_task',
+        fileName: 'yt_video.mp4',
+        url: 'https://youtube.com/watch?v=123',
+        fileSize: 100, // combinedTotalSize: videoStreamSize (80) + audioSize (20) = 100
+        downloadedBytes: 80, // video leg fully completed
+        videoStreamSize: 80,
+        audioSize: 20,
+        audioProgress: 0.40, // 40% completed of audio
+        audioDownloadedBytes: 8,
+        status: DownloadStatus.downloading,
+        category: 'Video',
+        mergedAudioUrl: 'https://youtube.com/watch?v=123_audio',
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: const [1.0],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // combinedTotalSize = 80 + 20 = 100
+      expect(task.combinedTotalSize, 100);
+      // combinedDownloadedBytes = videoOnly (80) + (audioProgress 0.40 * audioSize 20 = 8) = 88
+      expect(task.combinedDownloadedBytes, 88);
+    });
+
+    test('Bug 2: isTorrentFileSelected missing/null default value behaves consistently', () {
+      final fileWithSelectedTrue = {'name': '1.mp4', 'length': 1000, 'selected': true};
+      final fileWithSelectedFalse = {'name': '2.mp4', 'length': 2000, 'selected': false};
+      final fileWithSelectedNull = {'name': '3.mp4', 'length': 3000}; // missing/null selected key
+
+      expect(isTorrentFileSelected(fileWithSelectedTrue), isTrue);
+      expect(isTorrentFileSelected(fileWithSelectedFalse), isFalse);
+      expect(isTorrentFileSelected(fileWithSelectedNull), isTrue, reason: 'missing/null selected key defaults to true');
+
+      final task = DownloadTask(
+        id: 'bug2_task',
+        fileName: 't.torrent',
+        url: 'https://example.com/t.torrent',
+        fileSize: 6000,
+        downloadedBytes: 0,
+        status: DownloadStatus.downloading,
+        category: 'Torrent',
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: const [0.0],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        torrentFiles: [
+          fileWithSelectedTrue,
+          fileWithSelectedFalse,
+          fileWithSelectedNull,
+        ],
+      );
+
+      // resolvedFileSize = 1000 (true) + 3000 (null/missing -> selected) = 4000
+      expect(task.resolvedFileSize, 4000);
+    });
+  });
 }
