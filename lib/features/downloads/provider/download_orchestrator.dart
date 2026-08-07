@@ -1073,6 +1073,19 @@ class DownloadOrchestrator {
   /// FIX-B2: Re-attempt merge only when both video and audio files already exist on disk
   Future<void> retryMergeOnly(DownloadTask task) async {
     final audioTempPath = '${task.tempFilePath}.audio';
+
+    // FIX: Restore video-only file from previous merge failure
+    final ext = p.extension(task.localFilePath).isNotEmpty
+        ? p.extension(task.localFilePath)
+        : '.mp4';
+    final videoOnlyPath =
+        '${p.withoutExtension(task.localFilePath)}_video_only$ext';
+    final videoOnlyFile = File(videoOnlyPath);
+    if (videoOnlyFile.existsSync() && !File(task.localFilePath).existsSync()) {
+      debugPrint('[DMX] FIX-B1: Restoring video-only file for merge retry');
+      await videoOnlyFile.rename(task.localFilePath);
+    }
+
     final videoExists = (await File(task.tempFilePath).exists()) ||
         (await File(task.localFilePath).exists());
     final audioExists = await File(audioTempPath).exists();
@@ -1528,6 +1541,15 @@ class DownloadOrchestrator {
     _host.downloadMetrics[task.id]?.effectiveThreads = runtimeThreadCount;
     int? ttfbTimestamp;
 
+    final ext = p.extension(task.localFilePath).isNotEmpty
+        ? p.extension(task.localFilePath)
+        : '.mp4';
+    final videoOnlyPath =
+        '${p.withoutExtension(task.localFilePath)}_video_only$ext';
+    if (File(videoOnlyPath).existsSync() && !File(task.localFilePath).existsSync()) {
+      try { await File(videoOnlyPath).rename(task.localFilePath); } catch (_) {}
+    }
+
     int videoBytesFromDisk;
     final stateFilePath = '${task.tempFilePath}.dmxstate';
     final hasStateFile = await File(stateFilePath).exists();
@@ -1887,9 +1909,10 @@ class DownloadOrchestrator {
             final audioTaskIdx =
                 _host.providerTasks.indexWhere((x) => x.id == task.id);
             if (audioTaskIdx != -1) {
-              _host.providerTasks[audioTaskIdx] = _host
-                  .providerTasks[audioTaskIdx]
-                  .copyWith(audioThreadCount: resolvedAudioThreads); // FIX-04
+              final audioTask = _host.providerTasks[audioTaskIdx];
+              await _host.setTaskState(
+                audioTask.copyWith(audioThreadCount: resolvedAudioThreads),
+              );
             }
 
             debugPrint(

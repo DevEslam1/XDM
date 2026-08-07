@@ -2024,7 +2024,7 @@ class _TorrentFileRow extends StatelessWidget {
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     // FIX(T-2): Show indeterminate indicator when downloadedBytes == 0 and selected
     final showIndeterminate =
-        downloaded == 0 && !isEstimated && selected && !done;
+        downloaded == 0 && isEstimated && selected && !done;
     final progressText = showIndeterminate
         ? '…'
         : (isEstimated

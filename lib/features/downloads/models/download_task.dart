@@ -198,8 +198,10 @@ class DownloadTask {
       if (videoStreamSize > 0) return videoStreamSize + audioSize;
       // fileSize is the authoritative combined total when set by stream resolution
       if (fileSize > 0) return fileSize;
-      // FIX-H2: Use max(downloadedBytes, audioSize) + audioSize so denominator is fixed
-      return max(downloadedBytes, audioSize) + audioSize;
+      // FIX-B8: Use downloadedBytes as video proxy; don't let denominator
+      // shrink below what's already downloaded
+      final videoEstimate = max(downloadedBytes - audioDownloadedBytes, 0);
+      return max(videoEstimate + audioSize, audioSize);
     }
     return resolvedFileSize;
   }
@@ -234,18 +236,25 @@ class DownloadTask {
   /// Sanitized chunk progress ratios matching current threadCount.
   List<double> get sanitizedChunks {
     final count = threadCount > 0 ? threadCount : 1;
-    List<double> result;
     if (chunks.length == count) {
-      result = chunks;
-    } else if (chunks.isEmpty) {
-      result = List<double>.filled(count, 0.0);
-    } else if (chunks.length < count) {
-      result = [...chunks, ...List<double>.filled(count - chunks.length, 0.0)];
-    } else {
-      result = chunks.sublist(0, count);
+      return chunks.map((c) => c.isNaN ? 0.0 : c.clamp(0.0, 1.0)).toList();
     }
-    // FIX-L2: Clamp chunk ratios
-    return result.map((c) => c.clamp(0.0, 1.0)).toList();
+    if (chunks.isEmpty) {
+      // FIX-B4: Distribute actual progress evenly instead of returning zeros
+      final frac = resolvedFileSize > 0
+          ? (displayDownloadedBytes / resolvedFileSize).clamp(0.0, 1.0)
+          : 0.0;
+      return List.filled(count, frac);
+    }
+    if (chunks.length < count) {
+      return [...chunks, ...List.filled(count - chunks.length, 0.0)]
+          .map((c) => c.isNaN ? 0.0 : c.clamp(0.0, 1.0))
+          .toList();
+    }
+    return chunks
+        .sublist(0, count)
+        .map((c) => c.isNaN ? 0.0 : c.clamp(0.0, 1.0))
+        .toList();
   }
 
   double get progress {

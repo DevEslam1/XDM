@@ -1654,6 +1654,62 @@ class DownloadProvider extends ChangeNotifier
 
     if (task.status == DownloadStatus.downloading || isSeedingTorrent) {
       final torrentId = _torrentIds[id];
+
+      // BUG 4 FIX: Cancel token and await engine future FIRST if downloading
+      if (task.status == DownloadStatus.downloading) {
+        // FIX-P-03: Flush writer before reading state
+        await Future.delayed(const Duration(milliseconds: 300));
+
+        // FIX-P3: Ensure disk writes are committed before progress flush
+        try {
+          if (torrentId == null) {
+            debugPrint('[FIX-P3] Relying on engine cancel to flush writer');
+          }
+        } catch (e) {
+          debugPrint('[FIX-P3] Pre-flush error: $e');
+        }
+
+        // FIX-11: Flush pending progress BEFORE cancelling token
+        await _flushPendingProgress(id);
+
+        // FIX-H-02: Ensure engine state file is flushed before cancel
+        try {
+          final latest = _findTask(id) ?? task;
+          final stateFile = File('${latest.tempFilePath}.dmxstate');
+          if (await stateFile.exists()) {
+            final content = await stateFile.readAsString();
+            jsonDecode(content); // throws on corrupt
+          }
+        } catch (_) {
+          try {
+            final latest = _findTask(id) ?? task;
+            await File('${latest.tempFilePath}.dmxstate').delete();
+          } catch (_) {}
+        }
+
+        // FIX(H-2): cancel token first so the future can actually complete
+        if (_cancelTokens.containsKey(id)) {
+          try {
+            _cancelTokens[id]?.cancel('paused');
+          } catch (e) {
+            // ignore
+          }
+          final fut = _activeFutures[id];
+          if (fut != null) {
+            try {
+              final pauseTimeoutSecs = (task.fileSize) > 500 * 1024 * 1024 ? 20 : 8;
+              await fut.timeout(Duration(seconds: pauseTimeoutSecs), onTimeout: () {
+                debugPrint('[FIX-P1] Engine future timed out on pause (${pauseTimeoutSecs}s)');
+              });
+            } catch (_) {}
+          }
+
+          _cancelTokens.remove(id);
+          _activeFutures.remove(id);
+        }
+      }
+
+      // BUG 4 FIX: THEN handle torrent pause & snapshot AFTER engine has stopped
       if (torrentId != null) {
         if (TorrentService.isTorrentAlive(torrentId)) {
           await TorrentService.pauseTorrent(torrentId);
@@ -1679,52 +1735,44 @@ class DownloadProvider extends ChangeNotifier
             );
           }
 
-          if (task.status == DownloadStatus.downloading) {
-            try {
-              // FIX-AUDIT-08: Name-based matching to survive engine file reordering
-              final liveFiles = TorrentService.getFiles(torrentId);
-              if (liveFiles.isNotEmpty && task.torrentFiles != null) {
-                final liveByName = {for (final lf in liveFiles) lf.name: lf};
-                final updatedFiles = task.torrentFiles!.map((stored) {
-                  final live = liveByName[stored['name'] as String? ?? ''];
-                  if (live == null) return stored;
-                  // FIX T-P1: Preserve the previously stored byte count when the
-                  // engine has no data yet (downloadedBytes == -1) to prevent a
-                  // progress regression on resume.
-                  final prevBytes = (stored['downloadedBytes'] as num?)?.toInt() ?? 0;
-                  final liveBytes = live.downloadedBytes;
-                  final resolvedBytes = liveBytes >= 0
-                      ? liveBytes
-                      : prevBytes; // keep last known value
-                  return {
-                    ...stored,
-                    'downloadedBytes': resolvedBytes,
-                    'progressEstimated': liveBytes < 0,
-                  };
-                }).toList();
-                task = task.copyWith(torrentFiles: updatedFiles);
-              }
-
-              // B7 FIX: Recompute torrent aggregate downloadedBytes from per-file
-              if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
-                final recomputedTotal =
-                    task.torrentFiles!.fold<int>(0, (sum, f) {
-                  if (f['selected'] != false) {
-                    final bytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-                    return sum + (bytes > 0 ? bytes : 0);
-                  }
-                  return sum;
-                });
-                if (recomputedTotal > 0) {
-                  task = task.copyWith(downloadedBytes: recomputedTotal);
-                  debugPrint(
-                    '[DMX] B7 FIX: Recomputed torrent aggregate: $recomputedTotal bytes',
-                  );
-                }
-              }
-            } catch (e) {
-              debugPrint('[DMX] B5 FIX: Failed to snapshot per-file bytes: $e');
+          // Snapshot per-file bytes AFTER engine has stopped
+          try {
+            final liveFiles = TorrentService.getFiles(torrentId);
+            if (liveFiles.isNotEmpty && task.torrentFiles != null) {
+              final liveByName = {for (final lf in liveFiles) lf.name: lf};
+              final updatedFiles = task.torrentFiles!.map((stored) {
+                final live = liveByName[stored['name'] as String? ?? ''];
+                if (live == null) return stored;
+                final prevBytes = (stored['downloadedBytes'] as num?)?.toInt() ?? 0;
+                final liveBytes = live.downloadedBytes;
+                final resolvedBytes = liveBytes >= 0 ? liveBytes : prevBytes;
+                return {
+                  ...stored,
+                  'downloadedBytes': resolvedBytes,
+                  'progressEstimated': liveBytes < 0,
+                };
+              }).toList();
+              task = task.copyWith(torrentFiles: updatedFiles);
             }
+
+            if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+              final recomputedTotal =
+                  task.torrentFiles!.fold<int>(0, (sum, f) {
+                if (f['selected'] != false) {
+                  final bytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                  return sum + (bytes > 0 ? bytes : 0);
+                }
+                return sum;
+              });
+              if (recomputedTotal > 0) {
+                task = task.copyWith(downloadedBytes: recomputedTotal);
+                debugPrint(
+                  '[DMX] B7 FIX: Recomputed torrent aggregate: $recomputedTotal bytes',
+                );
+              }
+            }
+          } catch (e) {
+            debugPrint('[DMX] B5 FIX: Failed to snapshot per-file bytes: $e');
           }
 
           // FIX-06: Save fast-resume data BEFORE pausing so a crash
@@ -1746,66 +1794,9 @@ class DownloadProvider extends ChangeNotifier
             clearEta: true,
             statusMessage: 'Torrent session lost — will restart from last saved progress',
           );
-          // Skip the normal cancel-token flow since there's no active engine
           await _setTask(task);
           pumpQueue();
           return;
-        }
-      }
-
-      if (task.status == DownloadStatus.downloading) {
-        // FIX-P-03: Flush writer before reading state
-        // For multi-thread downloads, ensure engine has committed writes.
-        await Future.delayed(const Duration(milliseconds: 300));
-
-        // FIX-P3: Ensure disk writes are committed before progress flush
-        try {
-          if (torrentId == null) {
-            debugPrint('[FIX-P3] Relying on engine cancel to flush writer');
-          }
-        } catch (e) {
-          debugPrint('[FIX-P3] Pre-flush error: $e');
-        }
-
-        // FIX-11: Flush pending progress BEFORE cancelling token
-        await _flushPendingProgress(id);
-
-        // FIX-H-02: Ensure engine state file is flushed before cancel
-        try {
-          final latest = _findTask(id) ?? task;
-          final stateFile = File('${latest.tempFilePath}.dmxstate');
-          if (await stateFile.exists()) {
-            // Trigger a read to confirm file is valid; if corrupt, delete
-            final content = await stateFile.readAsString();
-            jsonDecode(content); // throws on corrupt
-          }
-        } catch (_) {
-          try {
-            final latest = _findTask(id) ?? task;
-            await File('${latest.tempFilePath}.dmxstate').delete();
-          } catch (_) {}
-        }
-
-        // FIX(H-2): cancel token first so the future can actually complete
-        if (_cancelTokens.containsKey(id)) {
-          try {
-            _cancelTokens[id]?.cancel('paused');
-          } catch (e) {
-            // ignore
-          }
-          final fut = _activeFutures[id];
-          if (fut != null) {
-            try {
-              // FIX-P1: Scale timeout with file size (min 8s, max 20s)
-              final pauseTimeoutSecs = (task.fileSize) > 500 * 1024 * 1024 ? 20 : 8;
-              await fut.timeout(Duration(seconds: pauseTimeoutSecs), onTimeout: () {
-                debugPrint('[FIX-P1] Engine future timed out on pause (${pauseTimeoutSecs}s)');
-              });
-            } catch (_) {}
-          }
-
-          _cancelTokens.remove(id);
-          _activeFutures.remove(id);
         }
       }
 
