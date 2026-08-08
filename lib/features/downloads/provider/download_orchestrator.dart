@@ -1935,6 +1935,17 @@ class DownloadOrchestrator {
                         ? 2
                         : min(4, liveAudioSize > 200 * 1024 * 1024 ? 4 : 3);
 
+            // FIX-AUDIO-THREADS: Persist the actual thread count used for the audio
+            // stream so pause/resume/validate always reads the correct state layout.
+            final liveTaskForThreads = _host.findTaskById(task.id);
+            if (liveTaskForThreads != null &&
+                liveTaskForThreads.audioThreadCount != resolvedAudioThreads) {
+              await _host.setTaskState(
+                liveTaskForThreads.copyWith(
+                    audioThreadCount: resolvedAudioThreads),
+              );
+            }
+
             final audioTaskIdx =
                 _host.providerTasks.indexWhere((x) => x.id == task.id);
             if (audioTaskIdx != -1) {

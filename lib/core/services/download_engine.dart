@@ -76,6 +76,22 @@ class DownloadIntegrityException implements Exception {
   String toString() => 'DownloadIntegrityException: $message';
 }
 
+/// FIX-3: Raised when the server signals the download URL has expired
+/// (401/403 on signed/YouTube URLs). The orchestrator should catch this,
+/// re-resolve streams (yt-dlp / signed-URL re-issue), and re-submit the
+/// download with the SAME tempFilePath + localFilePath so chunk-level
+/// resume still works.
+class UrlExpiredException implements Exception {
+  final String message;
+  const UrlExpiredException(this.message);
+  @override
+  String toString() => 'UrlExpiredException: $message';
+}
+
+class _UrlExpiredException extends UrlExpiredException {
+  const _UrlExpiredException(super.message);
+}
+
 /// ffmpeg failure taxonomy. Exposed so merge call-sites can map failures to
 /// user-facing messages WITHOUT string-sniffing; FFmpegMuxService can adopt
 /// this without any engine change.
@@ -117,6 +133,11 @@ MergeFailureKind classifyMergeFailure(Object error) {
   return MergeFailureKind.unknown;
 }
 
+/// Which sub-stream of a YouTube download this progress update refers to.
+/// The orchestrator combines `video` + `audio` into the user-facing
+/// percentage: combined = (videoBytes + audioBytes) / (videoSize + audioSize).
+enum YtStreamKind { video, audio, combined }
+
 class DownloadProgress {
   final int downloadedBytes;
   final int fileSize;
@@ -128,6 +149,18 @@ class DownloadProgress {
   final bool? supportsResume;
   final String? statusMessage;
 
+  /// FIX-10: Stream identity for YouTube audio+video downloads. Null for
+  /// non-YouTube / non-multistream tasks. The orchestrator uses this to
+  /// route the bytes into the right accumulator and compute a combined
+  /// percentage that always reflects BOTH streams.
+  final YtStreamKind? ytStreamKind;
+
+  /// FIX-10: Counterpart stream size, if known. Lets the orchestrator
+  /// compute combined percentage from a single progress event without
+  /// waiting for the other stream's update.
+  final int? ytCounterpartSize;
+  final int? ytCounterpartDownloadedBytes;
+
   DownloadProgress({
     required this.downloadedBytes,
     required this.fileSize,
@@ -138,6 +171,9 @@ class DownloadProgress {
     this.torrentFiles,
     this.supportsResume,
     this.statusMessage,
+    this.ytStreamKind,
+    this.ytCounterpartSize,
+    this.ytCounterpartDownloadedBytes,
   });
 }
 
@@ -997,6 +1033,10 @@ class DownloadEngine {
           type: DioExceptionType.unknown,
           message: 'Download engine worker crashed: $errMsg',
         );
+      case 'urlExpired':
+        // FIX-3: typed signal so the orchestrator can refresh the URL
+        // (YouTube / signed S3 links) and resume without losing bytes.
+        return _UrlExpiredException(errMsg);
       default:
         final DioExceptionType dioType = switch (errType) {
           'cancel' => DioExceptionType.cancel,
@@ -1116,10 +1156,31 @@ class DownloadEngine {
               '[DMX] stored resume data rejected by engine — rechecking');
         }
         TorrentService.recheckTorrent(id);
-        // FIX-24: Scale the recheck timeout with file size so large torrents
-        // have time to finish hash rechecking.
+        // FIX-12 / FIX-24: Use the ENGINE-reported total size, not
+        // knownFileSize, which is 0 for fresh magnet adds. Wait for
+        // metadata first if necessary so we have a real size to scale with.
+        int effectiveSize = knownFileSize;
+        try {
+          // _waitForMetadata already guarantees metadata is available, but
+          // we listen briefly to safely extract totalWanted without relying
+          // on a static cache (which may not exist on all platforms).
+          final sizeCompleter = Completer<int>();
+          final sizeSub = TorrentService.torrentUpdates.listen((torrents) {
+            final t = torrents[id];
+            if (t != null && t.hasMetadata && t.totalWanted > 0) {
+              if (!sizeCompleter.isCompleted) {
+                sizeCompleter.complete(t.totalWanted);
+              }
+            }
+          });
+          effectiveSize = await sizeCompleter.future.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => knownFileSize,
+          );
+          await sizeSub.cancel();
+        } catch (_) {}
         final recheckTimeout = Duration(
-          minutes: max(5, (knownFileSize ~/ (100 * 1024 * 1024)) + 5),
+          minutes: max(5, (effectiveSize ~/ (100 * 1024 * 1024)) + 5),
         );
         await _waitForState(
           id,
@@ -1237,30 +1298,53 @@ class DownloadEngine {
       );
       // Try to match by filename and apply priorities to matched files
       final engineFiles = TorrentService.getFiles(id);
-      final storedByName = {
-        for (final f in currentTorrentFiles) (f['name'] as String? ?? ''): f,
-      };
+      String normalizeName(String name) {
+        var decoded = name;
+        try {
+          decoded = Uri.decodeComponent(name.replaceAll('+', ' '));
+        } catch (_) {}
+        return decoded.replaceAll('\\', '/').trim().toLowerCase();
+      }
+
+      final storedByName = <String, Map<String, dynamic>>{};
+      for (final f in currentTorrentFiles) {
+        storedByName[normalizeName(f['name'] as String? ?? '')] = f;
+      }
       final priorities = <int>[];
+      var userDeselectedCount = 0;
       for (final ef in engineFiles) {
-        final stored = storedByName[ef.name];
+        final stored = storedByName[normalizeName(ef.name)];
         if (stored != null) {
           final selected = isTorrentFileSelected(stored);
+          if (!selected) userDeselectedCount++;
           priorities.add(selected ? (stored['priority'] as int? ?? 4) : 0);
         } else {
-          priorities.add(4); // default: select unknown files
+          // FIX-6: Unknown file. Default to selected ONLY if the user has
+          // not deselected any other file (i.e., they appear to want
+          // everything). If they deselected at least one, respect their
+          // selective intent and DO NOT auto-select unknowns.
+          priorities.add(userDeselectedCount > 0 ? 0 : 4);
         }
       }
       if (priorities.length == engineFileCount) {
         TorrentService.setFilePriorities(id, priorities);
-        debugPrint('[DMX] T-2 FIX: Applied reconciled priorities.');
-      } else {
         debugPrint(
-          '[DMX] T-2 FIX: Reconciliation failed. Selecting all files.',
-        );
-        TorrentService.setFilePriorities(
-          id,
-          List.filled(engineFileCount, 4),
-        );
+            '[DMX] FIX-6/T-2: Reconciled priorities ($userDeselectedCount user-deselected).');
+      } else {
+        // FIX-6: Even on total reconciliation failure, do NOT silently
+        // select all — preserve user intent by selecting only files that
+        // were previously selected.
+        final fallback = List<int>.generate(engineFileCount, (i) {
+          final ef = i < engineFiles.length ? engineFiles[i] : null;
+          if (ef == null) return 4;
+          final stored = storedByName[normalizeName(ef.name)];
+          return stored != null && isTorrentFileSelected(stored)
+              ? (stored['priority'] as int? ?? 4)
+              : 0;
+        });
+        TorrentService.setFilePriorities(id, fallback);
+        debugPrint(
+            '[DMX] FIX-6/T-2: Reconciliation mismatch — preserved user selection.');
       }
       return;
     }
@@ -1320,11 +1404,16 @@ class DownloadEngine {
                     );
             int resolvedBytes;
             bool isEstimated;
+            double fileProgress;
             if (f.hasProgressData) {
               // BUG 8 FIX: When f.size == 0, return 0 instead of unclamped safeDownloadedBytes
               resolvedBytes =
                   f.size > 0 ? f.safeDownloadedBytes.clamp(0, f.size) : 0;
               isEstimated = false;
+              // FIX-7: Real per-file percentage, clamped to [0.0, 1.0].
+              fileProgress = f.size > 0
+                  ? (resolvedBytes / f.size).clamp(0.0, 1.0)
+                  : (resolvedBytes > 0 ? 1.0 : 0.0);
             } else {
               // FIX T-S1: Preserve the previously stored byte count instead of
               // resetting to 0. The proportional estimator in
@@ -1332,8 +1421,15 @@ class DownloadEngine {
               // reports real data.
               final prevStored =
                   (existing?['downloadedBytes'] as num?)?.toInt() ?? 0;
-              resolvedBytes = prevStored;
+              // FIX-7: Clamp stored bytes to file length — defensive guard
+              // against stale state from a previous version.
+              resolvedBytes = f.size > 0
+                  ? prevStored.clamp(0, f.size)
+                  : prevStored.clamp(0, 1 << 62);
               isEstimated = true;
+              fileProgress = f.size > 0
+                  ? (resolvedBytes / f.size).clamp(0.0, 1.0)
+                  : (resolvedBytes > 0 ? 1.0 : 0.0);
             }
             return <String, dynamic>{
               'name': f.name,
@@ -1343,6 +1439,10 @@ class DownloadEngine {
               'downloadedBytes': resolvedBytes,
               'speed': 0.0,
               'progressEstimated': isEstimated,
+              // FIX-7: Explicit per-file percentage so UI can render
+              // file-level progress bars without re-computing (and possibly
+              // disagreeing with downloadedBytes/length).
+              'progress': fileProgress,
             };
           }).toList();
         } catch (e) {
@@ -1411,6 +1511,11 @@ class DownloadEngine {
 
       final isUserPaused = stateLabel == 'paused' || stateLabel == 'stopped';
       if (isUserPaused && !cancelToken.isCancelled && !isCheckingOrMetadata) {
+        // FIX-5: Only treat as a clean pause IF the orchestrator actually
+        // requested it via the cancel token. Otherwise the engine entered
+        // 'paused' due to an I/O error, disk-full, or external trigger —
+        // surface that as an error so the user is notified and the
+        // orchestrator can retry instead of silently "completing".
         onProgress(DownloadProgress(
           downloadedBytes: downloadedBytes,
           fileSize: totalSize,
@@ -1419,8 +1524,17 @@ class DownloadEngine {
           fileName: resolvedName,
           torrentFiles: resolvedFiles,
           supportsResume: true,
+          statusMessage: 'Paused',
         ));
-        if (!completer.isCompleted) completer.complete();
+        if (!completer.isCompleted) {
+          completer.completeError(DioException(
+            requestOptions: RequestOptions(path: url),
+            type: DioExceptionType.unknown,
+            message:
+                'Torrent entered paused state without an explicit cancel — '
+                'possible I/O error or external pause. Resume to retry.',
+          ));
+        }
         return;
       }
 
@@ -1536,11 +1650,27 @@ class DownloadEngine {
         now.difference(lastApply) < _concurrentLimitThrottle) {
       return;
     }
-    final priorities = List.filled(files.length, 0);
+    // FIX-8: Build priorities that PRESERVE user-deselected files (priority 0
+    // because the user explicitly unchecked them). Previously the code filled
+    // with 0 and only re-enabled the top-N incomplete SELECTED files, which
+    // correctly left deselected files at 0 — but it ALSO clobbered the
+    // per-file priority LEVEL of selected-but-waiting files (e.g., priority 6
+    // became 0). Restore the stored priority for the waiting selected files
+    // so when the limit rotates, they re-activate at the user's chosen level.
+    final priorities = List<int>.generate(files.length, (i) {
+      final f = files[i];
+      final selected = isTorrentFileSelected(f);
+      if (!selected) return 0; // respect user deselection
+      return (f['priority'] as int?) ?? 4;
+    });
     for (var i = 0; i < incompleteSelected.length; i++) {
       final idx = incompleteSelected[i];
-      priorities[idx] =
-          i < maxConcurrentFiles ? ((files[idx]['priority'] as int?) ?? 4) : 0;
+      if (i >= maxConcurrentFiles) {
+        priorities[idx] = 0; // temporarily park this SELECTED file
+      } else {
+        // Restore user priority (already set above, but explicit for clarity).
+        priorities[idx] = (files[idx]['priority'] as int?) ?? 4;
+      }
     }
     _lastConcurrentLimitApply[torrentId] = now;
     _lastIncompleteSnapshot[torrentId] = incompleteSet;

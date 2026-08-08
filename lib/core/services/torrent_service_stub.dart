@@ -56,6 +56,7 @@ class TorrentService {
   static List<TorrentFileItem> getFiles(int id) => [];
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
       const Stream.empty();
+  static Map<int, TorrentUpdateInfo> get latestStats => const {};
   static void configureSession(SettingsProvider settings) {}
 
   static List<TrackerInfo> getTrackers(int torrentId) => [];

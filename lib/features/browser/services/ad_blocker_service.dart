@@ -1026,6 +1026,28 @@ $customCss
 (function() {
   if (window.__xdmYtEarly) return;
   window.__xdmYtEarly = true;
+
+  // Stealth bait elements to fool client-side adblock detection
+  try {
+    window.yt = window.yt || {};
+    window.yt.config_ = window.yt.config_ || {};
+    window.yt.config_.ADS_DATA_BAIT = false;
+  } catch(e) {}
+
+  // Force ytcfg settings to disable enforcement
+  try {
+    var originalSet = window.ytcfg && window.ytcfg.set;
+    if (originalSet) {
+      window.ytcfg.set = function(key, val) {
+        if (key === 'EXPERIMENT_FLAGS' && val) {
+          val.web_enable_adblock_detection = false;
+          val.web_block_adblock = false;
+        }
+        return originalSet.apply(this, arguments);
+      };
+    }
+  } catch(e) {}
+
   // Quietly intercept ytInitialPlayerResponse writes to strip ad slots
   try {
     var _ytPR = undefined;
@@ -1035,9 +1057,15 @@ $customCss
       get: function() { return _ytPR; },
       set: function(v) {
         try {
-          if (v && v.adPlacements) { v.adPlacements = []; }
-          if (v && v.playerAds) { v.playerAds = []; }
-          if (v && v.adSlots) { v.adSlots = []; }
+          if (v) {
+            if (v.adPlacements) { v.adPlacements = []; }
+            if (v.playerAds) { v.playerAds = []; }
+            if (v.adSlots) { v.adSlots = []; }
+            // Disable enforcement message configs inside player responses
+            if (v.auxiliaryUi && v.auxiliaryUi.messageRenderers) {
+              v.auxiliaryUi.messageRenderers = {};
+            }
+          }
         } catch(e) {}
         _ytPR = v;
       }

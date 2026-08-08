@@ -555,6 +555,16 @@ class HttpTransferJob {
       });
       return;
     }
+    // FIX-3A: Catch the typed URL expiry exception so the orchestrator
+    // knows to refresh the link and retry, rather than treating it as a
+    // user cancel.
+    if (e is UrlExpiredException) {
+      _send('error', {
+        'errorType': 'urlExpired',
+        'errorMessage': e.message,
+      });
+      return;
+    }
     if (e is DioException) {
       _send('error', {
         'errorType': switch (e.type) {
@@ -618,18 +628,23 @@ class HttpTransferJob {
           totalSize: total,
           threadCount: cmd.threadCount,
         );
-        // Distribute saved bytes evenly across the new chunk layout
-        final perChunk = total > 0 ? (savedBytes / cmd.threadCount) : 0;
+        // FIX-4: Previous code distributed evenly, which can OVER-allocate
+        // bytes to early chunks (clamping hides the loss) and UNDER-allocate
+        // to the last chunk. Use a running-byte cursor instead so the sum of
+        // newChunks[i].downloaded EXACTLY equals savedBytes (when total allows).
+        var remaining = savedBytes;
         for (var i = 0; i < newChunks.length; i++) {
-          newChunks[i].downloaded = perChunk.toInt().clamp(
-                0,
-                newChunks[i].size >= 0 ? newChunks[i].size : 0,
-              );
+          final capacity =
+              newChunks[i].size >= 0 ? newChunks[i].size : remaining;
+          final take = remaining.clamp(0, capacity);
+          newChunks[i].downloaded = take;
+          remaining -= take;
         }
         _state!.chunks = newChunks;
         debugPrint(
-          '[FIX H-R1] Redistributed $savedBytes bytes from '
-          '${load.state.chunks.length} → ${cmd.threadCount} chunks',
+          '[FIX-4/H-R1] Redistributed $savedBytes bytes from '
+          '${load.state.chunks.length} → ${cmd.threadCount} chunks '
+          '(leftover=$remaining)',
         );
       }
       if (_state!.totalSize <= 0 && cmd.knownFileSize > 0) {
@@ -744,6 +759,24 @@ class HttpTransferJob {
       }
     } on _FileChangedOnServerException {
       rethrow;
+    } on DioException catch (e) {
+      // FIX-9: On YouTube / signed-URL downloads, a 401/403 during the
+      // identity probe means the URL has expired. Surface as UrlExpired
+      // so the orchestrator refreshes streams and re-submits — never
+      // silently "continue" with no usable resume data.
+      final status = e.response?.statusCode;
+      final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
+      final isYtOrSigned = host.endsWith('.googlevideo.com') ||
+          host.contains('youtube.com') ||
+          host.contains('youtu.be') ||
+          cmd.url.contains('expire=') ||
+          cmd.url.contains('signature=');
+      if (isYtOrSigned && (status == 401 || status == 403)) {
+        throw UrlExpiredException(
+          'YouTube / signed URL expired during identity probe (HTTP $status).',
+        );
+      }
+      debugPrint('[DMX-Job] identity probe failed (continuing): $e');
     } catch (e) {
       debugPrint('[DMX-Job] identity probe failed (continuing): $e');
     }
@@ -828,7 +861,16 @@ class HttpTransferJob {
       if (e is DioException && e.type == DioExceptionType.cancel) {
         st.status = DmxStateStatus.paused;
       } else if (e is! _RangeUnsupportedException) {
+        // FIX-11: Tag the state with whether resume is still safe. If at
+        // least one chunk has proven bytes, the next start can resume from
+        // those chunks. If all chunks are zero (e.g., integrity exception
+        // before any byte moved), mark as "restartRequired" so the
+        // orchestrator does NOT attempt a no-op resume.
+        final anyProven = st.chunks.any((c) => c.downloaded > 0);
         st.status = DmxStateStatus.failed;
+        st.migrationNote =
+            '${st.migrationNote ?? ''} ${anyProven ? 'resumable' : 'restartRequired'}'
+                .trim();
       }
       try {
         await writer.flushAll();
@@ -981,6 +1023,31 @@ class HttpTransferJob {
         if (e.message == 'HTML_INSTEAD_OF_MEDIA') rethrow;
         if (e.message?.startsWith('Server rejected resume') == true) rethrow;
         final status = e.response?.statusCode;
+        // FIX-3: 401/403 on signed/YouTube URLs usually means the URL has
+        // expired. Surface a dedicated error type so the orchestrator can
+        // refresh the link (yt-streams / signed-URL re-issue) and retry the
+        // SAME chunk from the SAME byte offset — never losing progress.
+        if (status == 401 || status == 403) {
+          final bodyText = (e.response?.data?.toString() ?? '').toLowerCase();
+          final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
+          final isLikelyExpired = host.endsWith('.googlevideo.com') ||
+              host.contains('youtube.com') ||
+              host.contains('youtu.be') ||
+              bodyText.contains('expired') ||
+              bodyText.contains('token') ||
+              bodyText.contains('signature') ||
+              bodyText.contains('forbidden') ||
+              cmd.url.contains('expire=') ||
+              cmd.url.contains('signature=');
+          if (isLikelyExpired) {
+            // FIX-3B: Throw the typed exception so sendUnhandledError() can
+            // map it to 'urlExpired'. The orchestrator catches this, refreshes
+            // the URL, and re-submits the job WITHOUT losing chunk progress.
+            throw _UrlExpiredException(
+              'Download URL expired (HTTP $status). Refresh required.',
+            );
+          }
+        }
         if (status != null &&
             status >= 400 &&
             status < 500 &&
@@ -1061,14 +1128,34 @@ class HttpTransferJob {
     await tempFile.parent.create(recursive: true);
 
     // Single-thread: the file itself is the byte source of truth.
+    // FIX-1: When temp file length >= totalSize, do not trust it blindly —
+    // the temp may be the result of a crashed write or a stale pre-allocated
+    // file. Validate via the saved state first; if no usable state, force a
+    // fresh restart so the byte source of truth is the network, not disk.
+    final stateFile = File(StateStore.pathFor(cmd.tempFilePath));
+    final hasUsableState = await stateFile.exists() &&
+        st.downloadedBytes > 0 &&
+        st.chunks.isNotEmpty;
+
     if (await tempFile.exists()) {
       final len = await tempFile.length();
       if (st.totalSize > 0 && len >= st.totalSize) {
-        chunk.downloaded = st.totalSize;
-        _emitProgress(0, statusMessage: 'Completed');
-        return;
-      }
-      if (cmd.supportsResume) {
+        if (hasUsableState && st.isComplete) {
+          chunk.downloaded = st.totalSize;
+          _emitProgress(0, statusMessage: 'Completed');
+          return;
+        }
+        // FIX-1: state missing/incomplete but file is full → corrupt or
+        // stale. Truncate to zero and re-download to guarantee integrity.
+        debugPrint(
+            '[DMX-Job] FIX-1: temp file full but state unusable — restarting single-stream');
+        chunk.downloaded = 0;
+        await tempFile.delete();
+        try {
+          await StateStore.remove(cmd.tempFilePath);
+        } catch (_) {}
+        st.chunks = ChunkScheduler.singleStream(st.totalSize);
+      } else if (cmd.supportsResume) {
         chunk.downloaded = st.totalSize > 0 ? len.clamp(0, st.totalSize) : len;
       } else {
         chunk.downloaded = 0;
@@ -1080,6 +1167,57 @@ class HttpTransferJob {
     governor.registerConsumer();
     if (cmd.speedLimitKbps > 0) {
       governor.setTaskLimit(cmd.taskId, cmd.speedLimitKbps * 125);
+    }
+
+    // FIX-2: Single-stream resume spot-check — parity with multi-thread.
+    // Validates the first 64 KB of the resumed prefix against the server so
+    // a truncated/modified temp file is detected BEFORE we append more bytes
+    // and corrupt the final output.
+    if (chunk.downloaded > 0 &&
+        cmd.supportsResume &&
+        SettingsProvider.instance.resumeIntegrityCheck &&
+        await tempFile.exists()) {
+      try {
+        const sampleSize = 64 * 1024;
+        final len = min(sampleSize, chunk.downloaded);
+        final raf = await tempFile.open(mode: FileMode.read);
+        try {
+          final diskBytes = await raf.read(len);
+          final response = await dio.get<ResponseBody>(
+            cmd.punyUrl,
+            cancelToken: _cancelToken,
+            options: Options(
+              responseType: ResponseType.stream,
+              headers: {'Range': 'bytes=0-${len - 1}'},
+              validateStatus: (_) => true,
+            ),
+          );
+          if (response.statusCode == 206 && response.data != null) {
+            final builder = BytesBuilder(copy: false);
+            await for (final b in response.data!.stream) {
+              builder.add(b);
+            }
+            final netBytes = builder.takeBytes();
+            if (netBytes.length != diskBytes.length ||
+                !listEquals(netBytes, diskBytes)) {
+              debugPrint(
+                  '[DMX-Job] FIX-2: single-stream spot-check mismatch — restarting');
+              chunk.downloaded = 0;
+              await tempFile.delete();
+              try {
+                await StateStore.remove(cmd.tempFilePath);
+              } catch (_) {}
+              st.chunks = ChunkScheduler.singleStream(st.totalSize);
+            }
+          } else {
+            await response.data?.stream.listen((_) {}).cancel();
+          }
+        } finally {
+          await raf.close();
+        }
+      } catch (e) {
+        debugPrint('[DMX-Job] FIX-2: spot-check probe failed (continuing): $e');
+      }
     }
 
     var attempts = 0;

@@ -308,6 +308,7 @@ class TorrentService {
   static bool get isSupported => true;
   static bool get isInitialized => _state == TorrentSessionState.ready;
   static Set<int> get activeTorrentIds => Set.unmodifiable(_activeTorrentIds);
+  static Map<int, TorrentUpdateInfo> get latestStats => Map.unmodifiable(_latestStats);
 
   /// Future getter that callers can await to ensure TorrentService is ready.
   static Future<void> get ready {

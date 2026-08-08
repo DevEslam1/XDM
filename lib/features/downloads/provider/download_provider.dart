@@ -2191,7 +2191,8 @@ class DownloadProvider extends ChangeNotifier
           if (urlChanged || audioChanged) {
             debugPrint(
                 '[DMX] YT-5 FIX: Refreshed expired stream URL on resume');
-            final identityChanged = youtubeStreamIdentityChanged(task.url, freshUrl);
+            final identityChanged =
+                youtubeStreamIdentityChanged(task.url, freshUrl);
             if (identityChanged) {
               debugPrint(
                   '[DMX] YT-5 FIX: Stream identity changed on refresh, resetting progress and deleting video temp file');
@@ -2514,9 +2515,22 @@ class DownloadProvider extends ChangeNotifier
     final isMergeFailure = task.statusMessage == 'MERGE_FAILED' ||
         (task.errorMessage != null &&
             task.errorMessage!.contains('FFmpeg merge failed'));
+    // FIX-MERGE-RETRY: Also look for the "_video_only" leg produced by a
+    // previous failed merge, and require the audio sidecar to be non-empty
+    // before attempting a merge-only retry.
+    final ext = p.extension(task.localFilePath).isNotEmpty
+        ? p.extension(task.localFilePath)
+        : '.mp4';
+    final videoOnlyPath =
+        '${p.withoutExtension(task.localFilePath)}_video_only$ext';
     final videoExists = await File(task.tempFilePath).exists() ||
-        await File(task.localFilePath).exists();
-    final audioExists = await File('${task.tempFilePath}.audio').exists();
+        await File(task.localFilePath).exists() ||
+        await File(videoOnlyPath).exists();
+
+    final audioFile = File('${task.tempFilePath}.audio');
+    final audioExists =
+        await audioFile.exists() && await audioFile.length() > 0;
+
     final shouldMergeRetry = isMergeFailure ||
         (videoExists &&
             audioExists &&
@@ -2733,7 +2747,8 @@ class DownloadProvider extends ChangeNotifier
           final audioChanged =
               freshAudioUrl != null && freshAudioUrl != task.mergedAudioUrl;
 
-          final identityChanged = youtubeStreamIdentityChanged(task.url, freshUrl);
+          final identityChanged =
+              youtubeStreamIdentityChanged(task.url, freshUrl);
           if (identityChanged) {
             debugPrint(
                 '[DMX] RT-2 FIX: Stream identity changed on refresh, resetting progress and deleting video temp file');
@@ -2870,10 +2885,12 @@ class DownloadProvider extends ChangeNotifier
         clearCompletedAt: true,
         clearFailureCategory: true, // FIX RT-1
         pausedByUser: false,
-        videoStreamSize:
-            shouldResetAllProgressMetadata ? 0 : task.videoStreamSize, // FIX RT-4
-        audioDownloadedBytes:
-            shouldResetAllProgressMetadata ? 0 : task.audioDownloadedBytes, // FIX RT-4
+        videoStreamSize: shouldResetAllProgressMetadata
+            ? 0
+            : task.videoStreamSize, // FIX RT-4
+        audioDownloadedBytes: shouldResetAllProgressMetadata
+            ? 0
+            : task.audioDownloadedBytes, // FIX RT-4
       ),
     );
 
@@ -4549,13 +4566,45 @@ class DownloadProvider extends ChangeNotifier
       return;
     } else {
       // updateTaskUrl already handles resume internally for downloading tasks
-      await updateTaskUrl(
-        id,
-        newUrl,
-        newAudioUrl: newAudioUrl,
-        isRefresh: true,
-      );
+      // FIX-AUDIO-REFRESH: If the refreshed stream swapped the audio URL/itag,
+      // the .audio sidecars on disk belong to the OLD stream. Wipe them and reset
+      // audio progress so the merge never combines mismatched audio.
+      final oldAudioUri = Uri.tryParse(task.mergedAudioUrl ?? '');
+      final newAudioUri =
+          newAudioUrl != null ? Uri.tryParse(newAudioUrl) : null;
+      final oldAudioItag = oldAudioUri?.queryParameters['itag'];
+      final newAudioItag = newAudioUri?.queryParameters['itag'];
+      final audioChanged =
+          newAudioUrl != null && newAudioUrl != task.mergedAudioUrl;
+      final audioItagChanged = oldAudioItag != null &&
+          newAudioItag != null &&
+          oldAudioItag != newAudioItag;
+      if (audioChanged || audioItagChanged) {
+        for (final p in [
+          '${task.tempFilePath}.audio',
+          '${task.tempFilePath}.audio.dmxstate',
+          '${task.tempFilePath}.audio.journal',
+          '${task.tempFilePath}.audio.itag',
+        ]) {
+          try {
+            final f = File(p);
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
+        }
+        final fresh = _findTask(id);
+        if (fresh != null) {
+          await _setTask(
+            fresh.copyWith(
+              audioProgress: 0.0,
+              audioDownloadedBytes: 0,
+              audioSize: 0,
+            ),
+          );
+        }
+      }
 
+      await updateTaskUrl(id, newUrl,
+          newAudioUrl: newAudioUrl, isRefresh: true);
       final updated = _findTask(id);
 
       if (updated != null &&
@@ -4907,7 +4956,8 @@ class DownloadProvider extends ChangeNotifier
       final oldMime = oldUri.queryParameters['mime'];
       final newMime = newUri.queryParameters['mime'];
 
-      final hostPathChanged = (oldUri.host != newUri.host) || (oldUri.path != newUri.path);
+      final hostPathChanged =
+          (oldUri.host != newUri.host) || (oldUri.path != newUri.path);
 
       return (oldItag != null && newItag != null && oldItag != newItag) ||
           (oldMime != null && newMime != null && oldMime != newMime) ||

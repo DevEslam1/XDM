@@ -271,12 +271,13 @@ class DownloadTask {
 
   double get progress {
     if (status == DownloadStatus.completed) return 1.0;
+    if (hasUnknownSize) return -1.0;
     final total = combinedTotalSize;
-    if (total <= 0) {
-      // FIX-H6: return 0.0; use hasUnknownSize for indeterminate state
-      return 0.0;
-    }
-    return (combinedDownloadedBytes / total).clamp(0.0, 1.0);
+    if (total <= 0) return -1.0;
+    // FIX-PROGRESS-NAN: Guard against NaN / Infinity from corrupted rows.
+    final ratio = displayDownloadedBytes / total;
+    if (ratio.isNaN || ratio.isInfinite) return -1.0;
+    return ratio.clamp(0.0, 1.0);
   }
 
   String get progressPercentString {
