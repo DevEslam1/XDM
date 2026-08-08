@@ -206,25 +206,28 @@ $customJs
   }) async {
     final controller = tab.controller;
     if (controller == null) return;
-
     final scripts = <String>[];
 
-    // 1. Always clean up previous intervals first
+    // FIX: intervalCleanupJs now only clears AD-tagged intervals,
+    // never legitimate page timers. Safe to run first.
     scripts.add(AdBlockerService.intervalCleanupJs);
 
-    // 2. Scroll unblock (all pages)
+    // Scroll unblock (all pages)
     scripts.add(AdBlockerService.scrollUnblockJs);
 
-    // 3. YouTube-specific ad skip
+    // YouTube-specific ad skip
     if (YoutubeService.isYoutubeUrl(url)) {
       scripts.add(adBlocker.youtubeJs);
     }
 
-    // 4. Ad blocker CSS injection
+    // Ad blocker CSS injection
     final css = adBlocker.cssRulesForUrl(url);
     if (css.isNotEmpty) {
       scripts.add(
-          'var s=document.createElement("style");s.textContent=${jsonEncode(css)};document.head.appendChild(s);');
+        'var s=document.createElement("style");'
+        's.textContent=${jsonEncode(css)};'
+        'document.head.appendChild(s);',
+      );
     }
 
     if (adBlocker.isEnabled) {
@@ -236,7 +239,7 @@ $customJs
       scripts.add(kDesktopModeScript);
     }
 
-    // 5. Custom JS/CSS for this site
+    // Custom JS/CSS for this site
     if (customJs.isNotEmpty) {
       scripts.add('''
 if (!window._xdmCustomJsInjected) {
@@ -262,14 +265,14 @@ $customJs
 ''');
     }
 
-    // 6. User scripts
+    // User scripts
     final userJs = await UserScriptManager.instance.getJsForUrl(url);
     if (userJs.isNotEmpty) scripts.add(userJs);
 
-    // 7. Fingerprint hiding
+    // Fingerprint hiding
     scripts.add(FingerprintManager.fingerprintHideJs);
 
-    // 8. Long-press handler
+    // Long-press handler
     if (isMediaDomain(url)) {
       scripts.add(kLongPressScript);
     }

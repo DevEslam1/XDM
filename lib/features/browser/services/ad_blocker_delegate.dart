@@ -127,6 +127,8 @@ class AdBlockerDelegate {
     final ctrl = tab.controller;
     if (ctrl == null) return;
     if (AdBlockerService.isYoutubePage(tab.url)) return;
+
+    // FIX: earlyJs no longer overrides window.open or document.createElement
     final setupScript =
         'window.__xdmDynamicAdDomains = ${_adBlocker.dynamicDomainsJson};';
     _eval(ctrl, '$setupScript\n${_adBlocker.earlyJs}', 'earlyJs');
@@ -141,19 +143,21 @@ class AdBlockerDelegate {
     if (ctrl == null) return;
     final url = tab.url;
 
+    // FIX: CSS now uses exact selectors, won't hide download buttons
     final cssJson = jsonEncode(cssRulesForUrl(url));
     _eval(ctrl, '''
-      (function() {
-        var s = document.getElementById('xdm-adblock-css');
-        if (!s) {
-          s = document.createElement('style');
-          s.id = 'xdm-adblock-css';
-          if (document.head) document.head.appendChild(s);
-        }
-        s.textContent = $cssJson;
-      })();
-    ''', 'CSS');
+(function() {
+  var s = document.getElementById('xdm-adblock-css');
+  if (!s) {
+    s = document.createElement('style');
+    s.id = 'xdm-adblock-css';
+    if (document.head) document.head.appendChild(s);
+  }
+  s.textContent = $cssJson;
+})();
+''', 'CSS');
 
+    // FIX: lateJs no longer hides elements containing download buttons
     _eval(ctrl, _adBlocker.lateJs, 'lateJs');
 
     if (AdBlockerService.isYoutubePage(url)) {
