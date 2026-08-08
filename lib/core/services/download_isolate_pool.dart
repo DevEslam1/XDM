@@ -1369,6 +1369,13 @@ class HttpTransferJob {
             }
             sink.add(piece);
             chunk.downloaded += piece.length;
+            // FIX-SIZE-LIVE: If the server didn't send Content-Length (total
+            // unknown), learn the size from the stream so the UI percentage
+            // bar is not stuck at indeterminate during the download. The
+            // final value is confirmed at stream end below.
+            if (st.totalSize <= 0 && chunk.end < 0) {
+              chunk.end = chunk.downloaded - 1;
+            }
             _bytesSinceSave += piece.length;
             await _throttledSaveAndReport(null);
           }
@@ -1588,6 +1595,15 @@ class HttpTransferJob {
       if (cmd.ytStreamKind != null) 'ytStreamKind': cmd.ytStreamKind!.name,
       if (cmd.ytCounterpartSize != null)
         'ytCounterpartSize': cmd.ytCounterpartSize,
+      // FIX-YT-COUNTERPART: Pass the CURRENT stream's live downloaded bytes
+      // as ytDownloadedBytes (not the stale cmd value). The orchestrator
+      // tracks both streams and computes combined percentage as:
+      //   (thisStreamBytes + otherStreamBytes) / (thisSize + otherSize)
+      // The old field ytCounterpartDownloadedBytes was always 0 because it
+      // came from cmd (set once at spawn). Keep it for backward compat but
+      // also send ytDownloadedBytes with the live value.
+      if (cmd.ytStreamKind != null) 'ytDownloadedBytes': downloaded,
+      if (cmd.ytStreamKind != null) 'ytFileSize': total,
       if (cmd.ytCounterpartDownloadedBytes != null)
         'ytCounterpartDownloadedBytes': cmd.ytCounterpartDownloadedBytes,
       if (statusMessage != null) 'statusMessage': statusMessage,

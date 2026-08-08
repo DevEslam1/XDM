@@ -138,6 +138,25 @@ MergeFailureKind classifyMergeFailure(Object error) {
 /// percentage: combined = (videoBytes + audioBytes) / (videoSize + audioSize).
 enum YtStreamKind { video, audio, combined }
 
+/// FIX-CHUNK-DETAILS: Per-chunk detail for the HTTP details screen.
+class ChunkDetail {
+  final int index;
+  final int start;
+  final int end;
+  final int downloaded;
+  final int size;
+  final double ratio;
+
+  const ChunkDetail({
+    required this.index,
+    required this.start,
+    required this.end,
+    required this.downloaded,
+    required this.size,
+    required this.ratio,
+  });
+}
+
 class DownloadProgress {
   final int downloadedBytes;
   final int fileSize;
@@ -148,6 +167,10 @@ class DownloadProgress {
   final List<Map<String, dynamic>>? torrentFiles;
   final bool? supportsResume;
   final String? statusMessage;
+
+  /// FIX-CHUNK-DETAILS: Detailed per-chunk info for the HTTP details screen.
+  /// Null for torrents (which use torrentFiles) and single-stream downloads.
+  final List<ChunkDetail>? chunkDetails;
 
   /// FIX-10: Stream identity for YouTube audio+video downloads. Null for
   /// non-YouTube / non-multistream tasks. The orchestrator uses this to
@@ -174,7 +197,34 @@ class DownloadProgress {
     this.ytStreamKind,
     this.ytCounterpartSize,
     this.ytCounterpartDownloadedBytes,
+    this.chunkDetails,
   });
+
+  /// FIX-YT-COMBINED: Combined audio+video progress for YouTube downloads.
+  /// Returns null for non-YouTube / single-stream tasks.
+  /// Formula: (currentDownloaded + counterpartDownloaded) /
+  ///          (currentSize + counterpartSize)
+  double? get ytCombinedProgress {
+    if (ytStreamKind == null) return null;
+    final counterpartSize = ytCounterpartSize ?? 0;
+    final totalSize = fileSize + counterpartSize;
+    if (totalSize == 0) return null;
+    final counterpartDownloaded = ytCounterpartDownloadedBytes ?? 0;
+    final totalDownloaded = downloadedBytes + counterpartDownloaded;
+    return (totalDownloaded / totalSize).clamp(0.0, 1.0);
+  }
+
+  /// FIX-YT-COMBINED: Total downloaded bytes across both streams.
+  int get ytCombinedDownloadedBytes {
+    if (ytStreamKind == null) return downloadedBytes;
+    return downloadedBytes + (ytCounterpartDownloadedBytes ?? 0);
+  }
+
+  /// FIX-YT-COMBINED: Total size across both streams.
+  int get ytCombinedFileSize {
+    if (ytStreamKind == null) return fileSize;
+    return fileSize + (ytCounterpartSize ?? 0);
+  }
 }
 
 typedef ValueChangedProgress = void Function(DownloadProgress progress);
@@ -956,6 +1006,26 @@ class DownloadEngine {
               _httpEngine.recordSample(taskId, speed, effectiveThreadCount);
             }
           }
+          // FIX-CHUNK-DETAILS: Parse per-chunk byte details for HTTP details screen
+          List<ChunkDetail>? chunkDetails;
+          if (p['chunkDetails'] is List) {
+            chunkDetails = (p['chunkDetails'] as List)
+                .map((c) => ChunkDetail(
+                      // ignore: avoid_dynamic_calls
+                      index: (c['index'] as num?)?.toInt() ?? 0,
+                      // ignore: avoid_dynamic_calls
+                      start: (c['start'] as num?)?.toInt() ?? 0,
+                      // ignore: avoid_dynamic_calls
+                      end: (c['end'] as num?)?.toInt() ?? -1,
+                      // ignore: avoid_dynamic_calls
+                      downloaded: (c['downloaded'] as num?)?.toInt() ?? 0,
+                      // ignore: avoid_dynamic_calls
+                      size: (c['size'] as num?)?.toInt() ?? 0,
+                      // ignore: avoid_dynamic_calls
+                      ratio: (c['ratio'] as num?)?.toDouble() ?? 0.0,
+                    ))
+                .toList();
+          }
           onProgress(DownloadProgress(
             downloadedBytes: (p['downloadedBytes'] as num?)?.toInt() ?? 0,
             fileSize: (p['fileSize'] as num?)?.toInt() ?? 0,
@@ -976,6 +1046,7 @@ class DownloadEngine {
             ytCounterpartSize: (p['ytCounterpartSize'] as num?)?.toInt(),
             ytCounterpartDownloadedBytes:
                 (p['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
+            chunkDetails: chunkDetails,
           ));
         case 'done':
           inactivityTimer?.cancel();
@@ -1197,6 +1268,8 @@ class DownloadEngine {
         final recheckTimeout = Duration(
           minutes: max(5, (effectiveSize ~/ (100 * 1024 * 1024)) + 5),
         );
+        // FIX-RECHECK-FEEDBACK: Pass onProgress + knownFileSize so the user
+        // sees "Checking pieces… X%" during recheck instead of a frozen bar.
         await _waitForState(
           id,
           cancelToken,
@@ -1205,6 +1278,8 @@ class DownloadEngine {
               !label.contains('metadata') &&
               !label.contains('allocating'),
           timeout: recheckTimeout,
+          onProgress: onProgress,
+          knownFileSize: effectiveSize,
         );
       }
       if (cancelToken.isCancelled) return;
@@ -1426,9 +1501,9 @@ class DownloadEngine {
                   f.size > 0 ? f.safeDownloadedBytes.clamp(0, f.size) : 0;
               isEstimated = false;
               // FIX-7: Real per-file percentage, clamped to [0.0, 1.0].
-              fileProgress = f.size > 0
-                  ? (resolvedBytes / f.size).clamp(0.0, 1.0)
-                  : (resolvedBytes > 0 ? 1.0 : 0.0);
+              // FIX-ZERO-SIZE: A zero-size file is trivially complete (1.0).
+              fileProgress =
+                  f.size > 0 ? (resolvedBytes / f.size).clamp(0.0, 1.0) : 1.0;
             } else {
               // FIX T-S1: Preserve the previously stored byte count instead of
               // resetting to 0. The proportional estimator in
@@ -1442,9 +1517,9 @@ class DownloadEngine {
                   ? prevStored.clamp(0, f.size)
                   : prevStored.clamp(0, 1 << 62);
               isEstimated = true;
-              fileProgress = f.size > 0
-                  ? (resolvedBytes / f.size).clamp(0.0, 1.0)
-                  : (resolvedBytes > 0 ? 1.0 : 0.0);
+              // FIX-ZERO-SIZE: A zero-size file is trivially complete (1.0).
+              fileProgress =
+                  f.size > 0 ? (resolvedBytes / f.size).clamp(0.0, 1.0) : 1.0;
             }
             return <String, dynamic>{
               'name': f.name,
@@ -1452,6 +1527,8 @@ class DownloadEngine {
               'selected': existing?['selected'] as bool? ?? f.selected,
               'priority': existing?['priority'] as int? ?? f.priority,
               'downloadedBytes': resolvedBytes,
+              // FIX-FILE-SPEED: Will be populated below from aggregate rate
+              // distributed across actively-downloading selected files.
               'speed': 0.0,
               'progressEstimated': isEstimated,
               // FIX-7: Explicit per-file percentage so UI can render
@@ -1534,14 +1611,43 @@ class DownloadEngine {
         // FIX-PROG-01: Recalculate per-file 'progress' AFTER estimated byte
         // distribution so the file-level percentage on the torrent details
         // screen always matches the distributed downloadedBytes value.
-        // Previously 'progress' was computed before distribution and never
-        // updated, leaving estimated files with a stale (often 0%) percentage.
+        // FIX-ZERO-SIZE: Zero-size files are trivially complete (1.0).
         for (final f in resolvedFiles) {
           final len = (f['length'] as num?)?.toInt() ?? 0;
           final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-          f['progress'] =
-              len > 0 ? (dl / len).clamp(0.0, 1.0) : (dl > 0 ? 1.0 : 0.0);
+          f['progress'] = len > 0 ? (dl / len).clamp(0.0, 1.0) : 1.0;
         }
+
+        // FIX-FILE-SPEED: Distribute aggregate download rate across files
+        // that are actively downloading (selected, incomplete, and either
+        // have real progress data or estimated progress > 0). This gives
+        // the torrent details screen a usable per-file speed indicator.
+        // FIX-SPEED-ZERO: Always explicitly set speed to 0.0 for ALL files
+        // first, then update only active files. This prevents stale speed
+        // values from persisting on files that just completed.
+        if (!isCheckingOrMetadata) {
+          for (final f in resolvedFiles) {
+            f['speed'] = 0.0;
+          }
+          final activeFiles = resolvedFiles.where((f) {
+            final selected = isTorrentFileSelected(f);
+            final len = (f['length'] as num?)?.toInt() ?? 0;
+            final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+            return selected && len > 0 && dl < len;
+          }).length;
+          if (activeFiles > 0) {
+            final perFileSpeed = torrent.downloadRate.toDouble() / activeFiles;
+            for (final f in resolvedFiles) {
+              final selected = isTorrentFileSelected(f);
+              final len = (f['length'] as num?)?.toInt() ?? 0;
+              final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+              if (selected && len > 0 && dl < len) {
+                f['speed'] = perFileSpeed;
+              }
+            }
+          }
+        }
+
         final maxConcurrent =
             SettingsProvider.instance.maxConcurrentFilesPerTorrent;
         if (maxConcurrent > 0 && !isCheckingOrMetadata) {
@@ -1572,6 +1678,11 @@ class DownloadEngine {
         // 'paused' due to an I/O error, disk-full, or external trigger —
         // surface that as an error so the user is notified and the
         // orchestrator can retry instead of silently "completing".
+        //
+        // FIX-PAUSE-RESUME: Save resume data BEFORE surfacing the error so
+        // the retry path can resume from the last flushed piece instead of
+        // rechecking the entire torrent. The cancel path already does this;
+        // this mirrors that behaviour for non-cancel pauses.
         onProgress(DownloadProgress(
           downloadedBytes: downloadedBytes,
           fileSize: totalSize,
@@ -1583,13 +1694,29 @@ class DownloadEngine {
           statusMessage: 'Paused',
         ));
         if (!completer.isCompleted) {
-          completer.completeError(DioException(
-            requestOptions: RequestOptions(path: url),
-            type: DioExceptionType.unknown,
-            message:
-                'Torrent entered paused state without an explicit cancel — '
-                'possible I/O error or external pause. Resume to retry.',
-          ));
+          // Fire async save, then complete with error so the orchestrator
+          // can retry with resume data intact.
+          () async {
+            try {
+              await TorrentResumeStore.saveAndWait(
+                torrentId: id,
+                sourceUrl: url,
+                fetchResumeData: () => TorrentService.fetchResumeBytes(id),
+                files: getTorrentFiles?.call(),
+              );
+            } catch (e) {
+              debugPrint('[DMX] non-cancel-pause resume save failed: $e');
+            }
+            if (!completer.isCompleted) {
+              completer.completeError(DioException(
+                requestOptions: RequestOptions(path: url),
+                type: DioExceptionType.unknown,
+                message:
+                    'Torrent entered paused state without an explicit cancel — '
+                    'possible I/O error or external pause. Resume to retry.',
+              ));
+            }
+          }();
         }
         return;
       }
@@ -1776,20 +1903,57 @@ class DownloadEngine {
     CancelToken cancelToken, {
     required bool Function(String stateLabel) predicate,
     required Duration timeout,
+    ValueChangedProgress? onProgress,
+    int knownFileSize = 0,
   }) async {
     final completer = Completer<void>();
     StreamSubscription? sub;
     Timer? t;
+    Timer? heartbeat;
     String? lastSeen;
+    var elapsed = 0;
     sub = TorrentService.torrentUpdates.listen((torrents) {
       final tor = torrents[id];
       if (tor != null) {
         lastSeen = tor.stateLabel;
+        // FIX-RECHECK-FEEDBACK: Emit progress during hash-check so the UI
+        // shows "Checking…" with the recheck percentage instead of a blank
+        // or frozen bar.
+        if (onProgress != null && !completer.isCompleted) {
+          final label = tor.stateLabel.toLowerCase();
+          if (label.contains('checking')) {
+            final recheckPct = tor.progress.clamp(0.0, 1.0);
+            onProgress(DownloadProgress(
+              downloadedBytes: (recheckPct *
+                      (tor.totalWanted > 0 ? tor.totalWanted : knownFileSize))
+                  .round(),
+              fileSize: tor.totalWanted > 0 ? tor.totalWanted : knownFileSize,
+              speed: 0.0,
+              eta: null,
+              statusMessage: 'Checking pieces… ${(recheckPct * 100).toInt()}%',
+            ));
+          }
+        }
         if (predicate(tor.stateLabel.toLowerCase()) && !completer.isCompleted) {
           completer.complete();
         }
       }
     });
+    // FIX-RECHECK-FEEDBACK: Heartbeat so the user sees activity even if the
+    // engine doesn't emit per-second updates during checking.
+    if (onProgress != null) {
+      heartbeat = Timer.periodic(const Duration(seconds: 5), (_) {
+        if (completer.isCompleted) return;
+        elapsed += 5;
+        onProgress(DownloadProgress(
+          downloadedBytes: 0,
+          fileSize: knownFileSize,
+          speed: 0.0,
+          eta: null,
+          statusMessage: 'Verifying downloaded data… (${elapsed}s)',
+        ));
+      });
+    }
     t = Timer(timeout, () {
       if (completer.isCompleted) return;
       try {
@@ -1815,6 +1979,7 @@ class DownloadEngine {
       await completer.future;
     } finally {
       t.cancel();
+      heartbeat?.cancel();
       await sub.cancel();
     }
   }
