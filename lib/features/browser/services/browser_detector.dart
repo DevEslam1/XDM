@@ -159,13 +159,20 @@ class BrowserDetector {
         ? cleanPath.substring(0, cleanPath.length - 1)
         : cleanPath;
 
-    // Check by file extension first
+    // Check by file extension (path or query parameters)
+    final lowerUrl = url.toLowerCase();
     for (final entry in _extensionMap.entries) {
-      if (trimmedPath.endsWith(entry.key)) {
+      final ext = entry.key;
+      if (trimmedPath.endsWith(ext) ||
+          lowerUrl.contains('$ext?') ||
+          lowerUrl.contains('$ext&') ||
+          lowerUrl.contains('$ext#') ||
+          lowerUrl.contains('file=$ext') ||
+          lowerUrl.contains('filename=') && lowerUrl.contains(ext)) {
         return DetectedMedia(
           kind: entry.value,
           url: url,
-          suggestedFileName: _suggestName(url, entry.key),
+          suggestedFileName: _suggestName(url, ext),
         );
       }
     }

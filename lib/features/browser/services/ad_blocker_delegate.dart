@@ -132,7 +132,14 @@ class AdBlockerDelegate {
     final setupScript =
         'window.__xdmDynamicAdDomains = ${_adBlocker.dynamicDomainsJson};';
     _eval(ctrl, '$setupScript\n${_adBlocker.earlyJs}', 'earlyJs');
+
+    // FIX #3: Inject scriptlet runner for parsed ##+js rules from filter lists.
+    final scriptlets = _adBlocker.scriptletJs;
+    if (scriptlets.isNotEmpty) {
+      _eval(ctrl, scriptlets, 'scriptletJs');
+    }
   }
+
 
   String cssRulesForUrl(String url) => _adBlocker.cssRulesForUrl(url);
 

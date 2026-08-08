@@ -28,6 +28,16 @@ class _FilterSource {
 }
 
 class AdBlockFilterUpdater {
+  // ── Singleton ─────────────────────────────────────────────────────────────
+  // CRITICAL FIX: Without a singleton, every AdBlockFilterUpdater() call
+  // created a fresh instance with empty _downloadedDomains, making the entire
+  // filter download pipeline useless for runtime URL blocking. Every caller
+  // (shouldBlock, allowListedDomains, cosmeticRulesForHost) now shares the
+  // same in-memory state that was populated by init() / updateIfNeeded().
+  static final AdBlockFilterUpdater _instance = AdBlockFilterUpdater._internal();
+  AdBlockFilterUpdater._internal();
+  factory AdBlockFilterUpdater() => _instance;
+
   static final _log = Logger('AdBlockFilterUpdater');
   static final _lock = Lock();
 

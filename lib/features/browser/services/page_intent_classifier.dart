@@ -326,6 +326,23 @@ class PageIntentClassifier {
     if (isUserInitiated && isFromClick) {
       final classification = classify(targetUrl);
       if (classification.intent == PageIntent.adPage) {
+        final lowerTarget = targetUrl.toLowerCase();
+        final isAdBlocked = AdBlockerService.instance.shouldBlockUrl(targetUrl);
+        final isFileHost = lowerTarget.contains('dlhaven') ||
+            lowerTarget.contains('mediafire') ||
+            lowerTarget.contains('pixeldrain') ||
+            lowerTarget.contains('gofile') ||
+            lowerTarget.contains('mega.nz');
+
+        if (!isAdBlocked && (isFileHost || BrowserDetector.isAutoDownloadable(targetUrl))) {
+          return PageClassification(
+            intent: PageIntent.normalBrowsing,
+            action: PageAction.openSameTab,
+            url: targetUrl,
+            confidence: 0.8,
+            reason: 'User clicked legitimate download/file host link',
+          );
+        }
         return PageClassification(
           intent: classification.intent,
           action: PageAction.openNewTabWithWarning,

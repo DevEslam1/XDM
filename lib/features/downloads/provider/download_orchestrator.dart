@@ -3211,6 +3211,7 @@ class DownloadOrchestrator {
             bypassSSL: _host.providerSettingsProvider.bypassSSL,
             cookies: cookieString,
             oauthToken: YoutubeService.oauthToken,
+            referer: task.downloadPageUrl,
           );
           if (meta.fileSize > 0) {
             final idx = _host.providerTasks.indexWhere((t) => t.id == task.id);
@@ -3267,6 +3268,7 @@ class DownloadOrchestrator {
             bypassSSL: _host.providerSettingsProvider.bypassSSL,
             cookies: cookieString,
             oauthToken: YoutubeService.oauthToken,
+            referer: task.downloadPageUrl,
           );
           if (videoMeta.fileSize > 0) {
             videoTransferSize = videoMeta.fileSize;

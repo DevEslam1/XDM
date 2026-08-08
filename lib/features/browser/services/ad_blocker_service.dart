@@ -135,11 +135,15 @@ class AdBlockerService {
 ''';
 
   /// JSON-encoded list of ad domains for dynamic blocking setup.
+  /// FIX #4: Now includes a capped sample of downloaded filter-list domains so
+  /// the in-browser JS fetch/XHR interceptor blocks as many domains as the
+  /// Dart-level shouldInterceptRequest does.
   String get dynamicDomainsJson {
-    final domains = CustomAdBlockStore.instance.hosts.toList();
-    // FIX: Use jsonEncode instead of manual string building to properly
-    // escape backslashes, control characters, and unicode in domain names.
-    return jsonEncode(domains);
+    final custom = CustomAdBlockStore.instance.hosts;
+    // Cap at 2000 downloaded domains to keep the injected JS payload manageable.
+    final filterDomains = AdBlockFilterUpdater().allBlockedDomains.take(2000);
+    final all = <String>{...custom, ...filterDomains}.toList();
+    return jsonEncode(all);
   }
 
   // ── Listener support (ChangeNotifier-style) ──────────────────────────────
@@ -499,12 +503,20 @@ $customCss
   // Track ad-created intervals for targeted cleanup (see intervalCleanupJs)
   window.__xdmAdIntervals = window.__xdmAdIntervals || [];
 
-  // Intercept all window.open popup requests and send them to native side (BUG A3)
+  // Intercept window.open popup requests ONLY for known ad URLs (BUG A3)
   var _origOpen = window.open;
   window.open = function(url, name, features) {
     if (url && typeof url === 'string' && url.trim() !== '' && url !== 'about:blank') {
       try {
-        if (window.XDM_Popups && window.XDM_Popups.postMessage) {
+        var u = new URL(url, window.location.href);
+        var host = u.hostname.toLowerCase();
+        var isAd = false;
+        var dynamicList = window.__xdmDynamicAdDomains || [];
+        for (var i = 0; i < dynamicList.length; i++) {
+          var d = dynamicList[i];
+          if (host === d || host.endsWith('.' + d)) { isAd = true; break; }
+        }
+        if (isAd && window.XDM_Popups && window.XDM_Popups.postMessage) {
           window.XDM_Popups.postMessage(url);
           return null;
         }
@@ -688,6 +700,207 @@ $customCss
   } catch(e) {}
 })();
 ''';
+  }
+
+
+  // ─────────────────────────────────────────────────────────────────────
+  // FIX #3: scriptletJs — implements common uBlock/AdGuard scriptlets.
+  // Filter lists (##+js rules) were previously parsed but never executed.
+  // ─────────────────────────────────────────────────────────────────────
+  String get scriptletJs => _buildScriptletJs();
+
+  String _buildScriptletJs() {
+    if (!_enabled) return '';
+
+    final parsedRules = AdBlockFilterUpdater().scriptletRules;
+    if (parsedRules.isEmpty) return '';
+
+    final calls = <String>[];
+    for (final rule in parsedRules.take(100)) {
+      final parts = rule.split(',').map((s) => s.trim()).toList();
+      if (parts.isEmpty) continue;
+      final name = parts[0].toLowerCase();
+      final args = parts.sublist(1);
+      String? call;
+      switch (name) {
+        case 'abort-on-property-read':
+        case 'aopw':
+          if (args.isNotEmpty) call = '_xdmAbortOnRead(${_jsStr(args[0])});';
+          break;
+        case 'abort-on-property-write':
+        case 'aopb':
+          if (args.isNotEmpty) call = '_xdmAbortOnWrite(${_jsStr(args[0])});';
+          break;
+        case 'set-constant':
+          if (args.length >= 2) {
+            call = '_xdmSetConstant(${_jsStr(args[0])}, ${_jsConstant(args[1])});';
+          }
+          break;
+        case 'no-settimeout-if':
+          if (args.isNotEmpty) call = '_xdmNoTimeoutIf(${_jsStr(args[0])});';
+          break;
+        case 'addeventlistener-defuser':
+          if (args.length >= 2) {
+            call =
+                '_xdmDefuseListener(${_jsStr(args[0])}, ${_jsStr(args[1])});';
+          }
+          break;
+        case 'json-prune':
+          if (args.isNotEmpty) call = '_xdmJsonPrune(${_jsStr(args[0])});';
+          break;
+        case 'noeval':
+          call = '_xdmNoEval();';
+          break;
+        case 'prevent-fetch':
+          if (args.isNotEmpty) call = '_xdmPreventFetch(${_jsStr(args[0])});';
+          break;
+      }
+      if (call != null) calls.add(call);
+    }
+    if (calls.isEmpty) return '';
+
+    final callsJs = calls.join('\n  ');
+    return r'''
+(function() {
+  if (window.__xdmScriptlets) return;
+  window.__xdmScriptlets = true;
+
+  function _xdmAbortOnRead(prop) {
+    try {
+      var chain = prop.split('.'), obj = window;
+      for (var i = 0; i < chain.length - 1; i++) { obj = obj[chain[i]]; if (!obj) return; }
+      var last = chain[chain.length - 1], orig = obj[last];
+      Object.defineProperty(obj, last, {
+        get: function() { throw new ReferenceError('[XDM] Read aborted: ' + prop); },
+        set: function(v) { orig = v; }, configurable: true
+      });
+    } catch(e) {}
+  }
+
+  function _xdmAbortOnWrite(prop) {
+    try {
+      var chain = prop.split('.'), obj = window;
+      for (var i = 0; i < chain.length - 1; i++) { obj = obj[chain[i]]; if (!obj) return; }
+      var last = chain[chain.length - 1];
+      Object.defineProperty(obj, last, {
+        get: function() { return undefined; },
+        set: function() { throw new ReferenceError('[XDM] Write aborted: ' + prop); },
+        configurable: true
+      });
+    } catch(e) {}
+  }
+
+  function _xdmSetConstant(prop, val) {
+    try {
+      var chain = prop.split('.'), obj = window;
+      for (var i = 0; i < chain.length - 1; i++) {
+        if (!obj[chain[i]]) obj[chain[i]] = {};
+        obj = obj[chain[i]];
+      }
+      Object.defineProperty(obj, chain[chain.length - 1], {
+        get: function() { return val; }, set: function() {}, configurable: false
+      });
+    } catch(e) {}
+  }
+
+  function _xdmNoTimeoutIf(pattern) {
+    try {
+      var _orig = window.setTimeout;
+      window.setTimeout = function(fn, delay) {
+        var src = typeof fn === 'function' ? fn.toString() : String(fn);
+        if (src.indexOf(pattern) !== -1) return 0;
+        return _orig.apply(window, arguments);
+      };
+    } catch(e) {}
+  }
+
+  function _xdmDefuseListener(event, search) {
+    try {
+      var _orig = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function(type, fn) {
+        if (type === event) {
+          var src = typeof fn === 'function' ? fn.toString() : '';
+          if (src.indexOf(search) !== -1) return;
+        }
+        return _orig.apply(this, arguments);
+      };
+    } catch(e) {}
+  }
+
+  function _xdmJsonPrune(keys) {
+    try {
+      var keyList = keys.split(/\s+/), _orig = JSON.parse;
+      JSON.parse = function(text) {
+        var r = _orig.apply(this, arguments);
+        if (r && typeof r === 'object') keyList.forEach(function(k) { delete r[k]; });
+        return r;
+      };
+    } catch(e) {}
+  }
+
+  function _xdmNoEval() {
+    try {
+      window.eval = new Proxy(window.eval, {
+        apply: function(target, ctx, args) {
+          var src = String(args[0] || '').toLowerCase();
+          if (src.indexOf('adblock') !== -1 || src.indexOf('adblocker') !== -1) return;
+          return target.apply(ctx, args);
+        }
+      });
+    } catch(e) {}
+  }
+
+  function _xdmPreventFetch(pattern) {
+    try {
+      var _orig = window.fetch;
+      window.fetch = function(input) {
+        var url = typeof input === 'string' ? input : (input && input.url) || '';
+        if (url.indexOf(pattern) !== -1)
+          return Promise.resolve(new Response('', { status: 200 }));
+        return _orig.apply(window, arguments);
+      };
+    } catch(e) {}
+  }
+
+  // Apply scriptlets from filter lists:
+  ''' +
+        callsJs +
+        r'''
+})();
+''';
+  }
+
+  /// Escapes [s] for safe insertion as a JS single-quoted string literal.
+  static String _jsStr(String s) {
+    final escaped = s
+        .replaceAll(r'\', r'\\')
+        .replaceAll("'", r"\'");
+    return "'$escaped'";
+  }
+
+  /// Converts a filter-list constant token to a JS literal value.
+  static String _jsConstant(String s) {
+    switch (s.toLowerCase()) {
+      case 'true':
+        return 'true';
+      case 'false':
+        return 'false';
+      case 'null':
+        return 'null';
+      case 'undefined':
+        return 'undefined';
+      case '0':
+        return '0';
+      case '1':
+        return '1';
+      case '""':
+      case "''":
+      case 'empty-string':
+        return "''";
+      default:
+        if (num.tryParse(s) != null) return s;
+        return _jsStr(s);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -1145,7 +1358,44 @@ $customCss
 })();
 ''';
 
-  /// Returns ad-block CSS for the given [url]. Always returns the same
-  /// rules for now; could be customised per-domain in future.
-  String cssRulesForUrl(String url) => cssRules;
+  /// Returns ad-block CSS for the given [url].
+  /// FIX #2: Now merges hardcoded selectors with per-host cosmetic rules
+  /// from the downloaded filter lists (EasyList/uBlock cosmetic rules),
+  /// strictly excluding any selectors that could target download buttons/links.
+  String cssRulesForUrl(String url) {
+    final base = cssRules;
+    if (!_enabled || url.isEmpty) return base;
+    try {
+      final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+      if (host.isEmpty) return base;
+      final extra = AdBlockFilterUpdater().cosmeticRulesForHost(host);
+      if (extra.isEmpty) return base;
+
+      // Filter out any selectors that could match download buttons, links, or media elements!
+      final safeSelectors = extra.where((s) {
+        final lower = s.toLowerCase();
+        if (lower.contains('download') ||
+            lower.contains('btn') ||
+            lower.contains('button') ||
+            lower.contains('get-') ||
+            lower.contains('file') ||
+            lower.contains('apk') ||
+            lower.contains('link') ||
+            lower.contains('href') ||
+            lower.contains('target') ||
+            lower.contains('action') ||
+            lower.contains('play') ||
+            lower.contains('stream')) {
+          return false;
+        }
+        return true;
+      }).take(200);
+
+      if (safeSelectors.isEmpty) return base;
+      final cappedSelectors = safeSelectors.join(',\n');
+      return '$base\n$cappedSelectors {\n  display: none !important;\n  visibility: hidden !important;\n  height: 0 !important;\n  overflow: hidden !important;\n  pointer-events: none !important;\n}\n';
+    } catch (_) {
+      return base;
+    }
+  }
 }

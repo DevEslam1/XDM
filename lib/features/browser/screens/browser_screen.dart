@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
-import 'package:dio/dio.dart' show Dio, DioException, Options, ResponseType;
+import 'package:dio/dio.dart' show Dio, Options, ResponseType, ResponseBody;
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -1114,9 +1114,22 @@ class _BrowserScreenState extends State<BrowserScreen>
   /// Silently follows HTTP redirects from a blocked ad popup URL.
   /// If the redirect chain ends at a downloadable file (APK, ZIP, video, etc.)
   /// the XDM download sheet is shown instead of opening a tab.
+  /// If it ends at a download gateway host/page, opens it in a tab.
   Future<void> _followAndInterceptAdRedirect(
       String adUrl, BrowserTab parentTab) async {
     try {
+      final referer = parentTab.url.isNotEmpty ? parentTab.url : adUrl;
+      final origin = Uri.tryParse(referer)?.origin ?? '';
+
+      final headers = <String, String>{
+        'User-Agent':
+            'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
+            '(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        if (referer.isNotEmpty) 'Referer': referer,
+        if (origin.isNotEmpty) 'Origin': origin,
+      };
+
       final dio = Dio();
       dio.options
         ..connectTimeout = const Duration(seconds: 8)
@@ -1125,29 +1138,55 @@ class _BrowserScreenState extends State<BrowserScreen>
         ..maxRedirects = 10
         ..validateStatus = (s) => true;
 
-      // HEAD first — lightweight, follows redirects without downloading body
-      final response = await dio.head<void>(
-        adUrl,
-        options: Options(
-          responseType: ResponseType.bytes,
-          headers: {
-            'User-Agent':
-                'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
-                '(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
-            'Accept': '*/*',
-          },
-        ),
-      );
+      String finalUrl = adUrl;
+      String contentType = '';
+      String contentDisposition = '';
 
-      final finalUrl =
-          response.realUri.toString().isNotEmpty
+      // 1. Try HEAD request first
+      try {
+        final response = await dio.head<void>(
+          adUrl,
+          options: Options(
+            responseType: ResponseType.bytes,
+            headers: headers,
+          ),
+        );
+        if (response.statusCode != null && response.statusCode! < 400) {
+          finalUrl = response.realUri.toString().isNotEmpty
               ? response.realUri.toString()
               : (response.redirects.isNotEmpty
                   ? response.redirects.last.location.toString()
                   : adUrl);
-      final contentType = (response.headers.value('content-type') ?? '').toLowerCase();
-      final contentDisposition =
-          (response.headers.value('content-disposition') ?? '').toLowerCase();
+          contentType = (response.headers.value('content-type') ?? '').toLowerCase();
+          contentDisposition = (response.headers.value('content-disposition') ?? '').toLowerCase();
+        }
+      } catch (e) {
+        _log.fine('[Browser] HEAD request for ad redirect failed: $e');
+      }
+
+      // 2. Fallback: If HEAD failed or returned HTML/empty, try stream GET
+      if (contentType.isEmpty || contentType.contains('text/html')) {
+        try {
+          final response = await dio.get<ResponseBody>(
+            adUrl,
+            options: Options(
+              responseType: ResponseType.stream,
+              headers: headers,
+            ),
+          );
+          finalUrl = response.realUri.toString().isNotEmpty
+              ? response.realUri.toString()
+              : (response.redirects.isNotEmpty
+                  ? response.redirects.last.location.toString()
+                  : adUrl);
+          contentType = (response.headers.value('content-type') ?? '').toLowerCase();
+          contentDisposition = (response.headers.value('content-disposition') ?? '').toLowerCase();
+          
+          response.data?.stream.listen((_) {}).cancel();
+        } catch (e) {
+          _log.fine('[Browser] Stream GET for ad redirect failed: $e');
+        }
+      }
 
       final isDownload = contentDisposition.contains('attachment') ||
           contentType.contains('application/octet-stream') ||
@@ -1158,6 +1197,7 @@ class _BrowserScreenState extends State<BrowserScreen>
           contentType.contains('video/') ||
           contentType.contains('audio/') ||
           BrowserDetector.isAutoDownloadable(finalUrl) ||
+          BrowserDetector.isAutoDownloadable(adUrl) ||
           _interceptor.shouldIntercept(
               tabUrl: parentTab.url, requestUrl: finalUrl);
 
@@ -1165,12 +1205,41 @@ class _BrowserScreenState extends State<BrowserScreen>
         _log.info(
             '[Browser] Ad redirect resolved to download: $finalUrl (type: $contentType)');
         _showInterceptionSheet(context, finalUrl);
-      } else {
-        _log.fine(
-            '[Browser] Ad redirect did not lead to download (type: $contentType, url: $finalUrl)');
+        return;
       }
-    } on DioException catch (e) {
-      _log.fine('[Browser] Ad redirect follow failed: $e');
+
+      // 3. If popup landed on an ad page or blocked domain, drop it (do NOT open tab)
+      final isAdBlocked = _adBlocker.shouldBlock(finalUrl) || _adBlocker.shouldBlock(adUrl);
+      if (isAdBlocked) {
+        _log.info('[Browser] Ad redirect resolved to blocked ad page: $finalUrl');
+        return;
+      }
+
+      // 4. If popup landed on a legitimate file host / download gateway, open in tab
+      final lowerFinal = finalUrl.toLowerCase();
+      final isKnownFileHost = lowerFinal.contains('dlhaven') ||
+          lowerFinal.contains('mediafire') ||
+          lowerFinal.contains('mega.nz') ||
+          lowerFinal.contains('pixeldrain') ||
+          lowerFinal.contains('gofile') ||
+          lowerFinal.contains('workupload') ||
+          lowerFinal.contains('1fichier');
+
+      if (isKnownFileHost && mounted) {
+        _log.info('[Browser] Ad redirect was legitimate file host, opening tab: $finalUrl');
+        setState(() {
+          final newTab = _createNewTab(
+            initialUrl: finalUrl,
+            isIncognito: parentTab.isIncognito,
+          );
+          _redirectGuard.reset(newTab.id);
+          _tabs.add(newTab);
+          _currentTabIndex = _tabs.length - 1;
+          _urlController.text = finalUrl;
+          _showBarsNotifier.value = true;
+        });
+        _saveTabs();
+      }
     } catch (e) {
       _log.fine('[Browser] Ad redirect follow error: $e');
     }

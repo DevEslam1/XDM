@@ -532,7 +532,9 @@ class XdmBackendClient {
           backendMsg ?? 'Invalid request or unsupported URL.',
         );
       } else if (statusCode == 401 || statusCode == 403) {
-        return const BackendUnauthorizedException();
+        return BackendUnauthorizedException(
+          backendMsg ?? 'Backend authentication failed. Check your API token.',
+        );
       } else if (statusCode == 404) {
         return const BackendNotFoundException();
       } else if (statusCode == 429) {

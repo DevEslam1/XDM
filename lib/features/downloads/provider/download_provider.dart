@@ -4141,6 +4141,7 @@ class DownloadProvider extends ChangeNotifier
             proxyUsername: _settingsProvider.proxyUsername,
             proxyPassword: _settingsProvider.proxyPassword,
             bypassSSL: _settingsProvider.bypassSSL,
+            referer: task.downloadPageUrl,
           );
         } catch (e) {
           throw Exception('Failed to resolve new link: $e');
@@ -4256,7 +4257,10 @@ class DownloadProvider extends ChangeNotifier
           if (metadata != null) {
             resolvedMetaSize = metadata.fileSize;
           } else {
-            final meta = await _downloadEngine.resolveMetadata(url: cleanUrl);
+            final meta = await _downloadEngine.resolveMetadata(
+              url: cleanUrl,
+              referer: task.downloadPageUrl,
+            );
             resolvedMetaSize = meta.fileSize;
           }
 
@@ -4308,6 +4312,7 @@ class DownloadProvider extends ChangeNotifier
             proxyHost: _settingsProvider.proxyHost,
             proxyPort: _settingsProvider.proxyPort,
             bypassSSL: _settingsProvider.bypassSSL,
+            referer: task.downloadPageUrl,
           );
           if (meta.fileSize > 0) {
             // If size changed significantly, reset progress
@@ -4573,7 +4578,10 @@ class DownloadProvider extends ChangeNotifier
 
     if (!isYoutube) {
       try {
-        final meta = await _downloadEngine.resolveMetadata(url: newUrl);
+        final meta = await _downloadEngine.resolveMetadata(
+          url: newUrl,
+          referer: task.downloadPageUrl,
+        );
         if (meta.fileSize > 0 &&
             task.fileSize > 0 &&
             (meta.fileSize - task.fileSize).abs() >

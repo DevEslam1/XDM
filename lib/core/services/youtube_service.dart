@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'xdm_backend_client.dart';
@@ -15,11 +14,6 @@ class YoutubeService {
   static const _secureStorage = FlutterSecureStorage();
   static const _cookiesStorageKey = 'youtube_cookies_persisted';
 
-  /// Platform channel for the on-device extractor (Android NewPipe
-  /// Extractor). Used as a local fallback when the remote backend is
-  /// unreachable. Unavailable on other platforms — falls back gracefully.
-  static const MethodChannel _platformChannel =
-      MethodChannel('com.example.dmx/youtube_extractor');
 
   static Future<void> init() async {
     try {
@@ -581,11 +575,22 @@ class YoutubeService {
       );
 
       if (results != null && results.isNotEmpty) return results;
-    } on BackendBadRequestException {
-      return null;
-    } on BackendNotFoundException {
-      return null;
     } on BackendException catch (e) {
+      final msg = e.message.toLowerCase();
+      final isYouTube = isYouTubeHost || isSupportedMediaHost(url);
+      final hasSpecificKeywords = msg.contains('sign in') ||
+          msg.contains('bot') ||
+          msg.contains('confirm') ||
+          msg.contains('age') ||
+          msg.contains('geo') ||
+          msg.contains('rate limit');
+
+      if (e is BackendBadRequestException || e is BackendNotFoundException) {
+        if (isYouTube || hasSpecificKeywords) {
+          throw Exception(e.toUserMessage());
+        }
+        return null;
+      }
       throw Exception(e.toUserMessage());
     } catch (e) {
       throw Exception(_parseErrorMessage(e));
@@ -594,9 +599,9 @@ class YoutubeService {
     return null;
   }
 
-  /// Resolves streams for [url], preferring the remote backend and falling
-  /// back to the on-device platform extractor when the backend times out or
-  /// is unreachable. Returns `null` when no streams could be resolved.
+  /// Resolves streams for [url] using the remote backend **only**.
+  /// Local fallback (on-device NewPipe extractor) is intentionally NOT used —
+  /// all stream resolution goes through the XDM backend for consistency.
   static Future<List<Map<String, dynamic>>?> _resolveStreamsWithFallback(
     String url, {
     String? cookies,
@@ -609,71 +614,20 @@ class YoutubeService {
       );
       final results = _parseStreams(backendRes);
       return results.isNotEmpty ? results : null;
-    } on XdmBackendTimeoutException catch (e) {
-      debugPrint('[YoutubeService] Backend timeout, trying local fallback: $e');
-      final fallback = await _tryLocalFallback(url);
-      if (fallback != null) return fallback;
+    } on XdmBackendTimeoutException {
+      // Rethrow — no local fallback; retry logic in _resolveWithRetry handles this.
       rethrow;
-    } on BackendException catch (e) {
-      // Any backend exception (unreachable, server error, not-found, auth)
-      // hands off to the on-device extractor. The multi-backend failover in
-      // XdmBackendClient maps the final failure to one of these types, so a
-      // narrow catch (timeout/network only) would skip the fallback whenever
-      // the last backend answers with, e.g., a 404.
-      debugPrint(
-        '[YoutubeService] Backend error, trying local fallback: $e',
-      );
-      final fallback = await _tryLocalFallback(url);
-      if (fallback != null) return fallback;
+    } on BackendException {
+      // Rethrow — caller (_resolveWithRetry) will retry or surface the error.
       rethrow;
-    } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.receiveTimeout ||
-          e.type == DioExceptionType.sendTimeout ||
-          e.type == DioExceptionType.connectionError) {
-        debugPrint(
-          '[YoutubeService] Backend connection error, trying local fallback: $e',
-        );
-        final fallback = await _tryLocalFallback(url);
-        if (fallback != null) return fallback;
-      }
+    } on DioException {
+      // Rethrow — network errors propagate up to the retry loop.
       rethrow;
     }
   }
 
-  // FIX-3: Fix _tryLocalFallback log and handling for PlatformException/MissingPluginException
-  static Future<List<Map<String, dynamic>>?> _tryLocalFallback(
-      String url) async {
-    if (!SettingsProvider.instance.useLocalYtFallback) {
-      debugPrint(
-          '[YoutubeService] Local fallback disabled in settings; skipping.');
-      return null;
-    }
-    try {
-      final result =
-          await _platformChannel.invokeListMethod<dynamic>('getStreams', {
-        'url': url,
-      });
-      if (result == null || result.isEmpty) return null;
-      final streams = result
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-      if (streams.isEmpty) return null;
-      final title = streams.first['title']?.toString() ?? 'Untitled';
-      return _parseStreams({'title': title, 'streams': streams});
-    } on PlatformException catch (e) {
-      debugPrint('[YoutubeService] Local fallback failed: $e');
-      return null;
-    } on MissingPluginException catch (_) {
-      // Platform channel not registered — expected on iOS / desktop.
-      // This is NOT an error; just skip silently.
-      return null;
-    } catch (e) {
-      debugPrint('[YoutubeService] Local fallback error: $e');
-      return null;
-    }
-  }
+
+
 
   // Retry stream resolution for transient errors and cold starts
   static Future<List<Map<String, dynamic>>?> _resolveWithRetry(
