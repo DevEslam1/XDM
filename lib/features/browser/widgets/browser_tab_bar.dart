@@ -223,8 +223,15 @@ class _TabChip extends StatelessWidget {
             if (showClose)
               GestureDetector(
                 onTap: onClose,
-                child: Padding(
-                  padding: const EdgeInsetsDirectional.only(start: 6),
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  // FIX: Enforce a minimum 28×28 touch target (combined with
+                  // the parent Row padding this meets accessibility guidelines
+                  // for tap targets on mobile).
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  margin: const EdgeInsetsDirectional.only(start: 4),
                   child: Icon(Icons.close_rounded, size: 14, color: muted),
                 ),
               ),

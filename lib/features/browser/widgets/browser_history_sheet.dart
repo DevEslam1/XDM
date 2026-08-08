@@ -60,6 +60,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
           setState(
             () => _searchQuery = _searchController.text.toLowerCase().trim(),
           );
+          // FIX: Re-query the database with the new search term so results
+          // include entries beyond the initial 200-item load window.
+          _loadSurfingHistory();
         }
       });
     });
@@ -97,12 +100,17 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     // FIX(5): visited_at is now INTEGER ms-epoch; keep parsing legacy ISO
     // strings for robustness.
     if (value is num) {
-      return _formatDateTime(
-          DateTime.fromMillisecondsSinceEpoch(value.toInt()));
+      final ms = value.toInt();
+      // FIX: Guard against negative or zero timestamps from corrupt
+      // migrations — showing "1970-01-01" is worse than showing nothing.
+      if (ms <= 0) return '';
+      return _formatDateTime(DateTime.fromMillisecondsSinceEpoch(ms));
     }
     if (value is String && value.isNotEmpty) {
       try {
-        return _formatDateTime(DateTime.parse(value));
+        final dt = DateTime.parse(value);
+        if (dt.millisecondsSinceEpoch <= 0) return '';
+        return _formatDateTime(dt);
       } catch (e, st) {
         Logger('browser_history_sheet')
             .warning('[browser_history_sheet] operation failed', e, st);
@@ -163,7 +171,12 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
   Future<void> _loadSurfingHistory() async {
     try {
       final db = context.read<DatabaseService>();
-      final h = await db.loadBrowserHistory();
+      // FIX: Pass the search query to the database so it can search across
+      // ALL history entries, not just the pre-loaded 200-item window.
+      final h = await db.loadBrowserHistory(
+        max: 500,
+        searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
+      );
       if (!mounted) return;
       setState(() => _surfingHistory = h);
     } catch (e) {
@@ -540,7 +553,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     );
   }
 
-  Map<String, List<Map<String, dynamic>>> _groupHistoryByDay(List<Map<String, dynamic>> items) {
+  Map<String, List<Map<String, dynamic>>> _groupHistoryByDay(
+      List<Map<String, dynamic>> items) {
     final groups = <String, List<Map<String, dynamic>>>{};
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -649,7 +663,6 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       },
     );
   }
-
 
   Widget _buildDownloadsList(
     ScrollController controller,
@@ -965,9 +978,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       builder: (_, o, child) => Opacity(opacity: o, child: child),
       child: Container(
         decoration: BoxDecoration(
-          color: isDark
-              ? AppTheme.cardBg
-              : AppTheme.lightCardBg,
+          color: isDark ? AppTheme.cardBg : AppTheme.lightCardBg,
           borderRadius: BorderRadius.circular(13),
           border: Border.all(
             color: isDark
@@ -1040,7 +1051,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  color: isDark ? Colors.white54 : Colors.black54,
+                                  color:
+                                      isDark ? Colors.white54 : Colors.black54,
                                   fontSize: 10,
                                 ),
                               ),

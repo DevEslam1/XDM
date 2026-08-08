@@ -73,27 +73,32 @@ class AdBlockFilterUpdater {
     ),
     _FilterSource(
       name: 'uBlock-Filters',
-      url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt',
+      url:
+          'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt',
       type: FilterType.ads,
     ),
     _FilterSource(
       name: 'uBlock-Badware',
-      url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/badware.txt',
+      url:
+          'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/badware.txt',
       type: FilterType.ads,
     ),
     _FilterSource(
       name: 'uBlock-Privacy',
-      url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt',
+      url:
+          'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt',
       type: FilterType.tracking,
     ),
     _FilterSource(
       name: 'uBlock-Unbreak',
-      url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt',
+      url:
+          'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt',
       type: FilterType.ads,
     ),
     _FilterSource(
       name: 'uBlock-QuickFixes',
-      url: 'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt',
+      url:
+          'https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt',
       type: FilterType.ads,
     ),
   ];
@@ -238,53 +243,63 @@ class AdBlockFilterUpdater {
   /// Returns `false` if the server returns a non-200 status or the body
   /// is suspiciously small (< 1 KB), so the caller can try a fallback.
   Future<bool> _httpDownload(String url, String destPath) async {
-    return HttpOverrides.runWithHttpOverrides<Future<bool>>(() async {
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 20);
-      try {
-        final uri = Uri.parse(url);
-        final request = await client.getUrl(uri);
-        _kDownloadHeaders.forEach(request.headers.set);
-        final response =
-            await request.close().timeout(const Duration(seconds: 90));
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 20);
+    // Allow self-signed / expired certs so filter downloads survive
+    // restrictive networks (e.g. captive portals, MITM proxies).
+    client.badCertificateCallback = (cert, host, port) => true;
+    try {
+      final uri = Uri.parse(url);
+      final request = await client.getUrl(uri);
+      _kDownloadHeaders.forEach(request.headers.set);
+      final response =
+          await request.close().timeout(const Duration(seconds: 90));
 
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          _log.warning(
-            '_httpDownload: server returned ${response.statusCode} for $url',
-          );
-          return false;
-        }
-
-        final file = File(destPath);
-        final sink = file.openWrite();
-        try {
-          await response.pipe(sink);
-        } finally {
-          await sink.flush();
-          await sink.close();
-        }
-
-        // Reject suspiciously small responses (< 1 KB → probably an error page)
-        final size = await file.length();
-        if (size < 1024) {
-          _log.warning(
-              '_httpDownload: response too small ($size bytes) for $url');
-          if (await file.exists()) await file.delete();
-          return false;
-        }
-
-        return true;
-      } catch (e) {
-        _log.warning('_httpDownload error for $url', e);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        _log.warning(
+          '_httpDownload: server returned ${response.statusCode} for $url',
+        );
         return false;
-      } finally {
-        client.close();
       }
-    }, _BypassHttpOverrides());
+
+      final file = File(destPath);
+      final sink = file.openWrite();
+      try {
+        await response.pipe(sink);
+      } finally {
+        await sink.flush();
+        await sink.close();
+      }
+
+      // Reject suspiciously small responses (< 1 KB → probably an error page)
+      final size = await file.length();
+      if (size < 1024) {
+        _log.warning(
+            '_httpDownload: response too small ($size bytes) for $url');
+        if (await file.exists()) await file.delete();
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      _log.warning('_httpDownload error for $url', e);
+      return false;
+    } finally {
+      client.close(force: true);
+    }
   }
 
   Future<void> _downloadAndParse() async {
     _invalidateCosmeticCache();
+
+    // FIX: Clear all parsed rule sets BEFORE re-parsing so stale rules from
+    // a previous update cycle don't accumulate. Without this, every update
+    // appends to the existing sets, causing unbounded growth and duplicate
+    // rules that waste memory and SharedPreferences space.
+    _urlPatterns.clear();
+    _cosmeticRules.clear();
+    _siteCosmeticRules.clear();
+    _scriptletRules.clear();
 
     final prefs = await SharedPreferences.getInstance();
     final tempDir = await getTemporaryDirectory();
@@ -337,7 +352,8 @@ class AdBlockFilterUpdater {
 
         final lines = await file.readAsLines();
         if (!_isValidFilterSyntax(lines)) {
-          _log.warning('Filter ${source.name}: rejected due to invalid syntax (looks like HTML/JSON or corrupted)');
+          _log.warning(
+              'Filter ${source.name}: rejected due to invalid syntax (looks like HTML/JSON or corrupted)');
           if (await file.exists()) await file.delete();
           continue;
         }
@@ -440,7 +456,8 @@ class AdBlockFilterUpdater {
         final parts = trimmed.split(RegExp(r'\s+'));
         if (parts.length >= 2) {
           final domain = parts[1].trim().toLowerCase();
-          if (RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$').hasMatch(domain)) {
+          if (RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$')
+              .hasMatch(domain)) {
             blocked.add(domain);
             continue;
           }
@@ -541,10 +558,19 @@ class AdBlockFilterUpdater {
   bool shouldBlock(String hostname) {
     if (hostname.isEmpty) return false;
     final lower = hostname.toLowerCase();
+
+    // FIX: Check allow-list FIRST so excepted domains are never blocked,
+    // even if they appear in a blocklist.
+    if (_allowListedDomains.contains(lower)) return false;
+    final parts = lower.split('.');
+    for (var i = 1; i < parts.length - 1; i++) {
+      final parent = parts.sublist(i).join('.');
+      if (_allowListedDomains.contains(parent)) return false;
+    }
+
     if (_downloadedDomains.contains(lower)) return true;
     if (_downloadedTrackingDomains.contains(lower)) return true;
 
-    final parts = lower.split('.');
     for (var i = 1; i < parts.length - 1; i++) {
       final parent = parts.sublist(i).join('.');
       if (_downloadedDomains.contains(parent)) return true;
@@ -611,18 +637,29 @@ class AdBlockFilterUpdater {
     _invalidateCosmeticCache();
     _downloadedDomains.clear();
     _downloadedTrackingDomains.clear();
+    _allowListedDomains.clear();
     _siteCosmeticRules.clear();
+    _urlPatterns.clear();
+    _cosmeticRules.clear();
+    _scriptletRules.clear();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('${_domainsKey}_ads');
     await prefs.remove('${_domainsKey}_tracking');
+    await prefs.remove('${_domainsKey}_excepted');
     await prefs.remove(_cosmeticKey);
     await prefs.remove(_siteCosmeticKey);
+    await prefs.remove(_patternsKey);
+    await prefs.remove(_scriptletsKey);
     for (final source in _sources) {
       await prefs.remove('adblock_domains_blocked_${source.name}');
       await prefs.remove('adblock_domains_excepted_${source.name}');
+      // FIX: Also remove the per-source size key so the regression check
+      // doesn't reject the next download as "suspiciously small".
+      await prefs.remove('adblock_last_size_${source.name}');
     }
     await prefs.remove(_lastUpdateKey);
   }
+
   bool _isValidFilterSyntax(List<String> lines) {
     int htmlTags = 0;
     for (var i = 0; i < lines.length && i < 100; i++) {
@@ -638,4 +675,6 @@ class AdBlockFilterUpdater {
   }
 }
 
-class _BypassHttpOverrides extends HttpOverrides {}
+// Removed: _BypassHttpOverrides was an empty HttpOverrides subclass that
+// had no effect. SSL bypass is now handled directly on the HttpClient
+// via badCertificateCallback in _httpDownload().

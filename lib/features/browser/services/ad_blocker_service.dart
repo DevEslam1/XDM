@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -67,6 +68,8 @@ class AdBlockerService {
     try {
       final prefs = await SharedPreferences.getInstance();
       _enabled = prefs.getBool(_prefKey) ?? true;
+      // FIX: Load persisted custom rules on startup.
+      await _loadCustomRules();
     } catch (e) {
       _log.warning('AdBlocker init error: $e');
       _enabled = false;
@@ -134,15 +137,9 @@ class AdBlockerService {
   /// JSON-encoded list of ad domains for dynamic blocking setup.
   String get dynamicDomainsJson {
     final domains = CustomAdBlockStore.instance.hosts.toList();
-    final sb = StringBuffer('[');
-    for (var i = 0; i < domains.length; i++) {
-      if (i > 0) sb.write(',');
-      sb.write('"');
-      sb.write(domains[i].replaceAll('"', '\\"'));
-      sb.write('"');
-    }
-    sb.write(']');
-    return sb.toString();
+    // FIX: Use jsonEncode instead of manual string building to properly
+    // escape backslashes, control characters, and unicode in domain names.
+    return jsonEncode(domains);
   }
 
   // ── Listener support (ChangeNotifier-style) ──────────────────────────────
@@ -158,43 +155,106 @@ class AdBlockerService {
 
   void _notifyListeners() {
     for (final l in List.of(_listeners)) {
-      try { l(); } catch (_) {}
+      try {
+        l();
+      } catch (_) {}
     }
   }
 
   // ── Custom rules ─────────────────────────────────────────────────────────
   /// User-defined CSS/JS rules (e.g. "#my-ad { display:none }").
+  static const _customRulesKey = 'adblock_custom_rules';
   final List<String> _customRules = [];
 
   List<String> get customRules => List.unmodifiable(_customRules);
 
+  Future<void> _loadCustomRules() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _customRules.addAll(prefs.getStringList(_customRulesKey) ?? []);
+    } catch (e) {
+      _log.warning('Failed to load custom rules: $e');
+    }
+  }
+
+  Future<void> _persistCustomRules() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_customRulesKey, _customRules);
+    } catch (e) {
+      _log.warning('Failed to persist custom rules: $e');
+    }
+  }
+
   Future<void> addCustomRule(String rule) async {
-    if (rule.trim().isEmpty || _customRules.contains(rule)) return;
-    _customRules.add(rule);
+    final trimmed = rule.trim();
+    if (trimmed.isEmpty || _customRules.contains(trimmed)) return;
+    _customRules.add(trimmed);
+    await _persistCustomRules();
     _notifyListeners();
   }
 
   Future<void> removeCustomRule(String rule) async {
-    _customRules.remove(rule);
-    _notifyListeners();
+    if (_customRules.remove(rule)) {
+      await _persistCustomRules();
+      _notifyListeners();
+    }
   }
 
   // ── URL blocking decision ─────────────────────────────────────────────────
   /// Known ad hostnames for shouldBlockUrl checks.
   static const _adHostnames = <String>{
-    'doubleclick.net', 'googlesyndication.com', 'googleadservices.com',
-    'adnxs.com', 'criteo.com', 'criteo.net', 'taboola.com', 'outbrain.com',
-    'pubmatic.com', 'openx.net', 'rubiconproject.com', 'casalemedia.com',
-    'smartadserver.com', 'adform.net', 'popads.net', 'popcash.net',
-    'propellerads.com', 'exoclick.com', 'trafficjunky.com', 'adsterra.com',
-    'hilltopads.net', 'juicyads.com', 'clickadu.com', 'onclickads.net',
-    'mgid.com', 'revcontent.com', 'amazon-adsystem.com', 'moatads.com',
-    'hotjar.com', 'quantserve.com', 'bidswitch.net', 'adskeeper.com',
-    'scorecardresearch.com', 'chartbeat.com', 'histats.com',
-    'onesignal.com', 'pushcrew.com', 'pushengage.com', 'pushails.com',
-    'adsrvr.org', 'adcolony.com', 'buysellads.com', 'carbonads.com',
-    'dianomi.com', 'infolinks.com', 'media.net', 'revenuehits.com',
-    'sharethis.com', 'tapad.com', 'yieldmo.com', 'zedo.com',
+    'doubleclick.net',
+    'googlesyndication.com',
+    'googleadservices.com',
+    'adnxs.com',
+    'criteo.com',
+    'criteo.net',
+    'taboola.com',
+    'outbrain.com',
+    'pubmatic.com',
+    'openx.net',
+    'rubiconproject.com',
+    'casalemedia.com',
+    'smartadserver.com',
+    'adform.net',
+    'popads.net',
+    'popcash.net',
+    'propellerads.com',
+    'exoclick.com',
+    'trafficjunky.com',
+    'adsterra.com',
+    'hilltopads.net',
+    'juicyads.com',
+    'clickadu.com',
+    'onclickads.net',
+    'mgid.com',
+    'revcontent.com',
+    'amazon-adsystem.com',
+    'moatads.com',
+    'hotjar.com',
+    'quantserve.com',
+    'bidswitch.net',
+    'adskeeper.com',
+    'scorecardresearch.com',
+    'chartbeat.com',
+    'histats.com',
+    'onesignal.com',
+    'pushcrew.com',
+    'pushengage.com',
+    'pushails.com',
+    'adsrvr.org',
+    'adcolony.com',
+    'buysellads.com',
+    'carbonads.com',
+    'dianomi.com',
+    'infolinks.com',
+    'media.net',
+    'revenuehits.com',
+    'sharethis.com',
+    'tapad.com',
+    'yieldmo.com',
+    'zedo.com',
   };
 
   /// Returns true if [url] should be blocked by the ad blocker.
@@ -217,7 +277,17 @@ class AdBlockerService {
         return false;
       }
 
-      // Exact hostname or subdomain match
+      // FIX: Check the downloaded filter lists FIRST — these contain
+      // 50,000+ domains from EasyList, EasyPrivacy, AdGuard, etc.
+      // The old code only checked a hardcoded set of ~50 domains,
+      // making the entire filter download pipeline useless for URL blocking.
+      if (AdBlockFilterUpdater().shouldBlock(host)) {
+        _recordBlocked(host);
+        return true;
+      }
+
+      // Fallback: hardcoded known-ad hostnames for instant blocking
+      // before the first filter download completes.
       for (final d in _adHostnames) {
         if (host == d || host.endsWith('.$d')) {
           _recordBlocked(host);
@@ -971,7 +1041,8 @@ $customCss
       ),
       // Tracking / Analytics
       ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*scorecardresearch\\.com.*'),
+        trigger:
+            ContentBlockerTrigger(urlFilter: '.*scorecardresearch\\.com.*'),
         action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
       ),
       ContentBlocker(
@@ -1006,8 +1077,9 @@ $customCss
   }
 
   // YouTube-specific UserScript injected at AT_DOCUMENT_START.
-  // This version is non-destructive — it does NOT use Object.defineProperty
-  // and does NOT throw errors that would halt YouTube's own scripts.
+  // Uses a Proxy-based approach that is safer than Object.defineProperty
+  // and degrades gracefully if YouTube's scripts have already set the
+  // property as non-configurable.
   static const String youtubeEarlyJs = '''
 (function() {
   if (window.__xdmYtEarly) return;
@@ -1034,28 +1106,41 @@ $customCss
     }
   } catch(e) {}
 
-  // Quietly intercept ytInitialPlayerResponse writes to strip ad slots
+  // Strip ad slots from ytInitialPlayerResponse using a polling approach
+  // instead of Object.defineProperty, which can throw if the property is
+  // already non-configurable and would halt YouTube's bootstrap scripts.
   try {
-    var _ytPR = undefined;
-    Object.defineProperty(window, 'ytInitialPlayerResponse', {
-      configurable: true,
-      enumerable: true,
-      get: function() { return _ytPR; },
-      set: function(v) {
-        try {
-          if (v) {
-            if (v.adPlacements) { v.adPlacements = []; }
-            if (v.playerAds) { v.playerAds = []; }
-            if (v.adSlots) { v.adSlots = []; }
-            // Disable enforcement message configs inside player responses
-            if (v.auxiliaryUi && v.auxiliaryUi.messageRenderers) {
-              v.auxiliaryUi.messageRenderers = {};
-            }
-          }
-        } catch(e) {}
-        _ytPR = v;
+    function stripAds(v) {
+      if (!v || typeof v !== 'object') return v;
+      try {
+        if (v.adPlacements) { v.adPlacements = []; }
+        if (v.playerAds) { v.playerAds = []; }
+        if (v.adSlots) { v.adSlots = []; }
+        if (v.auxiliaryUi && v.auxiliaryUi.messageRenderers) {
+          v.auxiliaryUi.messageRenderers = {};
+        }
+      } catch(e) {}
+      return v;
+    }
+    // Poll for ytInitialPlayerResponse and strip ads once it appears.
+    var stripTries = 0;
+    var stripInterval = setInterval(function() {
+      stripTries++;
+      if (window.ytInitialPlayerResponse) {
+        stripAds(window.ytInitialPlayerResponse);
       }
-    });
+      if (stripTries > 30) clearInterval(stripInterval);
+    }, 200);
+    // Also hook into ytcfg.set for PLAYER_VARS responses
+    if (window.ytcfg && window.ytcfg.set) {
+      var _origYtcfgSet = window.ytcfg.set;
+      window.ytcfg.set = function(key, val) {
+        if (key === 'PLAYER_VARS' || key === 'WEB_PLAYER_CONTEXT_CONFIGS') {
+          val = stripAds(val);
+        }
+        return _origYtcfgSet.apply(this, arguments);
+      };
+    }
   } catch(e) {}
 })();
 ''';

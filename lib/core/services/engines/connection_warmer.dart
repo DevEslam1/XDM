@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
+import 'package:synchronized/synchronized.dart';
 import '../../../features/downloads/models/download_task.dart';
 
 class ConnectionWarmer {
@@ -7,6 +8,9 @@ class ConnectionWarmer {
   static final Map<String, DateTime> _warmedHosts = {};
   static const _warmTtl = Duration(minutes: 5);
   static const _maxWarmedHosts = 10;
+  // FIX: Guard concurrent access to _warmedHosts since warmConnection can
+  // be called from multiple download tasks simultaneously.
+  static final _lock = Lock();
 
   static Future<void> warmConnection(String url) async {
     try {
@@ -14,16 +18,22 @@ class ConnectionWarmer {
       if (uri == null || !uri.hasAuthority) return;
 
       final host = uri.host;
-      final lastWarm = _warmedHosts[host];
-      if (lastWarm != null && DateTime.now().difference(lastWarm) < _warmTtl) {
-        return;
-      }
-
-      if (_warmedHosts.length >= _maxWarmedHosts) {
-        final oldest = _warmedHosts.entries
-            .reduce((a, b) => a.value.isBefore(b.value) ? a : b);
-        _warmedHosts.remove(oldest.key);
-      }
+      // Check-and-update under a lock to prevent concurrent warm calls
+      // for the same host from racing.
+      final shouldWarm = await _lock.synchronized(() {
+        final lastWarm = _warmedHosts[host];
+        if (lastWarm != null &&
+            DateTime.now().difference(lastWarm) < _warmTtl) {
+          return false;
+        }
+        if (_warmedHosts.length >= _maxWarmedHosts) {
+          final oldest = _warmedHosts.entries
+              .reduce((a, b) => a.value.isBefore(b.value) ? a : b);
+          _warmedHosts.remove(oldest.key);
+        }
+        return true;
+      });
+      if (!shouldWarm) return;
 
       final dio = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 5),

@@ -258,7 +258,17 @@ class DownloadProgress {
   ///          (currentSize + counterpartSize)
   double? get ytCombinedProgress {
     if (ytStreamKind == null) return null;
-    final counterpartSize = ytCounterpartSize ?? 0;
+
+    // FIX-YT-NULL-COUNTERPART: When counterpart size is unknown (null),
+    // show only this stream's progress. Previously null was coerced to
+    // 0, which made the combined bar show 100% when this stream
+    // completed even though the counterpart hadn't been resolved yet.
+    if (ytCounterpartSize == null) {
+      if (fileSize <= 0) return null;
+      return (downloadedBytes / fileSize).clamp(0.0, 1.0);
+    }
+
+    final counterpartSize = ytCounterpartSize!;
     final counterpartDownloaded = ytCounterpartDownloadedBytes ?? 0;
 
     // FIX-YT-LIVE: True combined progress once both streams are known to be
@@ -970,6 +980,12 @@ class DownloadEngine {
     // FIX-RESUME-BYTES: Move alreadyOnDisk outside the if-block so the
     // 'starting' progress update can report actual on-disk bytes.
     int alreadyOnDisk = 0;
+    // FIX-STARTING-CHUNKS: Extract per-chunk details from the loaded
+    // state so the 'starting' emission on resume includes chunk-level
+    // progress.
+    List<ChunkDetail>? startingChunkDetails;
+    int? startingTotalChunks;
+    int? startingCompletedChunks;
     if (resolvedFileSize > 0) {
       final saveDir = Directory(localFilePath).parent.path;
       try {
@@ -980,6 +996,26 @@ class DownloadEngine {
           knownFileSize: resolvedFileSize,
         );
         alreadyOnDisk = state.state.downloadedBytes;
+        // FIX-STARTING-CHUNKS: Build chunk details from the loaded state
+        // so the user sees per-part progress immediately on resume.
+        if (!isTorrent && state.state.chunks.isNotEmpty) {
+          startingChunkDetails = state.state.chunks.asMap().entries.map((e) {
+            final c = e.value;
+            final rawRatio = c.ratio;
+            final safeRatio = rawRatio < 0.0 ? 0.0 : rawRatio.clamp(0.0, 1.0);
+            return ChunkDetail(
+              index: e.key,
+              start: c.start,
+              end: c.end,
+              downloaded: c.downloaded,
+              size: c.size,
+              ratio: safeRatio,
+            );
+          }).toList();
+          startingTotalChunks = startingChunkDetails.length;
+          startingCompletedChunks =
+              startingChunkDetails.where((c) => c.isComplete).length;
+        }
       } catch (_) {}
       final remaining =
           (resolvedFileSize - alreadyOnDisk).clamp(0, resolvedFileSize);
@@ -1072,6 +1108,10 @@ class DownloadEngine {
     // bar is accurate from the very first 'starting' tick on resume.
     // Uses putIfAbsent to avoid overwriting a value already set by the
     // counterpart stream's download().
+    // FIX-YT-START-LIVE-COUNTERPART: Use live counterpart bytes if
+    // available — the counterpart stream may have progressed since spawn,
+    // making the spawn-time ytCounterpartDownloadedBytes stale.
+    int? ytStartingCounterpartBytes = ytCounterpartDownloadedBytes;
     if (ytStreamKind != null) {
       DownloadEngine._ytLiveBytes.putIfAbsent(taskId, () => alreadyOnDisk);
       // FIX-LINT: Assign to a local final variable to properly promote
@@ -1084,6 +1124,16 @@ class DownloadEngine {
             counterpartId,
             () => counterpartBytes,
           );
+        }
+      }
+      // Read back the live value — the counterpart may have already set
+      // its own live bytes which are more accurate than the spawn-time
+      // value passed via ytCounterpartDownloadedBytes.
+      final ytStartCid = _ytCounterpartTaskIds[taskId];
+      if (ytStartCid != null) {
+        final live = DownloadEngine._ytLiveBytes[ytStartCid];
+        if (live != null) {
+          ytStartingCounterpartBytes = live;
         }
       }
     }
@@ -1099,7 +1149,7 @@ class DownloadEngine {
       cycleState: 'starting',
       ytStreamKind: ytStreamKind,
       ytCounterpartSize: ytCounterpartSize,
-      ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
+      ytCounterpartDownloadedBytes: ytStartingCounterpartBytes,
       // FIX-YT-START-LIVE: Include this stream's live bytes so the
       // combined audio+video progress bar is accurate from the first tick.
       ytDownloadedBytes: alreadyOnDisk,
@@ -1107,6 +1157,12 @@ class DownloadEngine {
       // details screen can render the file tree immediately for .torrent
       // downloads where files are known before the engine starts.
       torrentFiles: isTorrent ? getTorrentFiles?.call() : null,
+      // FIX-STARTING-CHUNKS: Include per-chunk details on 'starting' so
+      // the HTTP details screen shows per-part progress immediately on
+      // resume instead of waiting for the first worker tick.
+      chunkDetails: startingChunkDetails,
+      totalChunks: startingTotalChunks,
+      completedChunks: startingCompletedChunks,
     ));
 
     final pool = await _ensurePool();
@@ -1118,15 +1174,20 @@ class DownloadEngine {
     Timer? inactivityTimer;
     // FIX-CYCLE-PAUSE: Track last known progress so we can emit a 'paused'
     // progress update with correct byte counts when the user cancels.
-    int lastDownloadedBytes = 0;
+    // FIX-STARTING-BYTES: Initialize with alreadyOnDisk so an immediate
+    // pause (before any worker tick) shows correct resume bytes.
+    int lastDownloadedBytes = alreadyOnDisk;
     int lastFileSize = resolvedFileSize;
     // FIX-CYCLE-PAUSE-CHUNKS: Preserve last chunk details so the 'paused',
     // 'failed', and 'updating_links' progress updates include per-chunk
     // progress instead of dropping the chunk-level view when the cycle
     // transitions.
-    List<ChunkDetail>? lastChunkDetails;
-    int? lastTotalChunks;
-    int? lastCompletedChunks;
+    // FIX-STARTING-CHUNKS: Initialize with starting chunk details so
+    // pause/failed/updating_links emissions retain per-chunk data even
+    // if no worker progress tick was received before the transition.
+    List<ChunkDetail>? lastChunkDetails = startingChunkDetails;
+    int? lastTotalChunks = startingTotalChunks;
+    int? lastCompletedChunks = startingCompletedChunks;
 
     void resetInactivityTimer() {
       inactivityTimer?.cancel();
@@ -1254,11 +1315,33 @@ class DownloadEngine {
 
           // FIX-CYCLE: Derive structured cycle state from status message.
           final sm = p['statusMessage'] as String?;
-          final cycle = _deriveCycleState(
+          var cycle = _deriveCycleState(
             sm,
             cancelToken.isCancelled,
             isTorrent,
           );
+          // FIX-YT-CYCLE-COMBINED: If this YouTube stream reports
+          // 'completed' but the counterpart stream is still downloading,
+          // keep the cycle as 'downloading' so the UI doesn't show
+          // 'completed' prematurely. The overall download is only
+          // complete when BOTH audio and video streams finish.
+          if (cycle == 'completed' && ytStreamKind != null) {
+            // FIX-YT-CYCLE-UNKNOWN-COUNTERPART: When counterpart size is
+            // unknown (null), we cannot confirm the counterpart stream is
+            // done. Default to 'downloading' so the UI doesn't show
+            // 'completed' prematurely for audio+video downloads where only
+            // one stream has resolved.
+            final cpSize =
+                ytCounterpartSize ?? (p['ytCounterpartSize'] as num?)?.toInt();
+            if (cpSize == null || cpSize <= 0) {
+              cycle = 'downloading';
+            } else {
+              final cpDl = liveCounterpart ?? 0;
+              if (cpDl < cpSize) {
+                cycle = 'downloading';
+              }
+            }
+          }
 
           // FIX-HTTP-PARTS: Derive explicit chunk completion counts.
           // FIX-HTTP-PARTS-NULL: When chunkDetails is null (worker didn't
@@ -1336,8 +1419,61 @@ class DownloadEngine {
                 message: 'Download cancelled.',
               ));
             }
-          } else if (!completer.isCompleted) {
-            completer.complete();
+          } else {
+            // FIX-CYCLE-DONE: Emit a final 'completed' progress so the UI
+            // transitions immediately even if the worker's last progress
+            // tick didn't include a 'completed' status message. Preserves
+            // chunk details and YT live bytes for accurate final rendering.
+            // FIX-YT-DONE-CYCLE: If this is a YouTube stream and the
+            // counterpart is still downloading (or its size is unknown),
+            // keep cycle as 'downloading' so the UI doesn't show
+            // 'completed' prematurely for audio+video downloads.
+            final ytDoneCid = _ytCounterpartTaskIds[taskId];
+            final ytDoneLiveCp = ytDoneCid != null
+                ? DownloadEngine._ytLiveBytes[ytDoneCid]
+                : null;
+            if (lastFileSize > 0) {
+              lastDownloadedBytes = lastFileSize;
+            }
+            // FIX-CHUNK-COMPLETE-DONE: On done, count ALL chunks as
+            // complete (including indeterminate-size chunks whose
+            // isComplete getter returns false due to size < 0).
+            if (lastChunkDetails != null && lastTotalChunks != null) {
+              lastCompletedChunks = lastTotalChunks;
+            }
+            var doneCycle = 'completed';
+            if (ytStreamKind != null) {
+              final cpSize = ytCounterpartSize;
+              if (cpSize == null || cpSize <= 0) {
+                doneCycle = 'downloading';
+              } else {
+                final cpDl = ytDoneLiveCp ?? 0;
+                if (cpDl < cpSize) {
+                  doneCycle = 'downloading';
+                }
+              }
+            }
+            onProgress(DownloadProgress(
+              downloadedBytes: lastDownloadedBytes,
+              fileSize: lastFileSize,
+              speed: 0.0,
+              eta: null,
+              fileName: resolvedFileName,
+              supportsResume: resolvedSupportsResume,
+              statusMessage: 'Completed',
+              cycleState: doneCycle,
+              ytStreamKind: ytStreamKind,
+              ytCounterpartSize: ytCounterpartSize,
+              ytCounterpartDownloadedBytes:
+                  ytDoneLiveCp ?? ytCounterpartDownloadedBytes,
+              ytDownloadedBytes: DownloadEngine._ytLiveBytes[taskId],
+              chunkDetails: lastChunkDetails,
+              totalChunks: lastTotalChunks,
+              completedChunks: lastCompletedChunks,
+            ));
+            if (!completer.isCompleted) {
+              completer.complete();
+            }
           }
         case 'error':
           inactivityTimer?.cancel();
@@ -1556,7 +1692,9 @@ class DownloadEngine {
       // FIX-TOR-RESUME-BYTES: Report actual downloaded bytes from stored
       // file data so the overall progress bar doesn't drop to 0 on resume.
       downloadedBytes: initDownloadedFileBytes,
-      fileSize: knownFileSize,
+      // FIX-TOR-START-SIZE: Use total selected file bytes when available
+      // (more accurate for partial selections) instead of knownFileSize.
+      fileSize: initTotalFileBytes > 0 ? initTotalFileBytes : knownFileSize,
       speed: 0.0,
       eta: null,
       supportsResume: true,
@@ -1567,9 +1705,10 @@ class DownloadEngine {
       // can render file counts and total size immediately for .torrent
       // downloads where files are known before the engine starts.
       totalFiles: initTotalFiles > 0 ? initTotalFiles : null,
+      completedFiles: initTotalFiles > 0 ? initCompletedFiles : null,
       totalFileBytes: initTotalFileBytes > 0 ? initTotalFileBytes : null,
-      downloadedFileBytes: initDownloadedFileBytes,
-      completedFiles: initCompletedFiles,
+      downloadedFileBytes:
+          initTotalFileBytes > 0 ? initDownloadedFileBytes : null,
     ));
     int id = torrentId ?? -1;
     if (id >= 0 && !TorrentService.isTorrentAlive(id)) {
@@ -1669,13 +1808,13 @@ class DownloadEngine {
         totalFiles: pTotal > 0 ? pTotal : null,
         completedFiles: pTotal > 0 ? pDone : null,
         totalFileBytes: pBytes > 0 ? pBytes : null,
-        downloadedFileBytes: pDl > 0 ? pDl : null,
+        downloadedFileBytes: pBytes > 0 ? pDl : null,
       ));
     });
 
     try {
       await _waitForMetadata(id, url, cancelToken, onProgress,
-          initialFileSize: knownFileSize);
+          initialFileSize: knownFileSize, getTorrentFiles: getTorrentFiles);
 
       _applyFilePriorities(id, getTorrentFiles?.call());
 
@@ -1730,6 +1869,7 @@ class DownloadEngine {
           timeout: recheckTimeout,
           onProgress: onProgress,
           knownFileSize: effectiveSize,
+          getTorrentFiles: getTorrentFiles,
         );
       }
       if (cancelToken.isCancelled) return;
@@ -1809,6 +1949,7 @@ class DownloadEngine {
     CancelToken cancelToken,
     ValueChangedProgress onProgress, {
     int initialFileSize = 0,
+    List<Map<String, dynamic>>? Function()? getTorrentFiles,
   }) async {
     final completer = Completer<void>();
     StreamSubscription? sub;
@@ -1836,14 +1977,44 @@ class DownloadEngine {
     heartbeat = Timer.periodic(const Duration(seconds: 10), (_) {
       if (completer.isCompleted) return;
       elapsed += 10;
+      // FIX-FETCH-META-FILES: Include stored torrent files so the details
+      // screen retains the file tree and per-file percentages during
+      // metadata fetching heartbeats instead of going blank.
+      final metaFiles = getTorrentFiles?.call();
+      int mfTotal = 0, mfDone = 0, mfBytes = 0, mfDl = 0;
+      if (metaFiles != null) {
+        for (final f in metaFiles) {
+          final len = (f['length'] as num?)?.toInt() ?? 0;
+          var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+          if (len > 0) {
+            dl = dl.clamp(0, len);
+            f['downloadedBytes'] = dl;
+            f['progress'] = (dl / len).clamp(0.0, 1.0);
+          } else {
+            f['downloadedBytes'] = 0;
+            f['progress'] = 1.0;
+          }
+          if (isTorrentFileSelected(f)) {
+            mfTotal++;
+            mfBytes += len;
+            mfDl += dl;
+            if (len == 0 || dl >= len) mfDone++;
+          }
+        }
+      }
       onProgress(DownloadProgress(
-        downloadedBytes: 0,
+        downloadedBytes: mfDl,
         fileSize:
             initialFileSize > 0 ? initialFileSize : 0, // FIX-L4: pass size
         speed: 0,
         eta: null,
         statusMessage: 'Fetching metadata… (${elapsed}s / 300s)',
         cycleState: 'fetching_metadata', // FIX-CYCLE-MISSING
+        torrentFiles: metaFiles,
+        totalFiles: mfTotal > 0 ? mfTotal : null,
+        completedFiles: mfTotal > 0 ? mfDone : null,
+        totalFileBytes: mfBytes > 0 ? mfBytes : null,
+        downloadedFileBytes: mfBytes > 0 ? mfDl : null,
       ));
     });
     final timeout = Timer(const Duration(seconds: 300), () {
@@ -2094,18 +2265,47 @@ class DownloadEngine {
       // files), fall through to normal progress emission so the UI doesn't
       // freeze on "Fetching metadata…".
       if (totalSize <= 0 && !torrent.hasMetadata) {
+        // FIX-FETCH-META-FILES-LISTEN: Include stored torrent files and
+        // file-level summary so the details screen retains the file tree
+        // and per-file percentages during metadata fetching.
+        final fmFiles = getTorrentFiles?.call() ?? resolvedFiles;
+        int fmTotal = 0, fmDone = 0, fmBytes = 0, fmDl = 0;
+        if (fmFiles != null) {
+          for (final f in fmFiles) {
+            final len = (f['length'] as num?)?.toInt() ?? 0;
+            var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+            if (len > 0) {
+              dl = dl.clamp(0, len);
+              f['downloadedBytes'] = dl;
+              f['progress'] = (dl / len).clamp(0.0, 1.0);
+            } else {
+              f['downloadedBytes'] = 0;
+              f['progress'] = 1.0;
+            }
+            if (isTorrentFileSelected(f)) {
+              fmTotal++;
+              fmBytes += len;
+              fmDl += dl;
+              if (len == 0 || dl >= len) fmDone++;
+            }
+          }
+        }
         onProgress(DownloadProgress(
-          downloadedBytes: 0, // suppress until metadata arrives
-          fileSize: 0,
+          downloadedBytes: fmDl,
+          fileSize: fmBytes > 0 ? fmBytes : 0,
           speed: (stateLabel == 'seeding')
               ? torrent.uploadRate.toDouble()
               : torrent.downloadRate.toDouble(),
           eta: null,
           fileName: resolvedName,
-          torrentFiles: resolvedFiles,
+          torrentFiles: fmFiles,
           supportsResume: true,
           statusMessage: 'Fetching metadata…',
           cycleState: 'fetching_metadata',
+          totalFiles: fmTotal > 0 ? fmTotal : null,
+          completedFiles: fmTotal > 0 ? fmDone : null,
+          totalFileBytes: fmBytes > 0 ? fmBytes : null,
+          downloadedFileBytes: fmBytes > 0 ? fmDl : null,
         ));
         return; // skip normal progress emission
       }
@@ -2621,6 +2821,7 @@ class DownloadEngine {
     required Duration timeout,
     ValueChangedProgress? onProgress,
     int knownFileSize = 0,
+    List<Map<String, dynamic>>? Function()? getTorrentFiles,
   }) async {
     final completer = Completer<void>();
     StreamSubscription? sub;
@@ -2646,6 +2847,31 @@ class DownloadEngine {
           final label = tor.stateLabel.toLowerCase();
           if (label.contains('checking')) {
             final recheckPct = tor.progress.clamp(0.0, 1.0);
+            // FIX-RECHECK-FILES: Include stored torrent files so the
+            // details screen retains the file tree and per-file
+            // percentages during recheck progress updates.
+            final rcFiles = getTorrentFiles?.call();
+            int rcTotal = 0, rcDone = 0, rcBytes = 0, rcDl = 0;
+            if (rcFiles != null) {
+              for (final f in rcFiles) {
+                final len = (f['length'] as num?)?.toInt() ?? 0;
+                var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                if (len > 0) {
+                  dl = dl.clamp(0, len);
+                  f['downloadedBytes'] = dl;
+                  f['progress'] = (dl / len).clamp(0.0, 1.0);
+                } else {
+                  f['downloadedBytes'] = 0;
+                  f['progress'] = 1.0;
+                }
+                if (isTorrentFileSelected(f)) {
+                  rcTotal++;
+                  rcBytes += len;
+                  rcDl += dl;
+                  if (len == 0 || dl >= len) rcDone++;
+                }
+              }
+            }
             onProgress(DownloadProgress(
               downloadedBytes: (recheckPct *
                       (tor.totalWanted > 0 ? tor.totalWanted : knownFileSize))
@@ -2655,6 +2881,11 @@ class DownloadEngine {
               eta: null,
               statusMessage: 'Checking pieces… ${(recheckPct * 100).toInt()}%',
               cycleState: 'checking', // FIX-CYCLE-MISSING
+              torrentFiles: rcFiles,
+              totalFiles: rcTotal > 0 ? rcTotal : null,
+              completedFiles: rcTotal > 0 ? rcDone : null,
+              totalFileBytes: rcBytes > 0 ? rcBytes : null,
+              downloadedFileBytes: rcBytes > 0 ? rcDl : null,
             ));
           }
         }
@@ -2676,15 +2907,47 @@ class DownloadEngine {
         elapsed += 5;
         final isChecking =
             lastSeen?.toLowerCase().contains('checking') ?? false;
+        // FIX-WAIT-STATE-FILES: Include stored torrent files so the
+        // details screen retains the file tree and per-file percentages
+        // during checking/preparing heartbeats.
+        final hbFiles = getTorrentFiles?.call();
+        int hbTotal = 0, hbDone = 0, hbBytes = 0, hbDl = 0;
+        if (hbFiles != null) {
+          for (final f in hbFiles) {
+            final len = (f['length'] as num?)?.toInt() ?? 0;
+            var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+            if (len > 0) {
+              dl = dl.clamp(0, len);
+              f['downloadedBytes'] = dl;
+              f['progress'] = (dl / len).clamp(0.0, 1.0);
+            } else {
+              f['downloadedBytes'] = 0;
+              f['progress'] = 1.0;
+            }
+            if (isTorrentFileSelected(f)) {
+              hbTotal++;
+              hbBytes += len;
+              hbDl += dl;
+              if (len == 0 || dl >= len) hbDone++;
+            }
+          }
+        }
         onProgress(DownloadProgress(
-          downloadedBytes: lastCheckedBytes,
-          fileSize: lastCheckedTotal > 0 ? lastCheckedTotal : knownFileSize,
+          downloadedBytes: isChecking ? lastCheckedBytes : hbDl,
+          fileSize: lastCheckedTotal > 0
+              ? lastCheckedTotal
+              : (knownFileSize > 0 ? knownFileSize : hbBytes),
           speed: 0.0,
           eta: null,
           statusMessage: isChecking
               ? 'Verifying downloaded data… (${elapsed}s)'
               : 'Preparing… (${elapsed}s)',
           cycleState: isChecking ? 'checking' : 'starting',
+          torrentFiles: hbFiles,
+          totalFiles: hbTotal > 0 ? hbTotal : null,
+          completedFiles: hbTotal > 0 ? hbDone : null,
+          totalFileBytes: hbBytes > 0 ? hbBytes : null,
+          downloadedFileBytes: hbBytes > 0 ? hbDl : null,
         ));
       });
     }
@@ -2774,11 +3037,13 @@ class DownloadEngine {
     if (lower.contains('retry')) return 'retrying';
     if (lower.contains('failed') || lower.contains('error')) return 'failed';
     if (lower.contains('seeding')) return 'seeding';
-    // FIX-CYCLE-RESUME: Map 'resume' / 'resuming' to 'starting' so the
-    // UI shows an active spinner when a paused download is resumed,
-    // instead of falling through to 'downloading' which skips the
-    // starting transition animation.
-    if (lower.contains('resum')) return 'starting';
+    // FIX-CYCLE-RESUME: Map 'resume' / 'resuming' / 'starting' to
+    // 'starting' so the UI shows an active spinner when a paused download
+    // is resumed, instead of falling through to 'downloading' which
+    // skips the starting transition animation.
+    if (lower.contains('resum') || lower.contains('starting')) {
+      return 'starting';
+    }
     return 'downloading';
   }
 }

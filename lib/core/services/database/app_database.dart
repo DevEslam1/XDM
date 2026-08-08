@@ -711,7 +711,7 @@ class AppDatabase extends _$AppDatabase {
           }
           if (to > 17) {
             _dbLog.warning(
-              'AppDatabase: Upgrade target version $to is higher than version 16, no specific migrations defined!',
+              'AppDatabase: Upgrade target version $to is higher than version 17, no specific migrations defined!',
             );
           }
         },

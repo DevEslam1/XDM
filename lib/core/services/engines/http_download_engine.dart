@@ -123,13 +123,29 @@ class _AdaptiveTracker {
 
   final int currentThreads;
   final List<double> _samples = [];
+  final List<int> _sampleThreads = [];
   int recommendation = 0;
 
   void add(double bytesPerSec, int threads) {
     if (bytesPerSec > 0) {
       _samples.add(bytesPerSec);
-      if (_samples.length > 12) _samples.removeAt(0);
+      _sampleThreads.add(threads);
+      if (_samples.length > 12) {
+        _samples.removeAt(0);
+        _sampleThreads.removeAt(0);
+      }
     }
+  }
+
+  /// Average per-thread throughput from recent samples.
+  double get averagePerThreadSpeed {
+    if (_samples.isEmpty) return 0;
+    double sum = 0;
+    for (var i = 0; i < _samples.length; i++) {
+      final t = _sampleThreads[i] > 0 ? _sampleThreads[i] : 1;
+      sum += _samples[i] / t;
+    }
+    return sum / _samples.length;
   }
 
   /// Plateau detection: three consecutive samples within ±5% mean more

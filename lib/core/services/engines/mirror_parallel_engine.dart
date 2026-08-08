@@ -24,15 +24,19 @@ class MirrorParallelEngine {
     if (_mirrorUrls.isEmpty || totalThreads <= 0) return {};
 
     final distribution = <String, List<int>>{};
-    final threadsPerMirror = totalThreads ~/ _mirrorUrls.length;
-    var remainder = totalThreads % _mirrorUrls.length;
+    final activeMirrorCount = _mirrorUrls.length.clamp(0, totalThreads);
+    final activeMirrors = _mirrorUrls.take(activeMirrorCount).toList();
+    final threadsPerMirror = totalThreads ~/ activeMirrors.length;
+    var remainder = totalThreads % activeMirrors.length;
 
     var threadIndex = 0;
-    for (final mirror in _mirrorUrls) {
+    for (final mirror in activeMirrors) {
       final count = threadsPerMirror + (remainder > 0 ? 1 : 0);
       if (remainder > 0) remainder--;
       distribution[mirror] = List.generate(count, (_) => threadIndex++);
     }
+    // FIX: Mirrors with 0 assigned threads are intentionally excluded from
+    // the map so downstream code never iterates over empty thread lists.
     return distribution;
   }
 

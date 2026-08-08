@@ -59,7 +59,23 @@ class BackendHealthService {
     }).toList();
 
     healthy.sort((a, b) => a.priority.compareTo(b.priority));
-    return healthy.isNotEmpty ? healthy : List.from(_backends);
+    if (healthy.isNotEmpty) return healthy;
+
+    // FIX: Instead of returning ALL backends (which defeats the purpose of
+    // cooldowns), return only the one whose cooldown expires soonest.
+    // This gives the system a chance to recover instead of immediately
+    // hammering a known-bad backend.
+    if (_unhealthyCooldowns.isEmpty) return List.from(_backends);
+    BackendConfig? soonest;
+    DateTime? soonestTime;
+    for (final b in _backends) {
+      final cd = _unhealthyCooldowns[b.baseUrl];
+      if (cd != null && (soonestTime == null || cd.isBefore(soonestTime))) {
+        soonestTime = cd;
+        soonest = b;
+      }
+    }
+    return soonest != null ? [soonest] : List.from(_backends);
   }
 
   void markUnhealthy(String baseUrl, [Duration? customDuration]) {
