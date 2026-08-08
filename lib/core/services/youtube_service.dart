@@ -565,7 +565,8 @@ class YoutubeService {
     try {
       final settings = SettingsProvider.instance;
       if (!settings.useRemoteBackend) {
-        return null;
+        throw Exception(
+            'Remote backend is disabled in settings. Please enable it in Settings.');
       }
       final results = await _resolveWithRetry(
         targetUrl,

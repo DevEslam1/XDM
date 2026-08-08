@@ -523,8 +523,28 @@ class XdmBackendClient {
       final statusCode = error.response?.statusCode;
       final responseData = error.response?.data;
       String? backendMsg;
-      if (responseData is Map && responseData['detail'] != null) {
-        backendMsg = responseData['detail'].toString();
+      if (responseData != null) {
+        if (responseData is Map) {
+          backendMsg = (responseData['detail'] ??
+                  responseData['message'] ??
+                  responseData['error'] ??
+                  responseData['msg'])
+              ?.toString();
+        } else if (responseData is String) {
+          backendMsg = responseData;
+          try {
+            final decoded = jsonDecode(responseData);
+            if (decoded is Map) {
+              backendMsg = (decoded['detail'] ??
+                      decoded['message'] ??
+                      decoded['error'] ??
+                      decoded['msg'])
+                  ?.toString();
+            }
+          } catch (_) {}
+        } else {
+          backendMsg = responseData.toString();
+        }
       }
 
       if (statusCode == 400) {

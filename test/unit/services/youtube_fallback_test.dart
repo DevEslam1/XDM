@@ -66,47 +66,25 @@ void main() {
     await server.close(force: true);
   });
 
-  test('backend network error triggers local fallback path', () async {
-    mockExtractorChannel([
-      {
-        'src': 'https://example.com/video.mp4',
-        'type': 'muxed',
-        'quality': '1080p',
-        'ext': 'mp4',
-        'title': 'Test Video',
-        'size': 1000,
-        'videoSize': 1000,
-      },
-    ]);
+  test('backend network error throws exception (no local fallback)', () async {
+    await expectLater(
+      YoutubeService.getStreams(testUrl),
+      throwsA(isA<Exception>()),
+    );
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
-    final streams = await YoutubeService.getStreams(testUrl);
-    expect(streams, isNotEmpty);
-    expect(streams.first['type'], 'muxed');
-    expect(streams.first['title'], 'Test Video');
-  });
-
-  test('connection error triggers fallback path', () async {
+  test('connection error throws exception (no local fallback)', () async {
     // Bind and immediately close a server so its port refuses connections.
     final deadServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final deadPort = deadServer.port;
     await deadServer.close(force: true);
     await SettingsProvider.instance.setBackendUrl('http://127.0.0.1:$deadPort');
 
-    mockExtractorChannel([
-      {
-        'src': 'https://example.com/video.mp4',
-        'type': 'audio',
-        'quality': '128kbps',
-        'ext': 'mp4',
-        'title': 'Audio Only',
-        'size': 500,
-      },
-    ]);
-
-    final streams = await YoutubeService.getStreams(testUrl);
-    expect(streams, isNotEmpty);
-    expect(streams.first['type'], 'audio');
-  });
+    await expectLater(
+      YoutubeService.getStreams(testUrl),
+      throwsA(isA<Exception>()),
+    );
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('all methods failing shows error to user', () async {
     // Local extractor returns nothing → total failure must surface an error.
