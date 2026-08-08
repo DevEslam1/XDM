@@ -795,6 +795,10 @@ class HttpTransferJob {
           cmd.url.contains('expire=') ||
           cmd.url.contains('signature=');
       if (isYtOrSigned && (status == 401 || status == 403)) {
+        // FIX-YT-UPDATING: Emit a progress update with 'updating_links'
+        // cycle state BEFORE throwing so the UI shows "Updating links…"
+        // during the URL refresh window instead of a generic error.
+        _emitProgress(0, statusMessage: 'Updating links (URL expired)…');
         throw UrlExpiredException(
           'YouTube / signed URL expired during identity probe (HTTP $status).',
         );
@@ -1069,6 +1073,10 @@ class HttpTransferJob {
             // FIX-URL-EXPIRY-ALL-MIRRORS: For YouTube / signed URLs, every
             // mirror shares the same expiry signature — flag this so the
             // orchestrator refreshes ALL mirrors in one pass.
+            // FIX-YT-UPDATING: Emit progress with 'updating_links' cycle
+            // state before throwing so the UI shows the correct status
+            // during the URL refresh window.
+            _emitProgress(0, statusMessage: 'Updating links (URL expired)…');
             throw _UrlExpiredException(
               'Download URL expired (HTTP $status). Refresh required.',
             );
@@ -1087,10 +1095,14 @@ class HttpTransferJob {
             activeUrl = next;
             attempts = 0;
             debugPrint('[DMX-Job] failing over to mirror: $next');
+            _emitProgress(_stopwatch.elapsedMilliseconds,
+                statusMessage: 'Retrying (mirror failover)…');
             continue;
           }
           rethrow;
         }
+        _emitProgress(_stopwatch.elapsedMilliseconds,
+            statusMessage: 'Retrying…');
         await _cancellableDelay(
             Duration(seconds: (attempts * attempts * 2) + Random().nextInt(3)));
       } on PositionalFileWriterException {
@@ -1440,10 +1452,14 @@ class HttpTransferJob {
             activeUrl = next;
             attempts = 0;
             _state!.status = DmxStateStatus.active;
+            _emitProgress(_stopwatch.elapsedMilliseconds,
+                statusMessage: 'Retrying (mirror failover)…');
             continue;
           }
           rethrow;
         }
+        _emitProgress(_stopwatch.elapsedMilliseconds,
+            statusMessage: 'Retrying…');
         await _cancellableDelay(
             Duration(seconds: (attempts * attempts * 2) + Random().nextInt(3)));
       } finally {
@@ -1638,15 +1654,17 @@ class HttpTransferJob {
       if (cmd.ytStreamKind != null) 'ytStreamKind': cmd.ytStreamKind!.name,
       if (cmd.ytCounterpartSize != null)
         'ytCounterpartSize': cmd.ytCounterpartSize,
-      // FIX-YT-LIVE: Do NOT send ytCounterpartDownloadedBytes from cmd —
-      // it was always the stale spawn-time value (0) and never reflected
-      // the counterpart stream's actual progress. The orchestrator must
-      // track both streams' live downloadedBytes (available here as
-      // 'ytDownloadedBytes') and set ytCounterpartDownloadedBytes on the
-      // DownloadProgress before forwarding to the UI.
-      if (cmd.ytStreamKind != null) 'ytDownloadedBytes': downloaded,
-      if (cmd.ytStreamKind != null) 'ytFileSize': total,
-      if (statusMessage != null) 'statusMessage': statusMessage,
+      if (cmd.ytCounterpartDownloadedBytes != null)
+        'ytCounterpartDownloadedBytes': cmd.ytCounterpartDownloadedBytes,
+      // FIX-YT-LIVE: Emit THIS stream's live downloaded bytes so the main
+      // isolate can populate DownloadEngine._ytLiveBytes[taskId] and the
+      // counterpart's combined percentage always reflects BOTH streams.
+      'ytDownloadedBytes': downloaded,
+      // FIX-CYCLE: Emit statusMessage so _deriveCycleState can map
+      // 'Completed' → 'completed', 'Updating links…' → 'updating_links',
+      // 'Checking pieces…' → 'checking', etc. Without this, every cycle
+      // state defaults to 'downloading' regardless of actual status.
+      'statusMessage': statusMessage,
     });
   }
 

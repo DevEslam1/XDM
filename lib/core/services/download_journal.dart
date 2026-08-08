@@ -210,10 +210,16 @@ class TransferState {
         final end = (i == effectiveThreads - 1 && totalSize > 0)
             ? totalSize - 1
             : (start + partSize - 1);
+        final size = end < 0 ? -1 : end - start + 1;
+        // FIX: Clamp downloaded bytes to the chunk size to prevent legacy
+        // state corruption (downloaded > size) from causing false "complete"
+        // states or NaN progress ratios.
         chunks.add(ChunkState(
           start: start,
           end: end,
-          downloaded: downloaded.clamp(0, 1 << 62),
+          downloaded: size < 0
+              ? downloaded.clamp(0, 1 << 62)
+              : downloaded.clamp(0, size),
         ));
       }
       return TransferState(
