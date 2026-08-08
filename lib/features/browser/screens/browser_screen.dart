@@ -3783,27 +3783,34 @@ class _BrowserScreenState extends State<BrowserScreen>
           if (didPop) {
             return;
           }
-          if (downloadProvider.activeTabIndex != 1) {
-            return;
-          }
           if (_tabs.isEmpty ||
               _currentTabIndex < 0 ||
               _currentTabIndex >= _tabs.length) {
-            return;
-          }
-          if (Navigator.canPop(context)) {
-            Navigator.pop(context);
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              downloadProvider.setActiveTabIndex(0);
+            }
             return;
           }
           final activeTab = _tabs[_currentTabIndex];
-          final canGoBack = await activeTab.controller?.canGoBack() ?? false;
-          if (canGoBack) {
+          final webCanGoBack =
+              await activeTab.controller?.canGoBack() ?? false;
+          if (activeTab.canGoBack ||
+              webCanGoBack ||
+              (!activeTab.isHome && activeTab.url.isNotEmpty)) {
             await _goBack();
+            return;
+          }
+          final switched = _switchToPreviousTab();
+          if (switched) {
+            return;
+          }
+          if (!context.mounted) return;
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context);
           } else {
-            final switched = _switchToPreviousTab();
-            if (!switched) {
-              downloadProvider.setActiveTabIndex(0);
-            }
+            downloadProvider.setActiveTabIndex(0);
           }
         },
         child: GeometricGridBackground(
@@ -4700,7 +4707,14 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                   window.XDM_LongPress = { postMessage: function(msg) { window.flutter_inappwebview.callHandler('XDM_LongPress', msg); } };
                                                                   window.XDM_Popups = { postMessage: function(msg) { window.flutter_inappwebview.callHandler('XDM_Popups', msg); } };
                                                                   window.XdmPickerChannel = { postMessage: function(msg) { window.flutter_inappwebview.callHandler('XdmPickerChannel', msg); } };
+                                                                  ${ScriptInjector.kLongPressScript}
                                                                 ''',
+                                                                injectionTime:
+                                                                    UserScriptInjectionTime
+                                                                        .AT_DOCUMENT_START,
+                                                              ),
+                                                              UserScript(
+                                                                source: AdBlockerService.youtubeEarlyJs,
                                                                 injectionTime:
                                                                     UserScriptInjectionTime
                                                                         .AT_DOCUMENT_START,
@@ -4756,6 +4770,35 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                               }
                                                               _log.fine(
                                                                   '[WebView Console] ${consoleMessage.messageLevel}: $msg');
+                                                            },
+                                                            onLongPressHitTestResult:
+                                                                (controller,
+                                                                    hitTestResult) async {
+                                                              final url =
+                                                                  hitTestResult
+                                                                      .extra;
+                                                              if (url != null &&
+                                                                  url.isNotEmpty) {
+                                                                String type =
+                                                                    'link';
+                                                                final hType =
+                                                                    hitTestResult
+                                                                        .type;
+                                                                if (hType ==
+                                                                        InAppWebViewHitTestResultType
+                                                                            .IMAGE_TYPE ||
+                                                                    hType ==
+                                                                        InAppWebViewHitTestResultType
+                                                                            .SRC_IMAGE_ANCHOR_TYPE) {
+                                                                  type = 'image';
+                                                                }
+                                                                _showLongPressSheet(
+                                                                    context,
+                                                                    url,
+                                                                    type,
+                                                                    tabId:
+                                                                        tab.id);
+                                                              }
                                                             },
                                                             gestureRecognizers: <Factory<
                                                                 OneSequenceGestureRecognizer>>{
@@ -4926,27 +4969,39 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                               final url = request
                                                                   .url
                                                                   .toString();
-                                                              final currentUrl = await controller.getUrl();
-                                                              final mainHost = currentUrl?.host.toLowerCase() ?? '';
                                                               final requestHost = request.url.host.toLowerCase();
 
-                                                              // First-party bypass: Never block requests made to first-party hosts or their subdomains
-                                                              bool isFirstParty = false;
-                                                              if (mainHost.isNotEmpty && requestHost.isNotEmpty) {
-                                                                if (requestHost == mainHost ||
-                                                                    requestHost.endsWith('.$mainHost') ||
-                                                                    mainHost.endsWith('.$requestHost')) {
-                                                                  isFirstParty = true;
-                                                                }
-                                                                // sister domains check (e.g. akw.to <-> akwam.to, akoam.com)
-                                                                if (!isFirstParty &&
-                                                                    ((mainHost.contains('akw') && requestHost.contains('akw')) ||
-                                                                     (mainHost.contains('akoam') && requestHost.contains('akoam')))) {
-                                                                  isFirstParty = true;
+                                                              // Never block main-frame requests
+                                                              if (request.isForMainFrame == true) {
+                                                                return null;
+                                                              }
+
+                                                              // Instant fast-path: Never block YouTube, Google, gstatic, or core media infrastructure
+                                                              if (requestHost.contains('youtube') ||
+                                                                  requestHost.contains('youtu.be') ||
+                                                                  requestHost.contains('ytimg') ||
+                                                                  requestHost.contains('googlesyndication') ||
+                                                                  requestHost.contains('googlevideo') ||
+                                                                  requestHost.contains('ggpht') ||
+                                                                  requestHost.contains('googleapis') ||
+                                                                  requestHost.contains('google.com') ||
+                                                                  requestHost.contains('gstatic')) {
+                                                                return null;
+                                                              }
+
+                                                              // Never block same-origin requests (requests to the current site's own domain or subdomains)
+                                                              final pageUrl = tab.url;
+                                                              if (pageUrl.isNotEmpty) {
+                                                                final pageHost = Uri.tryParse(pageUrl)?.host.toLowerCase() ?? '';
+                                                                if (pageHost.isNotEmpty &&
+                                                                    (requestHost == pageHost ||
+                                                                     requestHost.endsWith('.$pageHost') ||
+                                                                     pageHost.endsWith('.$requestHost'))) {
+                                                                  return null;
                                                                 }
                                                               }
 
-                                                              if (!isFirstParty && _adBlocker.shouldBlock(url)) {
+                                                              if (_adBlocker.shouldBlock(url)) {
                                                                 // E10: Blocked Ads Count Indicator
                                                                 _blockedAdsCount++;
                                                                 return WebResourceResponse(

@@ -134,16 +134,10 @@ class ScriptInjector {
   }
 
   Future<void> injectTimerSpeedScript(BrowserTab tab) async {
-    if (!isMediaDomain(tab.url)) return;
-    try {
-      await tab.controller?.evaluateJavascript(source: kTimerSpeedScript);
-    } catch (e) {
-      _log.warning('[DMX Browser] Failed to inject timer speed script: $e');
-    }
+    // No-op: do not override site timers so countdown timers run accurately
   }
 
   Future<void> injectLongPressScriptToTab(BrowserTab tab) async {
-    if (!isMediaDomain(tab.url)) return;
     try {
       await tab.controller?.evaluateJavascript(source: kLongPressScript);
     } catch (e) {
@@ -284,7 +278,7 @@ $customJs
 
     // Single batched call
     try {
-      await controller.evaluateJavascript(source: scripts.join('\\n;\\n'));
+      await controller.evaluateJavascript(source: scripts.join('\n;\n'));
     } catch (e) {
       _log.warning('[Browser] Batched script injection failed: $e');
     }

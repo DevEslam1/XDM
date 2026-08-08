@@ -237,9 +237,6 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                 if (currentIndex == 2) {
                   Provider.of<DownloadProvider>(context, listen: false)
                       .setActiveTabIndex(0);
-                } else if (currentIndex == 1) {
-                  Provider.of<DownloadProvider>(context, listen: false)
-                      .setActiveTabIndex(0);
                 }
               },
               child: Scaffold(

@@ -28,6 +28,25 @@ class AdBlockerService {
   static String get intervalCleanupJs => _intervalCleanupJs;
   static String get scrollUnblockJs => _scrollUnblockJs;
 
+  /// Injected via UserScript at AT_DOCUMENT_START on every page.
+  /// Safe for all domains — only activates on youtube.com / youtu.be.
+  /// Must be a static const so it can be referenced before [init].
+  static const String youtubeEarlyJs = '''
+(function() {
+  try {
+    var h = (window.location && window.location.hostname) || '';
+    if (h.indexOf('youtube.com') === -1 && h.indexOf('youtu.be') === -1) return;
+
+    /* Safely remove ad slots if ytInitialPlayerResponse exists */
+    if (window.ytInitialPlayerResponse && typeof window.ytInitialPlayerResponse === 'object') {
+      try { window.ytInitialPlayerResponse.adPlacements = []; } catch(e) {}
+      try { window.ytInitialPlayerResponse.playerAds = []; } catch(e) {}
+    }
+  } catch(e) {}
+})();
+''';
+
+
   static const String _intervalCleanupJs = '''
 (function() {
   if (window.__xdmScrollFixInterval) { clearInterval(window.__xdmScrollFixInterval); window.__xdmScrollFixInterval = null; }
@@ -233,11 +252,17 @@ class AdBlockerService {
                     ''));
     if (isBackend) return false;
 
-    // Never block reCAPTCHA, Google authentication, gstatic, or core JS frameworks
+    // Never block reCAPTCHA, Google authentication, gstatic, YouTube core infrastructure, or core JS frameworks
     if (lower.contains('recaptcha') ||
         lower.contains('gstatic.com') ||
         lower.contains('accounts.google.com') ||
         lower.contains('google.com/recaptcha') ||
+        lower.contains('youtube.com') ||
+        lower.contains('youtu.be') ||
+        lower.contains('ytimg.com') ||
+        lower.contains('googlevideo.com') ||
+        lower.contains('ggpht.com') ||
+        lower.contains('googleapis.com') ||
         lower.contains('jquery') ||
         lower.contains('bootstrap') ||
         lower.contains('fontawesome') ||
@@ -306,7 +331,7 @@ class AdBlockerService {
     final path = Uri.tryParse(url)?.path ?? '';
     if (path.isNotEmpty && !CustomAdBlockStore.instance.useCustomOnly) {
       for (final pattern in _updater.urlPatterns) {
-        if (path.contains(pattern)) {
+        if (pattern.length > 5 && path.contains(pattern)) {
           recordBlockedRequest(url);
           return true;
         }
@@ -326,23 +351,38 @@ class AdBlockerService {
   static final List<ContentBlocker> _nativeContentBlockers = [
     // -- DoubleClick / Google Ads --
     ContentBlocker(
-      trigger: ContentBlockerTrigger(urlFilter: '.*doubleclick\\.net.*'),
+      trigger: ContentBlockerTrigger(
+        urlFilter: '.*doubleclick\\.net.*',
+        unlessTopUrl: ['.*youtube\\.com.*', '.*youtu\\.be.*'],
+      ),
       action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
     ),
     ContentBlocker(
-      trigger: ContentBlockerTrigger(urlFilter: '.*googlesyndication\\.com.*'),
+      trigger: ContentBlockerTrigger(
+        urlFilter: '.*googlesyndication\\.com.*',
+        unlessTopUrl: ['.*youtube\\.com.*', '.*youtu\\.be.*'],
+      ),
       action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
     ),
     ContentBlocker(
-      trigger: ContentBlockerTrigger(urlFilter: '.*googleadservices\\.com.*'),
+      trigger: ContentBlockerTrigger(
+        urlFilter: '.*googleadservices\\.com.*',
+        unlessTopUrl: ['.*youtube\\.com.*', '.*youtu\\.be.*'],
+      ),
       action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
     ),
     ContentBlocker(
-      trigger: ContentBlockerTrigger(urlFilter: '.*googletagmanager\\.com.*'),
+      trigger: ContentBlockerTrigger(
+        urlFilter: '.*googletagmanager\\.com.*',
+        unlessTopUrl: ['.*youtube\\.com.*', '.*youtu\\.be.*'],
+      ),
       action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
     ),
     ContentBlocker(
-      trigger: ContentBlockerTrigger(urlFilter: '.*google-analytics\\.com.*'),
+      trigger: ContentBlockerTrigger(
+        urlFilter: '.*google-analytics\\.com.*',
+        unlessTopUrl: ['.*youtube\\.com.*', '.*youtu\\.be.*'],
+      ),
       action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
     ),
     // -- Major Ad Networks --
@@ -647,8 +687,47 @@ class AdBlockerService {
     String host = '';
     try {
       final uri = Uri.parse(url);
-      host = uri.host;
+      host = uri.host.toLowerCase();
     } catch (_) {}
+
+    // On YouTube, return only YouTube-specific ad selectors to avoid hiding structural layout elements
+    if (host.contains('youtube.com') || host.contains('youtu.be')) {
+      return '''
+ytd-ad-slot-renderer, ytd-promoted-sparkles-web-renderer,
+ytd-merch-shelf-renderer, ytd-statement-banner-renderer,
+#masthead-ad, #player-ads, #video-masthead,
+.ytp-ad-module, .ytp-ad-overlay-container,
+.ytp-ad-overlay-slot, .ytp-ad-image-overlay,
+ytd-display-ad-renderer, ytd-action-companion-ad-renderer,
+ytd-in-feed-ad-layout-renderer, ytd-promoted-video-renderer,
+ytd-search-pyv-renderer, ytd-video-masthead-ad-v3-renderer,
+ytd-companion-slot-renderer, ytd-primetime-promo-renderer,
+ytd-banner-promo-renderer, ytd-statement-banner-renderer,
+.ytp-ad-progress, .ytp-ad-progress-list,
+.ytp-ad-text-overlay, .ytp-ce-element,
+.ytp-suggested-action, .ytp-suggested-action-badge,
+tp-yt-paper-dialog:has(yt-mealbar-promo-renderer),
+ytd-enforcement-message-view-model,
+#movie_player .ytp-ad-player-overlay,
+#movie_player .ad-showing .ytp-chrome-bottom { display: none !important; }
+.ad-showing video { display: block !important; }
+''';
+    }
+
+    // On APK / Mod / Download sites, use targeted CSS to avoid hiding structural download containers, progress bars, & countdown buttons
+    if (isModAppSite(url)) {
+      return '''
+iframe[src*="doubleclick"], iframe[src*="googlesyndication"],
+iframe[src*="adnxs"], iframe[src*="popads"], iframe[src*="popcash"],
+iframe[src*="exoclick"], iframe[src*="trafficjunky"], iframe[src*="hilltopads"],
+iframe[src*="clickadu"], iframe[src*="adsterra"], iframe[src*="propellerads"],
+.adsbygoogle, ins.adsbygoogle, [class*="adsbygoogle-noablate"],
+[class*="popunder"], [class*="interstitial"], [class*="pop-overlay"],
+[class*="fake-download"], [class*="fake-button"] {
+  display: none !important;
+}
+''';
+    }
 
     final dynamicRules = CustomAdBlockStore.instance.useCustomOnly
         ? <String>{}
@@ -726,23 +805,24 @@ ytd-search-pyv-renderer,
 ytd-video-masthead-ad-v3-renderer,
 ytd-companion-slot-renderer,
 ytd-primetime-promo-renderer,
+ytd-banner-promo-renderer,
+ytd-enforcement-message-view-model,
+.ytp-ad-progress, .ytp-ad-progress-list,
+.ytp-ad-text-overlay, .ytp-suggested-action,
+tp-yt-paper-dialog:has(yt-mealbar-promo-renderer),
 ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
 /* === MOVIE / STREAMING SITES === */
-[class*="ad-player-overlay"], [class*="preloader"],
-[class*="pre-roll"], [class*="preroll"], [class*="midroll"],
-[class*="countdown-overlay"], [class*="skip-ad"],
+[class*="ad-player-overlay"], [class*="pre-roll"],
+[class*="preroll"], [class*="midroll"], [class*="skip-ad"],
 div[class*="ad-overlay"]:not(#page-manager):not(ytd-app),
 div[class*="ad-layer"]:not(#page-manager):not(ytd-app),
 div[class*="pop-overlay"]:not(#page-manager),
 div[class*="modal-ad"]:not(#page-manager),
 [class*="lightbox-ad"], [class*="full-page-ad"],
 /* === MOD-APP / APK SITES === */
-[class*="download-ad"], [class*="dl-ad"],
 [class*="fake-download"], [class*="fake-button"],
-[class*="ad-download"], [class*="sponsored-dl"],
-[class*="promo-download"], [class*="ad-cta"],
-[class*="redirect-btn"], [class*="ad-redirect"],
-[class*="pop-redirect"], [class*="overlay-redirect"],
+[class*="sponsored-dl"], [class*="promo-download"],
+[class*="ad-redirect"], [class*="pop-redirect"], [class*="overlay-redirect"],
 /* === GENERIC OVERLAYS / POPUPS / ANTI-ADBLOCK === */
 [class*="cookie-consent"], [class*="cookie-banner"],
 [class*="newsletter-popup"], [class*="subscribe-popup"],
@@ -785,6 +865,9 @@ body {
   if (window.__xdmAdBlockEarly) return;
   window.__xdmAdBlockEarly = true;
 
+  var _host = (window.location && window.location.hostname) || '';
+  if (_host.indexOf('youtube.com') !== -1 || _host.indexOf('youtu.be') !== -1) return;
+
   /* -- Anti-Adblock Detection Neutrals & Fake Globals -- */
   try {
     window.canRunAds = true;
@@ -825,7 +908,15 @@ body {
   function _isAdUrl(value) {
     if (!value || typeof value !== 'string') return false;
     var v = value.toLowerCase();
-    if (v.indexOf('recaptcha') !== -1 || v.indexOf('gstatic.com') !== -1) return false;
+    try {
+      var curHost = (window.location && window.location.hostname) || '';
+      if (curHost && v.indexOf(curHost.toLowerCase()) !== -1) return false;
+      if (v.indexOf('://') === -1) return false;
+    } catch(e) {}
+    if (v.indexOf('recaptcha') !== -1 || v.indexOf('gstatic.com') !== -1 ||
+        v.indexOf('youtube.com') !== -1 || v.indexOf('youtu.be') !== -1 ||
+        v.indexOf('ytimg.com') !== -1 || v.indexOf('googlevideo.com') !== -1 ||
+        v.indexOf('ggpht.com') !== -1 || v.indexOf('googleapis.com') !== -1) return false;
     if (window.__xdmDynamicAdDomains && Array.isArray(window.__xdmDynamicAdDomains)) {
       for (var i = 0; i < window.__xdmDynamicAdDomains.length; i++) {
         if (v.indexOf(window.__xdmDynamicAdDomains[i]) !== -1) return true;
@@ -846,7 +937,13 @@ body {
         }
       } catch(e) {}
     }
-    return null;
+    return {
+      document: { write: function(){}, close: function(){}, open: function(){}, location: {} },
+      location: { href: '' },
+      focus: function(){},
+      close: function(){},
+      closed: false
+    };
   };
 
   /* -- Block alert/confirm/prompt spam -- */
@@ -860,21 +957,7 @@ body {
     set: function() {}
   });
 
-  /* -- Neutralise ad redirect timers -- */
-  var origSetTimeout = window.setTimeout;
-  var origSetInterval = window.setInterval;
-  window.setTimeout = function(fn, delay) {
-    if (typeof fn === 'string' && /location|href|redirect|window\\.open/i.test(fn)) {
-      return 0;
-    }
-    return origSetTimeout.call(window, fn, delay);
-  };
-  window.setInterval = function(fn, delay) {
-    if (typeof fn === 'string' && /location|href|redirect|window\\.open/i.test(fn)) {
-      return 0;
-    }
-    return origSetInterval.call(window, fn, delay);
-  };
+  /* -- Preserve native site timers -- */
 
   /* -- Block ad iframes AND ad script tags from being created -- */
   var origCreateElement = document.createElement.bind(document);
@@ -957,16 +1040,25 @@ body {
     '[class*="pop-overlay"]','[class*="modal-ad"]',
     /* mod-app / APK */
     '[class*="fake-download"]','[class*="fake-button"]',
-    '[class*="ad-download"]','[class*="redirect-btn"]',
     '[class*="pop-redirect"]','[class*="overlay-redirect"]',
     /* overlays / push prompts */
     '[class*="cookie-consent"]','[class*="newsletter-popup"]',
     '[class*="push-notification"]','[class*="exit-intent"]',
     '[class*="exit-popup"]','[class*="splash-ad"]'
   ];
-  for (var i = 0; i < selectors.length; i++) {
+  var ytSelectors = [
+    'ytd-ad-slot-renderer','ytd-promoted-sparkles-web-renderer',
+    '#masthead-ad','#player-ads','.ytp-ad-module',
+    '.ytp-ad-overlay-container','.ytp-ad-overlay-slot',
+    'ytd-display-ad-renderer','ytd-in-feed-ad-layout-renderer',
+    'ytd-promoted-video-renderer','ytd-search-pyv-renderer',
+    'ytd-video-masthead-ad-v3-renderer',
+    'ytd-companion-slot-renderer'
+  ];
+  var activeSelectors = isYoutube ? ytSelectors : selectors;
+  for (var i = 0; i < activeSelectors.length; i++) {
     try {
-      var els = document.querySelectorAll(selectors[i]);
+      var els = document.querySelectorAll(activeSelectors[i]);
       for (var j = 0; j < els.length; j++) {
         _stealthHide(els[j]);
       }
@@ -1000,33 +1092,17 @@ body {
     } catch(e) {}
   }
 
-  /* -- YouTube: skip video ads -- */
-  try {
-    var skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-skip-ad-button, button[class*="skip"]');
-    if (skipBtn) skipBtn.click();
-    /* auto-skip on mutation */
-    var observer = new MutationObserver(function() {
-      var btn = document.querySelector('.ytp-ad-skip-button, .ytp-skip-ad-button');
-      if (btn) btn.click();
-      /* dismiss overlay ads */
-      var overlay = document.querySelector('.ytp-ad-overlay-close-button, .ytp-ad-overlay-close');
-      if (overlay) overlay.click();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-  } catch(e) {}
-
   /* -- Anti-Adblock Banner Neutralizer (Akwam, EgyBest, etc.) -- */
   function _neutralizeAntiAdblockBanners() {
+    if (isYoutube) return;
     var targets = [
-      'ad blocker',
-      'adblocker',
-      'adblock',
-      'ad-blocker',
-      'blocker',
-      'using an ad',
-      'close your ad',
-      'disable your ad',
-      'disabled my ad',
+      'disable your adblock',
+      'disable adblock',
+      'turn off adblock',
+      'please disable adblocker',
+      'using an adblocker',
+      'ad blocker detected',
+      'adblock detected',
       'deaktiviere deinen werbeblocker',
       'désactiver votre bloqueur',
       'desactive el bloqueador',
@@ -1034,11 +1110,6 @@ body {
       'منع الإعلانات',
       'مانع الاعلانات',
       'مانع الإعلانات',
-      'اغلقت مانع',
-      'أغلقت مانع',
-      'القائمة البيضاء',
-      'ادوات منع',
-      'أدوات منع',
       'تعطيل مانع',
       'ايقاف مانع',
       'إيقاف مانع',
@@ -1054,9 +1125,8 @@ body {
         for (var j = 0; j < targets.length; j++) {
           if (txt.indexOf(targets[j]) !== -1) {
             var cur = el;
-            var targetToHide = el;
+            var targetToHide = null;
             var depth = 0;
-            // Climb up to find fixed/absolute overlays or modal container
             while (cur && cur.parentElement && cur.parentElement !== document.body && cur.parentElement !== document.documentElement && depth < 8) {
               var style = window.getComputedStyle(cur);
               var cls = (cur.className || '');
@@ -1064,12 +1134,13 @@ body {
               if (typeof cls === 'string') cls = cls.toLowerCase();
               if (typeof id === 'string') id = id.toLowerCase();
               
-              if (style.position === 'fixed' || style.position === 'absolute' ||
-                  cls.indexOf('modal') !== -1 || cls.indexOf('popup') !== -1 ||
-                  cls.indexOf('overlay') !== -1 || cls.indexOf('adblock') !== -1 ||
-                  id.indexOf('modal') !== -1 || id.indexOf('popup') !== -1 ||
-                  id.indexOf('overlay') !== -1 || id.indexOf('adblock') !== -1) {
+              if ((style.position === 'fixed' || style.position === 'absolute') &&
+                  (cls.indexOf('modal') !== -1 || cls.indexOf('popup') !== -1 ||
+                   cls.indexOf('overlay') !== -1 || cls.indexOf('adblock') !== -1 ||
+                   id.indexOf('modal') !== -1 || id.indexOf('popup') !== -1 ||
+                   id.indexOf('overlay') !== -1 || id.indexOf('adblock') !== -1)) {
                 targetToHide = cur;
+                break;
               }
               cur = cur.parentElement;
               depth++;
@@ -1078,6 +1149,12 @@ body {
               _stealthHide(targetToHide);
               try { targetToHide.style.setProperty('display', 'none', 'important'); } catch(e) {}
             }
+            break;
+          }
+        }
+      }
+    } catch(e) {}
+  }
             try {
               if (document.body) {
                 document.body.style.setProperty('overflow', 'auto', 'important');
@@ -1109,50 +1186,89 @@ body {
   if (window.__xdmYtAdInterval) clearInterval(window.__xdmYtAdInterval);
   window.__xdmYtAdSkip = true;
 
+  /* -- Skip / speed-through playing ads -- */
   function trySkip() {
-    /* "Skip Ad" button */
+    /* Skip Ad button – covers legacy, modern Polymer 3, and mobile class names */
     var skip = document.querySelector(
-      '.ytp-ad-skip-button, .ytp-skip-ad-button, ' +
-      'button.ytp-ad-skip-button-modern, ' +
-      '[class*="ytp-ad-skip"]'
+      '.ytp-ad-skip-button, .ytp-skip-ad-button,' +
+      'button.ytp-ad-skip-button-modern,' +
+      '.ytp-ad-skip-button-modern .ytp-ad-skip-button-slot,' +
+      '[class*="ytp-ad-skip"], .ytm-ad-skip-button'
     );
-    if (skip) { skip.click(); return; }
+    if (skip) { try { skip.click(); } catch(e) {} return; }
 
-    /* "Skip" text button (newer UI) */
-    var btns = document.querySelectorAll('button');
+    /* Text-based skip button (newer UI: "Skip ads") */
+    var btns = document.querySelectorAll('button, div[role="button"]');
     for (var i = 0; i < btns.length; i++) {
       var t = (btns[i].textContent || '').trim().toLowerCase();
-      if (t === 'skip ad' || t === 'skip' || t.indexOf('skip ad') !== -1) {
-        btns[i].click();
+      if (t === 'skip ad' || t === 'skip ads' || t === 'skip' ||
+          t.indexOf('skip ad') !== -1) {
+        try { btns[i].click(); } catch(e) {}
         return;
       }
     }
 
-    /* Dismiss overlay / companion ads */
+    /* If unskippable ad is playing: mute + fast-forward so it ends instantly */
+    try {
+      var adBadge = document.querySelector(
+        '.ytp-ad-simple-ad-badge, .ytp-ad-preview-container, ' +
+        '.ytp-ad-duration-remaining, .ad-showing, .ad-interrupting'
+      );
+      var video = document.querySelector('video');
+      if (adBadge && video) {
+        if (!video.muted) video.muted = true;
+        if (video.playbackRate < 16) video.playbackRate = 16;
+        if (video.duration && isFinite(video.duration) && video.currentTime < video.duration) {
+          video.currentTime = video.duration - 0.1;
+        }
+      } else if (video && video.playbackRate > 2) {
+        video.playbackRate = 1;
+        video.muted = false;
+      }
+    } catch(e) {}
+
+    /* Close overlay / companion / survey ads */
     var close = document.querySelector(
-      '.ytp-ad-overlay-close-button, .ytp-ad-overlay-close, ' +
-      '.ytp-ad-dismiss-button'
+      '.ytp-ad-overlay-close-button, .ytp-ad-overlay-close,' +
+      '.ytp-ad-dismiss-button, .ytp-ad-survey-close'
     );
-    if (close) close.click();
+    if (close) { try { close.click(); } catch(e) {} }
+
+    /* Dismiss adblock enforcement dialog if shown */
+    try {
+      var dlg = document.querySelector(
+        'ytd-enforcement-message-view-model, tp-yt-paper-dialog'
+      );
+      if (dlg) {
+        var text = (dlg.textContent || '').toLowerCase();
+        if (text.indexOf('ad blocker') !== -1 || text.indexOf('adblock') !== -1) {
+          dlg.style.setProperty('display', 'none', 'important');
+          var dBtn = dlg.querySelector('button, .close-button, [aria-label*="close" i]');
+          if (dBtn) try { dBtn.click(); } catch(e) {}
+        }
+      }
+    } catch(e) {}
   }
 
   trySkip();
-  window.__xdmYtAdInterval = setInterval(trySkip, 1500);
+  window.__xdmYtAdInterval = setInterval(trySkip, 600);
 
-  /* Also react to DOM changes */
+  /* MutationObserver: react to newly injected ad elements */
+  var _ytSkipTimer = null;
+  function scheduleSkip() {
+    if (_ytSkipTimer) return;
+    _ytSkipTimer = setTimeout(function() { _ytSkipTimer = null; trySkip(); }, 300);
+  }
   try {
     if (window.__xdmMediaObserver) {
       try { window.__xdmMediaObserver.disconnect(); } catch(e) {}
     }
-    window.__xdmMediaObserver = new MutationObserver(trySkip);
-    window.__xdmMediaObserver.observe(document.body, {
-      childList: true, subtree: true
-    });
+    window.__xdmMediaObserver = new MutationObserver(scheduleSkip);
+    window.__xdmMediaObserver.observe(document.body, { childList: true, subtree: true });
   } catch(e) {}
 
-  /* -- Restore YouTube page scroll -- */
+  /* -- Restore YouTube page scroll if locked by detection scripts -- */
   try {
-    // Fix body/html overflow
     if (window.getComputedStyle(document.body).overflow === 'hidden') {
       document.body.style.setProperty('overflow', 'auto', 'important');
       document.body.style.setProperty('overflow-y', 'scroll', 'important');
@@ -1160,25 +1276,20 @@ body {
     if (window.getComputedStyle(document.documentElement).overflow === 'hidden') {
       document.documentElement.style.setProperty('overflow', 'auto', 'important');
     }
-    // Fix ytd-app scroll container
-    var scrollContainers = document.querySelectorAll(
-      'ytd-app, #page-manager, ytd-browse, ytd-watch-flexy, .html5-video-container'
+    var scEls = document.querySelectorAll(
+      'ytd-app, #page-manager, ytd-browse, ytd-watch-flexy'
     );
-    for (var i = 0; i < scrollContainers.length; i++) {
-      var el = scrollContainers[i];
-      var cs = window.getComputedStyle(el);
+    for (var i = 0; i < scEls.length; i++) {
+      var cs = window.getComputedStyle(scEls[i]);
       if (cs.overflow === 'hidden' || cs.overflowY === 'hidden') {
-        el.style.setProperty('overflow-y', 'auto', 'important');
-      }
-    }
-    // Ensure html element allows scroll
     document.documentElement.style.setProperty('overflow-y', 'auto', 'important');
   } catch(e) {}
 
   if (window.__xdmScrollFixInterval) clearInterval(window.__xdmScrollFixInterval);
   window.__xdmScrollFixInterval = setInterval(function() {
     try {
-      if (document.body && window.getComputedStyle(document.body).overflow === 'hidden') {
+      if (document.body &&
+          window.getComputedStyle(document.body).overflow === 'hidden') {
         document.body.style.setProperty('overflow-y', 'auto', 'important');
       }
     } catch(e) {}
@@ -1339,6 +1450,9 @@ body {
   if (window.__xdmAntiDetect) return;
   window.__xdmAntiDetect = true;
 
+  var _host = (window.location && window.location.hostname) || '';
+  if (_host.indexOf('youtube.com') !== -1 || _host.indexOf('youtu.be') !== -1) return;
+
   /* ==== A. FAKE AD SDK GLOBALS ====
      Sites check these to confirm "ads loaded ok". */
   try {
@@ -1384,219 +1498,242 @@ body {
     window._0x2649 = function(){ return true; }; // used by some obfuscated detectors
   } catch(e) {}
 
+  var _host = (window.location && window.location.hostname) || '';
+  var _isYtPage = (_host.indexOf('youtube.com') !== -1 || _host.indexOf('youtu.be') !== -1);
+
   /* ==== B. INTERCEPT fetch() TO AD DOMAINS ====
      Returns empty 200 so detector scripts think the ad loaded. */
-  try {
-    var _adDF = ['doubleclick','googlesyndication','googleadservices',
-      'adnxs','criteo','pubmatic','openx','taboola','outbrain',
-      'popads','popcash','exoclick','juicyads','trafficjunky',
-      'hilltopads','clickadu','adsterra','propellerads','onclickads',
-      'adskeeper','mgid','revcontent','adform','admob','adcolony',
-      'amazon-adsystem','applovin','bidswitch','casalemedia',
-      'quantserve','rubiconproject','smartadserver','yieldmo','zedo',
-      'moatads','hotjar','/ads/','prebid','googletag'];
-    function _isAD(url) {
-      if (!url || typeof url !== 'string') return false;
-      var u = url.toLowerCase();
-      if (u.indexOf('recaptcha') !== -1 || u.indexOf('gstatic.com') !== -1 ||
-          u.indexOf('accounts.google.com') !== -1) return false;
-      if (window.__xdmDynamicAdDomains && Array.isArray(window.__xdmDynamicAdDomains)) {
-        for (var i = 0; i < window.__xdmDynamicAdDomains.length; i++) {
-          if (u.indexOf(window.__xdmDynamicAdDomains[i]) !== -1) return true;
+  if (!_isYtPage) {
+    try {
+      var _adDF = ['doubleclick','googlesyndication','googleadservices',
+        'adnxs','criteo','pubmatic','openx','taboola','outbrain',
+        'popads','popcash','exoclick','juicyads','trafficjunky',
+        'hilltopads','clickadu','adsterra','propellerads','onclickads',
+        'adskeeper','mgid','revcontent','adform','admob','adcolony',
+        'amazon-adsystem','applovin','bidswitch','casalemedia',
+        'quantserve','rubiconproject','smartadserver','yieldmo','zedo',
+        'moatads','hotjar','prebid','googletag'];
+      function _isAD(url) {
+        if (!url || typeof url !== 'string') return false;
+        var u = url.toLowerCase();
+        try {
+          var curHost = (window.location && window.location.hostname) || '';
+          if (curHost && u.indexOf(curHost.toLowerCase()) !== -1) return false;
+          if (u.indexOf('://') === -1) return false;
+        } catch(e) {}
+        if (u.indexOf('recaptcha') !== -1 || u.indexOf('gstatic.com') !== -1 ||
+            u.indexOf('accounts.google.com') !== -1 || u.indexOf('youtube.com') !== -1 ||
+            u.indexOf('youtu.be') !== -1 || u.indexOf('ytimg.com') !== -1 ||
+            u.indexOf('googlevideo.com') !== -1 || u.indexOf('ggpht.com') !== -1 ||
+            u.indexOf('googleapis.com') !== -1) return false;
+        if (window.__xdmDynamicAdDomains && Array.isArray(window.__xdmDynamicAdDomains)) {
+          for (var i = 0; i < window.__xdmDynamicAdDomains.length; i++) {
+            if (u.indexOf(window.__xdmDynamicAdDomains[i]) !== -1) return true;
+          }
         }
+        for (var i = 0; i < _adDF.length; i++) { if (u.indexOf(_adDF[i]) !== -1) return true; }
+        return false;
       }
-      for (var i = 0; i < _adDF.length; i++) { if (u.indexOf(_adDF[i]) !== -1) return true; }
-      return false;
-    }
-    var _origFetch = window.fetch;
-    window.fetch = function(input, init) {
-      var url = (typeof input === 'string') ? input : (input && input.url) || '';
-      if (_isAD(url)) {
-        return Promise.resolve(new Response('', {
-          status: 200, statusText: 'OK',
-          headers: { 'Content-Type': 'text/plain' }
-        }));
-      }
-      return _origFetch.apply(this, arguments);
-    };
-    var _origOpen = XMLHttpRequest.prototype.open;
-    var _origSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.open = function(method, url) {
-      this.__xdmBlocked = _isAD(String(url || ''));
-      return _origOpen.apply(this, arguments);
-    };
-    XMLHttpRequest.prototype.send = function() {
-      if (this.__xdmBlocked) {
-        Object.defineProperty(this, 'readyState',   { get: function() { return 4; }, configurable: true });
-        Object.defineProperty(this, 'status',       { get: function() { return 200; }, configurable: true });
-        Object.defineProperty(this, 'responseText', { get: function() { return ''; }, configurable: true });
-        try { if (typeof this.onload === 'function') this.onload({}); } catch(e) {}
-        try { if (typeof this.onreadystatechange === 'function') this.onreadystatechange(); } catch(e) {}
-        return;
-      }
-      return _origSend.apply(this, arguments);
-    };
-  } catch(e) {}
+      var _origFetch = window.fetch;
+      window.fetch = function(input, init) {
+        var url = (typeof input === 'string') ? input : (input && input.url) || '';
+        if (_isAD(url)) {
+          return Promise.resolve(new Response('', {
+            status: 200, statusText: 'OK',
+            headers: { 'Content-Type': 'text/plain' }
+          }));
+        }
+        return _origFetch.apply(this, arguments);
+      };
+      var _origOpen = XMLHttpRequest.prototype.open;
+      var _origSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function(method, url) {
+        this.__xdmBlocked = _isAD(String(url || ''));
+        return _origOpen.apply(this, arguments);
+      };
+      XMLHttpRequest.prototype.send = function() {
+        if (this.__xdmBlocked) {
+          Object.defineProperty(this, 'readyState',   { get: function() { return 4; }, configurable: true });
+          Object.defineProperty(this, 'status',       { get: function() { return 200; }, configurable: true });
+          Object.defineProperty(this, 'responseText', { get: function() { return ''; }, configurable: true });
+          try { if (typeof this.onload === 'function') this.onload({}); } catch(e) {}
+          try { if (typeof this.onreadystatechange === 'function') this.onreadystatechange(); } catch(e) {}
+          return;
+        }
+        return _origSend.apply(this, arguments);
+      };
+    } catch(e) {}
+  }
 
   /* ==== C. NEUTRALISE BAIT-ELEMENT DETECTION ====
      Sites inject a <div class="ad-banner"> then check
      getComputedStyle().display or offsetHeight. */
-  try {
-    var _bait = ['adsbox','ad-banner','ads','ad-test','banner-ad',
-      'advertising','ad-slot','advert','sponsored-ad','native-ad',
-      'adv-','ad-','ads-','sponsored','popup-ad','popunder',
-      'overlay-ad','interstitial','adsbygoogle','adsbygoogle-noablate'];
-    function _isBait(el) {
-      if (!el || !el.getAttribute) return false;
-      var cls = (el.getAttribute('class') || '').toLowerCase();
-      var id  = (el.getAttribute('id')    || '').toLowerCase();
-      for (var i = 0; i < _bait.length; i++) {
-        if (cls.indexOf(_bait[i]) !== -1 || id.indexOf(_bait[i]) !== -1) return true;
+  if (!_isYtPage) {
+    try {
+      var _bait = ['adsbox','ad-banner','ads','ad-test','banner-ad',
+        'advertising','ad-slot','advert','sponsored-ad','native-ad',
+        'adv-','ad-','ads-','sponsored','popup-ad','popunder',
+        'overlay-ad','interstitial','adsbygoogle','adsbygoogle-noablate'];
+      function _isBait(el) {
+        if (!el || !el.getAttribute) return false;
+        var cls = (el.getAttribute('class') || '').toLowerCase();
+        var id  = (el.getAttribute('id')    || '').toLowerCase();
+        for (var i = 0; i < _bait.length; i++) {
+          if (cls.indexOf(_bait[i]) !== -1 || id.indexOf(_bait[i]) !== -1) return true;
+        }
+        return false;
       }
-      return false;
-    }
-    var _origGCS = window.getComputedStyle;
-    window.getComputedStyle = function(el, pseudo) {
-      var style = _origGCS.call(window, el, pseudo);
-      if (_isBait(el)) {
-        return new Proxy(style, {
-          get: function(target, prop) {
-            if (prop === 'display')    return 'block';
-            if (prop === 'visibility') return 'visible';
-            if (prop === 'height')     return '250px';
-            if (prop === 'width')      return '300px';
-            if (prop === 'opacity')    return '1';
-            var val = target[prop];
-            return (typeof val === 'function') ? val.bind(target) : val;
-          }
+      var _origGCS = window.getComputedStyle;
+      window.getComputedStyle = function(el, pseudo) {
+        var style = _origGCS.call(window, el, pseudo);
+        if (_isBait(el)) {
+          return new Proxy(style, {
+            get: function(target, prop) {
+              if (prop === 'display')    return 'block';
+              if (prop === 'visibility') return 'visible';
+              if (prop === 'height')     return '250px';
+              if (prop === 'width')      return '300px';
+              if (prop === 'opacity')    return '1';
+              var val = target[prop];
+              return (typeof val === 'function') ? val.bind(target) : val;
+            }
+          });
+        }
+        return style;
+      };
+      /* Also patch offsetHeight/Width and getBoundingClientRect */
+      var _patchProp = function(proto, prop, val) {
+        var desc = Object.getOwnPropertyDescriptor(proto, prop);
+        Object.defineProperty(proto, prop, {
+          get: function() {
+            if (_isBait(this)) return val;
+            return desc.get.call(this);
+          },
+          configurable: true
         });
-      }
-      return style;
-    };
-    /* Also patch offsetHeight/Width and getBoundingClientRect */
-    var _patchProp = function(proto, prop, val) {
-      var desc = Object.getOwnPropertyDescriptor(proto, prop);
-      Object.defineProperty(proto, prop, {
-        get: function() {
-          if (_isBait(this)) return val;
-          return desc.get.call(this);
-        },
-        configurable: true
-      });
-    };
-    _patchProp(Element.prototype, 'offsetHeight', 250);
-    _patchProp(Element.prototype, 'offsetWidth',  300);
-    _patchProp(Element.prototype, 'clientHeight', 250);
-    _patchProp(Element.prototype, 'clientWidth',  300);
-    var _origGBR = Element.prototype.getBoundingClientRect;
-    Element.prototype.getBoundingClientRect = function() {
-      var rect = _origGBR.call(this);
-      if (_isBait(this)) {
-        return {
-          top: 0, left: 0, right: 300, bottom: 250,
-          width: 300, height: 250, x: 0, y: 0,
-          toJSON: function() { return this; }
-        };
-      }
-      return rect;
-    };
-  } catch(e) {}
+      };
+      _patchProp(Element.prototype, 'offsetHeight', 250);
+      _patchProp(Element.prototype, 'offsetWidth',  300);
+      _patchProp(Element.prototype, 'clientHeight', 250);
+      _patchProp(Element.prototype, 'clientWidth',  300);
+      var _origGBR = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = function() {
+        var rect = _origGBR.call(this);
+        if (_isBait(this)) {
+          return {
+            top: 0, left: 0, right: 300, bottom: 250,
+            width: 300, height: 250, x: 0, y: 0,
+            toJSON: function() { return this; }
+          };
+        }
+        return rect;
+      };
+    } catch(e) {}
+  }
 
   /* ==== D. WRAP MutationObserver ====
      Swallows mutations on ad-related elements so sites
      cannot detect that our lateJs hid them. */
-  try {
-    var _OrigMO = window.MutationObserver;
-    window.MutationObserver = function(callback) {
-      var _wrapped = function(mutations, observer) {
-        var adTerms = ['ad-','ads-','advert','sponsor','popup-ad','popunder',
-          'overlay-ad','interstitial','ad-slot','adsbygoogle','adsbox'];
-        var filtered = mutations.filter(function(m) {
-          var target = m.target;
-          if (!target || !target.getAttribute) return true;
-          var cls = (target.getAttribute('class') || '').toLowerCase();
-          var id  = (target.getAttribute('id')    || '').toLowerCase();
-          for (var i = 0; i < adTerms.length; i++) {
-            if (cls.indexOf(adTerms[i]) !== -1 || id.indexOf(adTerms[i]) !== -1) return false;
-          }
-          return true;
-        });
-        if (filtered.length > 0) { try { callback(filtered, observer); } catch(e) {} }
+  if (!_isYtPage) {
+    try {
+      var _OrigMO = window.MutationObserver;
+      window.MutationObserver = function(callback) {
+        var _wrapped = function(mutations, observer) {
+          var adTerms = ['ad-','ads-','advert','sponsor','popup-ad','popunder',
+            'overlay-ad','interstitial','ad-slot','adsbygoogle','adsbox'];
+          var filtered = mutations.filter(function(m) {
+            var target = m.target;
+            if (!target || !target.getAttribute) return true;
+            var cls = (target.getAttribute('class') || '').toLowerCase();
+            var id  = (target.getAttribute('id')    || '').toLowerCase();
+            for (var i = 0; i < adTerms.length; i++) {
+              if (cls.indexOf(adTerms[i]) !== -1 || id.indexOf(adTerms[i]) !== -1) return false;
+            }
+            return true;
+          });
+          if (filtered.length > 0) { try { callback(filtered, observer); } catch(e) {} }
+        };
+        return new _OrigMO(_wrapped);
       };
-      return new _OrigMO(_wrapped);
-    };
-    MutationObserver.prototype = _OrigMO.prototype;
-  } catch(e) {}
+      MutationObserver.prototype = _OrigMO.prototype;
+    } catch(e) {}
+  }
 
   /* ==== E. PATCH Performance.getEntries() ====
      Removes ad-domain resource entries so sites cannot
      detect blocked requests via PerformanceResourceTiming. */
-  try {
-    var _adDP = ['doubleclick','googlesyndication','adnxs',
-      'criteo','pubmatic','openx','taboola','popads','exoclick',
-      'trafficjunky','adsterra','propellerads','mgid'];
-    function _filterP(entries) {
-      return entries.filter(function(e) {
-        var n = (e.name || '').toLowerCase();
-        for (var i = 0; i < _adDP.length; i++) { if (n.indexOf(_adDP[i]) !== -1) return false; }
-        return true;
-      });
-    }
-    var _pGE   = performance.getEntries.bind(performance);
-    var _pGET  = performance.getEntriesByType.bind(performance);
-    var _pGEN  = performance.getEntriesByName.bind(performance);
-    performance.getEntries       = function() { return _filterP(_pGE()); };
-    performance.getEntriesByType = function(t) { return _filterP(_pGET(t)); };
-    performance.getEntriesByName = function(n, t) { return _filterP(_pGEN(n, t)); };
-  } catch(e) {}
+  if (!_isYtPage) {
+    try {
+      var _adDP = ['doubleclick','googlesyndication','adnxs',
+        'criteo','pubmatic','openx','taboola','popads','exoclick',
+        'trafficjunky','adsterra','propellerads','mgid'];
+      function _filterP(entries) {
+        return entries.filter(function(e) {
+          var n = (e.name || '').toLowerCase();
+          for (var i = 0; i < _adDP.length; i++) { if (n.indexOf(_adDP[i]) !== -1) return false; }
+          return true;
+        });
+      }
+      var _pGE   = performance.getEntries.bind(performance);
+      var _pGET  = performance.getEntriesByType.bind(performance);
+      var _pGEN  = performance.getEntriesByName.bind(performance);
+      performance.getEntries       = function() { return _filterP(_pGE()); };
+      performance.getEntriesByType = function(t) { return _filterP(_pGET(t)); };
+      performance.getEntriesByName = function(n, t) { return _filterP(_pGEN(n, t)); };
+    } catch(e) {}
+  }
 
   /* ==== F. NEUTRALISE ANTI-ADBLOCK LIBRARIES ====
      NOP known detector variables (BlockAdBlock, FuckAdBlock, etc.) */
-  try {
-    var _fakeABD = {
-      onDetected:    function() { return _fakeABD; },
-      onNotDetected: function(fn) { try { fn(); } catch(e) {} return _fakeABD; },
-      check:         function() { return _fakeABD; }
-    };
-    var _abNames = ['blockAdBlock','BlockAdBlock','fuckAdBlock','FuckAdBlock',
-      'adBlockDetector','adblock','AdBlock','adBlocker','AdBlocker',
-      'AdBlockerDetector','antiAdBlock','AntiAdBlock'];
-    for (var i = 0; i < _abNames.length; i++) {
-      try {
-        Object.defineProperty(window, _abNames[i], {
-          get: function() { return _fakeABD; },
-          set: function() {},
-          configurable: true
-        });
-      } catch(e) {}
-    }
-    /* Stub googletag (GPT) used by publishers to detect blocked ads */
-    if (!window.googletag) {
-      window.googletag = {
-        cmd: [],
-        defineSlot: function() { return { addService: function() { return this; } }; },
-        pubads:     function() { return { enableSingleRequest: function(){}, refresh: function(){}, addEventListener: function(){} }; },
-        enableServices: function(){},
-        display:    function(){}
+  if (!_isYtPage) {
+    try {
+      var _fakeABD = {
+        onDetected:    function() { return _fakeABD; },
+        onNotDetected: function(fn) { try { fn(); } catch(e) {} return _fakeABD; },
+        check:         function() { return _fakeABD; }
       };
-      window.googletag.cmd.push = function(fn) { try { fn(); } catch(e) {} };
-    }
-  } catch(e) {}
+      var _abNames = ['blockAdBlock','BlockAdBlock','fuckAdBlock','FuckAdBlock',
+        'adBlockDetector','adblock','AdBlock','adBlocker','AdBlocker',
+        'AdBlockerDetector','antiAdBlock','AntiAdBlock'];
+      for (var i = 0; i < _abNames.length; i++) {
+        try {
+          Object.defineProperty(window, _abNames[i], {
+            get: function() { return _fakeABD; },
+            set: function() {},
+            configurable: true
+          });
+        } catch(e) {}
+      }
+      /* Stub googletag (GPT) used by publishers to detect blocked ads */
+      if (!window.googletag) {
+        window.googletag = {
+          cmd: [],
+          defineSlot: function() { return { addService: function() { return this; } }; },
+          pubads:     function() { return { enableSingleRequest: function(){}, refresh: function(){}, addEventListener: function(){} }; },
+          enableServices: function(){},
+          display:    function(){}
+        };
+        window.googletag.cmd.push = function(fn) { try { fn(); } catch(e) {} };
+      }
+    } catch(e) {}
+  }
 
   /* ==== G. STEALTH navigator.serviceWorker ====
      Prevents sites from using service workers to probe
      adblock state or bypass blockers. */
-  try {
-    if (navigator.serviceWorker) {
-      var _origRegister = navigator.serviceWorker.register.bind(navigator.serviceWorker);
-      navigator.serviceWorker.register = function(url, options) {
-        if (_isAD(String(url || ''))) {
-          return Promise.reject(new Error('ServiceWorker registration blocked by XDM'));
-        }
-        return _origRegister(url, options);
-      };
-    }
-  } catch(e) {}
+  if (!_isYtPage) {
+    try {
+      if (navigator.serviceWorker) {
+        var _origRegister = navigator.serviceWorker.register.bind(navigator.serviceWorker);
+        navigator.serviceWorker.register = function(url, options) {
+          if (typeof _isAD === 'function' && _isAD(String(url || ''))) {
+            return Promise.reject(new Error('ServiceWorker registration blocked by XDM'));
+          }
+          return _origRegister(url, options);
+        };
+      }
+    } catch(e) {}
+  }
 
 })();
 """;
@@ -1663,6 +1800,7 @@ body {
       'apkfolks',
       'modapkdown',
       'apkmodget',
+      'liteapks',
     ];
     return modDomains.any((d) => lower.contains(d));
   }

@@ -79,6 +79,7 @@ class AdBlockerDelegate {
     if (!_adBlocker.isEnabled) return;
     final ctrl = tab.controller;
     if (ctrl == null) return;
+    if (AdBlockerService.isYoutubePage(tab.url)) return;
 
     final setupScript =
         'window.__xdmDynamicAdDomains = ${_adBlocker.dynamicDomainsJson};';
@@ -125,6 +126,7 @@ class AdBlockerDelegate {
     if (!_adBlocker.isEnabled) return;
     final ctrl = tab.controller;
     if (ctrl == null) return;
+    if (AdBlockerService.isYoutubePage(tab.url)) return;
     final setupScript =
         'window.__xdmDynamicAdDomains = ${_adBlocker.dynamicDomainsJson};';
     _eval(ctrl, '$setupScript\n${_adBlocker.earlyJs}', 'earlyJs');
