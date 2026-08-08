@@ -249,6 +249,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
     if (newIndex >= 0 && newIndex < _tabs.length) {
       final newTab = _tabs[newIndex];
+      newTab.lastVisitedAt = DateTime.now().millisecondsSinceEpoch;
       if (newTab.isSuspended) {
         _resumeTab(newTab);
       }
@@ -6117,6 +6118,8 @@ class _BrowserScreenState extends State<BrowserScreen>
             isActive: i == _currentTabIndex,
             position: position++,
             createdAt: DateTime.now().millisecondsSinceEpoch,
+            lastVisitedAt: t.lastVisitedAt,
+            faviconUrl: t.faviconUrl,
           ),
         );
       }

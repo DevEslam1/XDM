@@ -57,7 +57,8 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
           }
         }
         if (result.isNotEmpty) {
-          _dbLog.info('Successfully recovered ${result.length} double items from corrupted JSON');
+          _dbLog.info(
+              'Successfully recovered ${result.length} double items from corrupted JSON');
           return result;
         }
       } catch (recEx) {
@@ -121,7 +122,8 @@ class TorrentFilesConverter
           }
         }
         if (result.isNotEmpty) {
-          _dbLog.info('Successfully recovered ${result.length} torrent file entries from corrupted JSON');
+          _dbLog.info(
+              'Successfully recovered ${result.length} torrent file entries from corrupted JSON');
           return result;
         }
       } catch (recEx) {
@@ -252,6 +254,11 @@ class BrowserHistory extends Table {
   TextColumn get title => text()();
   // FIX(5): INTEGER ms-epoch since v11 (was TEXT ISO8601).
   IntColumn get visitedAt => integer()();
+  // FIX-BH-01: Track visit count for deduplication — repeated visits
+  // to the same URL increment this instead of creating duplicate rows.
+  IntColumn get visitCount => integer().withDefault(const Constant(1))();
+  // FIX-BH-02: Store favicon URL for history UI display.
+  TextColumn get faviconUrl => text().nullable()();
 }
 
 @DataClassName('SavedBrowserTab')
@@ -262,6 +269,10 @@ class BrowserTabs extends Table {
   BoolColumn get isActive => boolean().withDefault(const Constant(false))();
   IntColumn get position => integer().withDefault(const Constant(0))();
   IntColumn get createdAt => integer()();
+  // FIX-BT-01: Track last visited time for tab restoration ordering.
+  IntColumn get lastVisitedAt => integer().withDefault(const Constant(0))();
+  // FIX-BT-02: Store favicon URL for tab bar display.
+  TextColumn get faviconUrl => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -287,7 +298,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 16; // FIX F5
+  int get schemaVersion => 17; // FIX F5 + FIX-BH/BT
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -311,6 +322,18 @@ class AppDatabase extends _$AppDatabase {
           );
           await customStatement(
             'CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks (created_at)',
+          );
+          // FIX-BH-03: Index on browser_history.url for deduplication lookups.
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_browser_history_url ON browser_history (url)',
+          );
+          // FIX-BM-01: Index on bookmarks.url for duplicate checks.
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_bookmarks_url ON bookmarks (url)',
+          );
+          // FIX-BT-03: Index on browser_tabs.position for ordered loading.
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_browser_tabs_position ON browser_tabs (position)',
           );
         },
         onUpgrade: (m, from, to) async {
@@ -657,7 +680,36 @@ class AppDatabase extends _$AppDatabase {
               'ALTER TABLE download_tasks ADD COLUMN uploaded_bytes INTEGER NOT NULL DEFAULT 0',
             );
           }
-          if (to > 16) {
+          if (from < 17) {
+            // Migration 16 -> 17: Browser history deduplication + favicon
+            // support; tab favicon + last-visited; URL indexes for fast
+            // duplicate lookups.
+            await customStatement(
+              'ALTER TABLE browser_history ADD COLUMN visit_count INTEGER NOT NULL DEFAULT 1',
+            );
+            await customStatement(
+              'ALTER TABLE browser_history ADD COLUMN favicon_url TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE browser_tabs ADD COLUMN last_visited_at INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE browser_tabs ADD COLUMN favicon_url TEXT',
+            );
+            // FIX-BH-03: Index on browser_history.url for deduplication lookups.
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_browser_history_url ON browser_history (url)',
+            );
+            // FIX-BM-01: Index on bookmarks.url for duplicate checks.
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_bookmarks_url ON bookmarks (url)',
+            );
+            // FIX-BT-03: Index on browser_tabs.position for ordered loading.
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_browser_tabs_position ON browser_tabs (position)',
+            );
+          }
+          if (to > 17) {
             _dbLog.warning(
               'AppDatabase: Upgrade target version $to is higher than version 16, no specific migrations defined!',
             );

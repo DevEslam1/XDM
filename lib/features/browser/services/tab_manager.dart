@@ -137,6 +137,8 @@ class TabManager {
               isActive: tab.id == activeTabId,
               position: i,
               createdAt: DateTime.now().millisecondsSinceEpoch,
+              lastVisitedAt: tab.lastVisitedAt,
+              faviconUrl: tab.faviconUrl,
             ),
           );
         }

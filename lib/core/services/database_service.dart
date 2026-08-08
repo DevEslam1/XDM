@@ -325,6 +325,8 @@ class DatabaseService {
               isActive: val['isActive'] as bool? ?? false,
               position: val['position'] as int? ?? 0,
               createdAt: DateTime.now().millisecondsSinceEpoch,
+              lastVisitedAt: val['lastVisitedAt'] as int? ?? DateTime.now().millisecondsSinceEpoch,
+              faviconUrl: val['faviconUrl'] as String?,
             ),
           );
         } catch (e) {
@@ -657,9 +659,8 @@ class DatabaseService {
     int retries = 3;
     while (true) {
       try {
-        await _db
-            .into(_db.downloadTasks)
-            .insert(_taskToCompanion(task), mode: drift.InsertMode.insertOrReplace);
+        await _db.into(_db.downloadTasks).insert(_taskToCompanion(task),
+            mode: drift.InsertMode.insertOrReplace);
         return;
       } catch (e) {
         retries--;
@@ -734,13 +735,14 @@ class DatabaseService {
           ..limit(1))
         .getSingleOrNull();
     if (existing != null) {
-      await (_db.update(_db.bookmarks)
-            ..where((t) => t.id.equals(existing.id)))
+      await (_db.update(_db.bookmarks)..where((t) => t.id.equals(existing.id)))
           .write(BookmarksCompanion(
         title: drift.Value(bookmark.title),
         url: drift.Value(bookmark.url),
         folder: drift.Value(bookmark.folder),
-        createdAt: drift.Value(bookmark.createdAt.millisecondsSinceEpoch),
+        // FIX-BM-02: Preserve original createdAt — re-saving should not
+        // reset the bookmark's creation date or break ordering.
+        createdAt: drift.Value(existing.createdAt),
       ));
       return;
     }
@@ -758,11 +760,21 @@ class DatabaseService {
     return _db.delete(_db.bookmarks).go();
   }
 
-  Future<List<Map<String, dynamic>>> loadBrowserHistory({int max = 200}) async {
-    final rows = await (_db.select(_db.browserHistory)
-          ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
-          ..limit(max))
-        .get();
+  Future<List<Map<String, dynamic>>> loadBrowserHistory({
+    int max = 200,
+    String? searchQuery,
+  }) async {
+    final query = _db.select(_db.browserHistory)
+      ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
+      ..limit(max);
+
+    // FIX-BH-06: Support search filtering by URL or title.
+    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+      final pattern = '%${searchQuery.trim()}%';
+      query.where((t) => t.url.like(pattern) | t.title.like(pattern));
+    }
+
+    final rows = await query.get();
 
     return rows
         .map(
@@ -771,9 +783,32 @@ class DatabaseService {
             'url': r.url,
             'title': r.title,
             'visitedAt': r.visitedAt,
+            'visitCount': r.visitCount,
+            'faviconUrl': r.faviconUrl,
           },
         )
         .toList();
+  }
+
+  /// FIX-BH-07: Clear browser history older than [before].
+  /// If [before] is null, clears all history.
+  Future<void> clearBrowserHistoryBefore(DateTime? before) async {
+    if (before == null) {
+      await clearBrowserHistory();
+      return;
+    }
+    await (_db.delete(_db.browserHistory)
+          ..where((t) =>
+              t.visitedAt.isSmallerThanValue(before.millisecondsSinceEpoch)))
+        .go();
+  }
+
+  /// FIX-BH-08: Get total visit count for a specific URL.
+  Future<int> getVisitCount(String url) async {
+    final rows = await (_db.select(_db.browserHistory)
+          ..where((t) => t.url.equals(url)))
+        .get();
+    return rows.fold<int>(0, (sum, r) => sum + r.visitCount);
   }
 
   Future<int> addBrowserHistory(Map<String, dynamic> entry) async {
@@ -782,23 +817,51 @@ class DatabaseService {
     final visitedAt = (entry['visitedAt'] as num?)?.toInt() ??
         DateTime.now().millisecondsSinceEpoch;
     final title = entry['title'] as String? ?? url;
+    final faviconUrl = entry['faviconUrl'] as String?;
 
-    final id = await _db.into(_db.browserHistory).insert(
-          BrowserHistoryCompanion.insert(
-            url: url,
-            title: title,
-            visitedAt: visitedAt,
-          ),
-        );
+    // FIX-BH-04: Deduplicate by URL — if the same URL was visited before,
+    // update its title, visitedAt, favicon, and increment visit_count
+    // instead of creating a duplicate row. This prevents history from
+    // being filled with repeats of the same URL and pushing out unique
+    // entries.
+    final existing = await (_db.select(_db.browserHistory)
+          ..where((t) => t.url.equals(url))
+          ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
+          ..limit(1))
+        .getSingleOrNull();
 
-    // FIX(23): cap history on every write (not every Nth insert) so the cap
-    // holds across hot restarts. Read max entries dynamically.
+    int id;
+    if (existing != null) {
+      await (_db.update(_db.browserHistory)
+            ..where((t) => t.id.equals(existing.id)))
+          .write(BrowserHistoryCompanion(
+        title: drift.Value(title),
+        visitedAt: drift.Value(visitedAt),
+        visitCount: drift.Value(existing.visitCount + 1),
+        faviconUrl: drift.Value(faviconUrl ?? existing.faviconUrl),
+      ));
+      id = existing.id;
+    } else {
+      id = await _db.into(_db.browserHistory).insert(
+            BrowserHistoryCompanion.insert(
+              url: url,
+              title: title,
+              visitedAt: visitedAt,
+              visitCount: const drift.Value(1),
+              faviconUrl: drift.Value(faviconUrl),
+            ),
+          );
+    }
+
+    // FIX(23): cap history on every write so the cap holds across hot restarts.
+    // FIX-BH-05: Use NOT IN with LIMIT instead of LIMIT 999999999 OFFSET
+    // for better SQLite compatibility and query planner efficiency.
     final maxHistory = SettingsProvider.instance.historyMaxEntries;
     await _db.customStatement(
-      'DELETE FROM browser_history WHERE id IN ('
+      'DELETE FROM browser_history WHERE id NOT IN ('
       '  SELECT id FROM browser_history '
       '  ORDER BY visited_at DESC '
-      '  LIMIT 999999999 OFFSET $maxHistory'
+      '  LIMIT $maxHistory'
       ')',
     );
 
@@ -812,8 +875,12 @@ class DatabaseService {
   }
 
   Future<void> updateBrowserHistoryTime(int id, int visitedAt) async {
-    await (_db.update(_db.browserHistory)..where((t) => t.id.equals(id))).write(
-      BrowserHistoryCompanion(visitedAt: drift.Value(visitedAt)),
+    // FIX-BH-09: Also increment visit_count when updating visit time,
+    // since this is called when a page is re-visited. Uses raw SQL to
+    // avoid an extra SELECT round-trip.
+    await _db.customStatement(
+      'UPDATE browser_history SET visited_at = ?, visit_count = visit_count + 1 WHERE id = ?',
+      [visitedAt, id],
     );
   }
 
@@ -826,16 +893,24 @@ class DatabaseService {
   }
 
   Future<void> saveOpenTabs(List<SavedBrowserTab> tabs) async {
+    // FIX-BT-05: Use batch insert instead of per-tab individual inserts
+    // for better performance (single transaction, single write).
     await _db.transaction(() async {
       await _db.delete(_db.browserTabs).go();
-      for (final t in tabs) {
-        await _db.into(_db.browserTabs).insert(t);
-      }
+      if (tabs.isEmpty) return;
+      await _db.batch((batch) {
+        batch.insertAll(_db.browserTabs, tabs);
+      });
     });
   }
 
   Future<List<SavedBrowserTab>> loadAndClearOpenTabs() async {
-    return loadOpenTabs();
+    // FIX-BT-04: Actually clear tabs after loading so they don't duplicate
+    // on next app launch. The previous implementation was a no-op that
+    // left all tabs in the DB, causing stale duplicates on restore.
+    final tabs = await loadOpenTabs();
+    await clearOpenTabs();
+    return tabs;
   }
 
   Future<List<SavedBrowserTab>> loadOpenTabs() {

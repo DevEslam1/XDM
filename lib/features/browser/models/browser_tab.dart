@@ -18,6 +18,8 @@ class BrowserTab {
   bool isHome;
   bool canGoBack;
   bool canGoForward;
+  int lastVisitedAt = DateTime.now().millisecondsSinceEpoch;
+  String? faviconUrl;
 
   BrowserTab({
     required this.id,

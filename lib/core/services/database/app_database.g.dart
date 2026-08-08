@@ -2265,8 +2265,23 @@ class $BrowserHistoryTable extends BrowserHistory
   late final GeneratedColumn<int> visitedAt = GeneratedColumn<int>(
       'visited_at', aliasedName, false,
       type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _visitCountMeta =
+      const VerificationMeta('visitCount');
   @override
-  List<GeneratedColumn> get $columns => [id, url, title, visitedAt];
+  late final GeneratedColumn<int> visitCount = GeneratedColumn<int>(
+      'visit_count', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(1));
+  static const VerificationMeta _faviconUrlMeta =
+      const VerificationMeta('faviconUrl');
+  @override
+  late final GeneratedColumn<String> faviconUrl = GeneratedColumn<String>(
+      'favicon_url', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, url, title, visitedAt, visitCount, faviconUrl];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -2298,6 +2313,18 @@ class $BrowserHistoryTable extends BrowserHistory
     } else if (isInserting) {
       context.missing(_visitedAtMeta);
     }
+    if (data.containsKey('visit_count')) {
+      context.handle(
+          _visitCountMeta,
+          visitCount.isAcceptableOrUnknown(
+              data['visit_count']!, _visitCountMeta));
+    }
+    if (data.containsKey('favicon_url')) {
+      context.handle(
+          _faviconUrlMeta,
+          faviconUrl.isAcceptableOrUnknown(
+              data['favicon_url']!, _faviconUrlMeta));
+    }
     return context;
   }
 
@@ -2315,6 +2342,10 @@ class $BrowserHistoryTable extends BrowserHistory
           .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
       visitedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}visited_at'])!,
+      visitCount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}visit_count'])!,
+      faviconUrl: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}favicon_url']),
     );
   }
 
@@ -2330,11 +2361,15 @@ class DbBrowserHistory extends DataClass
   final String url;
   final String title;
   final int visitedAt;
+  final int visitCount;
+  final String? faviconUrl;
   const DbBrowserHistory(
       {required this.id,
       required this.url,
       required this.title,
-      required this.visitedAt});
+      required this.visitedAt,
+      required this.visitCount,
+      this.faviconUrl});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2342,6 +2377,10 @@ class DbBrowserHistory extends DataClass
     map['url'] = Variable<String>(url);
     map['title'] = Variable<String>(title);
     map['visited_at'] = Variable<int>(visitedAt);
+    map['visit_count'] = Variable<int>(visitCount);
+    if (!nullToAbsent || faviconUrl != null) {
+      map['favicon_url'] = Variable<String>(faviconUrl);
+    }
     return map;
   }
 
@@ -2351,6 +2390,10 @@ class DbBrowserHistory extends DataClass
       url: Value(url),
       title: Value(title),
       visitedAt: Value(visitedAt),
+      visitCount: Value(visitCount),
+      faviconUrl: faviconUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(faviconUrl),
     );
   }
 
@@ -2362,6 +2405,8 @@ class DbBrowserHistory extends DataClass
       url: serializer.fromJson<String>(json['url']),
       title: serializer.fromJson<String>(json['title']),
       visitedAt: serializer.fromJson<int>(json['visitedAt']),
+      visitCount: serializer.fromJson<int>(json['visitCount']),
+      faviconUrl: serializer.fromJson<String?>(json['faviconUrl']),
     );
   }
   @override
@@ -2372,16 +2417,25 @@ class DbBrowserHistory extends DataClass
       'url': serializer.toJson<String>(url),
       'title': serializer.toJson<String>(title),
       'visitedAt': serializer.toJson<int>(visitedAt),
+      'visitCount': serializer.toJson<int>(visitCount),
+      'faviconUrl': serializer.toJson<String?>(faviconUrl),
     };
   }
 
   DbBrowserHistory copyWith(
-          {int? id, String? url, String? title, int? visitedAt}) =>
+          {int? id,
+          String? url,
+          String? title,
+          int? visitedAt,
+          int? visitCount,
+          Value<String?> faviconUrl = const Value.absent()}) =>
       DbBrowserHistory(
         id: id ?? this.id,
         url: url ?? this.url,
         title: title ?? this.title,
         visitedAt: visitedAt ?? this.visitedAt,
+        visitCount: visitCount ?? this.visitCount,
+        faviconUrl: faviconUrl.present ? faviconUrl.value : this.faviconUrl,
       );
   DbBrowserHistory copyWithCompanion(BrowserHistoryCompanion data) {
     return DbBrowserHistory(
@@ -2389,6 +2443,10 @@ class DbBrowserHistory extends DataClass
       url: data.url.present ? data.url.value : this.url,
       title: data.title.present ? data.title.value : this.title,
       visitedAt: data.visitedAt.present ? data.visitedAt.value : this.visitedAt,
+      visitCount:
+          data.visitCount.present ? data.visitCount.value : this.visitCount,
+      faviconUrl:
+          data.faviconUrl.present ? data.faviconUrl.value : this.faviconUrl,
     );
   }
 
@@ -2398,13 +2456,16 @@ class DbBrowserHistory extends DataClass
           ..write('id: $id, ')
           ..write('url: $url, ')
           ..write('title: $title, ')
-          ..write('visitedAt: $visitedAt')
+          ..write('visitedAt: $visitedAt, ')
+          ..write('visitCount: $visitCount, ')
+          ..write('faviconUrl: $faviconUrl')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, url, title, visitedAt);
+  int get hashCode =>
+      Object.hash(id, url, title, visitedAt, visitCount, faviconUrl);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2412,7 +2473,9 @@ class DbBrowserHistory extends DataClass
           other.id == this.id &&
           other.url == this.url &&
           other.title == this.title &&
-          other.visitedAt == this.visitedAt);
+          other.visitedAt == this.visitedAt &&
+          other.visitCount == this.visitCount &&
+          other.faviconUrl == this.faviconUrl);
 }
 
 class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
@@ -2420,17 +2483,23 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
   final Value<String> url;
   final Value<String> title;
   final Value<int> visitedAt;
+  final Value<int> visitCount;
+  final Value<String?> faviconUrl;
   const BrowserHistoryCompanion({
     this.id = const Value.absent(),
     this.url = const Value.absent(),
     this.title = const Value.absent(),
     this.visitedAt = const Value.absent(),
+    this.visitCount = const Value.absent(),
+    this.faviconUrl = const Value.absent(),
   });
   BrowserHistoryCompanion.insert({
     this.id = const Value.absent(),
     required String url,
     required String title,
     required int visitedAt,
+    this.visitCount = const Value.absent(),
+    this.faviconUrl = const Value.absent(),
   })  : url = Value(url),
         title = Value(title),
         visitedAt = Value(visitedAt);
@@ -2439,12 +2508,16 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
     Expression<String>? url,
     Expression<String>? title,
     Expression<int>? visitedAt,
+    Expression<int>? visitCount,
+    Expression<String>? faviconUrl,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (url != null) 'url': url,
       if (title != null) 'title': title,
       if (visitedAt != null) 'visited_at': visitedAt,
+      if (visitCount != null) 'visit_count': visitCount,
+      if (faviconUrl != null) 'favicon_url': faviconUrl,
     });
   }
 
@@ -2452,12 +2525,16 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
       {Value<int>? id,
       Value<String>? url,
       Value<String>? title,
-      Value<int>? visitedAt}) {
+      Value<int>? visitedAt,
+      Value<int>? visitCount,
+      Value<String?>? faviconUrl}) {
     return BrowserHistoryCompanion(
       id: id ?? this.id,
       url: url ?? this.url,
       title: title ?? this.title,
       visitedAt: visitedAt ?? this.visitedAt,
+      visitCount: visitCount ?? this.visitCount,
+      faviconUrl: faviconUrl ?? this.faviconUrl,
     );
   }
 
@@ -2476,6 +2553,12 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
     if (visitedAt.present) {
       map['visited_at'] = Variable<int>(visitedAt.value);
     }
+    if (visitCount.present) {
+      map['visit_count'] = Variable<int>(visitCount.value);
+    }
+    if (faviconUrl.present) {
+      map['favicon_url'] = Variable<String>(faviconUrl.value);
+    }
     return map;
   }
 
@@ -2485,7 +2568,9 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
           ..write('id: $id, ')
           ..write('url: $url, ')
           ..write('title: $title, ')
-          ..write('visitedAt: $visitedAt')
+          ..write('visitedAt: $visitedAt, ')
+          ..write('visitCount: $visitCount, ')
+          ..write('faviconUrl: $faviconUrl')
           ..write(')'))
         .toString();
   }
@@ -2538,9 +2623,31 @@ class $BrowserTabsTable extends BrowserTabs
   late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
       'created_at', aliasedName, false,
       type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _lastVisitedAtMeta =
+      const VerificationMeta('lastVisitedAt');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, url, title, isActive, position, createdAt];
+  late final GeneratedColumn<int> lastVisitedAt = GeneratedColumn<int>(
+      'last_visited_at', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _faviconUrlMeta =
+      const VerificationMeta('faviconUrl');
+  @override
+  late final GeneratedColumn<String> faviconUrl = GeneratedColumn<String>(
+      'favicon_url', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        url,
+        title,
+        isActive,
+        position,
+        createdAt,
+        lastVisitedAt,
+        faviconUrl
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -2580,6 +2687,18 @@ class $BrowserTabsTable extends BrowserTabs
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('last_visited_at')) {
+      context.handle(
+          _lastVisitedAtMeta,
+          lastVisitedAt.isAcceptableOrUnknown(
+              data['last_visited_at']!, _lastVisitedAtMeta));
+    }
+    if (data.containsKey('favicon_url')) {
+      context.handle(
+          _faviconUrlMeta,
+          faviconUrl.isAcceptableOrUnknown(
+              data['favicon_url']!, _faviconUrlMeta));
+    }
     return context;
   }
 
@@ -2601,6 +2720,10 @@ class $BrowserTabsTable extends BrowserTabs
           .read(DriftSqlType.int, data['${effectivePrefix}position'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+      lastVisitedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}last_visited_at'])!,
+      faviconUrl: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}favicon_url']),
     );
   }
 
@@ -2617,13 +2740,17 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
   final bool isActive;
   final int position;
   final int createdAt;
+  final int lastVisitedAt;
+  final String? faviconUrl;
   const SavedBrowserTab(
       {required this.id,
       required this.url,
       required this.title,
       required this.isActive,
       required this.position,
-      required this.createdAt});
+      required this.createdAt,
+      required this.lastVisitedAt,
+      this.faviconUrl});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2633,6 +2760,10 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
     map['is_active'] = Variable<bool>(isActive);
     map['position'] = Variable<int>(position);
     map['created_at'] = Variable<int>(createdAt);
+    map['last_visited_at'] = Variable<int>(lastVisitedAt);
+    if (!nullToAbsent || faviconUrl != null) {
+      map['favicon_url'] = Variable<String>(faviconUrl);
+    }
     return map;
   }
 
@@ -2644,6 +2775,10 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
       isActive: Value(isActive),
       position: Value(position),
       createdAt: Value(createdAt),
+      lastVisitedAt: Value(lastVisitedAt),
+      faviconUrl: faviconUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(faviconUrl),
     );
   }
 
@@ -2657,6 +2792,8 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
       isActive: serializer.fromJson<bool>(json['isActive']),
       position: serializer.fromJson<int>(json['position']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
+      lastVisitedAt: serializer.fromJson<int>(json['lastVisitedAt']),
+      faviconUrl: serializer.fromJson<String?>(json['faviconUrl']),
     );
   }
   @override
@@ -2669,6 +2806,8 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
       'isActive': serializer.toJson<bool>(isActive),
       'position': serializer.toJson<int>(position),
       'createdAt': serializer.toJson<int>(createdAt),
+      'lastVisitedAt': serializer.toJson<int>(lastVisitedAt),
+      'faviconUrl': serializer.toJson<String?>(faviconUrl),
     };
   }
 
@@ -2678,7 +2817,9 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
           String? title,
           bool? isActive,
           int? position,
-          int? createdAt}) =>
+          int? createdAt,
+          int? lastVisitedAt,
+          Value<String?> faviconUrl = const Value.absent()}) =>
       SavedBrowserTab(
         id: id ?? this.id,
         url: url ?? this.url,
@@ -2686,6 +2827,8 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
         isActive: isActive ?? this.isActive,
         position: position ?? this.position,
         createdAt: createdAt ?? this.createdAt,
+        lastVisitedAt: lastVisitedAt ?? this.lastVisitedAt,
+        faviconUrl: faviconUrl.present ? faviconUrl.value : this.faviconUrl,
       );
   SavedBrowserTab copyWithCompanion(BrowserTabsCompanion data) {
     return SavedBrowserTab(
@@ -2695,6 +2838,11 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
       position: data.position.present ? data.position.value : this.position,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastVisitedAt: data.lastVisitedAt.present
+          ? data.lastVisitedAt.value
+          : this.lastVisitedAt,
+      faviconUrl:
+          data.faviconUrl.present ? data.faviconUrl.value : this.faviconUrl,
     );
   }
 
@@ -2706,14 +2854,16 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
           ..write('title: $title, ')
           ..write('isActive: $isActive, ')
           ..write('position: $position, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastVisitedAt: $lastVisitedAt, ')
+          ..write('faviconUrl: $faviconUrl')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, url, title, isActive, position, createdAt);
+  int get hashCode => Object.hash(
+      id, url, title, isActive, position, createdAt, lastVisitedAt, faviconUrl);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2723,7 +2873,9 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
           other.title == this.title &&
           other.isActive == this.isActive &&
           other.position == this.position &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.lastVisitedAt == this.lastVisitedAt &&
+          other.faviconUrl == this.faviconUrl);
 }
 
 class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
@@ -2733,6 +2885,8 @@ class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
   final Value<bool> isActive;
   final Value<int> position;
   final Value<int> createdAt;
+  final Value<int> lastVisitedAt;
+  final Value<String?> faviconUrl;
   final Value<int> rowid;
   const BrowserTabsCompanion({
     this.id = const Value.absent(),
@@ -2741,6 +2895,8 @@ class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
     this.isActive = const Value.absent(),
     this.position = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.lastVisitedAt = const Value.absent(),
+    this.faviconUrl = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   BrowserTabsCompanion.insert({
@@ -2750,6 +2906,8 @@ class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
     this.isActive = const Value.absent(),
     this.position = const Value.absent(),
     required int createdAt,
+    this.lastVisitedAt = const Value.absent(),
+    this.faviconUrl = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         url = Value(url),
@@ -2761,6 +2919,8 @@ class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
     Expression<bool>? isActive,
     Expression<int>? position,
     Expression<int>? createdAt,
+    Expression<int>? lastVisitedAt,
+    Expression<String>? faviconUrl,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2770,6 +2930,8 @@ class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
       if (isActive != null) 'is_active': isActive,
       if (position != null) 'position': position,
       if (createdAt != null) 'created_at': createdAt,
+      if (lastVisitedAt != null) 'last_visited_at': lastVisitedAt,
+      if (faviconUrl != null) 'favicon_url': faviconUrl,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2781,6 +2943,8 @@ class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
       Value<bool>? isActive,
       Value<int>? position,
       Value<int>? createdAt,
+      Value<int>? lastVisitedAt,
+      Value<String?>? faviconUrl,
       Value<int>? rowid}) {
     return BrowserTabsCompanion(
       id: id ?? this.id,
@@ -2789,6 +2953,8 @@ class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
       isActive: isActive ?? this.isActive,
       position: position ?? this.position,
       createdAt: createdAt ?? this.createdAt,
+      lastVisitedAt: lastVisitedAt ?? this.lastVisitedAt,
+      faviconUrl: faviconUrl ?? this.faviconUrl,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2814,6 +2980,12 @@ class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
     if (createdAt.present) {
       map['created_at'] = Variable<int>(createdAt.value);
     }
+    if (lastVisitedAt.present) {
+      map['last_visited_at'] = Variable<int>(lastVisitedAt.value);
+    }
+    if (faviconUrl.present) {
+      map['favicon_url'] = Variable<String>(faviconUrl.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2829,6 +3001,8 @@ class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
           ..write('isActive: $isActive, ')
           ..write('position: $position, ')
           ..write('createdAt: $createdAt, ')
+          ..write('lastVisitedAt: $lastVisitedAt, ')
+          ..write('faviconUrl: $faviconUrl, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3808,6 +3982,8 @@ typedef $$BrowserHistoryTableCreateCompanionBuilder = BrowserHistoryCompanion
   required String url,
   required String title,
   required int visitedAt,
+  Value<int> visitCount,
+  Value<String?> faviconUrl,
 });
 typedef $$BrowserHistoryTableUpdateCompanionBuilder = BrowserHistoryCompanion
     Function({
@@ -3815,6 +3991,8 @@ typedef $$BrowserHistoryTableUpdateCompanionBuilder = BrowserHistoryCompanion
   Value<String> url,
   Value<String> title,
   Value<int> visitedAt,
+  Value<int> visitCount,
+  Value<String?> faviconUrl,
 });
 
 class $$BrowserHistoryTableFilterComposer
@@ -3837,6 +4015,12 @@ class $$BrowserHistoryTableFilterComposer
 
   ColumnFilters<int> get visitedAt => $composableBuilder(
       column: $table.visitedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get visitCount => $composableBuilder(
+      column: $table.visitCount, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get faviconUrl => $composableBuilder(
+      column: $table.faviconUrl, builder: (column) => ColumnFilters(column));
 }
 
 class $$BrowserHistoryTableOrderingComposer
@@ -3859,6 +4043,12 @@ class $$BrowserHistoryTableOrderingComposer
 
   ColumnOrderings<int> get visitedAt => $composableBuilder(
       column: $table.visitedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get visitCount => $composableBuilder(
+      column: $table.visitCount, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get faviconUrl => $composableBuilder(
+      column: $table.faviconUrl, builder: (column) => ColumnOrderings(column));
 }
 
 class $$BrowserHistoryTableAnnotationComposer
@@ -3881,6 +4071,12 @@ class $$BrowserHistoryTableAnnotationComposer
 
   GeneratedColumn<int> get visitedAt =>
       $composableBuilder(column: $table.visitedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get visitCount => $composableBuilder(
+      column: $table.visitCount, builder: (column) => column);
+
+  GeneratedColumn<String> get faviconUrl => $composableBuilder(
+      column: $table.faviconUrl, builder: (column) => column);
 }
 
 class $$BrowserHistoryTableTableManager extends RootTableManager<
@@ -3914,24 +4110,32 @@ class $$BrowserHistoryTableTableManager extends RootTableManager<
             Value<String> url = const Value.absent(),
             Value<String> title = const Value.absent(),
             Value<int> visitedAt = const Value.absent(),
+            Value<int> visitCount = const Value.absent(),
+            Value<String?> faviconUrl = const Value.absent(),
           }) =>
               BrowserHistoryCompanion(
             id: id,
             url: url,
             title: title,
             visitedAt: visitedAt,
+            visitCount: visitCount,
+            faviconUrl: faviconUrl,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             required String url,
             required String title,
             required int visitedAt,
+            Value<int> visitCount = const Value.absent(),
+            Value<String?> faviconUrl = const Value.absent(),
           }) =>
               BrowserHistoryCompanion.insert(
             id: id,
             url: url,
             title: title,
             visitedAt: visitedAt,
+            visitCount: visitCount,
+            faviconUrl: faviconUrl,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -3963,6 +4167,8 @@ typedef $$BrowserTabsTableCreateCompanionBuilder = BrowserTabsCompanion
   Value<bool> isActive,
   Value<int> position,
   required int createdAt,
+  Value<int> lastVisitedAt,
+  Value<String?> faviconUrl,
   Value<int> rowid,
 });
 typedef $$BrowserTabsTableUpdateCompanionBuilder = BrowserTabsCompanion
@@ -3973,6 +4179,8 @@ typedef $$BrowserTabsTableUpdateCompanionBuilder = BrowserTabsCompanion
   Value<bool> isActive,
   Value<int> position,
   Value<int> createdAt,
+  Value<int> lastVisitedAt,
+  Value<String?> faviconUrl,
   Value<int> rowid,
 });
 
@@ -4002,6 +4210,12 @@ class $$BrowserTabsTableFilterComposer
 
   ColumnFilters<int> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get lastVisitedAt => $composableBuilder(
+      column: $table.lastVisitedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get faviconUrl => $composableBuilder(
+      column: $table.faviconUrl, builder: (column) => ColumnFilters(column));
 }
 
 class $$BrowserTabsTableOrderingComposer
@@ -4030,6 +4244,13 @@ class $$BrowserTabsTableOrderingComposer
 
   ColumnOrderings<int> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get lastVisitedAt => $composableBuilder(
+      column: $table.lastVisitedAt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get faviconUrl => $composableBuilder(
+      column: $table.faviconUrl, builder: (column) => ColumnOrderings(column));
 }
 
 class $$BrowserTabsTableAnnotationComposer
@@ -4058,6 +4279,12 @@ class $$BrowserTabsTableAnnotationComposer
 
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get lastVisitedAt => $composableBuilder(
+      column: $table.lastVisitedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get faviconUrl => $composableBuilder(
+      column: $table.faviconUrl, builder: (column) => column);
 }
 
 class $$BrowserTabsTableTableManager extends RootTableManager<
@@ -4092,6 +4319,8 @@ class $$BrowserTabsTableTableManager extends RootTableManager<
             Value<bool> isActive = const Value.absent(),
             Value<int> position = const Value.absent(),
             Value<int> createdAt = const Value.absent(),
+            Value<int> lastVisitedAt = const Value.absent(),
+            Value<String?> faviconUrl = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               BrowserTabsCompanion(
@@ -4101,6 +4330,8 @@ class $$BrowserTabsTableTableManager extends RootTableManager<
             isActive: isActive,
             position: position,
             createdAt: createdAt,
+            lastVisitedAt: lastVisitedAt,
+            faviconUrl: faviconUrl,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -4110,6 +4341,8 @@ class $$BrowserTabsTableTableManager extends RootTableManager<
             Value<bool> isActive = const Value.absent(),
             Value<int> position = const Value.absent(),
             required int createdAt,
+            Value<int> lastVisitedAt = const Value.absent(),
+            Value<String?> faviconUrl = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               BrowserTabsCompanion.insert(
@@ -4119,6 +4352,8 @@ class $$BrowserTabsTableTableManager extends RootTableManager<
             isActive: isActive,
             position: position,
             createdAt: createdAt,
+            lastVisitedAt: lastVisitedAt,
+            faviconUrl: faviconUrl,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
