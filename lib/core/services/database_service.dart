@@ -8,6 +8,7 @@ import 'database/app_database.dart';
 import 'logging_service.dart';
 import '../../features/downloads/models/download_task.dart';
 import '../../features/browser/models/bookmark.dart';
+import '../../features/settings/provider/settings_provider.dart';
 
 import 'dart:convert';
 import 'dart:io';
@@ -37,7 +38,6 @@ class DatabaseService {
   /// FIX(23): history is capped on *every* write (below), so the old
   /// "every Nth insert" counter — which reset on hot restart and let history
   /// grow unbounded — is removed.
-  static const int _historyMaxEntries = 500;
 
   /// FIX(15): periodic WAL checkpoint + occasional VACUUM to keep the
   /// database file small and recovery fast.
@@ -653,10 +653,23 @@ class DatabaseService {
     return row != null ? _rowToTask(row) : null;
   }
 
-  Future<void> saveTask(DownloadTask task) {
-    return _db
-        .into(_db.downloadTasks)
-        .insert(_taskToCompanion(task), mode: drift.InsertMode.insertOrReplace);
+  Future<void> saveTask(DownloadTask task) async {
+    int retries = 3;
+    while (true) {
+      try {
+        await _db
+            .into(_db.downloadTasks)
+            .insert(_taskToCompanion(task), mode: drift.InsertMode.insertOrReplace);
+        return;
+      } catch (e) {
+        retries--;
+        if (retries <= 0) {
+          rethrow;
+        }
+        _log.warning('saveTask failed, retrying in 100ms... Error: $e');
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+    }
   }
 
   Future<void> saveTasks(Iterable<DownloadTask> tasks) async {
@@ -712,8 +725,26 @@ class DatabaseService {
     return rows.map(_rowToBookmark).toList();
   }
 
-  Future<void> saveBookmark(Bookmark bookmark) {
-    return _db.into(_db.bookmarks).insert(
+  Future<void> saveBookmark(Bookmark bookmark) async {
+    // FIX: Prevent duplicate bookmarks by checking if a bookmark with the
+    // same URL already exists. Updates the existing entry instead of creating
+    // a duplicate.
+    final existing = await (_db.select(_db.bookmarks)
+          ..where((t) => t.url.equals(bookmark.url))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing != null) {
+      await (_db.update(_db.bookmarks)
+            ..where((t) => t.id.equals(existing.id)))
+          .write(BookmarksCompanion(
+        title: drift.Value(bookmark.title),
+        url: drift.Value(bookmark.url),
+        folder: drift.Value(bookmark.folder),
+        createdAt: drift.Value(bookmark.createdAt.millisecondsSinceEpoch),
+      ));
+      return;
+    }
+    await _db.into(_db.bookmarks).insert(
           _bookmarkToCompanion(bookmark),
           mode: drift.InsertMode.insertOrReplace,
         );
@@ -761,12 +792,13 @@ class DatabaseService {
         );
 
     // FIX(23): cap history on every write (not every Nth insert) so the cap
-    // holds across hot restarts.
+    // holds across hot restarts. Read max entries dynamically.
+    final maxHistory = SettingsProvider.instance.historyMaxEntries;
     await _db.customStatement(
       'DELETE FROM browser_history WHERE id IN ('
       '  SELECT id FROM browser_history '
       '  ORDER BY visited_at DESC '
-      '  LIMIT -1 OFFSET $_historyMaxEntries'
+      '  LIMIT 999999999 OFFSET $maxHistory'
       ')',
     );
 
@@ -776,6 +808,12 @@ class DatabaseService {
   Future<void> updateBrowserHistoryTitle(int id, String title) async {
     await (_db.update(_db.browserHistory)..where((t) => t.id.equals(id))).write(
       BrowserHistoryCompanion(title: drift.Value(title)),
+    );
+  }
+
+  Future<void> updateBrowserHistoryTime(int id, int visitedAt) async {
+    await (_db.update(_db.browserHistory)..where((t) => t.id.equals(id))).write(
+      BrowserHistoryCompanion(visitedAt: drift.Value(visitedAt)),
     );
   }
 

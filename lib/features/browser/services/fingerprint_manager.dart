@@ -23,8 +23,41 @@ class FingerprintManager {
 
   static const String fingerprintHideJs = r'''
     try {
+      // 1. Webdriver Stub
       Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+      
+      // 2. Chrome Stub
       window.chrome = { runtime: {} };
+      
+      // 3. Plugins & Languages
+      Object.defineProperty(navigator, 'plugins', {get: () => []});
+      Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+      
+      // 4. outerWidth & outerHeight (Android WebViews return 0, which detects them)
+      Object.defineProperty(window, 'outerWidth', {get: () => window.innerWidth});
+      Object.defineProperty(window, 'outerHeight', {get: () => window.innerHeight});
+      
+      // 5. Canvas Data Poisoning (BUG FP3)
+      var orgGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+      CanvasRenderingContext2D.prototype.getImageData = function() {
+        var imgData = orgGetImageData.apply(this, arguments);
+        if (imgData && imgData.data && imgData.data.length >= 4) {
+          var len = imgData.data.length;
+          // Poison the last pixel's color slightly to alter fingerprint hash
+          imgData.data[len - 4] = (imgData.data[len - 4] + 1) % 256;
+        }
+        return imgData;
+      };
+      
+      // 6. WebGL Vendor & Renderer Spoofing (BUG FP3)
+      var orgGetParameter = WebGLRenderingContext.prototype.getParameter;
+      WebGLRenderingContext.prototype.getParameter = function(p) {
+        // UNMASKED_VENDOR_WEBGL
+        if (p === 37445) return 'Google Inc. (Intel)';
+        // UNMASKED_RENDERER_WEBGL
+        if (p === 37446) return 'ANGLE (Intel, Intel(R) UHD Graphics (0x00009BC4) Direct3D11 vs_5_0 ps_5_0)';
+        return orgGetParameter.apply(this, arguments);
+      };
     } catch(e) {}
   ''';
 

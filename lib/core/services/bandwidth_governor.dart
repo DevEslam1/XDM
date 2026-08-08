@@ -60,9 +60,10 @@ class BandwidthGovernor {
 
   int get perConsumerBytesPerSecond {
     if (_globalBytesPerSecond <= 0 || _activeConsumers <= 0) return 0;
-    // FIX-M6: Clamp to at least 1 to avoid division by zero from a race
+    // FIX-M6: Ensure at least 1 to avoid division by zero from a race
     // where _activeConsumers is decremented to 0 between isUnlimited and here.
-    final consumers = _activeConsumers.clamp(1, _activeConsumers);
+    // clamp(1, 0) is undefined when min > max in Dart; use max(1, ...) instead.
+    final consumers = max(1, _activeConsumers);
     final baseShare = _globalBytesPerSecond ~/ consumers;
     return (baseShare * PowerMonitor.throttleFactor).round();
   }

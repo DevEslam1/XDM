@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -209,6 +210,10 @@ class SiteIntelligenceService {
   static const _reliabilityKey = 'site_reliability_data';
   final Map<String, SiteReliability> _reliability = {};
   bool _loaded = false;
+  // FIX: Debounce persistence to avoid writing to SharedPreferences on every
+  // download outcome. Flushes at most once every 5 seconds.
+  Timer? _persistTimer;
+  bool _persistPending = false;
 
   Future<void> init() async {
     if (_loaded) return;
@@ -228,13 +233,33 @@ class SiteIntelligenceService {
   }
 
   Future<void> _persist() async {
+    if (_persistPending) return;
+    _persistPending = true;
+    _persistTimer?.cancel();
+    _persistTimer = Timer(const Duration(seconds: 5), () async {
+      _persistPending = false;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final raw =
+            jsonEncode(_reliability.map((k, v) => MapEntry(k, v.toJson())));
+        await prefs.setString(_reliabilityKey, raw);
+      } catch (e) {
+        _log.warning('Failed to persist reliability data: $e');
+      }
+    });
+  }
+
+  /// Flushes any pending persistence immediately. Call on app dispose.
+  Future<void> flushPending() async {
+    _persistTimer?.cancel();
+    _persistPending = false;
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw =
           jsonEncode(_reliability.map((k, v) => MapEntry(k, v.toJson())));
       await prefs.setString(_reliabilityKey, raw);
     } catch (e) {
-      _log.warning('Failed to persist reliability data: $e');
+      _log.warning('Failed to flush reliability data: $e');
     }
   }
 
@@ -446,7 +471,7 @@ class SiteIntelligenceService {
         case ContentHint.archiveFile:
           return 'Archive';
         case ContentHint.softwarePackage:
-          return 'APK';
+          return 'Software';
         case ContentHint.document:
           return 'Document';
         case ContentHint.image:
@@ -481,8 +506,12 @@ class SiteIntelligenceService {
     }
     if (searchArea.contains('setup') ||
         searchArea.contains('installer') ||
-        searchArea.contains('.apk')) {
-      return 'APK';
+        searchArea.contains('.apk') ||
+        searchArea.contains('.exe') ||
+        searchArea.contains('.dmg') ||
+        searchArea.contains('.deb') ||
+        searchArea.contains('.rpm')) {
+      return 'Software';
     }
     if (searchArea.contains('doc') ||
         searchArea.contains('pdf') ||

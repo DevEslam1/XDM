@@ -53,10 +53,18 @@ class MirrorParallelEngine {
   }
 
   void _redistributeFromSlowMirror(String slowMirror) {
+    final slowState = _mirrorStates[slowMirror];
     final fastest = _mirrorStates.entries
         .reduce((a, b) => a.value.averageSpeed > b.value.averageSpeed ? a : b);
+    // FIX: Previously logged "Redistributing threads" but never actually
+    // redistributed — this class is a pure planner with no thread ownership.
+    // Actual failover is handled by MirrorFailover in the download engine.
     _log.info(
-      '[MirrorParallel] Redistributing threads from slow mirror $slowMirror to ${fastest.key}',
+      '[MirrorParallel] Slow mirror detected: $slowMirror '
+      '(avg ${((slowState?.averageSpeed ?? 0) / 1024).toStringAsFixed(0)} KB/s). '
+      'Fastest mirror: ${fastest.key} '
+      '(avg ${(fastest.value.averageSpeed / 1024).toStringAsFixed(0)} KB/s). '
+      'Failover is handled by the download engine via MirrorFailover.',
     );
   }
 }

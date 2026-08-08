@@ -240,7 +240,7 @@ class UserScriptManager extends ChangeNotifier {
         'sessionStorage',
         'indexedDB'
       ],
-      'eval', 'Function', 'importScripts', // Always blocked
+      'eval', 'Function', 'importScripts', 'Worker', 'SharedWorker', // Always blocked
     ];
 
     final jsBlocked = blockedList.map((e) => "'$e'").join(',');
@@ -252,9 +252,45 @@ if (!window['$marker']) {
     const _blocked = [$jsBlocked];
     const _root = window;
     
+    // Custom stubs to block string evaluation in timers (BUG SI_B1)
+    const _origSetTimeout = _root.setTimeout;
+    const _origSetInterval = _root.setInterval;
+    
+    const sandboxSetTimeout = function(fn, delay) {
+      if (typeof fn === 'string') {
+        console.warn('[DMX Sandbox] Blocked setTimeout string execution');
+        return null;
+      }
+      var args = Array.prototype.slice.call(arguments, 2);
+      return _origSetTimeout.apply(_root, [fn, delay].concat(args));
+    };
+    
+    const sandboxSetInterval = function(fn, delay) {
+      if (typeof fn === 'string') {
+        console.warn('[DMX Sandbox] Blocked setInterval string execution');
+        return null;
+      }
+      var args = Array.prototype.slice.call(arguments, 2);
+      return _origSetInterval.apply(_root, [fn, delay].concat(args));
+    };
+
     // Create a restricted proxy for the window/global object
     const sandbox = new Proxy(_root, {
       get(target, prop) {
+        // Prevent prototype escapes (BUG SI_B1)
+        if (prop === '__proto__' || prop === 'prototype') {
+          return null;
+        }
+        
+        // Intercept global references (BUG SI_B1)
+        if (prop === 'window' || prop === 'self' || prop === 'globalThis' || 
+            prop === 'parent' || prop === 'top' || prop === 'opener') {
+          return sandbox;
+        }
+        
+        if (prop === 'setTimeout') return sandboxSetTimeout;
+        if (prop === 'setInterval') return sandboxSetInterval;
+
         if (_blocked.includes(prop) || (typeof prop === 'string' && prop.startsWith('flutter_'))) {
           console.warn('[DMX Sandbox] Access denied to: ' + prop);
           return undefined;
@@ -264,11 +300,13 @@ if (!window['$marker']) {
         return value;
       },
       set(target, prop, value) {
+        if (prop === '__proto__' || prop === 'prototype') return false;
         if (_blocked.includes(prop) || (typeof prop === 'string' && prop.startsWith('flutter_'))) return false;
         target[prop] = value;
         return true;
       },
       has(target, prop) {
+        if (prop === '__proto__' || prop === 'prototype') return false;
         if (_blocked.includes(prop)) return false;
         return prop in target;
       }
@@ -278,7 +316,15 @@ if (!window['$marker']) {
     Object.freeze(sandbox);
 
     // Apply specific restrictions to the document object
-    ${!perms.contains(ScriptPermission.cookies) ? "Object.defineProperty(document, 'cookie', { get: () => '', set: () => false, configurable: false });" : ""}
+    if (!${perms.contains(ScriptPermission.cookies)}) {
+      try {
+        Object.defineProperty(document, 'cookie', { 
+          get: function() { return ''; }, 
+          set: function() { return false; }, 
+          configurable: true 
+        });
+      } catch(e) {}
+    }
     ${!perms.contains(ScriptPermission.domWrite) ? "const _origWrite = document.write; document.write = () => {}; document.writeln = () => {};" : ""}
 
     // Execute user code in a scope where 'window', 'self', and 'globalThis' point to the sandbox
@@ -294,6 +340,7 @@ if (!window['$marker']) {
 }
 ''';
   }
+
 
   /// Batches all matching JS and CSS scripts for [url] into a single JS block.
   Future<String> getJsForUrl(String url) async {

@@ -43,15 +43,6 @@ class ReaderModeService {
 })();
 ''';
 
-  static const _readerCss = '''
-    body { font-family: 'Georgia', serif; line-height: 1.8; padding: 20px; max-width: 700px; margin: 0 auto; }
-    img { max-width: 100%; height: auto; border-radius: 8px; }
-    a { color: #3B82F6; }
-    h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
-    p { margin-bottom: 1.2em; }
-    .xdm-reader-header { border-bottom: 1px solid #333; padding-bottom: 12px; margin-bottom: 20px; }
-  ''';
-
   static Future<ReaderArticle?> extract(
     InAppWebViewController controller,
   ) async {
@@ -71,17 +62,45 @@ class ReaderModeService {
     }
   }
 
-  static String buildReaderHtml(ReaderArticle article, {bool isDark = true}) {
-    final bg = isDark ? '#1a1a2e' : '#ffffff';
-    final fg = isDark ? '#e0e0e0' : '#1a1a1a';
+  static String buildReaderHtml(
+    ReaderArticle article, {
+    required double fontSize,
+    required String theme,
+    required String fontFamily,
+  }) {
+    String bg = '#ffffff';
+    String fg = '#1a1a1a';
+    if (theme == 'dark') {
+      bg = '#1a1a2e';
+      fg = '#e0e0e0';
+    } else if (theme == 'sepia') {
+      bg = '#f4ecd8';
+      fg = '#5b4636';
+    }
+    
+    final font = fontFamily == 'serif' ? "'Georgia', serif" : "'Inter', sans-serif";
+    
     return '''
 <!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { background: $bg; color: $fg; }
-    $_readerCss
+    body { 
+      background: $bg; 
+      color: $fg; 
+      font-family: $font; 
+      font-size: ${fontSize}px; 
+      line-height: 1.8; 
+      padding: 20px; 
+      max-width: 700px; 
+      margin: 0 auto; 
+    }
+    img { max-width: 100%; height: auto; border-radius: 8px; }
+    a { color: #3B82F6; }
+    h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
+    p { margin-bottom: 1.2em; }
+    .xdm-reader-header { border-bottom: 1px solid ${theme == 'dark' ? '#333' : '#eee'}; padding-bottom: 12px; margin-bottom: 20px; }
   </style>
 </head>
 <body>
@@ -98,11 +117,19 @@ class ReaderModeService {
   /// Extracts article content and displays it in a clean modal view.
   static Future<bool> activateReaderMode(
     InAppWebViewController controller,
-    void Function(String htmlUrl) onLoadReaderUrl,
-  ) async {
+    void Function(String htmlUrl) onLoadReaderUrl, {
+    required double fontSize,
+    required String theme,
+    required String fontFamily,
+  }) async {
     final article = await extract(controller);
     if (article == null || article.content.isEmpty) return false;
-    final htmlContent = buildReaderHtml(article);
+    final htmlContent = buildReaderHtml(
+      article,
+      fontSize: fontSize,
+      theme: theme,
+      fontFamily: fontFamily,
+    );
     final dataUri = Uri.dataFromString(
       htmlContent,
       mimeType: 'text/html',
@@ -111,4 +138,5 @@ class ReaderModeService {
     onLoadReaderUrl(dataUri);
     return true;
   }
+
 }

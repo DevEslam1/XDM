@@ -28,14 +28,19 @@ class ConnectionWarmer {
       final dio = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 5),
       ));
-      await dio.head(
-        url,
-        options: Options(
-          receiveTimeout: const Duration(seconds: 3),
-          validateStatus: (_) => true,
-        ),
-      );
-      dio.close();
+      // FIX: Ensure Dio is always closed, even on exception, to prevent
+      // socket and memory leaks during pre-warm probes.
+      try {
+        await dio.head(
+          url,
+          options: Options(
+            receiveTimeout: const Duration(seconds: 3),
+            validateStatus: (_) => true,
+          ),
+        );
+      } finally {
+        dio.close();
+      }
 
       _warmedHosts[host] = DateTime.now();
       _log.fine('[ConnectionWarmer] Pre-warmed TLS connection to $host');

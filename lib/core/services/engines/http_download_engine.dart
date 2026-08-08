@@ -134,16 +134,28 @@ class _AdaptiveTracker {
 
   /// Plateau detection: three consecutive samples within ±5% mean more
   /// parallelism is not helping → recommend shedding threads on next start.
+  /// The recommendation is re-evaluated continuously: if speed improves after
+  /// a plateau was detected, the stale recommendation is cleared so the next
+  /// start uses the original (higher) thread count.
   void evaluate() {
-    if (recommendation != 0 || _samples.length < 6) return;
+    if (_samples.length < 6) return;
     final tail = _samples.sublist(_samples.length - 3);
     final avg = tail.reduce((a, b) => a + b) / tail.length;
-    if (avg <= 0) return;
+    if (avg <= 0) {
+      recommendation = 0;
+      return;
+    }
     final plateau = tail.every((s) => (s - avg).abs() / avg < 0.05);
     if (plateau && currentThreads > 1) {
-      recommendation = (currentThreads / 2).ceil().clamp(1, currentThreads);
-      debugPrint('[AdaptiveThreads] plateau at ${avg ~/ 1024} KB/s with '
-          '$currentThreads threads → next start uses $recommendation');
+      final newRec = (currentThreads / 2).ceil().clamp(1, currentThreads);
+      if (recommendation != newRec) {
+        recommendation = newRec;
+        debugPrint('[AdaptiveThreads] plateau at ${avg ~/ 1024} KB/s with '
+            '$currentThreads threads → next start uses $recommendation');
+      }
+    } else if (!plateau && recommendation != 0) {
+      // Speed is no longer plateaued — clear stale recommendation.
+      recommendation = 0;
     }
   }
 }

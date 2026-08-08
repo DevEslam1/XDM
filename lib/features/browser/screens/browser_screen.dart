@@ -51,6 +51,7 @@ import '../services/reader_mode_service.dart';
 import '../services/tab_manager.dart';
 import '../services/redirect_guard.dart';
 import '../services/page_intent_classifier.dart';
+import '../services/site_settings_store.dart';
 import '../screens/script_manager_screen.dart';
 import '../widgets/bookmark_manager_screen.dart';
 import '../widgets/browser_download_sheet.dart';
@@ -500,9 +501,13 @@ class _BrowserScreenState extends State<BrowserScreen>
     String? id,
     bool autoLoad = true,
   }) {
-    final cleanInitialUrl = (initialUrl.isEmpty || initialUrl == 'about:blank')
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    var cleanInitialUrl = (initialUrl.isEmpty || initialUrl == 'about:blank')
         ? 'about:blank'
         : initialUrl;
+    if (settings.httpsOnly && cleanInitialUrl.startsWith('http://')) {
+      cleanInitialUrl = cleanInitialUrl.replaceFirst('http://', 'https://');
+    }
     final tabId = id ??
         '${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(999999)}';
 
@@ -539,9 +544,35 @@ class _BrowserScreenState extends State<BrowserScreen>
     return tab;
   }
 
+  Future<void> _applySiteSettings(BrowserTab tab, String url) async {
+    if (tab.controller == null) return;
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+    final siteSettings = await SiteSettingsStore.getForHost(host);
+    final isDesktop = siteSettings.desktopMode ?? settings.desktopMode;
+    final isAdBlock = siteSettings.adBlockEnabled ?? AdBlockerService.instance.isEnabled;
+    final userAgent = isDesktop
+        ? FingerprintManager.desktopUserAgent
+        : _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings);
+    await tab.controller?.setSettings(
+      settings: InAppWebViewSettings(
+        useShouldOverrideUrlLoading: true,
+        useOnDownloadStart: true,
+        userAgent: userAgent,
+        supportZoom: isDesktop || settings.pinchToZoom,
+        incognito: tab.isIncognito,
+        contentBlockers: isAdBlock ? _adBlocker.contentBlockers : [],
+        javaScriptEnabled: true,
+        domStorageEnabled: true,
+        databaseEnabled: true,
+        supportMultipleWindows: true,
+        javaScriptCanOpenWindowsAutomatically: true,
+      ),
+    );
+  }
+
   void _configureController(BrowserTab tab, InAppWebViewController controller) {
     tab.controller = controller;
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
 
     // Register JS handlers (channels)
     controller.addJavaScriptHandler(
@@ -562,23 +593,105 @@ class _BrowserScreenState extends State<BrowserScreen>
       handlerName: _pickerChannel,
       callback: (args) {
         final msg = args.isNotEmpty ? args.first.toString() : '';
+        if (msg == 'cancel') {
+          setState(() {
+            _isPickerModeActive = false;
+          });
+          return;
+        }
         _handlePickerMessageForTab(tab, JavaScriptMessage(message: msg));
       },
     );
 
-    // Configure user agent and zoom
-    controller.setSettings(
-        settings: InAppWebViewSettings(
-      useShouldOverrideUrlLoading: true,
-      useOnDownloadStart: true,
-      userAgent:
-          _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
-      supportZoom: settings.desktopMode || settings.pinchToZoom,
-      incognito: tab.isIncognito,
-    ));
-    // NOTE: PullToRefreshController was already created in _createNewTab().
-    // Its onRefresh closure captures `tab` and calls tab.controller?.reload(),
-    // which now resolves to this controller. No re-creation needed.
+    _applySiteSettings(tab, tab.url);
+  }
+
+  void _showSiteSettingsSheet(BrowserTab tab) async {
+    if (tab.isHome || tab.url.isEmpty) return;
+    final uri = Uri.tryParse(tab.url);
+    if (uri == null || uri.host.isEmpty) return;
+    final host = uri.host.toLowerCase();
+    
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final isDark = settings.isDarkMode;
+    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    
+    final siteSettings = await SiteSettingsStore.getForHost(host);
+    bool siteDesktop = siteSettings.desktopMode ?? settings.desktopMode;
+    bool siteAdBlock = siteSettings.adBlockEnabled ?? AdBlockerService.instance.isEnabled;
+    
+    if (!mounted) return;
+    
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                host,
+                style: TextStyle(
+                  fontFamily: 'Space Grotesk',
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Site settings overrides',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              SwitchListTile(
+                title: const Text('Desktop Site'),
+                subtitle: const Text('Force desktop version of this site'),
+                value: siteDesktop,
+                activeThumbColor: accent,
+                onChanged: (val) async {
+                  setSheetState(() => siteDesktop = val);
+                  await SiteSettingsStore.updateForHost(host, SiteSettings(
+                    desktopMode: siteDesktop,
+                    adBlockEnabled: siteAdBlock,
+                  ));
+                  await _applySiteSettings(tab, tab.url);
+                  tab.controller?.reload();
+                },
+              ),
+              
+              SwitchListTile(
+                title: const Text('AdBlocker'),
+                subtitle: const Text('Block ads and trackers on this site'),
+                value: siteAdBlock,
+                activeThumbColor: accent,
+                onChanged: (val) async {
+                  setSheetState(() => siteAdBlock = val);
+                  await SiteSettingsStore.updateForHost(host, SiteSettings(
+                    desktopMode: siteDesktop,
+                    adBlockEnabled: siteAdBlock,
+                  ));
+                  await _applySiteSettings(tab, tab.url);
+                  tab.controller?.reload();
+                },
+              ),
+              
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _onPageStart(BrowserTab tab, String url) async {
@@ -632,16 +745,10 @@ class _BrowserScreenState extends State<BrowserScreen>
         tab.isLoading = true;
         tab.progress = 0.0;
         tab.lastRenderedProgress = 0;
-        tab.url = _cleanUrl(url);
-        if (url != 'about:blank') {
-          tab.isHome = false;
-        }
-        _showBarsNotifier.value = true;
-        _lastScrollY = 0;
         if (_currentTabIndex >= 0 &&
             _currentTabIndex < _tabs.length &&
             _tabs[_currentTabIndex].id == tab.id) {
-          _urlController.text = tab.url;
+          _urlController.text = _cleanUrl(url);
         }
         _detectedDownloadUrls.remove(tab.id);
         _detectedPlaylistUrls.remove(tab.id);
@@ -1089,6 +1196,9 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
 
     if (selector == null || selector.trim().isEmpty) return;
+    setState(() {
+      _isPickerModeActive = false;
+    });
     _confirmBlockElement(tab, selector.trim());
   }
 
@@ -1568,7 +1678,10 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
     final parsed = Uri.tryParse(url);
-    final targetUrl = parsed != null ? parsed.toString() : url;
+    var targetUrl = parsed != null ? parsed.toString() : url;
+    if (settings.httpsOnly && targetUrl.startsWith('http://')) {
+      targetUrl = targetUrl.replaceFirst('http://', 'https://');
+    }
 
     if (targetUrl.startsWith('magnet:') || isMagnetUrl(targetUrl)) {
       _log.info(
@@ -1830,6 +1943,9 @@ class _BrowserScreenState extends State<BrowserScreen>
                 });
               }
             },
+            fontSize: 16.0,
+            theme: isDark ? 'dark' : 'light',
+            fontFamily: 'serif',
           );
 
     if (mounted) {
@@ -2759,11 +2875,15 @@ class _BrowserScreenState extends State<BrowserScreen>
       context: context,
       builder: (dialogContext) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
+        final settings = Provider.of<SettingsProvider>(context, listen: false);
+        final limit = settings.maxTabs;
         return AlertDialog(
           backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
           title: Text(L10n.of(context, 'tab_limit_reached')),
           content: Text(
-            L10n.of(context, 'browser_max_tabs'),
+            L10n.isRtl(context)
+                ? 'تم الوصول إلى الحد الأقصى للمبوبات ($limit مبوبة).'
+                : 'Maximum tab limit of $limit reached.',
           ),
           actions: [
             TextButton(
@@ -2954,7 +3074,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                         ),
                                         onPressed: () {
                                           triggerHaptic(settings);
-                                          if (_tabs.length >= 10) {
+                                          final maxTabs = settings.maxTabs;
+                                          if (_tabs.length >= maxTabs) {
                                             _showTabLimitDialog(
                                               context,
                                               setModalState,
@@ -2989,7 +3110,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                         ),
                                         onPressed: () {
                                           triggerHaptic(settings);
-                                          if (_tabs.length >= 10) {
+                                          final maxTabs = settings.maxTabs;
+                                          if (_tabs.length >= maxTabs) {
                                             _showTabLimitDialog(
                                               context,
                                               setModalState,
@@ -3993,96 +4115,102 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                         color:
                                                             AppTheme.neonBlue),
                                               )
-                                            : Tooltip(
-                                                key: const ValueKey('security'),
-                                                message: activeTab.url
-                                                        .startsWith('https')
-                                                    ? 'Secure connection'
-                                                    : 'Insecure connection',
-                                                child: Padding(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 6.0),
-                                                  child: Icon(
-                                                    activeTab.isHome ||
-                                                            activeTab
-                                                                .url.isEmpty
-                                                        ? Icons.search_rounded
-                                                        : activeTab.url
-                                                                .startsWith(
-                                                                    'https')
-                                                            ? Icons.lock_rounded
-                                                            : Icons
-                                                                .lock_open_rounded,
-                                                    size: 14,
-                                                    color: activeTab.isHome ||
-                                                            activeTab
-                                                                .url.isEmpty
-                                                        ? (isDark
-                                                            ? AppTheme.textMuted
-                                                            : AppTheme
-                                                                .lightTextMuted)
-                                                        : activeTab.url
-                                                                .startsWith(
-                                                                    'https')
-                                                            ? AppTheme.neonGreen
-                                                            : AppTheme
-                                                                .neonAmber,
+                                            : GestureDetector(
+                                                onTap: () => _showSiteSettingsSheet(activeTab),
+                                                child: Tooltip(
+                                                  key: const ValueKey('security'),
+                                                  message: activeTab.url
+                                                          .startsWith('https')
+                                                      ? 'Secure connection'
+                                                      : 'Insecure connection',
+                                                  child: Padding(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 6.0),
+                                                    child: Icon(
+                                                      activeTab.isHome ||
+                                                              activeTab
+                                                                  .url.isEmpty
+                                                          ? Icons.search_rounded
+                                                          : activeTab.url
+                                                                  .startsWith(
+                                                                      'https')
+                                                              ? Icons.lock_rounded
+                                                              : Icons
+                                                                  .lock_open_rounded,
+                                                      size: 14,
+                                                      color: activeTab.isHome ||
+                                                              activeTab
+                                                                  .url.isEmpty
+                                                          ? (isDark
+                                                              ? AppTheme.textMuted
+                                                              : AppTheme
+                                                                  .lightTextMuted)
+                                                          : activeTab.url
+                                                                  .startsWith(
+                                                                      'https')
+                                                              ? AppTheme.neonGreen
+                                                              : AppTheme
+                                                                  .neonAmber,
+                                                    ),
                                                   ),
                                                 ),
                                               ),
                                       ),
 
                                       // E4 & E10: Ad-blocker Indicator
-                                      Tooltip(
-                                        message: _adBlocker.isEnabled
-                                            ? 'Ad-blocker active'
-                                            : 'Ad-blocker disabled',
-                                        child: Stack(
-                                          clipBehavior: Clip.none,
-                                          children: [
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 4.0),
-                                              child: Icon(
-                                                _adBlocker.isEnabled
-                                                    ? Icons.shield_rounded
-                                                    : Icons.shield_outlined,
-                                                size: 14,
-                                                color: _adBlocker.isEnabled
-                                                    ? AppTheme.neonGreen
-                                                    : (isDark
-                                                        ? AppTheme.textMuted
-                                                        : AppTheme
-                                                            .lightTextMuted),
-                                              ),
-                                            ),
-                                            if (_adBlocker.isEnabled &&
-                                                _blockedAdsCount > 0)
-                                              Positioned(
-                                                right: -4,
-                                                top: -4,
-                                                child: Container(
-                                                  padding:
-                                                      const EdgeInsets.all(2),
-                                                  decoration:
-                                                      const BoxDecoration(
-                                                          color: Colors.red,
-                                                          shape:
-                                                              BoxShape.circle),
-                                                  constraints:
-                                                      const BoxConstraints(
-                                                          minWidth: 12,
-                                                          minHeight: 12),
-                                                  child: Text(
-                                                      '$_blockedAdsCount',
-                                                      style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontSize: 8)),
+                                      GestureDetector(
+                                        onTap: () => _showSiteSettingsSheet(activeTab),
+                                        child: Tooltip(
+                                          message: _adBlocker.isEnabled
+                                              ? 'Ad-blocker active'
+                                              : 'Ad-blocker disabled',
+                                          child: Stack(
+                                            clipBehavior: Clip.none,
+                                            children: [
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 4.0),
+                                                child: Icon(
+                                                  _adBlocker.isEnabled
+                                                      ? Icons.shield_rounded
+                                                      : Icons.shield_outlined,
+                                                  size: 14,
+                                                  color: _adBlocker.isEnabled
+                                                      ? AppTheme.neonGreen
+                                                      : (isDark
+                                                          ? AppTheme.textMuted
+                                                          : AppTheme
+                                                              .lightTextMuted),
                                                 ),
                                               ),
-                                          ],
+                                              if (_adBlocker.isEnabled &&
+                                                  _blockedAdsCount > 0)
+                                                Positioned(
+                                                  right: -4,
+                                                  top: -4,
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.all(2),
+                                                    decoration:
+                                                        const BoxDecoration(
+                                                            color: Colors.red,
+                                                            shape:
+                                                                BoxShape.circle),
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                            minWidth: 12,
+                                                            minHeight: 12),
+                                                    child: Text(
+                                                        '$_blockedAdsCount',
+                                                        style: const TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 8)),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
                                         ),
                                       ),
 
@@ -4299,12 +4427,12 @@ class _BrowserScreenState extends State<BrowserScreen>
                                         ),
                                       ),
                                     ),
-                                    if (_tabs.length >= 10)
+                                    if (_tabs.length >= settings.maxTabs)
                                       const Positioned(
                                         right: -2,
                                         top: -2,
                                         child: Tooltip(
-                                          message: 'Tab limit reached (10/10)',
+                                          message: 'Tab limit reached',
                                           child: Icon(
                                               Icons.warning_amber_rounded,
                                               size: 12,
@@ -4755,7 +4883,50 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                       .contentBlockers,
                                                               incognito: tab
                                                                   .isIncognito,
+                                                              supportMultipleWindows:
+                                                                  true,
+                                                              javaScriptCanOpenWindowsAutomatically:
+                                                                  true,
                                                             ),
+                                                            onReceivedServerTrustAuthRequest:
+                                                                (controller,
+                                                                    challenge) async {
+                                                              final settings =
+                                                                  Provider.of<
+                                                                      SettingsProvider>(
+                                                                      context,
+                                                                      listen:
+                                                                          false);
+                                                              if (settings
+                                                                  .bypassSSL) {
+                                                                return ServerTrustAuthResponse(
+                                                                    action:
+                                                                        ServerTrustAuthResponseAction
+                                                                            .PROCEED);
+                                                              }
+                                                              return ServerTrustAuthResponse(
+                                                                  action:
+                                                                        ServerTrustAuthResponseAction
+                                                                            .CANCEL);
+                                                            },
+                                                            onCreateWindow:
+                                                                (controller,
+                                                                    createWindowAction) async {
+                                                              final reqUrl =
+                                                                  createWindowAction
+                                                                      .request
+                                                                      .url;
+                                                              if (reqUrl !=
+                                                                  null) {
+                                                                _handlePopupMessageForTab(
+                                                                    tab,
+                                                                    JavaScriptMessage(
+                                                                        message:
+                                                                            reqUrl
+                                                                                .toString()));
+                                                              }
+                                                              return false;
+                                                            },
                                                             onConsoleMessage:
                                                                 (controller,
                                                                     consoleMessage) {

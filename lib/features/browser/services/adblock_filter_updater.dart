@@ -335,7 +335,14 @@ class AdBlockFilterUpdater {
           continue;
         }
 
-        final result = await _parseFilterFile(file, source.type);
+        final lines = await file.readAsLines();
+        if (!_isValidFilterSyntax(lines)) {
+          _log.warning('Filter ${source.name}: rejected due to invalid syntax (looks like HTML/JSON or corrupted)');
+          if (await file.exists()) await file.delete();
+          continue;
+        }
+
+        final result = await _parseFilterLines(lines, source.type);
 
         // Save size of the successfully validated file for future comparisons
         await prefs.setInt(sizeKey, fileSize);
@@ -418,11 +425,10 @@ class AdBlockFilterUpdater {
     );
   }
 
-  Future<({Set<String> blocked, Set<String> excepted})> _parseFilterFile(
-      File file, FilterType type) async {
+  Future<({Set<String> blocked, Set<String> excepted})> _parseFilterLines(
+      List<String> lines, FilterType type) async {
     final blocked = <String>{};
     final excepted = <String>{};
-    final lines = await file.readAsLines();
 
     for (final line in lines) {
       if (blocked.length >= _maxDomains) break;
@@ -529,8 +535,8 @@ class AdBlockFilterUpdater {
 
   @visibleForTesting
   Future<({Set<String> blocked, Set<String> excepted})> parseFilterFile(
-          File file, FilterType type) =>
-      _parseFilterFile(file, type);
+          File file, FilterType type) async =>
+      _parseFilterLines(await file.readAsLines(), type);
 
   bool shouldBlock(String hostname) {
     if (hostname.isEmpty) return false;
@@ -616,6 +622,19 @@ class AdBlockFilterUpdater {
       await prefs.remove('adblock_domains_excepted_${source.name}');
     }
     await prefs.remove(_lastUpdateKey);
+  }
+  bool _isValidFilterSyntax(List<String> lines) {
+    int htmlTags = 0;
+    for (var i = 0; i < lines.length && i < 100; i++) {
+      final line = lines[i].trim().toLowerCase();
+      if (line.contains('<!doctype html') ||
+          line.contains('<html') ||
+          line.contains('<head') ||
+          line.contains('<body')) {
+        htmlTags++;
+      }
+    }
+    return htmlTags == 0;
   }
 }
 

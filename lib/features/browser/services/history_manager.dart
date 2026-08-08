@@ -29,12 +29,47 @@ class BrowserHistoryManager {
 
   String? _lastHistoryEntryUrl;
   int? _lastHistoryEntryId;
+  final Map<String, ({int id, DateTime visitedAt})> _recentVisits = {};
 
   void recordHistory(String url, {String? title}) {
     if (url.isEmpty || url == 'about:blank') return;
-    final clean = cleanUrl(url);
+    
+    final String clean;
+    try {
+      clean = cleanUrl(url);
+    } catch (e) {
+      _log.warning('[HistoryManager] Failed to clean URL: $url, error: $e');
+      return;
+    }
+    
     if (isIncognito()) return;
     final now = DateTime.now();
+    
+    // Clean up old entries in _recentVisits to prevent leaks (keep last 10 seconds)
+    _recentVisits.removeWhere((key, value) => now.difference(value.visitedAt) > const Duration(seconds: 10));
+    
+    // Check if the URL was visited in the last 5 seconds (BUG H1)
+    final recent = _recentVisits[clean];
+    if (recent != null && now.difference(recent.visitedAt) < const Duration(seconds: 5)) {
+      final id = recent.id;
+      _recentVisits[clean] = (id: id, visitedAt: now);
+      
+      try {
+        final db = resolveDatabase();
+        db.updateBrowserHistoryTime(id, now.millisecondsSinceEpoch).catchError((e) {
+          _log.warning('[HistoryManager] Time update error: $e');
+        });
+        if (title != null && title.isNotEmpty && title != clean) {
+          db.updateBrowserHistoryTitle(id, title).catchError((e) {
+            _log.warning('[HistoryManager] Title update error: $e');
+          });
+        }
+      } catch (e) {
+        _log.warning('[HistoryManager] Failed to update history: $e');
+      }
+      return;
+    }
+    
     if (clean == _lastHistoryEntryUrl) {
       if (title != null && title.isNotEmpty && title != clean) {
         if (_lastHistoryEntryId != null) {
@@ -53,6 +88,7 @@ class BrowserHistoryManager {
       }
       return;
     }
+    
     _lastHistoryEntryUrl = clean;
     _lastHistoryEntryId = null;
     final titleToRecord = (title != null && title.isNotEmpty) ? title : clean;
@@ -64,8 +100,10 @@ class BrowserHistoryManager {
         'visitedAt': now.millisecondsSinceEpoch,
       }).then((id) {
         if (!isActive()) return;
-        if (clean == _lastHistoryEntryUrl && id > 0) {
+        if (id > 0) {
+          _recentVisits[clean] = (id: id, visitedAt: now);
           _lastHistoryEntryId = id;
+          _lastHistoryEntryUrl = clean;
         }
       }).catchError((e) {
         _log.warning('[HistoryManager] Failed to record history: $e');
@@ -75,3 +113,4 @@ class BrowserHistoryManager {
     }
   }
 }
+

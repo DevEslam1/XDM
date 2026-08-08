@@ -8,6 +8,7 @@ import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../core/services/xdm_backend_client.dart';
 import '../../../features/browser/services/ad_blocker_service.dart';
+import '../../../features/browser/services/adblock_filter_updater.dart';
 import '../provider/settings_provider.dart';
 import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';
@@ -30,6 +31,16 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
   // FIX-5: State variable for testing backend health
   bool _testingBackend = false;
   bool _updatingAdblock = false;
+  DateTime? _lastAdblockUpdateTime;
+
+  void _loadLastAdblockUpdateTime() async {
+    final dt = await AdBlockFilterUpdater().getLastUpdateTime();
+    if (mounted) {
+      setState(() {
+        _lastAdblockUpdateTime = dt;
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -43,6 +54,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
     _proxyPasswordController =
         TextEditingController(text: settings.proxyPassword);
     _backendUrlController = TextEditingController(text: settings.backendUrl);
+    _loadLastAdblockUpdateTime();
   }
 
   @override
@@ -372,7 +384,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                     ),
                   ),
                   subtitle: Text(
-                    '${AdBlockerService.instance.ruleCount} ${isRtl ? 'قاعدة نشطة محملة' : 'active blocklist rules loaded'}',
+                    '${AdBlockerService.instance.ruleCount} ${isRtl ? 'قاعدة نشطة محملة' : 'active blocklist rules loaded'}'
+                    '${_lastAdblockUpdateTime != null ? '\n${isRtl ? 'آخر تحديث:' : 'Last updated:'} ${_lastAdblockUpdateTime!.toLocal().toString().split('.')[0]}' : ''}',
                     style: TextStyle(
                       fontFamily: 'Space Grotesk',
                       fontSize: 12,
@@ -406,8 +419,9 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                               isDarkMode: isDark,
                               icon: Icons.sync,
                             );
+                            bool updated = false;
                             try {
-                              final updated = await AdBlockerService.instance
+                              updated = await AdBlockerService.instance
                                   .updateFilters(force: true);
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context)
@@ -439,7 +453,10 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                               }
                             } finally {
                               if (mounted) {
-                                setState(() => _updatingAdblock = false);
+                                if (updated) {
+                                _loadLastAdblockUpdateTime();
+                              }
+                              setState(() => _updatingAdblock = false);
                               }
                             }
                           },

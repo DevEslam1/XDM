@@ -540,6 +540,57 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     );
   }
 
+  Map<String, List<Map<String, dynamic>>> _groupHistoryByDay(List<Map<String, dynamic>> items) {
+    final groups = <String, List<Map<String, dynamic>>>{};
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final sevenDaysAgo = today.subtract(const Duration(days: 7));
+
+    for (final item in items) {
+      final visitedAtVal = item['visitedAt'];
+      DateTime dt;
+      if (visitedAtVal is num) {
+        dt = DateTime.fromMillisecondsSinceEpoch(visitedAtVal.toInt());
+      } else if (visitedAtVal is String) {
+        dt = DateTime.tryParse(visitedAtVal) ?? now;
+      } else {
+        dt = now;
+      }
+
+      final itemDate = DateTime(dt.year, dt.month, dt.day);
+      String groupKey;
+      if (itemDate == today) {
+        groupKey = 'Today';
+      } else if (itemDate == yesterday) {
+        groupKey = 'Yesterday';
+      } else if (itemDate.isAfter(sevenDaysAgo)) {
+        groupKey = 'This Week';
+      } else {
+        groupKey = 'Older';
+      }
+
+      groups.putIfAbsent(groupKey, () => []).add(item);
+    }
+    return groups;
+  }
+
+  String _getGroupLabel(BuildContext context, String key) {
+    final isRtl = L10n.isRtl(context);
+    switch (key) {
+      case 'Today':
+        return isRtl ? 'اليوم' : 'Today';
+      case 'Yesterday':
+        return isRtl ? 'أمس' : 'Yesterday';
+      case 'This Week':
+        return isRtl ? 'هذا الأسبوع' : 'This Week';
+      case 'Older':
+        return isRtl ? 'أقدم' : 'Older';
+      default:
+        return key;
+    }
+  }
+
   Widget _buildSurfingList(
     ScrollController controller,
     bool isDark,
@@ -553,16 +604,52 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
 
     if (filtered.isEmpty) return _emptyState(isDark, isSurfing: true);
 
-    return ListView.separated(
+    final grouped = _groupHistoryByDay(filtered);
+    final listItems = <dynamic>[];
+    const groupOrder = ['Today', 'Yesterday', 'This Week', 'Older'];
+    for (final g in groupOrder) {
+      if (grouped.containsKey(g) && grouped[g]!.isNotEmpty) {
+        listItems.add(g);
+        listItems.addAll(grouped[g]!);
+      }
+    }
+
+    return ListView.builder(
       controller: controller,
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
-      itemCount: filtered.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 6),
-      itemBuilder: (context, i) =>
-          _surfingTile(context, filtered[i], isDark, settings, i),
+      itemCount: listItems.length,
+      itemBuilder: (context, i) {
+        final item = listItems[i];
+        if (item is String) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 14, bottom: 6, left: 4),
+            child: Text(
+              _getGroupLabel(context, item),
+              style: TextStyle(
+                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Space Grotesk',
+              ),
+            ),
+          );
+        } else {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: _surfingTile(
+              context,
+              item as Map<String, dynamic>,
+              isDark,
+              settings,
+              i,
+            ),
+          );
+        }
+      },
     );
   }
+
 
   Widget _buildDownloadsList(
     ScrollController controller,

@@ -135,8 +135,11 @@ class DesktopUpdateService {
       }
 
       if (Platform.isWindows) {
-        final result = await Process.start(downloadPath, ['/S']);
-        return result.pid > 0;
+        // FIX: Use Process.run instead of Process.start to wait for the
+        // installer to complete. Checking pid > 0 only verifies the process
+        // started, not that the update succeeded.
+        final result = await Process.run(downloadPath, ['/S']);
+        return result.exitCode == 0;
       } else if (Platform.isMacOS) {
         final mountResult =
             await Process.run('hdiutil', ['attach', downloadPath]);

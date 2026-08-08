@@ -107,6 +107,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _maxTotalConnectionsKey = 'maxTotalConnections';
   static const _adaptiveThreadsKey = 'adaptiveThreads';
   static const _autoVerifyChecksumKey = 'autoVerifyChecksum';
+  static const _maxTabsKey = 'maxTabs';
+  static const _historyMaxEntriesKey = 'historyMaxEntries';
 
   static const _powerAwareIsolatePoolKey = 'powerAwareIsolatePool';
   static const _thermalThreadLimitingKey = 'thermalThreadLimiting';
@@ -201,6 +203,22 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool categoryFolders = false;
   bool antiFingerprinting =
       true; // Obscure browser WebView automation fingerprints
+
+  int _maxTabs = 15;
+  int get maxTabs => _maxTabs;
+  set maxTabs(int value) {
+    _maxTabs = value;
+    _prefs.setInt(_maxTabsKey, value);
+    notifyListeners();
+  }
+
+  int _historyMaxEntries = 500;
+  int get historyMaxEntries => _historyMaxEntries;
+  set historyMaxEntries(int value) {
+    _historyMaxEntries = value;
+    _prefs.setInt(_historyMaxEntriesKey, value);
+    notifyListeners();
+  }
 
   static const _antiFingerprintingKey = 'antiFingerprinting';
 
@@ -447,6 +465,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     incognitoEnabled = _prefs.getBool(_incognitoEnabledKey) ?? incognitoEnabled;
     desktopMode = _prefs.getBool(_desktopModeKey) ?? desktopMode;
     pinchToZoom = _prefs.getBool(_pinchToZoomKey) ?? pinchToZoom;
+    _maxTabs = _prefs.getInt(_maxTabsKey) ?? 15;
+    _historyMaxEntries = _prefs.getInt(_historyMaxEntriesKey) ?? 500;
     saveBrowserHistory =
         _prefs.getBool(_saveBrowserHistoryKey) ?? saveBrowserHistory;
     notificationsEnabled = _prefs.getBool(_notificationsEnabledKey) ?? true;
@@ -1164,6 +1184,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _sendBrowserCookiesToBackendKey,
       _useRemoteBackendKey,
       _useLocalYtFallbackKey,
+      _maxTabsKey,
+      _historyMaxEntriesKey,
     ];
     for (final key in settingsKeys) {
       if (key == _proxyPasswordKey || key == _backendTokenKey) {
@@ -1237,6 +1259,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     useRemoteBackend = true;
     useLocalYtFallback = false;
     resumeIntegrityCheck = true;
+    _maxTabs = 15;
+    _historyMaxEntries = 500;
 
     await _prefs.setBool(_isDarkModeKey, _isDarkMode);
     await _prefs.setBool(_classicUiKey, _classicUi);

@@ -31,12 +31,21 @@ class ElementPickerService {
   document.addEventListener('keydown', e => { if (e.key === 'Escape') cleanup(); });
 
   function selectorFor(el) {
-    if (el.id) return '#' + CSS.escape(el.id);
+    if (el.id) {
+      var escapedId = (window.CSS && CSS.escape) ? CSS.escape(el.id) : el.id.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+      return '#' + escapedId;
+    }
     let s = el.tagName.toLowerCase();
     if (el.className && typeof el.className === 'string') {
       const classes = el.className.trim().split(/\s+/).filter(Boolean);
       if (classes.length > 0) {
-        s += '.' + classes.map(c => CSS.escape(c)).join('.');
+        const cleanClasses = classes.map(c => {
+          var clean = c.replace(/[\{\}\(\)\<\>\"\'\\\[\]]/g, '');
+          return (window.CSS && CSS.escape) ? CSS.escape(clean) : clean.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+        }).filter(Boolean);
+        if (cleanClasses.length > 0) {
+          s += '.' + cleanClasses.join('.');
+        }
       }
     }
     return s;
@@ -46,7 +55,11 @@ class ElementPickerService {
     overlay.remove();
     hl.remove();
     window.__xdmPicker = false;
+    if (window.XdmPickerChannel) {
+      window.XdmPickerChannel.postMessage(JSON.stringify({ action: 'cancel' }));
+    }
   }
+
 })();
 ''';
 

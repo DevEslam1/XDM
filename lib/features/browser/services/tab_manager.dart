@@ -95,6 +95,7 @@ class TabManager {
       final tabsData = normalTabs
           .map(
             (tab) => {
+              'id': tab.id,
               'url': tab.url,
               'title': tab.title,
               'isIncognito': false, // always false for persisted tabs
@@ -121,6 +122,26 @@ class TabManager {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('browser_tabs', jsonEncode(data));
+
+      // Drift DB Synchronization (BUG TP2)
+      final db = resolveDatabase();
+      if (db.isInitialized) {
+        final List<SavedBrowserTab> dbTabs = [];
+        for (var i = 0; i < normalTabs.length; i++) {
+          final tab = normalTabs[i];
+          dbTabs.add(
+            SavedBrowserTab(
+              id: tab.id,
+              url: tab.url,
+              title: tab.title,
+              isActive: tab.id == activeTabId,
+              position: i,
+              createdAt: DateTime.now().millisecondsSinceEpoch,
+            ),
+          );
+        }
+        await db.saveOpenTabs(dbTabs);
+      }
     } catch (e) {
       _log.warning('Failed to save tabs: $e');
     }
@@ -253,11 +274,15 @@ class TabManager {
         if (!isActive()) return;
         final active = activeTab;
         if (active != null && active.url.isNotEmpty && !active.isHome) {
-          try {
-            active.controller
-                ?.loadUrl(urlRequest: URLRequest(url: WebUri(active.url)));
-          } catch (e) {
-            _log.warning('[Browser] Restored active tab load error: $e');
+          if (active.controller != null) {
+            try {
+              active.controller
+                  ?.loadUrl(urlRequest: URLRequest(url: WebUri(active.url)));
+            } catch (e) {
+              _log.warning('[Browser] Restored active tab load error: $e');
+            }
+          } else {
+            _log.info('[Browser] Restored active tab controller not ready, relying on onWebViewCreated');
           }
         }
       });

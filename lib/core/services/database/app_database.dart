@@ -44,6 +44,26 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
       lastConversionError.value = msg;
       return [];
     } catch (e) {
+      try {
+        final matches = RegExp(r'[0-9]+(?:\.[0-9]+)?').allMatches(fromDb);
+        final result = <double>[];
+        for (final match in matches) {
+          final valStr = match.group(0);
+          if (valStr != null) {
+            final val = double.tryParse(valStr);
+            if (val != null) {
+              result.add(val);
+            }
+          }
+        }
+        if (result.isNotEmpty) {
+          _dbLog.info('Successfully recovered ${result.length} double items from corrupted JSON');
+          return result;
+        }
+      } catch (recEx) {
+        _dbLog.warning('DoubleListConverter regex recovery failed: $recEx');
+      }
+
       final msg = 'Error decoding DoubleList from DB: $e';
       _dbLog.warning(msg);
       lastConversionError.value = msg;
@@ -85,6 +105,29 @@ class TorrentFilesConverter
       lastConversionError.value = msg;
       return [];
     } catch (e) {
+      try {
+        final result = <Map<String, dynamic>>[];
+        final regex = RegExp(r'\{[^{}]*\}');
+        final matches = regex.allMatches(fromDb);
+        for (final match in matches) {
+          final objStr = match.group(0);
+          if (objStr != null) {
+            try {
+              final obj = jsonDecode(objStr);
+              if (obj is Map) {
+                result.add(Map<String, dynamic>.from(obj));
+              }
+            } catch (_) {}
+          }
+        }
+        if (result.isNotEmpty) {
+          _dbLog.info('Successfully recovered ${result.length} torrent file entries from corrupted JSON');
+          return result;
+        }
+      } catch (recEx) {
+        _dbLog.warning('TorrentFilesConverter regex recovery failed: $recEx');
+      }
+
       final msg = 'Error decoding TorrentFiles from DB: $e';
       _dbLog.warning(msg);
       lastConversionError.value = msg;
@@ -232,6 +275,7 @@ LazyDatabase _openConnection(String path) {
       setup: (database) {
         database.execute('PRAGMA journal_mode=WAL;');
         database.execute('PRAGMA foreign_keys=ON;');
+        database.execute('PRAGMA busy_timeout=5000;');
       },
     );
   });
@@ -611,6 +655,11 @@ class AppDatabase extends _$AppDatabase {
             // Migration 15 -> 16: Add uploadedBytes column (FIX F5)
             await customStatement(
               'ALTER TABLE download_tasks ADD COLUMN uploaded_bytes INTEGER NOT NULL DEFAULT 0',
+            );
+          }
+          if (to > 16) {
+            _dbLog.warning(
+              'AppDatabase: Upgrade target version $to is higher than version 16, no specific migrations defined!',
             );
           }
         },

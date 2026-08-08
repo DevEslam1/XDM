@@ -69,6 +69,7 @@ class AdBlockerService {
       _enabled = prefs.getBool(_prefKey) ?? true;
     } catch (e) {
       _log.warning('AdBlocker init error: $e');
+      _enabled = false;
     }
     _rebuildContentBlockers();
   }
@@ -428,32 +429,17 @@ $customCss
   // Track ad-created intervals for targeted cleanup (see intervalCleanupJs)
   window.__xdmAdIntervals = window.__xdmAdIntervals || [];
 
-  // FIX #3: Do NOT override window.open globally.
-  // Only intercept popups that target known ad domains.
-  var _adPopupDomains = [
-    'doubleclick.net', 'googlesyndication.com', 'googleadservices.com',
-    'adnxs.com', 'criteo.com', 'pubmatic.com', 'openx.net',
-    'taboola.com', 'outbrain.com', 'popads.net', 'popcash.net',
-    'exoclick.com', 'juicyads.com', 'trafficjunky.com',
-    'hilltopads.net', 'clickadu.com', 'adsterra.com',
-    'propellerads.com', 'onclickads.net'
-  ];
-
+  // Intercept all window.open popup requests and send them to native side (BUG A3)
   var _origOpen = window.open;
   window.open = function(url, name, features) {
-    if (url && typeof url === 'string') {
+    if (url && typeof url === 'string' && url.trim() !== '' && url !== 'about:blank') {
       try {
-        var u = new URL(url, window.location.href);
-        var host = u.hostname.toLowerCase();
-        for (var i = 0; i < _adPopupDomains.length; i++) {
-          if (host.indexOf(_adPopupDomains[i]) !== -1) {
-            // Block ad popup — return null so the page knows it failed
-            return null;
-          }
+        if (window.XDM_Popups && window.XDM_Popups.postMessage) {
+          window.XDM_Popups.postMessage(url);
+          return null;
         }
       } catch(e) {}
     }
-    // Legitimate popup — call original
     return _origOpen.call(window, url, name, features);
   };
 

@@ -17,7 +17,8 @@ class ClipboardService {
 
   String? _lastCheckedUrl;
   DateTime? _lastCheckedTime;
-  static const Duration _urlTtl = Duration(minutes: 30);
+  // FIX: Removed unused _urlTtl field. The 30-minute TTL logic was flawed
+  // and has been replaced by a strict 30-second per-URL rate limit.
   bool _initialized = false;
   Future<void>? _initFuture;
 
@@ -89,7 +90,10 @@ class ClipboardService {
         // through immediately.
         if (text == _lastCheckedUrl && _lastCheckedTime != null) {
           final elapsed = now.difference(_lastCheckedTime!);
-          if (elapsed < const Duration(seconds: 30) || elapsed <= _urlTtl) {
+          // FIX: Only skip the SAME URL within 30 seconds (per-URL rate limit).
+          // The previous `|| elapsed <= _urlTtl` made the 30s window redundant
+          // and effectively blocked re-prompting for the full 30-minute TTL.
+          if (elapsed < const Duration(seconds: 30)) {
             return null;
           }
           _lastCheckedTime = now;
