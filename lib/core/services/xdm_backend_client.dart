@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' show max;
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../utils/constants.dart';
@@ -115,6 +117,7 @@ class XdmBackendClient {
         'Referer': 'https://www.youtube.com/',
       },
     ));
+    _configureDioSSL(_dio);
     _log.fine('Configured with backend URL: $baseUrl');
   }
 
@@ -244,6 +247,7 @@ class XdmBackendClient {
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
               },
             ));
+            _configureDioSSL(dio);
 
             final response = await _withTimeout(
               dio.get<Map<String, dynamic>>(
@@ -370,6 +374,7 @@ class XdmBackendClient {
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
               },
             ));
+            _configureDioSSL(dio);
             final response = await _withTimeout(
               dio.get<Map<String, dynamic>>(
                 endpoint,
@@ -450,6 +455,7 @@ class XdmBackendClient {
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
               },
             ));
+            _configureDioSSL(dio);
             final response = await _withTimeout(
               dio.get<Map<String, dynamic>>(
                 endpoint,
@@ -572,6 +578,22 @@ class XdmBackendClient {
     }
 
     return BackendUnknownException(error.toString());
+  }
+
+  void _configureDioSSL(Dio client) {
+    try {
+      final bypassSSL = SettingsProvider.instance.bypassSSL;
+      if (bypassSSL && client.httpClientAdapter is IOHttpClientAdapter) {
+        final adapter = client.httpClientAdapter as IOHttpClientAdapter;
+        adapter.createHttpClient = () {
+          final httpClient = HttpClient();
+          httpClient.badCertificateCallback = (cert, host, port) => true;
+          return httpClient;
+        };
+      }
+    } catch (e) {
+      _log.warning('Failed to configure SSL bypass for Dio: $e');
+    }
   }
 }
 

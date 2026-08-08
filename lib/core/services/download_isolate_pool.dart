@@ -1388,7 +1388,9 @@ class HttpTransferJob {
             // file never claims bytes still in OS buffer.
             await _throttledSaveAndReport(
               null,
-              preSaveFlush: sink != null ? () => sink!.flush() : null,
+              preSaveFlush: () async {
+                await sink?.flush();
+              },
             );
           }
         } on DioException catch (e) {

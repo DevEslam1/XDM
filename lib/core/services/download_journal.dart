@@ -41,10 +41,13 @@ class ChunkState {
     final s = size;
     // FIX-UNKNOWN-SIZE: Open-ended chunk (size unknown). Reporting 1.0
     // while bytes are flowing makes the details screen show "100%" for a
-    // still-downloading indeterminate stream. Report 0.0 so the UI renders
-    // an indeterminate bar instead of a false "complete" state. The ratio
-    // is only meaningful once `end >= 0` (known total).
-    if (s < 0) return 0.0;
+    // still-downloading indeterminate stream. Report -1.0 as a sentinel
+    // so the UI can distinguish "indeterminate" (render an indeterminate
+    // bar) from "0% downloaded" (render a determinate bar at 0%). The
+    // ChunkDetail.isIndeterminate getter already checks `size < 0`, but
+    // some UI paths read `ratio` directly and can't tell the difference
+    // between 0.0 meaning "just started" and 0.0 meaning "unknown size".
+    if (s < 0) return -1.0;
     if (s == 0) return downloaded > 0 ? 1.0 : 0.0;
     return (downloaded / s).clamp(0.0, 1.0);
   }

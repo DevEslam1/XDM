@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/app_theme.dart';
 import '../../../core/services/youtube_service.dart';
+import '../../../core/services/permission_service.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
@@ -212,7 +213,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   Future<void> _startBatchDownload() async {
     final provider = context.read<DownloadProvider>();
     final settings = context.read<SettingsProvider>();
-    final savePath = settings.customDownloadPath ?? '';
+    final savePath = settings.customDownloadPath?.isNotEmpty == true
+        ? settings.customDownloadPath!
+        : await PermissionService().defaultDownloadDirectory();
     final isDark = settings.isDarkMode;
     final playlistId = YoutubeService.extractPlaylistId(widget.playlistUrl) ??
         widget.playlistUrl;

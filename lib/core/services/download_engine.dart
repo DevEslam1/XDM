@@ -241,8 +241,20 @@ class DownloadProgress {
     // size so the per-stream bar reaches 100% when this stream completes —
     // the orchestrator then swaps to the other stream. This avoids the
     // "stuck at 91%" UX when video finishes before audio begins.
+    //
+    // FIX-YT-COUNTERPART-FIRST: When THIS stream is already complete
+    // (downloadedBytes >= fileSize > 0) but the counterpart has not yet
+    // started, the combined bar would show 100% even though the overall
+    // download is only half done. In that case, fall through to the
+    // combined calculation so the user sees the true overall percentage.
     if (counterpartSize > 0 && counterpartDownloaded == 0) {
       if (fileSize <= 0) return null;
+      // If this stream is fully downloaded, show combined (not 100%).
+      if (downloadedBytes >= fileSize) {
+        final totalSize = fileSize + counterpartSize;
+        if (totalSize == 0) return null;
+        return (downloadedBytes / totalSize).clamp(0.0, 1.0);
+      }
       return (downloadedBytes / fileSize).clamp(0.0, 1.0);
     }
 
@@ -1049,22 +1061,31 @@ class DownloadEngine {
           // FIX-CHUNK-DETAILS: Parse per-chunk byte details for HTTP details screen
           List<ChunkDetail>? chunkDetails;
           if (p['chunkDetails'] is List) {
-            chunkDetails = (p['chunkDetails'] as List)
-                .map((c) => ChunkDetail(
-                      // ignore: avoid_dynamic_calls
-                      index: (c['index'] as num?)?.toInt() ?? 0,
-                      // ignore: avoid_dynamic_calls
-                      start: (c['start'] as num?)?.toInt() ?? 0,
-                      // ignore: avoid_dynamic_calls
-                      end: (c['end'] as num?)?.toInt() ?? -1,
-                      // ignore: avoid_dynamic_calls
-                      downloaded: (c['downloaded'] as num?)?.toInt() ?? 0,
-                      // ignore: avoid_dynamic_calls
-                      size: (c['size'] as num?)?.toInt() ?? 0,
-                      // ignore: avoid_dynamic_calls
-                      ratio: (c['ratio'] as num?)?.toDouble() ?? 0.0,
-                    ))
-                .toList();
+            chunkDetails = (p['chunkDetails'] as List).map((c) {
+              // ignore: avoid_dynamic_calls
+              final rawSize = (c['size'] as num?)?.toInt() ?? 0;
+              // ignore: avoid_dynamic_calls
+              final rawRatio = (c['ratio'] as num?)?.toDouble() ?? 0.0;
+              // FIX-RATIO-SENTINEL: After the ChunkState.ratio fix that
+              // returns -1.0 for unknown-size chunks, clamp the ratio
+              // back to [0.0, 1.0] for the ChunkDetail model. The
+              // isIndeterminate getter on ChunkDetail already signals
+              // indeterminate state via `size < 0`, so the ratio field
+              // itself should never be negative.
+              final safeRatio = rawRatio < 0.0 ? 0.0 : rawRatio.clamp(0.0, 1.0);
+              return ChunkDetail(
+                // ignore: avoid_dynamic_calls
+                index: (c['index'] as num?)?.toInt() ?? 0,
+                // ignore: avoid_dynamic_calls
+                start: (c['start'] as num?)?.toInt() ?? 0,
+                // ignore: avoid_dynamic_calls
+                end: (c['end'] as num?)?.toInt() ?? -1,
+                // ignore: avoid_dynamic_calls
+                downloaded: (c['downloaded'] as num?)?.toInt() ?? 0,
+                size: rawSize,
+                ratio: safeRatio,
+              );
+            }).toList();
           }
           onProgress(DownloadProgress(
             downloadedBytes: (p['downloadedBytes'] as num?)?.toInt() ?? 0,
@@ -1631,11 +1652,23 @@ class DownloadEngine {
           }
         }
       }
+      // FIX-TOR-TOTAL: Prefer the per-file sum (calculatedTotal) because it
+      // respects user file selection. Fall back to the engine aggregate, then
+      // to the orchestrator's knownFileSize. If ALL are zero (rare race where
+      // metadata just arrived but totalWanted hasn't propagated yet), skip
+      // this tick entirely instead of emitting a bogus 0/0 progress event.
       final totalSize = calculatedTotal > 0
           ? calculatedTotal
           : (torrent.totalWanted > 0
               ? torrent.totalWanted
               : (knownFileSize > 0 ? knownFileSize : 0));
+      if (totalSize <= 0 && !torrent.hasMetadata) {
+        // No metadata yet — emit indeterminate state below.
+      } else if (totalSize <= 0) {
+        // Metadata present but no size data yet — skip this tick to avoid
+        // flashing 0% on the UI. The next update will have real numbers.
+        return;
+      }
 
       // FIX T-1: While metadata is unknown, show indeterminate state
       if (totalSize <= 0) {
@@ -1719,7 +1752,18 @@ class DownloadEngine {
         // selected files. During seeding, split uploadRate across selected
         // files (all are complete). Always zero ALL files first to prevent
         // stale values persisting on files that just completed.
-        if (!isCheckingOrMetadata) {
+        //
+        // FIX-FILE-SPEED-PAUSE: Also zero all file speeds when the torrent
+        // is paused/stopped/error so the details screen doesn't show a
+        // stale non-zero speed on individual files after the user pauses.
+        final isPausedState = stateLabel == 'paused' ||
+            stateLabel == 'stopped' ||
+            stateLabel == 'error';
+        if (isPausedState) {
+          for (final f in resolvedFiles) {
+            f['speed'] = 0.0;
+          }
+        } else if (!isCheckingOrMetadata) {
           for (final f in resolvedFiles) {
             f['speed'] = 0.0;
           }
