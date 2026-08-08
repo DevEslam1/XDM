@@ -745,10 +745,11 @@ class _BrowserScreenState extends State<BrowserScreen>
         tab.isLoading = true;
         tab.progress = 0.0;
         tab.lastRenderedProgress = 0;
+        tab.url = _cleanUrl(url);
         if (_currentTabIndex >= 0 &&
             _currentTabIndex < _tabs.length &&
             _tabs[_currentTabIndex].id == tab.id) {
-          _urlController.text = _cleanUrl(url);
+          _urlController.text = tab.url;
         }
         _detectedDownloadUrls.remove(tab.id);
         _detectedPlaylistUrls.remove(tab.id);

@@ -1076,8 +1076,7 @@ class DownloadProvider extends ChangeNotifier
       for (final task in reconciled) {
         final idx = _tasks.indexWhere((t) => t.id == task.id);
         if (idx != -1) {
-          // If the task status in memory has transitioned during the async gap
-          // (e.g. user resumed/paused/deleted it), do NOT overwrite live state!
+          // If the task was deleted or status in memory transitioned during the async gap, do NOT overwrite or recreate in DB!
           if (_tasks[idx].status != task.status &&
               _tasks[idx].status != DownloadStatus.paused) {
             continue;
@@ -3051,21 +3050,18 @@ class DownloadProvider extends ChangeNotifier
       _notifications.cancelNotification(savedNotificationId);
     }
 
-    // 5. Delete from DB (with retries in background)
-    unawaited(() async {
-      for (var attempt = 0; attempt < 3; attempt++) {
-        try {
-          await _databaseService.deleteTask(id);
-          return;
-        } catch (e) {
-          debugPrint('[DMX] deleteTask DB attempt ${attempt + 1} failed: $e');
-          if (attempt < 2) {
-            await Future.delayed(Duration(milliseconds: 200 * (attempt + 1)));
-          }
+    // 5. Delete from DB (with retries)
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        await _databaseService.deleteTask(id);
+        break;
+      } catch (e) {
+        debugPrint('[DMX] deleteTask DB attempt ${attempt + 1} failed: $e');
+        if (attempt < 2) {
+          await Future.delayed(Duration(milliseconds: 200 * (attempt + 1)));
         }
       }
-      debugPrint('[DMX] deleteTask DB delete permanently failed for $id');
-    }());
+    }
 
     // 6. Heavy cleanup in BACKGROUND
     unawaited(_backgroundDeleteCleanup(task, deleteFiles));

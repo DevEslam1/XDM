@@ -2740,6 +2740,10 @@ class DownloadOrchestrator {
                 if (!youtubeMimeCompatible(task.url, refreshedUrl)) {
                   rethrow;
                 }
+                task = task.copyWith(
+                  url: refreshedUrl,
+                  mergedAudioUrl: refreshedAudioUrl ?? task.mergedAudioUrl,
+                );
                 final idx = _host.providerTasks.indexWhere(
                   (x) => x.id == task.id,
                 );
@@ -2748,11 +2752,12 @@ class DownloadOrchestrator {
                     url: refreshedUrl,
                     mergedAudioUrl: refreshedAudioUrl ?? task.mergedAudioUrl,
                   );
+                  await _host.providerDatabaseService.saveTask(
+                    _host.providerTasks[idx],
+                  );
                 }
-                await _host.providerDatabaseService.saveTask(
-                  _host.providerTasks[idx],
-                );
-                rethrow;
+                await _host.setTaskState(task);
+                continue;
               }
             } catch (e) {
               // ignore
