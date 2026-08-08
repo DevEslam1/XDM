@@ -30,7 +30,38 @@ class AdBlockerService {
   bool _enabled = true;
   List<ContentBlocker> _nativeContentBlockers = [];
 
+  final ValueNotifier<int> _blockedCountNotifier = ValueNotifier<int>(0);
+  final Set<String> _blockedDomains = {};
+
   bool get isEnabled => _enabled;
+  int get blockedCount => _blockedCountNotifier.value;
+  ValueNotifier<int> get blockedCountNotifier => _blockedCountNotifier;
+  Set<String> get blockedDomains => Set.unmodifiable(_blockedDomains);
+
+  void resetStats() {
+    _blockedDomains.clear();
+    _blockedCountNotifier.value = 0;
+  }
+
+  void refresh() {
+    _rebuildContentBlockers();
+    _notifyListeners();
+  }
+
+  bool isAllowListed(String domainOrUrl) {
+    if (domainOrUrl.isEmpty) return false;
+    final host = domainOrUrl.contains('://')
+        ? (Uri.tryParse(domainOrUrl)?.host ?? domainOrUrl)
+        : domainOrUrl;
+    final lower = host.toLowerCase();
+
+    final allowList = AdBlockFilterUpdater().allowListedDomains;
+    if (allowList.contains(lower)) return true;
+    for (final d in allowList) {
+      if (lower == d || lower.endsWith('.$d')) return true;
+    }
+    return false;
+  }
 
   Future<void> init() async {
     try {
@@ -169,22 +200,56 @@ class AdBlockerService {
   bool shouldBlockUrl(String url) {
     if (!_enabled || url.isEmpty) return false;
     try {
-      final host = Uri.parse(url).host.toLowerCase();
+      final host = url.contains('://')
+          ? (Uri.parse(url).host.toLowerCase())
+          : url.toLowerCase();
+
+      if (isAllowListed(host)) return false;
+
+      final customStore = CustomAdBlockStore.instance;
+
+      if (customStore.useCustomOnly) {
+        if (customStore.contains(host)) {
+          _recordBlocked(host);
+          return true;
+        }
+        return false;
+      }
+
       // Exact hostname or subdomain match
       for (final d in _adHostnames) {
-        if (host == d || host.endsWith('.$d')) return true;
+        if (host == d || host.endsWith('.$d')) {
+          _recordBlocked(host);
+          return true;
+        }
       }
       // Custom hosts from user store
-      for (final h in CustomAdBlockStore.instance.hosts) {
-        if (host == h || host.endsWith('.$h')) return true;
+      if (customStore.contains(host)) {
+        _recordBlocked(host);
+        return true;
       }
     } catch (_) {}
     return false;
   }
 
-  /// Records a blocked request for statistics. (No-op stub — extend if needed.)
+  /// Records a blocked request for statistics.
   void recordBlockedRequest(String url) {
     _log.fine('Blocked: $url');
+    try {
+      final host = url.contains('://')
+          ? (Uri.parse(url).host.toLowerCase())
+          : url.toLowerCase();
+      _recordBlocked(host);
+    } catch (_) {
+      _recordBlocked(url);
+    }
+  }
+
+  void _recordBlocked(String host) {
+    if (host.isNotEmpty) {
+      _blockedDomains.add(host);
+    }
+    _blockedCountNotifier.value++;
   }
 
   // ─────────────────────────────────────────────────────────────────────
