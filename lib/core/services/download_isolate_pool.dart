@@ -581,6 +581,10 @@ class HttpTransferJob {
       _send('error', {
         'errorType': 'urlExpired',
         'errorMessage': e.message,
+        // FIX-URL-EXPIRY-ALL-MIRRORS: YouTube/signed-URL mirrors all
+        // expire together. The orchestrator uses this flag to refresh
+        // every mirror URL before re-submitting the job.
+        'refreshAllMirrors': true,
       });
       return;
     }
@@ -1062,6 +1066,9 @@ class HttpTransferJob {
             // FIX-3B: Throw the typed exception so sendUnhandledError() can
             // map it to 'urlExpired'. The orchestrator catches this, refreshes
             // the URL, and re-submits the job WITHOUT losing chunk progress.
+            // FIX-URL-EXPIRY-ALL-MIRRORS: For YouTube / signed URLs, every
+            // mirror shares the same expiry signature — flag this so the
+            // orchestrator refreshes ALL mirrors in one pass.
             throw _UrlExpiredException(
               'Download URL expired (HTTP $status). Refresh required.',
             );
@@ -1369,15 +1376,20 @@ class HttpTransferJob {
             }
             sink.add(piece);
             chunk.downloaded += piece.length;
-            // FIX-SIZE-LIVE: If the server didn't send Content-Length (total
-            // unknown), learn the size from the stream so the UI percentage
-            // bar is not stuck at indeterminate during the download. The
-            // final value is confirmed at stream end below.
-            if (st.totalSize <= 0 && chunk.end < 0) {
-              chunk.end = chunk.downloaded - 1;
-            }
+            // FIX-SIZE-LIVE: For unknown-size streams, do NOT set chunk.end
+            // to downloaded-1 mid-stream. That makes ChunkState.size ==
+            // downloaded and ChunkState.ratio always 1.0, falsely showing
+            // 100% during active download. Keep chunk.end = -1 so ratio
+            // returns 0.0 (indeterminate); the UI renders an indeterminate
+            // bar and uses `downloaded` as the byte indicator. Final size
+            // is confirmed at stream end below.
             _bytesSinceSave += piece.length;
-            await _throttledSaveAndReport(null);
+            // FIX-SINGLE-FLUSH: Flush IOSink before state save so state
+            // file never claims bytes still in OS buffer.
+            await _throttledSaveAndReport(
+              null,
+              preSaveFlush: sink != null ? () => sink!.flush() : null,
+            );
           }
         } on DioException catch (e) {
           if (e.type == DioExceptionType.cancel) {
@@ -1533,7 +1545,10 @@ class HttpTransferJob {
 
   /// Bounded-interval persistence + progress emission, both derived from the
   /// SAME TransferState snapshot.
-  Future<void> _throttledSaveAndReport(PositionalFileWriter? writer) async {
+  Future<void> _throttledSaveAndReport(
+    PositionalFileWriter? writer, {
+    Future<void> Function()? preSaveFlush,
+  }) async {
     final nowMs = _stopwatch.elapsedMilliseconds;
     final st = _state!;
     final dueSave = nowMs - _lastStateSaveMs >= _stateSaveIntervalMs ||
@@ -1544,6 +1559,13 @@ class HttpTransferJob {
       _lastStateSaveMs = nowMs;
       _bytesSinceSave = 0;
       try {
+        // FIX-SINGLE-FLUSH: For single-stream downloads (writer == null),
+        // flush the IOSink before saving state so the state file never
+        // claims bytes that are still buffered in the OS file buffer.
+        // Without this, a crash between state save and sink flush leaves
+        // the state file ahead of the actual file on disk, causing a
+        // corrupt resume on the next start.
+        if (preSaveFlush != null) await preSaveFlush();
         if (writer != null) await writer.flush();
         await StateStore.save(cmd.tempFilePath, st);
       } catch (e) {
@@ -1584,28 +1606,44 @@ class HttpTransferJob {
       _lastEta = null;
     }
 
+    // FIX-CHUNK-DETAILS: Always emit per-chunk details so the HTTP details
+    // screen can render progress for every part — including single-stream
+    // downloads where there is exactly one chunk. Previously chunkDetails
+    // was null for single-stream, so the details screen showed nothing.
+    final chunkDetails = st.chunks.isNotEmpty
+        ? st.chunks.asMap().entries.map((e) {
+            final c = e.value;
+            return <String, dynamic>{
+              'index': e.key,
+              'start': c.start,
+              'end': c.end,
+              'downloaded': c.downloaded,
+              'size': c.size,
+              'ratio': c.ratio,
+            };
+          }).toList()
+        : null;
+
     _send('progress', {
       'downloadedBytes': downloaded,
       'fileSize': total,
       'speed': speed,
       'eta': eta,
-      'chunks': st.chunks.length > 1 ? st.chunkRatios : null,
+      'chunks': st.chunks.isNotEmpty ? st.chunkRatios : null,
+      'chunkDetails': chunkDetails,
       'fileName': cmd.resolvedFileName,
       'supportsResume': cmd.supportsResume,
       if (cmd.ytStreamKind != null) 'ytStreamKind': cmd.ytStreamKind!.name,
       if (cmd.ytCounterpartSize != null)
         'ytCounterpartSize': cmd.ytCounterpartSize,
-      // FIX-YT-COUNTERPART: Pass the CURRENT stream's live downloaded bytes
-      // as ytDownloadedBytes (not the stale cmd value). The orchestrator
-      // tracks both streams and computes combined percentage as:
-      //   (thisStreamBytes + otherStreamBytes) / (thisSize + otherSize)
-      // The old field ytCounterpartDownloadedBytes was always 0 because it
-      // came from cmd (set once at spawn). Keep it for backward compat but
-      // also send ytDownloadedBytes with the live value.
+      // FIX-YT-LIVE: Do NOT send ytCounterpartDownloadedBytes from cmd —
+      // it was always the stale spawn-time value (0) and never reflected
+      // the counterpart stream's actual progress. The orchestrator must
+      // track both streams' live downloadedBytes (available here as
+      // 'ytDownloadedBytes') and set ytCounterpartDownloadedBytes on the
+      // DownloadProgress before forwarding to the UI.
       if (cmd.ytStreamKind != null) 'ytDownloadedBytes': downloaded,
       if (cmd.ytStreamKind != null) 'ytFileSize': total,
-      if (cmd.ytCounterpartDownloadedBytes != null)
-        'ytCounterpartDownloadedBytes': cmd.ytCounterpartDownloadedBytes,
       if (statusMessage != null) 'statusMessage': statusMessage,
     });
   }

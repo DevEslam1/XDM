@@ -39,7 +39,13 @@ class ChunkState {
 
   double get ratio {
     final s = size;
-    if (s <= 0) return downloaded > 0 ? 1.0 : 0.0;
+    // FIX-UNKNOWN-SIZE: Open-ended chunk (size unknown). Reporting 1.0
+    // while bytes are flowing makes the details screen show "100%" for a
+    // still-downloading indeterminate stream. Report 0.0 so the UI renders
+    // an indeterminate bar instead of a false "complete" state. The ratio
+    // is only meaningful once `end >= 0` (known total).
+    if (s < 0) return 0.0;
+    if (s == 0) return downloaded > 0 ? 1.0 : 0.0;
     return (downloaded / s).clamp(0.0, 1.0);
   }
 
@@ -506,22 +512,32 @@ class StateStore {
       } catch (_) {}
       await tmp.rename(targetPath);
     } catch (e) {
-      debugPrint('[DmxState] save failed for $targetPath: $e');
+      debugPrint('[DmxState] save failed for $tempFilePath: $e');
+      // Best-effort cleanup of the orphaned tmp file so a stale
+      // .dmxstate.tmp never pollutes the next save attempt.
       try {
         final tmp = File(tmpPath);
-        if (await tmp.exists()) await tmp.delete();
+        if (await tmp.exists()) {
+          await tmp.delete();
+        }
       } catch (_) {}
-      rethrow;
     }
   }
 
+  /// Removes the state file and its tmp sidecar. Called after a successful
+  /// finalize/rename so the next launch does not treat a completed transfer
+  /// as resumable.
   static Future<void> remove(String tempFilePath) async {
-    for (final p in [pathFor(tempFilePath), '${pathFor(tempFilePath)}.tmp']) {
-      try {
-        final f = File(p);
-        if (await f.exists()) await f.delete();
-      } catch (_) {}
-    }
+    final targetPath = pathFor(tempFilePath);
+    final tmpPath = '$targetPath.tmp';
+    try {
+      final f = File(targetPath);
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
+    try {
+      final tmp = File(tmpPath);
+      if (await tmp.exists()) await tmp.delete();
+    } catch (_) {}
   }
 }
 

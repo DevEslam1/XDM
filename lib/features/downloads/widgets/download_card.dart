@@ -1781,23 +1781,33 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                     // Total progress + total percentage
                     Builder(builder: (context) {
                       final files = widget.task.torrentFiles ?? [];
-                      final isChecking = widget.task.statusMessage?.contains('checking') == true ||
-                          widget.task.statusMessage?.contains('Checking') == true;
+                      final isChecking = widget.task.statusMessage
+                              ?.toLowerCase()
+                              .contains('checking') ==
+                          true; // FIX-B10: case-insensitive
                       final displayFiles = files.map((f) {
                         final selected = isTorrentFileSelected(f);
                         final length = (f['length'] as num?)?.toInt() ?? 0;
-                        final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-
+                        final rawDownloaded =
+                            (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                        // FIX-SENTINEL: -1 means "engine has no data yet" → treat as 0
+                        final downloaded =
+                            rawDownloaded < 0 ? 0 : rawDownloaded;
                         final effectiveDownloaded = isChecking
-                            ? downloaded
-                            : (widget.task.status == DownloadStatus.completed && selected
+                            ? downloaded // FIX-B7: keep last known value to avoid flicker
+                            : (widget.task.status == DownloadStatus.completed &&
+                                    selected
                                 ? length
                                 : downloaded);
-
-                        return {...f, 'downloadedBytes': effectiveDownloaded};
+                        return {
+                          ...f,
+                          'downloadedBytes': effectiveDownloaded,
+                          '_hadNoData': rawDownloaded < 0,
+                        };
                       }).toList();
-                      final selectedFiles =
-                          displayFiles.where((f) => isTorrentFileSelected(f)).toList();
+                      final selectedFiles = displayFiles
+                          .where((f) => isTorrentFileSelected(f))
+                          .toList();
                       final totalLen = selectedFiles.fold<int>(
                         0,
                         (s, f) {
@@ -1808,14 +1818,20 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                       final totalDl = selectedFiles.fold<int>(
                         0,
                         (s, f) {
-                          final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                          final dl =
+                              (f['downloadedBytes'] as num?)?.toInt() ?? 0;
                           return s + (dl < 0 ? 0 : dl);
                         },
                       );
-                      final overallProgress =
-                          totalLen > 0 ? (totalDl / totalLen).clamp(0.0, 1.0) : -1.0;
+                      // FIX-CLAMP: guard against totalDl > totalLen (stale per-file data)
+                      final overallProgress = totalLen > 0
+                          ? (totalDl.clamp(0, totalLen) / totalLen)
+                              .clamp(0.0, 1.0)
+                          : -1.0;
                       final pctLabel = overallProgress < 0
-                          ? (totalDl > 0 ? formatBytes(totalDl.toDouble()) : '0.0%')
+                          ? (totalDl > 0
+                              ? formatBytes(totalDl.toDouble())
+                              : '0.0%')
                           : '${(overallProgress * 100).toStringAsFixed(1)}%';
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1830,21 +1846,23 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                                   child: overallProgress < 0
                                       ? const SizedBox(
                                           height: 8,
-                                          child: LinearProgressIndicator(minHeight: 8),
+                                          child: LinearProgressIndicator(
+                                              minHeight: 8),
                                         )
                                       : Stack(
                                           children: [
                                             Container(
                                               height: 8,
-                                              decoration: AppTheme.progressTrack(
+                                              decoration:
+                                                  AppTheme.progressTrack(
                                                 isDark: isDark,
                                               ),
                                             ),
                                             AnimatedFractionallySizedBox(
-                                              widthFactor:
-                                                  overallProgress.clamp(0.0, 1.0),
-                                              duration:
-                                                  const Duration(milliseconds: 400),
+                                              widthFactor: overallProgress
+                                                  .clamp(0.0, 1.0),
+                                              duration: const Duration(
+                                                  milliseconds: 400),
                                               curve: Curves.easeOut,
                                               child: Container(
                                                 height: 8,
@@ -2167,8 +2185,9 @@ class _TorrentFileRow extends StatelessWidget {
     final isEstimated = file['progressEstimated'] == true;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     // FIX(T-2): Show indeterminate indicator when downloadedBytes == 0 and selected
+    final hadNoData = (file['_hadNoData'] as bool?) ?? false;
     final showIndeterminate =
-        downloaded == 0 && isEstimated && selected && !done;
+        (downloaded == 0 || hadNoData) && isEstimated && selected && !done;
     final progressText = showIndeterminate
         ? '…'
         : (isEstimated

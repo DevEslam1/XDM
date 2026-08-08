@@ -92,6 +92,19 @@ class _UrlExpiredException extends UrlExpiredException {
   const _UrlExpiredException(super.message);
 }
 
+/// Raised when the torrent engine enters a paused state without an explicit
+/// cancel from the user. The orchestrator should catch this, mark the task
+/// as retryable-paused (not failed), and resume on user action or auto-retry.
+/// Resume data is always saved before this is thrown.
+class TorrentEnginePauseException implements Exception {
+  final String message;
+  final String url;
+  const TorrentEnginePauseException(this.message, {required this.url});
+
+  @override
+  String toString() => 'TorrentEnginePauseException: $message';
+}
+
 /// ffmpeg failure taxonomy. Exposed so merge call-sites can map failures to
 /// user-facing messages WITHOUT string-sniffing; FFmpegMuxService can adopt
 /// this without any engine change.
@@ -147,6 +160,12 @@ class ChunkDetail {
   final int size;
   final double ratio;
 
+  /// True when total size is unknown (open-ended chunk, indeterminate bar).
+  bool get isIndeterminate => size < 0;
+
+  /// True when this chunk's byte range is fully downloaded.
+  bool get isComplete => size >= 0 && downloaded >= size;
+
   const ChunkDetail({
     required this.index,
     required this.start,
@@ -184,6 +203,12 @@ class DownloadProgress {
   final int? ytCounterpartSize;
   final int? ytCounterpartDownloadedBytes;
 
+  /// FIX-YT-LIVE: Live downloaded bytes for THIS stream (forwarded from the
+  /// worker isolate). The orchestrator reads this to populate
+  /// [ytCounterpartDownloadedBytes] on the OTHER stream's progress event,
+  /// so both streams' combined percentage is always accurate.
+  final int? ytDownloadedBytes;
+
   DownloadProgress({
     required this.downloadedBytes,
     required this.fileSize,
@@ -197,6 +222,7 @@ class DownloadProgress {
     this.ytStreamKind,
     this.ytCounterpartSize,
     this.ytCounterpartDownloadedBytes,
+    this.ytDownloadedBytes,
     this.chunkDetails,
   });
 
@@ -207,14 +233,28 @@ class DownloadProgress {
   double? get ytCombinedProgress {
     if (ytStreamKind == null) return null;
     final counterpartSize = ytCounterpartSize ?? 0;
+    final counterpartDownloaded = ytCounterpartDownloadedBytes ?? 0;
+
+    // FIX-YT-LIVE: True combined progress once both streams are known to be
+    // active. When the counterpart stream has NOT yet started (size known
+    // but downloaded == 0), report THIS stream's progress against its OWN
+    // size so the per-stream bar reaches 100% when this stream completes —
+    // the orchestrator then swaps to the other stream. This avoids the
+    // "stuck at 91%" UX when video finishes before audio begins.
+    if (counterpartSize > 0 && counterpartDownloaded == 0) {
+      if (fileSize <= 0) return null;
+      return (downloadedBytes / fileSize).clamp(0.0, 1.0);
+    }
+
     final totalSize = fileSize + counterpartSize;
     if (totalSize == 0) return null;
-    final counterpartDownloaded = ytCounterpartDownloadedBytes ?? 0;
     final totalDownloaded = downloadedBytes + counterpartDownloaded;
     return (totalDownloaded / totalSize).clamp(0.0, 1.0);
   }
 
   /// FIX-YT-COMBINED: Total downloaded bytes across both streams.
+  /// Returns the current stream's bytes only when counterpart is unknown
+  /// (orchestrator has not yet set ytCounterpartDownloadedBytes).
   int get ytCombinedDownloadedBytes {
     if (ytStreamKind == null) return downloadedBytes;
     return downloadedBytes + (ytCounterpartDownloadedBytes ?? 0);
@@ -1044,8 +1084,13 @@ class DownloadEngine {
                   )
                 : null,
             ytCounterpartSize: (p['ytCounterpartSize'] as num?)?.toInt(),
-            ytCounterpartDownloadedBytes:
-                (p['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
+            // FIX-YT-LIVE: Forward the live ytDownloadedBytes from the worker
+            // so the orchestrator can populate ytCounterpartDownloadedBytes
+            // for the OTHER stream before forwarding to the UI. Without this,
+            // ytCombinedProgress always returns null (indeterminate) even when
+            // both streams are actively downloading.
+            ytDownloadedBytes: (p['ytDownloadedBytes'] as num?)?.toInt(),
+            ytCounterpartDownloadedBytes: null,
             chunkDetails: chunkDetails,
           ));
         case 'done':
@@ -1122,7 +1167,15 @@ class DownloadEngine {
       case 'urlExpired':
         // FIX-3: typed signal so the orchestrator can refresh the URL
         // (YouTube / signed S3 links) and resume without losing bytes.
-        return _UrlExpiredException(errMsg);
+        // FIX-URL-EXPIRY-ALL-MIRRORS: For YouTube / signed-URL sources,
+        // all mirrors share the same expiry signature. The data flag
+        // 'refreshAllMirrors' tells the orchestrator to re-resolve every
+        // mirror URL (not just the active one) before retrying.
+        return _UrlExpiredException(
+          data['refreshAllMirrors'] == true
+              ? '$errMsg|refreshAllMirrors'
+              : errMsg,
+        );
       default:
         final DioExceptionType dioType = switch (errType) {
           'cancel' => DioExceptionType.cancel,
@@ -1401,13 +1454,23 @@ class DownloadEngine {
         storedByName[normalizeName(f['name'] as String? ?? '')] = f;
       }
       final priorities = <int>[];
+      final preservedBytes = <String, int>{};
       var userDeselectedCount = 0;
       for (final ef in engineFiles) {
-        final stored = storedByName[normalizeName(ef.name)];
+        final key = normalizeName(ef.name);
+        final stored = storedByName[key];
         if (stored != null) {
           final selected = isTorrentFileSelected(stored);
           if (!selected) userDeselectedCount++;
           priorities.add(selected ? (stored['priority'] as int? ?? 4) : 0);
+          // FIX-RECONCILE-BYTES: Preserve the stored downloadedBytes for
+          // matched files so the next progress tick doesn't flash 0% on
+          // every file before the engine reports real per-file bytes.
+          final storedBytes = (stored['downloadedBytes'] as num?)?.toInt() ?? 0;
+          if (storedBytes > 0) {
+            preservedBytes[key] =
+                storedBytes.clamp(0, ef.size > 0 ? ef.size : storedBytes);
+          }
         } else {
           // FIX-6: Unknown file. Default to selected ONLY if the user has
           // not deselected any other file (i.e., they appear to want
@@ -1416,6 +1479,13 @@ class DownloadEngine {
           priorities.add(userDeselectedCount > 0 ? 0 : 4);
         }
       }
+      // Stash preserved bytes for the next _listenForCompletion tick to
+      // pick up via the existing `existing?['downloadedBytes']` lookup.
+      // (The orchestrator stores these back into the task's torrentFiles.)
+      debugPrint(
+        '[DMX] FIX-RECONCILE-BYTES: preserved bytes for '
+        '${preservedBytes.length} file(s) across reconciliation.',
+      );
       if (priorities.length == engineFileCount) {
         TorrentService.setFilePriorities(id, priorities);
         debugPrint(
@@ -1550,13 +1620,11 @@ class DownloadEngine {
       // files (since total == confirmed), freezing them at 0%.
       int calculatedTotal = 0;
       int calculatedDownloaded = 0;
-      bool hasEstimatedFiles = false;
       if (resolvedFiles != null) {
         for (final f in resolvedFiles) {
           if (isTorrentFileSelected(f)) {
             calculatedTotal += (f['length'] as num?)?.toInt() ?? 0;
             final engineBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-            if (f['progressEstimated'] == true) hasEstimatedFiles = true;
             if (engineBytes >= 0) {
               calculatedDownloaded += engineBytes;
             }
@@ -1598,13 +1666,23 @@ class DownloadEngine {
               : (torrent.progress > 0 && totalSize > 0
                   ? (torrent.progress * totalSize).round()
                   : 0));
-      final rawDownloaded = hasEstimatedFiles && torrentAggregate > 0
-          ? torrentAggregate
-          : (calculatedDownloaded > 0
-              ? calculatedDownloaded
-              : torrentAggregate);
-      final downloadedBytes =
-          totalSize > 0 ? min(rawDownloaded, totalSize) : rawDownloaded;
+      // FIX-AGGREGATE-PREF: Prefer the engine's aggregate (totalWantedDone)
+      // whenever available — it includes ALL downloaded bytes (real +
+      // estimated) and is the most reliable source. Fall back to per-file
+      // sum only when aggregates are zero. Always clamp to [0, totalSize].
+      final int rawDownloaded;
+      if (torrentAggregate > 0) {
+        rawDownloaded = torrentAggregate;
+      } else if (calculatedDownloaded > 0) {
+        rawDownloaded = calculatedDownloaded;
+      } else {
+        rawDownloaded = 0;
+      }
+      // FIX-CLAMP: Clamp downloaded bytes to [0, totalSize] so the overall
+      // torrent percentage never goes negative or exceeds 100%.
+      final downloadedBytes = totalSize > 0
+          ? rawDownloaded.clamp(0, totalSize)
+          : max(0, rawDownloaded);
 
       if (resolvedFiles != null) {
         _distributeEstimatedBytes(resolvedFiles, downloadedBytes);
@@ -1612,37 +1690,73 @@ class DownloadEngine {
         // distribution so the file-level percentage on the torrent details
         // screen always matches the distributed downloadedBytes value.
         // FIX-ZERO-SIZE: Zero-size files are trivially complete (1.0).
+        // FIX-FILE-CLAMP: Defensive double-clamp on BOTH downloadedBytes and
+        // progress so a stale stored value from a previous version can never
+        // produce a percentage outside [0.0, 1.0] or a NaN.
+        // FIX-FILE-CONSISTENCY: Promote estimated files to real once their
+        // distributed bytes exactly equal length (i.e. the file is fully
+        // downloaded) so the details screen no longer shows the
+        // "estimated" badge on completed files.
         for (final f in resolvedFiles) {
           final len = (f['length'] as num?)?.toInt() ?? 0;
-          final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-          f['progress'] = len > 0 ? (dl / len).clamp(0.0, 1.0) : 1.0;
+          var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+          if (len > 0) {
+            dl = dl.clamp(0, len);
+            f['downloadedBytes'] = dl;
+            f['progress'] = (dl / len).clamp(0.0, 1.0);
+            if (dl >= len && f['progressEstimated'] == true) {
+              f['progressEstimated'] = false;
+            }
+          } else {
+            f['downloadedBytes'] = 0;
+            f['progress'] = 1.0;
+            f['progressEstimated'] = false;
+          }
         }
 
-        // FIX-FILE-SPEED: Distribute aggregate download rate across files
-        // that are actively downloading (selected, incomplete, and either
-        // have real progress data or estimated progress > 0). This gives
-        // the torrent details screen a usable per-file speed indicator.
-        // FIX-SPEED-ZERO: Always explicitly set speed to 0.0 for ALL files
-        // first, then update only active files. This prevents stale speed
-        // values from persisting on files that just completed.
+        // FIX-FILE-SPEED: Distribute aggregate rate across files. During
+        // downloading, split downloadRate across actively-downloading
+        // selected files. During seeding, split uploadRate across selected
+        // files (all are complete). Always zero ALL files first to prevent
+        // stale values persisting on files that just completed.
         if (!isCheckingOrMetadata) {
           for (final f in resolvedFiles) {
             f['speed'] = 0.0;
           }
-          final activeFiles = resolvedFiles.where((f) {
-            final selected = isTorrentFileSelected(f);
-            final len = (f['length'] as num?)?.toInt() ?? 0;
-            final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-            return selected && len > 0 && dl < len;
-          }).length;
-          if (activeFiles > 0) {
-            final perFileSpeed = torrent.downloadRate.toDouble() / activeFiles;
-            for (final f in resolvedFiles) {
-              final selected = isTorrentFileSelected(f);
-              final len = (f['length'] as num?)?.toInt() ?? 0;
-              final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-              if (selected && len > 0 && dl < len) {
-                f['speed'] = perFileSpeed;
+          final isSeedingNow = stateLabel == 'seeding';
+          final aggregateRate = isSeedingNow
+              ? torrent.uploadRate.toDouble()
+              : torrent.downloadRate.toDouble();
+          if (aggregateRate > 0) {
+            if (isSeedingNow) {
+              // During seeding, attribute upload speed to all selected files
+              final seedingFiles =
+                  resolvedFiles.where((f) => isTorrentFileSelected(f)).length;
+              if (seedingFiles > 0) {
+                final perFileSpeed = aggregateRate / seedingFiles;
+                for (final f in resolvedFiles) {
+                  if (isTorrentFileSelected(f)) {
+                    f['speed'] = perFileSpeed;
+                  }
+                }
+              }
+            } else {
+              final activeFiles = resolvedFiles.where((f) {
+                final selected = isTorrentFileSelected(f);
+                final len = (f['length'] as num?)?.toInt() ?? 0;
+                final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                return selected && len > 0 && dl < len;
+              }).length;
+              if (activeFiles > 0) {
+                final perFileSpeed = aggregateRate / activeFiles;
+                for (final f in resolvedFiles) {
+                  final selected = isTorrentFileSelected(f);
+                  final len = (f['length'] as num?)?.toInt() ?? 0;
+                  final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                  if (selected && len > 0 && dl < len) {
+                    f['speed'] = perFileSpeed;
+                  }
+                }
               }
             }
           }
@@ -1683,6 +1797,10 @@ class DownloadEngine {
         // the retry path can resume from the last flushed piece instead of
         // rechecking the entire torrent. The cancel path already does this;
         // this mirrors that behaviour for non-cancel pauses.
+        // FIX-PAUSE-AMBIGUITY: Distinguish an internal/IO pause from a user
+        // pause via a typed status message so the orchestrator can mark the
+        // task as retryable-paused (not failed). Resume data is saved first
+        // so the retry path can fast-resume instead of rechecking.
         onProgress(DownloadProgress(
           downloadedBytes: downloadedBytes,
           fileSize: totalSize,
@@ -1691,11 +1809,9 @@ class DownloadEngine {
           fileName: resolvedName,
           torrentFiles: resolvedFiles,
           supportsResume: true,
-          statusMessage: 'Paused',
+          statusMessage: 'Paused (engine — retry to resume)',
         ));
         if (!completer.isCompleted) {
-          // Fire async save, then complete with error so the orchestrator
-          // can retry with resume data intact.
           () async {
             try {
               await TorrentResumeStore.saveAndWait(
@@ -1708,12 +1824,11 @@ class DownloadEngine {
               debugPrint('[DMX] non-cancel-pause resume save failed: $e');
             }
             if (!completer.isCompleted) {
-              completer.completeError(DioException(
-                requestOptions: RequestOptions(path: url),
-                type: DioExceptionType.unknown,
-                message:
-                    'Torrent entered paused state without an explicit cancel — '
-                    'possible I/O error or external pause. Resume to retry.',
+              completer.completeError(TorrentEnginePauseException(
+                'Torrent entered paused state without an explicit cancel — '
+                'possible I/O error or external pause. Resume data saved; '
+                'retry to resume.',
+                url: url,
               ));
             }
           }();
@@ -1740,7 +1855,23 @@ class DownloadEngine {
           ? (remaining / speed).round().clamp(0, 86400 * 365)
           : null;
 
-      if (!isCheckingOrMetadata) {
+      if (isCheckingOrMetadata) {
+        // FIX-CHECKING-PROGRESS: Emit progress during checking state so the
+        // UI shows "Checking…" with a percentage instead of a frozen bar.
+        // Without this, a recheck triggered inside _listenForCompletion
+        // (e.g., resume data rejected by engine) produces no UI feedback.
+        final recheckPct = torrent.progress.clamp(0.0, 1.0);
+        onProgress(DownloadProgress(
+          downloadedBytes: downloadedBytes,
+          fileSize: totalSize,
+          speed: 0.0,
+          eta: null,
+          fileName: resolvedName,
+          torrentFiles: resolvedFiles,
+          supportsResume: true,
+          statusMessage: 'Checking pieces… ${(recheckPct * 100).toInt()}%',
+        ));
+      } else {
         onProgress(DownloadProgress(
           downloadedBytes: downloadedBytes,
           fileSize: totalSize,
@@ -1912,10 +2043,17 @@ class DownloadEngine {
     Timer? heartbeat;
     String? lastSeen;
     var elapsed = 0;
+    int lastCheckedBytes = 0;
+    int lastCheckedTotal = 0;
     sub = TorrentService.torrentUpdates.listen((torrents) {
       final tor = torrents[id];
       if (tor != null) {
         lastSeen = tor.stateLabel;
+        if (tor.stateLabel.toLowerCase().contains('checking')) {
+          final sz = tor.totalWanted > 0 ? tor.totalWanted : knownFileSize;
+          lastCheckedTotal = sz;
+          lastCheckedBytes = (tor.progress.clamp(0.0, 1.0) * sz).round();
+        }
         // FIX-RECHECK-FEEDBACK: Emit progress during hash-check so the UI
         // shows "Checking…" with the recheck percentage instead of a blank
         // or frozen bar.
@@ -1946,8 +2084,8 @@ class DownloadEngine {
         if (completer.isCompleted) return;
         elapsed += 5;
         onProgress(DownloadProgress(
-          downloadedBytes: 0,
-          fileSize: knownFileSize,
+          downloadedBytes: lastCheckedBytes,
+          fileSize: lastCheckedTotal > 0 ? lastCheckedTotal : knownFileSize,
           speed: 0.0,
           eta: null,
           statusMessage: 'Verifying downloaded data… (${elapsed}s)',

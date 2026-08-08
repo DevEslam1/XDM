@@ -162,6 +162,7 @@ class _HomeScreenState extends State<HomeScreen>
                             context,
                             isDark: isDark,
                             isRtl: isRtl,
+                            downloadProvider: downloadProvider,
                           )),
                       const SizedBox(height: 12),
                       // Analytics Panel
@@ -586,6 +587,7 @@ class _HomeScreenState extends State<HomeScreen>
     BuildContext context, {
     required bool isDark,
     required bool isRtl,
+    required DownloadProvider downloadProvider,
   }) {
     return Selector<DownloadProvider, List<DownloadTask>>(
       selector: (_, p) => p.filteredTasks,
@@ -621,6 +623,7 @@ class _HomeScreenState extends State<HomeScreen>
                   L10n.of(context, 'active_tab'),
                   activeCount,
                   isDark,
+                  downloadProvider,
                 ),
                 const SizedBox(width: 4),
                 _buildSegment(
@@ -629,6 +632,7 @@ class _HomeScreenState extends State<HomeScreen>
                   L10n.of(context, 'completed_tab'),
                   historyCount,
                   isDark,
+                  downloadProvider,
                 ),
               ],
             ),
@@ -644,11 +648,10 @@ class _HomeScreenState extends State<HomeScreen>
     String label,
     int count,
     bool isDark,
+    DownloadProvider downloadProvider,
   ) {
     final selected = selectedSegment == index;
-    final color = index == 0
-        ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-        : (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen);
+    final color = getActiveFilterColor(downloadProvider, isDark);
 
     return Expanded(
       child: GestureDetector(

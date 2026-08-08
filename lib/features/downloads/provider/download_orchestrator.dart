@@ -2060,12 +2060,21 @@ class DownloadOrchestrator {
                 pushCombinedProgress(
                   statusMessageOverride: progress.statusMessage,
                 );
+// REPLACE:
                 // FIX-AUDIT-A1: Persist audio progress to sidecar at 2s intervals
                 final audioNow = DateTime.now().millisecondsSinceEpoch;
                 if (audioNow - _lastAudioStateSaveMs >= 2000) {
                   _lastAudioStateSaveMs = audioNow;
                   unawaited(_persistAudioState(
                       liveAudioTempPath, progress.downloadedBytes, size));
+                  // FIX-AUDIO-DB: also persist the task row so a crash does not
+                  // lose audioDownloadedBytes/audioProgress in the DB.
+                  final audioDbIdx =
+                      _host.providerTasks.indexWhere((x) => x.id == task.id);
+                  if (audioDbIdx != -1) {
+                    unawaited(
+                        _host.setTaskState(_host.providerTasks[audioDbIdx]));
+                  }
                 }
               },
               speedLimitBytesPerSecond: () {
@@ -2102,8 +2111,10 @@ class DownloadOrchestrator {
             if (downloadedAudioLen == 0) {
               throw Exception('Audio file is empty: $audioTempPath');
             }
-            audioBytesSoFar =
-                task.audioSize > 0 ? task.audioSize : downloadedAudioLen;
+            // FIX-AUDIO-CLAMP: never report more audio bytes than actually on disk.
+            audioBytesSoFar = task.audioSize > 0
+                ? task.audioSize.clamp(0, downloadedAudioLen).toInt()
+                : downloadedAudioLen;
             audioSpeedNow = 0.0;
 
             final liveTask = _host.findTaskById(task.id);
@@ -2527,11 +2538,12 @@ class DownloadOrchestrator {
             if (e.type == DioExceptionType.cancel) {
               return;
             }
-
             // FIX F-3: If video completed but audio failed, mark for merge retry
             final videoFile = File(task.tempFilePath);
             final audioFile = File('${task.tempFilePath}.audio');
-            if (await videoFile.exists() && await audioFile.exists()) {
+            final videoExists = await videoFile.exists();
+            final audioExists = await audioFile.exists();
+            if (videoExists && audioExists) {
               final vLen = await actualDownloadedBytes(task.tempFilePath,
                   threadCount: streamThreadCount);
               final aLen = await actualDownloadedBytes(
@@ -2546,7 +2558,23 @@ class DownloadOrchestrator {
                         'Tap retry to attempt merge.',
                   ));
                 }
-                return; // Don't rethrow — let retry handle merge
+                return; // Don't rethrow – let retry handle merge
+              }
+            }
+            // FIX-AUDIO-ONLY: video done, audio missing → keep video, retry audio only
+            if (videoExists && !audioExists && hasAudio) {
+              final vLen = await actualDownloadedBytes(task.tempFilePath,
+                  threadCount: streamThreadCount);
+              if (vLen > 0) {
+                final current = _host.findTaskById(task.id);
+                if (current != null) {
+                  await _host.setTaskState(current.copyWith(
+                    statusMessage: 'AUDIO_RETRY',
+                    errorMessage:
+                        'Video complete. Audio stream failed — retry will fetch audio only.',
+                  ));
+                }
+                return; // preserve video .dmxstate; retry re-downloads audio
               }
             }
             rethrow;
@@ -2845,9 +2873,8 @@ class DownloadOrchestrator {
       // starts cleanly instead of appending mismatched bytes.
       final oldItag = Uri.tryParse(task.url)?.queryParameters['itag'];
       final newItag = Uri.tryParse(resolved.url)?.queryParameters['itag'];
-      final itagChanged = oldItag != null &&
-          newItag != null &&
-          oldItag != newItag;
+      final itagChanged =
+          oldItag != null && newItag != null && oldItag != newItag;
       if (itagChanged && resolved.downloadedBytes > 0) {
         resolved = resolved.copyWith(
           downloadedBytes: 0,
