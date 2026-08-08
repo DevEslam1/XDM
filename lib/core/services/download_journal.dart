@@ -511,6 +511,7 @@ class StateStore {
     try {
       final payload = jsonEncode(state.toJson());
       final tmp = File(tmpPath);
+      await tmp.parent.create(recursive: true);
       await tmp.writeAsString(payload, flush: true);
       // writeAsString(flush:true) flushes buffers; re-open to force FSYNC
       // before rename on platforms where it matters.

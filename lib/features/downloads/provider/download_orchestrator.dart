@@ -405,6 +405,9 @@ class DownloadOrchestrator {
       debugPrint('[DMX] Cookie resolution error: $e');
     }
 
+    if (cookieString.isEmpty && YoutubeService.currentCookies != null) {
+      cookieString = YoutubeService.currentCookies!;
+    }
     _currentCookieString = cookieString;
 
     // FIX-INTEL: Use site intelligence to guide resolution and headers
