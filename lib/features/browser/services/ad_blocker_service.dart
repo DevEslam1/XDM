@@ -396,48 +396,11 @@ $customCss
   // The old version intercepted ALL element creation, breaking pages
   // that dynamically create download buttons.
 
-  // Do NOT override alert/confirm/prompt — some sites need them.
-
-  // Tag intervals created by ad scripts for targeted cleanup.
-  // We wrap setInterval/setTimeout to detect ad-related callbacks.
-  var _adCallbackPatterns = [
-    'ad', 'ads', 'advert', 'banner', 'popup', 'popunder',
-    'interstitial', 'sponsor', 'promo', 'tracking', 'analytics'
-  ];
-
-  var _origSetInterval = window.setInterval;
-  var _origSetTimeout = window.setTimeout;
-
-  window.setInterval = function(fn, delay) {
-    var id = _origSetInterval.apply(window, arguments);
-    // Only tag if the callback source contains ad-related patterns
-    try {
-      var src = (typeof fn === 'function') ? fn.toString() : String(fn);
-      var srcLower = src.toLowerCase();
-      for (var i = 0; i < _adCallbackPatterns.length; i++) {
-        if (srcLower.indexOf(_adCallbackPatterns[i]) !== -1) {
-          window.__xdmAdIntervals.push(id);
-          break;
-        }
-      }
-    } catch(e) {}
-    return id;
-  };
-
-  window.setTimeout = function(fn, delay) {
-    var id = _origSetTimeout.apply(window, arguments);
-    try {
-      var src = (typeof fn === 'function') ? fn.toString() : String(fn);
-      var srcLower = src.toLowerCase();
-      for (var i = 0; i < _adCallbackPatterns.length; i++) {
-        if (srcLower.indexOf(_adCallbackPatterns[i]) !== -1) {
-          window.__xdmAdIntervals.push(id);
-          break;
-        }
-      }
-    } catch(e) {}
-    return id;
-  };
+  // Do NOT override setInterval/setTimeout — scanning callback source
+  // for patterns like 'ad' is too broad. The word 'ad' appears in
+  // 'download', 'load', 'ready', 'upload', etc. and kills legitimate
+  // countdown timers like the one on liteapks.com.
+  // intervalCleanupJs is effectively a no-op (clears empty list).
 })();
 ''';
   }
@@ -647,33 +610,52 @@ $customCss
   }
 
   // Remove fixed/absolute overlays covering the page that are ad-related.
+  // IMPORTANT: We must NOT match on generic text like 'ad' — that word
+  // appears in legitimate content ('download', 'upload', 'loading', etc.).
+  // We only hide overlays that have ALL of:
+  //   • Are fixed/absolute with very high z-index
+  //   • Contain an <iframe> (ad iframes) OR have a known ad class/id
+  //   • Do NOT contain a download link or button anywhere inside them
   try {
     var all = document.querySelectorAll('div, section, aside');
     var maxCount = Math.min(all.length, 300);
+    var _adOverlayClasses = [
+      'popup-ad', 'ad-popup', 'popunder', 'interstitial',
+      'overlay-ad', 'ad-overlay', 'floating-ad', 'ad-floating',
+      'fullscreen-ad', 'ad-fullscreen'
+    ];
     for (var k = 0; k < maxCount; k++) {
       var el = all[k];
       var st = window.getComputedStyle(el);
-      if ((st.position === 'fixed' || st.position === 'absolute') &&
-          st.zIndex > 999 &&
-          st.display !== 'none' &&
-          el.offsetWidth > window.innerWidth * 0.5 &&
-          el.offsetHeight > window.innerHeight * 0.3) {
-        var text = (el.textContent || '').toLowerCase();
-        // Only hide if it contains ad-related text AND has an iframe
-        var isAdOverlay = (
-          text.indexOf('ad') !== -1 ||
-          text.indexOf('sponsor') !== -1 ||
-          text.indexOf('click here') !== -1 ||
-          el.querySelector('iframe') !== null
-        );
-        // Extra guard: don't hide if it contains a download button
-        var hasDownloadBtn = el.querySelector(
-          'a[download], button[download], a[href*="download"], ' +
-          'button[class*="download"], a[class*="download"]'
-        );
-        if (isAdOverlay && !hasDownloadBtn) {
-          el.style.setProperty('display', 'none', 'important');
+      if (!((st.position === 'fixed' || st.position === 'absolute') &&
+            st.zIndex > 999 &&
+            st.display !== 'none' &&
+            el.offsetWidth > window.innerWidth * 0.5 &&
+            el.offsetHeight > window.innerHeight * 0.3)) continue;
+
+      // Must have an iframe inside (classic ad overlay), OR match a
+      // known ad overlay class — text content alone is NOT enough.
+      var hasAdIframe = el.querySelector('iframe') !== null;
+      var hasAdClass = false;
+      var elClass = (el.className || '').toLowerCase();
+      var elId = (el.id || '').toLowerCase();
+      for (var m = 0; m < _adOverlayClasses.length; m++) {
+        if (elClass.indexOf(_adOverlayClasses[m]) !== -1 ||
+            elId.indexOf(_adOverlayClasses[m]) !== -1) {
+          hasAdClass = true;
+          break;
         }
+      }
+      if (!hasAdIframe && !hasAdClass) continue;
+
+      // Extra guard: don't hide if it contains any download link/button
+      var hasDownloadBtn = el.querySelector(
+        'a[download], button[download], a[href*="download"], ' +
+        'button[class*="download"], a[class*="download"], ' +
+        '[class*="download-btn"], [id*="download"]'
+      );
+      if (!hasDownloadBtn) {
+        el.style.setProperty('display', 'none', 'important');
       }
     }
   } catch(e) {}
