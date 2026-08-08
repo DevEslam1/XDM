@@ -392,6 +392,9 @@ class _TestDownloadEngine extends DownloadEngine {
     List<String>? mirrorUrls,
     bool adaptiveThreads = false,
     int speedLimitKbps = 0,
+    YtStreamKind? ytStreamKind,
+    int? ytCounterpartSize,
+    int? ytCounterpartDownloadedBytes,
   }) async {
     throw const SocketException('Simulated network failure');
   }

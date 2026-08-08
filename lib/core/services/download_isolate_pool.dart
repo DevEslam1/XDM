@@ -85,6 +85,9 @@ class DownloadCommand {
     this.oauthToken,
     this.mirrorUrls,
     this.resolvedFileName,
+    this.ytStreamKind,
+    this.ytCounterpartSize,
+    this.ytCounterpartDownloadedBytes,
   });
 
   final String taskId;
@@ -113,6 +116,9 @@ class DownloadCommand {
   final List<String>? mirrorUrls;
   final bool adaptiveThreads;
   final String? resolvedFileName;
+  final YtStreamKind? ytStreamKind;
+  final int? ytCounterpartSize;
+  final int? ytCounterpartDownloadedBytes;
 
   Map<String, dynamic> toMap() => {
         'taskId': taskId,
@@ -141,6 +147,10 @@ class DownloadCommand {
         'mirrorUrls': mirrorUrls,
         'adaptiveThreads': adaptiveThreads,
         'resolvedFileName': resolvedFileName,
+        if (ytStreamKind != null) 'ytStreamKind': ytStreamKind!.name,
+        if (ytCounterpartSize != null) 'ytCounterpartSize': ytCounterpartSize,
+        if (ytCounterpartDownloadedBytes != null)
+          'ytCounterpartDownloadedBytes': ytCounterpartDownloadedBytes,
       };
 
   static DownloadCommand fromMap(Map<String, dynamic> m) => DownloadCommand(
@@ -170,6 +180,15 @@ class DownloadCommand {
         mirrorUrls: (m['mirrorUrls'] as List?)?.cast<String>(),
         adaptiveThreads: m['adaptiveThreads'] as bool? ?? false,
         resolvedFileName: m['resolvedFileName'] as String?,
+        ytStreamKind: m['ytStreamKind'] != null
+            ? YtStreamKind.values.firstWhere(
+                (k) => k.name == m['ytStreamKind'],
+                orElse: () => YtStreamKind.combined,
+              )
+            : null,
+        ytCounterpartSize: (m['ytCounterpartSize'] as num?)?.toInt(),
+        ytCounterpartDownloadedBytes:
+            (m['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
       );
 }
 
@@ -1372,22 +1391,34 @@ class HttpTransferJob {
         }
         break;
       } on DioException catch (e) {
-        if (e.type == DioExceptionType.cancel) rethrow;
-        if (e.message == 'HTML_INSTEAD_OF_MEDIA') rethrow;
-        if (e.message?.startsWith('Server rejected resume') == true) rethrow;
+        if (e.type == DioExceptionType.cancel) {
+          _state!.status = DmxStateStatus.paused;
+          rethrow;
+        }
+        if (e.message == 'HTML_INSTEAD_OF_MEDIA') {
+          _state!.status = DmxStateStatus.failed;
+          rethrow;
+        }
+        if (e.message?.startsWith('Server rejected resume') == true) {
+          _state!.status = DmxStateStatus.failed;
+          rethrow;
+        }
         final status = e.response?.statusCode;
         if (status != null &&
             status >= 400 &&
             status < 500 &&
             status != 408 &&
             status != 429) {
+          _state!.status = DmxStateStatus.failed;
           rethrow;
         }
         if (attempts >= maxAttempts) {
+          _state!.status = DmxStateStatus.failed;
           final next = failover.advance();
           if (next != null) {
             activeUrl = next;
             attempts = 0;
+            _state!.status = DmxStateStatus.active;
             continue;
           }
           rethrow;
@@ -1554,6 +1585,11 @@ class HttpTransferJob {
       'chunks': st.chunks.length > 1 ? st.chunkRatios : null,
       'fileName': cmd.resolvedFileName,
       'supportsResume': cmd.supportsResume,
+      if (cmd.ytStreamKind != null) 'ytStreamKind': cmd.ytStreamKind!.name,
+      if (cmd.ytCounterpartSize != null)
+        'ytCounterpartSize': cmd.ytCounterpartSize,
+      if (cmd.ytCounterpartDownloadedBytes != null)
+        'ytCounterpartDownloadedBytes': cmd.ytCounterpartDownloadedBytes,
       if (statusMessage != null) 'statusMessage': statusMessage,
     });
   }

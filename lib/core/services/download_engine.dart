@@ -741,6 +741,9 @@ class DownloadEngine {
     List<String>? mirrorUrls,
     bool adaptiveThreads = false,
     int speedLimitKbps = 0,
+    YtStreamKind? ytStreamKind,
+    int? ytCounterpartSize,
+    int? ytCounterpartDownloadedBytes,
   }) async {
     _activeCancelTokens.add(cancelToken);
 
@@ -882,6 +885,9 @@ class DownloadEngine {
       adaptiveThreads: adaptiveThreads,
       speedLimitKbps: speedLimitKbps,
       resolvedFileName: resolvedFileName,
+      ytStreamKind: ytStreamKind,
+      ytCounterpartSize: ytCounterpartSize,
+      ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
     );
 
     if (adaptiveThreads) {
@@ -961,6 +967,15 @@ class DownloadEngine {
             fileName: p['fileName'] as String?,
             supportsResume: p['supportsResume'] as bool?,
             statusMessage: p['statusMessage'] as String?,
+            ytStreamKind: p['ytStreamKind'] != null
+                ? YtStreamKind.values.firstWhere(
+                    (k) => k.name == p['ytStreamKind'],
+                    orElse: () => YtStreamKind.combined,
+                  )
+                : null,
+            ytCounterpartSize: (p['ytCounterpartSize'] as num?)?.toInt(),
+            ytCounterpartDownloadedBytes:
+                (p['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
           ));
         case 'done':
           inactivityTimer?.cancel();
@@ -1451,15 +1466,21 @@ class DownloadEngine {
       }
 
       // FIX-21 & FIX T-1: Prefer engine-reported per-file bytes over stored values
+      // FIX-PROG-02: Include ALL selected file bytes (real + estimated) in
+      // calculatedDownloaded so the total percentage is never artificially low.
+      // Previously estimated bytes were excluded, causing the total to underreport
+      // and _distributeEstimatedBytes to receive 0 remaining bytes for estimated
+      // files (since total == confirmed), freezing them at 0%.
       int calculatedTotal = 0;
       int calculatedDownloaded = 0;
+      bool hasEstimatedFiles = false;
       if (resolvedFiles != null) {
         for (final f in resolvedFiles) {
           if (isTorrentFileSelected(f)) {
             calculatedTotal += (f['length'] as num?)?.toInt() ?? 0;
             final engineBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-            final isEstimated = f['progressEstimated'] == true;
-            if (!isEstimated && engineBytes >= 0) {
+            if (f['progressEstimated'] == true) hasEstimatedFiles = true;
+            if (engineBytes >= 0) {
               calculatedDownloaded += engineBytes;
             }
           }
@@ -1481,27 +1502,46 @@ class DownloadEngine {
               : torrent.downloadRate.toDouble(),
           eta: null,
           fileName: resolvedName,
+          torrentFiles: resolvedFiles,
+          supportsResume: true,
           statusMessage: 'Fetching metadata…',
         ));
         return; // skip normal progress emission
       }
 
-      // FIX-21 & FIX-PCTG: Prefer per-file downloaded sum, then engine aggregates,
-      // then derive from the native progress ratio (most reliable early-phase source).
-      final rawDownloaded = calculatedDownloaded > 0
-          ? calculatedDownloaded
-          : (torrent.totalWantedDone > 0
-              ? torrent.totalWantedDone
-              : (torrent.totalDone > 0
-                  ? torrent.totalDone
-                  : (torrent.progress > 0 && totalSize > 0
-                      ? (torrent.progress * totalSize).round()
-                      : 0)));
+      // FIX-PROG-02: When any file has estimated progress, prefer the torrent
+      // engine's aggregate totals (totalWantedDone / totalDone / progress)
+      // over the per-file sum. The aggregate includes ALL downloaded bytes
+      // (real + estimated) and is the most reliable early-phase source.
+      // The per-file sum is used only as a fallback when aggregates are 0.
+      final int torrentAggregate = torrent.totalWantedDone > 0
+          ? torrent.totalWantedDone
+          : (torrent.totalDone > 0
+              ? torrent.totalDone
+              : (torrent.progress > 0 && totalSize > 0
+                  ? (torrent.progress * totalSize).round()
+                  : 0));
+      final rawDownloaded = hasEstimatedFiles && torrentAggregate > 0
+          ? torrentAggregate
+          : (calculatedDownloaded > 0
+              ? calculatedDownloaded
+              : torrentAggregate);
       final downloadedBytes =
           totalSize > 0 ? min(rawDownloaded, totalSize) : rawDownloaded;
 
       if (resolvedFiles != null) {
         _distributeEstimatedBytes(resolvedFiles, downloadedBytes);
+        // FIX-PROG-01: Recalculate per-file 'progress' AFTER estimated byte
+        // distribution so the file-level percentage on the torrent details
+        // screen always matches the distributed downloadedBytes value.
+        // Previously 'progress' was computed before distribution and never
+        // updated, leaving estimated files with a stale (often 0%) percentage.
+        for (final f in resolvedFiles) {
+          final len = (f['length'] as num?)?.toInt() ?? 0;
+          final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+          f['progress'] =
+              len > 0 ? (dl / len).clamp(0.0, 1.0) : (dl > 0 ? 1.0 : 0.0);
+        }
         final maxConcurrent =
             SettingsProvider.instance.maxConcurrentFilesPerTorrent;
         if (maxConcurrent > 0 && !isCheckingOrMetadata) {
@@ -1511,6 +1551,22 @@ class DownloadEngine {
 
       final isUserPaused = stateLabel == 'paused' || stateLabel == 'stopped';
       if (isUserPaused && !cancelToken.isCancelled && !isCheckingOrMetadata) {
+        // FIX: If the torrent is fully downloaded but paused (e.g., seeding
+        // disabled), treat as complete — not as an error.
+        if (totalSize > 0 && downloadedBytes >= totalSize) {
+          onProgress(DownloadProgress(
+            downloadedBytes: downloadedBytes,
+            fileSize: totalSize,
+            speed: 0.0,
+            eta: null,
+            fileName: resolvedName,
+            torrentFiles: resolvedFiles,
+            supportsResume: true,
+            statusMessage: 'Completed',
+          ));
+          if (!completer.isCompleted) completer.complete();
+          return;
+        }
         // FIX-5: Only treat as a clean pause IF the orchestrator actually
         // requested it via the cancel token. Otherwise the engine entered
         // 'paused' due to an I/O error, disk-full, or external trigger —
@@ -1565,6 +1621,7 @@ class DownloadEngine {
           eta: eta,
           fileName: resolvedName,
           torrentFiles: resolvedFiles,
+          supportsResume: true,
         ));
       }
       if (isCompleted && !completer.isCompleted) completer.complete();
@@ -1572,9 +1629,13 @@ class DownloadEngine {
 
     cancelToken.whenCancel.then((_) async {
       await sub?.cancel();
-      // PAUSE BARRIER (engine side): flush and hash-verify fast-resume data
-      // BEFORE the cancel completes, so "cancelled" always implies
+      // PAUSE BARRIER (engine side): pause the torrent FIRST so all in-flight
+      // pieces are flushed to disk, THEN save and hash-verify fast-resume
+      // data BEFORE the cancel completes, so "cancelled" always implies
       // "resumable state is on disk".
+      try {
+        TorrentService.pauseTorrent(id);
+      } catch (_) {}
       try {
         await TorrentResumeStore.saveAndWait(
           torrentId: id,
@@ -1585,9 +1646,6 @@ class DownloadEngine {
       } catch (e) {
         debugPrint('[DMX] cancel-time resume save failed: $e');
       }
-      try {
-        TorrentService.pauseTorrent(id);
-      } catch (_) {}
       if (!completer.isCompleted) {
         completer.completeError(DioException(
           requestOptions: RequestOptions(path: url),
@@ -1683,7 +1741,6 @@ class DownloadEngine {
         .where((f) => (f['progressEstimated'] as bool? ?? true) == true)
         .toList();
     if (needing.isEmpty) return;
-
     // BUG 4 FIX: Subtract confirmed (non-estimated) bytes first
     int confirmedBytes = 0;
     for (final f in files) {
@@ -1693,14 +1750,13 @@ class DownloadEngine {
     }
     final remainingForEstimation =
         max(0, totalDownloadedBytes - confirmedBytes);
-
     final totalNeedingSize = needing.fold<int>(
-      0,
-      (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0),
-    );
-
+        0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
     for (var i = 0; i < needing.length; i++) {
       final length = (needing[i]['length'] as num?)?.toInt() ?? 0;
+      // FIX-6: When the engine has no data yet (remainingForEstimation == 0)
+      // preserve the previously stored per-file bytes instead of zeroing
+      // them, so a resume after restart doesn't flash 0 % on every file.
       if (length <= 0) {
         needing[i]['downloadedBytes'] = 0;
       } else if (totalNeedingSize > 0 && remainingForEstimation > 0) {
@@ -1708,7 +1764,8 @@ class DownloadEngine {
             ((length / totalNeedingSize) * remainingForEstimation).round();
         needing[i]['downloadedBytes'] = estimated.clamp(0, length);
       } else {
-        needing[i]['downloadedBytes'] = 0;
+        final prev = (needing[i]['downloadedBytes'] as num?)?.toInt() ?? 0;
+        needing[i]['downloadedBytes'] = prev.clamp(0, length);
       }
       needing[i]['progressEstimated'] = true;
     }

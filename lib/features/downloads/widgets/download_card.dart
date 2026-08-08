@@ -615,9 +615,8 @@ class _TelemetryStrip extends StatelessWidget {
                     final history = provider.getSpeedHistory(task.id);
                     if (history.length >= 2) {
                       final screenW = MediaQuery.sizeOf(context).width;
-                      final sparkWidth = screenW < 340
-                          ? 45.0
-                          : (screenW < 400 ? 60.0 : 80.0);
+                      final sparkWidth =
+                          screenW < 340 ? 45.0 : (screenW < 400 ? 60.0 : 80.0);
                       return _CardSparklineGraph(
                         history: history,
                         color: accent,
@@ -1639,8 +1638,10 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
             0;
 
         final isSmallScreen = MediaQuery.sizeOf(context).width < 360;
-        final horizPadding = isSmallScreen ? 10.0 : (widget.compact ? 12.0 : 14.0);
-        final vertPadding = isSmallScreen ? 10.0 : (widget.compact ? 10.0 : 14.0);
+        final horizPadding =
+            isSmallScreen ? 10.0 : (widget.compact ? 12.0 : 14.0);
+        final vertPadding =
+            isSmallScreen ? 10.0 : (widget.compact ? 10.0 : 14.0);
         final itemGap = isSmallScreen ? 8.0 : 12.0;
 
         return _CardShell(
@@ -1778,11 +1779,109 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                     ),
                     const SizedBox(height: 8),
                     // Total progress + total percentage
-                    _ProgressRow(
-                      task: widget.task,
-                      isDark: isDark,
-                      color: statusColor,
-                    ),
+                    Builder(builder: (context) {
+                      final files = widget.task.torrentFiles ?? [];
+                      final isChecking = widget.task.statusMessage?.contains('checking') == true ||
+                          widget.task.statusMessage?.contains('Checking') == true;
+                      final displayFiles = files.map((f) {
+                        final selected = isTorrentFileSelected(f);
+                        final length = (f['length'] as num?)?.toInt() ?? 0;
+                        final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+
+                        final effectiveDownloaded = isChecking
+                            ? downloaded
+                            : (widget.task.status == DownloadStatus.completed && selected
+                                ? length
+                                : downloaded);
+
+                        return {...f, 'downloadedBytes': effectiveDownloaded};
+                      }).toList();
+                      final selectedFiles =
+                          displayFiles.where((f) => isTorrentFileSelected(f)).toList();
+                      final totalLen = selectedFiles.fold<int>(
+                        0,
+                        (s, f) {
+                          final len = (f['length'] as num?)?.toInt() ?? 0;
+                          return s + (len < 0 ? 0 : len);
+                        },
+                      );
+                      final totalDl = selectedFiles.fold<int>(
+                        0,
+                        (s, f) {
+                          final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                          return s + (dl < 0 ? 0 : dl);
+                        },
+                      );
+                      final overallProgress =
+                          totalLen > 0 ? (totalDl / totalLen).clamp(0.0, 1.0) : -1.0;
+                      final pctLabel = overallProgress < 0
+                          ? (totalDl > 0 ? formatBytes(totalDl.toDouble()) : '0.0%')
+                          : '${(overallProgress * 100).toStringAsFixed(1)}%';
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: overallProgress < 0
+                                      ? const SizedBox(
+                                          height: 8,
+                                          child: LinearProgressIndicator(minHeight: 8),
+                                        )
+                                      : Stack(
+                                          children: [
+                                            Container(
+                                              height: 8,
+                                              decoration: AppTheme.progressTrack(
+                                                isDark: isDark,
+                                              ),
+                                            ),
+                                            AnimatedFractionallySizedBox(
+                                              widthFactor:
+                                                  overallProgress.clamp(0.0, 1.0),
+                                              duration:
+                                                  const Duration(milliseconds: 400),
+                                              curve: Curves.easeOut,
+                                              child: Container(
+                                                height: 8,
+                                                decoration: BoxDecoration(
+                                                  color: statusColor,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              SizedBox(
+                                width: 48,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    pctLabel,
+                                    textAlign: TextAlign.end,
+                                    style: AppTheme.dataStyle(
+                                      isDark: isDark,
+                                      size: 13,
+                                      weight: FontWeight.w800,
+                                      color: statusColor,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    }),
                     // Per-file percentages (isolated rebuild via dedicated StatefulWidget)
                     if (fileCount > 0) ...[
                       const SizedBox(height: 12),
@@ -2040,7 +2139,10 @@ class _TorrentFileRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nameRaw = file['name'] as String?;
-    if (file.isEmpty || nameRaw == null) {
+    // FIX-T-LEN: reject entries with a missing/invalid length before any
+    // fraction math so a zero or negative length can never yield NaN %.
+    final rawLen = (file['length'] as num?)?.toInt() ?? 0;
+    if (file.isEmpty || nameRaw == null || rawLen < 0) {
       final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
       return Padding(
         padding: const EdgeInsetsDirectional.only(start: 12, bottom: 8),
@@ -2105,31 +2207,38 @@ class _TorrentFileRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
+                  // Progress bar — indeterminate while the engine is rechecking
+                  // so a stale estimate is never rendered as a fixed percentage.
                   ClipRRect(
                     borderRadius: BorderRadius.circular(1),
-                    child: Stack(
-                      children: [
-                        Container(
-                          height: 2,
-                          decoration: AppTheme.progressTrack(
-                            isDark: isDark,
-                            radius: 1,
-                          ),
-                        ),
-                        AnimatedFractionallySizedBox(
-                          widthFactor: p.clamp(0.0, 1.0),
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOut,
-                          child: Container(
+                    child: isChecking
+                        ? const SizedBox(
                             height: 2,
-                            decoration: BoxDecoration(
-                              color: done ? greenClr : accent,
-                              borderRadius: BorderRadius.circular(1),
-                            ),
+                            child: LinearProgressIndicator(minHeight: 2),
+                          )
+                        : Stack(
+                            children: [
+                              Container(
+                                height: 2,
+                                decoration: AppTheme.progressTrack(
+                                  isDark: isDark,
+                                  radius: 1,
+                                ),
+                              ),
+                              AnimatedFractionallySizedBox(
+                                widthFactor: p.clamp(0.0, 1.0),
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut,
+                                child: Container(
+                                  height: 2,
+                                  decoration: BoxDecoration(
+                                    color: done ? greenClr : accent,
+                                    borderRadius: BorderRadius.circular(1),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               ),
@@ -2183,11 +2292,15 @@ class _TorrentFileRow extends StatelessWidget {
                 ],
               ),
             ),
-
             const SizedBox(width: 8),
             SizedBox(
               child: Text(
-                '${formatBytes(downloaded.toDouble())} / ${formatBytes(length.toDouble())}',
+                // FIX-8: When the engine hasn't reported any bytes yet
+                // (rawBytes was −1 → clamped to 0) show "…" so the user
+                // doesn't see a false "0 B / 1.2 GB" after a restart.
+                rawBytes <= 0 && !done
+                    ? '… / ${formatBytes(length.toDouble())}'
+                    : '${formatBytes(downloaded.toDouble())} / ${formatBytes(length.toDouble())}',
                 textAlign: TextAlign.end,
                 style: AppTheme.dataStyle(
                   isDark: isDark,

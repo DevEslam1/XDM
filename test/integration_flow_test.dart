@@ -90,6 +90,9 @@ class FakeDownloadEngine extends DownloadEngine {
     List<String>? mirrorUrls,
     bool adaptiveThreads = false,
     int speedLimitKbps = 0,
+    YtStreamKind? ytStreamKind,
+    int? ytCounterpartSize,
+    int? ytCounterpartDownloadedBytes,
   }) {
     startedUrls.add(url);
     knownFileSizes[url] = knownFileSize;

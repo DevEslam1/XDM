@@ -833,7 +833,7 @@ class DownloadOrchestrator {
       );
       final audioLen = await actualDownloadedBytes(
         actualAudioPath,
-        threadCount: current.audioThreadCount,
+        threadCount: max(1, current.audioThreadCount),
       );
       debugPrint('[DMX]   Video size: $videoLen bytes');
       debugPrint('[DMX]   Audio size: $audioLen bytes');
@@ -1597,9 +1597,12 @@ class DownloadOrchestrator {
     int audioBytesFromDisk = 0;
     final audioTempPath = '${task.tempFilePath}.audio';
     if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
+      // FIX-AUDIO-INIT: guard against audioThreadCount == 0 so the
+      // multi-thread guard inside actualDownloadedBytes does not discard
+      // a valid existing .audio file on session start.
       audioBytesFromDisk = await actualDownloadedBytes(
         audioTempPath,
-        threadCount: task.audioThreadCount,
+        threadCount: max(1, task.audioThreadCount),
       );
     }
     int audioBytesSoFar = audioBytesFromDisk;
@@ -1642,12 +1645,23 @@ class DownloadOrchestrator {
                 : (hasAudio && base.audioSize > 0
                     ? (base.fileSize - base.audioSize).clamp(0, base.fileSize)
                     : base.fileSize));
+        // FIX-2: When audioSize is still unknown, use the larger of
+        // audioBytesSoFar and the task's stored audioDownloadedBytes so
+        // the denominator doesn't shrink between ticks.  Once the engine
+        // reports the real size the task field is updated and this
+        // fallback is no longer reached.
         final audioContribution = hasAudio
             ? (base.audioSize > 0
                 ? base.audioSize
-                : (audioBytesSoFar > 0 ? audioBytesSoFar : 0))
+                : max(
+                    audioBytesSoFar,
+                    base.audioDownloadedBytes,
+                  ))
             : 0;
-        final calculatedTotal = effectiveVideoSize + audioContribution;
+        var calculatedTotal = effectiveVideoSize + audioContribution;
+        if (base.fileSize > 0 && calculatedTotal > base.fileSize) {
+          calculatedTotal = base.fileSize;
+        }
         final cachedMax = _sessionCachedTotalSize[task.id] ?? 0;
         final int totalSize;
         if (calculatedTotal > cachedMax) {
@@ -1788,7 +1802,7 @@ class DownloadOrchestrator {
           );
           final audioLen = await actualDownloadedBytes(
             audioTempPath,
-            threadCount: task.audioThreadCount,
+            threadCount: max(1, task.audioThreadCount),
           );
           // FIX(YT-2): When videoTransferSize is unknown (0), use a minimum threshold
           // to avoid merging incomplete video. Require at least 1KB for video.
@@ -1851,7 +1865,7 @@ class DownloadOrchestrator {
             final audioLen = audioExists
                 ? await actualDownloadedBytes(
                     liveAudioTempPath,
-                    threadCount: liveAudioTask.audioThreadCount,
+                    threadCount: max(1, liveAudioTask.audioThreadCount),
                   )
                 : 0;
 
@@ -1990,6 +2004,9 @@ class DownloadOrchestrator {
               threadCount: resolvedAudioThreads,
               adaptiveThreads: _host.providerSettingsProvider.adaptiveThreads,
               speedLimitKbps: task.speedLimitKbps,
+              ytStreamKind: YtStreamKind.audio,
+              ytCounterpartSize: videoTransferSize,
+              ytCounterpartDownloadedBytes: videoBytesSoFar,
               onProgress: (progress) {
                 if (audioCancelToken.isCancelled || cancelToken.isCancelled) {
                   return;
@@ -2000,6 +2017,11 @@ class DownloadOrchestrator {
                 audioSpeedNow = progress.speed;
                 // FIX-YT-01: Use engine-reported fileSize; fall back to byte-count heuristic
                 final size = t.audioSize > 0 ? t.audioSize : progress.fileSize;
+                // FIX-AUDIO-SIZE: keep audioBytesSoFar consistent when audioSize
+                // resolves mid-session so pushCombinedProgress denominator is correct.
+                if (size > 0 && audioBytesSoFar > size) {
+                  audioBytesSoFar = size;
+                }
 
                 // FIX YT-01b: Propagate discovered audio size back to task
                 if (t.audioSize == 0 && progress.fileSize > 0) {
@@ -2094,6 +2116,13 @@ class DownloadOrchestrator {
 
             // Only mark 1.0 when we can confirm completeness
             audioDone = true;
+            // FIX-AUDIO-SYNC: push audioBytesSoFar to the authoritative full size so
+            // pushCombinedProgress computes audioProgress == 1.0 and the combined
+            // denominator is correct immediately.
+            audioBytesSoFar = max(
+              audioBytesSoFar,
+              task.audioSize > 0 ? task.audioSize : downloadedAudioLen,
+            );
             if (task.audioSize > 0 && downloadedAudioLen < task.audioSize) {
               final frac =
                   (downloadedAudioLen / task.audioSize).clamp(0.0, 1.0);
@@ -2121,6 +2150,7 @@ class DownloadOrchestrator {
 
           Future<void> runVideo() async {
             final liveVideoTask = _host.findTaskById(task.id);
+            final liveAudioSize = liveVideoTask?.audioSize ?? task.audioSize;
             final liveHasAudio = liveVideoTask != null &&
                 !liveVideoTask.isTorrent &&
                 liveVideoTask.mergedAudioUrl != null &&
@@ -2171,6 +2201,9 @@ class DownloadOrchestrator {
                 oauthToken: YoutubeService.oauthToken,
                 adaptiveThreads: _host.providerSettingsProvider.adaptiveThreads,
                 speedLimitKbps: task.speedLimitKbps,
+                ytStreamKind: YtStreamKind.video,
+                ytCounterpartSize: liveAudioSize,
+                ytCounterpartDownloadedBytes: audioBytesSoFar,
                 onProgress: (progress) {
                   // TTFB tracking: record ms until first byte
                   if (ttfbTimestamp == null && progress.downloadedBytes > 0) {
@@ -2434,6 +2467,9 @@ class DownloadOrchestrator {
                     adaptiveThreads:
                         _host.providerSettingsProvider.adaptiveThreads,
                     speedLimitKbps: task.speedLimitKbps,
+                    ytStreamKind: YtStreamKind.video,
+                    ytCounterpartSize: liveAudioSize,
+                    ytCounterpartDownloadedBytes: audioBytesSoFar,
                     onProgress: (progress) {
                       final current = _host.findTaskById(task.id);
                       if (current == null ||
@@ -2470,6 +2506,24 @@ class DownloadOrchestrator {
           try {
             await Future.wait([runVideo(), runAudio()]);
           } on DioException catch (e) {
+            // FIX-3: Sync the last known audio byte count into the task model
+            // so a pause / cancel doesn't lose audio progress.
+            if (hasAudio && audioBytesSoFar > 0) {
+              final syncIdx =
+                  _host.providerTasks.indexWhere((x) => x.id == task.id);
+              if (syncIdx != -1) {
+                final syncTask = _host.providerTasks[syncIdx];
+                final syncSize =
+                    syncTask.audioSize > 0 ? syncTask.audioSize : 0;
+                _host.providerTasks[syncIdx] = syncTask.copyWith(
+                  audioDownloadedBytes: audioBytesSoFar,
+                  audioProgress: syncSize > 0
+                      ? (audioBytesSoFar / syncSize).clamp(0.0, 1.0)
+                      : syncTask.audioProgress,
+                );
+                await _host.setTaskState(_host.providerTasks[syncIdx]);
+              }
+            }
             if (e.type == DioExceptionType.cancel) {
               return;
             }
@@ -2482,7 +2536,7 @@ class DownloadOrchestrator {
                   threadCount: streamThreadCount);
               final aLen = await actualDownloadedBytes(
                   '${task.tempFilePath}.audio',
-                  threadCount: task.audioThreadCount);
+                  threadCount: max(1, task.audioThreadCount));
               if (vLen > 0 && aLen > 0) {
                 final current = _host.findTaskById(task.id);
                 if (current != null) {
@@ -2774,7 +2828,7 @@ class DownloadOrchestrator {
       _host.providerStartWidgetTimer();
       _host.updateTelemetryWidget();
 
-      final resolved = await _resolveStreamUrl(task);
+      var resolved = await _resolveStreamUrl(task);
       if (resolved == null) {
         final live = _host.findTaskById(task.id);
         if (live != null && live.status == DownloadStatus.queued) {
@@ -2784,6 +2838,27 @@ class DownloadOrchestrator {
           ));
         }
         return;
+      }
+      // FIX-YT-ITAG: if the resolved stream URL carries a different itag
+      // (format/quality changed), the previously downloaded bytes belong to
+      // the old format and are invalid.  Reset progress so the engine
+      // starts cleanly instead of appending mismatched bytes.
+      final oldItag = Uri.tryParse(task.url)?.queryParameters['itag'];
+      final newItag = Uri.tryParse(resolved.url)?.queryParameters['itag'];
+      final itagChanged = oldItag != null &&
+          newItag != null &&
+          oldItag != newItag;
+      if (itagChanged && resolved.downloadedBytes > 0) {
+        resolved = resolved.copyWith(
+          downloadedBytes: 0,
+          chunks: List<double>.filled(
+            resolved.threadCount > 0 ? resolved.threadCount : 1,
+            0.0,
+          ),
+          audioProgress: 0.0,
+          audioDownloadedBytes: 0,
+          clearError: true,
+        );
       }
       task = resolved;
       final cookieString = _currentCookieString;
@@ -2819,7 +2894,7 @@ class DownloadOrchestrator {
           );
           final aLen = await actualDownloadedBytes(
             audioFile.path,
-            threadCount: task.audioThreadCount,
+            threadCount: max(1, task.audioThreadCount),
           );
           final expectedV = task.fileSize - task.audioSize;
           final expectedA = task.audioSize;
@@ -3230,7 +3305,7 @@ class DownloadOrchestrator {
           );
           final audioLen = await actualDownloadedBytes(
             audioFile.path,
-            threadCount: task.audioThreadCount,
+            threadCount: max(1, task.audioThreadCount),
           );
 
           if (videoLen > 1024 && audioLen > 1024) {

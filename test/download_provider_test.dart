@@ -89,6 +89,9 @@ class FakeDownloadEngine extends DownloadEngine {
     List<String>? mirrorUrls,
     bool adaptiveThreads = false,
     int speedLimitKbps = 0,
+    YtStreamKind? ytStreamKind,
+    int? ytCounterpartSize,
+    int? ytCounterpartDownloadedBytes,
   }) {
     startedUrls.add(url);
     final completer = Completer<void>();
@@ -1367,6 +1370,9 @@ class FakeDownloadEngine403 extends DownloadEngine {
     List<String>? mirrorUrls,
     bool adaptiveThreads = false,
     int speedLimitKbps = 0,
+    YtStreamKind? ytStreamKind,
+    int? ytCounterpartSize,
+    int? ytCounterpartDownloadedBytes,
   }) async {
     throw DioException(
       requestOptions: response.requestOptions,

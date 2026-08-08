@@ -225,20 +225,21 @@ class DownloadTask {
       final videoOnly = videoStreamSize > 0
           ? videoStreamSize
           : (fileSize > audioSize ? fileSize - audioSize : 0);
+      // FIX-1: Always fold audio bytes in, even when videoOnly is still 0
+      // (audio size may be known before video size resolves).
+      final audioBytes = audioSize > 0
+          ? (audioProgress * audioSize).round()
+          : audioDownloadedBytes;
       if (videoOnly > 0) {
         if (raw < videoOnly) {
-          if (audioSize > 0) {
-            raw += (audioProgress * audioSize).round();
-          } else if (audioDownloadedBytes > 0) {
-            raw += audioDownloadedBytes;
-          }
+          raw += audioBytes;
         } else {
-          if (audioSize > 0) {
-            raw = videoOnly + (audioProgress * audioSize).round();
-          } else if (audioDownloadedBytes > 0) {
-            raw = videoOnly + audioDownloadedBytes;
-          }
+          raw = videoOnly + audioBytes;
         }
+      } else {
+        // videoOnly unknown — add audio bytes on top of whatever
+        // video bytes we already have so progress still moves.
+        raw += audioBytes;
       }
     }
     if (total > 0) return raw.clamp(0, total);
@@ -283,7 +284,12 @@ class DownloadTask {
   String get progressPercentString {
     if (status == DownloadStatus.completed) return '100.0%';
     final total = combinedTotalSize;
-    if (total <= 0) return '0.0%';
+    // FIX-7: Show byte count instead of a misleading "0.0 %" while the
+    // total size is still unknown (magnets, YouTube before first byte, etc.)
+    if (total <= 0) {
+      final dl = combinedDownloadedBytes;
+      return dl > 0 ? formatBytes(dl) : '0.0%';
+    }
     return '${(progress * 100).toStringAsFixed(1)}%';
   }
 
