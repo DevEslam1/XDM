@@ -1386,12 +1386,17 @@ class DownloadEngine {
         return; // skip normal progress emission
       }
 
-      // FIX-21: Prefer per-file downloaded sum, then engine aggregates
+      // FIX-21 & FIX-PCTG: Prefer per-file downloaded sum, then engine aggregates,
+      // then derive from the native progress ratio (most reliable early-phase source).
       final rawDownloaded = calculatedDownloaded > 0
           ? calculatedDownloaded
           : (torrent.totalWantedDone > 0
               ? torrent.totalWantedDone
-              : torrent.totalDone); // fallback to totalDone
+              : (torrent.totalDone > 0
+                  ? torrent.totalDone
+                  : (torrent.progress > 0 && totalSize > 0
+                      ? (torrent.progress * totalSize).round()
+                      : 0)));
       final downloadedBytes =
           totalSize > 0 ? min(rawDownloaded, totalSize) : rawDownloaded;
 

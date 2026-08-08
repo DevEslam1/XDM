@@ -471,7 +471,12 @@ class TorrentService {
                 uploadRate: value.uploadRate,
                 totalDone: value.totalDone,
                 totalWanted: value.totalWanted,
-                totalWantedDone: (safeProgress * value.totalWanted).toInt(),
+                // FIX-PCTG: When totalWanted is 0 (not yet reported by engine),
+                // fall back to totalDone (actual bytes received) so the percentage
+                // is non-zero during early download phase.
+                totalWantedDone: value.totalWanted > 0
+                    ? (safeProgress * value.totalWanted).toInt()
+                    : value.totalDone,
                 hasMetadata: value.hasMetadata,
                 stateLabel: value.state.label,
                 numSeeds: value.numSeeds,
