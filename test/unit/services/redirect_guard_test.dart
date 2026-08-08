@@ -1,114 +1,46 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/features/browser/services/redirect_guard.dart';
+import 'package:dmx/core/services/redirect_guard.dart';
 
 void main() {
-  group('RedirectGuard.extractDomain', () {
-    test('simple domain', () {
-      expect(RedirectGuard.extractDomain('https://example.com/page'),
-          'example.com');
-    });
-
-    test('strips www prefix', () {
-      expect(RedirectGuard.extractDomain('https://www.example.com'),
-          'example.com');
-    });
-
-    test('subdomain returns root', () {
-      expect(RedirectGuard.extractDomain('https://sub.example.com'),
-          'example.com');
-    });
-
-    test('multi-part TLD co.uk', () {
-      expect(
-          RedirectGuard.extractDomain('https://shop.bbc.co.uk'), 'bbc.co.uk');
-    });
-
-    test('multi-part TLD com.au', () {
-      expect(
-          RedirectGuard.extractDomain('https://news.abc.com.au'), 'abc.com.au');
-    });
-
-    test('empty string returns empty', () {
-      expect(RedirectGuard.extractDomain(''), '');
-    });
-
-    test('malformed URL returns empty', () {
-      expect(RedirectGuard.extractDomain(':::not-a-url'), '');
-    });
-  });
-
-  group('RedirectGuard.isSuspiciousRedirect', () {
-    final guard = RedirectGuard.instance;
+  group('RedirectGuard Heuristics', () {
+    late RedirectGuard guard;
 
     setUp(() {
-      // Ensure guard is enabled for all tests
-      guard.setEnabled(true);
+      guard = RedirectGuard();
     });
 
-    test('same domain is not suspicious', () {
-      expect(
-        guard.isSuspiciousRedirect(
-          currentTabUrl: 'https://example.com/page1',
-          targetUrl: 'https://example.com/page2',
-        ),
-        isFalse,
+    test('ignores standard legitimate URLs', () async {
+      final res = await guard.evaluate(
+        tabId: 'tab1',
+        navigatingTo: 'https://google.com/search?q=test',
       );
+      expect(res.decision, RedirectDecision.ignore);
     });
 
-    test('allowlisted domain (google.com) is not suspicious', () {
-      expect(
-        guard.isSuspiciousRedirect(
-          currentTabUrl: 'https://example.com/page',
-          targetUrl: 'https://google.com/search',
-        ),
-        isFalse,
+    test('flags ad networks for blocking', () async {
+      final res = await guard.evaluate(
+        tabId: 'tab1',
+        navigatingTo: 'https://popads.net/track?id=123',
       );
+      expect(res.decision, RedirectDecision.block);
     });
 
-    test('allowlisted subdomain (maps.google.com) is not suspicious', () {
-      expect(
-        guard.isSuspiciousRedirect(
-          currentTabUrl: 'https://example.com/page',
-          targetUrl: 'https://maps.google.com/',
-        ),
-        isFalse,
-      );
+    test('loop guard blocks identical sequential navigations', () async {
+      final url = 'https://adf.ly/go/target';
+      guard.addToChain('tab1', url);
+
+      final res = await guard.evaluate(tabId: 'tab1', navigatingTo: url);
+      expect(res.decision, RedirectDecision.block);
     });
 
-    test('cross-domain redirect to unknown site is suspicious', () {
-      expect(
-        guard.isSuspiciousRedirect(
-          currentTabUrl: 'https://example.com/page',
-          targetUrl: 'https://sketchy-ads.biz/track',
-        ),
-        isTrue,
-      );
-    });
+    test('reset clears loop history for the tab', () async {
+      final url = 'https://adf.ly/go/target';
+      guard.addToChain('tab1', url);
 
-    test('disabled guard never flags suspicious', () {
-      guard.setEnabled(false);
-      expect(
-        guard.isSuspiciousRedirect(
-          currentTabUrl: 'https://example.com/page',
-          targetUrl: 'https://sketchy-ads.biz/track',
-        ),
-        isFalse,
-      );
-    });
-  });
+      guard.reset('tab1');
 
-  group('RedirectGuard.markUserInitiated / consumeUserInitiated', () {
-    final guard = RedirectGuard.instance;
-
-    test('marking a URL allows consuming it once', () {
-      guard.markUserInitiated('https://example.com/go');
-      expect(guard.consumeUserInitiated('https://example.com/go'), isTrue);
-    });
-
-    test('consuming removes the mark', () {
-      guard.markUserInitiated('https://example.com/go');
-      guard.consumeUserInitiated('https://example.com/go');
-      expect(guard.consumeUserInitiated('https://example.com/go'), isFalse);
+      final res = await guard.evaluate(tabId: 'tab1', navigatingTo: url);
+      expect(res.decision, RedirectDecision.ignore);
     });
   });
 }

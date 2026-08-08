@@ -49,7 +49,7 @@ import '../services/long_press_parser.dart';
 import '../services/media_sniffer.dart';
 import '../services/reader_mode_service.dart';
 import '../services/tab_manager.dart';
-import '../services/redirect_guard.dart';
+import '../../../core/services/redirect_guard.dart';
 import '../services/page_intent_classifier.dart';
 import '../services/site_settings_store.dart';
 import '../screens/script_manager_screen.dart';
@@ -163,7 +163,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   bool _isRestoring = false;
 
   final AdBlockerDelegate _adBlocker = AdBlockerDelegate();
-  final RedirectGuard _redirectGuard = RedirectGuard.instance;
+  final RedirectGuard _redirectGuard = RedirectGuard();
 
   String? _lastInterceptedUrl;
   DateTime? _lastInterceptedTime;
@@ -360,7 +360,6 @@ class _BrowserScreenState extends State<BrowserScreen>
 
     _dashboardScrollController.addListener(_onDashboardScroll);
     unawaited(_adBlocker.init());
-    _redirectGuard.init();
   }
 
   Future<void> _updateAdBlockSettings() async {
@@ -1098,12 +1097,12 @@ class _BrowserScreenState extends State<BrowserScreen>
 
     // 4. Open popup URL in new tab directly (Popup Blocking Disabled)
     _log.info('[Browser] Opening popup URL in new tab: $url');
-    _redirectGuard.markUserInitiated(url);
     setState(() {
       final newTab = _createNewTab(
         initialUrl: url,
         isIncognito: parentTab.isIncognito,
       );
+      _redirectGuard.reset(newTab.id);
       _tabs.add(newTab);
       _currentTabIndex = _tabs.length - 1;
       _urlController.text = url;
@@ -1278,12 +1277,12 @@ class _BrowserScreenState extends State<BrowserScreen>
       AddDownloadDialog.show(context, prefilledUrl: url);
       return;
     }
-    _redirectGuard.markUserInitiated(url);
     setState(() {
       final newTab = _createNewTab(
         initialUrl: url,
         isIncognito: isIncognito,
       );
+      _redirectGuard.reset(newTab.id);
       _tabs.add(newTab);
       if (switchToTab) {
         _currentTabIndex = _tabs.length - 1;
@@ -1336,50 +1335,6 @@ class _BrowserScreenState extends State<BrowserScreen>
       icon: Icons.tab_rounded,
       isDarkMode: isDark,
     );
-  }
-
-  Future<void> _handleRedirectIntercept(
-      BrowserTab parentTab, String targetUrl) async {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    triggerHaptic(settings);
-
-    final action = await RedirectSheet.show(
-      context,
-      targetUrl: targetUrl,
-      currentTabUrl: parentTab.url,
-    );
-
-    if (!mounted || action == null) return;
-
-    switch (action) {
-      case RedirectAction.openOnceInNewTab:
-        _openInNewTab(targetUrl,
-            isIncognito: parentTab.isIncognito, switchToTab: true);
-        break;
-      case RedirectAction.openInBackgroundTab:
-        _openInNewTab(targetUrl,
-            isIncognito: parentTab.isIncognito, switchToTab: false);
-        if (!mounted) return;
-        ThemedSnackbar.show(
-          context,
-          message: L10n.of(context, 'redirect_bg_opened'),
-          color:
-              settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-          icon: Icons.tab_unselected_rounded,
-          isDarkMode: settings.isDarkMode,
-        );
-        break;
-      case RedirectAction.alwaysOpenInNewTab:
-        await _redirectGuard.addAlwaysNewTabDomain(targetUrl);
-        _openInNewTab(targetUrl,
-            isIncognito: parentTab.isIncognito, switchToTab: true);
-        break;
-      case RedirectAction.allowInSameTab:
-        _redirectGuard.markUserInitiated(targetUrl);
-        parentTab.controller
-            ?.loadUrl(urlRequest: URLRequest(url: WebUri(targetUrl)));
-        break;
-    }
   }
 
   void _onDashboardScroll() {
@@ -1652,7 +1607,6 @@ class _BrowserScreenState extends State<BrowserScreen>
     var url = input.trim();
     if (url.isEmpty) return;
 
-    _redirectGuard.markUserInitiated(url);
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final engine = settings.searchEngine;
 
@@ -1678,6 +1632,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
+    _redirectGuard.reset(activeTab.id);
     final parsed = Uri.tryParse(url);
     var targetUrl = parsed != null ? parsed.toString() : url;
     if (settings.httpsOnly && targetUrl.startsWith('http://')) {
@@ -2026,12 +1981,12 @@ class _BrowserScreenState extends State<BrowserScreen>
           : null,
       onOpenInNewTab: isWebUrl
           ? () {
-              _redirectGuard.markUserInitiated(cleanUrl);
               setState(() {
                 final newTab = _createNewTab(
                   initialUrl: cleanUrl,
                   isIncognito: tab.isIncognito,
                 );
+                _redirectGuard.reset(newTab.id);
                 _tabs.add(newTab);
                 _currentTabIndex = _tabs.length - 1;
                 _urlController.text = cleanUrl;
@@ -2042,12 +1997,12 @@ class _BrowserScreenState extends State<BrowserScreen>
           : null,
       onOpenInIncognito: isWebUrl
           ? () {
-              _redirectGuard.markUserInitiated(cleanUrl);
               setState(() {
                 final newTab = _createNewTab(
                   initialUrl: cleanUrl,
                   isIncognito: true,
                 );
+                _redirectGuard.reset(newTab.id);
                 _tabs.add(newTab);
                 _currentTabIndex = _tabs.length - 1;
                 _urlController.text = cleanUrl;
@@ -5008,13 +4963,40 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                       '');
                                                             },
                                                             onLoadStop:
-                                                                (controller,
-                                                                    url) {
-                                                              _onPageStop(
-                                                                  tab,
-                                                                  url?.toString() ??
-                                                                      '');
-                                                            },
+                                                                 (controller,
+                                                                     url) async {
+                                                               _onPageStop(
+                                                                   tab,
+                                                                   url?.toString() ??
+                                                                       '');
+                                                               if (url == null) return;
+                                                               final res = await _redirectGuard.extractFromPage(
+                                                                 tabId: tab.id,
+                                                                 controller: controller,
+                                                               );
+                                                               switch (res.decision) {
+                                                                 case RedirectDecision.autoFollow:
+                                                                   await Future.delayed(const Duration(milliseconds: 400));
+                                                                   await controller.loadUrl(
+                                                                       urlRequest: URLRequest(url: WebUri(res.targetUrl!)));
+                                                                   break;
+                                                                 case RedirectDecision.promptUser:
+                                                                   if (context.mounted) {
+                                                                     RedirectSheet.show(
+                                                                       context,
+                                                                       candidates: res.candidates,
+                                                                       onSelected: (u) {
+                                                                         controller.loadUrl(
+                                                                             urlRequest: URLRequest(url: WebUri(u)));
+                                                                       },
+                                                                     );
+                                                                   }
+                                                                   break;
+                                                                 case RedirectDecision.block:
+                                                                 case RedirectDecision.ignore:
+                                                                   break;
+                                                               }
+                                                             },
                                                             onProgressChanged:
                                                                 (controller,
                                                                     progress) {
@@ -5211,6 +5193,14 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                     .CANCEL;
                                                               }
 
+                                                              final res = await _redirectGuard.evaluate(
+                                                                tabId: tab.id,
+                                                                navigatingTo: url,
+                                                              );
+                                                              if (res.decision == RedirectDecision.block) {
+                                                                return NavigationActionPolicy.CANCEL;
+                                                              }
+
                                                               // 0. Ad-blocker: cancel navigation-level ad redirects
                                                               // Only block sub-frame navigations (ads redirect in iframes/popups)
                                                               // Never block main-frame navigations so user can still browse
@@ -5234,9 +5224,11 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                       url)) {
                                                                 _log.info(
                                                                     '[Browser] Intercepted magnet link in navigation: $url');
-                                                                _showInterceptionSheet(
-                                                                    context,
-                                                                    url);
+                                                                if (context.mounted) {
+                                                                  _showInterceptionSheet(
+                                                                      context,
+                                                                      url);
+                                                                }
                                                                 return NavigationActionPolicy
                                                                     .CANCEL;
                                                               }
@@ -5264,15 +5256,9 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                     .CANCEL;
                                                               }
 
-                                                              // 3. Bypass & User-initiated checks
+                                                              // 3. Bypass check
                                                               if (_interceptor
                                                                   .consumeBypass(
-                                                                      url)) {
-                                                                return NavigationActionPolicy
-                                                                    .ALLOW;
-                                                              }
-                                                              if (_redirectGuard
-                                                                  .consumeUserInitiated(
                                                                       url)) {
                                                                 return NavigationActionPolicy
                                                                     .ALLOW;
@@ -5337,9 +5323,11 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                           .action ==
                                                                       PageAction
                                                                           .openNewTabWithWarning) {
-                                                                    _showAdWarning(
-                                                                        context,
-                                                                        url);
+                                                                    if (context.mounted) {
+                                                                      _showAdWarning(
+                                                                          context,
+                                                                          url);
+                                                                    }
                                                                   }
                                                                   return NavigationActionPolicy
                                                                       .CANCEL;
@@ -5376,33 +5364,11 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                               tab.id] =
                                                                           url;
                                                                     });
-                                                                    _showInterceptionSheet(
-                                                                        context,
-                                                                        url);
-                                                                    return NavigationActionPolicy
-                                                                        .CANCEL;
-                                                                  }
-                                                                  if (_redirectGuard
-                                                                      .isAlwaysNewTab(
-                                                                          url)) {
-                                                                    _openInNewTab(
-                                                                        url,
-                                                                        isIncognito: tab
-                                                                            .isIncognito,
-                                                                        switchToTab:
-                                                                            true);
-                                                                    return NavigationActionPolicy
-                                                                        .CANCEL;
-                                                                  }
-                                                                  if (_redirectGuard.isSuspiciousRedirect(
-                                                                      currentTabUrl:
-                                                                          tab
-                                                                              .url,
-                                                                      targetUrl:
-                                                                          url)) {
-                                                                    _handleRedirectIntercept(
-                                                                        tab,
-                                                                        url);
+                                                                    if (context.mounted) {
+                                                                      _showInterceptionSheet(
+                                                                          context,
+                                                                          url);
+                                                                    }
                                                                     return NavigationActionPolicy
                                                                         .CANCEL;
                                                                   }

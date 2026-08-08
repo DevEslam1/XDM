@@ -186,6 +186,7 @@ class DownloadProgress {
   final List<Map<String, dynamic>>? torrentFiles;
   final bool? supportsResume;
   final String? statusMessage;
+  final int? torrentId;
 
   /// FIX-CHUNK-DETAILS: Per-chunk detail for the HTTP details screen.
   /// Null for torrents (which use torrentFiles) and single-stream downloads.
@@ -238,6 +239,7 @@ class DownloadProgress {
     this.torrentFiles,
     this.supportsResume,
     this.statusMessage,
+    this.torrentId,
     this.ytStreamKind,
     this.ytCounterpartSize,
     this.ytCounterpartDownloadedBytes,
@@ -2015,6 +2017,7 @@ class DownloadEngine {
         completedFiles: mfTotal > 0 ? mfDone : null,
         totalFileBytes: mfBytes > 0 ? mfBytes : null,
         downloadedFileBytes: mfBytes > 0 ? mfDl : null,
+        torrentId: id,
       ));
     });
     final timeout = Timer(const Duration(seconds: 300), () {
@@ -2306,6 +2309,7 @@ class DownloadEngine {
           completedFiles: fmTotal > 0 ? fmDone : null,
           totalFileBytes: fmBytes > 0 ? fmBytes : null,
           downloadedFileBytes: fmBytes > 0 ? fmDl : null,
+          torrentId: id,
         ));
         return; // skip normal progress emission
       }
@@ -2487,6 +2491,7 @@ class DownloadEngine {
             completedFiles: cFiles > 0 ? cDoneFiles : null,
             totalFileBytes: cTotalBytes > 0 ? cTotalBytes : null,
             downloadedFileBytes: cTotalBytes > 0 ? cDlBytes : null,
+            torrentId: id,
           ));
           if (!completer.isCompleted) completer.complete();
           return;
@@ -2536,6 +2541,7 @@ class DownloadEngine {
           completedFiles: rFiles > 0 ? rDoneFiles : null,
           totalFileBytes: rTotalBytes > 0 ? rTotalBytes : null,
           downloadedFileBytes: rTotalBytes > 0 ? rDlBytes : null,
+          torrentId: id,
         ));
         if (!completer.isCompleted) {
           () async {
@@ -2615,6 +2621,7 @@ class DownloadEngine {
           completedFiles: tFiles > 0 ? dFiles : null,
           totalFileBytes: tBytes > 0 ? tBytes : null,
           downloadedFileBytes: tBytes > 0 ? dBytes : null,
+          torrentId: id,
         ));
       } else {
         // FIX-TOR-FILES: Compute file-level summary for the details screen.
@@ -2665,6 +2672,7 @@ class DownloadEngine {
           completedFiles: tFiles > 0 ? dFiles : null,
           totalFileBytes: tBytes > 0 ? tBytes : null,
           downloadedFileBytes: tBytes > 0 ? dBytes : null,
+          torrentId: id,
         ));
       }
       if (isCompleted && !completer.isCompleted) completer.complete();
@@ -2886,6 +2894,7 @@ class DownloadEngine {
               completedFiles: rcTotal > 0 ? rcDone : null,
               totalFileBytes: rcBytes > 0 ? rcBytes : null,
               downloadedFileBytes: rcBytes > 0 ? rcDl : null,
+              torrentId: id,
             ));
           }
         }

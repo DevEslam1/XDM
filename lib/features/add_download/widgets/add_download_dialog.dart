@@ -1419,7 +1419,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           child: Stack(
             children: [
               AbsorbPointer(
-                absorbing: _isResolvingLink || _isSubmitting,
+                absorbing: (_isResolvingLink && !_isTorrentOrMagnet) || _isSubmitting,
                 child: SingleChildScrollView(
                   child: Padding(
                     padding: EdgeInsets.only(
@@ -2796,14 +2796,14 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                 ),
                               const SizedBox(width: 4),
                               NeonGlowButton(
-                                onPressed: (_isResolvingLink || _isSubmitting)
+                                onPressed: ((_isResolvingLink && !_isTorrentOrMagnet) || _isSubmitting)
                                     ? null
                                     : () {
                                         if (_formKey.currentState!.validate()) {
                                           _handleDuplicateOrSubmit();
                                         }
                                       },
-                                text: _isResolvingLink
+                                text: (_isResolvingLink && !_isTorrentOrMagnet)
                                     ? (L10n.isRtl(context)
                                         ? 'إنتظار الاتصال...'
                                         : 'Connecting...')
@@ -2813,7 +2813,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                             : 'Adding...')
                                         : L10n.of(context, 'add_btn'),
                                 icon: Icons.add_circle_outline,
-                                isLoading: _isResolvingLink || _isSubmitting,
+                                isLoading: (_isResolvingLink && !_isTorrentOrMagnet) || _isSubmitting,
                                 color: greenClr,
                                 glowColor: greenClr,
                                 isExpanded: false,

@@ -2216,6 +2216,9 @@ class DownloadOrchestrator {
                 ytCounterpartSize: liveAudioSize,
                 ytCounterpartDownloadedBytes: audioBytesSoFar,
                 onProgress: (progress) {
+                  if (progress.torrentId != null) {
+                    _host.providerTorrentIds[task.id] = progress.torrentId!;
+                  }
                   // TTFB tracking: record ms until first byte
                   if (ttfbTimestamp == null && progress.downloadedBytes > 0) {
                     ttfbTimestamp = DateTime.now().millisecondsSinceEpoch;
@@ -3005,7 +3008,7 @@ class DownloadOrchestrator {
             }
             if (task.url.startsWith('magnet:')) {
               torrentId = TorrentService.addMagnet(task.url, saveDir);
-            } else {
+            } else if (!task.url.startsWith('http://') && !task.url.startsWith('https://')) {
               String filePath = task.url;
               if (task.url.startsWith('file://')) {
                 filePath = Uri.parse(task.url).toFilePath();
@@ -3016,19 +3019,21 @@ class DownloadOrchestrator {
                 sourceKey: task.url,
               );
             }
-            if (torrentId < 0) {
-              throw Exception('Torrent engine rejected the torrent.');
-            }
-            _host.providerTorrentIds[task.id] = torrentId;
-            // FIX-C4: Save resume data for magnet links so resume works across app restarts
-            if (task.url.startsWith('magnet:')) {
-              unawaited(TorrentService.saveResumeData(torrentId));
+            if (torrentId != null) {
+              if (torrentId < 0) {
+                throw Exception('Torrent engine rejected the torrent.');
+              }
+              _host.providerTorrentIds[task.id] = torrentId;
+              // FIX-C4: Save resume data for magnet links so resume works across app restarts
+              if (task.url.startsWith('magnet:')) {
+                unawaited(TorrentService.saveResumeData(torrentId));
+              }
             }
 
             // C-2 FIX: Set downloading immediately so UI reflects state
             await _host.setTaskState(task.copyWith(
               status: DownloadStatus.downloading,
-              statusMessage: 'Connecting to peers...',
+              statusMessage: torrentId == null ? 'Acquiring torrent file...' : 'Connecting to peers...',
             ));
           }
         } catch (e) {
