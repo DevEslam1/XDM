@@ -88,6 +88,7 @@ class DownloadCommand {
     this.ytStreamKind,
     this.ytCounterpartSize,
     this.ytCounterpartDownloadedBytes,
+    this.ytCounterpartTaskId,
   });
 
   final String taskId;
@@ -119,6 +120,7 @@ class DownloadCommand {
   final YtStreamKind? ytStreamKind;
   final int? ytCounterpartSize;
   final int? ytCounterpartDownloadedBytes;
+  final String? ytCounterpartTaskId;
 
   Map<String, dynamic> toMap() => {
         'taskId': taskId,
@@ -151,6 +153,8 @@ class DownloadCommand {
         if (ytCounterpartSize != null) 'ytCounterpartSize': ytCounterpartSize,
         if (ytCounterpartDownloadedBytes != null)
           'ytCounterpartDownloadedBytes': ytCounterpartDownloadedBytes,
+        if (ytCounterpartTaskId != null)
+          'ytCounterpartTaskId': ytCounterpartTaskId,
       };
 
   static DownloadCommand fromMap(Map<String, dynamic> m) => DownloadCommand(
@@ -189,6 +193,7 @@ class DownloadCommand {
         ytCounterpartSize: (m['ytCounterpartSize'] as num?)?.toInt(),
         ytCounterpartDownloadedBytes:
             (m['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
+        ytCounterpartTaskId: m['ytCounterpartTaskId'] as String?,
       );
 }
 
@@ -1631,16 +1636,70 @@ class HttpTransferJob {
     final chunkDetails = st.chunks.isNotEmpty
         ? st.chunks.asMap().entries.map((e) {
             final c = e.value;
+            final rawRatio = c.ratio;
+            // FIX-CHUNK-RATIO: Clamp negative sentinel (-1.0 for unknown
+            // size) to 0.0 for wire transport; the UI checks isIndeterminate
+            // via chunkDetails[size < 0] separately.
+            final safeRatio = rawRatio < 0.0 ? 0.0 : rawRatio.clamp(0.0, 1.0);
             return <String, dynamic>{
               'index': e.key,
               'start': c.start,
               'end': c.end,
               'downloaded': c.downloaded,
               'size': c.size,
-              'ratio': c.ratio,
+              'ratio': safeRatio,
+              'isComplete': c.isComplete,
+              'isIndeterminate': c.size < 0,
             };
           }).toList()
         : null;
+
+    // FIX-HTTP-PARTS: Aggregate chunk completion counts here so the
+    // orchestrator and details screen can render "3 of 8 parts" without
+    // re-iterating chunkDetails. Single-stream downloads report 1/1 (or
+    // 0/1 if indeterminate and not yet finished).
+    final totalChunks = st.chunks.isNotEmpty ? st.chunks.length : null;
+    final completedChunks = st.chunks.isNotEmpty
+        ? st.chunks.where((c) => c.isComplete).length
+        : null;
+
+    // FIX-CYCLE-DERIVE: Derive cycleState directly in the worker isolate
+    // from DmxStateStatus + statusMessage so the orchestrator receives a
+    // structured cycle state on every tick — not just a human-readable
+    // string it has to re-parse. This guarantees start/pause/resume/
+    // retry/failed/updating_links/completed are always correctly mapped
+    // regardless of which orchestrator code path consumes the event.
+    final cycleState = _deriveCycleState(statusMessage, st.status);
+
+    // FIX-YT-LIVE-COUNTERPART: Read the counterpart's live bytes from the
+    // static cache so the combined audio+video percentage always reflects
+    // BOTH streams' real-time progress — not just the spawn-time snapshot
+    // passed via cmd.ytCounterpartDownloadedBytes which goes stale as soon
+    // as the counterpart stream starts downloading.
+    int? ytLiveCounterpartBytes = cmd.ytCounterpartDownloadedBytes;
+    if (cmd.ytStreamKind != null) {
+      final counterpartId = cmd.ytCounterpartTaskId;
+      if (counterpartId != null) {
+        final live = DownloadEngine._ytLiveBytes[counterpartId];
+        if (live != null) {
+          // FIX-YT-LIVE-STALE-GUARD: If the counterpart has already
+          // completed (its live bytes equal its size), use its final
+          // size as the live value. This prevents the combined bar from
+          // flickering when one stream finishes and its cache entry is
+          // cleaned up by unregisterYtCounterpart before the other
+          // stream's next tick.
+          ytLiveCounterpartBytes = live;
+        } else if (cmd.ytCounterpartSize != null &&
+            cmd.ytCounterpartSize! > 0) {
+          // Counterpart finished and was unregistered — use its known
+          // final size as the live bytes.
+          ytLiveCounterpartBytes = cmd.ytCounterpartSize;
+        }
+      }
+      // FIX-YT-LIVE: Update this stream's live bytes cache so the
+      // counterpart can read them on its next progress tick.
+      DownloadEngine._ytLiveBytes[cmd.taskId] = downloaded;
+    }
 
     _send('progress', {
       'downloadedBytes': downloaded,
@@ -1654,8 +1713,8 @@ class HttpTransferJob {
       if (cmd.ytStreamKind != null) 'ytStreamKind': cmd.ytStreamKind!.name,
       if (cmd.ytCounterpartSize != null)
         'ytCounterpartSize': cmd.ytCounterpartSize,
-      if (cmd.ytCounterpartDownloadedBytes != null)
-        'ytCounterpartDownloadedBytes': cmd.ytCounterpartDownloadedBytes,
+      if (ytLiveCounterpartBytes != null)
+        'ytCounterpartDownloadedBytes': ytLiveCounterpartBytes,
       // FIX-YT-LIVE: Emit THIS stream's live downloaded bytes so the main
       // isolate can populate DownloadEngine._ytLiveBytes[taskId] and the
       // counterpart's combined percentage always reflects BOTH streams.
@@ -1665,7 +1724,46 @@ class HttpTransferJob {
       // 'Checking pieces…' → 'checking', etc. Without this, every cycle
       // state defaults to 'downloading' regardless of actual status.
       'statusMessage': statusMessage,
+      // FIX-CYCLE-DERIVE: Structured cycle state derived from status + msg.
+      // Values: 'downloading', 'paused', 'retrying', 'updating_links',
+      // 'failed', 'completed'. The orchestrator may override with
+      // 'starting' / 'fetching_metadata' / 'seeding' / 'checking' for
+      // torrent and lifecycle transitions it owns.
+      'cycleState': cycleState,
+      // FIX-HTTP-PARTS: Aggregate part counts for HTTP/YouTube details
+      // screen — "3 of 8 parts complete".
+      if (totalChunks != null) 'totalChunks': totalChunks,
+      if (completedChunks != null) 'completedChunks': completedChunks,
     });
+  }
+
+  /// Maps an internal [DmxStateStatus] + optional human-readable
+  /// [statusMessage] to the structured cycle-state vocabulary consumed by
+  /// the UI status chips.
+  ///
+  /// Priority: explicit status (complete/failed/paused) > statusMessage
+  /// keyword match > default 'downloading'.
+  static String _deriveCycleState(
+      String? statusMessage, DmxStateStatus status) {
+    switch (status) {
+      case DmxStateStatus.complete:
+        return 'completed';
+      case DmxStateStatus.failed:
+        return 'failed';
+      case DmxStateStatus.paused:
+        return 'paused';
+      case DmxStateStatus.active:
+        final msg = statusMessage?.toLowerCase() ?? '';
+        if (msg.contains('updating links')) return 'updating_links';
+        if (msg.contains('retrying')) return 'retrying';
+        if (msg.contains('checking')) return 'checking';
+        if (msg.contains('seeding')) return 'seeding';
+        if (msg.contains('completed')) return 'completed';
+        if (msg.contains('starting')) return 'starting';
+        if (msg.contains('resuming')) return 'resuming';
+        if (msg.contains('fetching metadata')) return 'fetching_metadata';
+        return 'downloading';
+    }
   }
 
   void _validateContentRange(
