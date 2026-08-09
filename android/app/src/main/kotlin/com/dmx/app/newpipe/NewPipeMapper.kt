@@ -8,12 +8,6 @@ import org.schabi.newpipe.extractor.stream.StreamExtractor
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import org.schabi.newpipe.extractor.stream.VideoStream
 
-/**
- * Maps NewPipeExtractor model objects to the flat Dart-compatible shapes the
- * download engine / UI consume. Keys mirror the *StreamEntry*, *VideoStreams*,
- * *PlaylistInfo* and *SearchResult* Dart models so the Dart service can decode
- * them directly.
- */
 object NewPipeMapper {
 
     fun streamInfoToMap(
@@ -23,6 +17,7 @@ object NewPipeMapper {
         val title = safeRead { extractor.name }.orEmpty()
         val id = safeRead { extractor.id }.orEmpty()
         val thumb = safeRead { extractor.thumbnails?.firstOrNull()?.url }
+        val videoId = videoIdFromUrl(url)
 
         val videoStreams = try {
             extractor.videoStreams.orEmpty()
@@ -48,6 +43,7 @@ object NewPipeMapper {
                     appType = "muxed",
                     quality = video.resolution,
                     label = "Video: ${video.resolution} (Muxed)",
+                    videoId = videoId,
                 )
             }
         }
@@ -58,12 +54,13 @@ object NewPipeMapper {
                     quality = video.resolution,
                     label = "Video Only: ${video.resolution}",
                     audioStream = bestAudio,
+                    videoId = videoId,
                 )
             }
         }
         audioStreams.forEach { audio ->
             if (audio.deliveryMethod != DeliveryMethod.HLS && audio.deliveryMethod != DeliveryMethod.DASH) {
-                entries += audio.toStreamEntry()
+                entries += audio.toStreamEntry(videoId = videoId)
             }
         }
 
@@ -91,6 +88,7 @@ object NewPipeMapper {
         quality: String,
         label: String,
         audioStream: AudioStream? = null,
+        videoId: String = "",
     ): Map<String, Any> {
         val videoSize = itagItem?.contentLength?.coerceAtLeast(0L) ?: 0L
         val audioSize = audioStream?.itagItem?.contentLength?.coerceAtLeast(0L) ?: 0L
@@ -109,6 +107,7 @@ object NewPipeMapper {
             "videoSize" to videoSize,
             "audioSize" to audioSize,
             "size" to (videoSize + audioSize),
+            "videoId" to videoId,
         )
         if (audioStream != null) {
             entry["audioSrc"] = audioStream.content.orEmpty()
@@ -118,7 +117,7 @@ object NewPipeMapper {
         return entry
     }
 
-    private fun AudioStream.toStreamEntry(): Map<String, Any> {
+    private fun AudioStream.toStreamEntry(videoId: String = ""): Map<String, Any> {
         val quality = averageBitrate
         val size = itagItem?.contentLength?.coerceAtLeast(0L) ?: 0L
         val ext = format?.suffix ?: "m4a"
@@ -135,6 +134,7 @@ object NewPipeMapper {
             "videoSize" to 0L,
             "audioSize" to size,
             "size" to size,
+            "videoId" to videoId,
         )
     }
 
@@ -202,7 +202,6 @@ object NewPipeMapper {
         return map
     }
 
-    /** Extracts a stable video id from a watch/short/embed URL. */
     fun videoIdFromUrl(url: String): String {
         Regex("""[?&]v=([a-zA-Z0-9_-]{11})""").find(url)?.let {
             return it.groupValues[1]
@@ -211,6 +210,9 @@ object NewPipeMapper {
             return it.groupValues[1]
         }
         Regex("""youtu\.be/([a-zA-Z0-9_-]{11})""").find(url)?.let {
+            return it.groupValues[1]
+        }
+        Regex("""music\.youtube\.com/watch\?v=([a-zA-Z0-9_-]{11})""").find(url)?.let {
             return it.groupValues[1]
         }
         val segment = Regex("""/([a-zA-Z0-9_-]{11})(?=/|$)""").find(url)

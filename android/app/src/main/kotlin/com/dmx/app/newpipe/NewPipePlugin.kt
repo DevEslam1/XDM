@@ -20,16 +20,8 @@ import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeStreamExt
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
-/**
- * Flutter MethodChannel bridge exposing local NewPipeExtractor extraction to
- * the Dart side. Channel: `com.dmx.app/newpipe`.
- *
- * Extraction runs on a single background thread (see [executor]) and results
- * are posted on the main thread as MethodChannel requires. The single thread
- * also serializes extractions so the cookie / poToken context stored on
- * [NewPipeDownloader] never bleeds across concurrent resolutions.
- */
 class NewPipePlugin(
     private val messenger: BinaryMessenger,
 ) : MethodChannel.MethodCallHandler {
@@ -49,6 +41,14 @@ class NewPipePlugin(
     fun unregister() {
         channel.setMethodCallHandler(null)
         executor.shutdown()
+        try {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow()
+            }
+        } catch (e: InterruptedException) {
+            executor.shutdownNow()
+            Thread.currentThread().interrupt()
+        }
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -70,30 +70,21 @@ class NewPipePlugin(
         }
     }
 
-    /** Hands the Dart-supplied poToken straight back to the extractor so
-     * signed YouTube player requests can include it. */
     private fun registerPoTokenProvider() {
         val provider = object : PoTokenProvider {
-            override fun getWebClientPoToken(visitorData: String): PoTokenResult =
-                resultFor(visitorData)
-
-            override fun getWebEmbedClientPoToken(visitorData: String): PoTokenResult =
-                resultFor(visitorData)
-
-            override fun getAndroidClientPoToken(visitorData: String): PoTokenResult =
-                resultFor(visitorData)
-
-            override fun getIosClientPoToken(visitorData: String): PoTokenResult =
-                resultFor(visitorData)
+            override fun getWebClientPoToken(visitorData: String): PoTokenResult? = resultFor(visitorData)
+            override fun getWebEmbedClientPoToken(visitorData: String): PoTokenResult? = resultFor(visitorData)
+            // Return null for mobile clients as we don't have a mobile-specific poToken from Dart
+            override fun getAndroidClientPoToken(visitorData: String): PoTokenResult? = null
+            override fun getIosClientPoToken(visitorData: String): PoTokenResult? = null
         }
         YoutubeStreamExtractor.setPoTokenProvider(provider)
     }
 
-    private fun resultFor(visitorData: String): PoTokenResult {
+    private fun resultFor(visitorData: String): PoTokenResult? {
         val poToken = downloader.poToken()
         return if (poToken.isNullOrEmpty()) {
-            // NewPipe tolerates an empty token; behave as the default passthrough.
-            PoTokenResult(visitorData, "", "")
+            null
         } else {
             PoTokenResult(visitorData, poToken, poToken)
         }
@@ -107,19 +98,22 @@ class NewPipePlugin(
         }
         val cookies: String? = call.argument("cookies")
         val poToken: String? = call.argument("poToken")
+        val userAgent: String? = call.argument("userAgent")
 
-        // Reject HTTP header injection
+        android.util.Log.d("NewPipePlugin", "handleStreamCall: method=${call.method}, url=$url, hasCookies=${!cookies.isNullOrBlank()}, hasPoToken=${!poToken.isNullOrBlank()}, hasUserAgent=${!userAgent.isNullOrBlank()}")
+
         if (url.contains("\r") || url.contains("\n") ||
             cookies?.contains("\r") == true || cookies?.contains("\n") == true ||
-            poToken?.contains("\r") == true || poToken?.contains("\n") == true) {
-            result.error("INVALID_INPUT", "HTTP header injection detected.", null)
+            poToken?.contains("\r") == true || poToken?.contains("\n") == true ||
+            userAgent?.contains("\r") == true || userAgent?.contains("\n") == true) {
+            result.error("invalid_input", "HTTP header injection detected.", null)
             return
         }
 
         val resolve = call.method == "resolveExpired"
 
         runBackground(result) {
-            val map = withContext(cookies, poToken) {
+            val map = withContext(cookies, poToken, userAgent) {
                 ensureInitialized()
                 val service = NewPipe.getServiceByUrl(url)
                 val extractor = service.getStreamExtractor(url)
@@ -137,14 +131,17 @@ class NewPipePlugin(
     private fun handlePlaylistCall(call: MethodCall, result: MethodChannel.Result) {
         val url = call.argument<String>("url")
         if (url.isNullOrBlank()) {
-            result.error("INVALID_URL", "A playlist URL is required.", null)
+            result.error("invalid_url", "A playlist URL is required.", null)
             return
         }
         val cookies = call.argument<String>("cookies")
         val pageToken = call.argument<String>("pageToken")
+        val userAgent = call.argument<String>("userAgent")
+
+        android.util.Log.d("NewPipePlugin", "handlePlaylistCall: url=$url, hasCookies=${!cookies.isNullOrBlank()}, hasPageToken=${!pageToken.isNullOrBlank()}, hasUserAgent=${!userAgent.isNullOrBlank()}")
 
         runBackground(result) {
-            val payload = withContext(cookies, null) {
+            val payload = withContext(cookies, null, userAgent) {
                 ensureInitialized()
                 val service = NewPipe.getServiceByUrl(url)
                 if (pageToken.isNullOrEmpty()) {
@@ -185,13 +182,16 @@ class NewPipePlugin(
         val serviceId = call.argument<Int>("serviceId") ?: 0
         val query = call.argument<String>("query")
         if (query.isNullOrBlank()) {
-            result.error("INVALID_QUERY", "A search query is required.", null)
+            result.error("invalid_query", "A search query is required.", null)
             return
         }
         val cookies = call.argument<String>("cookies")
+        val userAgent = call.argument<String>("userAgent")
+
+        android.util.Log.d("NewPipePlugin", "handleSearchCall: serviceId=$serviceId, query=$query, hasCookies=${!cookies.isNullOrBlank()}, hasUserAgent=${!userAgent.isNullOrBlank()}")
 
         runBackground(result) {
-            val items = withContext(cookies, null) {
+            val items = withContext(cookies, null, userAgent) {
                 ensureInitialized()
                 val service = NewPipe.getService(serviceId)
                 val linkHandler = service.searchQHFactory.fromQuery(query)
@@ -205,13 +205,12 @@ class NewPipePlugin(
         }
     }
 
-    /** Runs [block] on the background thread and posts failures as a
-     * MethodChannel error. */
     private fun runBackground(result: MethodChannel.Result, block: () -> Unit) {
         executor.execute {
             try {
                 block()
             } catch (e: Throwable) {
+                android.util.Log.e("NewPipePlugin", "Extraction failed: ${e.message}", e)
                 mainHandler.post {
                     result.error(exceptionCode(e), e.message ?: "Extraction failed", null)
                 }
@@ -219,9 +218,8 @@ class NewPipePlugin(
         }
     }
 
-    /** Wraps [block] with the downloader's cookie / poToken context lifecycle. */
-    private inline fun <T> withContext(cookies: String?, poToken: String?, block: () -> T): T {
-        downloader.setExtractionContext(cookies, poToken)
+    private inline fun <T> withContext(cookies: String?, poToken: String?, userAgent: String?, block: () -> T): T {
+        downloader.setExtractionContext(cookies, poToken, userAgent)
         try {
             return block()
         } finally {
@@ -239,7 +237,7 @@ class NewPipePlugin(
             when {
                 msg.contains("sign in to confirm") || msg.contains("bot") ||
                     msg.contains("recaptcha") || msg.contains("captcha") -> "sign_in_required"
-                msg.contains("age") || msg.contains("restricted") -> "age_restricted"
+                msg.contains("age-restricted") || msg.contains("age restricted") -> "age_restricted"
                 msg.contains("not available in your country") || msg.contains("geo") ->
                     "geo_restricted"
                 msg.contains("no streams") || msg.contains("nothing found") -> "no_streams"
@@ -250,10 +248,22 @@ class NewPipePlugin(
 
     private fun encodeNextPage(page: Page?): String? {
         if (page == null || !Page.isValid(page)) return null
-        return JSONObject()
-            .put("id", page.id ?: "")
-            .put("url", page.url ?: "")
-            .toString()
+        val obj = JSONObject()
+        obj.put("id", page.id ?: "")
+        obj.put("url", page.url ?: "")
+        val cookies = page.cookies
+        if (cookies != null) {
+            val parts = mutableListOf<String>()
+            for ((k, v) in cookies) {
+                if (k != null && v != null) {
+                    parts.add("$k=$v")
+                }
+            }
+            if (parts.isNotEmpty()) {
+                obj.put("cookies", parts.joinToString("; "))
+            }
+        }
+        return obj.toString()
     }
 
     private fun decodeNextPage(token: String?): Page? {
@@ -262,8 +272,15 @@ class NewPipePlugin(
             val obj = JSONObject(token)
             val id = obj.optString("id", "")
             val url = obj.optString("url", "")
+            val cookiesStr = obj.optString("cookies", "").ifEmpty { null }
+            
+            val cookies = cookiesStr?.split(";")?.map { it.trim() }?.filter { it.isNotEmpty() }
+            
             when {
-                id.isNotEmpty() && url.isNotEmpty() -> Page(id, url)
+                id.isNotEmpty() && url.isNotEmpty() -> {
+                    if (cookies != null) Page(url, id, cookies, emptyMap(), null)
+                    else Page(url, id)
+                }
                 id.isNotEmpty() -> Page(id)
                 url.isNotEmpty() -> Page(url)
                 else -> null

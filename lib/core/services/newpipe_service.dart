@@ -97,6 +97,7 @@ class NewPipeService {
     String url, {
     String? cookies,
     String? poToken,
+    String? userAgent,
     bool useCache = true,
   }) async {
     _ensureSupported();
@@ -112,7 +113,12 @@ class NewPipeService {
 
     final map = await _invoke(
       'getStreams',
-      {'url': url, if (cookies != null) 'cookies': cookies, if (poToken != null) 'poToken': poToken},
+      {
+        'url': url,
+        if (cookies != null) 'cookies': cookies,
+        if (poToken != null) 'poToken': poToken,
+        if (userAgent != null) 'userAgent': userAgent,
+      },
     );
     final result = Map<String, dynamic>.from(map);
     if (cacheKey != null) {
@@ -127,11 +133,17 @@ class NewPipeService {
     String url, {
     String? cookies,
     String? poToken,
+    String? userAgent,
   }) async {
     _ensureSupported();
     final map = await _invoke(
       'resolveExpired',
-      {'url': url, if (cookies != null) 'cookies': cookies, if (poToken != null) 'poToken': poToken},
+      {
+        'url': url,
+        if (cookies != null) 'cookies': cookies,
+        if (poToken != null) 'poToken': poToken,
+        if (userAgent != null) 'userAgent': userAgent,
+      },
     );
     final result = Map<String, dynamic>.from(map);
     final cacheKey = _cacheKeyFor(url);
@@ -148,6 +160,7 @@ class NewPipeService {
     String url, {
     String? cookies,
     String? pageToken,
+    String? userAgent,
   }) async {
     _ensureSupported();
     final map = await _invoke(
@@ -156,6 +169,7 @@ class NewPipeService {
         'url': url,
         if (cookies != null) 'cookies': cookies,
         if (pageToken != null && pageToken.toString().isNotEmpty) 'pageToken': pageToken,
+        if (userAgent != null) 'userAgent': userAgent,
       },
     );
     return Map<String, dynamic>.from(map);
@@ -167,12 +181,14 @@ class NewPipeService {
     String query, {
     int serviceId = 0,
     String? cookies,
+    String? userAgent,
   }) async {
     _ensureSupported();
     final raw = await _invoke('search', {
       'query': query,
       'cookies': cookies,
       'serviceId': serviceId,
+      if (userAgent != null) 'userAgent': userAgent,
     });
     return (raw as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
@@ -180,50 +196,49 @@ class NewPipeService {
   // ───────────────────────────── Internals ───────────────────────────
 
   Future<dynamic> _invoke(String method, Map<String, dynamic> arguments) async {
+    debugPrint('[NewPipeService] Invoking method: $method, arguments: $arguments');
     try {
-      return await _channel.invokeMethod(method, arguments).timeout(
+      final result = await _channel.invokeMethod(method, arguments).timeout(
             const Duration(seconds: 30),
             onTimeout: () => throw TimeoutException('Native extraction timed out.'),
           );
+      debugPrint('[NewPipeService] Method $method success');
+      return result;
     } on PlatformException catch (e) {
+      debugPrint('[NewPipeService] PlatformException in $method: code=${e.code}, message=${e.message}, details=${e.details}');
       throw _mapError(e);
+    } catch (e, stackTrace) {
+      debugPrint('[NewPipeService] Unexpected error in $method: $e\n$stackTrace');
+      rethrow;
     }
   }
 
   NewPipeExtractionException _mapError(PlatformException e) {
     final code = e.code;
     final message = e.message ?? '';
+    final details = e.details?.toString();
+    final errorKind = _mapErrorKind(code);
+    final exception = NewPipeExtractionException(
+      errorKind,
+      message,
+      details: details,
+    );
+    debugPrint('[NewPipeService] Mapped extraction exception: $exception');
+    return exception;
+  }
+
+  NewPipeErrorKind _mapErrorKind(String code) {
     switch (code) {
       case 'age_restricted':
-        return NewPipeExtractionException(
-          NewPipeErrorKind.ageRestricted,
-          message,
-          details: e.details?.toString(),
-        );
+        return NewPipeErrorKind.ageRestricted;
       case 'geo_restricted':
-        return NewPipeExtractionException(
-          NewPipeErrorKind.geoRestricted,
-          message,
-          details: e.details?.toString(),
-        );
+        return NewPipeErrorKind.geoRestricted;
       case 'sign_in_required':
-        return NewPipeExtractionException(
-          NewPipeErrorKind.signInRequired,
-          message,
-          details: e.details?.toString(),
-        );
+        return NewPipeErrorKind.signInRequired;
       case 'no_streams':
-        return NewPipeExtractionException(
-          NewPipeErrorKind.noStreams,
-          message,
-          details: e.details?.toString(),
-        );
+        return NewPipeErrorKind.noStreams;
       default:
-        return NewPipeExtractionException(
-          NewPipeErrorKind.extractionFailed,
-          message.isNotEmpty ? message : 'Failed to extract media.',
-          details: e.details?.toString(),
-        );
+        return NewPipeErrorKind.extractionFailed;
     }
   }
 

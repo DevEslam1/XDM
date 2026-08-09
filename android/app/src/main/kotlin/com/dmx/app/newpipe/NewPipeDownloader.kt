@@ -10,14 +10,6 @@ import org.schabi.newpipe.extractor.downloader.Request as NpRequest
 import org.schabi.newpipe.extractor.downloader.Response as NpResponse
 import java.util.concurrent.TimeUnit
 
-/**
- * OkHttp-backed [Downloader] used by NewPipeExtractor.
- *
- * Cookies / poToken passed from Dart are stored here for the duration of a
- * single extraction and injected into every request NewPipe makes. Extraction
- * runs are serialized on a single thread in [NewPipePlugin] so the context
- * can't bleed across concurrent resolutions.
- */
 class NewPipeDownloader : Downloader() {
 
     @Volatile
@@ -25,6 +17,9 @@ class NewPipeDownloader : Downloader() {
 
     @Volatile
     private var contextPoToken: String? = null
+
+    @Volatile
+    private var contextUserAgent: String? = null
 
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -34,19 +29,18 @@ class NewPipeDownloader : Downloader() {
         .followSslRedirects(true)
         .build()
 
-    /** Call before starting an extraction (see [NewPipePlugin]). */
-    fun setExtractionContext(cookies: String?, poToken: String?) {
+    fun setExtractionContext(cookies: String?, poToken: String?, userAgent: String?) {
         contextCookies = cookies?.takeIf { it.isNotBlank() }
         contextPoToken = poToken?.takeIf { it.isNotBlank() }
+        contextUserAgent = userAgent?.takeIf { it.isNotBlank() }
     }
 
-    /** Call after extraction finishes so stale session data isn't leaked. */
     fun clearExtractionContext() {
         contextCookies = null
         contextPoToken = null
+        contextUserAgent = null
     }
 
-    /** Reads back the active poToken so the PoTokenProvider can inject it. */
     fun poToken(): String? = contextPoToken
 
     override fun execute(request: NpRequest): NpResponse {
@@ -63,33 +57,63 @@ class NewPipeDownloader : Downloader() {
             reqBuilder.method(request.httpMethod(), null)
         }
 
-        val combinedCookies = mutableListOf<String>()
+        // Fix 8: Cookie merging doesn't deduplicate
+        val cookieMap = mutableMapOf<String, String>()
         reqHeaders.forEach { (name, values) ->
-            if (name.equals("Cookie", ignoreCase = true)) {
-                combinedCookies.addAll(values)
-            } else {
+            val lowerName = name.lowercase()
+            if (lowerName == "cookie") {
+                values.forEach { cookieHeader ->
+                    cookieHeader.split(";").map { it.trim() }.filter { it.isNotEmpty() }.forEach { cookie ->
+                        val parts = cookie.split("=", limit = 2)
+                        if (parts.size == 2) {
+                            cookieMap[parts[0].trim()] = parts[1].trim()
+                        }
+                    }
+                }
+            } else if (lowerName != "user-agent") {
                 values.forEach { value -> reqBuilder.addHeader(name, value) }
             }
         }
 
-        // Merge existing cookies with context cookies (RFC 6265)
-        contextCookies?.let { combinedCookies.add(it) }
-        if (combinedCookies.isNotEmpty()) {
-            reqBuilder.header("Cookie", combinedCookies.joinToString("; "))
+        contextCookies?.let { contextCookieHeader ->
+            contextCookieHeader.split(";").map { it.trim() }.filter { it.isNotEmpty() }.forEach { cookie ->
+                val parts = cookie.split("=", limit = 2)
+                if (parts.size == 2) {
+                    cookieMap[parts[0].trim()] = parts[1].trim() // Context cookies override
+                }
+            }
         }
 
-        contextPoToken?.let { reqBuilder.header("X-Youtube-Po-Token", it) }
-        reqBuilder.header("User-Agent", USER_AGENT)
+        if (cookieMap.isNotEmpty()) {
+            reqBuilder.header("Cookie", cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" })
+        }
+
+        // Fix 7: X-Youtube-Po-Token header sent to non-YouTube hosts
+        val isYoutube = url.contains("youtube.com") || url.contains("googlevideo.com") || url.contains("youtu.be")
+        if (isYoutube) {
+            contextPoToken?.let { reqBuilder.header("X-Youtube-Po-Token", it) }
+        }
+
+        val isYoutubeiApi = url.contains("youtubei.googleapis.com") || url.contains("youtube.com/youtubei")
+        if (!isYoutubeiApi) {
+            reqBuilder.header("User-Agent", contextUserAgent ?: USER_AGENT)
+        }
 
         val call = client.newCall(reqBuilder.build())
         call.execute().use { response ->
             val code = response.code
             val message = response.message ?: ""
-            val bodyStr = if (response.isSuccessful || code >= 300) {
-                response.body?.string() ?: ""
+            
+            // Fix 12: Response body read for error responses (Limit to 1MB to prevent OOM)
+            val bodyStr = if (response.isSuccessful || code in 400..599) {
+                val source = response.body?.source()
+                source?.request(1024 * 1024) // Buffer up to 1MB
+                val buffer = source?.buffer?.clone()
+                buffer?.readString(Charsets.UTF_8) ?: ""
             } else {
                 ""
             }
+            
             val headers: MutableMap<String, MutableList<String>> = LinkedHashMap()
             response.headers.toMultimap().forEach { (name, values) ->
                 headers[name] = ArrayList(values)
@@ -100,8 +124,8 @@ class NewPipeDownloader : Downloader() {
 
     companion object {
         internal const val USER_AGENT =
-            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/AP1A.240505.005) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 
         @Suppress("unused")
         const val CHANNEL_NAME = "com.dmx.app/newpipe"

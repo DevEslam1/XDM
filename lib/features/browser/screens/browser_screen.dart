@@ -554,6 +554,11 @@ class _BrowserScreenState extends State<BrowserScreen>
     final userAgent = isDesktop
         ? FingerprintManager.desktopUserAgent
         : _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings);
+    
+    // Sync User-Agent to the native extractor so bot-detection challenges 
+    // see a consistent environment between the browser and the downloader.
+    YoutubeService.setCurrentUserAgent(userAgent);
+
     await tab.controller?.setSettings(
       settings: InAppWebViewSettings(
         useShouldOverrideUrlLoading: true,
@@ -1029,8 +1034,11 @@ class _BrowserScreenState extends State<BrowserScreen>
   Future<void> _applyUserAgent(
     BrowserTab tab,
     SettingsProvider settings,
-  ) =>
-      _fingerprintManager.applyUserAgent(tab, settings);
+  ) async {
+    final ua = _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings);
+    YoutubeService.setCurrentUserAgent(ua);
+    await _fingerprintManager.applyUserAgent(tab, settings);
+  }
 
   Future<void> _hideWebViewFingerprints(BrowserTab tab) =>
       _fingerprintManager.hideWebViewFingerprints(tab);
@@ -4842,6 +4850,14 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                   controller);
                                                               _hideWebViewFingerprints(
                                                                   tab);
+                                                              
+                                                              // Sync User-Agent to the native extractor immediately
+                                                              final ua = _resolveUserAgent(
+                                                                isIncognito: tab.isIncognito,
+                                                                settings: settings,
+                                                              );
+                                                              YoutubeService.setCurrentUserAgent(ua);
+
                                                               if (tab.url
                                                                       .isNotEmpty &&
                                                                   tab.url !=
@@ -4876,6 +4892,13 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                             ]),
                                                             initialSettings:
                                                                 InAppWebViewSettings(
+                                                              userAgent:
+                                                                  _resolveUserAgent(
+                                                                isIncognito:
+                                                                    tab.isIncognito,
+                                                                settings:
+                                                                    settings,
+                                                              ),
                                                               useShouldOverrideUrlLoading:
                                                                   true,
                                                               useOnDownloadStart:
@@ -4894,10 +4917,17 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                   true,
                                                               domStorageEnabled:
                                                                   true,
+                                                              allowFileAccess:
+                                                                  true,
                                                               databaseEnabled:
                                                                   true,
                                                               thirdPartyCookiesEnabled:
                                                                   true,
+                                                              safeBrowsingEnabled:
+                                                                  false,
+                                                              mixedContentMode:
+                                                                  MixedContentMode
+                                                                      .MIXED_CONTENT_ALWAYS_ALLOW,
                                                               cacheEnabled:
                                                                   true,
                                                               supportZoom: settings

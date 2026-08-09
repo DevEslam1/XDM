@@ -8,8 +8,19 @@ import 'newpipe_service.dart';
 class YoutubeService {
   static String? _cookies;
   static String? _oauthToken;
+  static String? _poToken;
+  static String? _userAgent;
   static const _secureStorage = FlutterSecureStorage();
   static const _cookiesStorageKey = 'youtube_cookies_persisted';
+
+  static void setPoToken(String? token) {
+    if (token != null && token.isNotEmpty) {
+      _poToken = token;
+      debugPrint('[YouTubeService] Updated poToken');
+    }
+  }
+
+  static String? get poToken => _poToken;
 
   /// Timeout for NewPipe extractions. YouTube's JS challenge can sometimes stall.
   static const Duration _extractionTimeout = Duration(seconds: 30);
@@ -26,6 +37,10 @@ class YoutubeService {
     }
   }
 
+  static void setCurrentUserAgent(String? ua) {
+    _userAgent = ua;
+  }
+
   static String? get oauthToken => _oauthToken;
   static final _authStateController = StreamController<bool>.broadcast();
 
@@ -37,6 +52,7 @@ class YoutubeService {
 
   static Future<void> signIn(String cookieString) async {
     _cookies = cookieString;
+    debugPrint('[YouTubeService] Signing in with YouTube cookies: $cookieString');
     _notifyAuthState();
     try {
       await _secureStorage.write(key: _cookiesStorageKey, value: cookieString);
@@ -92,15 +108,18 @@ class YoutubeService {
       final cookieManager = CookieManager.instance();
       final urls = [
         'https://www.youtube.com',
+        'https://m.youtube.com',
         'https://youtube.com',
         'https://accounts.google.com',
         'https://google.com',
+        'https://www.google.com',
       ];
       final Map<String, String> allCookies = {};
 
       for (final u in urls) {
         try {
           final cookies = await cookieManager.getCookies(url: WebUri(u));
+          debugPrint('[YouTubeService] WebView cookies for URL $u: $cookies');
           for (final c in cookies) {
             if (c.name.isNotEmpty &&
                 c.value != null &&
@@ -114,13 +133,44 @@ class YoutubeService {
       }
 
       if (allCookies.isNotEmpty) {
+        if (allCookies.containsKey('GOOGLE_ABUSE_EXEMPTION')) {
+          debugPrint('[YouTubeService] GOOGLE_ABUSE_EXEMPTION cookie preserved from WebView!');
+        }
         final cookieStr =
-        allCookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+            allCookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+        debugPrint(
+          '[YouTubeService] Fetched ${allCookies.length} unique cookies from WebView',
+        );
+        debugPrint('[YouTubeService] Combined WebView cookies: $cookieStr');
         await signIn(cookieStr);
+      } else {
+        debugPrint('[YouTubeService] No cookies found in WebView');
       }
     } catch (e) {
       debugPrint('Failed to authenticate YouTube from browser cookies: $e');
     }
+  }
+
+  static Future<String?> extractPoTokenFromWebView(InAppWebViewController controller) async {
+    try {
+      final jsResult = await controller.evaluateJavascript(source: '''
+        (function() {
+          try {
+            if (window.ytcfg && typeof window.ytcfg.get === 'function') {
+              return window.ytcfg.get('PO_TOKEN') || null;
+            }
+          } catch(e) {}
+          return null;
+        })();
+      ''');
+      if (jsResult != null && jsResult is String && jsResult.isNotEmpty) {
+        setPoToken(jsResult);
+        return jsResult;
+      }
+    } catch (e) {
+      debugPrint('[YouTubeService] Failed extracting poToken from WebView: $e');
+    }
+    return null;
   }
 
   static Future<void> authenticateFromBrowser([List<Cookie>? cookies]) async {
@@ -596,9 +646,20 @@ class YoutubeService {
       String url, {
         String? cookies,
       }) async {
+    debugPrint(
+      '[YouTubeService] _resolveStreamsWithFallback:\n'
+      '  - URL: $url\n'
+      '  - Cookies: ${cookies ?? "None"}',
+    );
+    // Use the same User-Agent as the WebView to ensure cookie compatibility
+    const userAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
     final raw = await NewPipeService.instance.getVideoStreams(
       url,
       cookies: cookies,
+      poToken: _poToken,
+      userAgent: _userAgent ?? userAgent,
     ).timeout(_extractionTimeout);
     final results = _parseStreams(raw);
     return results.isNotEmpty ? results : null;
@@ -782,6 +843,7 @@ class YoutubeService {
         targetUrl,
         pageToken: pageToken,
         cookies: currentCookies,
+        userAgent: _userAgent,
       ).timeout(_extractionTimeout);
 
       final info = raw['info'] as Map<String, dynamic>?;
@@ -834,6 +896,7 @@ class YoutubeService {
       final results = await NewPipeService.instance.search(
         query,
         cookies: currentCookies,
+        userAgent: _userAgent,
       ).timeout(_extractionTimeout);
       return results;
     } on NewPipeExtractionException catch (e) {
