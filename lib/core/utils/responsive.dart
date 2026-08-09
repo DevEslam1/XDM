@@ -64,6 +64,31 @@ double gridChildAspectRatio(BuildContext context,
   return ratio.clamp(0.3, 3.0);
 }
 
+bool isLandscape(BuildContext context) =>
+    MediaQuery.orientationOf(context) == Orientation.landscape;
+
+bool isPhoneLandscape(BuildContext context) {
+  final size = MediaQuery.sizeOf(context);
+  return size.width > size.height && size.height < 600;
+}
+
+bool isTabletLandscape(BuildContext context) {
+  final size = MediaQuery.sizeOf(context);
+  return size.width > size.height && size.height >= 600 && size.width >= 600;
+}
+
+bool shouldShowSideNavigation(BuildContext context) {
+  final type = getScreenType(context);
+  return type == ScreenType.desktop || isLandscape(context);
+}
+
+int responsiveGridColumns(BuildContext context) {
+  final w = MediaQuery.sizeOf(context).width;
+  if (w >= 1100) return 3;
+  if (w >= 600 || isLandscape(context)) return 2;
+  return 1;
+}
+
 /// Scales layout values from a phone baseline while keeping them within
 /// practical bounds for very small and very large windows.
 double responsiveValue(
@@ -90,3 +115,4 @@ EdgeInsets responsiveInsets(
     vertical: responsiveValue(context, vertical),
   );
 }
+

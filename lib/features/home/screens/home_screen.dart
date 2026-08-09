@@ -1675,8 +1675,9 @@ class _DownloadTaskList extends StatelessWidget {
               },
             );
           } else {
-            final isTabletView = MediaQuery.sizeOf(context).width >= 600;
-            if (isTabletView) {
+            final isMultiColumnView =
+                MediaQuery.sizeOf(context).width >= 600 || isLandscape(context);
+            if (isMultiColumnView) {
               contentWidget = GridView.builder(
                 padding: EdgeInsets.symmetric(
                   horizontal: screenPadding(context).left,

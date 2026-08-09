@@ -663,10 +663,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                   )
                 else
                   Expanded(
-                    child: isDesktop
+                    child: (isDesktop || isTablet(context) || isLandscape(context))
                         ? Row(
                             children: [
-                              // Desktop NavigationRail
+                              // Side NavigationRail for Desktop / Tablet / Landscape
                               NavigationRail(
                                 selectedIndex: _selectedCategoryIndex,
                                 onDestinationSelected: _onCategorySelected,

@@ -214,6 +214,8 @@ class _DetailsScreenState extends State<DetailsScreen>
 
             final statusColor = DmxStatusColors.of(task.status, isDark);
 
+            final isTwoColumn = isLandscape(context) || isTablet(context);
+
             return Directionality(
               textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
               child: SafeArea(
@@ -223,92 +225,198 @@ class _DetailsScreenState extends State<DetailsScreen>
                     horizontal: 16.0,
                     vertical: 12,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _stagger(
-                        0.0,
-                        Hero(
-                          tag: 'download_card_${widget.taskId}',
-                          createRectTween: (begin, end) =>
-                              RectTween(begin: begin, end: end),
-                          child: _TelemetryHero(
-                            task: task,
-                            statusColor: statusColor,
-                            speedText: speedTextInsideCircle,
-                            etaText:
-                                (task.status == DownloadStatus.downloading ||
-                                        isSeeding)
-                                    ? L10n.translateStatus(
-                                        context,
-                                        task.status,
-                                        task.etaFormatted,
-                                      )
-                                    : L10n.of(context, 'details_inactive_eta'),
-                            pulse: _pulse,
-                          ),
+                  child: isTwoColumn
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 5,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _stagger(
+                                    0.0,
+                                    Hero(
+                                      tag: 'download_card_${widget.taskId}',
+                                      createRectTween: (begin, end) =>
+                                          RectTween(begin: begin, end: end),
+                                      child: _TelemetryHero(
+                                        task: task,
+                                        statusColor: statusColor,
+                                        speedText: speedTextInsideCircle,
+                                        etaText:
+                                            (task.status == DownloadStatus.downloading ||
+                                                    isSeeding)
+                                                ? L10n.translateStatus(
+                                                    context,
+                                                    task.status,
+                                                    task.etaFormatted,
+                                                  )
+                                                : L10n.of(context, 'details_inactive_eta'),
+                                        pulse: _pulse,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  _stagger(
+                                    0.1,
+                                    _ActionRail(
+                                      task: task,
+                                      provider: provider,
+                                      settings: settings,
+                                      statusColor: statusColor,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  if (task.isTorrent) ...[
+                                    _stagger(
+                                      0.2,
+                                      _TorrentStatsPanel(
+                                          task: task, provider: provider),
+                                    ),
+                                  ] else ...[
+                                    _stagger(
+                                      0.2,
+                                      _ChannelsPanel(
+                                        task: task,
+                                        provider: provider,
+                                        statusColor: statusColor,
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 14),
+                                  _stagger(
+                                    0.3,
+                                    _BandwidthPanel(
+                                        task: task, provider: provider),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              flex: 6,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _stagger(
+                                    0.4,
+                                    Visibility(
+                                      visible: _graphExpanded,
+                                      maintainState: false,
+                                      child: _SpeedGraphPanel(
+                                        task: task,
+                                        provider: provider,
+                                      ),
+                                    ),
+                                  ),
+                                  if (_graphExpanded) const SizedBox(height: 14),
+                                  _stagger(
+                                    0.5,
+                                    _TorrentFilesPanel(
+                                      task: task,
+                                      provider: provider,
+                                      settings: settings,
+                                    ),
+                                  ),
+                                  if (task.isTorrent) const SizedBox(height: 14),
+                                  _stagger(
+                                    0.6,
+                                    _MetadataPanel(
+                                        task: task, provider: provider),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _stagger(
+                              0.0,
+                              Hero(
+                                tag: 'download_card_${widget.taskId}',
+                                createRectTween: (begin, end) =>
+                                    RectTween(begin: begin, end: end),
+                                child: _TelemetryHero(
+                                  task: task,
+                                  statusColor: statusColor,
+                                  speedText: speedTextInsideCircle,
+                                  etaText:
+                                      (task.status == DownloadStatus.downloading ||
+                                              isSeeding)
+                                          ? L10n.translateStatus(
+                                              context,
+                                              task.status,
+                                              task.etaFormatted,
+                                            )
+                                          : L10n.of(context, 'details_inactive_eta'),
+                                  pulse: _pulse,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            _stagger(
+                              0.1,
+                              _ActionRail(
+                                task: task,
+                                provider: provider,
+                                settings: settings,
+                                statusColor: statusColor,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            if (task.isTorrent) ...[
+                              _stagger(
+                                0.2,
+                                _TorrentStatsPanel(
+                                    task: task, provider: provider),
+                              ),
+                            ] else ...[
+                              _stagger(
+                                0.2,
+                                _ChannelsPanel(
+                                  task: task,
+                                  provider: provider,
+                                  statusColor: statusColor,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 14),
+                            _stagger(
+                              0.3,
+                              _BandwidthPanel(task: task, provider: provider),
+                            ),
+                            const SizedBox(height: 14),
+                            _stagger(
+                              0.4,
+                              Visibility(
+                                visible: _graphExpanded,
+                                maintainState: false,
+                                child: _SpeedGraphPanel(
+                                  task: task,
+                                  provider: provider,
+                                ),
+                              ),
+                            ),
+                            if (_graphExpanded) const SizedBox(height: 14),
+                            _stagger(
+                              0.5,
+                              _TorrentFilesPanel(
+                                task: task,
+                                provider: provider,
+                                settings: settings,
+                              ),
+                            ),
+                            if (task.isTorrent) const SizedBox(height: 14),
+                            _stagger(
+                              0.6,
+                              _MetadataPanel(task: task, provider: provider),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 14),
-                      _stagger(
-                        0.1,
-                        _ActionRail(
-                          task: task,
-                          provider: provider,
-                          settings: settings,
-                          statusColor: statusColor,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      if (task.isTorrent) ...[
-                        _stagger(
-                          0.2,
-                          _TorrentStatsPanel(task: task, provider: provider),
-                        ),
-                      ] else ...[
-                        _stagger(
-                          0.2,
-                          _ChannelsPanel(
-                            task: task,
-                            provider: provider,
-                            statusColor: statusColor,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 14),
-                      _stagger(
-                        0.3,
-                        _BandwidthPanel(task: task, provider: provider),
-                      ),
-                      const SizedBox(height: 14),
-                      _stagger(
-                        0.4,
-                        Visibility(
-                          visible: _graphExpanded,
-                          maintainState: false,
-                          child: _SpeedGraphPanel(
-                            task: task,
-                            provider: provider,
-                          ),
-                        ),
-                      ),
-                      if (_graphExpanded) const SizedBox(height: 14),
-                      _stagger(
-                        0.5,
-                        _TorrentFilesPanel(
-                          task: task,
-                          provider: provider,
-                          settings: settings,
-                        ),
-                      ),
-                      if (task.isTorrent) const SizedBox(height: 14),
-                      _stagger(
-                        0.6,
-                        _MetadataPanel(task: task, provider: provider),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-                  ),
                 ),
               ),
             );

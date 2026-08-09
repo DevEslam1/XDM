@@ -356,10 +356,10 @@ class DownloadProgress {
     // file-level summary fields, compute them from torrentFiles so the
     // details screen always has totalFiles / completedFiles /
     // totalFileBytes / downloadedFileBytes regardless of code path.
-    int? totalFiles = data['totalFiles'] as int?;
-    int? completedFiles = data['completedFiles'] as int?;
-    int? totalFileBytes = data['totalFileBytes'] as int?;
-    int? downloadedFileBytes = data['downloadedFileBytes'] as int?;
+    int? totalFiles = (data['totalFiles'] as num?)?.toInt();
+    int? completedFiles = (data['completedFiles'] as num?)?.toInt();
+    int? totalFileBytes = (data['totalFileBytes'] as num?)?.toInt();
+    int? downloadedFileBytes = (data['downloadedFileBytes'] as num?)?.toInt();
     if (torrentFiles != null && torrentFiles.isNotEmpty) {
       // FIX-FALLBACK-SELECTED: Only count SELECTED files to match the
       // engine's normalizeTorrentFiles. Previously deselected files
@@ -392,7 +392,7 @@ class DownloadProgress {
       downloadedBytes: (data['downloadedBytes'] as num?)?.toInt() ?? 0,
       fileSize: (data['fileSize'] as num?)?.toInt() ?? 0,
       speed: (data['speed'] as num?)?.toDouble() ?? 0.0,
-      eta: data['eta'] as int?,
+      eta: (data['eta'] as num?)?.toInt(),
       chunks: (data['chunks'] as List?)
           ?.map((e) => (e as num?)?.toDouble() ?? 0.0)
           .toList(),
@@ -401,25 +401,19 @@ class DownloadProgress {
       supportsResume: data['supportsResume'] as bool?,
       statusMessage: data['statusMessage'] as String?,
       cycleState: data['cycleState'] as String?,
-      torrentId: data['torrentId'] as int?,
+      torrentId: (data['torrentId'] as num?)?.toInt(),
       chunkDetails: chunkDetails,
-      totalChunks: data['totalChunks'] as int?,
-      completedChunks: data['completedChunks'] as int?,
+      totalChunks: (data['totalChunks'] as num?)?.toInt(),
+      completedChunks: (data['completedChunks'] as num?)?.toInt(),
       totalFiles: totalFiles,
       completedFiles: completedFiles,
       totalFileBytes: totalFileBytes,
       downloadedFileBytes: downloadedFileBytes,
       ytStreamKind: ytStreamKind,
-      ytCounterpartSize: data['ytCounterpartSize'] as int?,
+      ytCounterpartSize: (data['ytCounterpartSize'] as num?)?.toInt(),
       ytCounterpartDownloadedBytes:
-          data['ytCounterpartDownloadedBytes'] as int?,
-      // FIX-YT-FROMWORKER: When ytDownloadedBytes is absent from the worker
-      // message but this is a YouTube stream (ytStreamKind != null), fall
-      // back to downloadedBytes — they are the same value for a YT stream.
-      // Without this fallback, ytCombinedProgress returns null or uses only
-      // the counterpart's bytes, causing the combined audio+video bar to
-      // show incorrect progress.
-      ytDownloadedBytes: data['ytDownloadedBytes'] as int? ??
+          (data['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
+      ytDownloadedBytes: (data['ytDownloadedBytes'] as num?)?.toInt() ??
           (ytStreamKind != null
               ? (data['downloadedBytes'] as num?)?.toInt()
               : null),
@@ -433,10 +427,7 @@ class DownloadProgress {
   double? get ytCombinedProgress {
     if (ytStreamKind == null) return null;
 
-    // FIX-YT-NULL-COUNTERPART: When counterpart size is unknown (null),
-    // show only this stream's progress. Previously null was coerced to
-    // 0, which made the combined bar show 100% when this stream
-    // completed even though the counterpart hadn't been resolved yet.
+    // If counterpart size is null, use only this stream's progress.
     if (ytCounterpartSize == null) {
       if (fileSize <= 0) return null;
       return (downloadedBytes / fileSize).clamp(0.0, 1.0);
@@ -445,21 +436,16 @@ class DownloadProgress {
     final counterpartSize = ytCounterpartSize!;
     final counterpartDownloaded = ytCounterpartDownloadedBytes ?? 0;
 
-    // FIX-YT-LIVE: True combined progress once both streams are known to be
-    // active. When the counterpart stream has NOT yet started (size known
-    // but downloaded == 0), report THIS stream's progress against its OWN
-    // size so the per-stream bar reaches 100% when this stream completes —
-    // the orchestrator then swaps to the other stream. This avoids the
-    // "stuck at 91%" UX when video finishes before audio begins.
-    //
-    // FIX-YT-COUNTERPART-FIRST: When THIS stream is already complete
-    // (downloadedBytes >= fileSize > 0) but the counterpart has not yet
-    // started, the combined bar would show 100% even though the overall
-    // download is only half done. In that case, fall through to the
-    // combined calculation so the user sees the true overall percentage.
+    // If this stream is complete but counterpart hasn't started, show combined
+    // (so the bar doesn't jump to 100% prematurely).
     if (counterpartSize > 0 && counterpartDownloaded == 0) {
-      if (fileSize <= 0) return null;
-      // If this stream is fully downloaded, show combined (not 100%).
+      if (fileSize <= 0) {
+        // Video size unknown but audio known – use audio as total.
+        final totalSize = counterpartSize;
+        if (totalSize == 0) return null;
+        // downloadedBytes is audio bytes (if this is audio stream) or video bytes.
+        return (downloadedBytes / totalSize).clamp(0.0, 1.0);
+      }
       if (downloadedBytes >= fileSize) {
         final totalSize = fileSize + counterpartSize;
         if (totalSize == 0) return null;
@@ -590,7 +576,7 @@ class DownloadProgress {
         'percent': progress,
         'isComplete': length == 0 || dl >= length,
         'selected': f['selected'] as bool? ?? true,
-        'priority': f['priority'] as int? ?? 4,
+        'priority': (f['priority'] as num?)?.toInt() ?? 4,
         'speed': (f['speed'] as num?)?.toDouble() ?? 0.0,
         // FIX-MISSING-EST: Include progressEstimated flag so the details
         // screen can show the "estimated" badge consistently.
@@ -1636,6 +1622,10 @@ class DownloadEngine {
         completedFiles: lastCompletedFiles,
         totalFileBytes: lastTotalFileBytes,
         downloadedFileBytes: lastDownloadedFileBytes,
+        // FIX-CYCLE-PAUSE-TORRENT-ID: Include torrentId so the details
+        // screen can associate the paused state with the torrent handle
+        // for resume operations.
+        torrentId: torrentId,
       ));
     }
 
@@ -1704,7 +1694,9 @@ class DownloadEngine {
               downloadedFileBytes: lastDownloadedFileBytes,
             ));
             if (!completer.isCompleted) {
-              completer.completeError(UrlExpiredException(errorMsg));
+              // FIX-ERROR-MAP: Route through _mapWorkerError to correctly
+              // construct _UrlExpiredException with refreshAllMirrors flag.
+              completer.completeError(_mapWorkerError(message, punyUrl));
             }
             break;
           }
@@ -1855,8 +1847,8 @@ class DownloadEngine {
           // Non-active states hardcode 0.0 and null.
           if (chunkDetails != null) {
             lastChunkDetails = chunkDetails;
-            lastTotalChunks = p['totalChunks'] as int?;
-            lastCompletedChunks = p['completedChunks'] as int?;
+            lastTotalChunks = (p['totalChunks'] as num?)?.toInt();
+            lastCompletedChunks = (p['completedChunks'] as num?)?.toInt();
           }
           // FIX-CYCLE-TOR-TRACK-UPDATE: Update torrent file-level data
           // from the worker message so pause/failed/updating_links
@@ -1997,6 +1989,16 @@ class DownloadEngine {
                 (isTorrent || chunkDetails == null) ? null : totalParts,
             completedChunks:
                 (isTorrent || chunkDetails == null) ? null : doneParts,
+            // FIX-PROGRESS-TOR-FIELDS: Forward torrent file-level data on
+            // every progress tick so the details screen has per-file
+            // progress, file counts, byte summaries, and single-file
+            // percentage during active downloading — not only on
+            // pause/failed/updating_links/done emissions.
+            torrentFiles: lastTorrentFiles,
+            totalFiles: lastTotalFiles,
+            completedFiles: lastCompletedFiles,
+            totalFileBytes: lastTotalFileBytes,
+            downloadedFileBytes: lastDownloadedFileBytes,
           ));
         case 'done':
           // FIX-CYCLE-DONE: Emit final 'completed' with all preserved
@@ -2059,6 +2061,17 @@ class DownloadEngine {
             if (lastChunkDetails != null && lastTotalChunks != null) {
               lastCompletedChunks = lastTotalChunks;
             }
+            // FIX-FILE-COMPLETE-DONE: On done, mark ALL torrent files as
+            // complete and set downloaded bytes to total — mirrors the
+            // chunk-complete logic above so a racing cancel/pause emission
+            // sees consistent file-level data instead of stale values
+            // from the last progress tick.
+            if (lastTotalFiles != null) {
+              lastCompletedFiles = lastTotalFiles;
+            }
+            if (lastTotalFileBytes != null) {
+              lastDownloadedFileBytes = lastTotalFileBytes;
+            }
             var doneCycle = 'completed';
             // FIX-YT-COMBINED-DONE: For combined/muxed YouTube streams (no
             // counterpart), the download IS complete. Previously the null
@@ -2083,7 +2096,11 @@ class DownloadEngine {
               eta: null,
               fileName: resolvedFileName,
               supportsResume: resolvedSupportsResume,
-              statusMessage: 'Completed',
+              statusMessage: doneCycle == 'completed'
+                  ? 'Completed'
+                  : (ytStreamKind == YtStreamKind.video
+                      ? 'Video stream completed, downloading audio…'
+                      : 'Audio stream completed, downloading video…'),
               cycleState: doneCycle,
               ytStreamKind: ytStreamKind,
               ytCounterpartSize: ytCounterpartSize,
@@ -2095,89 +2112,21 @@ class DownloadEngine {
               completedChunks: lastCompletedChunks,
               torrentFiles: lastTorrentFiles,
               totalFiles: lastTotalFiles,
-              completedFiles: lastTotalFiles,
+              completedFiles: lastCompletedFiles ?? lastTotalFiles,
               totalFileBytes: lastTotalFileBytes,
-              downloadedFileBytes: lastTotalFileBytes,
+              downloadedFileBytes:
+                  lastDownloadedFileBytes ?? lastTotalFileBytes,
             ));
             if (!completer.isCompleted) {
               completer.complete();
             }
           }
-        // ignore: unreachable_switch_case
-        case 'error':
-          inactivityTimer?.cancel();
-          // FIX-CYCLE-URL-EXPIRED: When the worker signals a URL expiry,
-          // emit an explicit 'updating_links' progress BEFORE surfacing the
-          // error so the UI shows "Updating links…" during the refresh
-          // window instead of flashing 'failed' or 'downloading'.
-          final errType = message.data['errorType'] as String?;
-          if (errType == 'urlExpired') {
-            // FIX-YT-UPDATING-LIVE: Use live counterpart bytes for the most
-            // accurate combined audio+video progress during URL refresh.
-            final ytUpdCid = _ytCounterpartTaskIds[taskId];
-            final ytUpdLiveCp =
-                ytUpdCid != null ? DownloadEngine._ytLiveBytes[ytUpdCid] : null;
-            onProgress(DownloadProgress(
-              // FIX-UPDATING-BYTES: Preserve last known bytes instead of
-              // resetting to 0 so the progress bar doesn't drop during
-              // the URL refresh window.
-              downloadedBytes: lastDownloadedBytes,
-              fileSize: lastFileSize,
-              speed: 0.0,
-              eta: null,
-              fileName: resolvedFileName,
-              supportsResume: resolvedSupportsResume,
-              statusMessage: 'Updating links (URL expired)…',
-              cycleState: 'updating_links',
-              ytStreamKind: ytStreamKind,
-              ytCounterpartSize: ytCounterpartSize,
-              ytCounterpartDownloadedBytes:
-                  ytUpdLiveCp ?? ytCounterpartDownloadedBytes,
-              // FIX-YT-LIVE: Preserve live downloaded bytes so the combined
-              // audio+video progress bar doesn't reset during URL refresh.
-              ytDownloadedBytes: DownloadEngine._ytLiveBytes[taskId],
-              // FIX-CYCLE-UPDATING-CHUNKS: Preserve chunk-level progress.
-              chunkDetails: lastChunkDetails,
-              totalChunks: lastTotalChunks,
-              completedChunks: lastCompletedChunks,
-            ));
-          }
-          // FIX-CYCLE-FAILED: Emit a 'failed' progress update for non-cancel,
-          // non-URL-expiry errors so the UI transitions immediately to the
-          // failed state instead of retaining the last 'downloading' tick.
-          if (errType != 'cancel' && errType != 'urlExpired') {
-            // FIX-YT-FAILED-LIVE: Use live counterpart bytes for the most
-            // accurate combined audio+video progress on failure.
-            final ytFailCid = _ytCounterpartTaskIds[taskId];
-            final ytFailLiveCp = ytFailCid != null
-                ? DownloadEngine._ytLiveBytes[ytFailCid]
-                : null;
-            onProgress(DownloadProgress(
-              downloadedBytes: lastDownloadedBytes,
-              fileSize: lastFileSize,
-              speed: 0.0,
-              eta: null,
-              fileName: resolvedFileName,
-              supportsResume: resolvedSupportsResume,
-              statusMessage: 'Failed',
-              cycleState: 'failed',
-              ytStreamKind: ytStreamKind,
-              ytCounterpartSize: ytCounterpartSize,
-              ytCounterpartDownloadedBytes:
-                  ytFailLiveCp ?? ytCounterpartDownloadedBytes,
-              // FIX-YT-LIVE: Preserve live YT bytes on failure.
-              ytDownloadedBytes: DownloadEngine._ytLiveBytes[taskId],
-              // FIX-CYCLE-FAILED-CHUNKS: Preserve chunk-level progress so
-              // the details screen shows which parts completed before the
-              // failure.
-              chunkDetails: lastChunkDetails,
-              totalChunks: lastTotalChunks,
-              completedChunks: lastCompletedChunks,
-            ));
-          }
-          if (!completer.isCompleted) {
-            completer.completeError(_mapWorkerError(message, punyUrl));
-          }
+        // FIX-DEAD-CODE: Removed unreachable second `case 'error':` block.
+        // The first `case 'error':` above handles all error types with
+        // complete data (chunks, torrent files, YT audio+video live bytes,
+        // file-level summaries). This dead code was missing torrent file
+        // fields and YT live bytes — removing it eliminates the risk of
+        // silently dropped data if Dart switch semantics change.
       }
     });
 
