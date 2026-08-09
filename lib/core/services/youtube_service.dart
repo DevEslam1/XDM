@@ -1,12 +1,9 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'xdm_backend_client.dart';
-import 'xdm_backend_exceptions.dart';
-import '../../features/settings/provider/settings_provider.dart';
+import 'newpipe_service.dart';
 
 class YoutubeService {
   static String? _cookies;
@@ -80,7 +77,8 @@ class YoutubeService {
   }
 
   static Future<void> resetClient() async {
-    // No local cache to clear anymore, relying on XdmBackendClient cache
+    // Nothing to reset locally — every extraction runs on-device via
+    // NewPipeService. Left in place so existing call sites keep compiling.
   }
 
   static bool get isSignedIn =>
@@ -517,15 +515,10 @@ class YoutubeService {
     final targetUrl =
         videoId != null ? 'https://www.youtube.com/watch?v=$videoId' : url;
 
-    final settings = SettingsProvider.instance;
-    if (!settings.useRemoteBackend) {
-      throw Exception('Remote backend is disabled in settings.');
-    }
-
     try {
       final results = await _resolveWithRetry(
         targetUrl,
-        cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,
+        cookies: currentCookies,
       );
 
       if (results != null && results.isNotEmpty) {
@@ -542,8 +535,8 @@ class YoutubeService {
         }
         return results;
       }
-    } on BackendException catch (e) {
-      throw Exception(e.toUserMessage());
+    } on NewPipeExtractionException catch (e) {
+      throw Exception(e.userMessage);
     } catch (e) {
       throw Exception(_parseErrorMessage(e));
     }
@@ -563,20 +556,13 @@ class YoutubeService {
         videoId != null ? 'https://www.youtube.com/watch?v=$videoId' : url;
 
     try {
-      final settings = SettingsProvider.instance;
-      if (!settings.useRemoteBackend) {
-        throw Exception(
-            'Remote backend is disabled in settings. Please enable it in Settings.');
-      }
       final results = await _resolveWithRetry(
         targetUrl,
-        cookies: isYouTubeHost && settings.sendBrowserCookiesToBackend
-            ? currentCookies
-            : null,
+        cookies: isYouTubeHost ? currentCookies : null,
       );
 
       if (results != null && results.isNotEmpty) return results;
-    } on BackendException catch (e) {
+    } on NewPipeExtractionException catch (e) {
       final msg = e.message.toLowerCase();
       final isYouTube = isYouTubeHost || isSupportedMediaHost(url);
       final hasSpecificKeywords = msg.contains('sign in') ||
@@ -586,13 +572,14 @@ class YoutubeService {
           msg.contains('geo') ||
           msg.contains('rate limit');
 
-      if (e is BackendBadRequestException || e is BackendNotFoundException) {
+      if (e.kind == NewPipeErrorKind.extractionFailed ||
+          e.kind == NewPipeErrorKind.noStreams) {
         if (isYouTube || hasSpecificKeywords) {
-          throw Exception(e.toUserMessage());
+          throw Exception(e.userMessage);
         }
         return null;
       }
-      throw Exception(e.toUserMessage());
+      throw Exception(e.userMessage);
     } catch (e) {
       throw Exception(_parseErrorMessage(e));
     }
@@ -600,37 +587,22 @@ class YoutubeService {
     return null;
   }
 
-  /// Resolves streams for [url] using the remote backend **only**.
-  /// Local fallback (on-device NewPipe extractor) is intentionally NOT used —
-  /// all stream resolution goes through the XDM backend for consistency.
+  /// Resolves streams for [url] on-device via the native NewPipeExtractor
+  /// bridge. Every stream resolution now goes through this path — the remote
+  /// XDM backend has been removed entirely.
   static Future<List<Map<String, dynamic>>?> _resolveStreamsWithFallback(
     String url, {
     String? cookies,
   }) async {
-    try {
-      final backendRes = await XdmBackendClient().getStreams(
-        url,
-        cookies: cookies,
-        oauthToken: YoutubeService.oauthToken,
-      );
-      final results = _parseStreams(backendRes);
-      return results.isNotEmpty ? results : null;
-    } on XdmBackendTimeoutException {
-      // Rethrow — no local fallback; retry logic in _resolveWithRetry handles this.
-      rethrow;
-    } on BackendException {
-      // Rethrow — caller (_resolveWithRetry) will retry or surface the error.
-      rethrow;
-    } on DioException {
-      // Rethrow — network errors propagate up to the retry loop.
-      rethrow;
-    }
+    final raw = await NewPipeService.instance.getVideoStreams(
+      url,
+      cookies: cookies,
+    );
+    final results = _parseStreams(raw);
+    return results.isNotEmpty ? results : null;
   }
 
-
-
-
-  // Retry stream resolution for transient errors and cold starts
+  // Retry stream resolution for transient errors and cold cache starts
   static Future<List<Map<String, dynamic>>?> _resolveWithRetry(
     String url, {
     String? cookies,
@@ -648,12 +620,12 @@ class YoutubeService {
         }
         continue;
       } catch (e) {
-        final isPermanent = e is BackendUnauthorizedException;
+        final isPermanent = e is NewPipeExtractionException;
         if (attempt == maxRetries || isPermanent) rethrow;
-        // Backoff: 2s, 4s, 6s (Cloud Run cold start needs time to spin up)
+        // Backoff: 2s, 4s, 6s (new instances may need to warm native state)
         final delay = Duration(seconds: 2 * (attempt + 1));
         debugPrint(
-          '[YoutubeService] Backend attempt ${attempt + 1} failed, '
+          '[YoutubeService] Extraction attempt ${attempt + 1} failed, '
           'retrying in ${delay.inSeconds}s: $e',
         );
         await Future.delayed(delay);
@@ -793,16 +765,14 @@ class YoutubeService {
         : 'https://www.youtube.com/playlist?list=$playlistId';
 
     try {
-      final settings = SettingsProvider.instance;
-      final backendRes = await XdmBackendClient().getPlaylist(
+      final raw = await NewPipeService.instance.getPlaylist(
         targetUrl,
-        cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,
         pageToken: pageToken,
-        pageSize: pageSize,
+        cookies: currentCookies,
       );
 
-      final info = backendRes['info'] as Map<String, dynamic>?;
-      final rawVideos = backendRes['videos'] as List?;
+      final info = raw['info'] as Map<String, dynamic>?;
+      final rawVideos = raw['videos'] as List?;
       if (info != null && rawVideos != null) {
         final videoList = rawVideos.map((e) {
           final map = Map<String, dynamic>.from(e as Map);
@@ -827,22 +797,15 @@ class YoutubeService {
         return {
           'info': info,
           'videos': videoList,
-          if (backendRes['note'] != null) 'note': backendRes['note'],
-          if (backendRes['nextPageToken'] != null)
-            'nextPageToken': backendRes['nextPageToken'],
+          if (raw['note'] != null) 'note': raw['note'],
+          if (raw['nextPageToken'] != null) 'nextPageToken': raw['nextPageToken'],
         };
       }
-    } on BackendRateLimitException catch (e) {
-      throw Exception(e.toUserMessage());
-    } on BackendBadRequestException catch (e) {
-      throw Exception(e.toUserMessage());
-    } on BackendNotFoundException catch (e) {
-      throw Exception(e.toUserMessage());
-    } on BackendUnauthorizedException catch (e) {
-      throw Exception(e.toUserMessage());
+    } on NewPipeExtractionException catch (e) {
+      throw Exception(e.userMessage);
     } catch (e) {
       debugPrint(
-        '[YoutubeService] Backend error during getPlaylistDetails ($e).',
+        '[YoutubeService] Extraction error during getPlaylistDetails ($e).',
       );
       throw Exception(_parseErrorMessage(e));
     }
@@ -852,10 +815,13 @@ class YoutubeService {
 
   static Future<List<Map<String, dynamic>>> search(String query) async {
     try {
-      final results = await XdmBackendClient().search(query);
+      final results = await NewPipeService.instance.search(
+        query,
+        cookies: currentCookies,
+      );
       return results;
-    } on BackendException catch (e) {
-      throw Exception(e.toUserMessage());
+    } on NewPipeExtractionException catch (e) {
+      throw Exception(e.userMessage);
     } catch (e) {
       debugPrint('[YouTubeService] Search error: $e');
       throw Exception('Search failed: $e');
@@ -1076,7 +1042,7 @@ class YoutubeService {
         }
       }
     } catch (e) {
-      debugPrint('[YouTubeService] Backend getFreshStreams error ($e).');
+      debugPrint('[YouTubeService] Extraction getFreshStreams error ($e).');
     }
 
     return null;

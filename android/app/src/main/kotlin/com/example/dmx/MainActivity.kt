@@ -20,6 +20,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterActivityLaunchConfigs
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import com.dmx.app.newpipe.NewPipePlugin
 import com.example.dmx.widget.WidgetDataRepository
 
 class MainActivity : FlutterActivity() {
@@ -165,6 +166,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Local NewPipeExtractor bridge ("getStreams", "getPlaylist", "search", "resolveExpired").
+        NewPipePlugin(flutterEngine.dartExecutor.binaryMessenger).register()
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, YOUTUBE_CHANNEL).setMethodCallHandler { call, result ->
             if (call.method != "getStreams") {
                 result.notImplemented()

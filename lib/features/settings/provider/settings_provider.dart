@@ -5,7 +5,6 @@ import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../core/services/quiet_hours.dart';
-import '../../../core/services/xdm_backend_client.dart';
 import '../../../core/services/power_monitor.dart';
 
 class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
@@ -102,7 +101,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _maxRetriesKey = 'maxRetries';
   static const _retryDelaySecondsKey = 'retryDelaySeconds';
   static const _searchEngineKey = 'searchEngine';
-  static const _useRemoteBackendKey = 'use_remote_backend';
   static const _batteryOptimizationPromptedKey = 'batteryOptimizationPrompted';
   static const _maxTotalConnectionsKey = 'maxTotalConnections';
   static const _adaptiveThreadsKey = 'adaptiveThreads';
@@ -116,12 +114,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _diskWriteBatchingKey = 'diskWriteBatching';
   static const _powerBandwidthThrottlingKey = 'powerBandwidthThrottling';
   static const _resumeIntegrityCheckKey = 'resumeIntegrityCheck';
-
-  static const _backendUrlKey = 'backend_url';
-  static const _backendTokenKey = 'backend_token';
-  static const _sendBrowserCookiesToBackendKey =
-      'send_browser_cookies_to_backend';
-  static const _useLocalYtFallbackKey = 'use_local_yt_fallback';
 
   // Not `final`: [load] may run more than once on the singleton (e.g. in
   // tests where each case re-loads settings with fresh mock values).
@@ -233,15 +225,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  String backendUrl = '';
-  String backendToken = '';
-  bool sendBrowserCookiesToBackend = true;
-
-  /// When the remote backend is unreachable (timeout / connection error),
-  /// fall back to the on-device platform extractor (Android NewPipe
-  /// Extractor via the `com.example.dmx/youtube_extractor` channel).
-  bool useLocalYtFallback = true;
-
   // Torrent Seeding settings
   bool globalTorrentSeeding = true;
   bool globalTorrentSeedingLimited = false;
@@ -347,7 +330,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   int maxRetries = 3;
   int retryDelaySeconds = 3;
   String searchEngine = 'Google';
-  bool useRemoteBackend = true;
   bool batteryOptimizationPrompted = false;
   int _maxTotalConnections = 32;
   int get maxTotalConnections => _maxTotalConnections;
@@ -417,14 +399,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     categoryFolders = _prefs.getBool(_categoryFoldersKey) ?? categoryFolders;
     antiFingerprinting =
         _prefs.getBool(_antiFingerprintingKey) ?? antiFingerprinting;
-
-    backendUrl = _prefs.getString(_backendUrlKey) ?? backendUrl;
-    backendToken = await _secureStorage.read(key: _backendTokenKey) ?? '';
-    sendBrowserCookiesToBackend =
-        _prefs.getBool(_sendBrowserCookiesToBackendKey) ??
-            sendBrowserCookiesToBackend;
-    useLocalYtFallback =
-        _prefs.getBool(_useLocalYtFallbackKey) ?? useLocalYtFallback;
 
     globalTorrentSeeding =
         _prefs.getBool(_globalTorrentSeedingKey) ?? globalTorrentSeeding;
@@ -499,7 +473,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       retryDelaySeconds = 10;
     }
     searchEngine = _prefs.getString(_searchEngineKey) ?? searchEngine;
-    useRemoteBackend = _prefs.getBool(_useRemoteBackendKey) ?? true;
     batteryOptimizationPrompted =
         _prefs.getBool(_batteryOptimizationPromptedKey) ?? false;
     _maxTotalConnections = _prefs.getInt(_maxTotalConnectionsKey) ?? 32;
@@ -687,12 +660,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> setClassicUi(bool value) async {
     _classicUi = value;
     await _prefs.setBool(_classicUiKey, value);
-    notifyListeners();
-  }
-
-  Future<void> setUseRemoteBackend(bool value) async {
-    useRemoteBackend = value;
-    await _prefs.setBool(_useRemoteBackendKey, value);
     notifyListeners();
   }
 
@@ -1045,32 +1012,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<void> setBackendUrl(String value) async {
-    backendUrl = value;
-    await _prefs.setString(_backendUrlKey, value);
-    XdmBackendClient().refreshConfig();
-    notifyListeners();
-  }
-
-  Future<void> setBackendToken(String value) async {
-    backendToken = value;
-    await _secureStorage.write(key: _backendTokenKey, value: value);
-    XdmBackendClient().refreshConfig();
-    notifyListeners();
-  }
-
-  Future<void> setSendBrowserCookiesToBackend(bool value) async {
-    sendBrowserCookiesToBackend = value;
-    await _prefs.setBool(_sendBrowserCookiesToBackendKey, value);
-    notifyListeners();
-  }
-
-  Future<void> setUseLocalYtFallback(bool value) async {
-    useLocalYtFallback = value;
-    await _prefs.setBool(_useLocalYtFallbackKey, value);
-    notifyListeners();
-  }
-
   Future<void> setBatteryOptimizationPrompted(bool value) async {
     batteryOptimizationPrompted = value;
     await _prefs.setBool(_batteryOptimizationPromptedKey, value);
@@ -1179,16 +1120,11 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _searchEngineKey,
       _batteryOptimizationPromptedKey,
       _maxTotalConnectionsKey,
-      _backendUrlKey,
-      _backendTokenKey,
-      _sendBrowserCookiesToBackendKey,
-      _useRemoteBackendKey,
-      _useLocalYtFallbackKey,
       _maxTabsKey,
       _historyMaxEntriesKey,
     ];
     for (final key in settingsKeys) {
-      if (key == _proxyPasswordKey || key == _backendTokenKey) {
+      if (key == _proxyPasswordKey) {
         await _secureStorage.delete(key: key);
       } else {
         await _prefs.remove(key);
@@ -1253,11 +1189,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     searchEngine = 'Google';
     batteryOptimizationPrompted = false;
     _maxTotalConnections = 32;
-    backendUrl = '';
-    backendToken = '';
-    sendBrowserCookiesToBackend = true;
-    useRemoteBackend = true;
-    useLocalYtFallback = false;
     resumeIntegrityCheck = true;
     _maxTabs = 15;
     _historyMaxEntries = 500;
@@ -1326,12 +1257,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       batteryOptimizationPrompted,
     );
     await _prefs.setInt(_maxTotalConnectionsKey, _maxTotalConnections);
-    await _prefs.setString(_backendUrlKey, backendUrl);
-    await _prefs.setBool(
-      _sendBrowserCookiesToBackendKey,
-      sendBrowserCookiesToBackend,
-    );
-    await _prefs.setBool(_useRemoteBackendKey, useRemoteBackend);
     if (customDownloadPath != null) {
       await _prefs.setString(_customDownloadPathKey, customDownloadPath!);
     }

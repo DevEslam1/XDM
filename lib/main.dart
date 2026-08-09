@@ -22,7 +22,6 @@ import 'core/services/database_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/performance_monitor.dart';
 import 'core/services/single_instance_service.dart';
-import 'core/services/xdm_backend_client.dart';
 import 'core/services/youtube_service.dart';
 import 'core/services/remote_api_service.dart';
 import 'features/browser/services/page_intent_classifier.dart';
@@ -146,7 +145,6 @@ Future<void> main(List<String> args) async {
       // ── PHASE 3: Settings (required for theme before runApp) ──
       final settingsProvider = SettingsProvider.instance;
       await settingsProvider.load();
-      XdmBackendClient().refreshConfig();
 
       await LocalProxyService.instance.start();
 
@@ -280,12 +278,6 @@ Future<void> _initNonCriticalServices(
     await MirrorHealthStore.init();
   } catch (e) {
     debugPrint('Mirror health store init failed: $e');
-  }
-
-  try {
-    await XdmBackendClient.loadApiKey();
-  } catch (e) {
-    debugPrint('API key load failed: $e');
   }
 
   try {

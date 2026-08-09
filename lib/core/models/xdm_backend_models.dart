@@ -20,24 +20,30 @@ class ApiException implements Exception {
   String toString() => 'ApiException($statusCode): $userMessage';
 }
 
-/// Extracted video stream info from the backend (`GET /api/streams`).
+/// Extracted video stream info produced by the on-device NewPipeExtractor.
 class VideoStreams {
   final String url;
   final String title;
   final String? id; // Present for YouTube, may be absent for other platforms
   final List<StreamEntry> streams;
 
+  /// Extraction engine that produced this result. Always `'newpipe'` now that
+  /// the remote backend has been removed.
+  final String source;
+
   VideoStreams({
     required this.url,
     required this.title,
     this.id,
     required this.streams,
+    this.source = 'newpipe',
   });
 
   VideoStreams.fromJson(Map<String, dynamic> json)
       : url = json['url']?.toString() ?? '',
         title = json['title']?.toString() ?? '',
         id = json['id']?.toString(),
+        source = json['source']?.toString() ?? 'newpipe',
         streams = ((json['streams'] as List?) ?? [])
             .map((e) =>
                 StreamEntry.fromJson(Map<String, dynamic>.from(e as Map)))
@@ -47,6 +53,7 @@ class VideoStreams {
         'url': url,
         'title': title,
         if (id != null) 'id': id,
+        'source': source,
         'streams': streams.map((e) => e.toJson()).toList(),
       };
 }

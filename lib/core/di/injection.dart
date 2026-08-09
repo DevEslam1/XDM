@@ -11,7 +11,6 @@ import '../services/share_url_handler.dart';
 import '../services/background_service.dart';
 import '../services/crash_reporting_service.dart';
 import '../services/app_lock_service.dart';
-import '../services/xdm_backend_client.dart';
 import '../services/update_service.dart';
 import '../services/single_instance_service.dart';
 import '../services/tracker_manager.dart';
@@ -38,7 +37,6 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<CrashReportingService>(
       () => CrashReportingService());
   getIt.registerLazySingleton<AppLockService>(() => AppLockService());
-  getIt.registerLazySingleton<XdmBackendClient>(() => XdmBackendClient());
   getIt.registerLazySingleton<UpdateService>(() => UpdateService());
   getIt.registerLazySingleton<SingleInstanceService>(
       () => SingleInstanceService());

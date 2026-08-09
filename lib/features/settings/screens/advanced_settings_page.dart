@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -7,9 +6,7 @@ import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/constants.dart';
-import '../../../core/services/xdm_backend_client.dart';
 import '../../../core/services/app_lock_service.dart';
-import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../shared/design/dmx_design.dart';
 import '../provider/settings_provider.dart';
@@ -27,25 +24,19 @@ class AdvancedSettingsPage extends StatefulWidget {
 
 class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
     with HapticHelper {
-  late final TextEditingController _backendUrlController;
   late final TextEditingController _uaController;
-  Timer? _backendUrlDebounce;
-  bool _testingBackend = false;
   bool _appLockEnabled = false;
 
   @override
   void initState() {
     super.initState();
     final settings = Provider.of<SettingsProvider>(context, listen: false);
-    _backendUrlController = TextEditingController(text: settings.backendUrl);
     _uaController = TextEditingController(text: settings.customUserAgent);
     _loadAppLockState();
   }
 
   @override
   void dispose() {
-    _backendUrlDebounce?.cancel();
-    _backendUrlController.dispose();
     _uaController.dispose();
     super.dispose();
   }
@@ -67,18 +58,6 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
       await AppLockService.disableLock();
       if (mounted) setState(() => _appLockEnabled = false);
     }
-  }
-
-  void _onBackendUrlChanged(String val, SettingsProvider settings) {
-    _backendUrlDebounce?.cancel();
-    _backendUrlDebounce = Timer(const Duration(milliseconds: 600), () {
-      final trimmed = val.trim();
-      if (trimmed.isEmpty ||
-          trimmed.startsWith('http://') ||
-          trimmed.startsWith('https://')) {
-        settings.setBackendUrl(trimmed);
-      }
-    });
   }
 
   Future<void> _pickTime(
@@ -171,59 +150,13 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
           ),
           const SizedBox(height: 12),
           SettingsSectionHeader(
-            title: isRtl
-                ? 'خادم اليوتيوب والوسائط'
-                : 'YouTube & Extraction Backend',
+            title: isRtl ? 'يوتيوب واستخراج الوسائط' : 'YouTube & Media Extraction',
             accentColor: accent,
             isDark: isDark,
           ),
           SettingsSectionGroup(
             accentColor: accent,
             children: [
-              SwitchTile(
-                accentColor: accent,
-                title: L10n.of(context, 'settings_use_remote_backend'),
-                subtitle: L10n.of(context, 'settings_use_remote_backend_sub'),
-                value: settings.useRemoteBackend,
-                onChanged: (val) {
-                  settings.setUseRemoteBackend(val);
-                  triggerHaptic(settings);
-                },
-              ),
-              if (settings.useRemoteBackend) ...[
-                TextFieldTile(
-                  accentColor: accent,
-                  title: L10n.of(context, 'settings_backend_url'),
-                  subtitle: 'e.g. https://yt.example.com',
-                  controller: _backendUrlController,
-                  onChanged: (val) => _onBackendUrlChanged(val, settings),
-                ),
-              ],
-              SwitchTile(
-                accentColor: accent,
-                title: L10n.of(context, 'settings_use_local_yt_fallback'),
-                subtitle:
-                    L10n.of(context, 'settings_use_local_yt_fallback_sub'),
-                value: settings.useLocalYtFallback,
-                onChanged: (val) {
-                  settings.setUseLocalYtFallback(val);
-                  triggerHaptic(settings);
-                },
-              ),
-              SwitchTile(
-                accentColor: accent,
-                title: isRtl
-                    ? 'إرسال كوكيز المتصفح للخادم'
-                    : 'Send Cookies to Backend',
-                subtitle: isRtl
-                    ? 'إرفاق جلسات المتصفح للوصول للفيديوهات الخاصة والمقيدة'
-                    : 'Send browser session cookies for age-restricted / private media',
-                value: settings.sendBrowserCookiesToBackend,
-                onChanged: (val) {
-                  settings.setSendBrowserCookiesToBackend(val);
-                  triggerHaptic(settings);
-                },
-              ),
               TextFieldTile(
                 accentColor: accent,
                 title: isRtl
@@ -236,50 +169,6 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
               ),
             ],
           ),
-          if (settings.useRemoteBackend)
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-              child: NeonGlowButton(
-                isFilled: false,
-                color: accent,
-                text: _testingBackend
-                    ? (isRtl ? 'جاري الاختبار...' : 'TESTING BACKEND...')
-                    : (isRtl ? 'اختبار اتصال الخادم' : 'TEST BACKEND HEALTH'),
-                onPressed: _testingBackend
-                    ? null
-                    : () async {
-                        final isRtl = L10n.isRtl(context);
-                        final isDark = settings.isDarkMode;
-                        setState(() => _testingBackend = true);
-                        bool isHealthy = false;
-                        try {
-                          final res = await XdmBackendClient().health();
-                          isHealthy = res.isNotEmpty;
-                        } catch (_) {
-                          isHealthy = false;
-                        }
-                        if (!mounted || !context.mounted) return;
-                        setState(() => _testingBackend = false);
-                        ThemedSnackbar.show(
-                          context,
-                          message: isHealthy
-                              ? (isRtl
-                                  ? 'الخادم يعمل بنجاح!'
-                                  : 'Backend health check passed!')
-                              : (isRtl
-                                  ? 'فشل الاتصال بالخادم'
-                                  : 'Backend health check failed'),
-                          color:
-                              isHealthy ? AppTheme.neonGreen : AppTheme.neonRed,
-                          icon: isHealthy
-                              ? Icons.check_circle_outline
-                              : Icons.error_outline,
-                          isDarkMode: isDark,
-                        );
-                      },
-              ),
-            ),
           const SizedBox(height: 12),
           SettingsSectionHeader(
             title: isRtl ? 'جدولة النطاق الترددي' : 'Bandwidth Schedule',
