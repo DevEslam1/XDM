@@ -1135,6 +1135,10 @@ class YoutubeService {
         msg.contains('not a bot') ||
         msg.contains('Sign in') ||
         msg.contains('bot') ||
+        msg.contains('ytInitialData') ||
+        msg.contains('ytInitialPlayerResponse') ||
+        msg.contains('Could not get') ||
+        msg.contains('ParsingException') ||
         msg.contains('Connection closed before full header') ||
         msg.contains('full header')) {
       return 'YouTube requires sign-in or bot verification. Please sign in to YouTube via the browser and try again.';

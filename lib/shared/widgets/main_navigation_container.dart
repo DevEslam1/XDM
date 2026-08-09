@@ -212,6 +212,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         final isDark = settingsTuple.isDark;
         final isRtl = L10n.isRtl(context);
         final screenType = getScreenType(context);
+        final showSideNav = shouldShowSideNavigation(context);
 
         return Selector<DownloadProvider,
             ({int activeTabIndex, bool isNavbarVisible})>(
@@ -245,7 +246,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                   isAmoled: settingsTuple.isAmoled,
                 ),
                 extendBody: true,
-                body: screenType == ScreenType.desktop
+                body: showSideNav
                     ? Row(
                         children: [
                           _NavigationRailWidget(
@@ -259,21 +260,23 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                         ],
                       )
                     : bodyContent,
-                bottomNavigationBar: screenType == ScreenType.phone
-                    ? _PhoneBottomNavBar(
-                        settingsTuple: settingsTuple,
-                        isDark: isDark,
-                        isRtl: isRtl,
-                        navState: navState,
-                      )
-                    : screenType == ScreenType.tablet
-                        ? _TabletFloatingNavBar(
+                bottomNavigationBar: showSideNav
+                    ? null
+                    : screenType == ScreenType.phone
+                        ? _PhoneBottomNavBar(
                             settingsTuple: settingsTuple,
                             isDark: isDark,
                             isRtl: isRtl,
                             navState: navState,
                           )
-                        : null,
+                        : screenType == ScreenType.tablet
+                            ? _TabletFloatingNavBar(
+                                settingsTuple: settingsTuple,
+                                isDark: isDark,
+                                isRtl: isRtl,
+                                navState: navState,
+                              )
+                            : null,
               ),
             );
           },
@@ -623,55 +626,63 @@ class _NavigationRailWidget extends StatelessWidget {
                 ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              const SizedBox(height: 16),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: DmxAppIcon(size: 40, showGlow: true),
-              ),
-              const SizedBox(height: 8),
-              _RailItem(
-                index: 0,
-                icon: Icons.file_download_outlined,
-                selectedIcon: Icons.file_download,
-                label: L10n.of(context, 'title_transmissions'),
-                isSelected: currentIndex == 0,
-                activeColor: activeColor,
-                inactiveColor: inactiveColor,
-                onTap: () {
-                  if (settingsTuple.vibration) HapticFeedback.lightImpact();
-                  downloadProvider.setActiveTabIndex(0);
-                },
-              ),
-              _RailItem(
-                index: 1,
-                icon: Icons.language_outlined,
-                selectedIcon: Icons.language,
-                label: L10n.of(context, 'title_browser'),
-                isSelected: currentIndex == 1,
-                activeColor: activeColor,
-                inactiveColor: inactiveColor,
-                onTap: () {
-                  if (settingsTuple.vibration) HapticFeedback.lightImpact();
-                  downloadProvider.setActiveTabIndex(1);
-                },
-              ),
-              _RailItem(
-                index: 2,
-                icon: Icons.settings_outlined,
-                selectedIcon: Icons.settings_rounded,
-                label: L10n.of(context, 'title_config'),
-                isSelected: currentIndex == 2,
-                activeColor: getSettingsTabColor(
-                    settingsProvider.activeSettingsTabIndex, isDark),
-                inactiveColor: inactiveColor,
-                onTap: () {
-                  if (settingsTuple.vibration) HapticFeedback.lightImpact();
-                  downloadProvider.setActiveTabIndex(2);
-                },
-              ),
-            ],
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              children: [
+                SizedBox(height: isPhoneLandscape(context) ? 4 : 16),
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    vertical: isPhoneLandscape(context) ? 6 : 16,
+                  ),
+                  child: DmxAppIcon(
+                    size: isPhoneLandscape(context) ? 28 : 40,
+                    showGlow: true,
+                  ),
+                ),
+                SizedBox(height: isPhoneLandscape(context) ? 2 : 8),
+                _RailItem(
+                  index: 0,
+                  icon: Icons.file_download_outlined,
+                  selectedIcon: Icons.file_download,
+                  label: L10n.of(context, 'title_transmissions'),
+                  isSelected: currentIndex == 0,
+                  activeColor: activeColor,
+                  inactiveColor: inactiveColor,
+                  onTap: () {
+                    if (settingsTuple.vibration) HapticFeedback.lightImpact();
+                    downloadProvider.setActiveTabIndex(0);
+                  },
+                ),
+                _RailItem(
+                  index: 1,
+                  icon: Icons.language_outlined,
+                  selectedIcon: Icons.language,
+                  label: L10n.of(context, 'title_browser'),
+                  isSelected: currentIndex == 1,
+                  activeColor: activeColor,
+                  inactiveColor: inactiveColor,
+                  onTap: () {
+                    if (settingsTuple.vibration) HapticFeedback.lightImpact();
+                    downloadProvider.setActiveTabIndex(1);
+                  },
+                ),
+                _RailItem(
+                  index: 2,
+                  icon: Icons.settings_outlined,
+                  selectedIcon: Icons.settings_rounded,
+                  label: L10n.of(context, 'title_config'),
+                  isSelected: currentIndex == 2,
+                  activeColor: getSettingsTabColor(
+                      settingsProvider.activeSettingsTabIndex, isDark),
+                  inactiveColor: inactiveColor,
+                  onTap: () {
+                    if (settingsTuple.vibration) HapticFeedback.lightImpact();
+                    downloadProvider.setActiveTabIndex(2);
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),

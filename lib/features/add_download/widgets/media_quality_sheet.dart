@@ -103,7 +103,10 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
               : errorStr;
         } else if (errorStr.toLowerCase().contains('sign in') ||
             errorStr.toLowerCase().contains('bot') ||
-            errorStr.toLowerCase().contains('confirm you\'re not a bot')) {
+            errorStr.toLowerCase().contains('confirm you\'re not a bot') ||
+            errorStr.toLowerCase().contains('ytinitialdata') ||
+            errorStr.toLowerCase().contains('ytinitialplayerresponse') ||
+            errorStr.toLowerCase().contains('could not get')) {
           _errorMessage = L10n.isRtl(context)
               ? 'يتطلب يوتيوب تسجيل الدخول لتأكيد أنك لست روبوت.\n\n'
                   'يرجى تسجيل الدخول في حساب يوتيوب عبر المتصفح ثم الضغط على إعادة المحاولة.'

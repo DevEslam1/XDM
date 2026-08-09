@@ -236,7 +236,9 @@ class NewPipePlugin(
             val msg = (e.message ?: "").lowercase()
             when {
                 msg.contains("sign in to confirm") || msg.contains("bot") ||
-                    msg.contains("recaptcha") || msg.contains("captcha") -> "sign_in_required"
+                    msg.contains("recaptcha") || msg.contains("captcha") ||
+                    msg.contains("ytinitialdata") || msg.contains("ytinitialplayerresponse") ||
+                    msg.contains("could not get") -> "sign_in_required"
                 msg.contains("age-restricted") || msg.contains("age restricted") -> "age_restricted"
                 msg.contains("not available in your country") || msg.contains("geo") ->
                     "geo_restricted"
