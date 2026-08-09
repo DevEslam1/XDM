@@ -63,13 +63,21 @@ class NewPipeDownloader : Downloader() {
             reqBuilder.method(request.httpMethod(), null)
         }
 
+        val combinedCookies = mutableListOf<String>()
         reqHeaders.forEach { (name, values) ->
-            values.forEach { value -> reqBuilder.header(name, value) }
+            if (name.equals("Cookie", ignoreCase = true)) {
+                combinedCookies.addAll(values)
+            } else {
+                values.forEach { value -> reqBuilder.addHeader(name, value) }
+            }
         }
 
-        // Inject session context on top of NewPipe's own headers.
-        contextCookies?.let { reqBuilder.header("Cookie", it) }
-        contextCookies?.let { reqBuilder.header("X-YouTube-Cookies", it) }
+        // Merge existing cookies with context cookies (RFC 6265)
+        contextCookies?.let { combinedCookies.add(it) }
+        if (combinedCookies.isNotEmpty()) {
+            reqBuilder.header("Cookie", combinedCookies.joinToString("; "))
+        }
+
         contextPoToken?.let { reqBuilder.header("X-Youtube-Po-Token", it) }
         reqBuilder.header("User-Agent", USER_AGENT)
 

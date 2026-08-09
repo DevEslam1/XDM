@@ -100,13 +100,22 @@ class NewPipePlugin(
     }
 
     private fun handleStreamCall(call: MethodCall, result: MethodChannel.Result) {
-        val url = call.argument<String>("url")
+        val url: String? = call.argument("url")
         if (url.isNullOrBlank()) {
             result.error("invalid_url", "A media URL is required.", null)
             return
         }
-        val cookies = call.argument<String>("cookies")
-        val poToken = call.argument<String>("poToken")
+        val cookies: String? = call.argument("cookies")
+        val poToken: String? = call.argument("poToken")
+
+        // Reject HTTP header injection
+        if (url.contains("\r") || url.contains("\n") ||
+            cookies?.contains("\r") == true || cookies?.contains("\n") == true ||
+            poToken?.contains("\r") == true || poToken?.contains("\n") == true) {
+            result.error("INVALID_INPUT", "HTTP header injection detected.", null)
+            return
+        }
+
         val resolve = call.method == "resolveExpired"
 
         runBackground(result) {
@@ -188,7 +197,9 @@ class NewPipePlugin(
                 val linkHandler = service.searchQHFactory.fromQuery(query)
                 val extractor = service.getSearchExtractor(linkHandler)
                 extractor.fetchPage()
-                extractor.initialPage.items.map { NewPipeMapper.searchItemToMap(it) }
+                extractor.initialPage.items
+                    .filterIsInstance<StreamInfoItem>()
+                    .map { NewPipeMapper.searchItemToMap(it) }
             }
             result.success(items)
         }

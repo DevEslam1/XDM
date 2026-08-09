@@ -26,7 +26,6 @@ import com.example.dmx.widget.WidgetDataRepository
 class MainActivity : FlutterActivity() {
     private val WIDGET_BRIDGE_CHANNEL = "com.dmx.app/widget_bridge"
     private val MEDIA_CHANNEL = "com.dmx.app/media"
-    private val YOUTUBE_CHANNEL = "com.example.dmx/youtube_extractor"
     private val SAF_CHANNEL = "com.example.dmx/saf"
     private val WAKE_LOCK_CHANNEL = "com.dmx.app/wakelock"
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
@@ -167,26 +166,8 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // Local NewPipeExtractor bridge ("getStreams", "getPlaylist", "search", "resolveExpired").
-        NewPipePlugin(flutterEngine.dartExecutor.binaryMessenger).register()
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, YOUTUBE_CHANNEL).setMethodCallHandler { call, result ->
-            if (call.method != "getStreams") {
-                result.notImplemented()
-                return@setMethodCallHandler
-            }
-            val url = call.argument<String>("url")
-            if (url.isNullOrBlank()) {
-                result.error("invalid_url", "A YouTube URL is required.", null)
-                return@setMethodCallHandler
-            }
-            backgroundExecutor.execute {
-                try {
-                    val streams = YoutubeExtractor.getStreams(url)
-                    runOnUiThread { result.success(streams) }
-                } catch (error: Exception) {
-                    runOnUiThread { result.error("extractor_failed", error.message, null) }
-                }
-            }
-        }
+        val newPipePlugin = NewPipePlugin(flutterEngine.dartExecutor.binaryMessenger)
+        newPipePlugin.register()
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MEDIA_CHANNEL).setMethodCallHandler { call, result ->
             if (call.method == "scanMedia") {
                 val path = call.argument<String>("path")

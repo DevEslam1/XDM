@@ -11,6 +11,8 @@ class YoutubeService {
   static const _secureStorage = FlutterSecureStorage();
   static const _cookiesStorageKey = 'youtube_cookies_persisted';
 
+  /// Timeout for NewPipe extractions. YouTube's JS challenge can sometimes stall.
+  static const Duration _extractionTimeout = Duration(seconds: 30);
 
   static Future<void> init() async {
     try {
@@ -83,7 +85,7 @@ class YoutubeService {
 
   static bool get isSignedIn =>
       (_cookies != null && _cookies!.isNotEmpty) ||
-      (_oauthToken != null && _oauthToken!.isNotEmpty);
+          (_oauthToken != null && _oauthToken!.isNotEmpty);
 
   static Future<void> fetchCookiesFromWebView() async {
     try {
@@ -113,7 +115,7 @@ class YoutubeService {
 
       if (allCookies.isNotEmpty) {
         final cookieStr =
-            allCookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+        allCookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
         await signIn(cookieStr);
       }
     } catch (e) {
@@ -243,9 +245,9 @@ class YoutubeService {
     if (idRegex.hasMatch(clean)) return true;
 
     final normalized =
-        clean.startsWith('http://') || clean.startsWith('https://')
-            ? clean
-            : 'https://$clean';
+    clean.startsWith('http://') || clean.startsWith('https://')
+        ? clean
+        : 'https://$clean';
 
     try {
       final uri = Uri.parse(normalized);
@@ -270,9 +272,9 @@ class YoutubeService {
     try {
       final clean = url.trim();
       final normalized =
-          clean.startsWith('http://') || clean.startsWith('https://')
-              ? clean
-              : 'https://$clean';
+      clean.startsWith('http://') || clean.startsWith('https://')
+          ? clean
+          : 'https://$clean';
       final uri = Uri.parse(normalized);
       final host = uri.host.toLowerCase();
       final isYoutubeHost = _isYouTubeHost(host) || _isYouTubeShortHost(host);
@@ -323,9 +325,9 @@ class YoutubeService {
 
     try {
       final normalized =
-          clean.startsWith('http://') || clean.startsWith('https://')
-              ? clean
-              : 'https://$clean';
+      clean.startsWith('http://') || clean.startsWith('https://')
+          ? clean
+          : 'https://$clean';
       final uri = Uri.parse(normalized);
       if (uri.queryParameters.containsKey('list')) {
         final listId = uri.queryParameters['list'];
@@ -342,9 +344,9 @@ class YoutubeService {
   /// Exact host matching for youtube.com and its subdomains.
   static bool _isYouTubeHost(String host) =>
       host == 'youtube.com' ||
-      host == 'm.youtube.com' ||
-      host == 'www.youtube.com' ||
-      host.endsWith('.youtube.com');
+          host == 'm.youtube.com' ||
+          host == 'www.youtube.com' ||
+          host.endsWith('.youtube.com');
 
   /// Exact host matching for youtu.be and its subdomains.
   static bool _isYouTubeShortHost(String host) =>
@@ -392,10 +394,10 @@ class YoutubeService {
   }
 
   static Map<String, dynamic> normalizeStreamEntry(
-    Map<String, dynamic> map, {
-    String? title,
-    String? thumbnailUrl,
-  }) {
+      Map<String, dynamic> map, {
+        String? title,
+        String? thumbnailUrl,
+      }) {
     final rawType = (map['type'] as String?)?.toLowerCase().trim() ?? '';
     final directUrl = _sanitizeStreamUrl(
       map['direct_url']?.toString() ??
@@ -467,8 +469,8 @@ class YoutubeService {
   }
 
   static List<Map<String, dynamic>> _parseStreams(
-    Map<String, dynamic> backendRes,
-  ) {
+      Map<String, dynamic> backendRes,
+      ) {
     final title = (backendRes['title'] as String?) ?? 'Untitled';
     final thumbnailUrl = (backendRes['thumbnail'] as String?) ??
         (backendRes['thumbnailUrl'] as String?);
@@ -513,7 +515,7 @@ class YoutubeService {
   static Future<List<Map<String, dynamic>>> getStreams(String url) async {
     final videoId = extractVideoId(url) ?? (url.length == 11 ? url : null);
     final targetUrl =
-        videoId != null ? 'https://www.youtube.com/watch?v=$videoId' : url;
+    videoId != null ? 'https://www.youtube.com/watch?v=$videoId' : url;
 
     try {
       final results = await _resolveWithRetry(
@@ -545,15 +547,15 @@ class YoutubeService {
   }
 
   static Future<List<Map<String, dynamic>>?> getStreamsForAnyUrl(
-    String url,
-  ) async {
+      String url,
+      ) async {
     final uri = Uri.tryParse(url);
     final host = uri?.host.toLowerCase() ?? '';
     final isYouTubeHost = _isYouTubeHost(host) || _isYouTubeShortHost(host);
 
     final videoId = extractVideoId(url);
     final targetUrl =
-        videoId != null ? 'https://www.youtube.com/watch?v=$videoId' : url;
+    videoId != null ? 'https://www.youtube.com/watch?v=$videoId' : url;
 
     try {
       final results = await _resolveWithRetry(
@@ -591,23 +593,23 @@ class YoutubeService {
   /// bridge. Every stream resolution now goes through this path — the remote
   /// XDM backend has been removed entirely.
   static Future<List<Map<String, dynamic>>?> _resolveStreamsWithFallback(
-    String url, {
-    String? cookies,
-  }) async {
+      String url, {
+        String? cookies,
+      }) async {
     final raw = await NewPipeService.instance.getVideoStreams(
       url,
       cookies: cookies,
-    );
+    ).timeout(_extractionTimeout);
     final results = _parseStreams(raw);
     return results.isNotEmpty ? results : null;
   }
 
   // Retry stream resolution for transient errors and cold cache starts
   static Future<List<Map<String, dynamic>>?> _resolveWithRetry(
-    String url, {
-    String? cookies,
-    int maxRetries = 3,
-  }) async {
+      String url, {
+        String? cookies,
+        int maxRetries = 3,
+      }) async {
     for (int attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         final result = await _resolveStreamsWithFallback(url, cookies: cookies);
@@ -619,6 +621,17 @@ class YoutubeService {
           await Future.delayed(delay);
         }
         continue;
+      } on NewPipeExtractionException {
+        rethrow; // Don't retry permanent NewPipe errors (e.g. age restricted)
+      } on TimeoutException {
+        // Treat timeouts as transient, allow retry
+        if (attempt == maxRetries) rethrow;
+        final delay = Duration(seconds: 2 * (attempt + 1));
+        debugPrint(
+          '[YoutubeService] Extraction attempt ${attempt + 1} timed out, '
+              'retrying in ${delay.inSeconds}s...',
+        );
+        await Future.delayed(delay);
       } catch (e) {
         final isPermanent = e is NewPipeExtractionException;
         if (attempt == maxRetries || isPermanent) rethrow;
@@ -626,7 +639,7 @@ class YoutubeService {
         final delay = Duration(seconds: 2 * (attempt + 1));
         debugPrint(
           '[YoutubeService] Extraction attempt ${attempt + 1} failed, '
-          'retrying in ${delay.inSeconds}s: $e',
+              'retrying in ${delay.inSeconds}s: $e',
         );
         await Future.delayed(delay);
       }
@@ -635,9 +648,9 @@ class YoutubeService {
   }
 
   static Future<Map<String, dynamic>?> getStreamForVideo(
-    String videoId, [
-    String? qualityPreset,
-  ]) async {
+      String videoId, [
+        String? qualityPreset,
+      ]) async {
     try {
       final streams = await getStreams(videoId);
       if (streams.isEmpty) return null;
@@ -646,17 +659,17 @@ class YoutubeService {
 
       if (preset == 'audio_only') {
         final audioStreams =
-            streams.where((s) => s['type'] == 'audio').toList();
+        streams.where((s) => s['type'] == 'audio').toList();
         if (audioStreams.isNotEmpty) return audioStreams.first;
         return streams.isNotEmpty ? streams.first : null;
       }
 
       if (preset == 'best_muxed') {
         final muxedStreams =
-            streams.where((s) => s['type'] == 'muxed').toList();
+        streams.where((s) => s['type'] == 'muxed').toList();
         if (muxedStreams.isNotEmpty) return muxedStreams.first;
         final combinedStreams =
-            streams.where((s) => s['type'] == 'combined').toList();
+        streams.where((s) => s['type'] == 'combined').toList();
         if (combinedStreams.isNotEmpty) return combinedStreams.first;
         return streams.isNotEmpty ? streams.first : null;
       }
@@ -675,12 +688,12 @@ class YoutubeService {
 
       if (preset == 'best_combined' || preset == 'best') {
         final combinedStreams =
-            streams.where((s) => s['type'] == 'combined').toList();
+        streams.where((s) => s['type'] == 'combined').toList();
         final bestCombined = pickBest(combinedStreams);
         if (bestCombined != null) return bestCombined;
 
         final muxedStreams =
-            streams.where((s) => s['type'] == 'muxed').toList();
+        streams.where((s) => s['type'] == 'muxed').toList();
         final bestMuxed = pickBest(muxedStreams);
         if (bestMuxed != null) return bestMuxed;
 
@@ -690,17 +703,17 @@ class YoutubeService {
       final reqHeight = parseQualityHeight(preset);
       if (reqHeight > 0) {
         final combinedStreams =
-            streams.where((s) => s['type'] == 'combined').toList();
+        streams.where((s) => s['type'] == 'combined').toList();
         final exactCombined = combinedStreams.where(
-          (s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight,
+              (s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight,
         );
         final bestExactCombined = pickBest(exactCombined);
         if (bestExactCombined != null) return bestExactCombined;
 
         final muxedStreams =
-            streams.where((s) => s['type'] == 'muxed').toList();
+        streams.where((s) => s['type'] == 'muxed').toList();
         final exactMuxed = muxedStreams.where(
-          (s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight,
+              (s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight,
         );
         final bestExactMuxed = pickBest(exactMuxed);
         if (bestExactMuxed != null) return bestExactMuxed;
@@ -708,12 +721,12 @@ class YoutubeService {
         final lowerCombined = combinedStreams
             .where(
               (s) =>
-                  parseQualityHeight(s['quality'] as String? ?? '') <=
-                  reqHeight,
-            )
+          parseQualityHeight(s['quality'] as String? ?? '') <=
+              reqHeight,
+        )
             .toList()
           ..sort(
-            (a, b) => parseQualityHeight(
+                (a, b) => parseQualityHeight(
               b['quality'] as String? ?? '',
             ).compareTo(parseQualityHeight(a['quality'] as String? ?? '')),
           );
@@ -723,12 +736,12 @@ class YoutubeService {
         final lowerMuxed = muxedStreams
             .where(
               (s) =>
-                  parseQualityHeight(s['quality'] as String? ?? '') <=
-                  reqHeight,
-            )
+          parseQualityHeight(s['quality'] as String? ?? '') <=
+              reqHeight,
+        )
             .toList()
           ..sort(
-            (a, b) => parseQualityHeight(
+                (a, b) => parseQualityHeight(
               b['quality'] as String? ?? '',
             ).compareTo(parseQualityHeight(a['quality'] as String? ?? '')),
           );
@@ -751,10 +764,10 @@ class YoutubeService {
   }
 
   static Future<Map<String, dynamic>?> getPlaylistDetails(
-    String url, {
-    dynamic pageToken,
-    int pageSize = 50,
-  }) async {
+      String url, {
+        dynamic pageToken,
+        int pageSize = 50,
+      }) async {
     final playlistId = extractPlaylistId(url);
     if (playlistId == null) {
       throw Exception('Invalid YouTube playlist URL.');
@@ -769,7 +782,7 @@ class YoutubeService {
         targetUrl,
         pageToken: pageToken,
         cookies: currentCookies,
-      );
+      ).timeout(_extractionTimeout);
 
       final info = raw['info'] as Map<String, dynamic>?;
       final rawVideos = raw['videos'] as List?;
@@ -783,7 +796,7 @@ class YoutubeService {
               videoId != null &&
               videoId.isNotEmpty) {
             map['thumbnailUrl'] =
-                'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
+            'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
           } else if (thumb != null) {
             map['thumbnailUrl'] = thumb.toString();
           }
@@ -798,11 +811,14 @@ class YoutubeService {
           'info': info,
           'videos': videoList,
           if (raw['note'] != null) 'note': raw['note'],
-          if (raw['nextPageToken'] != null) 'nextPageToken': raw['nextPageToken'],
+          if (raw['nextPageToken'] != null && raw['nextPageToken'].toString().isNotEmpty)
+            'nextPageToken': raw['nextPageToken'],
         };
       }
     } on NewPipeExtractionException catch (e) {
       throw Exception(e.userMessage);
+    } on TimeoutException {
+      throw Exception('Playlist extraction timed out after 30 seconds.');
     } catch (e) {
       debugPrint(
         '[YoutubeService] Extraction error during getPlaylistDetails ($e).',
@@ -818,10 +834,12 @@ class YoutubeService {
       final results = await NewPipeService.instance.search(
         query,
         cookies: currentCookies,
-      );
+      ).timeout(_extractionTimeout);
       return results;
     } on NewPipeExtractionException catch (e) {
       throw Exception(e.userMessage);
+    } on TimeoutException {
+      throw Exception('Search timed out after 30 seconds.');
     } catch (e) {
       debugPrint('[YouTubeService] Search error: $e');
       throw Exception('Search failed: $e');
@@ -834,10 +852,10 @@ class YoutubeService {
   }
 
   static Future<List<Map<String, dynamic>>?> getPlaylistVideos(
-    String playlistId, {
-    dynamic pageToken,
-    int pageSize = 50,
-  }) async {
+      String playlistId, {
+        dynamic pageToken,
+        int pageSize = 50,
+      }) async {
     final details = await getPlaylistDetails(
       'https://www.youtube.com/playlist?list=$playlistId',
       pageToken: pageToken,
@@ -849,9 +867,9 @@ class YoutubeService {
   }
 
   static Future<Map<String, dynamic>?> refreshStreamUrl(
-    String downloadPageUrl,
-    String oldStreamUrl,
-  ) async {
+      String downloadPageUrl,
+      String oldStreamUrl,
+      ) async {
     // Mirror getStreams' own fallback: a bare 11-character YouTube video id
     // is a valid input here too (getStreamForVideo passes ids around, not
     // just full URLs), so don't bail out just because extractVideoId — which
@@ -876,12 +894,12 @@ class YoutubeService {
 
         if (oldItag != null) {
           final matched = streams.firstWhere(
-            (s) =>
-                s['itag']?.toString() == oldItag ||
+                (s) =>
+            s['itag']?.toString() == oldItag ||
                 (s['src'] != null &&
                     Uri.tryParse(
-                          s['src'].toString(),
-                        )?.queryParameters['itag'] ==
+                      s['src'].toString(),
+                    )?.queryParameters['itag'] ==
                         oldItag),
             orElse: () => <String, dynamic>{},
           );
@@ -936,11 +954,11 @@ class YoutubeService {
               .toList();
           if (sameType.isNotEmpty) {
             sameType.sort((a, b) =>
-                (parseQualityHeight(b['quality']?.toString() ?? '') -
-                        parseQualityHeight(oldQuality ?? ''))
-                    .abs() -
+            (parseQualityHeight(b['quality']?.toString() ?? '') -
+                parseQualityHeight(oldQuality ?? ''))
+                .abs() -
                 (parseQualityHeight(a['quality']?.toString() ?? '') -
-                        parseQualityHeight(oldQuality ?? ''))
+                    parseQualityHeight(oldQuality ?? ''))
                     .abs());
             return {
               'url': sameType.first['src'] as String?,
@@ -950,10 +968,10 @@ class YoutubeService {
 
           debugPrint(
             '[YouTube] refreshStreamUrl: No itag/quality/same-type match found. '
-            'Falling back to any stream (quality may differ).',
+                'Falling back to any stream (quality may differ).',
           );
           final first = streams.firstWhere(
-            (s) => s['src'] != null,
+                (s) => s['src'] != null,
             orElse: () => <String, dynamic>{},
           );
           if (first.isNotEmpty) {
@@ -976,9 +994,9 @@ class YoutubeService {
   static Future<Map<String, String?>?> Function(String, {String? preferredType})? mockGetFreshStreams;
 
   static Future<Map<String, String?>?> getFreshStreams(
-    String downloadPageUrl, {
-    String? preferredType,
-  }) async {
+      String downloadPageUrl, {
+        String? preferredType,
+      }) async {
     if (mockGetFreshStreams != null) {
       return mockGetFreshStreams!(downloadPageUrl, preferredType: preferredType);
     }
@@ -992,10 +1010,10 @@ class YoutubeService {
       if (streams.isNotEmpty) {
         if (preferredType != null) {
           final matched =
-              streams.where((s) => s['type'] == preferredType).toList();
+          streams.where((s) => s['type'] == preferredType).toList();
           if (matched.isNotEmpty) {
             final best = matched.firstWhere(
-              (s) => s['src'] != null,
+                  (s) => s['src'] != null,
               orElse: () => <String, dynamic>{},
             );
             if (best.isNotEmpty) {
@@ -1010,7 +1028,7 @@ class YoutubeService {
         final combined = streams.where((s) => s['type'] == 'combined').toList();
         if (combined.isNotEmpty) {
           final best = combined.firstWhere(
-            (s) => s['src'] != null,
+                (s) => s['src'] != null,
             orElse: () => <String, dynamic>{},
           );
           if (best.isNotEmpty) {
@@ -1023,7 +1041,7 @@ class YoutubeService {
         final muxed = streams.where((s) => s['type'] == 'muxed').toList();
         if (muxed.isNotEmpty) {
           final best = muxed.firstWhere(
-            (s) => s['src'] != null,
+                (s) => s['src'] != null,
             orElse: () => <String, dynamic>{},
           );
           if (best.isNotEmpty) {
@@ -1031,7 +1049,7 @@ class YoutubeService {
           }
         }
         final first = streams.firstWhere(
-          (s) => s['src'] != null,
+              (s) => s['src'] != null,
           orElse: () => <String, dynamic>{},
         );
         if (first.isNotEmpty) {

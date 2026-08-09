@@ -155,7 +155,7 @@ class NewPipeService {
       {
         'url': url,
         if (cookies != null) 'cookies': cookies,
-        if (pageToken != null) 'pageToken': pageToken,
+        if (pageToken != null && pageToken.toString().isNotEmpty) 'pageToken': pageToken,
       },
     );
     return Map<String, dynamic>.from(map);
@@ -181,7 +181,10 @@ class NewPipeService {
 
   Future<dynamic> _invoke(String method, Map<String, dynamic> arguments) async {
     try {
-      return await _channel.invokeMethod(method, arguments);
+      return await _channel.invokeMethod(method, arguments).timeout(
+            const Duration(seconds: 30),
+            onTimeout: () => throw TimeoutException('Native extraction timed out.'),
+          );
     } on PlatformException catch (e) {
       throw _mapError(e);
     }
