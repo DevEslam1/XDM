@@ -1550,13 +1550,13 @@ class DownloadOrchestrator {
 
     // Also fix audio bytes — same pre-allocation issue applies
     int audioBytesFromDisk = 0;
-    final audioTempPath = '${task.tempFilePath}.audio';
+    final effectiveAudioPath = audioTempPath ?? '${task.tempFilePath}.audio';
     if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
       // FIX-AUDIO-INIT: guard against audioThreadCount == 0 so the
       // multi-thread guard inside actualDownloadedBytes does not discard
       // a valid existing .audio file on session start.
       audioBytesFromDisk = await actualDownloadedBytes(
-        audioTempPath,
+        effectiveAudioPath,
         threadCount: max(1, task.audioThreadCount),
       );
     }
@@ -1753,7 +1753,7 @@ class DownloadOrchestrator {
     // FIX A-3: Early-exit merge path before retry loop when both streams exist and are complete
     if (hasAudio) {
       final videoFile = File(task.tempFilePath);
-      final audioFile = File(audioTempPath);
+      final audioFile = File(effectiveAudioPath);
       if (await videoFile.exists() && await audioFile.exists()) {
         try {
           final videoLen = await actualDownloadedBytes(
@@ -1761,7 +1761,7 @@ class DownloadOrchestrator {
             threadCount: task.threadCount,
           );
           final audioLen = await actualDownloadedBytes(
-            audioTempPath,
+            effectiveAudioPath,
             threadCount: max(1, task.audioThreadCount),
           );
           // FIX(YT-2): When videoTransferSize is unknown (0), use a minimum threshold
@@ -1782,7 +1782,7 @@ class DownloadOrchestrator {
             await _host.setTaskState(task.copyWith(
               statusMessage: DownloadStatusMessages.merging,
             ));
-            final merged = await _mergeAudioVideo(task.id, audioTempPath);
+            final merged = await _mergeAudioVideo(task.id, effectiveAudioPath);
             if (merged) {
               await _finalizeDownload(task.id, notificationId);
               return;
@@ -1817,7 +1817,7 @@ class DownloadOrchestrator {
                 liveAudioTask.mergedAudioUrl != null &&
                 liveAudioTask.mergedAudioUrl!.isNotEmpty;
             if (!liveHasAudio) return;
-            final liveAudioTempPath = audioTempPath;
+            final liveAudioTempPath = effectiveAudioPath;
             final liveAudioSize = liveAudioTask.audioSize;
 
             final audioFile = File(liveAudioTempPath);
@@ -2066,10 +2066,10 @@ class DownloadOrchestrator {
             }
             final downloadedAudioLen = await audioFile.length();
             debugPrint(
-              '[DMX] Audio download complete: $audioTempPath ($downloadedAudioLen bytes)',
+              '[DMX] Audio download complete: $effectiveAudioPath ($downloadedAudioLen bytes)',
             );
             if (downloadedAudioLen == 0) {
-              throw Exception('Audio file is empty: $audioTempPath');
+              throw Exception('Audio file is empty: $effectiveAudioPath');
             }
             // FIX-AUDIO-CLAMP: never report more audio bytes than actually on disk.
             audioBytesSoFar = task.audioSize > 0
@@ -2567,7 +2567,7 @@ class DownloadOrchestrator {
             // FIX-YT-1: Set merging status before merge in normal download path
             await _host.setTaskState(
                 preMergeCheck.copyWith(status: DownloadStatus.merging));
-            final mergeOk = await _mergeAudioVideo(task.id, audioTempPath,
+            final mergeOk = await _mergeAudioVideo(task.id, effectiveAudioPath,
                 notificationId: notificationId);
 
             if (!mergeOk) {

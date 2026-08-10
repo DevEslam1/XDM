@@ -1441,6 +1441,7 @@ class DownloadEngine {
           proxyUsername: proxyUsername,
           proxyPassword: proxyPassword,
           bypassSSL: bypassSSL,
+          isRetry: isRetry,
         );
       } finally {
         _activeCancelTokens.remove(cancelToken);
@@ -2319,6 +2320,7 @@ class DownloadEngine {
     String? proxyUsername,
     String? proxyPassword,
     bool bypassSSL = true,
+    bool isRetry = false,
   }) async {
     // FIX-CYCLE-TOR-START: Emit 'starting' immediately so the UI shows an
     // active spinner before metadata resolution begins. Without this, the
@@ -2342,10 +2344,14 @@ class DownloadEngine {
       torrentFiles: initialTorrentFiles,
       // FIX-RESUME-CYCLE: Distinguish resume from fresh start so the UI
       // can show "Resuming…" instead of "Starting…" when bytes exist.
-      statusMessage: initSummary.downloaded > 0
-          ? 'Resuming torrent…'
-          : 'Starting torrent…',
-      cycleState: initSummary.downloaded > 0 ? 'resuming' : 'starting',
+      statusMessage: isRetry
+          ? 'Retrying torrent…'
+          : (initSummary.downloaded > 0
+              ? 'Resuming torrent…'
+              : 'Starting torrent…'),
+      cycleState: isRetry
+          ? 'retrying'
+          : (initSummary.downloaded > 0 ? 'resuming' : 'starting'),
       torrentId: torrentId,
       totalFiles: initSummary.total > 0 ? initSummary.total : null,
       completedFiles: initSummary.total > 0 ? initSummary.done : null,

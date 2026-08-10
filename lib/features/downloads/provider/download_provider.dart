@@ -2679,11 +2679,12 @@ class DownloadProvider extends ChangeNotifier
     try {
       if (task.isTorrent) {
         final totalFromFiles = torrentBytesFromFiles(task.torrentFiles);
-        if (totalFromFiles > 0) {
-          realBytesOnDisk = totalFromFiles;
-          debugPrint(
-              '[FIX-T2] Torrent retry: using per-file total=$totalFromFiles');
-        }
+        final resolvedTotal = totalFromFiles > 0 ? totalFromFiles : realBytesOnDisk;
+        realBytesOnDisk = task.resolvedFileSize > 0
+            ? resolvedTotal.clamp(0, task.resolvedFileSize)
+            : max(0, resolvedTotal);
+        debugPrint(
+            '[FIX-T2] Torrent retry: using per-file total=$realBytesOnDisk');
       }
     } catch (e) {
       debugPrint('[FIX-T2] Torrent retry per-file calculation failed: $e');
@@ -2703,10 +2704,14 @@ class DownloadProvider extends ChangeNotifier
       threadCount: task.threadCount,
     );
 
+    final finalDownloadedBytes = task.hasMergedAudio
+        ? (videoOnlySize > 0 ? videoBytes.clamp(0, videoOnlySize) : videoBytes)
+        : realBytesOnDisk;
+
     await _setTask(
       task.copyWith(
         status: DownloadStatus.queued,
-        downloadedBytes: realBytesOnDisk,
+        downloadedBytes: finalDownloadedBytes,
         chunks: chunks,
         audioProgress: task.audioSize > 0 && audioBytes > 0
             ? (audioBytes / task.audioSize).clamp(0.0, 1.0)
@@ -2723,7 +2728,7 @@ class DownloadProvider extends ChangeNotifier
             : task.videoStreamSize, // FIX RT-4
         audioDownloadedBytes: shouldResetAllProgressMetadata
             ? 0
-            : task.audioDownloadedBytes, // FIX RT-4
+            : audioBytes, // FIX RT-4 / BUG 2 FIX
       ),
     );
 

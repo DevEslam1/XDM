@@ -398,7 +398,7 @@ class DownloadTask {
       audioSize > 0 ? formatBytes(audioSize) : 'Unknown';
 
   String get audioProgressPercentString =>
-      '${(audioProgress * 100).toStringAsFixed(1)}%';
+      '${(audioProgressPercent * 100).toStringAsFixed(1)}%';
 
   DownloadTask copyWith({
     String? fileName,
