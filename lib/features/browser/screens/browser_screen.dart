@@ -309,10 +309,45 @@ class _BrowserScreenState extends State<BrowserScreen>
   bool _isSnifferEnabled = true;
   bool _lastZoomEnabled = false;
   String? _homeReturnUrl;
+  String? _lastLongPressSheetUrl;
+  DateTime? _lastLongPressSheetAt;
 
   static const String _longPressChannel = 'XDM_LongPress';
   static const String _popupsChannel = 'XDM_Popups';
   static const String _pickerChannel = 'XdmPickerChannel';
+
+  /// Fallback used by [onLongPressHitTestResult] when the OS hit test gives no
+  /// URL. It resolves the element at the point stored by the injected
+  /// long-press script (window.__xdmLastTouch) and returns {url, type}.
+  static const String _longPressTargetFallbackJs = '''
+(function() {
+  try {
+    var sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      var anchor = sel.anchorNode ? (sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentNode : sel.anchorNode) : null;
+      var a = anchor ? anchor.closest('a[href]') : null;
+      if (a && a.href) return JSON.stringify({ url: a.href, type: 'link' });
+    }
+  } catch (e) {}
+  try {
+    var p = window.__xdmLastTouch;
+    if (p && typeof p.x === 'number' && typeof p.y === 'number') {
+      var el = document.elementFromPoint(p.x, p.y);
+      if (el) {
+        var a2 = el.closest('a[href]') || el.closest('area[href]');
+        if (a2 && a2.href) return JSON.stringify({ url: a2.href, type: 'link' });
+        var img = el.closest('img');
+        if (img) return JSON.stringify({ url: img.currentSrc || img.src || '', type: 'image' });
+        var v = el.closest('video');
+        if (v) return JSON.stringify({ url: v.currentSrc || v.src || '', type: 'video' });
+        var au = el.closest('audio');
+        if (au) return JSON.stringify({ url: au.currentSrc || au.src || '', type: 'audio' });
+      }
+    }
+  } catch (e) {}
+  return '';
+})()
+''';
 
   // ─────────────────────────────────────────────────────────────
   // Tab persistence
@@ -418,17 +453,6 @@ class _BrowserScreenState extends State<BrowserScreen>
     _isRestoring = true;
     try {
       await _tabManager.restoreTabs();
-      // E14: Tab Persistence/Restore Visual Feedback
-      if (mounted && _tabs.length > 1) {
-        final isDark = context.read<SettingsProvider>().isDarkMode;
-        ThemedSnackbar.show(
-          context,
-          message: 'Restored ${_tabs.length} tabs',
-          icon: Icons.restore_rounded,
-          color: AppTheme.neonBlue,
-          isDarkMode: isDark,
-        );
-      }
     } finally {
       if (mounted) {
         setState(() {
@@ -1167,6 +1191,32 @@ class _BrowserScreenState extends State<BrowserScreen>
         '[DMX Browser] Failed to decode/handle long press message: $e',
       );
     }
+  }
+
+  /// Parses the {url, type} JSON returned by [_longPressTargetFallbackJs].
+  static (String, String)? _parseLongPressTarget(String? raw) {
+    if (raw == null) return null;
+    final s = raw.trim();
+    if (s.isEmpty || s == 'null') return null;
+    try {
+      final decoded = jsonDecode(s);
+      if (decoded is Map<String, dynamic>) {
+        final url = (decoded['url'] as String?)?.trim() ?? '';
+        if (url.isEmpty) return null;
+        return (url, (decoded['type'] as String?) ?? 'link');
+      }
+    } on FormatException {
+      // Some platforms return the string quoted, unwrap it.
+    }
+    try {
+      final unquoted = jsonDecode(s.substring(1, s.length - 1));
+      if (unquoted is Map<String, dynamic>) {
+        final url = (unquoted['url'] as String?)?.trim() ?? '';
+        if (url.isEmpty) return null;
+        return (url, (unquoted['type'] as String?) ?? 'link');
+      }
+    } catch (_) {}
+    return null;
   }
 
   void _handlePopupMessageForTab(
@@ -2269,6 +2319,15 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
 
     if (cleanUrl.isEmpty) return;
+
+    final now = DateTime.now();
+    if (_lastLongPressSheetUrl == cleanUrl &&
+        _lastLongPressSheetAt != null &&
+        now.difference(_lastLongPressSheetAt!) < const Duration(seconds: 1)) {
+      return;
+    }
+    _lastLongPressSheetUrl = cleanUrl;
+    _lastLongPressSheetAt = now;
 
     final isWebUrl = cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://');
 
@@ -5250,17 +5309,26 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                               var targetUrl =
                                                                   hitTestResult
                                                                       .extra;
+                                                              String typeOverride =
+                                                                  '';
                                                               if (targetUrl == null ||
                                                                   targetUrl.trim().isEmpty) {
                                                                 try {
                                                                   final jsUrl =
                                                                       await controller.evaluateJavascript(
-                                                                    source:
-                                                                        "(function() { var sel = window.getSelection(); if (!sel || sel.rangeCount === 0) return ''; var el = sel.anchorNode ? (sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentNode : sel.anchorNode) : null; var a = el ? el.closest('a') : null; return a ? a.href : ''; })()",
-                                                                  );
-                                                                  if (jsUrl != null &&
-                                                                      jsUrl.toString().trim().isNotEmpty) {
-                                                                    targetUrl = jsUrl.toString().trim();
+                                                                        source:
+                                                                            _longPressTargetFallbackJs,
+                                                                      );
+                                                                  final resolved =
+                                                                      _parseLongPressTarget(
+                                                                          jsUrl?.toString());
+                                                                  if (resolved !=
+                                                                      null) {
+                                                                    targetUrl =
+                                                                        resolved.$1;
+                                                                    typeOverride =
+                                                                        resolved
+                                                                            .$2;
                                                                   }
                                                                 } catch (_) {}
                                                               }
@@ -5268,7 +5336,10 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                   targetUrl.trim().isNotEmpty) {
                                                                 if (!mounted || !context.mounted) return;
                                                                 String type =
-                                                                    'link';
+                                                                    typeOverride
+                                                                            .isNotEmpty
+                                                                        ? typeOverride
+                                                                        : 'link';
                                                                 final hType =
                                                                     hitTestResult
                                                                         .type;

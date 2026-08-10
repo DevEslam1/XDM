@@ -1887,14 +1887,22 @@ class _EmptyState extends StatelessWidget {
     final query = provider.searchQuery;
     final accentClr = getActiveFilterColor(provider, isDark);
     if (query.isNotEmpty) {
+      final isLandscape =
+          MediaQuery.of(context).orientation == Orientation.landscape;
+
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: EdgeInsets.symmetric(
+            horizontal: 24.0,
+            vertical: isLandscape ? 12.0 : 32.0,
+          ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: EdgeInsets.all(isLandscape ? 14 : 20),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: accentClr.withValues(alpha: 0.06),
@@ -1902,21 +1910,22 @@ class _EmptyState extends StatelessWidget {
                 ),
                 child: Icon(
                   Icons.search_off_rounded,
-                  size: 36,
+                  size: isLandscape ? 28 : 36,
                   color: accentClr.withValues(alpha: 0.6),
                 ),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: isLandscape ? 8 : 16),
               Text(
                 '${L10n.of(context, 'no_results_for')} "$query"',
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   color:
                       isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
                   fontWeight: FontWeight.w700,
-                  fontSize: 14,
+                  fontSize: isLandscape ? 13 : 14,
                 ),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: isLandscape ? 8 : 16),
               TextButton.icon(
                 onPressed: () {
                   onClearSearch?.call();

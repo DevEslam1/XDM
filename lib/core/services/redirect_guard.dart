@@ -46,6 +46,12 @@ class _TabState {
   final List<String> chain = [];
   DateTime? lastAutoFollow;
   String? currentUrl;
+
+  /// Whether the last navigation [_TabState.currentUrl] looks like an ad
+  /// bridge / redirect page. Only such pages should ever be inspected for an
+  /// auto-follow target — normal pages (searches, articles, ...) must not be
+  /// hijacked or have their history polluted.
+  bool isAdBridge = false;
   int depth = 0;
 }
 
@@ -100,6 +106,7 @@ class RedirectGuard {
   }) async {
     final st = _tabs.putIfAbsent(tabId, () => _TabState());
     st.currentUrl = navigatingTo;
+    st.isAdBridge = _looksLikeAdBridge(navigatingTo);
 
     // 1) Loop guard: same URL twice in a row, or rapid re-fire (<800ms).
     if (st.chain.isNotEmpty &&
@@ -156,6 +163,15 @@ class RedirectGuard {
     final st = _tabs.putIfAbsent(tabId, () => _TabState());
     final currentUrl = st.currentUrl ?? '';
     if (currentUrl.isEmpty) return RedirectResult.ignored;
+
+    // Only inspect pages that look like ad/redirect bridges. Running the JS
+    // extraction on normal pages (Google search, articles, media sites) was
+    // causing the WebView to be silently re-navigated (autoFollow) or to pop a
+    // redirect sheet (promptUser) on every load — which made back/forward
+    // appear to skip pages like the search results page and polluted history.
+    if (!_looksLikeAdBridge(currentUrl) && !st.isAdBridge) {
+      return RedirectResult.ignored;
+    }
 
     // Run all extraction strategies in priority order via a single JS call.
     final extracted = await _runJsExtraction(controller, currentUrl);

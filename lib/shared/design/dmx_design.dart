@@ -763,57 +763,77 @@ class DmxEmptyState extends StatelessWidget {
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: accent.withValues(alpha: 0.08),
-                border: Border.all(
-                  color: accent.withValues(alpha: 0.2),
-                  width: 1,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isLandscape =
+            MediaQuery.of(context).orientation == Orientation.landscape ||
+                constraints.maxHeight < 360;
+        final iconSize = isLandscape ? 28.0 : 36.0;
+        final containerPadding = isLandscape ? 14.0 : 22.0;
+        final verticalSpacing = isLandscape ? 8.0 : 16.0;
+
+        return Center(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: isLandscape ? 12 : 24,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(containerPadding),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: accent.withValues(alpha: 0.08),
+                    border: Border.all(
+                      color: accent.withValues(alpha: 0.2),
+                      width: 1,
+                    ),
+                  ),
+                  child: Icon(icon, size: iconSize, color: accent),
                 ),
-              ),
-              child: Icon(icon, size: 36, color: accent),
+                SizedBox(height: verticalSpacing),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Space Grotesk',
+                    fontSize: isLandscape ? 13 : 14,
+                    fontWeight: FontWeight.bold,
+                    color: textClr,
+                  ),
+                ),
+                SizedBox(height: isLandscape ? 4 : 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: Text(
+                    subtitle,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: isLandscape ? 11 : 12,
+                      color: mutedClr,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+                if (buttonText != null && onButtonPressed != null) ...[
+                  SizedBox(height: verticalSpacing),
+                  DmxButton.filled(
+                    label: buttonText!,
+                    onPressed: onButtonPressed,
+                    color: accent,
+                    icon: Icons.add_rounded,
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              style: TextStyle(
-                fontFamily: 'Space Grotesk',
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: textClr,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 12,
-                color: mutedClr,
-                height: 1.4,
-              ),
-            ),
-            if (buttonText != null && onButtonPressed != null) ...[
-              const SizedBox(height: 20),
-              DmxButton.filled(
-                label: buttonText!,
-                onPressed: onButtonPressed,
-                color: accent,
-                icon: Icons.add_rounded,
-              ),
-            ],
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

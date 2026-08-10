@@ -80,51 +80,135 @@ class ScriptInjector {
     (function() {
       if (window.__xdmLongPressInjected) return;
       window.__xdmLongPressInjected = true;
-      var longPressTimer = null;
-      var startX = 0, startY = 0;
 
-      function getElementInfo(el) {
-        var link = el.closest('a');
-        var img = el.closest('img');
-        var video = el.closest('video');
-        var audio = el.closest('audio');
-        if (link && link.href) return { type: 'link', url: link.href, text: link.innerText || '' };
-        if (img && img.src) return { type: 'image', url: img.src, text: img.alt || '' };
-        if (video && (video.src || video.currentSrc)) return { type: 'video', url: video.src || video.currentSrc, text: '' };
-        if (audio && (audio.src || audio.currentSrc)) return { type: 'audio', url: audio.src || audio.currentSrc, text: '' };
+      var LONG_PRESS_MS = 480;
+      var FIRE_AFTER_CANCEL_MS = 430;
+      var MOVE_TOLERANCE = 12;
+
+      var longPressTimer = null;
+      var pressStartTime = 0;
+      var startX = 0, startY = 0;
+      var pressedInfo = null;
+
+      function nowMs() {
+        return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      }
+
+      function resolveInfo(el) {
+        try {
+          if (!el || el.nodeType !== 1) el = null;
+          if (el) {
+            var link = el.closest('a[href]');
+            var img = el.closest('img');
+            var video = el.closest('video');
+            var audio = el.closest('audio');
+            var source = el.closest('source[src]');
+            if (link && link.href) return { type: 'link', url: link.href, text: (link.innerText || '').trim() };
+            if (img) return { type: 'image', url: img.currentSrc || img.src || '', text: img.alt || '' };
+            if (video) return { type: 'video', url: video.currentSrc || video.src || '', text: '' };
+            if (audio) return { type: 'audio', url: audio.currentSrc || audio.src || '', text: '' };
+            if (source && source.src) {
+              var parent = source.parentNode;
+              if (parent && parent.tagName === 'VIDEO') return { type: 'video', url: source.src, text: '' };
+              if (parent && parent.tagName === 'AUDIO') return { type: 'audio', url: source.src, text: '' };
+            }
+          }
+        } catch (e) {}
         return null;
       }
 
-      document.addEventListener('touchstart', function(e) {
-        if (e.touches.length !== 1) return;
-        var touch = e.touches[0];
-        startX = touch.clientX;
-        startY = touch.clientY;
-        var info = getElementInfo(e.target);
-        if (!info) return;
+      function elementAtPoint(x, y) {
+        try {
+          var el = document.elementFromPoint(x, y);
+          return (el && el.nodeType === 1) ? el : null;
+        } catch (e) { return null; }
+      }
 
-        longPressTimer = setTimeout(function() {
+      function rememberPoint(x, y) {
+        try { window.__xdmLastTouch = { x: x, y: y }; } catch (e) {}
+      }
+
+      function postLongPress() {
+        if (!pressedInfo) return;
+        var info = pressedInfo;
+        clearLongPress();
+        try {
           if (window.XDM_LongPress && window.XDM_LongPress.postMessage) {
             window.XDM_LongPress.postMessage(JSON.stringify(info));
           }
-        }, 500);
-      }, { passive: true });
+        } catch (e) {}
+      }
 
-      document.addEventListener('touchmove', function(e) {
-        if (!longPressTimer) return;
-        var touch = e.touches[0];
-        if (Math.abs(touch.clientX - startX) > 10 || Math.abs(touch.clientY - startY) > 10) {
-          clearTimeout(longPressTimer);
-          longPressTimer = null;
-        }
-      }, { passive: true });
-
-      document.addEventListener('touchend', function() {
+      function clearLongPress() {
         if (longPressTimer) {
           clearTimeout(longPressTimer);
           longPressTimer = null;
         }
+        pressedInfo = null;
+        pressStartTime = 0;
+      }
+
+      function beginLongPress(clientX, clientY, target) {
+        clearLongPress();
+        rememberPoint(clientX, clientY);
+        startX = clientX;
+        startY = clientY;
+        var info = resolveInfo(target);
+        if (!info && typeof clientX === 'number' && typeof clientY === 'number') {
+          info = resolveInfo(elementAtPoint(clientX, clientY));
+        }
+        if (!info) return;
+        pressedInfo = info;
+        pressStartTime = nowMs();
+        longPressTimer = setTimeout(postLongPress, LONG_PRESS_MS);
+      }
+
+      function endLongPress() {
+        // Android fires touchcancel when the OS begins its own long-press
+        // (text selection / ACTION_MODE). If the press was already long enough,
+        // treat the cancel as a valid long press and fire immediately.
+        if (longPressTimer) {
+          if (pressStartTime > 0 && nowMs() - pressStartTime >= FIRE_AFTER_CANCEL_MS) {
+            postLongPress();
+            return;
+          }
+        }
+        clearLongPress();
+      }
+
+      function moveLongPress(clientX, clientY) {
+        if (!longPressTimer) return;
+        if (Math.abs(clientX - startX) > MOVE_TOLERANCE || Math.abs(clientY - startY) > MOVE_TOLERANCE) {
+          clearLongPress();
+        }
+      }
+
+      document.addEventListener('touchstart', function(e) {
+        if (!e.touches || e.touches.length !== 1) return;
+        var t = e.touches[0];
+        beginLongPress(t.clientX, t.clientY, e.target);
       }, { passive: true });
+
+      document.addEventListener('touchmove', function(e) {
+        if (!e.touches || !e.touches.length) return;
+        var t = e.touches[0];
+        moveLongPress(t.clientX, t.clientY);
+      }, { passive: true });
+
+      document.addEventListener('touchend', endLongPress, { passive: true });
+      document.addEventListener('touchcancel', endLongPress, { passive: true });
+
+      document.addEventListener('mousedown', function(e) {
+        if (e.button !== 2) return;
+        beginLongPress(e.clientX, e.clientY, e.target);
+      }, { passive: true });
+
+      document.addEventListener('mousemove', function(e) {
+        moveLongPress(e.clientX, e.clientY);
+      }, { passive: true });
+
+      document.addEventListener('mouseup', endLongPress, { passive: true });
+      document.addEventListener('contextmenu', endLongPress, { passive: true });
     })();
   ''';
 
@@ -272,10 +356,9 @@ $customJs
     // Fingerprint hiding
     scripts.add(FingerprintManager.fingerprintHideJs);
 
-    // Long-press handler
-    if (isMediaDomain(url)) {
-      scripts.add(kLongPressScript);
-    }
+    // Long-press handler (all pages; guarded against double-injection
+    // by the __xdmLongPressInjected flag).
+    scripts.add(kLongPressScript);
 
     if (scripts.isEmpty) return;
 
