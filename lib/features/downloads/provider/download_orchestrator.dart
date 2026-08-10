@@ -425,57 +425,9 @@ class DownloadOrchestrator {
       try {
         final videoId = YoutubeService.extractVideoId(youtubeUrl);
         if (videoId != null) {
-          final isRetry = (_host.retryCounts[task.id] ?? 0) > 0 ||
-              task.status == DownloadStatus.failed;
-          // H2: Resuming with stored progress must not burn an engine attempt
-          // on an expired stream URL. Refresh the video/audio URLs proactively
-          // before the engine starts so a stale signed URL cannot kill the
-          // resume mid-way.
-          final isResumingWithProgress = task.downloadedBytes > 0 ||
-              (task.chunks.isNotEmpty && task.chunks.any((c) => c > 0));
-          if ((isRetry || isResumingWithProgress) &&
-              task.downloadPageUrl != null) {
-            try {
-              final fresh = await YoutubeService.getFreshStreams(
-                  task.downloadPageUrl!,
-                  preferredType: task.youtubePreferredType);
-              if (fresh != null && fresh['url'] != null) {
-                final freshUrl = fresh['url'].toString();
-                final freshAudioUrl = fresh['audioUrl']?.toString();
-                final videoUrlChanged = freshUrl != task.url;
-                final audioUrlChanged = freshAudioUrl != null &&
-                    freshAudioUrl != task.mergedAudioUrl;
-
-                // FIX-18: Delete audio sidecars when the audio URL changes so the
-                // engine does not resume from corrupt/stale audio bytes.
-                if (audioUrlChanged) {
-                  for (final p in [
-                    '${task.tempFilePath}.audio',
-                    '${task.tempFilePath}.audio.dmxstate',
-                    '${task.tempFilePath}.audio.journal',
-                    '${task.tempFilePath}.audio.itag',
-                  ]) {
-                    try {
-                      final f = File(p);
-                      if (await f.exists()) await f.delete();
-                    } catch (_) {}
-                  }
-                }
-
-                task = task.copyWith(
-                  url: videoUrlChanged ? freshUrl : task.url,
-                  mergedAudioUrl: freshAudioUrl ?? task.mergedAudioUrl,
-                  downloadedBytes: videoUrlChanged ? 0 : task.downloadedBytes,
-                  chunks: videoUrlChanged
-                      ? List<double>.filled(
-                          task.threadCount > 0 ? task.threadCount : 1, 0.0)
-                      : task.chunks,
-                  audioProgress: audioUrlChanged ? 0.0 : task.audioProgress,
-                );
-              }
-            } catch (e) {
-              debugPrint('[DMX] Pre-refresh on retry failed: $e');
-            }
+          // Directly return stored task URL for download start
+          if (task.url.isNotEmpty) {
+            return task;
           }
 
           Map<String, dynamic>? streamInfo;
@@ -1641,25 +1593,30 @@ class DownloadOrchestrator {
 
         // FIX YT-S1: When both runtime sizes are unknown, subtract audioSize
         // from fileSize to avoid double-counting the audio contribution.
+        // Prefer live engine size → persisted videoStreamSize → derived → fileSize.
         final effectiveVideoSize = videoSizeSoFar > 0
             ? videoSizeSoFar
-            : (videoTransferSize > 0
-                ? videoTransferSize
-                : (hasAudio && base.audioSize > 0
-                    ? (base.fileSize - base.audioSize).clamp(0, base.fileSize)
-                    : base.fileSize));
+            : (base.videoStreamSize > 0
+                ? base.videoStreamSize
+                : (videoTransferSize > 0
+                    ? videoTransferSize
+                    : (hasAudio && base.audioSize > 0
+                        ? (base.fileSize - base.audioSize)
+                            .clamp(0, base.fileSize)
+                        : base.fileSize)));
         // FIX-2: When audioSize is still unknown, use the larger of
         // audioBytesSoFar and the task's stored audioDownloadedBytes so
         // the denominator doesn't shrink between ticks.  Once the engine
         // reports the real size the task field is updated and this
         // fallback is no longer reached.
+        // Use the live audioBytesSoFar first (updated on every audio tick),
+        // then fall back to the persisted audioDownloadedBytes, then 0.
         final audioContribution = hasAudio
             ? (base.audioSize > 0
                 ? base.audioSize
-                : max(
-                    audioBytesSoFar,
-                    base.audioDownloadedBytes,
-                  ))
+                : (audioBytesSoFar > 0
+                    ? audioBytesSoFar
+                    : base.audioDownloadedBytes))
             : 0;
         var calculatedTotal = effectiveVideoSize + audioContribution;
         if (base.fileSize > 0 && calculatedTotal > base.fileSize) {
@@ -2578,6 +2535,10 @@ class DownloadOrchestrator {
                     statusMessage: 'AUDIO_RETRY',
                     errorMessage:
                         'Video complete. Audio stream failed — retry will fetch audio only.',
+                    // Reset audio state so the combined bar doesn't show a
+                    // phantom audio contribution from the deleted sidecar.
+                    audioProgress: 0.0,
+                    audioDownloadedBytes: 0,
                   ));
                 }
                 return; // preserve video .dmxstate; retry re-downloads audio
@@ -3016,7 +2977,8 @@ class DownloadOrchestrator {
             }
             if (task.url.startsWith('magnet:')) {
               torrentId = TorrentService.addMagnet(task.url, saveDir);
-            } else if (!task.url.startsWith('http://') && !task.url.startsWith('https://')) {
+            } else if (!task.url.startsWith('http://') &&
+                !task.url.startsWith('https://')) {
               String filePath = task.url;
               if (task.url.startsWith('file://')) {
                 filePath = Uri.parse(task.url).toFilePath();
@@ -3041,7 +3003,9 @@ class DownloadOrchestrator {
             // C-2 FIX: Set downloading immediately so UI reflects state
             await _host.setTaskState(task.copyWith(
               status: DownloadStatus.downloading,
-              statusMessage: torrentId == null ? 'Acquiring torrent file...' : 'Connecting to peers...',
+              statusMessage: torrentId == null
+                  ? 'Acquiring torrent file...'
+                  : 'Connecting to peers...',
             ));
           }
         } catch (e) {
@@ -3180,26 +3144,7 @@ class DownloadOrchestrator {
           (task.downloadPageUrl!.contains('youtube.com/') ||
               task.downloadPageUrl!.contains('youtu.be/'));
 
-      if (isYoutube &&
-          task.downloadPageUrl != null &&
-          realTotalDownloaded > 0) {
-        try {
-          final fresh = await YoutubeService.getFreshStreams(
-              task.downloadPageUrl!,
-              preferredType: task.youtubePreferredType);
-          if (fresh != null && fresh['url'] != null) {
-            debugPrint(
-                '[DMX] Proactively refreshed YouTube stream URL on resume');
-            task = task.copyWith(
-              url: fresh['url'] as String,
-              mergedAudioUrl: fresh['audioUrl'],
-            );
-          }
-        } catch (e) {
-          debugPrint(
-              '[DMX] Proactive YouTube stream refresh on resume failed: $e');
-        }
-      }
+      // Skip proactive YouTube stream refresh; start directly with stored stream URL.
 
       // Ensure audioSize is properly set for combined downloads.
       // Skip for YouTube — googlevideo.com CDN URLs 429 on extra HEAD requests
@@ -3396,7 +3341,8 @@ class DownloadOrchestrator {
       // H-1 FIX: Check if task was paused/deleted during async gap
       final preStartCheck = _host.findTaskById(task.id);
       if (preStartCheck == null ||
-          preStartCheck.status != DownloadStatus.downloading) {
+          (preStartCheck.status != DownloadStatus.downloading &&
+              preStartCheck.status != DownloadStatus.queued)) {
         return;
       }
       // FIX H-3: Zero downloadedBytes in task model immediately when supportsResume is false

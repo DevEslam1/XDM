@@ -8,6 +8,7 @@ import '../../../core/utils/constants.dart';
 import '../provider/settings_provider.dart';
 import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';
+import '../widgets/browser_extensions_sheet.dart';
 
 class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
   const DownloadsSettingsPage({super.key});
@@ -267,6 +268,33 @@ class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
                     settings.setMaxConcurrentFilesPerTorrent(val);
                     triggerHaptic(settings);
                   }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SettingsSectionHeader(
+            title: isRtl
+                ? 'ملحقات المتصفح والتكامل'
+                : 'Browser Plugins & Interception',
+            accentColor: accent,
+            isDark: isDark,
+          ),
+          SettingsSectionGroup(
+            accentColor: accent,
+            children: [
+              ActionTile(
+                accentColor: accent,
+                icon: Icons.extension_rounded,
+                title: isRtl
+                    ? 'إعداد ملحقات المتصفح (Firefox & Safari)'
+                    : 'Browser Plugins (Firefox & Safari)',
+                subtitle: isRtl
+                    ? 'إلغاء تنزيلات المتصفح تلقائياً وتحويلها إلى XDM'
+                    : 'Auto-intercept & redirect downloads from Firefox Android & Safari iOS to XDM',
+                onTap: () {
+                  triggerHaptic(settings);
+                  BrowserExtensionsSheet.show(context);
                 },
               ),
             ],

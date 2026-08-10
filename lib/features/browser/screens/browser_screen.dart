@@ -5190,15 +5190,12 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                             shouldInterceptRequest:
                                                                 (controller,
                                                                     request) async {
-                                                              final url = request
-                                                                  .url
-                                                                  .toString();
-                                                              final requestHost = request.url.host.toLowerCase();
-
                                                               // Never block main-frame requests
                                                               if (request.isForMainFrame == true) {
                                                                 return null;
                                                               }
+
+                                                              final requestHost = request.url.host.toLowerCase();
 
                                                               // Instant fast-path: Never block YouTube, Google, gstatic, or core media infrastructure
                                                               if (requestHost.contains('youtube') ||
@@ -5225,8 +5222,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                 }
                                                               }
 
+                                                              final url = request.url.toString();
                                                               if (_adBlocker.shouldBlock(url)) {
-                                                                // E10: Blocked Ads Count Indicator
                                                                 _blockedAdsCount++;
                                                                 return WebResourceResponse(
                                                                   contentType:

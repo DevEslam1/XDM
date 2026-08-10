@@ -89,8 +89,9 @@ class WidgetDeepLinkHandler {
       case 'add':
       case 'share':
         final target = uri.queryParameters['url'];
+        final name = uri.queryParameters['name'];
         if (target != null && target.isNotEmpty) {
-          _handleAddUrl(target);
+          _handleAddUrl(target, name: name);
         }
         break;
       case 'pause_all':
@@ -217,10 +218,10 @@ class WidgetDeepLinkHandler {
     }
   }
 
-  static void _handleAddUrl(String url) {
+  static void _handleAddUrl(String url, {String? name}) {
     final ctx = navigatorKey?.currentContext;
     if (ctx == null) return;
-    ShareUrlHandler.handle(ctx, url, isShareLaunch: false);
+    ShareUrlHandler.handle(ctx, url, isShareLaunch: false, prefilledName: name);
   }
 
   static void _toggleAll({required bool pause}) {

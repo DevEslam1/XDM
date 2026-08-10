@@ -249,25 +249,36 @@ class DownloadTask {
   /// Sanitized chunk progress ratios matching current threadCount.
   List<double> get sanitizedChunks {
     final count = threadCount > 0 ? threadCount : 1;
+    double safe(double c) => c.isNaN ? 0.0 : c.clamp(0.0, 1.0);
+
     if (chunks.length == count) {
-      return chunks.map((c) => c.isNaN ? 0.0 : c.clamp(0.0, 1.0)).toList();
+      return chunks.map(safe).toList();
     }
     if (chunks.isEmpty) {
-      // FIX-B4: Distribute actual progress evenly instead of returning zeros
+      // No chunk data at all → distribute overall progress evenly.
       final frac = resolvedFileSize > 0
           ? (displayDownloadedBytes / resolvedFileSize).clamp(0.0, 1.0)
           : 0.0;
       return List.filled(count, frac);
     }
     if (chunks.length < count) {
-      return [...chunks, ...List.filled(count - chunks.length, 0.0)]
-          .map((c) => c.isNaN ? 0.0 : c.clamp(0.0, 1.0))
-          .toList();
+      // Thread count increased: keep existing progress, pad remainder
+      // with the average so total progress is preserved.
+      final existing = chunks.map(safe).toList();
+      final avg = existing.isEmpty
+          ? 0.0
+          : existing.reduce((a, b) => a + b) / existing.length;
+      return [...existing, ...List.filled(count - existing.length, avg)];
     }
-    return chunks
-        .sublist(0, count)
-        .map((c) => c.isNaN ? 0.0 : c.clamp(0.0, 1.0))
-        .toList();
+    // Thread count decreased: keep the first `count` chunks.
+    return chunks.sublist(0, count).map(safe).toList();
+  }
+
+  /// Downloaded bytes clamped to total size for safe display / ratio math.
+  int get displayDownloadedBytes {
+    final total = combinedTotalSize;
+    final downloaded = combinedDownloadedBytes;
+    return total > 0 ? downloaded.clamp(0, total) : downloaded;
   }
 
   double get progress {
@@ -275,7 +286,6 @@ class DownloadTask {
     if (hasUnknownSize) return -1.0;
     final total = combinedTotalSize;
     if (total <= 0) return -1.0;
-    // FIX-PROGRESS-NAN: Guard against NaN / Infinity from corrupted rows.
     final ratio = displayDownloadedBytes / total;
     if (ratio.isNaN || ratio.isInfinite) return -1.0;
     return ratio.clamp(0.0, 1.0);
@@ -284,11 +294,11 @@ class DownloadTask {
   String get progressPercentString {
     if (status == DownloadStatus.completed) return '100.0%';
     final total = combinedTotalSize;
-    // FIX-7: Show byte count instead of a misleading "0.0 %" while the
-    // total size is still unknown (magnets, YouTube before first byte, etc.)
     if (total <= 0) {
+      // Unknown total → show downloaded bytes as a byte-count badge
+      // so the UI is consistent with the indeterminate progress bar.
       final dl = combinedDownloadedBytes;
-      return dl > 0 ? formatBytes(dl) : '0.0%';
+      return dl > 0 ? formatBytes(dl) : '—';
     }
     return '${(progress * 100).toStringAsFixed(1)}%';
   }
@@ -719,13 +729,6 @@ class DownloadTask {
   // FIX 5: Helper getter for merged audio status
   bool get hasMergedAudio =>
       mergedAudioUrl != null && mergedAudioUrl!.isNotEmpty;
-
-  // FIX(H-4): Expose displayDownloadedBytes clamped to combinedTotalSize for UI rendering
-  int get displayDownloadedBytes {
-    final total = combinedTotalSize;
-    final downloaded = combinedDownloadedBytes;
-    return total > 0 ? min(downloaded, total) : downloaded;
-  }
 
   String? get youtubePreferredType {
     if (mergedAudioUrl != null && mergedAudioUrl!.isNotEmpty) return 'combined';

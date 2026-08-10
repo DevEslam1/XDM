@@ -2204,128 +2204,7 @@ class DownloadProvider extends ChangeNotifier
     _resumeRejectionRestarts.remove(id);
     _orchestrator.clearSessionCachedTotalSize(id);
 
-    // ═══ FIX YT-5: Proactive YouTube URL refresh on resume ═══
-    if (task.youtubeQualityPreset != null &&
-        task.downloadPageUrl != null &&
-        task.downloadPageUrl!.isNotEmpty &&
-        _isYoutubeUrlExpired(task.url)) {
-      try {
-        final fresh = await YoutubeService.getFreshStreams(
-            task.downloadPageUrl!,
-            preferredType: task.youtubePreferredType);
-        if (fresh != null && fresh['url'] != null) {
-          final freshUrl = fresh['url']!;
-          final freshAudioUrl = fresh['audioUrl'];
-          final urlChanged = freshUrl != task.url;
-          final audioChanged =
-              freshAudioUrl != null && freshAudioUrl != task.mergedAudioUrl;
-          if (urlChanged || audioChanged) {
-            debugPrint(
-                '[DMX] YT-5 FIX: Refreshed expired stream URL on resume');
-            final identityChanged =
-                youtubeStreamIdentityChanged(task.url, freshUrl);
-            if (identityChanged) {
-              debugPrint(
-                  '[DMX] YT-5 FIX: Stream identity changed on refresh, resetting progress and deleting video temp file');
-              for (final p in [
-                task.tempFilePath,
-                '${task.tempFilePath}.dmxstate',
-                '${task.tempFilePath}.journal',
-              ]) {
-                try {
-                  final f = File(p);
-                  if (await f.exists()) await f.delete();
-                } catch (_) {}
-              }
-            } else if (urlChanged) {
-              final stateFile = File('${task.tempFilePath}.dmxstate');
-              if (await stateFile.exists()) {
-                try {
-                  await stateFile.delete();
-                } catch (_) {}
-              }
-            }
-
-            // ── FIX YT-1: Independent audio identity validation ──
-            if (task.mergedAudioUrl != null &&
-                task.mergedAudioUrl!.isNotEmpty) {
-              final oldAudioUri = Uri.tryParse(task.mergedAudioUrl!);
-              final newAudioUri =
-                  freshAudioUrl != null ? Uri.tryParse(freshAudioUrl) : null;
-              final oldAudioItag = oldAudioUri?.queryParameters['itag'];
-              final newAudioItag = newAudioUri?.queryParameters['itag'];
-              final oldAudioMime = oldAudioUri?.queryParameters['mime'];
-              final newAudioMime = newAudioUri?.queryParameters['mime'];
-              final audioIdentityChanged = (oldAudioItag != null &&
-                      newAudioItag != null &&
-                      oldAudioItag != newAudioItag) ||
-                  (oldAudioMime != null &&
-                      newAudioMime != null &&
-                      oldAudioMime != newAudioMime);
-
-              if (audioIdentityChanged) {
-                debugPrint(
-                    '[DMX] YT-1 FIX: Audio stream identity changed on resume, resetting audio progress');
-                // Delete audio sidecars so the engine re-downloads cleanly
-                for (final p in [
-                  '${task.tempFilePath}.audio',
-                  '${task.tempFilePath}.audio.dmxstate',
-                  '${task.tempFilePath}.audio.journal',
-                ]) {
-                  try {
-                    final f = File(p);
-                    if (await f.exists()) await f.delete();
-                  } catch (_) {}
-                }
-                task = task.copyWith(audioProgress: 0.0, audioSize: 0);
-              }
-
-              if (audioChanged && task.tempFilePath.isNotEmpty) {
-                final videoFile = File(task.tempFilePath);
-                if (await videoFile.exists()) {
-                  final videoLen = await actualDownloadedBytes(
-                    task.tempFilePath,
-                    threadCount: task.threadCount,
-                  );
-                  if (videoLen > 0) {
-                    // Check if new audio mime is compatible with video container
-                    final newAudioUri = Uri.tryParse(freshAudioUrl);
-                    final newAudioMime = newAudioUri?.queryParameters['mime'];
-                    if (newAudioMime != null &&
-                        !newAudioMime.startsWith('audio/mp4') &&
-                        !newAudioMime.startsWith('audio/webm') &&
-                        !newAudioMime.startsWith('audio/m4a')) {
-                      debugPrint('[DMX] R-4: Audio codec may be incompatible, '
-                          'will rely on FFmpeg fallback');
-                    }
-                  }
-                }
-              }
-            }
-
-            final updatedTask = task.copyWith(
-              url: urlChanged ? freshUrl : task.url,
-              mergedAudioUrl: freshAudioUrl ?? task.mergedAudioUrl,
-              downloadedBytes: identityChanged ? 0 : task.downloadedBytes,
-              chunks: identityChanged
-                  ? List<double>.filled(task.threadCount, 0.0)
-                  : task.chunks,
-              audioProgress: identityChanged ? 0.0 : task.audioProgress,
-            );
-            final idx = _tasks.indexWhere((t) => t.id == id);
-            if (idx != -1) {
-              _tasks[idx] = updatedTask;
-              await _databaseService.saveTask(updatedTask);
-            }
-            task = updatedTask;
-          }
-        }
-      } catch (e) {
-        debugPrint(
-            '[DMX] YT-5: Proactive refresh failed, will retry on error: $e');
-      }
-    }
-    // ═══ END FIX YT-5 ═══
+    // Proceed directly with existing download stream URL without auto-updating
 
     // FIX-R-02: Separate video and audio bytes on resume
     int videoBytesOnly = task.downloadedBytes; // fallback
@@ -2757,77 +2636,6 @@ class DownloadProvider extends ChangeNotifier
     _retryCounts.remove(id);
     _resumeRejectionRestarts.remove(id);
     _orchestrator.clearSessionCachedTotalSize(id);
-
-    // ═══ FIX RT-2: Refresh YouTube URL on retry ═══
-    if (task.youtubeQualityPreset != null &&
-        task.downloadPageUrl != null &&
-        task.downloadPageUrl!.isNotEmpty &&
-        _isYoutubeUrlExpired(task.url)) {
-      try {
-        final fresh = await YoutubeService.getFreshStreams(
-          task.downloadPageUrl!,
-          preferredType: task.youtubePreferredType,
-        );
-        if (fresh != null && fresh['url'] != null) {
-          final freshUrl = fresh['url']!;
-          final freshAudioUrl = fresh['audioUrl'];
-          final urlChanged = freshUrl != task.url;
-          final audioChanged =
-              freshAudioUrl != null && freshAudioUrl != task.mergedAudioUrl;
-
-          final identityChanged =
-              youtubeStreamIdentityChanged(task.url, freshUrl);
-          if (identityChanged) {
-            debugPrint(
-                '[DMX] RT-2 FIX: Stream identity changed on refresh, resetting progress and deleting video temp file');
-            for (final p in [
-              task.tempFilePath,
-              '${task.tempFilePath}.dmxstate',
-              '${task.tempFilePath}.journal',
-            ]) {
-              try {
-                final f = File(p);
-                if (await f.exists()) await f.delete();
-              } catch (_) {}
-            }
-          } else if (urlChanged) {
-            final stateFile = File('${task.tempFilePath}.dmxstate');
-            if (await stateFile.exists()) {
-              try {
-                await stateFile.delete();
-              } catch (_) {}
-            }
-          }
-
-          if (audioChanged) {
-            for (final p in [
-              '${task.tempFilePath}.audio',
-              '${task.tempFilePath}.audio.dmxstate',
-              '${task.tempFilePath}.audio.journal',
-              '${task.tempFilePath}.audio.itag',
-            ]) {
-              try {
-                final f = File(p);
-                if (await f.exists()) await f.delete();
-              } catch (_) {}
-            }
-          }
-
-          task = task.copyWith(
-            url: urlChanged ? freshUrl : task.url,
-            mergedAudioUrl: freshAudioUrl ?? task.mergedAudioUrl,
-            downloadedBytes: identityChanged ? 0 : task.downloadedBytes,
-            chunks: identityChanged
-                ? List<double>.filled(
-                    task.threadCount > 0 ? task.threadCount : 1, 0.0)
-                : task.chunks,
-            audioProgress: audioChanged ? 0.0 : task.audioProgress,
-          );
-        }
-      } catch (e) {
-        debugPrint('[DMX] RT-2: YouTube refresh on retry failed: $e');
-      }
-    }
     // ═══ END FIX RT-2 ═══
 
     // ═══ FIX H-7: Validate state before retry ═══
@@ -4976,20 +4784,7 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
-  bool _isYoutubeUrlExpired(String url) {
-    try {
-      final uri = Uri.tryParse(url);
-      if (uri == null) return true;
-      final expireStr = uri.queryParameters['expire'];
-      if (expireStr == null) return false;
-      final expireTime = int.tryParse(expireStr);
-      if (expireTime == null) return false;
-      final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      return nowSecs > (expireTime - 300); // 5 minutes buffer
-    } catch (_) {
-      return true;
-    }
-  }
+
 
   static bool youtubeStreamIdentityChanged(String oldUrl, String newUrl) {
     try {

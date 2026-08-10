@@ -1,0 +1,10 @@
+{
+  "extensionName": {
+    "message": "XDM Download Redirect",
+    "description": "Name of the extension"
+  },
+  "extensionDescription": {
+    "message": "Redirect all browser downloads to XDM app",
+    "description": "Description of the extension"
+  }
+}

@@ -1824,8 +1824,16 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                         },
                       );
                       // FIX-CLAMP: guard against totalDl > totalLen (stale per-file data)
-                      final overallProgress = totalLen > 0
-                          ? (totalDl.clamp(0, totalLen) / totalLen)
+                      // Fall back to the provider's known totalFileBytes when the local
+                      // file list is empty (e.g. first tick after a session restore).
+                      final effectiveTotalLen = totalLen > 0
+                          ? totalLen
+                          : (widget.task.fileSize > 0
+                              ? widget.task.fileSize
+                              : 0);
+                      final overallProgress = effectiveTotalLen > 0
+                          ? (totalDl.clamp(0, effectiveTotalLen) /
+                                  effectiveTotalLen)
                               .clamp(0.0, 1.0)
                           : -1.0;
                       final pctLabel = overallProgress < 0
@@ -2015,15 +2023,18 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
       final displayFiles = files.map((f) {
         final selected = isTorrentFileSelected(f);
         final length = (f['length'] as num?)?.toInt() ?? 0;
-        final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-
-        final effectiveDownloaded = isChecking
-            ? downloaded // FIX-B7: keep last known value to avoid flicker
-            : (widget.task.status == DownloadStatus.completed && selected
+        final rawBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+        // During a recheck the engine may report 0 temporarily;
+        // keep the last known value so the bar doesn't flicker to 0.
+        final downloaded = isChecking
+            ? (length > 0 ? rawBytes.clamp(0, length) : rawBytes)
+            : (length > 0 ? rawBytes.clamp(0, length) : 0);
+        final resolvedBytes =
+            (widget.task.status == DownloadStatus.completed && selected)
                 ? length
-                : downloaded);
+                : downloaded;
 
-        return {...f, 'downloadedBytes': effectiveDownloaded};
+        return {...f, 'downloadedBytes': resolvedBytes};
       }).toList();
 
       final visible = _showAllFiles

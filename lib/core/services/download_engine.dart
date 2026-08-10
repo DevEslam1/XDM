@@ -438,34 +438,40 @@ class DownloadProgress {
 
     // If this stream is complete but counterpart hasn't started, show combined
     // (so the bar doesn't jump to 100% prematurely).
+    // FIX-YT-COMBINED-BYTES: Use ytDownloadedBytes (live cache) instead of
+    // downloadedBytes (top-level field) for YT stream progress. The live
+    // cache is always more accurate for YT streams and ensures the combined
+    // audio+video bar reflects the true state of both streams.
+    final selfDownloaded = ytDownloadedBytes ?? downloadedBytes;
+
     if (counterpartSize > 0 && counterpartDownloaded == 0) {
       if (fileSize <= 0) {
-        // Video size unknown but audio known – use audio as total.
         final totalSize = counterpartSize;
         if (totalSize == 0) return null;
-        // downloadedBytes is audio bytes (if this is audio stream) or video bytes.
-        return (downloadedBytes / totalSize).clamp(0.0, 1.0);
+        return (selfDownloaded / totalSize).clamp(0.0, 1.0);
       }
-      if (downloadedBytes >= fileSize) {
-        final totalSize = fileSize + counterpartSize;
-        if (totalSize == 0) return null;
-        return (downloadedBytes / totalSize).clamp(0.0, 1.0);
-      }
-      return (downloadedBytes / fileSize).clamp(0.0, 1.0);
+      final totalSize = fileSize + counterpartSize;
+      if (totalSize == 0) return null;
+      return (selfDownloaded / totalSize).clamp(0.0, 1.0);
     }
 
     final totalSize = fileSize + counterpartSize;
     if (totalSize == 0) return null;
-    final totalDownloaded = downloadedBytes + counterpartDownloaded;
+    final totalDownloaded = selfDownloaded + counterpartDownloaded;
     return (totalDownloaded / totalSize).clamp(0.0, 1.0);
   }
 
   /// FIX-YT-COMBINED: Total downloaded bytes across both streams.
   /// Returns the current stream's bytes only when counterpart is unknown
   /// (orchestrator has not yet set ytCounterpartDownloadedBytes).
+  /// FIX-YT-COMBINED-BYTES: Use ytDownloadedBytes (live cache) for YT
+  /// streams to ensure consistency with ytCombinedProgress. The live cache
+  /// is updated on every progress tick and always reflects the true
+  /// downloaded state for this stream.
   int get ytCombinedDownloadedBytes {
     if (ytStreamKind == null) return downloadedBytes;
-    return downloadedBytes + (ytCounterpartDownloadedBytes ?? 0);
+    final selfBytes = ytDownloadedBytes ?? downloadedBytes;
+    return selfBytes + (ytCounterpartDownloadedBytes ?? 0);
   }
 
   /// FIX-YT-COMBINED: Total size across both streams.
@@ -558,12 +564,20 @@ class DownloadProgress {
   /// details screen on torrents".
   List<Map<String, dynamic>>? get torrentFilePercents {
     if (torrentFiles == null || torrentFiles!.isEmpty) return null;
+    // FIX-TOR-FILE-PERCENT-AGG: Pre-compute aggregate data percentage so
+    // the torrent details screen has both single-file percentages AND the
+    // overall data percentage in a single call, covering "data percentage
+    // on every level" as required.
+    //
+    // FIX-TOR-FILE-PERCENT-SYNC: Always set BOTH 'progress' and 'percent'
+    // to the same value. Some legacy UI code paths read 'percent' while
+    // newer code reads 'progress'. If only one is set, the other goes
+    // stale, causing the single-file percentage bar on the torrent details
+    // screen to show incorrect data. This getter is the canonical source
+    // for single-file percentage — both keys must always agree.
     return torrentFiles!.map((f) {
       final length = (f['length'] as num?)?.toInt() ?? 0;
       final dlRaw = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-      // FIX-PERC-KEY: Use 'progress' key (not 'percent') for consistency
-      // with normalizeTorrentFile and _listenForCompletion. The UI reads
-      // 'progress'; using 'percent' caused null reads on the details screen.
       final dl = length > 0 ? dlRaw.clamp(0, length) : 0;
       // FIX-ZERO-SIZE: Zero-size files are trivially complete (1.0).
       final progress = length > 0 ? (dl / length).clamp(0.0, 1.0) : 1.0;
@@ -572,16 +586,18 @@ class DownloadProgress {
         'length': length,
         'downloadedBytes': dl,
         'progress': progress,
-        // Keep 'percent' as alias for backward compat with any legacy UI.
         'percent': progress,
         'isComplete': length == 0 || dl >= length,
         'selected': f['selected'] as bool? ?? true,
         'priority': (f['priority'] as num?)?.toInt() ?? 4,
         'speed': (f['speed'] as num?)?.toDouble() ?? 0.0,
-        // FIX-MISSING-EST: Include progressEstimated flag so the details
-        // screen can show the "estimated" badge consistently.
         'progressEstimated':
             (f['progressEstimated'] as bool?) ?? (length > 0 && dl <= 0),
+        // FIX-TOR-FILE-OVERALL: Include overall data percentage so the
+        // details screen can show both single-file AND aggregate data
+        // percentage in one pass, covering "data percentage on every
+        // level" for torrents.
+        'overallPercent': torrentOverallPercent,
       };
     }).toList();
   }
@@ -650,12 +666,28 @@ class DownloadEngine {
       // up self.
       DownloadEngine._ytLiveBytes.remove(taskId);
       _ytFinishedStreams.remove(taskId);
+    } else {
+      // Counterpart is still running. Leave _ytCounterpartTaskIds and
+      // _ytLiveBytes intact so the counterpart can still look up our final
+      // byte count. But schedule a safety cleanup in case the counterpart
+      // never finishes (crash, unhandled error) — prevents a permanent
+      // memory leak of both streams' live byte data.
+      // FIX-YT-LEAK: Safety timeout — if counterpart doesn't finish within
+      // 10 minutes, clean up this stream's entries unconditionally. The
+      // counterpart's data will be cleaned up by its own unregister call
+      // (or by a future safety timeout if it also crashes).
+      Timer(const Duration(minutes: 10), () {
+        if (_ytFinishedStreams.contains(taskId) &&
+            _ytCounterpartTaskIds.containsKey(taskId)) {
+          _ytCounterpartTaskIds.remove(taskId);
+          _ytCounterpartTaskIds.remove(c);
+          DownloadEngine._ytLiveBytes.remove(taskId);
+          DownloadEngine._ytLiveBytes.remove(c);
+          _ytFinishedStreams.remove(taskId);
+          _ytFinishedStreams.remove(c);
+        }
+      });
     }
-    // Else: counterpart is still running. Leave _ytCounterpartTaskIds and
-    // _ytLiveBytes intact so the counterpart can still look up our final
-    // byte count (set in the 'done' case via FIX-YT-DONE-LIVE). The
-    // counterpart's own unregister call will clean up both entries when
-    // it finishes.
   }
 
   final Set<Dio> _activeDioClients = {};
@@ -1208,6 +1240,12 @@ class DownloadEngine {
     YtStreamKind? ytStreamKind,
     int? ytCounterpartSize,
     int? ytCounterpartDownloadedBytes,
+    // FIX-CYCLE-RETRY: New parameter so the engine can distinguish a retry
+    // (previous attempt failed) from a user-initiated resume. When true,
+    // the engine emits 'retrying' instead of 'resuming' on the starting
+    // tick, giving the user clear feedback that the previous attempt failed
+    // and the engine is retrying — not just resuming from disk.
+    bool isRetry = false,
   }) async {
     _activeCancelTokens.add(cancelToken);
 
@@ -1403,6 +1441,11 @@ class DownloadEngine {
     // 'starting' immediately — even when metadata resolution was skipped
     // (knownFileSize > 0, user-provided name). Without this, the UI retains
     // the old cycle state until the first worker progress tick arrives.
+    // FIX-CYCLE-RETRY-HTTP: If this is a retry (alreadyOnDisk > 0 AND the
+    // task was previously failed), emit 'retrying' instead of 'resuming'
+    // so the UI shows "Retrying…" rather than "Resuming…" — giving the
+    // user clear feedback that the previous attempt failed and the engine
+    // is retrying, not just resuming from disk.
     // FIX-CYCLE-TOR-START: Torrents also need 'starting' before
     // 'fetching_metadata' so the UI shows an active spinner immediately
     // instead of retaining the previous cycle state until metadata arrives.
@@ -1445,79 +1488,50 @@ class DownloadEngine {
         }
       }
     }
-    // FIX-CYCLE-TOR-START-SUMMARY: Pre-compute torrent file-level summaries
-    // for the 'starting'/'resuming' emission so the details screen has
-    // totalFiles, completedFiles, totalFileBytes, and downloadedFileBytes
-    // from the very first tick — not just the raw file list.
-    final List<Map<String, dynamic>>? startingTorrentFiles =
-        isTorrent ? getTorrentFiles?.call() : null;
-    int? startingTotalFiles;
-    int? startingCompletedFiles;
-    int? startingTotalFileBytes;
-    int? startingDownloadedFileBytes;
-    if (startingTorrentFiles != null && startingTorrentFiles.isNotEmpty) {
-      final selected = startingTorrentFiles
-          .where((f) => (f['selected'] as bool?) ?? true)
-          .toList();
-      startingTotalFiles = selected.length;
-      startingTotalFileBytes = selected.fold<int>(
-        0,
-        (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0),
-      );
-      startingDownloadedFileBytes = selected.fold<int>(
-        0,
-        (sum, f) {
-          final len = (f['length'] as num?)?.toInt() ?? 0;
-          final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-          return sum + (len > 0 ? dl.clamp(0, len) : 0);
-        },
-      );
-      startingCompletedFiles = selected.where((f) {
-        final length = (f['length'] as num?)?.toInt() ?? 0;
-        final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-        return length == 0 || dl >= length;
-      }).length;
+    // FIX-CYCLE-TOR-DEDUP: Skip the main 'starting'/'resuming' emission for
+    // torrents — _handleTorrentDownload emits its own 'starting'/'resuming'
+    // with the same file-level data, so emitting here causes a duplicate
+    // progress update that can flicker the UI. HTTP and YouTube downloads
+    // still need this emission because they go through the isolate pool.
+    if (!isTorrent) {
+      onProgress(DownloadProgress(
+        // FIX-RESUME-BYTES: Report actual on-disk bytes on 'starting' so
+        // the progress bar doesn't drop to 0 on resume.
+        // FIX-RESUME-CYCLE: Use 'resuming' when there are bytes already
+        // on disk (alreadyOnDisk > 0) to distinguish a resume from a fresh
+        // start, giving the user clearer cycle feedback.
+        downloadedBytes: alreadyOnDisk,
+        fileSize: resolvedFileSize,
+        speed: 0.0,
+        eta: null,
+        fileName: resolvedFileName,
+        supportsResume: resolvedSupportsResume,
+        // FIX-CYCLE-RETRY-HTTP: Distinguish retry from resume using the
+        // isRetry parameter. When the orchestrator signals a retry (previous
+        // attempt failed), emit 'retrying' so the UI shows "Retrying…"
+        // instead of "Resuming…". When the user manually resumes a paused
+        // download, emit 'resuming'. For fresh downloads with no bytes on
+        // disk, emit 'starting'.
+        cycleState: isRetry
+            ? 'retrying'
+            : (alreadyOnDisk > 0 ? 'resuming' : 'starting'),
+        ytStreamKind: ytStreamKind,
+        ytCounterpartSize: ytCounterpartSize,
+        ytCounterpartDownloadedBytes: ytStartingCounterpartBytes,
+        // FIX-YT-START-LIVE: Include this stream's live bytes so the
+        // combined audio+video progress bar is accurate from the first tick.
+        ytDownloadedBytes: alreadyOnDisk,
+        // FIX-STARTING-CHUNKS: Include per-chunk details on 'starting' so
+        // the HTTP details screen shows per-part progress immediately on
+        // resume instead of waiting for the first worker tick.
+        chunkDetails: startingChunkDetails,
+        totalChunks: startingTotalChunks,
+        completedChunks: startingCompletedChunks,
+      ));
     }
 
-    onProgress(DownloadProgress(
-      // FIX-RESUME-BYTES: Report actual on-disk bytes on 'starting' so
-      // the progress bar doesn't drop to 0 on resume.
-      // FIX-RESUME-CYCLE: Use 'resuming' when there are already bytes
-      // on disk (alreadyOnDisk > 0) to distinguish a resume from a fresh
-      // start, giving the user clearer cycle feedback.
-      downloadedBytes: alreadyOnDisk,
-      fileSize: resolvedFileSize,
-      speed: 0.0,
-      eta: null,
-      fileName: resolvedFileName,
-      supportsResume: resolvedSupportsResume,
-      cycleState: alreadyOnDisk > 0 ? 'resuming' : 'starting',
-      ytStreamKind: ytStreamKind,
-      ytCounterpartSize: ytCounterpartSize,
-      ytCounterpartDownloadedBytes: ytStartingCounterpartBytes,
-      // FIX-YT-START-LIVE: Include this stream's live bytes so the
-      // combined audio+video progress bar is accurate from the first tick.
-      ytDownloadedBytes: alreadyOnDisk,
-      // FIX-CYCLE-TOR-FILES: Include torrent file list at 'starting' so the
-      // details screen can render the file tree immediately for .torrent
-      // downloads where files are known before the engine starts.
-      torrentFiles: startingTorrentFiles,
-      // FIX-STARTING-CHUNKS: Include per-chunk details on 'starting' so
-      // the HTTP details screen shows per-part progress immediately on
-      // resume instead of waiting for the first worker tick.
-      chunkDetails: startingChunkDetails,
-      totalChunks: startingTotalChunks,
-      completedChunks: startingCompletedChunks,
-      // FIX-CYCLE-TOR-START-SUMMARY: Include torrent file-level summaries
-      // at 'starting'/'resuming' so the details screen has file counts,
-      // byte totals, and completed-file counts from the very first tick.
-      totalFiles: startingTotalFiles,
-      completedFiles: startingCompletedFiles,
-      totalFileBytes: startingTotalFileBytes,
-      downloadedFileBytes: startingDownloadedFileBytes,
-    ));
-
     final pool = await _ensurePool();
+    await _ensurePool();
     final job = pool.submit(command);
     final completer = Completer<void>();
     bool acked = false;
@@ -1667,11 +1681,18 @@ class DownloadEngine {
             // preserved data (chunks, torrent files, YT audio+video) so
             // the UI shows "Updating links…" while the orchestrator
             // refreshes URLs and re-submits the job.
+            // FIX-YT-UPDATING-LIVE: Read BOTH streams' live bytes fresh
+            // from the cache so the combined audio+video progress bar
+            // retains the most accurate data during URL refresh. The
+            // spawn-time ytCounterpartDownloadedBytes may be stale if the
+            // counterpart stream progressed between the last tick and the
+            // URL expiry error.
             final ytUlcId = _ytCounterpartTaskIds[taskId];
             final ytUlcLiveCp =
                 ytUlcId != null ? DownloadEngine._ytLiveBytes[ytUlcId] : null;
+            final ytUlcLiveSelf = DownloadEngine._ytLiveBytes[taskId];
             onProgress(DownloadProgress(
-              downloadedBytes: lastDownloadedBytes,
+              downloadedBytes: ytUlcLiveSelf ?? lastDownloadedBytes,
               fileSize: lastFileSize,
               speed: 0.0,
               eta: null,
@@ -1683,7 +1704,7 @@ class DownloadEngine {
               ytCounterpartSize: ytCounterpartSize,
               ytCounterpartDownloadedBytes:
                   ytUlcLiveCp ?? ytCounterpartDownloadedBytes,
-              ytDownloadedBytes: DownloadEngine._ytLiveBytes[taskId],
+              ytDownloadedBytes: ytUlcLiveSelf,
               chunkDetails: lastChunkDetails,
               totalChunks: lastTotalChunks,
               completedChunks: lastCompletedChunks,
@@ -1701,9 +1722,16 @@ class DownloadEngine {
             break;
           }
 
-          // FIX-CYCLE-FAILED: Emit 'failed' with all preserved data so
-          // the details screen retains chunk/file/YT visibility and the
-          // user can see exactly how far the download got before failing.
+          // FIX-CYCLE-RETRYABLE: For error types that are auto-retryable
+          // (connectionTimeout, connectionError, receiveTimeout, sendTimeout),
+          // emit 'retrying' instead of 'failed' so the UI shows "Retrying…"
+          // and the user knows the engine hasn't given up. The orchestrator
+          // will catch and retry these. Non-retryable errors (diskFull,
+          // integrity, badResponse) still emit 'failed'.
+          final isRetryable = errorType == 'connectionTimeout' ||
+              errorType == 'connectionError' ||
+              errorType == 'receiveTimeout' ||
+              errorType == 'sendTimeout';
           final ytFailCid = _ytCounterpartTaskIds[taskId];
           final ytFailLiveCp =
               ytFailCid != null ? DownloadEngine._ytLiveBytes[ytFailCid] : null;
@@ -1714,8 +1742,8 @@ class DownloadEngine {
             eta: null,
             fileName: resolvedFileName,
             supportsResume: resolvedSupportsResume,
-            statusMessage: errorMsg,
-            cycleState: 'failed',
+            statusMessage: isRetryable ? 'Retrying: $errorMsg' : errorMsg,
+            cycleState: isRetryable ? 'retrying' : 'failed',
             ytStreamKind: ytStreamKind,
             ytCounterpartSize: ytCounterpartSize,
             ytCounterpartDownloadedBytes:
@@ -2405,6 +2433,33 @@ class DownloadEngine {
           knownFileSize: effectiveSize,
           getTorrentFiles: getTorrentFiles,
         );
+        // FIX-CYCLE-CHECKING: Emit 'checking' completion transition with
+        // full file-level data so the details screen retains per-file
+        // percentages, file counts, and byte summaries after recheck
+        // finishes and before the torrent resumes downloading.
+        final postCheckFiles = getTorrentFiles?.call();
+        final postCheckSummary = normalizeTorrentFiles(postCheckFiles);
+        onProgress(DownloadProgress(
+          downloadedBytes: postCheckSummary.downloaded,
+          fileSize: postCheckSummary.bytes > 0
+              ? postCheckSummary.bytes
+              : effectiveSize,
+          speed: 0.0,
+          eta: null,
+          supportsResume: true,
+          torrentFiles: postCheckFiles,
+          statusMessage: 'Starting download…',
+          cycleState: 'starting',
+          torrentId: id,
+          totalFiles:
+              postCheckSummary.total > 0 ? postCheckSummary.total : null,
+          completedFiles:
+              postCheckSummary.total > 0 ? postCheckSummary.done : null,
+          totalFileBytes:
+              postCheckSummary.bytes > 0 ? postCheckSummary.bytes : null,
+          downloadedFileBytes:
+              postCheckSummary.bytes > 0 ? postCheckSummary.downloaded : null,
+        ));
       }
       if (cancelToken.isCancelled) return;
 
@@ -2421,17 +2476,20 @@ class DownloadEngine {
       if (!cancelToken.isCancelled) {
         // FIX-CYCLE-RETRY: Don't emit 'failed' for TorrentEnginePauseException
         // — the 'retrying' state was already emitted in _listenForCompletion
-        // with full file-level data (files, per-file percentages, file
-        // counts, byte summaries). The orchestrator will catch this
-        // exception and retry. Emitting 'failed' here would override the
-        // 'retrying' state, causing the UI to flash "Failed" instead of
-        // "Retrying…" and losing the retry context.
+        // with full file-level data. The orchestrator will catch this
+        // exception and retry.
         if (e is! TorrentEnginePauseException) {
-          // FIX-CYCLE-FAILED: Emit a 'failed' progress update so the UI
-          // transitions immediately instead of retaining the last state.
-          // FIX-TOR-FAILED-DATA: Preserve torrent file tree, per-file
-          // percentages, and file-level summary so the details screen
-          // retains all data instead of going blank on failure.
+          // FIX-CYCLE-RETRYABLE: For DioException types that are
+          // auto-retryable (connectionTimeout, connectionError,
+          // receiveTimeout), emit 'retrying' instead of 'failed' so the
+          // UI shows "Retrying…" and the user knows the engine hasn't
+          // given up. The orchestrator will catch and retry these.
+          // Non-retryable errors (diskFull, integrity) still emit 'failed'.
+          final isRetryable = e is DioException &&
+              (e.type == DioExceptionType.connectionTimeout ||
+                  e.type == DioExceptionType.connectionError ||
+                  e.type == DioExceptionType.receiveTimeout ||
+                  e.type == DioExceptionType.sendTimeout);
           final failedFiles = getTorrentFiles?.call();
           final fSummary = normalizeTorrentFiles(failedFiles);
           onProgress(DownloadProgress(
@@ -2441,8 +2499,10 @@ class DownloadEngine {
             eta: null,
             supportsResume: true,
             torrentFiles: failedFiles,
-            statusMessage: 'Failed: ${e.toString()}',
-            cycleState: 'failed',
+            statusMessage: isRetryable
+                ? 'Retrying: ${e.toString()}'
+                : 'Failed: ${e.toString()}',
+            cycleState: isRetryable ? 'retrying' : 'failed',
             totalFiles: fSummary.total > 0 ? fSummary.total : null,
             completedFiles: fSummary.total > 0 ? fSummary.done : null,
             totalFileBytes: fSummary.bytes > 0 ? fSummary.bytes : null,
@@ -3125,8 +3185,56 @@ class DownloadEngine {
           stateLabel == 'finished';
       final isFullyDownloaded =
           totalSize > 0 ? downloadedBytes >= totalSize : isStableFinished;
-      final isCompleted =
-          isFullyDownloaded && !isCheckingOrMetadata && isStableFinished;
+      // FIX-SEEDING-COMPLETE: Only complete the engine if seeding is disabled,
+      // or the torrent finished without entering seeding state. Otherwise,
+      // keep the engine alive to emit live upload speed and 'seeding' state.
+      // FIX-CYCLE-SEEDING-DATA: When torrent is seeding and seeding is
+      // enabled, emit 'seeding' cycle state with full file-level data
+      // (all files complete, per-file percentages at 100%, upload speed
+      // distributed across selected files) so the details screen retains
+      // single-file percentage visibility during seeding.
+      final isSeedingActive = stateLabel == 'seeding' &&
+          SettingsProvider.instance.globalTorrentSeeding &&
+          !isCheckingOrMetadata;
+      if (isSeedingActive && !completer.isCompleted) {
+        int sFiles = 0, sDoneFiles = 0, sTotalBytes = 0, sDlBytes = 0;
+        if (resolvedFiles != null) {
+          for (final f in resolvedFiles) {
+            if (isTorrentFileSelected(f)) {
+              final len = (f['length'] as num?)?.toInt() ?? 0;
+              final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+              sFiles++;
+              sTotalBytes += len;
+              sDlBytes += dl.clamp(0, len);
+              if (len == 0 || dl >= len) sDoneFiles++;
+            }
+          }
+        }
+        onProgress(DownloadProgress(
+          downloadedBytes: downloadedBytes,
+          fileSize: totalSize,
+          speed: torrent.uploadRate.toDouble(),
+          eta: null,
+          fileName: resolvedName,
+          torrentFiles: resolvedFiles,
+          supportsResume: true,
+          statusMessage: 'Seeding',
+          cycleState: 'seeding',
+          totalFiles: sFiles > 0 ? sFiles : null,
+          completedFiles: sFiles > 0 ? sDoneFiles : null,
+          totalFileBytes: sTotalBytes > 0 ? sTotalBytes : null,
+          downloadedFileBytes: sTotalBytes > 0 ? sDlBytes : null,
+          torrentId: id,
+        ));
+        return; // keep listening; don't complete
+      }
+
+      final shouldComplete = isFullyDownloaded &&
+          !isCheckingOrMetadata &&
+          (stateLabel == 'finished' ||
+              stateLabel == 'completed' ||
+              (stateLabel == 'seeding' &&
+                  !SettingsProvider.instance.globalTorrentSeeding));
 
       // FIX F-1: Report upload speed while seeding, download speed otherwise.
       final isSeedingNow = stateLabel == 'seeding';
@@ -3212,20 +3320,28 @@ class DownloadEngine {
         // stalled, queued, finished, and completed all fell through to
         // 'downloading', causing the UI to show an active spinner on a
         // failed, idle, or finished torrent.
-        final torCycle = stateLabel == 'seeding'
-            ? 'seeding'
-            : stateLabel == 'paused' || stateLabel == 'stopped'
-                ? 'paused'
-                : stateLabel == 'downloading' || stateLabel.contains('stalled')
-                    ? 'downloading'
-                    : stateLabel == 'error'
-                        ? 'failed'
-                        : stateLabel == 'finished' || stateLabel == 'completed'
-                            ? 'completed'
-                            : stateLabel == 'queued' ||
-                                    stateLabel == 'allocating'
-                                ? 'starting'
-                                : 'downloading';
+        // FIX-CYCLE-COMPLETE-OVERRIDE: If shouldComplete is true (fully
+        // downloaded and seeding disabled), force 'completed' cycle state
+        // so the UI doesn't briefly show 'seeding' before the engine
+        // completes and the orchestrator marks the task as finished.
+        final torCycle = shouldComplete
+            ? 'completed'
+            : stateLabel == 'seeding'
+                ? 'seeding'
+                : stateLabel == 'paused' || stateLabel == 'stopped'
+                    ? 'paused'
+                    : stateLabel == 'downloading' ||
+                            stateLabel.contains('stalled')
+                        ? 'downloading'
+                        : stateLabel == 'error'
+                            ? 'failed'
+                            : stateLabel == 'finished' ||
+                                    stateLabel == 'completed'
+                                ? 'completed'
+                                : stateLabel == 'queued' ||
+                                        stateLabel == 'allocating'
+                                    ? 'starting'
+                                    : 'downloading';
         onProgress(DownloadProgress(
           downloadedBytes: downloadedBytes,
           fileSize: totalSize,
@@ -3235,6 +3351,15 @@ class DownloadEngine {
           torrentFiles: resolvedFiles,
           supportsResume: true,
           cycleState: torCycle,
+          statusMessage: torCycle == 'seeding'
+              ? 'Seeding'
+              : torCycle == 'downloading'
+                  ? 'Downloading'
+                  : torCycle == 'paused'
+                      ? 'Paused'
+                      : torCycle == 'completed'
+                          ? 'Completed'
+                          : 'Processing…',
           totalFiles: tFiles > 0 ? tFiles : null,
           completedFiles: tFiles > 0 ? dFiles : null,
           totalFileBytes: tBytes > 0 ? tBytes : null,
@@ -3242,7 +3367,7 @@ class DownloadEngine {
           torrentId: id,
         ));
       }
-      if (isCompleted && !completer.isCompleted) completer.complete();
+      if (shouldComplete && !completer.isCompleted) completer.complete();
     });
 
     cancelToken.whenCancel.then((_) async {
@@ -3684,11 +3809,13 @@ class DownloadEngine {
     if (lower.contains('retry')) return 'retrying';
     if (lower.contains('failed') || lower.contains('error')) return 'failed';
     if (lower.contains('seeding')) return 'seeding';
-    // FIX-CYCLE-RESUME: Map 'resume' / 'resuming' / 'starting' to
-    // 'starting' so the UI shows an active spinner when a paused download
-    // is resumed, instead of falling through to 'downloading' which
-    // skips the starting transition animation.
-    if (lower.contains('resum') || lower.contains('starting')) {
+    // FIX-CYCLE-RESUME: Map 'resume' / 'resuming' to 'resuming' so the UI
+    // can show "Resuming…" when a paused download is resumed, instead of
+    // lumping it with 'starting'. Only map 'starting' to 'starting'.
+    if (lower.contains('resum')) {
+      return 'resuming';
+    }
+    if (lower.contains('starting')) {
       return 'starting';
     }
     return 'downloading';

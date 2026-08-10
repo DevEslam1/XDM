@@ -17,6 +17,7 @@ import 'torrent_settings_page.dart';
 import 'power_settings_page.dart';
 import 'advanced_settings_page.dart';
 import '../widgets/settings_tiles.dart';
+import '../widgets/browser_extensions_sheet.dart';
 
 Color getSettingsTabColor(int tabIndex, bool isDark) {
   return switch (tabIndex) {
@@ -247,6 +248,37 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
 
       // Category 1: Downloads
+      _SettingSearchEntry(
+        categoryTitle: isRtl ? 'التحميلات والتكامل' : 'Downloads & Plugins',
+        categoryIndex: 1,
+        settingTitle: isRtl ? 'ملحقات المتصفح (Firefox & Safari)' : 'Browser Plugins (Firefox & Safari)',
+        subtitle: isRtl
+            ? 'إلغاء تنزيلات المتصفح تلقائياً وتحويلها إلى XDM'
+            : 'Auto-intercept & redirect downloads from Firefox Android & Safari iOS',
+        keywords: const [
+          'firefox',
+          'safari',
+          'browser',
+          'extension',
+          'plugin',
+          'intercept',
+          'redirect',
+          'chrome',
+          'download'
+        ],
+        accentColor: blue,
+        builder: (ctx) => ActionTile(
+          accentColor: blue,
+          icon: Icons.extension_rounded,
+          title: isRtl
+              ? 'إعداد ملحقات المتصفح (Firefox & Safari)'
+              : 'Browser Plugins (Firefox & Safari)',
+          subtitle: isRtl
+              ? 'إلغاء تنزيلات المتصفح تلقائياً وتحويلها إلى XDM'
+              : 'Auto-intercept & redirect downloads from Firefox Android & Safari iOS',
+          onTap: () => BrowserExtensionsSheet.show(ctx),
+        ),
+      ),
       _SettingSearchEntry(
         categoryTitle: isRtl ? 'التحميلات (المحرك)' : 'Downloads (Engine)',
         categoryIndex: 1,

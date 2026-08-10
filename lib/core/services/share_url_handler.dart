@@ -19,6 +19,7 @@ class ShareUrlHandler {
     BuildContext context,
     String url, {
     required bool isShareLaunch,
+    String? prefilledName,
   }) async {
     // Validate URL scheme to reject malicious URLs (e.g., file://)
     final trimmedUrl = url.trim();
@@ -59,7 +60,7 @@ class ShareUrlHandler {
       final qualityPreset =
           streamType == 'audio' ? 'audio_only' : selected['quality'] as String?;
       final category = streamType == 'audio' ? 'Audio' : 'Video';
-      final fileName = '$title.$ext';
+      final fileName = prefilledName ?? '$title.$ext';
 
       final provider = context.read<DownloadProvider>();
       final settings = context.read<SettingsProvider>();
@@ -116,8 +117,8 @@ class ShareUrlHandler {
         }
       }
     } else {
-      String? requestedFileName;
-      if (isMagnetUrl(trimmedUrl)) {
+      String? requestedFileName = prefilledName;
+      if (requestedFileName == null && isMagnetUrl(trimmedUrl)) {
         final parsed = parseMagnetUrl(trimmedUrl);
         final dn = parsed['name'];
         if (dn != null && dn.isNotEmpty) {
@@ -154,6 +155,7 @@ class ShareUrlHandler {
     if (uri.scheme != 'dmx') return;
 
     switch (uri.host) {
+      case 'add':
       case 'share':
         final url = uri.queryParameters['url'];
         if (url != null && url.isNotEmpty) {

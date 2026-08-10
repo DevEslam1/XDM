@@ -1,0 +1,41 @@
+{
+  "manifest_version": 2,
+  "name": "XDM Download Redirect",
+  "version": "1.0.0",
+  "description": "Redirect all browser downloads to XDM app",
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  },
+  "permissions": [
+    "downloads",
+    "downloads.open",
+    "webRequest",
+    "webRequestBlocking",
+    "storage",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icons/icon-48.png"
+    }
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "xdm-redirect@dmx.app",
+      "strict_min_version": "120.0"
+    }
+  }
+}

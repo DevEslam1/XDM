@@ -73,6 +73,7 @@ class FakeDownloadEngine extends DownloadEngine {
     required int Function() speedLimitBytesPerSecond,
     required int Function() activeDownloadCount,
     int threadCount = 1,
+    bool isRetry = false,
     String? customUserAgent,
     String? referer,
     String? cookies,

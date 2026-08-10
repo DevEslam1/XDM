@@ -375,6 +375,7 @@ class _TestDownloadEngine extends DownloadEngine {
     required int Function() speedLimitBytesPerSecond,
     required int Function() activeDownloadCount,
     int threadCount = 0,
+    bool isRetry = false,
     String? customUserAgent,
     String? referer,
     bool enableProxy = false,

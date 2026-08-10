@@ -898,3 +898,84 @@ class ActionSettingTile extends StatelessWidget {
     );
   }
 }
+
+/// Standardized Action tile with leading/trailing icon and onTap callback
+class ActionTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData? icon;
+  final VoidCallback onTap;
+  final Color accentColor;
+
+  const ActionTile({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    this.icon,
+    required this.onTap,
+    required this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isRtl = L10n.isRtl(context);
+
+    return Directionality(
+      textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+      child: ListTile(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 6,
+        ),
+        leading: icon != null
+            ? Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: accentColor.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Icon(icon, color: accentColor, size: 20),
+              )
+            : null,
+        title: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+            fontFamily: 'Space Grotesk',
+            fontSize: 13.0,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+            fontFamily: 'Inter',
+            fontSize: 11.0,
+            height: 1.25,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        trailing: Icon(
+          Icons.chevron_right_rounded,
+          color: accentColor,
+          size: 20,
+        ),
+      ),
+    );
+  }
+}
+
