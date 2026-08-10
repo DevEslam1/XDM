@@ -299,7 +299,7 @@ class AdBlockerService {
       // 50,000+ domains from EasyList, EasyPrivacy, AdGuard, etc.
       // The old code only checked a hardcoded set of ~50 domains,
       // making the entire filter download pipeline useless for URL blocking.
-      if (AdBlockFilterUpdater().shouldBlock(host)) {
+      if (AdBlockFilterUpdater().shouldBlock(url)) {
         _recordBlocked(host);
         return true;
       }
@@ -515,8 +515,7 @@ $customCss
   if (window.__xdmAdBlockEarly) return;
   window.__xdmAdBlockEarly = true;
 
-  // Track ad-created intervals for targeted cleanup (see intervalCleanupJs)
-  window.__xdmAdIntervals = window.__xdmAdIntervals || [];
+
 
   // Intercept window.open popup requests ONLY for known ad URLs (BUG A3)
   var _origOpen = window.open;
@@ -655,7 +654,7 @@ $customCss
       } catch(e) {}
       return;
     }
-    return _origSend.apply(window, arguments);
+    return _origSend.apply(this, arguments);
   };
 
   // FIX #4: Do NOT wrap MutationObserver.
@@ -1301,9 +1300,9 @@ $customCss
       ),
     ];
 
-    // Add downloaded domains to native blockers (limit to 10,000 to respect platform limits)
+    // Add downloaded domains to native blockers (limit to 200 high-priority domains to maintain engine performance)
     final downloadedDomains = AdBlockFilterUpdater().allBlockedDomains;
-    for (final domain in downloadedDomains.take(10000)) {
+    for (final domain in downloadedDomains.take(200)) {
       blockers.add(
         ContentBlocker(
           trigger: ContentBlockerTrigger(

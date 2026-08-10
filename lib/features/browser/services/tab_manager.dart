@@ -4,29 +4,24 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:logging/logging.dart';
 
 import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
 import '../models/browser_tab.dart';
-import 'package:logging/logging.dart';
 import 'page_intent_classifier.dart';
 
-/// Signature matching the screen's `_createNewTab` factory — building a tab
-/// (WebViewController + NavigationDelegate) stays on the screen.
+/// Signature matching the screen's `_createNewTab` factory.
 typedef CreateTabCallback = BrowserTab Function(
-    {String initialUrl, bool isIncognito, String? id, bool autoLoad});
+    {String initialUrl, bool isIncognito, String? id, bool autoLoad, TabOrigin origin});
 
-/// Owns the open-tab list, the active index, tab persistence/restore, and
-/// the screen's pending-timer bookkeeping (REFACTOR B extraction from
-/// `_BrowserScreenState`).
-///
-/// It is a plain Dart class: UI concerns (setState, URL bar sync, nav state)
-/// are reached through the host callbacks passed to the constructor.
-class TabManager {
+/// Refactored ChangeNotifier owning open tabs, active index, background tab loading,
+/// atomic state mutations, and tab persistence.
+class TabManager extends ChangeNotifier {
   static final _log = Logger('TabManager');
+
   TabManager({
     required this.isActive,
-    required this.setHostState,
     required this.createTab,
     required this.resolveDatabase,
     required this.fallbackTitle,
@@ -38,37 +33,196 @@ class TabManager {
   /// Whether the host screen is still mounted.
   final bool Function() isActive;
 
-  /// Runs [fn] inside the host's setState.
-  final void Function(VoidCallback fn) setHostState;
-
   /// Builds a fully wired tab (kept on the screen — see [CreateTabCallback]).
   final CreateTabCallback createTab;
 
-  /// Lazily resolves the database service (Provider lookup on the screen).
+  /// Lazily resolves the database service.
   final DatabaseService Function() resolveDatabase;
 
   /// Localized title for restored blank tabs.
   final String Function() fallbackTitle;
 
-  /// Clears per-tab detection state (delegated to the media sniffer).
+  /// Clears per-tab detection state.
   final void Function(String tabId) cleanupTabState;
 
-  /// Syncs the address bar with the active tab after a restore.
+  /// Syncs the address bar with the active tab after a switch or restore.
   final VoidCallback syncUrlController;
 
   /// Refreshes back/forward navigation state.
   final VoidCallback updateNavState;
 
-  final List<BrowserTab> tabs = [];
-  int currentIndex = 0;
+  final List<BrowserTab> _tabs = [];
+  int _currentIndex = 0;
+  final List<String> _tabIdHistory = [];
+
+  /// Maximum allowed background ad/popup tabs before auto-eviction.
+  final int _maxUnvisitedAdTabs = 3;
 
   /// In-flight page load timers registered by the screen.
   final List<Timer> pendingTimers = [];
   final Set<String> _disposedTabIds = {};
 
-  BrowserTab? get activeTab => (currentIndex >= 0 && currentIndex < tabs.length)
-      ? tabs[currentIndex]
-      : null;
+  List<BrowserTab> get tabs => List.unmodifiable(_tabs);
+  int get currentIndex => _currentIndex;
+  set currentIndex(int value) {
+    if (value >= 0 && value < _tabs.length) {
+      _currentIndex = value;
+      notifyListeners();
+    }
+  }
+
+  BrowserTab? get activeTab =>
+      (_currentIndex >= 0 && _currentIndex < _tabs.length)
+          ? _tabs[_currentIndex]
+          : null;
+
+  /// Switches active tab smoothly by index.
+  void switchToTab(int index) {
+    if (index < 0 || index >= _tabs.length || index == _currentIndex) return;
+    final oldTab = activeTab;
+    if (oldTab != null) {
+      if (_tabIdHistory.isEmpty || _tabIdHistory.last != oldTab.id) {
+        _tabIdHistory.add(oldTab.id);
+      }
+    }
+    _currentIndex = index;
+    notifyListeners();
+    syncUrlController();
+    updateNavState();
+  }
+
+  /// Switches active tab relative to current index (e.g. +1, -1).
+  void switchToTabRelative(int offset) {
+    if (_tabs.length <= 1) return;
+    final newIndex =
+        ((_currentIndex + offset) % _tabs.length + _tabs.length) % _tabs.length;
+    switchToTab(newIndex);
+  }
+
+  /// Opens a new tab with optional background loading logic.
+  void openInNewTab(
+    String url, {
+    bool switchToTab = false,
+    TabOrigin origin = TabOrigin.userDirect,
+    bool isIncognito = false,
+  }) {
+    if (!isActive() || url.isEmpty) return;
+
+    // 1. Evict stale background ad/popup tabs atomically before adding
+    _evictStaleAdTabsInternal();
+
+    // 2. Construct the new tab
+    final newTab = createTab(
+      initialUrl: url,
+      isIncognito: isIncognito,
+      origin: origin,
+    );
+    _tabs.add(newTab);
+
+    // 3. Update current index if switching or keep focus on active tab
+    if (switchToTab) {
+      final oldActive = activeTab;
+      if (oldActive != null) {
+        if (_tabIdHistory.isEmpty || _tabIdHistory.last != oldActive.id) {
+          _tabIdHistory.add(oldActive.id);
+        }
+      }
+      _currentIndex = _tabs.length - 1;
+      syncUrlController();
+      updateNavState();
+    }
+
+    notifyListeners();
+    saveTabs();
+  }
+
+  /// Closes a tab by ID with atomic state update and smooth LRU/adjacent fallback.
+  void closeTab(String tabId) {
+    final targetIndex = _tabs.indexWhere((t) => t.id == tabId);
+    if (targetIndex == -1) return;
+
+    final isClosingActive = targetIndex == _currentIndex;
+    final closingTab = _tabs[targetIndex];
+
+    cleanupTabState(closingTab.id);
+
+    // Atomic removal and index recalculation
+    _tabs.removeAt(targetIndex);
+    _tabIdHistory.removeWhere((id) => id == tabId);
+
+    if (_tabs.isEmpty) {
+      final fallback = createTab();
+      _tabs.add(fallback);
+      _currentIndex = 0;
+    } else if (isClosingActive) {
+      int nextIndex = -1;
+      while (_tabIdHistory.isNotEmpty) {
+        final lastId = _tabIdHistory.removeLast();
+        final idx = _tabs.indexWhere((t) => t.id == lastId);
+        if (idx != -1) {
+          nextIndex = idx;
+          break;
+        }
+      }
+      if (nextIndex == -1) {
+        nextIndex = targetIndex.clamp(0, _tabs.length - 1);
+      }
+      _currentIndex = nextIndex;
+    } else if (targetIndex < _currentIndex) {
+      _currentIndex = (_currentIndex - 1).clamp(0, _tabs.length - 1);
+    }
+
+    notifyListeners();
+    syncUrlController();
+    updateNavState();
+    saveTabs();
+
+    // Post-frame disposal prevents double-dispose or widget unmount crashes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_disposedTabIds.contains(closingTab.id)) {
+        _disposedTabIds.add(closingTab.id);
+        closingTab.dispose();
+      }
+    });
+  }
+
+  /// Safely evicts stale unvisited ad/popup tabs without interrupting the active tab.
+  void evictStaleAdTabs() {
+    if (_evictStaleAdTabsInternal()) {
+      notifyListeners();
+      saveTabs();
+    }
+  }
+
+  bool _evictStaleAdTabsInternal() {
+    final activeId = activeTab?.id;
+    final candidates = _tabs
+        .where((t) =>
+            (t.origin == TabOrigin.adOrPopup ||
+                t.origin == TabOrigin.redirect) &&
+            t.id != activeId)
+        .toList()
+      ..sort((a, b) => a.lastVisitedAt.compareTo(b.lastVisitedAt));
+
+    bool mutated = false;
+    while (candidates.length >= _maxUnvisitedAdTabs) {
+      final oldest = candidates.removeAt(0);
+      _log.info('[TabManager] Evicting stale background ad tab: ${oldest.url}');
+      cleanupTabState(oldest.id);
+      _tabs.remove(oldest);
+      mutated = true;
+      if (_currentIndex >= _tabs.length) {
+        _currentIndex = _tabs.length - 1;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_disposedTabIds.contains(oldest.id)) {
+          _disposedTabIds.add(oldest.id);
+          oldest.dispose();
+        }
+      });
+    }
+    return mutated;
+  }
 
   void delayed(Duration duration, VoidCallback callback) {
     late Timer timer;
@@ -79,31 +233,30 @@ class TabManager {
     pendingTimers.add(timer);
   }
 
+  @override
   void dispose() {
     for (final timer in pendingTimers) {
       timer.cancel();
     }
     pendingTimers.clear();
     _disposedTabIds.clear();
+    super.dispose();
   }
 
   Future<void> saveTabs() async {
     try {
-      // Only persist normal (non-incognito) tabs.
-      final normalTabs = tabs.where((t) => !t.isIncognito).toList();
-
+      final normalTabs = _tabs.where((t) => !t.isIncognito).toList();
       final tabsData = normalTabs
           .map(
             (tab) => {
               'id': tab.id,
               'url': tab.url,
               'title': tab.title,
-              'isIncognito': false, // always false for persisted tabs
+              'isIncognito': false,
             },
           )
           .toList();
 
-      // Determine the active tab ID, but only if it's a normal tab.
       final active = activeTab;
       final String? activeTabId;
       if (active != null && !active.isIncognito) {
@@ -123,7 +276,6 @@ class TabManager {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('browser_tabs', jsonEncode(data));
 
-      // Drift DB Synchronization (BUG TP2)
       final db = resolveDatabase();
       if (db.isInitialized) {
         final List<SavedBrowserTab> dbTabs = [];
@@ -151,7 +303,6 @@ class TabManager {
 
   Future<void> restoreTabs() async {
     if (!isActive()) return;
-    // Try Drift first (new persistence path from _quitBrowser)
     try {
       final db = resolveDatabase();
       if (db.isInitialized) {
@@ -162,10 +313,9 @@ class TabManager {
         }
       }
     } catch (e) {
-      _log.warning(
-          '[Browser] Drift restore failed, trying SharedPreferences: $e');
+      _log.warning('[Browser] Drift restore failed: $e');
     }
-    // Fall back to SharedPreferences (legacy persistence)
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final String? tabsJson = prefs.getString('browser_tabs');
@@ -182,7 +332,7 @@ class TabManager {
             final title = item['title']?.toString() ?? restoredTitle;
             final id = item['id']?.toString();
             final isIncognito = item['isIncognito'] as bool? ?? false;
-            if (isIncognito) continue; // Skip any incognito tabs (defensive)
+            if (isIncognito) continue;
             final uri = Uri.tryParse(url);
             if (uri != null &&
                 url != 'about:blank' &&
@@ -204,20 +354,18 @@ class TabManager {
             final idx = loadedTabs.indexWhere((t) => t.id == activeTabId);
             if (idx != -1) activeIdx = idx;
           }
-          setHostState(() {
-            for (final oldTab in tabs) {
-              if (_disposedTabIds.contains(oldTab.id)) continue;
-              _disposedTabIds.add(oldTab.id);
-              cleanupTabState(oldTab.id);
-            }
-            tabs
-              ..clear()
-              ..addAll(loadedTabs);
-            currentIndex = activeIdx;
-            syncUrlController();
-          });
+          for (final oldTab in _tabs) {
+            if (_disposedTabIds.contains(oldTab.id)) continue;
+            _disposedTabIds.add(oldTab.id);
+            cleanupTabState(oldTab.id);
+          }
+          _tabs
+            ..clear()
+            ..addAll(loadedTabs);
+          _currentIndex = activeIdx;
+          notifyListeners();
+          syncUrlController();
           updateNavState();
-          // Load saved URLs after platform views initialize
           loadRestoredTabs();
           return;
         }
@@ -225,19 +373,18 @@ class TabManager {
     } catch (e) {
       _log.warning('[Browser] SharedPreferences restore failed: $e');
     }
-    // Nothing to restore — create a single blank tab
+
     if (!isActive()) return;
     final fallback = createTab();
-    setHostState(() {
-      tabs
-        ..clear()
-        ..add(fallback);
-      currentIndex = 0;
-    });
+    _tabs
+      ..clear()
+      ..add(fallback);
+    _currentIndex = 0;
+    notifyListeners();
   }
 
   Future<void> applyRestoredTabs(List<SavedBrowserTab> saved) async {
-    for (final tab in tabs) {
+    for (final tab in _tabs) {
       if (_disposedTabIds.contains(tab.id)) continue;
       _disposedTabIds.add(tab.id);
       try {
@@ -258,15 +405,14 @@ class TabManager {
       if (row.isActive) activeIdx = i;
     }
     if (!isActive()) return;
-    setHostState(() {
-      tabs
-        ..clear()
-        ..addAll(newTabs);
-      currentIndex = activeIdx.clamp(0, tabs.length - 1);
-      if (tabs.isNotEmpty) {
-        syncUrlController();
-      }
-    });
+    _tabs
+      ..clear()
+      ..addAll(newTabs);
+    _currentIndex = activeIdx.clamp(0, _tabs.length - 1);
+    notifyListeners();
+    if (_tabs.isNotEmpty) {
+      syncUrlController();
+    }
     loadRestoredTabs();
   }
 
@@ -283,15 +429,12 @@ class TabManager {
             } catch (e) {
               _log.warning('[Browser] Restored active tab load error: $e');
             }
-          } else {
-            _log.info('[Browser] Restored active tab controller not ready, relying on onWebViewCreated');
           }
         }
       });
     });
   }
 
-  /// Navigate smartly based on URL/page intent classification
   Future<PageClassification> smartNavigate(
     String url, {
     bool isUserInitiated = true,
@@ -299,28 +442,21 @@ class TabManager {
   }) async {
     final classifier = PageIntentClassifier.instance;
     final classification = classifier.classifyWithContext(
-      currentUrl: currentIndex >= 0 && currentIndex < tabs.length
-          ? tabs[currentIndex].url
-          : '',
+      currentUrl: activeTab?.url ?? '',
       targetUrl: url,
       isUserInitiated: isUserInitiated,
       isFromClick: isFromClick,
     );
 
-    _log.info('[SmartNav] $url -> ${classification.intent.name} '
-        '(action: ${classification.action.name}, '
-        'confidence: ${classification.confidence.toStringAsFixed(2)})');
-
     switch (classification.action) {
       case PageAction.block:
-        _log.info('[SmartNav] BLOCKED: $url (${classification.reason})');
         return classification;
 
       case PageAction.openSameTab:
-        if (currentIndex >= 0 && currentIndex < tabs.length) {
-          final tab = tabs[currentIndex];
-          tab.url = url;
-          tab.controller?.loadUrl(
+        final active = activeTab;
+        if (active != null) {
+          active.url = url;
+          active.controller?.loadUrl(
             urlRequest: URLRequest(url: WebUri(url)),
           );
         }
@@ -329,18 +465,14 @@ class TabManager {
       case PageAction.openNewTab:
       case PageAction.openNewTabWithWarning:
       case PageAction.openNewTabWithDownloadSuggestion:
-        final newTab = createTab(initialUrl: url);
-        tabs.add(newTab);
-        currentIndex = tabs.length - 1;
+        openInNewTab(url, switchToTab: true);
         return classification;
 
       case PageAction.openBackgroundTab:
-        final newTab = createTab(initialUrl: url);
-        tabs.add(newTab);
+        openInNewTab(url, switchToTab: false);
         return classification;
 
       case PageAction.directDownload:
-        _log.info('[SmartNav] DIRECT DOWNLOAD: $url');
         return classification;
     }
   }

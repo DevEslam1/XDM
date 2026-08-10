@@ -200,7 +200,6 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   late final TabManager _tabManager = TabManager(
     isActive: () => mounted,
-    setHostState: setState,
     createTab: _createNewTab,
     resolveDatabase: () => context.read<DatabaseService>(),
     fallbackTitle: () => L10n.of(context, 'browser_new_tab'),
@@ -5337,7 +5336,55 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                           ),
                                                         ),
                                                       )
-                                                    : Stack(
+                                                         : tab.hasError
+                                                             ? Container(
+                                                                 color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                                                                 child: Center(
+                                                                   child: Column(
+                                                                     mainAxisAlignment: MainAxisAlignment.center,
+                                                                     children: [
+                                                                       const Icon(Icons.wifi_off_rounded, size: 48, color: Colors.grey),
+                                                                       const SizedBox(height: 16),
+                                                                       Text(
+                                                                         'Failed to load page',
+                                                                         style: TextStyle(
+                                                                           fontSize: 16,
+                                                                           fontWeight: FontWeight.bold,
+                                                                           color: isDark ? Colors.white : Colors.black87,
+                                                                         ),
+                                                                       ),
+                                                                       const SizedBox(height: 8),
+                                                                       Padding(
+                                                                         padding: const EdgeInsets.symmetric(horizontal: 32),
+                                                                         child: Text(
+                                                                           tab.errorDescription ?? 'Unknown error',
+                                                                           textAlign: TextAlign.center,
+                                                                           style: TextStyle(
+                                                                             fontSize: 12,
+                                                                             color: isDark ? Colors.white54 : Colors.black54,
+                                                                           ),
+                                                                         ),
+                                                                       ),
+                                                                       const SizedBox(height: 16),
+                                                                       ElevatedButton.icon(
+                                                                         style: ElevatedButton.styleFrom(
+                                                                           backgroundColor: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                                                                           foregroundColor: Colors.white,
+                                                                         ),
+                                                                         onPressed: () {
+                                                                           setState(() {
+                                                                             tab.hasError = false;
+                                                                           });
+                                                                           _safeReloadTab(tab);
+                                                                         },
+                                                                         icon: const Icon(Icons.refresh, size: 18),
+                                                                         label: const Text('Retry'),
+                                                                       ),
+                                                                     ],
+                                                                   ),
+                                                                 ),
+                                                               )
+                                                         : Stack(
                                                         children: [
                                                           InAppWebView(
                                                             initialUrlRequest: tab

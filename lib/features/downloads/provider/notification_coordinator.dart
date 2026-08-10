@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:math';
 
 // ignore_for_file: prefer_initializing_formals
 
@@ -84,8 +83,7 @@ class NotificationCoordinator {
   // handle map has finished loading. Keep the action path behind this future
   // so a valid pause/cancel action is not dropped during cold start.
   Future<void>? _handlesLoadFuture;
-  static final Random _handleRandom = Random.secure();
-  static const int _maxOpaqueHandles = 512;
+
   static const String _handleMapKey = 'dmx_opaque_handle_map';
 
   Future<void> _loadPersistedHandles() async {

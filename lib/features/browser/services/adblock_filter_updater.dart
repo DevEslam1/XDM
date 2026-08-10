@@ -573,9 +573,29 @@ class AdBlockFilterUpdater {
           File file, FilterType type) async =>
       _parseFilterLines(await file.readAsLines(), type);
 
-  bool shouldBlock(String hostname) {
-    if (hostname.isEmpty) return false;
-    final lower = hostname.toLowerCase();
+  bool shouldBlock(String hostnameOrUrl) {
+    if (hostnameOrUrl.isEmpty) return false;
+
+    String lower = hostnameOrUrl.toLowerCase();
+    String path = '';
+    if (hostnameOrUrl.contains('://')) {
+      try {
+        final uri = Uri.parse(hostnameOrUrl);
+        lower = uri.host.toLowerCase();
+        path = uri.path;
+      } catch (_) {}
+    } else if (hostnameOrUrl.contains('/')) {
+      final idx = hostnameOrUrl.indexOf('/');
+      lower = hostnameOrUrl.substring(0, idx).toLowerCase();
+      path = hostnameOrUrl.substring(idx);
+    }
+
+    // FIX #9: Check collected URL path patterns
+    if (path.isNotEmpty && _urlPatterns.isNotEmpty) {
+      for (final pattern in _urlPatterns) {
+        if (pattern.isNotEmpty && path.contains(pattern)) return true;
+      }
+    }
 
     // FIX: Check allow-list FIRST so excepted domains are never blocked,
     // even if they appear in a blocklist.

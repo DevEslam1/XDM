@@ -296,6 +296,8 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
     super.dispose();
   }
 
+  String? _errorMessage;
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
@@ -315,6 +317,28 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_errorMessage != null) ...[
+              Container(
+                padding: const EdgeInsets.all(8),
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, size: 16, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             TextField(
               controller: _nameC,
               decoration: InputDecoration(
@@ -413,7 +437,18 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
             final name = _nameC.text.trim();
             final pattern = _urlC.text.trim();
             final code = _codeC.text.trim();
-            if (name.isEmpty || pattern.isEmpty || code.isEmpty) return;
+            if (name.isEmpty) {
+              setState(() => _errorMessage = L10n.isRtl(context) ? 'يرجى إدخال اسم السكريبت' : 'Please enter script name');
+              return;
+            }
+            if (pattern.isEmpty) {
+              setState(() => _errorMessage = L10n.isRtl(context) ? 'يرجى إدخال نمط الرابط' : 'Please enter URL pattern');
+              return;
+            }
+            if (code.isEmpty) {
+              setState(() => _errorMessage = L10n.isRtl(context) ? 'يرجى إدخال الكود' : 'Please enter script code');
+              return;
+            }
             Navigator.pop(
               context,
               _ScriptResult(name, pattern, code, _isCss, _permissions),

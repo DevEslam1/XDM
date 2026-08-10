@@ -24,6 +24,8 @@ class BrowserTab {
   bool hasCrashed;
   bool isTimedOut;
   bool isSuspended;
+  bool hasError;
+  String? errorDescription;
   final ValueNotifier<double> progressNotifier;
   bool isHome;
   bool canGoBack;
@@ -45,6 +47,8 @@ class BrowserTab {
     this.hasCrashed = false,
     this.isTimedOut = false,
     this.isSuspended = false,
+    this.hasError = false,
+    this.errorDescription,
     double progress = 0.0,
     this.isHome = true,
     this.canGoBack = false,
