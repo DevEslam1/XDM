@@ -896,6 +896,11 @@ class HttpTransferJob {
       // up the surviving chunks.
       if (e is DioException && e.type == DioExceptionType.cancel) {
         st.status = DmxStateStatus.paused;
+        // FIX-CYCLE-PAUSE: Emit progress with 'paused' cycle state so the
+        // UI immediately transitions from 'downloading' to 'paused'
+        // instead of retaining the last downloading tick until the
+        // orchestrator processes the cancel error.
+        _emitProgress(0, statusMessage: 'Paused');
       } else if (e is! _RangeUnsupportedException) {
         // FIX-11: Tag the state with whether resume is still safe. If at
         // least one chunk has proven bytes, the next start can resume from
@@ -907,6 +912,13 @@ class HttpTransferJob {
         st.migrationNote =
             '${st.migrationNote ?? ''} ${anyProven ? 'resumable' : 'restartRequired'}'
                 .trim();
+        // FIX-CYCLE-FAIL: Emit progress with 'failed' cycle state so the
+        // UI immediately shows the failed state with the correct
+        // downloaded-bytes snapshot, instead of retaining the last
+        // 'downloading' tick. The orchestrator also receives the error
+        // message, but this progress tick ensures the cycle-state chip
+        // and progress bar update atomically.
+        _emitProgress(0, statusMessage: 'Failed');
       }
       try {
         await writer.flushAll();
@@ -1435,14 +1447,21 @@ class HttpTransferJob {
       } on DioException catch (e) {
         if (e.type == DioExceptionType.cancel) {
           _state!.status = DmxStateStatus.paused;
+          // FIX-CYCLE-PAUSE: Emit 'paused' cycle state so the UI shows
+          // 'Paused' immediately instead of retaining 'downloading'.
+          _emitProgress(0, statusMessage: 'Paused');
           rethrow;
         }
         if (e.message == 'HTML_INSTEAD_OF_MEDIA') {
           _state!.status = DmxStateStatus.failed;
+          // FIX-CYCLE-FAIL: Emit 'failed' cycle state before rethrowing.
+          _emitProgress(0, statusMessage: 'Failed');
           rethrow;
         }
         if (e.message?.startsWith('Server rejected resume') == true) {
           _state!.status = DmxStateStatus.failed;
+          // FIX-CYCLE-FAIL: Emit 'failed' cycle state before rethrowing.
+          _emitProgress(0, statusMessage: 'Failed');
           rethrow;
         }
         final status = e.response?.statusCode;
@@ -1452,6 +1471,9 @@ class HttpTransferJob {
             status != 408 &&
             status != 429) {
           _state!.status = DmxStateStatus.failed;
+          // FIX-CYCLE-FAIL: Emit 'failed' cycle state before rethrowing
+          // on non-retryable 4xx errors.
+          _emitProgress(0, statusMessage: 'Failed');
           rethrow;
         }
         if (attempts >= maxAttempts) {
@@ -1465,6 +1487,9 @@ class HttpTransferJob {
                 statusMessage: 'Retrying (mirror failover)…');
             continue;
           }
+          // FIX-CYCLE-FAIL: Emit 'failed' cycle state before rethrowing
+          // when all retry attempts AND all mirrors are exhausted.
+          _emitProgress(0, statusMessage: 'Failed');
           rethrow;
         }
         _emitProgress(_stopwatch.elapsedMilliseconds,
@@ -1493,6 +1518,11 @@ class HttpTransferJob {
       } else {
         st.status = DmxStateStatus.failed;
         await StateStore.save(cmd.tempFilePath, st);
+        // FIX-CYCLE-FAIL: Emit 'failed' cycle state before throwing the
+        // integrity exception so the UI shows 'Failed' immediately with
+        // the correct byte snapshot, instead of retaining 'downloading'
+        // until the orchestrator processes the error.
+        _emitProgress(0, statusMessage: 'Failed');
         throw DownloadIntegrityException(
             'expected ${st.totalSize} bytes, got $actualLen');
       }
@@ -1760,6 +1790,9 @@ class HttpTransferJob {
         final msg = statusMessage?.toLowerCase() ?? '';
         if (msg.contains('updating links')) return 'updating_links';
         if (msg.contains('retrying')) return 'retrying';
+        if (msg.contains('restarting') || msg.contains('source changed')) {
+          return 'retrying';
+        }
         if (msg.contains('checking')) return 'checking';
         if (msg.contains('seeding')) return 'seeding';
         if (msg.contains('completed')) return 'completed';

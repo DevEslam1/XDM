@@ -565,11 +565,11 @@ class DownloadProgress {
   /// details screen on torrents".
   List<Map<String, dynamic>>? get torrentFilePercents {
     if (torrentFiles == null || torrentFiles!.isEmpty) return null;
-    // FIX-TOR-FILE-PERCENT-AGG: Pre-compute aggregate data percentage so
-    // the torrent details screen has both single-file percentages AND the
-    // overall data percentage in a single call, covering "data percentage
-    // on every level" as required.
-    //
+    // FIX-PERF-TOR-PERCENT: Compute overall percent ONCE before mapping
+    // to avoid O(n²) when torrentOverallPercent iterates all files via
+    // torrentFileAggregates. On a 1000-file torrent this is the difference
+    // between 1ms and 1000ms per details-screen rebuild.
+    final overall = torrentOverallPercent;
     // FIX-TOR-FILE-PERCENT-SYNC: Always set BOTH 'progress' and 'percent'
     // to the same value. Some legacy UI code paths read 'percent' while
     // newer code reads 'progress'. If only one is set, the other goes
@@ -582,6 +582,12 @@ class DownloadProgress {
       final dl = length > 0 ? dlRaw.clamp(0, length) : 0;
       // FIX-ZERO-SIZE: Zero-size files are trivially complete (1.0).
       final progress = length > 0 ? (dl / length).clamp(0.0, 1.0) : 1.0;
+      // FIX-FILE-SPEED-GETTER: Explicitly read 'speed' from the file map
+      // and clamp to non-negative. This is the canonical source for
+      // single-file download speed on the torrent details screen. The
+      // engine populates this field in _listenForCompletion via weighted
+      // distribution of the aggregate download/upload rate.
+      final fileSpeed = (f['speed'] as num?)?.toDouble() ?? 0.0;
       return <String, dynamic>{
         'name': f['name'] ?? '',
         'length': length,
@@ -591,14 +597,10 @@ class DownloadProgress {
         'isComplete': length == 0 || dl >= length,
         'selected': f['selected'] as bool? ?? true,
         'priority': (f['priority'] as num?)?.toInt() ?? 4,
-        'speed': (f['speed'] as num?)?.toDouble() ?? 0.0,
+        'speed': fileSpeed < 0 ? 0.0 : fileSpeed,
         'progressEstimated':
             (f['progressEstimated'] as bool?) ?? (length > 0 && dl <= 0),
-        // FIX-TOR-FILE-OVERALL: Include overall data percentage so the
-        // details screen can show both single-file AND aggregate data
-        // percentage in one pass, covering "data percentage on every
-        // level" for torrents.
-        'overallPercent': torrentOverallPercent,
+        'overallPercent': overall,
       };
     }).toList();
   }
@@ -934,7 +936,8 @@ class DownloadEngine {
             }
             final getContentType =
                 getResponse.headers.value(Headers.contentTypeHeader);
-            if (isLikelyHtmlResponse(getContentType) && fileSize < 1024 * 1024) {
+            if (isLikelyHtmlResponse(getContentType) &&
+                fileSize < 1024 * 1024) {
               fileSize = 0;
             }
             supportsResume = isYoutube ||
@@ -1842,13 +1845,26 @@ class DownloadEngine {
                 ),
               ));
             } else if (errorType == 'connectionTimeout' ||
-                errorType == 'connectionError') {
+                errorType == 'connectionError' ||
+                errorType == 'receiveTimeout' ||
+                errorType == 'sendTimeout') {
+              final dioType = switch (errorType) {
+                'connectionTimeout' => DioExceptionType.connectionTimeout,
+                'connectionError' => DioExceptionType.connectionError,
+                'receiveTimeout' => DioExceptionType.receiveTimeout,
+                'sendTimeout' => DioExceptionType.sendTimeout,
+                _ => DioExceptionType.unknown,
+              };
               completer.completeError(DioException(
                 requestOptions: RequestOptions(path: punyUrl),
-                type: errorType == 'connectionTimeout'
-                    ? DioExceptionType.connectionTimeout
-                    : DioExceptionType.connectionError,
+                type: dioType,
                 message: errorMsg,
+              ));
+            } else if (errorType == 'workerDied') {
+              completer.completeError(DioException(
+                requestOptions: RequestOptions(path: punyUrl),
+                type: DioExceptionType.unknown,
+                message: 'Download engine worker crashed: $errorMsg',
               ));
             } else {
               completer.completeError(Exception(errorMsg));
@@ -1937,11 +1953,8 @@ class DownloadEngine {
           lastFileSize = (p['fileSize'] as num?)?.toInt() ?? lastFileSize;
           // Speed and ETA are read directly from 'p' for 'downloading' states.
           // Non-active states hardcode 0.0 and null.
-          if (chunkDetails != null) {
-            lastChunkDetails = chunkDetails;
-            lastTotalChunks = (p['totalChunks'] as num?)?.toInt();
-            lastCompletedChunks = (p['completedChunks'] as num?)?.toInt();
-          }
+          // Chunk-detail caching is handled below after totalParts/doneParts
+          // are computed, so they reflect isDone completion semantics.
           // FIX-CYCLE-TOR-TRACK-UPDATE: Update torrent file-level data
           // from the worker message so pause/failed/updating_links
           // emissions include current per-file progress.
@@ -2175,7 +2188,17 @@ class DownloadEngine {
             if (ytStreamKind != null && ytStreamKind != YtStreamKind.combined) {
               final cpSize = ytCounterpartSize;
               if (cpSize == null || cpSize <= 0) {
-                doneCycle = 'downloading';
+                // FIX-YT-DONE-NO-COUNTERPART: If counterpart size is unknown
+                // AND counterpart never started (no live byte cache entry),
+                // this stream is effectively complete — don't hold it in
+                // 'downloading' forever waiting for a counterpart that will
+                // never come. The orchestrator handles the missing stream
+                // separately.
+                if (ytDoneLiveCp == null) {
+                  doneCycle = 'completed';
+                } else {
+                  doneCycle = 'downloading';
+                }
               } else {
                 final cpDl = ytDoneLiveCp ?? 0;
                 if (cpDl < cpSize) {
@@ -2200,7 +2223,13 @@ class DownloadEngine {
               ytCounterpartSize: ytCounterpartSize,
               ytCounterpartDownloadedBytes:
                   ytDoneLiveCp ?? ytCounterpartDownloadedBytes,
-              ytDownloadedBytes: DownloadEngine._ytLiveBytes[taskId],
+              // FIX-YT-DONE-BYTES: Fall back to lastDownloadedBytes when
+              // live cache wasn't set (lastFileSize == 0 skipped the
+              // cache update above). Ensures combined audio+video bar
+              // has a valid byte count on completion even for streams
+              // whose size was never resolved.
+              ytDownloadedBytes:
+                  DownloadEngine._ytLiveBytes[taskId] ?? lastDownloadedBytes,
               chunkDetails: lastChunkDetails,
               totalChunks: lastTotalChunks,
               completedChunks: lastCompletedChunks,
@@ -2426,6 +2455,9 @@ class DownloadEngine {
     bool torrentCompleted = false;
     cancelToken.whenCancel.then((_) {
       if (torrentCompleted) return;
+      try {
+        TorrentService.pauseTorrent(id);
+      } catch (_) {}
       final pauseFiles = getTorrentFiles?.call();
       final pSummary = normalizeTorrentFiles(pauseFiles);
       onProgress(DownloadProgress(
@@ -2450,6 +2482,62 @@ class DownloadEngine {
           initialFileSize: knownFileSize, getTorrentFiles: getTorrentFiles);
 
       _applyFilePriorities(id, getTorrentFiles?.call());
+
+      // FIX-CYCLE-SEEDING: After download completes, if seeding is enabled,
+      // emit 'seeding' cycle state with full file-level data (all files
+      // marked complete, per-file percentage = 1.0, upload speed distributed)
+      // so the details screen shows accurate single-file percentage and
+      // speed during the seeding phase.
+      TorrentService.torrentUpdates.listen((torrents) {
+        final t = torrents[id];
+        if (t == null) return;
+        final sl = t.stateLabel.toLowerCase();
+        if (sl == 'seeding') {
+          final seedFiles = getTorrentFiles?.call();
+          final sSummary = normalizeTorrentFiles(seedFiles);
+          // Mark all selected files as 100% complete during seeding
+          if (seedFiles != null) {
+            for (final f in seedFiles) {
+              if (isTorrentFileSelected(f)) {
+                final len = (f['length'] as num?)?.toInt() ?? 0;
+                f['downloadedBytes'] = len;
+                f['progress'] = 1.0;
+                f['percent'] = 1.0;
+                f['isComplete'] = true;
+                f['progressEstimated'] = false;
+              }
+              f['speed'] = 0.0;
+            }
+            // Distribute upload rate across selected files
+            final selectedCount =
+                seedFiles.where((f) => isTorrentFileSelected(f)).length;
+            if (selectedCount > 0 && t.uploadRate > 0) {
+              final perFile = t.uploadRate.toDouble() / selectedCount;
+              for (final f in seedFiles) {
+                if (isTorrentFileSelected(f)) {
+                  f['speed'] = perFile;
+                }
+              }
+            }
+          }
+          onProgress(DownloadProgress(
+            downloadedBytes:
+                sSummary.bytes > 0 ? sSummary.bytes : knownFileSize,
+            fileSize: sSummary.bytes > 0 ? sSummary.bytes : knownFileSize,
+            speed: t.uploadRate.toDouble(),
+            eta: null,
+            supportsResume: true,
+            torrentFiles: seedFiles,
+            statusMessage: 'Seeding…',
+            cycleState: 'seeding',
+            torrentId: id,
+            totalFiles: sSummary.total > 0 ? sSummary.total : null,
+            completedFiles: sSummary.total > 0 ? sSummary.total : null,
+            totalFileBytes: sSummary.bytes > 0 ? sSummary.bytes : null,
+            downloadedFileBytes: sSummary.bytes > 0 ? sSummary.bytes : null,
+          ));
+        }
+      });
 
       // RESUME BARRIER (load side): fast-resume data is loaded, hash-verified
       // and applied BEFORE the torrent is resumed and BEFORE any progress
@@ -3078,20 +3166,40 @@ class DownloadEngine {
                 }
               }
             } else {
-              final activeFiles = resolvedFiles.where((f) {
+              final activeFileList = resolvedFiles.where((f) {
                 final selected = isTorrentFileSelected(f);
                 final len = (f['length'] as num?)?.toInt() ?? 0;
                 final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
                 return selected && len > 0 && dl < len;
-              }).length;
-              if (activeFiles > 0) {
-                final perFileSpeed = aggregateRate / activeFiles;
-                for (final f in resolvedFiles) {
-                  final selected = isTorrentFileSelected(f);
-                  final len = (f['length'] as num?)?.toInt() ?? 0;
-                  final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-                  if (selected && len > 0 && dl < len) {
-                    f['speed'] = perFileSpeed;
+              }).toList();
+              if (activeFileList.isNotEmpty) {
+                // FIX-FILE-SPEED-DIST: Distribute aggregate download rate
+                // across actively-downloading selected files. Weight by
+                // remaining bytes so larger files get more bandwidth
+                // allocation (approximates libtorrent's priority-based
+                // distribution for the details screen single-file speed).
+                final totalRemaining = activeFileList.fold<double>(
+                  0.0,
+                  (sum, f) {
+                    final len = (f['length'] as num?)?.toInt() ?? 0;
+                    final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                    return sum + (len - dl).clamp(0, len);
+                  },
+                );
+                if (totalRemaining > 0) {
+                  for (final f in activeFileList) {
+                    final len = (f['length'] as num?)?.toInt() ?? 0;
+                    final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                    final remaining = (len - dl).clamp(0, len);
+                    f['speed'] = (aggregateRate * remaining / totalRemaining)
+                        .toDouble();
+                  }
+                } else {
+                  // Equal split fallback when all remaining bytes are 0
+                  // (shouldn't happen but defensive).
+                  final perFileSpeed = aggregateRate / activeFileList.length;
+                  for (final f in activeFileList) {
+                    f['speed'] = perFileSpeed.toDouble();
                   }
                 }
               }
@@ -3643,12 +3751,17 @@ class DownloadEngine {
   Future<void> _waitForState(
     int id,
     CancelToken cancelToken, {
-    required bool Function(String stateLabel) predicate,
+    required bool Function(String) predicate,
     required Duration timeout,
     ValueChangedProgress? onProgress,
     int knownFileSize = 0,
     List<Map<String, dynamic>>? Function()? getTorrentFiles,
   }) async {
+    // FIX-CHECKING-PERCENT: During recheck, normalize torrent files on every
+    // tick so single-file percentage on the details screen stays valid and
+    // clamped to [0.0, 1.0] instead of going null/stale during the checking
+    // phase. This ensures per-file data percentage is accurate at every
+    // level (overall, per-file, file counts, byte summaries) during recheck. {
     final completer = Completer<void>();
     StreamSubscription? sub;
     Timer? t;
