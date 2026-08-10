@@ -72,85 +72,26 @@ class AdBlockerDelegate {
     }
   }
 
-  /// Injects the stealth anti-detection layer — must be called **first**,
-  /// before `injectEarly`, so fake ad globals are defined before any page
-  /// script runs.
+  /// Stealth anti-detection JS injection disabled — using host-based blocking.
   void injectAntiDetect(BrowserTab tab) {
-    if (!_adBlocker.isEnabled) return;
-    final ctrl = tab.controller;
-    if (ctrl == null) return;
-    if (AdBlockerService.isYoutubePage(tab.url)) return;
-
-    final setupScript =
-        'window.__xdmDynamicAdDomains = ${_adBlocker.dynamicDomainsJson};';
-
-    // Anti-detect JS: fakes ad SDK globals, intercepts fetch/XHR/MO
-    _eval(ctrl, '$setupScript\n${_adBlocker.antiDetectJs}', 'antiDetectJs');
-
-    // Anti-detect CSS: keeps bait elements measurable but invisible.
-    // Retries until <head> exists (it may not yet at onPageStarted).
-    final cssJson = jsonEncode(_adBlocker.antiDetectCss);
-    _eval(ctrl, '''
-      (function() {
-        var css = $cssJson;
-        var applied = false;
-        function apply() {
-          if (applied) return;
-          var s = document.getElementById('xdm-antidetect-css');
-          if (!s) {
-            s = document.createElement('style');
-            s.id = 'xdm-antidetect-css';
-            if (document.head) document.head.appendChild(s);
-          }
-          if (s.parentNode) {
-            if (s.textContent !== css) s.textContent = css;
-            applied = true;
-          }
-        }
-        apply();
-        if (!applied) {
-          var tries = 0;
-          var timer = setInterval(function() {
-            tries++;
-            if (applied || tries > 250) { clearInterval(timer); return; }
-            apply();
-          }, 20);
-        }
-      })();
-    ''', 'antiDetectCss');
+    // Disabled JS injection: AdBlocker uses host domain blocking.
   }
 
-  /// Injects the early-phase blocking script (call from `onPageStarted`).
-  /// Always call `injectAntiDetect` before this.
+  /// Early phase JS injection disabled — using host-based blocking.
   void injectEarly(BrowserTab tab) {
-    if (!_adBlocker.isEnabled) return;
-    final ctrl = tab.controller;
-    if (ctrl == null) return;
-    if (AdBlockerService.isYoutubePage(tab.url)) return;
-
-    // FIX: earlyJs no longer overrides window.open or document.createElement
-    final setupScript =
-        'window.__xdmDynamicAdDomains = ${_adBlocker.dynamicDomainsJson};';
-    _eval(ctrl, '$setupScript\n${_adBlocker.earlyJs}', 'earlyJs');
-
-    // FIX #3: Inject scriptlet runner for parsed ##+js rules from filter lists.
-    final scriptlets = _adBlocker.scriptletJs;
-    if (scriptlets.isNotEmpty) {
-      _eval(ctrl, scriptlets, 'scriptletJs');
-    }
+    // Disabled JS injection: AdBlocker uses host domain blocking.
   }
-
 
   String cssRulesForUrl(String url) => _adBlocker.cssRulesForUrl(url);
 
-  /// Injects cosmetic CSS + late-phase scripts (call from `onPageFinished`).
+  /// Late phase JS injection disabled — using host-based blocking.
   void injectInto(BrowserTab tab) {
     if (!_adBlocker.isEnabled) return;
     final ctrl = tab.controller;
     if (ctrl == null) return;
     final url = tab.url;
 
-    // FIX: CSS now uses exact selectors, won't hide download buttons
+    // Apply cosmetic CSS styling only
     final cssJson = jsonEncode(cssRulesForUrl(url));
     _eval(ctrl, '''
 (function() {
@@ -163,12 +104,5 @@ class AdBlockerDelegate {
   s.textContent = $cssJson;
 })();
 ''', 'CSS');
-
-    // FIX: lateJs no longer hides elements containing download buttons
-    _eval(ctrl, _adBlocker.lateJs, 'lateJs');
-
-    if (AdBlockerService.isYoutubePage(url)) {
-      _eval(ctrl, _adBlocker.youtubeJs, 'youtubeJs');
-    }
   }
 }
