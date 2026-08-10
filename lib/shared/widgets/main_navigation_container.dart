@@ -235,7 +235,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
               canPop: currentIndex == 0,
               onPopInvokedWithResult: (didPop, result) async {
                 if (didPop) return;
-                if (currentIndex == 2) {
+                if (currentIndex != 0) {
                   Provider.of<DownloadProvider>(context, listen: false)
                       .setActiveTabIndex(0);
                 }

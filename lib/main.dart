@@ -414,9 +414,11 @@ class DmxApp extends StatelessWidget {
                         Platform.isAndroid &&
                         (settings.customDownloadPath?.isEmpty ?? true))
                     ? const PermissionRequestScreen()
-                    : (initialUrl != null && initialUrl!.trim().isNotEmpty)
-                        ? ShareLaunchScreen(url: initialUrl!)
-                        : const MainNavigationContainer(),
+                    : MainNavigationContainer(
+                        initialUrl: initialUrl,
+                        isShareLaunch:
+                            initialUrl != null && initialUrl!.trim().isNotEmpty,
+                      ),
             builder: (context, child) {
               return XdmTextScaler(
                 child: AnnotatedRegion<SystemUiOverlayStyle>(
