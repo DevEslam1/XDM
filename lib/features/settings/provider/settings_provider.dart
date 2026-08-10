@@ -109,6 +109,11 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _autoVerifyChecksumKey = 'autoVerifyChecksum';
   static const _maxTabsKey = 'maxTabs';
   static const _historyMaxEntriesKey = 'historyMaxEntries';
+  static const _forceDarkModeKey = 'forceDarkMode';
+  static const _blockImagesKey = 'blockImages';
+  static const _openLinksInAppKey = 'openLinksInApp';
+  static const _translateTargetLangKey = 'translateTargetLang';
+  static const _formAutofillKey = 'formAutofill';
 
   static const _powerAwareIsolatePoolKey = 'powerAwareIsolatePool';
   static const _thermalThreadLimitingKey = 'thermalThreadLimiting';
@@ -336,6 +341,11 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool desktopMode = false;
   bool pinchToZoom = true;
   bool saveBrowserHistory = true;
+  bool forceDarkMode = false;
+  bool blockImages = false;
+  bool openLinksInApp = false;
+  String translateTargetLang = 'en';
+  bool formAutofill = true;
 
   bool notificationsEnabled = true;
   bool quietHoursEnabled = false;
@@ -472,6 +482,12 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     _historyMaxEntries = _prefs.getInt(_historyMaxEntriesKey) ?? 500;
     saveBrowserHistory =
         _prefs.getBool(_saveBrowserHistoryKey) ?? saveBrowserHistory;
+    forceDarkMode = _prefs.getBool(_forceDarkModeKey) ?? forceDarkMode;
+    blockImages = _prefs.getBool(_blockImagesKey) ?? blockImages;
+    openLinksInApp = _prefs.getBool(_openLinksInAppKey) ?? openLinksInApp;
+    translateTargetLang =
+        _prefs.getString(_translateTargetLangKey) ?? translateTargetLang;
+    formAutofill = _prefs.getBool(_formAutofillKey) ?? formAutofill;
     notificationsEnabled = _prefs.getBool(_notificationsEnabledKey) ?? true;
     quietHoursEnabled =
         _prefs.getBool(_quietHoursEnabledKey) ?? quietHoursEnabled;
@@ -861,6 +877,36 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  Future<void> setForceDarkMode(bool value) async {
+    forceDarkMode = value;
+    await _prefs.setBool(_forceDarkModeKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setBlockImages(bool value) async {
+    blockImages = value;
+    await _prefs.setBool(_blockImagesKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setOpenLinksInApp(bool value) async {
+    openLinksInApp = value;
+    await _prefs.setBool(_openLinksInAppKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setTranslateTargetLang(String value) async {
+    translateTargetLang = value;
+    await _prefs.setString(_translateTargetLangKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setFormAutofill(bool value) async {
+    formAutofill = value;
+    await _prefs.setBool(_formAutofillKey, value);
+    notifyListeners();
+  }
+
   ThemeMode get currentThemeMode {
     switch (themeMode) {
       case 'light':
@@ -1064,6 +1110,11 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _historyMaxEntriesKey,
       _developerModeKey,
       _antiFingerprintingKey,
+      _forceDarkModeKey,
+      _blockImagesKey,
+      _openLinksInAppKey,
+      _translateTargetLangKey,
+      _formAutofillKey,
     ];
     for (final key in settingsKeys) {
       if (key == _proxyPasswordKey || key == _backendTokenKey) {
@@ -1117,6 +1168,11 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     desktopMode = false;
     pinchToZoom = true;
     saveBrowserHistory = true;
+    forceDarkMode = false;
+    blockImages = false;
+    openLinksInApp = false;
+    translateTargetLang = 'en';
+    formAutofill = true;
     notificationsEnabled = true;
     quietHoursEnabled = false;
     quietHoursStart = '23:00';
@@ -1190,6 +1246,11 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _prefs.setBool(_desktopModeKey, desktopMode);
     await _prefs.setBool(_pinchToZoomKey, pinchToZoom);
     await _prefs.setBool(_saveBrowserHistoryKey, saveBrowserHistory);
+    await _prefs.setBool(_forceDarkModeKey, forceDarkMode);
+    await _prefs.setBool(_blockImagesKey, blockImages);
+    await _prefs.setBool(_openLinksInAppKey, openLinksInApp);
+    await _prefs.setString(_translateTargetLangKey, translateTargetLang);
+    await _prefs.setBool(_formAutofillKey, formAutofill);
     await _prefs.setBool(_notificationsEnabledKey, notificationsEnabled);
     await _prefs.setBool(_quietHoursEnabledKey, quietHoursEnabled);
     await _prefs.setString(_quietHoursStartKey, quietHoursStart);

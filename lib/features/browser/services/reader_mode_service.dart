@@ -77,9 +77,10 @@ class ReaderModeService {
       bg = '#f4ecd8';
       fg = '#5b4636';
     }
-    
-    final font = fontFamily == 'serif' ? "'Georgia', serif" : "'Inter', sans-serif";
-    
+
+    final font =
+        fontFamily == 'serif' ? "'Georgia', serif" : "'Inter', sans-serif";
+
     return '''
 <!DOCTYPE html>
 <html>
@@ -124,6 +125,25 @@ class ReaderModeService {
   }) async {
     final article = await extract(controller);
     if (article == null || article.content.isEmpty) return false;
+    return rebuildReaderHtml(
+      article,
+      onLoadReaderUrl,
+      fontSize: fontSize,
+      theme: theme,
+      fontFamily: fontFamily,
+    );
+  }
+
+  /// Rebuilds the reader view for an already-extracted [article] using new
+  /// appearance settings, without re-extracting from the live page. Used by
+  /// the reader-mode controls toolbar (font size, theme, font family).
+  static Future<bool> rebuildReaderHtml(
+    ReaderArticle article,
+    void Function(String htmlUrl) onLoadReaderUrl, {
+    required double fontSize,
+    required String theme,
+    required String fontFamily,
+  }) async {
     final htmlContent = buildReaderHtml(
       article,
       fontSize: fontSize,
@@ -138,5 +158,4 @@ class ReaderModeService {
     onLoadReaderUrl(dataUri);
     return true;
   }
-
 }

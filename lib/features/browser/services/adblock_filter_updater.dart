@@ -214,6 +214,10 @@ class AdBlockFilterUpdater {
     _downloadedTrackingDomains = cachedTracking.toSet();
     _allowListedDomains = cachedExcepted.toSet();
     _urlPatterns.addAll(cachedPatterns);
+    // FIX: Populate the trie on startup so path-based blocking works immediately
+    for (final p in cachedPatterns) {
+      _urlPatternsTrie.insert(p);
+    }
     _cosmeticRules.addAll(cachedCosmetics);
     _scriptletRules.addAll(cachedScriptlets);
 
@@ -346,6 +350,8 @@ class AdBlockFilterUpdater {
     // appends to the existing sets, causing unbounded growth and duplicate
     // rules that waste memory and SharedPreferences space.
     _urlPatterns.clear();
+    _urlPatternsTrie
+        .clear(); // Bug #2 fix: trie must be cleared alongside _urlPatterns to avoid stale patterns accumulating across filter updates
     _cosmeticRules.clear();
     _siteCosmeticRules.clear();
     _cosmeticExceptions.clear();
@@ -498,7 +504,10 @@ class AdBlockFilterUpdater {
     final excepted = <String>{};
 
     for (final line in lines) {
-      if (blocked.length >= _maxDomains) break;
+      // FIX: Do not break early. Breaking causes exception rules (@@||) and
+      // cosmetic rules (##.ad) later in the file to be silently ignored.
+      // The _maxDomains limit is already safely enforced during the final
+      // prefs.setStringList save step via `.take(_maxDomains)`.
       if (line.isEmpty || line.length > _maxLineLength) continue;
 
       final trimmed = line.trim();
@@ -565,7 +574,9 @@ class AdBlockFilterUpdater {
               if (domain.startsWith('~')) {
                 final excDomain = domain.substring(1).trim();
                 if (excDomain.isNotEmpty) {
-                  _cosmeticExceptions.putIfAbsent(excDomain, () => {}).add(selector);
+                  _cosmeticExceptions
+                      .putIfAbsent(excDomain, () => {})
+                      .add(selector);
                 }
               } else {
                 _siteCosmeticRules.putIfAbsent(domain, () => {}).add(selector);
@@ -602,6 +613,7 @@ class AdBlockFilterUpdater {
       // URL path patterns: /ads/banner
       if (line.startsWith('/') && !line.startsWith('//')) {
         _urlPatterns.add(line);
+        _urlPatternsTrie.insert(line);
       }
     }
 
@@ -727,6 +739,7 @@ class AdBlockFilterUpdater {
     _allowListedDomains.clear();
     _siteCosmeticRules.clear();
     _urlPatterns.clear();
+    _urlPatternsTrie.clear();
     _cosmeticRules.clear();
     _scriptletRules.clear();
     final prefs = await SharedPreferences.getInstance();

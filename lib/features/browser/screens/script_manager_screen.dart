@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
@@ -20,6 +20,10 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
   @override
   void initState() {
     super.initState();
+    // Bug #19 fix: load() is async; fire it here and rely on
+    // notifyListeners() to rebuild the widget once loading is complete.
+    // The build() method shows a CircularProgressIndicator while
+    // manager.isLoaded is false.
     _manager.load();
   }
 
@@ -94,147 +98,152 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
           ),
         ],
       ),
-      body: manager.scripts.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.code_rounded,
-                    size: 56,
-                    color:
-                        isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    L10n.of(context, 'browser_no_scripts'),
-                    style: TextStyle(
-                      color: isDark
-                          ? AppTheme.textPrimary
-                          : AppTheme.lightTextPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    L10n.of(context, 'browser_no_scripts_desc'),
-                    style: TextStyle(
-                      color: isDark
-                          ? AppTheme.textSecondary
-                          : AppTheme.lightTextSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: manager.scripts.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 6),
-              itemBuilder: (context, i) {
-                final script = manager.scripts[i];
-                return Container(
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? (isAmoled
-                            ? AppTheme.amoledCardBg
-                            : AppTheme.glassBg.withValues(alpha: 0.4))
-                        : AppTheme.lightGlassBg.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isDark
-                          ? (isAmoled
-                              ? AppTheme.amoledBorder
-                              : AppTheme.glassBorder)
-                          : AppTheme.lightGlassBorder,
-                      width: 0.6,
-                    ),
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(14),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () => _editScript(script),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color:
-                                    (script.isCss ? AppTheme.neonGreen : accent)
-                                        .withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(
-                                script.isCss
-                                    ? Icons.palette_outlined
-                                    : Icons.code,
-                                color:
-                                    script.isCss ? AppTheme.neonGreen : accent,
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    script.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: isDark
-                                          ? AppTheme.textPrimary
-                                          : AppTheme.lightTextPrimary,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Text(
-                                    script.urlPattern,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: isDark
-                                          ? AppTheme.textMuted
-                                          : AppTheme.lightTextMuted,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: script.enabled,
-                              activeThumbColor: accent,
-                              onChanged: (val) =>
-                                  _manager.toggle(script.id, val),
-                            ),
-                            IconButton(
-                              icon: Icon(
-                                Icons.delete_outline,
-                                size: 16,
-                                color: isDark
-                                    ? AppTheme.neonRed
-                                    : AppTheme.lightNeonRed,
-                              ),
-                              tooltip: L10n.of(context, 'browser_delete'),
-                              onPressed: () => _delete(script),
-                            ),
-                          ],
+      // Bug #19 fix: show a spinner while scripts are being loaded from
+      // SharedPreferences. Once load() completes, notifyListeners() fires
+      // and the widget rebuilds with the actual script list.
+      body: !manager.isLoaded
+          ? Center(child: CircularProgressIndicator(color: accent))
+          : manager.scripts.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.code_rounded,
+                        size: 56,
+                        color:
+                            isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        L10n.of(context, 'browser_no_scripts'),
+                        style: TextStyle(
+                          color: isDark
+                              ? AppTheme.textPrimary
+                              : AppTheme.lightTextPrimary,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 6),
+                      Text(
+                        L10n.of(context, 'browser_no_scripts_desc'),
+                        style: TextStyle(
+                          color: isDark
+                              ? AppTheme.textSecondary
+                              : AppTheme.lightTextSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              },
-            ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: manager.scripts.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 6),
+                  itemBuilder: (context, i) {
+                    final script = manager.scripts[i];
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? (isAmoled
+                                ? AppTheme.amoledCardBg
+                                : AppTheme.glassBg.withValues(alpha: 0.4))
+                            : AppTheme.lightGlassBg.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isDark
+                              ? (isAmoled
+                                  ? AppTheme.amoledBorder
+                                  : AppTheme.glassBorder)
+                              : AppTheme.lightGlassBorder,
+                          width: 0.6,
+                        ),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(14),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => _editScript(script),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        (script.isCss ? AppTheme.neonGreen : accent)
+                                            .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    script.isCss
+                                        ? Icons.palette_outlined
+                                        : Icons.code,
+                                    color:
+                                        script.isCss ? AppTheme.neonGreen : accent,
+                                    size: 18,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        script.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? AppTheme.textPrimary
+                                              : AppTheme.lightTextPrimary,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Text(
+                                        script.urlPattern,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? AppTheme.textMuted
+                                              : AppTheme.lightTextMuted,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Switch(
+                                  value: script.enabled,
+                                  activeThumbColor: accent,
+                                  onChanged: (val) =>
+                                      _manager.toggle(script.id, val),
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.delete_outline,
+                                    size: 16,
+                                    color: isDark
+                                        ? AppTheme.neonRed
+                                        : AppTheme.lightNeonRed,
+                                  ),
+                                  tooltip: L10n.of(context, 'browser_delete'),
+                                  onPressed: () => _delete(script),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 }

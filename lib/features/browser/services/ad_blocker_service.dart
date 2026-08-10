@@ -1318,9 +1318,9 @@ $customCss
       ),
     ];
 
-    // Add downloaded domains to native blockers (limit to 200 high-priority domains to maintain engine performance)
+    // Add downloaded domains to native blockers (limit to 2500 high-priority domains to maintain engine performance)
     final downloadedDomains = AdBlockFilterUpdater().allBlockedDomains;
-    for (final domain in downloadedDomains.take(200)) {
+    for (final domain in downloadedDomains.take(2500)) {
       blockers.add(
         ContentBlocker(
           trigger: ContentBlockerTrigger(

@@ -719,46 +719,84 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       );
     }
 
+    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final isRtl = L10n.isRtl(context);
+
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: (isDark ? AppTheme.cardBg : AppTheme.lightCardBg)
-                  .withValues(alpha: 0.5),
-              border: Border.all(
-                color: isDark ? AppTheme.border : AppTheme.lightBorder,
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    accent.withValues(alpha: 0.2),
+                    accent.withValues(alpha: 0.05),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.15),
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Icon(
+                  isSurfing ? Icons.manage_history_rounded : Icons.cloud_off_rounded,
+                  size: 44,
+                  color: accent,
+                ),
               ),
             ),
-            child: Icon(
-              isSurfing ? Icons.history_rounded : Icons.cloud_off_outlined,
-              size: 40,
-              color: muted,
+            const SizedBox(height: 18),
+            Text(
+              isSurfing
+                  ? L10n.of(context, 'browser_no_history_found')
+                  : L10n.of(context, 'browser_no_downloads_yet'),
+              style: TextStyle(
+                color: textClr,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            isSurfing
-                ? L10n.of(context, 'browser_no_history_found')
-                : L10n.of(context, 'browser_no_downloads_yet'),
-            style: TextStyle(
-              color: textClr,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
+            const SizedBox(height: 6),
+            Text(
+              isSurfing
+                  ? L10n.of(context, 'browser_no_history_desc')
+                  : L10n.of(context, 'browser_no_downloads_desc'),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: secClr, fontSize: 12),
             ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            isSurfing
-                ? L10n.of(context, 'browser_no_history_desc')
-                : L10n.of(context, 'browser_no_downloads_desc'),
-            textAlign: TextAlign.center,
-            style: TextStyle(color: secClr, fontSize: 11),
-          ),
-        ],
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accent.withValues(alpha: 0.15),
+                foregroundColor: accent,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: accent.withValues(alpha: 0.3)),
+                ),
+              ),
+              icon: const Icon(Icons.language_rounded, size: 16),
+              label: Text(
+                isRtl ? 'تصفح الويب' : 'Explore Web',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
       ),
     );
   }

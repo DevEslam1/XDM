@@ -6,6 +6,8 @@ import '../../../core/services/database_service.dart';
 import '../../../core/utils/localization.dart';
 import '../../settings/provider/settings_provider.dart';
 
+import '../../../core/utils/haptic_helper.dart';
+
 enum SuggestionType { url, search, bookmark, history }
 
 class _Suggestion {
@@ -46,7 +48,7 @@ class SmartUrlBar extends StatefulWidget {
   State<SmartUrlBar> createState() => _SmartUrlBarState();
 }
 
-class _SmartUrlBarState extends State<SmartUrlBar> {
+class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
   List<_Suggestion> _suggestions = [];
   Timer? _debounce;
   final LayerLink _layerLink = LayerLink();
@@ -70,6 +72,12 @@ class _SmartUrlBarState extends State<SmartUrlBar> {
   }
 
   void _onFocusChanged() {
+    if (widget.focusNode.hasFocus) {
+      try {
+        final settings = context.read<SettingsProvider>();
+        lightPulse(settings);
+      } catch (_) {}
+    }
     if (!widget.focusNode.hasFocus) {
       _removeOverlay();
     } else if (widget.controller.text.isNotEmpty) {
@@ -425,18 +433,28 @@ class _SmartUrlBarState extends State<SmartUrlBar> {
                 padding: EdgeInsets.zero,
                 constraints:
                     const BoxConstraints(minWidth: 32, minHeight: 32),
-                icon: Icon(
-                  widget.isLoading
-                      ? Icons.close
-                      : (isFocused && hasText)
-                          ? Icons.clear
-                          : Icons.refresh,
-                  size: 16,
-                  color: isFocused
-                      ? accent
-                      : (isDark
-                          ? AppTheme.textSecondary
-                          : AppTheme.lightTextSecondary),
+                icon: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    widget.isLoading
+                        ? Icons.close
+                        : (isFocused && hasText)
+                            ? Icons.clear
+                            : Icons.refresh,
+                    key: ValueKey(
+                      widget.isLoading
+                          ? 'close'
+                          : (isFocused && hasText)
+                              ? 'clear'
+                              : 'refresh',
+                    ),
+                    size: 16,
+                    color: isFocused
+                        ? accent
+                        : (isDark
+                            ? AppTheme.textSecondary
+                            : AppTheme.lightTextSecondary),
+                  ),
                 ),
                 tooltip: widget.isLoading
                     ? (isRtl ? 'إلغاء التحميل' : 'Stop loading')

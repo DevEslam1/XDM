@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
@@ -33,9 +34,37 @@ class BrowserTab {
   int lastVisitedAt = DateTime.now().millisecondsSinceEpoch;
   String? faviconUrl;
 
-  /// How this tab was opened. Used for back-button auto-close and ad-tab
-  /// eviction logic. Defaults to [TabOrigin.userDirect].
-  final TabOrigin origin;
+  /// Decoded favicon bytes for the tab (shown in the tab switcher / strip).
+  /// Populated by the browser screen after a page load.
+  Uint8List? faviconBytes;
+
+  /// The last find-in-page query entered for this tab. Restored when the
+  /// find panel is reopened for the tab.
+  String? findQuery;
+
+  /// How this tab was opened. Used for back-button auto-close and ad-tab management.
+  TabOrigin origin;
+
+  /// Dynamic theme color extracted from page meta tag or favicon.
+  Color? themeColor;
+
+  /// Controls the native find-in-page bar for this tab.
+  FindInteractionController? _findInteractionController;
+
+  FindInteractionController? get findInteractionController {
+    if (_findInteractionController != null) return _findInteractionController;
+    try {
+      _findInteractionController = FindInteractionController();
+    } catch (_) {
+      // In pure Dart unit test environments where InAppWebViewPlatform is uninitialized
+      return null;
+    }
+    return _findInteractionController;
+  }
+
+  set findInteractionController(FindInteractionController? ctrl) {
+    _findInteractionController = ctrl;
+  }
 
   BrowserTab({
     required this.id,
@@ -54,10 +83,18 @@ class BrowserTab {
     this.canGoBack = false,
     this.canGoForward = false,
     this.origin = TabOrigin.userDirect,
-  }) : progressNotifier = ValueNotifier<double>(progress);
+    FindInteractionController? findController,
+  })  : progressNotifier = ValueNotifier<double>(progress),
+        _findInteractionController = findController;
+
+  bool _isDisposed = false;
+  bool get isDisposed => _isDisposed;
 
   double get progress => progressNotifier.value;
-  set progress(double val) => progressNotifier.value = val;
+  set progress(double val) {
+    if (_isDisposed) return;
+    progressNotifier.value = val;
+  }
 
   /// True when the current URL is served over HTTPS.
   bool get isSecure => url.toLowerCase().startsWith('https://');
@@ -83,6 +120,8 @@ class BrowserTab {
   }
 
   void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
     try {
       progressNotifier.dispose();
       // NOTE: pullToRefreshController is owned and disposed synchronously

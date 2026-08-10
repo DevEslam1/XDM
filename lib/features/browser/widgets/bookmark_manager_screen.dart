@@ -224,31 +224,92 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
           Expanded(
             child: _bookmarks.isEmpty
                 ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.bookmarks_outlined,
-                            size: 56,
-                            color: isDark
-                                ? AppTheme.textMuted
-                                : AppTheme.lightTextMuted),
-                        const SizedBox(height: 14),
-                        Text(L10n.of(context, 'browser_no_bookmarks'),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 100,
+                            height: 100,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [
+                                  accent.withValues(alpha: 0.2),
+                                  accent.withValues(alpha: 0.05),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: accent.withValues(alpha: 0.15),
+                                  blurRadius: 20,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: Center(
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.star_rounded,
+                                    size: 48,
+                                    color: accent.withValues(alpha: 0.4),
+                                  ),
+                                  Icon(
+                                    Icons.bookmarks_rounded,
+                                    size: 36,
+                                    color: accent,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            L10n.of(context, 'browser_no_bookmarks'),
                             style: TextStyle(
                               color: isDark
                                   ? AppTheme.textPrimary
                                   : AppTheme.lightTextPrimary,
                               fontWeight: FontWeight.bold,
-                            )),
-                        const SizedBox(height: 6),
-                        Text(L10n.of(context, 'browser_no_bookmarks_desc'),
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            L10n.of(context, 'browser_no_bookmarks_desc'),
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                               color: isDark
                                   ? AppTheme.textSecondary
                                   : AppTheme.lightTextSecondary,
-                              fontSize: 12,
-                            )),
-                      ],
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: accent,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 24, vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            icon: const Icon(Icons.add, size: 18),
+                            label: Text(
+                              isRtl ? 'إضافة إشارة مرجعية' : 'Add Bookmark',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: _addBookmarkDialog,
+                          ),
+                        ],
+                      ),
                     ),
                   )
                 : grouped.isEmpty

@@ -57,6 +57,82 @@ class ScriptInjector {
     })();
   ''';
 
+  /// CSS fallback for force-dark mode on platforms that do not expose the
+  /// WebView `forceDark` setting (Android handles it natively).
+  static String buildForceDarkCss() => '''
+    html { filter: invert(0) hue-rotate(180deg); }
+    img, video { filter: invert(0) hue-rotate(180deg); }
+  ''';
+
+  /// CSS that hides all `<img>` and `<picture>` elements (image blocking).
+  static String buildBlockImagesCss() => '''
+    img, picture { display: none !important; }
+  ''';
+
+  /// Injects saved form data (from SharedPreferences) into inputs that match
+  /// the stored field name or id on page load.
+  static String buildAutofillScript(Map<String, String> fields) {
+    if (fields.isEmpty) return '';
+    final buf = StringBuffer()
+      ..writeln('(function() {')
+      ..writeln('  function xdmFill() {')
+      ..writeln('    var data = ${jsonEncode(fields)};')
+      ..writeln(
+          '    document.querySelectorAll("input, textarea").forEach(function(el) {')
+      ..writeln('      if (el.disabled || el.readOnly) return;')
+      ..writeln('      var name = (el.name || el.id || "").toLowerCase();')
+      ..writeln('      var hit = null;')
+      ..writeln('      Object.keys(data).forEach(function(k) {')
+      ..writeln('        if (k.toLowerCase() === name) hit = data[k];')
+      ..writeln('      });')
+      ..writeln('      if (hit == null) return;')
+      ..writeln('      var tag = el.tagName.toLowerCase();')
+      ..writeln('      if (tag === "textarea") { el.value = hit; }')
+      ..writeln(
+          '      else if (el.type === "email" || el.type === "text" || el.type === "tel" || el.type === "url" || el.type === "search" || el.type === "password") { el.value = hit; }')
+      ..writeln('      else return;')
+      ..writeln(
+          '      el.dispatchEvent(new Event("input", { bubbles: true }));')
+      ..writeln(
+          '      el.dispatchEvent(new Event("change", { bubbles: true }));')
+      ..writeln('    });')
+      ..writeln('  }')
+      ..writeln('  if (document.readyState === "loading") {')
+      ..writeln('    document.addEventListener("DOMContentLoaded", xdmFill);')
+      ..writeln('  } else { xdmFill(); }')
+      ..writeln('  setTimeout(xdmFill, 1500);')
+      ..writeln('})();');
+    return buf.toString();
+  }
+
+  /// Captures submitted form values and posts them to the XDM_Autofill
+  /// handler so the app can persist them for the current host.
+  static const String kAutofillCaptureScript = '''
+    (function() {
+      if (window.__xdmAutofillCaptureInjected) return;
+      window.__xdmAutofillCaptureInjected = true;
+      document.addEventListener('submit', function(e) {
+        try {
+          var form = e.target;
+          var fields = {};
+          Array.prototype.slice.call(form.querySelectorAll('input, textarea, select')).forEach(function(el) {
+            var name = el.name || el.id;
+            if (!name) return;
+            var val = '';
+            if (el.type === 'checkbox') val = el.checked ? 'true' : 'false';
+            else if (el.tagName === 'SELECT') val = el.options[el.selectedIndex] ? el.options[el.selectedIndex].value : '';
+            else val = el.value || '';
+            if (val.length > 0) fields[name] = val;
+          });
+          var keys = Object.keys(fields);
+          if (keys.length > 0 && window.XDM_Autofill && window.XDM_Autofill.postMessage) {
+            window.XDM_Autofill.postMessage(JSON.stringify({ url: window.location.href, fields: fields }));
+          }
+        } catch (err) {}
+      }, true);
+    })();
+  ''';
+
   static const String kTimerSpeedScript = '''
     (function() {
       if (window.__xdmTimerSpeedInjected) return;
@@ -322,6 +398,20 @@ $customJs
     if (settings.desktopMode) {
       scripts.add(kDesktopModeScript);
     }
+
+    // Force-dark CSS fallback (non-Android); Android uses the native
+    // `forceDark` WebView setting instead.
+    if (settings.forceDarkMode) {
+      scripts.add(buildForceDarkCss());
+    }
+
+    // Image blocking
+    if (settings.blockImages) {
+      scripts.add(buildBlockImagesCss());
+    }
+
+    // Form autofill capture (always safe; gated by the app-side handler)
+    scripts.add(kAutofillCaptureScript);
 
     // Custom JS/CSS for this site
     if (customJs.isNotEmpty) {
