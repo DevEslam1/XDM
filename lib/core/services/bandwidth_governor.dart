@@ -85,7 +85,7 @@ class BandwidthGovernor {
   /// true shared-memory concurrency for this object instance.
   void registerConsumer() {
     _activeConsumers++;
-    _availableTokens = 0;
+    // FIX-P2-19: Do NOT reset shared tokens when a new consumer registers
   }
 
   /// Unregisters a consumer.
@@ -96,6 +96,8 @@ class BandwidthGovernor {
   }
 
   final Map<String, int> _taskLimits = {};
+  // FIX-P2-18: Per-task refill timestamps so acquiring per-task tokens does not corrupt shared refill
+  final Map<String, DateTime> _taskLastRefill = {};
 
   void setTaskLimit(String taskId, int limit) {
     _taskLimits[taskId] = limit;
@@ -103,6 +105,7 @@ class BandwidthGovernor {
 
   void removeTaskLimit(String taskId) {
     _taskLimits.remove(taskId);
+    _taskLastRefill.remove(taskId);
   }
 
   int? getTaskLimit(String taskId) {
@@ -119,7 +122,7 @@ class BandwidthGovernor {
       if (taskLimit == 0) return 0; // Unlimited
 
       return _lock.synchronized(() {
-        _refillWithLimit(taskLimit);
+        _refillWithLimit(taskLimit, taskId);
 
         _availableTokens -= bytes;
         final maxDeficit = -(taskLimit * 2.0);
@@ -161,15 +164,16 @@ class BandwidthGovernor {
     });
   }
 
-  void _refillWithLimit(int limit) {
+  void _refillWithLimit(int limit, String taskId) {
     final now = DateTime.now();
-    final elapsedMs = now.difference(_lastRefill).inMilliseconds;
+    final last = _taskLastRefill[taskId] ?? now;
+    final elapsedMs = now.difference(last).inMilliseconds;
 
     if (elapsedMs <= 0) return;
 
     final newTokens = limit * elapsedMs / 1000.0;
     _availableTokens = min(_availableTokens + newTokens, limit * _burstFactor);
-    _lastRefill = now;
+    _taskLastRefill[taskId] = now;
   }
 
   void _refill() {

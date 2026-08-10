@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -22,24 +23,28 @@ class ClipboardService {
   bool _initialized = false;
   Future<void>? _initFuture;
 
+  // FIX-P0-5: Guard concurrent initialization using a Completer pattern.
   Future<void> _initIfNeeded() async {
+    if (_initialized) return;
     if (_initFuture != null) {
       try {
         await _initFuture;
+        return;
       } catch (e) {
         LoggingService.logger('ClipboardService').info(
-          '[ClipboardService] previous init future failed, will retry on next check: $e',
+          '[ClipboardService] previous init future failed, will retry: $e',
         );
         _initFuture = null;
       }
     }
-    if (_initFuture == null) {
-      _initFuture = _doInit();
-      try {
-        await _initFuture;
-      } catch (e) {
-        _initFuture = null;
-      }
+    final completer = Completer<void>();
+    _initFuture = completer.future;
+    try {
+      await _doInit();
+      completer.complete();
+    } catch (e) {
+      _initFuture = null;
+      completer.completeError(e);
     }
   }
 

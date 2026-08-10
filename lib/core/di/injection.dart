@@ -29,7 +29,8 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<DownloadEngine>(() => DownloadEngine());
   getIt.registerLazySingleton<PermissionService>(() => PermissionService());
   getIt.registerLazySingleton<ConnectionManager>(() => ConnectionManager());
-  getIt.registerLazySingleton<BandwidthGovernor>(() => BandwidthGovernor(0));
+  getIt.registerLazySingleton<BandwidthGovernor>(() => BandwidthGovernor(0),
+      dispose: (governor) => governor.dispose());
   getIt.registerLazySingleton<ChecksumService>(() => ChecksumService());
   getIt.registerLazySingleton<NotificationService>(() => NotificationService());
   getIt.registerLazySingleton<ClipboardService>(() => ClipboardService());
@@ -44,7 +45,8 @@ Future<void> configureDependencies() async {
       () => SingleInstanceService());
   getIt.registerLazySingleton<TrackerManager>(() => TrackerManager());
   getIt.registerLazySingleton<SiteIntelligenceService>(
-      () => SiteIntelligenceService());
+      () => SiteIntelligenceService(),
+      dispose: (service) => service.dispose());
   getIt
       .registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);
 }

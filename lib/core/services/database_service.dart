@@ -101,13 +101,13 @@ class DatabaseService {
         try {
           final activeCountResult = await _db
               .customSelect(
-                "SELECT COUNT(*) as cnt FROM download_tasks WHERE status = 'downloading'",
+                "SELECT COUNT(*) as cnt FROM download_tasks WHERE status IN ('downloading', 'paused', 'queued', 'seeding')",
               )
               .get();
           final activeCount = activeCountResult.first.read<int>('cnt');
           if (activeCount > 0) {
             _log.info(
-              'Skipping periodic DB VACUUM because $activeCount active download(s) in progress',
+              'Skipping periodic DB VACUUM because $activeCount active/paused/queued download(s) in progress',
             );
           } else {
             final swVacuum = Stopwatch()..start();
@@ -324,7 +324,9 @@ class DatabaseService {
               title: val['title'] as String? ?? '',
               isActive: val['isActive'] as bool? ?? false,
               position: val['position'] as int? ?? 0,
-              createdAt: DateTime.now().millisecondsSinceEpoch,
+              // FIX-P4-28: Preserve original createdAt timestamp from Hive map if present
+              createdAt: (val['createdAt'] as num?)?.toInt() ??
+                  DateTime.now().millisecondsSinceEpoch,
               lastVisitedAt: val['lastVisitedAt'] as int? ??
                   DateTime.now().millisecondsSinceEpoch,
               faviconUrl: val['faviconUrl'] as String?,
@@ -380,20 +382,40 @@ class DatabaseService {
       return true;
     }
 
-    final hist = <BrowserHistoryCompanion>[];
     final failedItems = <dynamic>[];
+    // FIX-P4-29: Deduplicate Hive history items by URL before inserting into Drift
+    final Map<String, _MergedHistoryItem> mergedHistory = {};
+
     for (final key in box.keys) {
       final val = box.get(key);
       if (val is Map) {
         try {
-          hist.add(
-            BrowserHistoryCompanion.insert(
-              url: val['url'] as String? ?? '',
-              title: val['title'] as String? ?? val['url'] as String? ?? '',
-              visitedAt: (val['visitedAt'] as num?)?.toInt() ??
-                  DateTime.now().millisecondsSinceEpoch,
-            ),
-          );
+          final url = val['url'] as String? ?? '';
+          if (url.isEmpty) continue;
+          final title = val['title'] as String? ?? url;
+          final visitedAt = (val['visitedAt'] as num?)?.toInt() ??
+              DateTime.now().millisecondsSinceEpoch;
+          final faviconUrl = val['faviconUrl'] as String?;
+
+          final existing = mergedHistory[url];
+          if (existing == null) {
+            mergedHistory[url] = _MergedHistoryItem(
+              url: url,
+              title: title,
+              visitedAt: visitedAt,
+              visitCount: 1,
+              faviconUrl: faviconUrl,
+            );
+          } else {
+            existing.visitCount += 1;
+            if (visitedAt > existing.visitedAt) {
+              existing.visitedAt = visitedAt;
+              existing.title = title;
+            }
+            if (faviconUrl != null) {
+              existing.faviconUrl = faviconUrl;
+            }
+          }
         } catch (e) {
           failedItems.add(val);
         }
@@ -401,6 +423,18 @@ class DatabaseService {
         failedItems.add(val);
       }
     }
+
+    final hist = mergedHistory.values
+        .map(
+          (item) => BrowserHistoryCompanion.insert(
+            url: item.url,
+            title: item.title,
+            visitedAt: item.visitedAt,
+            visitCount: drift.Value(item.visitCount),
+            faviconUrl: drift.Value(item.faviconUrl),
+          ),
+        )
+        .toList();
     if (hist.isNotEmpty) {
       try {
         await _db.batch(
@@ -865,17 +899,21 @@ class DatabaseService {
       }
     });
 
-    // FIX(23): cap history on every write so the cap holds across hot restarts.
-    // FIX-BH-05: Use NOT IN with LIMIT instead of LIMIT 999999999 OFFSET
-    // for better SQLite compatibility and query planner efficiency.
+    // FIX-P3-24: Only run DELETE query when total count exceeds the cap.
     final maxHistory = SettingsProvider.instance.historyMaxEntries;
-    await _db.customStatement(
-      'DELETE FROM browser_history WHERE id NOT IN ('
-      '  SELECT id FROM browser_history '
-      '  ORDER BY visited_at DESC '
-      '  LIMIT $maxHistory'
-      ')',
-    );
+    final countResult = await _db.customSelect(
+      'SELECT COUNT(*) as cnt FROM browser_history',
+    ).get();
+    final count = countResult.first.read<int>('cnt');
+    if (count > maxHistory) {
+      await _db.customStatement(
+        'DELETE FROM browser_history WHERE id NOT IN ('
+        '  SELECT id FROM browser_history '
+        '  ORDER BY visited_at DESC '
+        '  LIMIT $maxHistory'
+        ')',
+      );
+    }
 
     return id;
   }
@@ -939,4 +977,20 @@ class DatabaseService {
     _maintenanceTimer = null;
     await _db.close();
   }
+}
+
+class _MergedHistoryItem {
+  final String url;
+  String title;
+  int visitedAt;
+  int visitCount;
+  String? faviconUrl;
+
+  _MergedHistoryItem({
+    required this.url,
+    required this.title,
+    required this.visitedAt,
+    required this.visitCount,
+    this.faviconUrl,
+  });
 }

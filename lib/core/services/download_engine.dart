@@ -413,6 +413,7 @@ class DownloadProgress {
       ytCounterpartSize: (data['ytCounterpartSize'] as num?)?.toInt(),
       ytCounterpartDownloadedBytes:
           (data['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
+      // FIX-P5-31: Non-YouTube streams do not use ytDownloadedBytes; fallback to null for non-YT is intentional.
       ytDownloadedBytes: (data['ytDownloadedBytes'] as num?)?.toInt() ??
           (ytStreamKind != null
               ? (data['downloadedBytes'] as num?)?.toInt()
@@ -697,6 +698,29 @@ class DownloadEngine {
   Timer? _cleanupTimer;
   bool _closed = false;
 
+  // FIX-P1-7: Resource cleanup on engine disposal.
+  void dispose() {
+    _closed = true;
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
+    _httpEngine.stopAdaptiveThreadMonitor();
+    _pool?.dispose();
+    _sharedDio.close(force: true);
+    for (final client in [..._activeDioClients, ..._reservedDioClients]) {
+      try {
+        client.close(force: true);
+      } catch (_) {}
+    }
+    _activeDioClients.clear();
+    _reservedDioClients.clear();
+    _dioClientCreationTimes.clear();
+    _activeDownloadsPerClient.clear();
+    _activeCancelTokens.clear();
+    _ytCounterpartTaskIds.clear();
+    DownloadEngine._ytLiveBytes.clear();
+    _ytFinishedStreams.clear();
+  }
+
   DownloadEngine({
     Dio? dio,
     bool enableCleanupTimer = true,
@@ -706,13 +730,10 @@ class DownloadEngine {
         if (_closed) return;
         final now = DateTime.now();
         _activeDioClients.removeWhere((client) {
-          final active = _activeDownloadsPerClient[client];
-          final hasActive = active != null && active.isNotEmpty;
           final age = _dioClientCreationTimes[client] != null
               ? now.difference(_dioClientCreationTimes[client]!)
               : Duration.zero;
           final reserved = _reservedDioClients.contains(client);
-          if (hasActive) return false;
           final stale = reserved
               ? age > const Duration(minutes: 10)
               : age > const Duration(minutes: 5);
@@ -751,6 +772,8 @@ class DownloadEngine {
 
   // ── Dio client construction (main isolate; probes/metadata) ─────────────
 
+  /// Builds an isolated Dio HTTP client for metadata probing or download transfers.
+  /// If `proxyAddress` is provided, it takes precedence over `proxyHost`/`proxyPort`.
   Dio _buildIsolatedClient({
     String? url,
     String? customUserAgent,
@@ -866,6 +889,16 @@ class DownloadEngine {
           ? acceptRanges == 'bytes'
           : (isYoutube || response.statusCode == 206);
 
+      final contentType = response.headers.value(Headers.contentTypeHeader);
+      if (isLikelyHtmlResponse(contentType) && fileSize < 1024 * 1024) {
+        fileSize = 0;
+      }
+      if (response.statusCode != null && response.statusCode! >= 400) {
+        if (![400, 403, 405].contains(response.statusCode)) {
+          fileSize = 0;
+        }
+      }
+
       if (fileSize == 0 ||
           response.statusCode == 403 ||
           response.statusCode == 405 ||
@@ -898,6 +931,11 @@ class DownloadEngine {
                       getResponse.headers.value(Headers.contentLengthHeader) ??
                           '') ??
                   0;
+            }
+            final getContentType =
+                getResponse.headers.value(Headers.contentTypeHeader);
+            if (isLikelyHtmlResponse(getContentType) && fileSize < 1024 * 1024) {
+              fileSize = 0;
             }
             supportsResume = isYoutube ||
                 getResponse.statusCode == 206 ||
@@ -942,13 +980,19 @@ class DownloadEngine {
       StreamSubscription? sub;
       Timer? metadataTimer;
 
+      // FIX-P0-3: Track cleanup state so cancel handler does not operate on an already-removed torrent.
+      bool cleanedUp = false;
+
       void handleCancel() {
         sub?.cancel();
         metadataTimer?.cancel();
-        try {
-          TorrentService.pauseTorrent(torrentId);
-          TorrentService.removeTorrent(torrentId, deleteFiles: false);
-        } catch (_) {}
+        if (!cleanedUp) {
+          cleanedUp = true;
+          try {
+            TorrentService.pauseTorrent(torrentId);
+            TorrentService.removeTorrent(torrentId, deleteFiles: false);
+          } catch (_) {}
+        }
         if (!completer.isCompleted) {
           completer.completeError(DioException(
             requestOptions: RequestOptions(path: url),
@@ -983,26 +1027,28 @@ class DownloadEngine {
               .toList();
           final totalSize = resolvedFiles.fold<int>(
               0, (sum, f) => sum + (f['length'] as int));
-          try {
-            TorrentService.pauseTorrent(torrentId);
-            TorrentService.removeTorrent(torrentId, deleteFiles: false);
-          } catch (_) {}
+          // FIX-P2-16: Keep torrent handle alive and pass torrentId so _handleTorrentDownload reuses it.
           completer.complete(DownloadMetadata(
             fileName: torrent.name,
             category: categoryFromFileName(torrent.name),
             fileSize: totalSize,
             supportsResume: true,
             torrentFiles: resolvedFiles,
+            torrentId: torrentId,
           ));
         }
       });
-      metadataTimer = Timer(const Duration(seconds: 60), () {
+      // FIX-P2-17: Align magnet resolution timeout to 300s to match _waitForMetadata.
+      metadataTimer = Timer(const Duration(seconds: 300), () {
         if (completer.isCompleted) return;
         sub?.cancel();
-        try {
-          TorrentService.pauseTorrent(torrentId);
-          TorrentService.removeTorrent(torrentId, deleteFiles: false);
-        } catch (_) {}
+        if (!cleanedUp) {
+          cleanedUp = true;
+          try {
+            TorrentService.pauseTorrent(torrentId);
+            TorrentService.removeTorrent(torrentId, deleteFiles: false);
+          } catch (_) {}
+        }
         completer.complete(DownloadMetadata(
           fileName: resolvedName,
           category: 'Torrent',
@@ -1125,6 +1171,10 @@ class DownloadEngine {
           validateStatus: (_) => true,
         ),
       );
+      // FIX-P2-14: Check status code — do not multithread an error response
+      if (response.statusCode != null && response.statusCode! >= 400) {
+        return 1;
+      }
       if (response.headers.value('accept-ranges') == 'none') return 1;
       if (response.headers.value('connection')?.toLowerCase() == 'close') {
         return 1;
@@ -1146,8 +1196,14 @@ class DownloadEngine {
     return fullPath;
   }
 
+  // FIX-P2-15: Add path traversal check to buildTempFilePath
   String buildTempFilePath(String directory, String fileName) {
-    return p.join(directory, '${safeFileName(fileName)}.dmxpart');
+    final safeName = safeFileName(fileName);
+    final fullPath = p.join(directory, '$safeName.dmxpart');
+    if (!p.isWithin(directory, fullPath)) {
+      throw ArgumentError('Invalid file name: path traversal detected');
+    }
+    return fullPath;
   }
 
   /// Deletes temp/sidecar files for a task. Merge sources (.audio*) are only
@@ -1192,9 +1248,11 @@ class DownloadEngine {
         }
       }
       final stem = p.basenameWithoutExtension(tempFilePath);
-      await for (final entity in dir.list()) {
+      final stemPartPrefix = '$stem.part';
+      await for (final entity in dir.list(recursive: false)) {
+        final basename = p.basename(entity.path);
         if (entity is File &&
-            entity.path.contains('$stem.part') &&
+            basename.startsWith(stemPartPrefix) &&
             entity.path != tempFilePath) {
           try {
             await entity.delete();
@@ -1538,6 +1596,7 @@ class DownloadEngine {
     bool cancelRequested = false;
     Timer? watchdog;
     Timer? inactivityTimer;
+    DateTime? lastProgressEmitTime;
     // FIX-CYCLE-PAUSE: Track last known progress so we can emit a 'paused'
     // progress update with correct byte counts when the user cancels.
     // FIX-STARTING-BYTES: Initialize with alreadyOnDisk so an immediate
@@ -1589,6 +1648,8 @@ class DownloadEngine {
     });
 
     void requestCancel() {
+      // FIX-P0-1: Guard against requestCancel executing after job has already completed.
+      if (completer.isCompleted) return;
       cancelRequested = true;
       job.cancel();
       // A cancel must never leave a completed final file behind (even if the
@@ -1643,13 +1704,15 @@ class DownloadEngine {
       ));
     }
 
-    cancelToken.whenCancel.then((_) => requestCancel());
+    // FIX-P1-6: Store cancelFuture so it is tracked and handle unhandled async errors.
+    final cancelFuture = cancelToken.whenCancel.then((_) => requestCancel());
     if (cancelToken.isCancelled) requestCancel();
 
     final sub = job.messages.listen((message) {
       switch (message.type) {
         case 'ack':
           acked = true;
+          watchdog?.cancel();
           if (cancelRequested) job.cancel();
         case 'error':
           // FIX-CYCLE-ERROR: Map worker error types to structured cycle
@@ -1988,46 +2051,48 @@ class DownloadEngine {
           lastCompletedChunks = (isTorrent || chunkDetails == null)
               ? lastCompletedChunks
               : doneParts;
-          onProgress(DownloadProgress(
-            downloadedBytes: lastDownloadedBytes,
-            fileSize: lastFileSize,
-            speed: (p['speed'] as num?)?.toDouble() ?? 0.0,
-            eta: (p['eta'] as num?)?.toInt(),
-            chunks: p['chunks'] != null
-                ? List<double>.from(p['chunks'] as List)
-                : null,
-            fileName: p['fileName'] as String?,
-            supportsResume: p['supportsResume'] as bool?,
-            statusMessage: sm,
-            ytStreamKind: p['ytStreamKind'] != null
-                ? YtStreamKind.values.firstWhere(
-                    (k) => k.name == p['ytStreamKind'],
-                    orElse: () => YtStreamKind.combined,
-                  )
-                : null,
-            ytCounterpartSize: (p['ytCounterpartSize'] as num?)?.toInt(),
-            ytDownloadedBytes: ytEffectiveLive,
-            // FIX-YT-LIVE: Use live counterpart bytes (falls back to
-            // spawn-time value if counterpart hasn't reported yet).
-            ytCounterpartDownloadedBytes: liveCounterpart ??
-                (p['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
-            chunkDetails: chunkDetails,
-            cycleState: cycle,
-            totalChunks:
-                (isTorrent || chunkDetails == null) ? null : totalParts,
-            completedChunks:
-                (isTorrent || chunkDetails == null) ? null : doneParts,
-            // FIX-PROGRESS-TOR-FIELDS: Forward torrent file-level data on
-            // every progress tick so the details screen has per-file
-            // progress, file counts, byte summaries, and single-file
-            // percentage during active downloading — not only on
-            // pause/failed/updating_links/done emissions.
-            torrentFiles: lastTorrentFiles,
-            totalFiles: lastTotalFiles,
-            completedFiles: lastCompletedFiles,
-            totalFileBytes: lastTotalFileBytes,
-            downloadedFileBytes: lastDownloadedFileBytes,
-          ));
+
+          // FIX-P3-26: Throttle progress notifications on main isolate using effectiveProgressReportIntervalMs
+          final nowEmit = DateTime.now();
+          final shouldEmit = lastProgressEmitTime == null ||
+              nowEmit.difference(lastProgressEmitTime!) >=
+                  Duration(milliseconds: effectiveProgressReportIntervalMs);
+          if (shouldEmit) {
+            lastProgressEmitTime = nowEmit;
+            onProgress(DownloadProgress(
+              downloadedBytes: lastDownloadedBytes,
+              fileSize: lastFileSize,
+              speed: (p['speed'] as num?)?.toDouble() ?? 0.0,
+              eta: (p['eta'] as num?)?.toInt(),
+              chunks: p['chunks'] != null
+                  ? List<double>.from(p['chunks'] as List)
+                  : null,
+              fileName: p['fileName'] as String?,
+              supportsResume: p['supportsResume'] as bool?,
+              statusMessage: sm,
+              ytStreamKind: p['ytStreamKind'] != null
+                  ? YtStreamKind.values.firstWhere(
+                      (k) => k.name == p['ytStreamKind'],
+                      orElse: () => YtStreamKind.combined,
+                    )
+                  : null,
+              ytCounterpartSize: (p['ytCounterpartSize'] as num?)?.toInt(),
+              ytDownloadedBytes: ytEffectiveLive,
+              ytCounterpartDownloadedBytes: liveCounterpart ??
+                  (p['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
+              chunkDetails: chunkDetails,
+              cycleState: cycle,
+              totalChunks:
+                  (isTorrent || chunkDetails == null) ? null : totalParts,
+              completedChunks:
+                  (isTorrent || chunkDetails == null) ? null : doneParts,
+              torrentFiles: lastTorrentFiles,
+              totalFiles: lastTotalFiles,
+              completedFiles: lastCompletedFiles,
+              totalFileBytes: lastTotalFileBytes,
+              downloadedFileBytes: lastDownloadedFileBytes,
+            ));
+          }
         case 'done':
           // FIX-CYCLE-DONE: Emit final 'completed' with all preserved
           // data (chunks, torrent files, YT audio+video combined) so the
@@ -2161,6 +2226,7 @@ class DownloadEngine {
     try {
       await completer.future;
     } finally {
+      cancelFuture.catchError((_) {});
       watchdog.cancel();
       inactivityTimer?.cancel();
       await sub.cancel();
@@ -2193,11 +2259,7 @@ class DownloadEngine {
       case 'diskFull':
         return const InsufficientStorageException();
       case 'fileChanged':
-        return DioException(
-          requestOptions: RequestOptions(path: url),
-          type: DioExceptionType.unknown,
-          message: errMsg, // contains 'File changed on server'
-        );
+        return DownloadIntegrityException(errMsg);
       case 'workerDied':
         return DioException(
           requestOptions: RequestOptions(path: url),
@@ -2354,7 +2416,10 @@ class DownloadEngine {
     // to 'paused' instead of retaining the last active cycle state until
     // the cancel error surfaces. Preserves per-file percentage, file counts,
     // and byte summaries so the details screen retains all data on pause.
+    // FIX-P0-2: Guard cancel callback against firing after torrent completion.
+    bool torrentCompleted = false;
     cancelToken.whenCancel.then((_) {
+      if (torrentCompleted) return;
       final pauseFiles = getTorrentFiles?.call();
       final pSummary = normalizeTorrentFiles(pauseFiles);
       onProgress(DownloadProgress(
@@ -2517,7 +2582,10 @@ class DownloadEngine {
       }
       rethrow;
     } finally {
+      torrentCompleted = true;
       _activeTorrentIds.remove(id);
+      // FIX-P1-10: Clean up source mapping for torrent
+      TorrentResumeStore.unregisterSource(url);
       // FIX-TOR-04: Clean up static maps on torrent removal or completion
       _lastConcurrentLimitApply.remove(id);
       _lastIncompleteSnapshot.remove(id);

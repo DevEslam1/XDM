@@ -68,19 +68,24 @@ class ConnectionWarmer {
     );
   }
 
-  static bool isWarmed(String url) {
-    try {
-      final host = Uri.parse(url).host;
-      final lastWarm = _warmedHosts[host];
-      return lastWarm != null && DateTime.now().difference(lastWarm) < _warmTtl;
-    } catch (e) {
-      _log.info(
-          '[ConnectionWarmer] URL parse skipped, returning not warmed: $e');
-      return false;
-    }
+  // FIX-P0-4: Guard concurrent access to _warmedHosts in isWarmed and clear
+  static Future<bool> isWarmed(String url) async {
+    return _lock.synchronized(() {
+      try {
+        final host = Uri.parse(url).host;
+        final lastWarm = _warmedHosts[host];
+        return lastWarm != null && DateTime.now().difference(lastWarm) < _warmTtl;
+      } catch (e) {
+        _log.info(
+            '[ConnectionWarmer] URL parse skipped, returning not warmed: $e');
+        return false;
+      }
+    });
   }
 
-  static void clear() {
-    _warmedHosts.clear();
+  static Future<void> clear() async {
+    await _lock.synchronized(() {
+      _warmedHosts.clear();
+    });
   }
 }

@@ -48,15 +48,16 @@ class BackendHealthService {
 
   List<BackendConfig> get activeBackends {
     final now = DateTime.now();
-    final healthy = _backends.where((b) {
+    // FIX-P2-22: Clean up expired cooldowns before filtering
+    for (final b in _backends) {
       final cooldown = _unhealthyCooldowns[b.baseUrl];
-      if (cooldown == null) return true;
-      if (now.isAfter(cooldown)) {
+      if (cooldown != null && now.isAfter(cooldown)) {
         _unhealthyCooldowns.remove(b.baseUrl);
-        return true;
       }
-      return false;
-    }).toList();
+    }
+    final healthy = _backends
+        .where((b) => !_unhealthyCooldowns.containsKey(b.baseUrl))
+        .toList();
 
     healthy.sort((a, b) => a.priority.compareTo(b.priority));
     if (healthy.isNotEmpty) return healthy;

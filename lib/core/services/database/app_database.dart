@@ -352,6 +352,13 @@ class AppDatabase extends _$AppDatabase {
             SUBSTR(created_at, 1, INSTR(created_at, '.') - 1)
           WHERE created_at LIKE '%.%';
         ''');
+            // FIX-P4-27: Strip timezone offset before julianday calculation
+            await customStatement('''
+          UPDATE download_tasks SET created_at = SUBSTR(created_at, 1, INSTR(created_at, '+') - 1) WHERE created_at LIKE '%+%';
+          UPDATE download_tasks SET updated_at = SUBSTR(updated_at, 1, INSTR(updated_at, '+') - 1) WHERE updated_at LIKE '%+%';
+          UPDATE download_tasks SET completed_at = SUBSTR(completed_at, 1, INSTR(completed_at, '+') - 1) WHERE completed_at LIKE '%+%';
+          UPDATE download_tasks SET scheduled_at = SUBSTR(scheduled_at, 1, INSTR(scheduled_at, '+') - 1) WHERE scheduled_at LIKE '%+%';
+        ''');
 
             // Step 1: Create a temporary table with the new schema
             await customStatement('''
@@ -555,6 +562,12 @@ class AppDatabase extends _$AppDatabase {
             // epoch), matching download_tasks and restoring correct numeric
             // ordering. ISO8601 strings are converted with the same julianday
             // formula used by the earlier download_tasks migration.
+
+            // FIX-P4-27: Strip timezone offsets before julianday calculation
+            await customStatement('''
+          UPDATE bookmarks SET created_at = SUBSTR(created_at, 1, INSTR(created_at, '+') - 1) WHERE created_at LIKE '%+%';
+          UPDATE browser_history SET visited_at = SUBSTR(visited_at, 1, INSTR(visited_at, '+') - 1) WHERE visited_at LIKE '%+%';
+        ''');
 
             // --- bookmarks ---
             await customStatement('''

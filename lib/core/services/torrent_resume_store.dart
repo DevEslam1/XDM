@@ -76,6 +76,10 @@ class TorrentResumeStore {
     _sourceByTorrentId.remove(torrentId);
   }
 
+  static void unregisterSource(String sourceUrl) {
+    _sourceByTorrentId.removeWhere((_, url) => url == sourceUrl);
+  }
+
   /// Durable save. Returns true only when the blob was written AND re-read
   /// hash-verified. Never throws.
   static Future<bool> saveAndWait({

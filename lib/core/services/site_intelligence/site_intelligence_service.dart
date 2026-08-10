@@ -249,6 +249,13 @@ class SiteIntelligenceService {
     });
   }
 
+  // FIX-P1-9: Clean up timer and flush pending data on shutdown.
+  Future<void> dispose() async {
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    await flushPending();
+  }
+
   /// Flushes any pending persistence immediately. Call on app dispose.
   Future<void> flushPending() async {
     _persistTimer?.cancel();

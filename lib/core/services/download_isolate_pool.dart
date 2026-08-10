@@ -399,6 +399,10 @@ class DownloadIsolatePool {
     _workers.clear();
   }
 
+  void dispose() {
+    shutdown();
+  }
+
   Future<void> drain({Duration? timeout}) async {
     await shutdown();
   }
