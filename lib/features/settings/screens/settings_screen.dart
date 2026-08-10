@@ -9,6 +9,7 @@ import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../provider/settings_provider.dart';
 import '../../downloads/provider/download_provider.dart';
+import '../../browser/services/ad_blocker_service.dart';
 import 'appearance_settings_page.dart';
 import 'downloads_settings_page.dart';
 import 'network_settings_page.dart';
@@ -445,7 +446,19 @@ class _SettingsScreenState extends State<SettingsScreen>
           'update'
         ],
         accentColor: cyan,
-        builder: (ctx) => const NetworkSettingsPage(),
+        builder: (ctx) => StatefulBuilder(
+          builder: (context, setState) => SwitchTile(
+            accentColor: cyan,
+            title: L10n.of(context, 'settings_enable_adblock'),
+            subtitle: L10n.of(context, 'settings_enable_adblock_sub'),
+            value: AdBlockerService.instance.isEnabled,
+            onChanged: (val) async {
+              await AdBlockerService.instance.setEnabled(val);
+              triggerHaptic(settings);
+              setState(() {});
+            },
+          ),
+        ),
       ),
 
       // Category 6: Advanced

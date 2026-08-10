@@ -231,6 +231,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                   onSubmitted: (val) {
                     final port = int.tryParse(val);
                     if (port != null) settings.setProxyPort(port);
+                    _proxyPortController.text = settings.proxyPort.toString();
                   },
                 ),
                 TextFieldTile(

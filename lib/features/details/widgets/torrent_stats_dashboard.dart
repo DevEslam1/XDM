@@ -28,8 +28,10 @@ class TorrentStatsDashboard extends StatelessWidget {
     if (duration.inSeconds <= 0) return '0s';
     final hours = duration.inHours;
     final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
     if (hours > 0) return '${hours}h ${minutes}m';
-    return '${minutes}m';
+    if (minutes > 0) return '${minutes}m ${seconds}s';
+    return '${seconds}s';
   }
 
   @override

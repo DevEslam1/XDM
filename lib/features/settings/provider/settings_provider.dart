@@ -221,6 +221,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   static const _antiFingerprintingKey = 'antiFingerprinting';
+  static const _developerModeKey = 'developerMode';
 
   Future<void> setAntiFingerprinting(bool value) async {
     antiFingerprinting = value;
@@ -228,8 +229,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  void toggleDeveloperMode() {
+  Future<void> toggleDeveloperMode() async {
     developerMode = !developerMode;
+    await _prefs.setBool(_developerModeKey, developerMode);
     notifyListeners();
   }
 
@@ -404,6 +406,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     showOnboarding = _prefs.getBool(_showOnboardingKey) ?? showOnboarding;
     _classicUi = _prefs.getBool(_classicUiKey) ?? _classicUi;
     batterySaverMode = _prefs.getBool(_batterySaverModeKey) ?? batterySaverMode;
+    developerMode = _prefs.getBool(_developerModeKey) ?? false;
 
     enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
     proxyAddress = _prefs.getString(_proxyAddressKey) ?? proxyAddress;
@@ -1018,6 +1021,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (proxyHost.isNotEmpty) {
       proxyAddress = '$proxyHost:$proxyPort';
       await _prefs.setString(_proxyAddressKey, proxyAddress);
+    } else {
+      proxyAddress = '';
+      await _prefs.remove(_proxyAddressKey);
     }
     notifyListeners();
   }
@@ -1186,6 +1192,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _useLocalYtFallbackKey,
       _maxTabsKey,
       _historyMaxEntriesKey,
+      _developerModeKey,
+      _antiFingerprintingKey,
     ];
     for (final key in settingsKeys) {
       if (key == _proxyPasswordKey || key == _backendTokenKey) {
@@ -1261,6 +1269,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     resumeIntegrityCheck = true;
     _maxTabs = 15;
     _historyMaxEntries = 500;
+    developerMode = false;
+    antiFingerprinting = true;
 
     await _prefs.setBool(_isDarkModeKey, _isDarkMode);
     await _prefs.setBool(_classicUiKey, _classicUi);
@@ -1332,12 +1342,18 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       sendBrowserCookiesToBackend,
     );
     await _prefs.setBool(_useRemoteBackendKey, useRemoteBackend);
+    await _prefs.setBool(_developerModeKey, developerMode);
+    await _prefs.setBool(_antiFingerprintingKey, antiFingerprinting);
+    await _prefs.setBool(_useLocalYtFallbackKey, useLocalYtFallback);
+    await _prefs.setInt(_maxTabsKey, _maxTabs);
+    await _prefs.setInt(_historyMaxEntriesKey, _historyMaxEntries);
     if (customDownloadPath != null) {
       await _prefs.setString(_customDownloadPathKey, customDownloadPath!);
     }
     if (proxyPassword.isNotEmpty) {
       await _secureStorage.write(key: _proxyPasswordKey, value: proxyPassword);
     }
+    XdmBackendClient().refreshConfig();
     notifyListeners();
   }
 

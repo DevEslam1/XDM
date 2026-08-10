@@ -33,6 +33,7 @@ class TorrentHealthIndicator extends StatelessWidget {
   HealthLevel get _level {
     if (seeds == 0 && availability < 1.0) return HealthLevel.dead;
     if (seeds == 0 && availability >= 1.0) return HealthLevel.poor;
+    if (distributedCopies < 1.0) return HealthLevel.poor;
     if (seeds < 3) return HealthLevel.fair;
     if (seeds < 10) return HealthLevel.good;
     return HealthLevel.excellent;

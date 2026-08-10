@@ -59,8 +59,17 @@ class _AppLockScreenState extends State<AppLockScreen> {
       }
     });
     if (seconds > 0) {
-      _lockoutTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        _refreshLockout();
+      _lockoutTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        setState(() {
+          _remainingSeconds--;
+          if (_remainingSeconds <= 0) {
+            timer.cancel();
+          }
+        });
       });
     }
   }

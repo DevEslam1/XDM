@@ -72,7 +72,16 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
   void _onBackendUrlChanged(String val, SettingsProvider settings) {
     _backendUrlDebounce?.cancel();
     _backendUrlDebounce = Timer(const Duration(milliseconds: 600), () {
-      final trimmed = val.trim();
+      var trimmed = val.trim();
+      if (trimmed.isNotEmpty &&
+          !trimmed.startsWith('http://') &&
+          !trimmed.startsWith('https://')) {
+        trimmed = 'https://$trimmed';
+        _backendUrlController.value = TextEditingValue(
+          text: trimmed,
+          selection: TextSelection.collapsed(offset: trimmed.length),
+        );
+      }
       if (trimmed.isEmpty ||
           trimmed.startsWith('http://') ||
           trimmed.startsWith('https://')) {

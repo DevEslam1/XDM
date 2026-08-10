@@ -69,6 +69,9 @@ class _DetailsScreenState extends State<DetailsScreen>
 
   final bool _graphExpanded = true;
 
+  final Map<double, Animation<double>> _fadeAnimations = {};
+  final Map<double, Animation<Offset>> _slideAnimations = {};
+
   @override
   AnimationController get loopController => _pulse;
 
@@ -99,20 +102,24 @@ class _DetailsScreenState extends State<DetailsScreen>
   }
 
   Widget _stagger(double start, Widget child) {
-    return FadeTransition(
-      opacity: CurvedAnimation(
-        parent: _reveal,
-        curve: Interval(
-          start,
-          (start + 0.5).clamp(0.0, 1.0),
-          curve: AppTheme.motionCurve,
+    final fadeAnim = _fadeAnimations.putIfAbsent(
+      start,
+      () => _reveal.drive(
+        CurveTween(
+          curve: Interval(
+            start,
+            (start + 0.5).clamp(0.0, 1.0),
+            curve: AppTheme.motionCurve,
+          ),
         ),
       ),
-      child: SlideTransition(
-        position: Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
-            .animate(
-          CurvedAnimation(
-            parent: _reveal,
+    );
+
+    final slideAnim = _slideAnimations.putIfAbsent(
+      start,
+      () => _reveal.drive(
+        Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero).chain(
+          CurveTween(
             curve: Interval(
               start,
               (start + 0.5).clamp(0.0, 1.0),
@@ -120,6 +127,13 @@ class _DetailsScreenState extends State<DetailsScreen>
             ),
           ),
         ),
+      ),
+    );
+
+    return FadeTransition(
+      opacity: fadeAnim,
+      child: SlideTransition(
+        position: slideAnim,
         child: child,
       ),
     );
@@ -456,7 +470,6 @@ class _TelemetryHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Provider.of<SettingsProvider>(
       context,
-      listen: false,
     ).isDarkMode;
 
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
@@ -1321,7 +1334,6 @@ class _SpeedGraphPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Provider.of<SettingsProvider>(
       context,
-      listen: false,
     ).isDarkMode;
 
     final primaryClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
@@ -1516,7 +1528,7 @@ class _BandwidthPanelState extends State<_BandwidthPanel> with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = Provider.of<SettingsProvider>(context);
 
     final isDark = settings.isDarkMode;
 
@@ -1809,7 +1821,6 @@ class _TorrentStatsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Provider.of<SettingsProvider>(
       context,
-      listen: false,
     ).isDarkMode;
 
     final isRtl = L10n.isRtl(context);
@@ -2042,20 +2053,6 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
     _refresh();
 
     _scheduleRefresh();
-  }
-
-  @override
-  void deactivate() {
-    WidgetsBinding.instance.removeObserver(this);
-
-    super.deactivate();
-  }
-
-  @override
-  void activate() {
-    super.activate();
-
-    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
@@ -2884,7 +2881,7 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = Provider.of<SettingsProvider>(context);
 
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);

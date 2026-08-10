@@ -268,11 +268,11 @@ class SliderTile extends StatelessWidget {
     String? descriptionText = subtitle;
 
     if (badgeText.isEmpty && subtitle != null) {
-      final spaceIndex = subtitle!.indexOf(' ');
-      if (spaceIndex > 0 &&
-          (subtitle!.startsWith(RegExp(r'\d')) || subtitle!.endsWith('%'))) {
-        badgeText = subtitle!.substring(0, spaceIndex);
-        descriptionText = subtitle!.substring(spaceIndex + 1);
+      final match = RegExp(r'^(\d+(?:\.\d+)?)\s*(.*)$').firstMatch(subtitle!);
+      if (match != null) {
+        badgeText = match.group(1) ?? '';
+        final rest = match.group(2) ?? '';
+        descriptionText = rest.isNotEmpty ? rest : null;
       } else {
         badgeText = subtitle!;
         descriptionText = null;
