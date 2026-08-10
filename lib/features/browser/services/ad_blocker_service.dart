@@ -57,9 +57,16 @@ class AdBlockerService {
     final lower = host.toLowerCase();
 
     final allowList = AdBlockFilterUpdater().allowListedDomains;
+
+    // Check exact match first (O(1))
     if (allowList.contains(lower)) return true;
-    for (final d in allowList) {
-      if (lower == d || lower.endsWith('.$d')) return true;
+
+    // Walk up the domain tree to check parent domains (O(depth), typically < 5)
+    // Avoids O(N) iteration over the entire allowlist (which can be 50k+ domains)
+    final parts = lower.split('.');
+    for (var i = 1; i < parts.length - 1; i++) {
+      final parent = parts.sublist(i).join('.');
+      if (allowList.contains(parent)) return true;
     }
     return false;
   }
@@ -70,6 +77,13 @@ class AdBlockerService {
       _enabled = prefs.getBool(_prefKey) ?? true;
       // FIX: Load persisted custom rules on startup.
       await _loadCustomRules();
+      // FIX: Initialize the custom ad-block host store so user-defined
+      // hosts are loaded from disk.
+      await CustomAdBlockStore.instance.init();
+      // FIX: Initialize the filter updater to load previously downloaded
+      // domains from disk. Without this, the adblocker relies only on
+      // hardcoded hosts until the next scheduled filter update.
+      await AdBlockFilterUpdater().init();
     } catch (e) {
       _log.warning('AdBlocker init error: $e');
       _enabled = false;
@@ -702,7 +716,6 @@ $customCss
 ''';
   }
 
-
   // ─────────────────────────────────────────────────────────────────────
   // FIX #3: scriptletJs — implements common uBlock/AdGuard scriptlets.
   // Filter lists (##+js rules) were previously parsed but never executed.
@@ -733,7 +746,8 @@ $customCss
           break;
         case 'set-constant':
           if (args.length >= 2) {
-            call = '_xdmSetConstant(${_jsStr(args[0])}, ${_jsConstant(args[1])});';
+            call =
+                '_xdmSetConstant(${_jsStr(args[0])}, ${_jsConstant(args[1])});';
           }
           break;
         case 'no-settimeout-if':
@@ -872,9 +886,7 @@ $customCss
 
   /// Escapes [s] for safe insertion as a JS single-quoted string literal.
   static String _jsStr(String s) {
-    final escaped = s
-        .replaceAll(r'\', r'\\')
-        .replaceAll("'", r"\'");
+    final escaped = s.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
     return "'$escaped'";
   }
 

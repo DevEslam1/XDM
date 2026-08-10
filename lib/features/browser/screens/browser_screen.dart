@@ -4732,14 +4732,20 @@ class _BrowserScreenState extends State<BrowserScreen>
                                   Icons.arrow_back_ios_new,
                                   size: 15,
                                   color:
-                                      (activeTab.canGoBack || !activeTab.isHome)
+                                      (activeTab.canGoBack ||
+                                              (!activeTab.isHome &&
+                                                  activeTab.origin !=
+                                                      TabOrigin.userDirect))
                                           ? textClr
                                           : (isDark
                                               ? AppTheme.textMuted
                                               : AppTheme.lightTextMuted),
                                 ),
                                 onPressed:
-                                    (activeTab.canGoBack || !activeTab.isHome)
+                                    (activeTab.canGoBack ||
+                                            (!activeTab.isHome &&
+                                                activeTab.origin !=
+                                                    TabOrigin.userDirect))
                                         ? () async {
                                             triggerHaptic(settings);
                                             await _goBack();
@@ -5276,16 +5282,10 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                   createWindowAction
                                                                       .request
                                                                       .url;
-                                                              if (reqUrl !=
-                                                                  null) {
-                                                                _handlePopupMessageForTab(
-                                                                    tab,
-                                                                    JavaScriptMessage(
-                                                                        message:
-                                                                            reqUrl
-                                                                                .toString()));
+                                                              if (reqUrl != null) {
+                                                                controller.loadUrl(urlRequest: URLRequest(url: reqUrl));
                                                               }
-                                                              return false;
+                                                              return true;
                                                             },
                                                             onConsoleMessage:
                                                                 (controller,

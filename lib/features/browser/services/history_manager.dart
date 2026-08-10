@@ -33,7 +33,7 @@ class BrowserHistoryManager {
 
   void recordHistory(String url, {String? title}) {
     if (url.isEmpty || url == 'about:blank') return;
-    
+
     final String clean;
     try {
       clean = cleanUrl(url);
@@ -41,22 +41,32 @@ class BrowserHistoryManager {
       _log.warning('[HistoryManager] Failed to clean URL: $url, error: $e');
       return;
     }
-    
-    if (isIncognito()) return;
+
+    if (isIncognito()) {
+      // Clear stale dedup state so the first visit after exiting
+      // incognito isn't incorrectly skipped.
+      _lastHistoryEntryUrl = null;
+      _lastHistoryEntryId = null;
+      return;
+    }
     final now = DateTime.now();
-    
+
     // Clean up old entries in _recentVisits to prevent leaks (keep last 10 seconds)
-    _recentVisits.removeWhere((key, value) => now.difference(value.visitedAt) > const Duration(seconds: 10));
-    
+    _recentVisits.removeWhere((key, value) =>
+        now.difference(value.visitedAt) > const Duration(seconds: 10));
+
     // Check if the URL was visited in the last 5 seconds (BUG H1)
     final recent = _recentVisits[clean];
-    if (recent != null && now.difference(recent.visitedAt) < const Duration(seconds: 5)) {
+    if (recent != null &&
+        now.difference(recent.visitedAt) < const Duration(seconds: 5)) {
       final id = recent.id;
       _recentVisits[clean] = (id: id, visitedAt: now);
-      
+
       try {
         final db = resolveDatabase();
-        db.updateBrowserHistoryTime(id, now.millisecondsSinceEpoch).catchError((e) {
+        db
+            .updateBrowserHistoryTime(id, now.millisecondsSinceEpoch)
+            .catchError((e) {
           _log.warning('[HistoryManager] Time update error: $e');
         });
         if (title != null && title.isNotEmpty && title != clean) {
@@ -69,7 +79,7 @@ class BrowserHistoryManager {
       }
       return;
     }
-    
+
     if (clean == _lastHistoryEntryUrl) {
       if (title != null && title.isNotEmpty && title != clean) {
         if (_lastHistoryEntryId != null) {
@@ -88,7 +98,7 @@ class BrowserHistoryManager {
       }
       return;
     }
-    
+
     _lastHistoryEntryUrl = clean;
     _lastHistoryEntryId = null;
     final titleToRecord = (title != null && title.isNotEmpty) ? title : clean;
@@ -113,4 +123,3 @@ class BrowserHistoryManager {
     }
   }
 }
-

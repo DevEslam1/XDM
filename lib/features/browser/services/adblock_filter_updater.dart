@@ -34,7 +34,8 @@ class AdBlockFilterUpdater {
   // filter download pipeline useless for runtime URL blocking. Every caller
   // (shouldBlock, allowListedDomains, cosmeticRulesForHost) now shares the
   // same in-memory state that was populated by init() / updateIfNeeded().
-  static final AdBlockFilterUpdater _instance = AdBlockFilterUpdater._internal();
+  static final AdBlockFilterUpdater _instance =
+      AdBlockFilterUpdater._internal();
   AdBlockFilterUpdater._internal();
   factory AdBlockFilterUpdater() => _instance;
 
@@ -145,7 +146,7 @@ class AdBlockFilterUpdater {
 
   Set<String> _allowListedDomains = {};
   Completer<bool>? _inFlightUpdate;
-  double regressionThreshold = 0.50;
+  static const double regressionThreshold = 0.50;
 
   Set<String> get allBlockedDomains => _downloadedDomains;
   Set<String> get allTrackingDomains => _downloadedTrackingDomains;
@@ -255,9 +256,20 @@ class AdBlockFilterUpdater {
   Future<bool> _httpDownload(String url, String destPath) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 20);
-    // Allow self-signed / expired certs so filter downloads survive
-    // restrictive networks (e.g. captive portals, MITM proxies).
-    client.badCertificateCallback = (cert, host, port) => true;
+    // Only bypass cert validation for known filter-list hosts that are
+    // notorious for expired/self-signed certs. Never bypass for arbitrary
+    // hosts — that would allow MITM injection of malicious filter lists.
+    client.badCertificateCallback = (cert, host, port) {
+      final knownHosts = {
+        'easylist.to',
+        'easylist-downloads.adblockplus.org',
+        'pgl.yoyo.org',
+        'adguardteam.github.io',
+        'adaway.org',
+        'raw.githubusercontent.com',
+      };
+      return knownHosts.contains(host.toLowerCase());
+    };
     try {
       final uri = Uri.parse(url);
       final request = await client.getUrl(uri);
@@ -351,7 +363,8 @@ class AdBlockFilterUpdater {
         // ── Integrity check 3: reject suspicious size regressions ──────────
         final sizeKey = 'adblock_last_size_${source.name}';
         final lastSize = prefs.getInt(sizeKey) ?? 0;
-        if (lastSize > 0 && fileSize < (lastSize * 0.50).round()) {
+        if (lastSize > 0 &&
+            fileSize < (lastSize * regressionThreshold).round()) {
           _log.warning(
             'Filter ${source.name}: rejected suspiciously small file '
             '($fileSize bytes vs last good $lastSize bytes)',

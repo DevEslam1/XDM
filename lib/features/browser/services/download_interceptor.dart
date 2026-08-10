@@ -30,7 +30,9 @@ class ContentCheckResult {
     final lowerCd = contentDisposition.toLowerCase();
     final lowerCt = contentType.toLowerCase();
     if (lowerCd.contains('attachment')) return true;
-    if (lowerCt.isEmpty || lowerCt.contains('text/html') || lowerCt.contains('text/plain')) {
+    if (lowerCt.isEmpty ||
+        lowerCt.contains('text/html') ||
+        lowerCt.contains('text/plain')) {
       return false;
     }
     return lowerCt.contains('application/') ||
@@ -134,6 +136,16 @@ class DownloadInterceptor {
     return exact || normalized;
   }
 
+  // Shared Dio instance — reusing connections across content checks
+  // avoids the overhead of creating a new HttpClient per call.
+  static final Dio _sharedDio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 4),
+    receiveTimeout: const Duration(seconds: 4),
+    followRedirects: true,
+    maxRedirects: 10,
+    validateStatus: (s) => true,
+  ));
+
   /// Reusable HEAD-then-streamed-GET verification logic.
   Future<ContentCheckResult> verifyContentType(
     String url, {
@@ -143,21 +155,15 @@ class DownloadInterceptor {
     try {
       final origin = Uri.tryParse(referer ?? '')?.origin ?? '';
       final headers = <String, String>{
-        'User-Agent':
-            'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
             '(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept':
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         if (referer != null && referer.isNotEmpty) 'Referer': referer,
         if (origin.isNotEmpty) 'Origin': origin,
       };
 
-      final dio = Dio();
-      dio.options
-        ..connectTimeout = timeout
-        ..receiveTimeout = timeout
-        ..followRedirects = true
-        ..maxRedirects = 10
-        ..validateStatus = (s) => true;
+      final dio = _sharedDio;
 
       String finalUrl = url;
       String contentType = '';
@@ -177,8 +183,11 @@ class DownloadInterceptor {
               : (response.redirects.isNotEmpty
                   ? response.redirects.last.location.toString()
                   : url);
-          contentType = (response.headers.value('content-type') ?? '').toLowerCase();
-          contentDisposition = (response.headers.value('content-disposition') ?? '').toLowerCase();
+          contentType =
+              (response.headers.value('content-type') ?? '').toLowerCase();
+          contentDisposition =
+              (response.headers.value('content-disposition') ?? '')
+                  .toLowerCase();
         }
       } catch (_) {}
 
@@ -196,8 +205,11 @@ class DownloadInterceptor {
               : (response.redirects.isNotEmpty
                   ? response.redirects.last.location.toString()
                   : url);
-          contentType = (response.headers.value('content-type') ?? '').toLowerCase();
-          contentDisposition = (response.headers.value('content-disposition') ?? '').toLowerCase();
+          contentType =
+              (response.headers.value('content-type') ?? '').toLowerCase();
+          contentDisposition =
+              (response.headers.value('content-disposition') ?? '')
+                  .toLowerCase();
 
           response.data?.stream.listen((_) {}).cancel();
         } catch (_) {}
@@ -298,7 +310,8 @@ class DownloadInterceptor {
     String finalFileName = suggestedName ?? '';
     if (finalFileName.isEmpty) {
       if (contentDisposition != null && contentDisposition.isNotEmpty) {
-        finalFileName = parseFilenameFromContentDispositionString(contentDisposition) ?? '';
+        finalFileName =
+            parseFilenameFromContentDispositionString(contentDisposition) ?? '';
       }
       if (finalFileName.isEmpty) {
         if (url.startsWith('magnet:')) {
@@ -321,11 +334,14 @@ class DownloadInterceptor {
     }
     finalFileName = numberedName;
     String resolvedCategory = '';
-    if (type == 'video' || (mimeType != null && mimeType.startsWith('video/'))) {
+    if (type == 'video' ||
+        (mimeType != null && mimeType.startsWith('video/'))) {
       resolvedCategory = 'Video';
-    } else if (type == 'audio' || (mimeType != null && mimeType.startsWith('audio/'))) {
+    } else if (type == 'audio' ||
+        (mimeType != null && mimeType.startsWith('audio/'))) {
       resolvedCategory = 'Audio';
-    } else if (type == 'image' || (mimeType != null && mimeType.startsWith('image/'))) {
+    } else if (type == 'image' ||
+        (mimeType != null && mimeType.startsWith('image/'))) {
       resolvedCategory = 'Image';
     } else {
       if (mimeType != null) {
