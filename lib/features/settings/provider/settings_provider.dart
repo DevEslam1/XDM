@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../core/services/quiet_hours.dart';
 import '../../../core/services/xdm_backend_client.dart';
 import '../../../core/services/power_monitor.dart';
+import '../../../core/services/notification_service.dart';
 
 class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   // FIX(R5): Logger instance
@@ -972,6 +973,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> setNotificationsEnabled(bool value) async {
     notificationsEnabled = value;
     await _prefs.setBool(_notificationsEnabledKey, value);
+    if (!value) {
+      unawaited(NotificationService().cancelAll());
+    }
     notifyListeners();
   }
 

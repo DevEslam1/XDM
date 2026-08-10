@@ -431,7 +431,13 @@ class DownloadProgress {
     // If counterpart size is null, use only this stream's progress.
     if (ytCounterpartSize == null) {
       if (fileSize <= 0) return null;
-      return (downloadedBytes / fileSize).clamp(0.0, 1.0);
+      // FIX-YT-COMBINED-NULL-COUNTERPART: Use ytDownloadedBytes (live cache)
+      // instead of downloadedBytes for consistency with the rest of the
+      // combined progress logic. The live cache is always more accurate for
+      // YT streams and ensures the combined audio+video bar reflects the
+      // true downloaded state even when counterpart size is unknown.
+      final selfBytes = ytDownloadedBytes ?? downloadedBytes;
+      return (selfBytes / fileSize).clamp(0.0, 1.0);
     }
 
     final counterpartSize = ytCounterpartSize!;
@@ -1025,7 +1031,9 @@ class DownloadEngine {
                     'priority': 4,
                     'downloadedBytes': 0,
                     'speed': 0.0,
+                    'progress': 0.0,
                     'percent': 0.0,
+                    'isComplete': f.size == 0,
                   })
               .toList();
           final totalSize = resolvedFiles.fold<int>(
@@ -1086,7 +1094,9 @@ class DownloadEngine {
               'priority': 4,
               'downloadedBytes': 0,
               'speed': 0.0,
+              'progress': 0.0,
               'percent': 0.0,
+              'isComplete': length == 0,
             };
           }).toList();
           if (fileSize == 0) {
@@ -1959,13 +1969,6 @@ class DownloadEngine {
           if (liveCounterpart == null && counterpartId != null) {
             liveCounterpart = ytCounterpartSize;
           }
-          // FIX-YT-LIVE-FALLBACK: If the counterpart finished and was
-          // unregistered, its live bytes cache entry is gone. Use its
-          // known size as the live bytes so the combined progress bar
-          // doesn't drop back to the spawn-time value.
-          if (liveCounterpart == null && counterpartId != null) {
-            liveCounterpart = ytCounterpartSize;
-          }
 
           // FIX-CYCLE-LAST-DATA: Update last-known progress values on
           // every tick so non-active cycle states (paused/failed/
@@ -2177,16 +2180,11 @@ class DownloadEngine {
             }
             if (lastFileSize > 0) {
               lastDownloadedBytes = lastFileSize;
-              // FIX-YT-DONE-LIVE: Update the live bytes cache to the final
-              // file size so the counterpart stream can read our true
-              // completion bytes even after our download() returns.
-              // Without this, the counterpart sees stale (pre-completion)
-              // bytes and incorrectly reports 'downloading' instead of
-              // 'completed' on its final tick — the combined audio+video
-              // bar never reaches 100%.
-              if (ytStreamKind != null) {
-                DownloadEngine._ytLiveBytes[taskId] = lastFileSize;
-              }
+              // FIX-YT-DONE-LIVE: Live bytes cache was already set to
+              // lastFileSize at the top of the 'done' handler (before the
+              // cancel/non-cancel branch). The redundant second write is
+              // removed to avoid confusion about which write is the
+              // authoritative one.
             }
             // FIX-CHUNK-COMPLETE-DONE: On done, count ALL chunks as
             // complete (including indeterminate-size chunks whose
@@ -2911,14 +2909,23 @@ class DownloadEngine {
               'selected': existing?['selected'] as bool? ?? f.selected,
               'priority': existing?['priority'] as int? ?? f.priority,
               'downloadedBytes': resolvedBytes,
-              // FIX-FILE-SPEED: Will be populated below from aggregate rate
-              // distributed across actively-downloading selected files.
+              // FIX-FILE-SPEED: Populated below via aggregate rate
+              // distribution across actively-downloading selected files.
               'speed': 0.0,
               'progressEstimated': isEstimated,
               // FIX-7: Explicit per-file percentage so UI can render
               // file-level progress bars without re-computing (and possibly
               // disagreeing with downloadedBytes/length).
               'progress': fileProgress,
+              // FIX-FILE-ISCOMPLETE-PERCENT: Set isComplete and percent
+              // directly in the engine emission so the torrent details
+              // screen single-file percentage bar always has valid data
+              // without relying on torrentFilePercents getter or
+              // fromWorkerMap to synthesize them. Both keys must always
+              // agree — 'progress' is the canonical key used by newer
+              // code, 'percent' is the legacy alias.
+              'percent': fileProgress,
+              'isComplete': f.size == 0 || resolvedBytes >= f.size,
             };
           }).toList();
         } catch (e) {
@@ -2940,6 +2947,32 @@ class DownloadEngine {
         resolvedFiles = getTorrentFiles?.call();
         if (resolvedFiles != null) {
           normalizeTorrentFiles(resolvedFiles);
+        }
+      }
+
+      // FIX-FILE-SPEED-DISTRIBUTE: Distribute the aggregate download/upload
+      // rate across actively-downloading selected files so single-file speed
+      // on the torrent details screen is non-zero. Previously the 'speed'
+      // field was always 0.0 in the engine emission — the torrentFilePercents
+      // getter's comment claimed the engine populated it, but it never did.
+      // Distribution is equal among all selected, incomplete files (those
+      // with length > 0 and downloadedBytes < length). Complete or
+      // deselected files get 0.0 (no active transfer).
+      if (resolvedFiles != null) {
+        final activeFiles = resolvedFiles.where((f) {
+          if (!isTorrentFileSelected(f)) return false;
+          final length = (f['length'] as num?)?.toInt() ?? 0;
+          final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+          return length > 0 && dl < length;
+        }).toList();
+        if (activeFiles.isNotEmpty) {
+          final aggregateRate = (stateLabel == 'seeding')
+              ? torrent.uploadRate.toDouble()
+              : torrent.downloadRate.toDouble();
+          final perFileSpeed = aggregateRate / activeFiles.length;
+          for (final f in activeFiles) {
+            f['speed'] = perFileSpeed;
+          }
         }
       }
 

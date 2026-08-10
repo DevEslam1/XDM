@@ -70,6 +70,9 @@ class WidgetDeepLinkHandler {
       case 'pause':
         if (id != null && id.isNotEmpty) _pauseTask(id);
         break;
+      case 'cancel':
+        if (id != null && id.isNotEmpty) _cancelTask(id);
+        break;
       case 'resume':
         if (id != null && id.isNotEmpty) _resumeTask(id);
         break;
@@ -194,6 +197,13 @@ class WidgetDeepLinkHandler {
     if (ctx == null) return;
     final provider = Provider.of<DownloadProvider>(ctx, listen: false);
     provider.pauseTask(taskId);
+  }
+
+  static void _cancelTask(String taskId) {
+    final ctx = navigatorKey?.currentContext;
+    if (ctx == null) return;
+    final provider = Provider.of<DownloadProvider>(ctx, listen: false);
+    provider.cancelTask(taskId);
   }
 
   static void _resumeTask(String taskId) {

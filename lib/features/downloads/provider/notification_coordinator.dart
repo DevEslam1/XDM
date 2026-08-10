@@ -230,9 +230,7 @@ class NotificationCoordinator {
       case 'tap':
         if (taskId != null) {
           final task = _findTask(taskId);
-          if (task != null &&
-              task.isAppUpdate &&
-              task.status == DownloadStatus.completed) {
+          if (task != null && task.status == DownloadStatus.completed) {
             open_filex.OpenFilex.open(task.localFilePath);
           }
         }
@@ -266,6 +264,7 @@ class NotificationCoordinator {
         notificationId: notificationId,
         title: task.fileName,
         playSound: _settingsProvider.soundNotification && !quietHours,
+        payload: opaqueHandleFor(task.id),
       );
     }
   }

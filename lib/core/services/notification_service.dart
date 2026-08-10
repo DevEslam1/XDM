@@ -17,9 +17,8 @@ const String _pendingActionsKey = 'dmx_pending_notification_actions';
 
 @pragma('vm:entry-point')
 void _onBackgroundNotificationResponse(NotificationResponse response) {
-  final actionId = response.actionId;
+  final actionId = response.actionId ?? 'tap';
   final payload = response.payload;
-  if (actionId == null) return;
 
   // Runs in a fresh isolate after the process may have been killed, so the
   // in-memory `_nonce` is not available. Read the persisted nonce and forward

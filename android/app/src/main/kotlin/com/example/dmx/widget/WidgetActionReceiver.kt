@@ -48,6 +48,16 @@ class WidgetActionReceiver : BroadcastReceiver() {
                 if (!isValidTaskId(taskId)) return
                 "dmx://toggle/$taskId"
             }
+            ACTION_PAUSE_TASK -> {
+                val taskId = intent.getStringExtra(EXTRA_TASK_ID)
+                if (!isValidTaskId(taskId)) return
+                "dmx://pause/$taskId"
+            }
+            ACTION_CANCEL_TASK -> {
+                val taskId = intent.getStringExtra(EXTRA_TASK_ID)
+                if (!isValidTaskId(taskId)) return
+                "dmx://cancel/$taskId"
+            }
             ACTION_OPEN_TASK -> {
                 val taskId = intent.getStringExtra(EXTRA_TASK_ID)
                 if (!isValidTaskId(taskId)) return
@@ -69,6 +79,8 @@ class WidgetActionReceiver : BroadcastReceiver() {
         const val ACTION_TOGGLE_TASK = "com.example.dmx.TOGGLE_TASK"
         const val ACTION_OPEN_TASK = "com.example.dmx.OPEN_TASK"
         const val ACTION_SELECT_TAB = "com.example.dmx.SELECT_TAB"
+        const val ACTION_PAUSE_TASK = "com.example.dmx.PAUSE_TASK"
+        const val ACTION_CANCEL_TASK = "com.example.dmx.CANCEL_TASK"
 
         const val EXTRA_TASK_ID = "task_id"
         const val EXTRA_TAB = "tab"

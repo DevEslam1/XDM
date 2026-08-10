@@ -88,10 +88,13 @@ class _BrowserScreenState extends State<BrowserScreen>
       builder: (context) {
         return AlertDialog(
           backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(
             isRtl ? 'إضافة اختصار جديد' : 'Add Custom Shortcut',
-            style: TextStyle(color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary),
+            style: TextStyle(
+                color:
+                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -152,14 +155,22 @@ class _BrowserScreenState extends State<BrowserScreen>
       builder: (context) {
         return AlertDialog(
           backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(
             isRtl ? 'حذف الاختصار' : 'Remove Shortcut',
-            style: TextStyle(color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary),
+            style: TextStyle(
+                color:
+                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary),
           ),
           content: Text(
-            isRtl ? 'هل تريد حذف هذا الاختصار؟' : 'Remove "${shortcut['title']}" from your shortcuts?',
-            style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+            isRtl
+                ? 'هل تريد حذف هذا الاختصار؟'
+                : 'Remove "${shortcut['title']}" from your shortcuts?',
+            style: TextStyle(
+                color: isDark
+                    ? AppTheme.textSecondary
+                    : AppTheme.lightTextSecondary),
           ),
           actions: [
             TextButton(
@@ -167,9 +178,11 @@ class _BrowserScreenState extends State<BrowserScreen>
               child: Text(isRtl ? 'إلغاء' : 'Cancel'),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonRed),
+              style:
+                  ElevatedButton.styleFrom(backgroundColor: AppTheme.neonRed),
               onPressed: () => Navigator.of(context).pop(true),
-              child: Text(isRtl ? 'حذف' : 'Remove', style: const TextStyle(color: Colors.white)),
+              child: Text(isRtl ? 'حذف' : 'Remove',
+                  style: const TextStyle(color: Colors.white)),
             ),
           ],
         );
@@ -182,6 +195,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       });
     }
   }
+
   static final _log = Logger('BrowserScreen');
 
   late final TabManager _tabManager = TabManager(
@@ -214,9 +228,10 @@ class _BrowserScreenState extends State<BrowserScreen>
   int get _currentTabIndex => _tabManager.currentIndex;
   set _currentTabIndex(int value) {
     if (value >= 0 && value < _tabs.length) {
-      final oldActiveTab = _tabs.length > _currentTabIndex && _currentTabIndex >= 0
-          ? _tabs[_currentTabIndex]
-          : null;
+      final oldActiveTab =
+          _tabs.length > _currentTabIndex && _currentTabIndex >= 0
+              ? _tabs[_currentTabIndex]
+              : null;
       if (oldActiveTab != null && oldActiveTab.id != _tabs[value].id) {
         if (_tabIdHistory.isEmpty || _tabIdHistory.last != oldActiveTab.id) {
           _tabIdHistory.add(oldActiveTab.id);
@@ -269,6 +284,13 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   bool _quitPersisted = false;
   bool _isRestoring = false;
+
+  /// Tracks when a back/forward navigation is in progress so that
+  /// [shouldOverrideUrlLoading] doesn't intercept it. Without this,
+  /// back/forward to certain pages (e.g. Google search) gets intercepted
+  /// by the classifier and either blocked or opened in a new background
+  /// tab, effectively "dismissing" the page.
+  bool _isNavigatingBackForward = false;
 
   final AdBlockerDelegate _adBlocker = AdBlockerDelegate();
   final RedirectGuard _redirectGuard = RedirectGuard();
@@ -684,7 +706,8 @@ class _BrowserScreenState extends State<BrowserScreen>
     final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
     final siteSettings = await SiteSettingsStore.getForHost(host);
     final isDesktop = siteSettings.desktopMode ?? settings.desktopMode;
-    final isAdBlock = siteSettings.adBlockEnabled ?? AdBlockerService.instance.isEnabled;
+    final isAdBlock =
+        siteSettings.adBlockEnabled ?? AdBlockerService.instance.isEnabled;
     final userAgent = isDesktop
         ? FingerprintManager.desktopUserAgent
         : _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings);
@@ -745,17 +768,18 @@ class _BrowserScreenState extends State<BrowserScreen>
     final uri = Uri.tryParse(tab.url);
     if (uri == null || uri.host.isEmpty) return;
     final host = uri.host.toLowerCase();
-    
+
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    
+
     final siteSettings = await SiteSettingsStore.getForHost(host);
     bool siteDesktop = siteSettings.desktopMode ?? settings.desktopMode;
-    bool siteAdBlock = siteSettings.adBlockEnabled ?? AdBlockerService.instance.isEnabled;
-    
+    bool siteAdBlock =
+        siteSettings.adBlockEnabled ?? AdBlockerService.instance.isEnabled;
+
     if (!mounted) return;
-    
+
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
@@ -775,7 +799,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                   fontFamily: 'Space Grotesk',
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                  color:
+                      isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
                 ),
               ),
               const SizedBox(height: 6),
@@ -787,7 +812,6 @@ class _BrowserScreenState extends State<BrowserScreen>
                 ),
               ),
               const SizedBox(height: 16),
-              
               SwitchListTile(
                 title: const Text('Desktop Site'),
                 subtitle: const Text('Force desktop version of this site'),
@@ -795,15 +819,16 @@ class _BrowserScreenState extends State<BrowserScreen>
                 activeThumbColor: accent,
                 onChanged: (val) async {
                   setSheetState(() => siteDesktop = val);
-                  await SiteSettingsStore.updateForHost(host, SiteSettings(
-                    desktopMode: siteDesktop,
-                    adBlockEnabled: siteAdBlock,
-                  ));
+                  await SiteSettingsStore.updateForHost(
+                      host,
+                      SiteSettings(
+                        desktopMode: siteDesktop,
+                        adBlockEnabled: siteAdBlock,
+                      ));
                   await _applySiteSettings(tab, tab.url);
                   tab.controller?.reload();
                 },
               ),
-              
               SwitchListTile(
                 title: const Text('AdBlocker'),
                 subtitle: const Text('Block ads and trackers on this site'),
@@ -811,15 +836,16 @@ class _BrowserScreenState extends State<BrowserScreen>
                 activeThumbColor: accent,
                 onChanged: (val) async {
                   setSheetState(() => siteAdBlock = val);
-                  await SiteSettingsStore.updateForHost(host, SiteSettings(
-                    desktopMode: siteDesktop,
-                    adBlockEnabled: siteAdBlock,
-                  ));
+                  await SiteSettingsStore.updateForHost(
+                      host,
+                      SiteSettings(
+                        desktopMode: siteDesktop,
+                        adBlockEnabled: siteAdBlock,
+                      ));
                   await _applySiteSettings(tab, tab.url);
                   tab.controller?.reload();
                 },
               ),
-              
               const SizedBox(height: 12),
             ],
           ),
@@ -829,6 +855,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _onPageStart(BrowserTab tab, String url) async {
+    _isNavigatingBackForward = false;
     if (url.startsWith('magnet:') || isMagnetUrl(url)) {
       _log.info(
           '[Browser] Stopped webview from navigating to magnet scheme: $url');
@@ -910,6 +937,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _onPageStop(BrowserTab tab, String url) {
+    _isNavigatingBackForward = false;
     _loadingTimeoutTimers[tab.id]?.cancel();
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     unawaited(_injectAllScripts(tab, url));
@@ -1000,6 +1028,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _onUrlChange(BrowserTab tab, String url) {
+    _isNavigatingBackForward = false;
     if (url.startsWith('magnet:') || isMagnetUrl(url)) return;
     final cleanUrl = _cleanUrl(url);
     if (tab.url == cleanUrl) return;
@@ -1228,7 +1257,8 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (url.isEmpty || url == 'about:blank') return;
 
     if (_recentDownloadUrls.contains(url)) {
-      _log.info('[Browser] Popup URL ignored because it was already handled as a download: $url');
+      _log.info(
+          '[Browser] Popup URL ignored because it was already handled as a download: $url');
       return;
     }
 
@@ -1277,7 +1307,9 @@ class _BrowserScreenState extends State<BrowserScreen>
       final isRtl = L10n.isRtl(context);
       ThemedSnackbar.show(
         context,
-        message: isRtl ? 'تم فتح علامة تبويب في الخلفية' : 'Opened in background tab',
+        message: isRtl
+            ? 'تم فتح علامة تبويب في الخلفية'
+            : 'Opened in background tab',
         color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
         icon: Icons.tab_rounded,
         isDarkMode: isDark,
@@ -1293,7 +1325,8 @@ class _BrowserScreenState extends State<BrowserScreen>
       String adUrl, BrowserTab parentTab) async {
     try {
       final referer = parentTab.url.isNotEmpty ? parentTab.url : adUrl;
-      final check = await _interceptor.verifyContentType(adUrl, referer: referer);
+      final check =
+          await _interceptor.verifyContentType(adUrl, referer: referer);
       final finalUrl = check.finalUrl;
       final contentType = check.contentType;
       final contentDisposition = check.contentDisposition;
@@ -1319,9 +1352,11 @@ class _BrowserScreenState extends State<BrowserScreen>
       }
 
       // 3. If popup landed on an ad page or blocked domain, drop it (do NOT open tab)
-      final isAdBlocked = _adBlocker.shouldBlock(finalUrl) || _adBlocker.shouldBlock(adUrl);
+      final isAdBlocked =
+          _adBlocker.shouldBlock(finalUrl) || _adBlocker.shouldBlock(adUrl);
       if (isAdBlocked) {
-        _log.info('[Browser] Ad redirect resolved to blocked ad page: $finalUrl');
+        _log.info(
+            '[Browser] Ad redirect resolved to blocked ad page: $finalUrl');
         return;
       }
 
@@ -1336,7 +1371,8 @@ class _BrowserScreenState extends State<BrowserScreen>
           lowerFinal.contains('1fichier');
 
       if (isKnownFileHost && mounted) {
-        _log.info('[Browser] Ad redirect was legitimate file host, opening background tab: $finalUrl');
+        _log.info(
+            '[Browser] Ad redirect was legitimate file host, opening background tab: $finalUrl');
         _evictStaleAdTabs();
         setState(() {
           final newTab = _createNewTab(
@@ -1349,12 +1385,15 @@ class _BrowserScreenState extends State<BrowserScreen>
         });
         _saveTabs();
         if (mounted) {
-          final settings = Provider.of<SettingsProvider>(context, listen: false);
+          final settings =
+              Provider.of<SettingsProvider>(context, listen: false);
           final isDark = settings.isDarkMode;
           final isRtl = L10n.isRtl(context);
           ThemedSnackbar.show(
             context,
-            message: isRtl ? 'تم فتح علامة تبويب في الخلفية' : 'Opened in background tab',
+            message: isRtl
+                ? 'تم فتح علامة تبويب في الخلفية'
+                : 'Opened in background tab',
             color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
             icon: Icons.tab_rounded,
             isDarkMode: isDark,
@@ -1545,10 +1584,9 @@ class _BrowserScreenState extends State<BrowserScreen>
   /// Call this inside or just before the [setState] that adds a new
   /// ad/popup/redirect tab.
   void _evictStaleAdTabs() {
-    final activeId =
-        (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length)
-            ? _tabs[_currentTabIndex].id
-            : null;
+    final activeId = (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length)
+        ? _tabs[_currentTabIndex].id
+        : null;
 
     // Collect background ad/redirect tabs, sorted oldest-first.
     final candidates = _tabs
@@ -1572,8 +1610,6 @@ class _BrowserScreenState extends State<BrowserScreen>
       WidgetsBinding.instance.addPostFrameCallback((_) => oldest.dispose());
     }
   }
-
-
 
   void _onDashboardScroll() {
     if (!_dashboardScrollController.hasClients) return;
@@ -1785,17 +1821,24 @@ class _BrowserScreenState extends State<BrowserScreen>
     // (a) WebView can go back.
     if (activeTab.canGoBack) {
       _homeReturnUrl = null;
+      _isNavigatingBackForward = true;
       unawaited(activeTab.controller?.goBack() ?? Future.value());
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) _isNavigatingBackForward = false;
+      });
       _updateNavState();
       return true;
     }
 
     // Also async-check with the controller in case the cached flag is stale.
-    final webCanGoBack =
-        await activeTab.controller?.canGoBack() ?? false;
+    final webCanGoBack = await activeTab.controller?.canGoBack() ?? false;
     if (webCanGoBack) {
       _homeReturnUrl = null;
+      _isNavigatingBackForward = true;
       unawaited(activeTab.controller?.goBack() ?? Future.value());
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) _isNavigatingBackForward = false;
+      });
       _updateNavState();
       return true;
     }
@@ -1822,7 +1865,8 @@ class _BrowserScreenState extends State<BrowserScreen>
         _urlController.text = nowActive.isHome ? '' : nowActive.url;
       });
       // Dispose AFTER the frame — widget is now unmounted, no double-dispose.
-      WidgetsBinding.instance.addPostFrameCallback((_) => tabToDispose.dispose());
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => tabToDispose.dispose());
       _switchToPreviousTab();
       _saveTabs();
 
@@ -1861,12 +1905,13 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
 
     // (c) Not Home → send tab to its Home dashboard.
+    // Keep the URL intact so forward navigation can restore the page
+    // without needing _homeReturnUrl to reload it from scratch.
     if (!activeTab.isHome && activeTab.url.isNotEmpty) {
       if (mounted) {
         _homeReturnUrl = activeTab.url;
         setState(() {
           activeTab.isHome = true;
-          activeTab.url = '';
           activeTab.canGoBack = false;
           activeTab.canGoForward = true;
           activeTab.controller = null;
@@ -1879,8 +1924,6 @@ class _BrowserScreenState extends State<BrowserScreen>
     // (d) Already Home — caller handles exit / tab-switch fallback.
     return false;
   }
-
-
 
   bool _switchToPreviousTab() {
     _tabIdHistory.removeWhere((id) => !_tabs.any((t) => t.id == id));
@@ -1920,22 +1963,28 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (activeTab.isHome &&
         _homeReturnUrl != null &&
         _homeReturnUrl!.isNotEmpty) {
-      final returnUrl = _homeReturnUrl!;
       _homeReturnUrl = null;
       if (mounted) {
+        _redirectGuard.reset(activeTab.id);
         setState(() {
           activeTab.isHome = false;
+          _urlController.text = activeTab.url;
         });
+        _delayed(const Duration(milliseconds: 300), _updateNavState);
       }
-      _navigateToUrl(returnUrl);
       return;
     }
 
+    _isNavigatingBackForward = true;
     unawaited(activeTab.controller?.goForward() ?? Future.value());
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) _isNavigatingBackForward = false;
+    });
     _updateNavState();
   }
 
   void _navigateToUrl(String input) {
+    _isNavigatingBackForward = false;
     var url = input.trim();
     if (url.isEmpty) return;
 
@@ -2329,7 +2378,8 @@ class _BrowserScreenState extends State<BrowserScreen>
     _lastLongPressSheetUrl = cleanUrl;
     _lastLongPressSheetAt = now;
 
-    final isWebUrl = cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://');
+    final isWebUrl =
+        cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://');
 
     // Plain link long-press → lightweight navigation sheet.
     // Media/file long-press → BrowserDownloadSheet (download-forward UI).
@@ -3321,7 +3371,8 @@ class _BrowserScreenState extends State<BrowserScreen>
       builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
               Icon(Icons.warning_amber_rounded,
@@ -3330,7 +3381,8 @@ class _BrowserScreenState extends State<BrowserScreen>
               Text(
                 isRtl ? 'إغلاق جميع التبويبات' : 'Close All Tabs',
                 style: TextStyle(
-                  color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                  color:
+                      isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
                   fontSize: 16,
                 ),
               ),
@@ -3341,7 +3393,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                 ? 'هل أنت تأكد من إغلاق جميع التبويبات (${_tabs.length})؟'
                 : 'Close all ${_tabs.length} tabs?',
             style: TextStyle(
-              color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+              color:
+                  isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
               fontSize: 13,
             ),
           ),
@@ -3499,9 +3552,14 @@ class _BrowserScreenState extends State<BrowserScreen>
                                       const Spacer(),
                                       _TabSwitcherAction(
                                         icon: Icons.delete_sweep_rounded,
-                                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                                        tooltip: L10n.isRtl(context) ? 'إغلاق جميع التبويبات' : 'Close all tabs',
-                                        onPressed: () => _confirmCloseAllTabs(context, setModalState),
+                                        color: isDark
+                                            ? AppTheme.neonRed
+                                            : AppTheme.lightNeonRed,
+                                        tooltip: L10n.isRtl(context)
+                                            ? 'إغلاق جميع التبويبات'
+                                            : 'Close all tabs',
+                                        onPressed: () => _confirmCloseAllTabs(
+                                            context, setModalState),
                                       ),
                                       const SizedBox(width: 8),
                                       _TabSwitcherAction(
@@ -4057,7 +4115,10 @@ class _BrowserScreenState extends State<BrowserScreen>
                 icon: Icon(Icons.add, size: 16, color: accentColor),
                 label: Text(
                   isRtl ? 'إضافة' : 'Add',
-                  style: TextStyle(fontSize: 12, color: accentColor, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: accentColor,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -4465,444 +4526,499 @@ class _BrowserScreenState extends State<BrowserScreen>
                             }
                           },
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 8.0),
                             child: Row(
-                            children: [
-                              IconButton(
-                                icon:
-                                    Icon(Icons.close, size: 20, color: textClr),
-                                tooltip:
-                                    isRtl ? 'إغلاق المتصفح' : 'Close browser',
-                                onPressed: () {
-                                  triggerHaptic(settings);
-                                  if (Navigator.canPop(context)) {
-                                    Navigator.pop(context);
-                                  } else {
-                                    downloadProvider.setActiveTabIndex(0);
-                                  }
-                                },
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  height: 38,
-                                  decoration: BoxDecoration(
-                                    // E3: Incognito Mode Visual Indicator
-                                    color: (activeTab.isIncognito ||
-                                            settings.incognitoEnabled)
-                                        ? const Color(0xFF1A1A2E)
-                                        : isDark
-                                            ? (settings.isAmoledMode
-                                                ? (_isFocused
-                                                    ? AppTheme
-                                                        .amoledSurfaceRaised
-                                                    : AppTheme.amoledBackground)
-                                                : (_isFocused
-                                                    ? const Color(0xFF141424)
-                                                    : const Color(0xFF0F0F16)))
-                                            : (_isFocused
-                                                ? AppTheme.lightNeonBlue
-                                                    .withValues(alpha: 0.08)
-                                                : const Color(0xFFF1F5F9)),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
+                              children: [
+                                IconButton(
+                                  icon: Icon(Icons.close,
+                                      size: 20, color: textClr),
+                                  tooltip:
+                                      isRtl ? 'إغلاق المتصفح' : 'Close browser',
+                                  onPressed: () {
+                                    triggerHaptic(settings);
+                                    if (Navigator.canPop(context)) {
+                                      Navigator.pop(context);
+                                    } else {
+                                      downloadProvider.setActiveTabIndex(0);
+                                    }
+                                  },
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      // E3: Incognito Mode Visual Indicator
                                       color: (activeTab.isIncognito ||
                                               settings.incognitoEnabled)
-                                          ? AppTheme.neonViolet
-                                              .withValues(alpha: 0.3)
-                                          : _isFocused
-                                              ? (isDark
-                                                      ? AppTheme.neonBlue
-                                                      : AppTheme.lightNeonBlue)
-                                                  .withValues(alpha: 0.5)
-                                              : (isDark
-                                                  ? const Color(0x15FFFFFF)
-                                                  : const Color(0x0D000000)),
-                                      width: (activeTab.isIncognito ||
-                                              settings.incognitoEnabled)
-                                          ? 1.0
-                                          : (_isFocused ? 1.2 : 0.8),
+                                          ? const Color(0xFF1A1A2E)
+                                          : isDark
+                                              ? (settings.isAmoledMode
+                                                  ? (_isFocused
+                                                      ? AppTheme
+                                                          .amoledSurfaceRaised
+                                                      : AppTheme
+                                                          .amoledBackground)
+                                                  : (_isFocused
+                                                      ? const Color(0xFF141424)
+                                                      : const Color(
+                                                          0xFF0F0F16)))
+                                              : (_isFocused
+                                                  ? AppTheme.lightNeonBlue
+                                                      .withValues(alpha: 0.08)
+                                                  : const Color(0xFFF1F5F9)),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: (activeTab.isIncognito ||
+                                                settings.incognitoEnabled)
+                                            ? AppTheme.neonViolet
+                                                .withValues(alpha: 0.3)
+                                            : _isFocused
+                                                ? (isDark
+                                                        ? AppTheme.neonBlue
+                                                        : AppTheme
+                                                            .lightNeonBlue)
+                                                    .withValues(alpha: 0.5)
+                                                : (isDark
+                                                    ? const Color(0x15FFFFFF)
+                                                    : const Color(0x0D000000)),
+                                        width: (activeTab.isIncognito ||
+                                                settings.incognitoEnabled)
+                                            ? 1.0
+                                            : (_isFocused ? 1.2 : 0.8),
+                                      ),
+                                      boxShadow: (_isFocused &&
+                                              isDark &&
+                                              settings.enableGlow)
+                                          ? [
+                                              BoxShadow(
+                                                color: (isDark
+                                                        ? AppTheme.neonBlue
+                                                        : AppTheme
+                                                            .lightNeonBlue)
+                                                    .withValues(alpha: 0.25),
+                                                blurRadius: 8,
+                                                spreadRadius: 0.5,
+                                              ),
+                                            ]
+                                          : null,
                                     ),
-                                    boxShadow: (_isFocused &&
-                                            isDark &&
-                                            settings.enableGlow)
-                                        ? [
-                                            BoxShadow(
-                                              color: (isDark
-                                                      ? AppTheme.neonBlue
-                                                      : AppTheme.lightNeonBlue)
-                                                  .withValues(alpha: 0.25),
-                                              blurRadius: 8,
-                                              spreadRadius: 0.5,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4),
+                                    child: Row(
+                                      children: [
+                                        // E3: Incognito Icon
+                                        if (activeTab.isIncognito ||
+                                            settings.incognitoEnabled)
+                                          const Tooltip(
+                                            message:
+                                                'Incognito mode — cookies isolated, history not saved',
+                                            child: Padding(
+                                              padding: EdgeInsets.symmetric(
+                                                  horizontal: 4.0),
+                                              child: Icon(
+                                                  Icons.visibility_off_rounded,
+                                                  size: 14,
+                                                  color: AppTheme.neonViolet),
                                             ),
-                                          ]
-                                        : null,
-                                  ),
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 4),
-                                  child: Row(
-                                    children: [
-                                      // E3: Incognito Icon
-                                      if (activeTab.isIncognito ||
-                                          settings.incognitoEnabled)
-                                        const Tooltip(
-                                          message:
-                                              'Incognito mode — cookies isolated, history not saved',
-                                          child: Padding(
-                                            padding: EdgeInsets.symmetric(
-                                                horizontal: 4.0),
-                                            child: Icon(
-                                                Icons.visibility_off_rounded,
-                                                size: 14,
-                                                color: AppTheme.neonViolet),
                                           ),
-                                        ),
 
-                                      // E1 & E2: Security / Loading Indicator
-                                      AnimatedSwitcher(
-                                        duration: AppTheme.motionBase,
-                                        child: activeTab.isLoading
-                                            ? const SizedBox(
-                                                key: ValueKey('loading'),
-                                                width: 14,
-                                                height: 14,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                        strokeWidth: 1.5,
-                                                        color:
-                                                            AppTheme.neonBlue),
-                                              )
-                                            : GestureDetector(
-                                                onTap: () => _showSiteSettingsSheet(activeTab),
-                                                child: Tooltip(
-                                                  key: const ValueKey('security'),
-                                                  message: activeTab.url
-                                                          .startsWith('https')
-                                                      ? 'Secure connection'
-                                                      : 'Insecure connection',
-                                                  child: Padding(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 6.0),
-                                                    child: Icon(
-                                                      activeTab.isHome ||
-                                                              activeTab
-                                                                  .url.isEmpty
-                                                          ? Icons.search_rounded
-                                                          : activeTab.url
-                                                                  .startsWith(
-                                                                      'https')
-                                                              ? Icons.lock_rounded
-                                                              : Icons
-                                                                  .lock_open_rounded,
-                                                      size: 14,
-                                                      color: activeTab.isHome ||
-                                                              activeTab
-                                                                  .url.isEmpty
-                                                          ? (isDark
-                                                              ? AppTheme.textMuted
-                                                              : AppTheme
-                                                                  .lightTextMuted)
-                                                          : activeTab.url
-                                                                  .startsWith(
-                                                                      'https')
-                                                              ? AppTheme.neonGreen
-                                                              : AppTheme
-                                                                  .neonAmber,
+                                        // E1 & E2: Security / Loading Indicator
+                                        AnimatedSwitcher(
+                                          duration: AppTheme.motionBase,
+                                          child: activeTab.isLoading
+                                              ? const SizedBox(
+                                                  key: ValueKey('loading'),
+                                                  width: 14,
+                                                  height: 14,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                          strokeWidth: 1.5,
+                                                          color: AppTheme
+                                                              .neonBlue),
+                                                )
+                                              : GestureDetector(
+                                                  onTap: () =>
+                                                      _showSiteSettingsSheet(
+                                                          activeTab),
+                                                  child: Tooltip(
+                                                    key: const ValueKey(
+                                                        'security'),
+                                                    message: activeTab.url
+                                                            .startsWith('https')
+                                                        ? 'Secure connection'
+                                                        : 'Insecure connection',
+                                                    child: Padding(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 6.0),
+                                                      child: Icon(
+                                                        activeTab.isHome ||
+                                                                activeTab
+                                                                    .url.isEmpty
+                                                            ? Icons
+                                                                .search_rounded
+                                                            : activeTab.url
+                                                                    .startsWith(
+                                                                        'https')
+                                                                ? Icons
+                                                                    .lock_rounded
+                                                                : Icons
+                                                                    .lock_open_rounded,
+                                                        size: 14,
+                                                        color: activeTab
+                                                                    .isHome ||
+                                                                activeTab
+                                                                    .url.isEmpty
+                                                            ? (isDark
+                                                                ? AppTheme
+                                                                    .textMuted
+                                                                : AppTheme
+                                                                    .lightTextMuted)
+                                                            : activeTab.url
+                                                                    .startsWith(
+                                                                        'https')
+                                                                ? AppTheme
+                                                                    .neonGreen
+                                                                : AppTheme
+                                                                    .neonAmber,
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
-                                              ),
-                                      ),
+                                        ),
 
-                                      // E4 & E10: Ad-blocker Indicator
-                                      GestureDetector(
-                                        onTap: () => _showSiteSettingsSheet(activeTab),
-                                        child: Tooltip(
-                                          message: _adBlocker.isEnabled
-                                              ? 'Ad-blocker active'
-                                              : 'Ad-blocker disabled',
-                                          child: Stack(
-                                            clipBehavior: Clip.none,
-                                            children: [
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 4.0),
-                                                child: Icon(
-                                                  _adBlocker.isEnabled
-                                                      ? Icons.shield_rounded
-                                                      : Icons.shield_outlined,
-                                                  size: 14,
-                                                  color: _adBlocker.isEnabled
-                                                      ? AppTheme.neonGreen
-                                                      : (isDark
-                                                          ? AppTheme.textMuted
-                                                          : AppTheme
-                                                              .lightTextMuted),
-                                                ),
-                                              ),
-                                              if (_adBlocker.isEnabled &&
-                                                  _blockedAdsCount > 0)
-                                                Positioned(
-                                                  right: -4,
-                                                  top: -4,
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.all(2),
-                                                    decoration:
-                                                        const BoxDecoration(
-                                                            color: Colors.red,
-                                                            shape:
-                                                                BoxShape.circle),
-                                                    constraints:
-                                                        const BoxConstraints(
-                                                            minWidth: 12,
-                                                            minHeight: 12),
-                                                    child: Text(
-                                                        '$_blockedAdsCount',
-                                                        style: const TextStyle(
-                                                            color: Colors.white,
-                                                            fontSize: 8)),
+                                        // E4 & E10: Ad-blocker Indicator
+                                        GestureDetector(
+                                          onTap: () =>
+                                              _showSiteSettingsSheet(activeTab),
+                                          child: Tooltip(
+                                            message: _adBlocker.isEnabled
+                                                ? 'Ad-blocker active'
+                                                : 'Ad-blocker disabled',
+                                            child: Stack(
+                                              clipBehavior: Clip.none,
+                                              children: [
+                                                Padding(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 4.0),
+                                                  child: Icon(
+                                                    _adBlocker.isEnabled
+                                                        ? Icons.shield_rounded
+                                                        : Icons.shield_outlined,
+                                                    size: 14,
+                                                    color: _adBlocker.isEnabled
+                                                        ? AppTheme.neonGreen
+                                                        : (isDark
+                                                            ? AppTheme.textMuted
+                                                            : AppTheme
+                                                                .lightTextMuted),
                                                   ),
                                                 ),
-                                            ],
+                                                if (_adBlocker.isEnabled &&
+                                                    _blockedAdsCount > 0)
+                                                  Positioned(
+                                                    right: -4,
+                                                    top: -4,
+                                                    child: Container(
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                              2),
+                                                      decoration:
+                                                          const BoxDecoration(
+                                                              color: Colors.red,
+                                                              shape: BoxShape
+                                                                  .circle),
+                                                      constraints:
+                                                          const BoxConstraints(
+                                                              minWidth: 12,
+                                                              minHeight: 12),
+                                                      child: Text(
+                                                          '$_blockedAdsCount',
+                                                          style:
+                                                              const TextStyle(
+                                                                  color: Colors
+                                                                      .white,
+                                                                  fontSize: 8)),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      ),
 
-                                      // E7: Desktop Mode Indicator
-                                      if (settings.desktopMode)
-                                        const Tooltip(
-                                          message: 'Desktop mode active',
-                                          child: Padding(
-                                            padding: EdgeInsets.symmetric(
-                                                horizontal: 4.0),
-                                            child: Icon(
-                                                Icons.desktop_windows_rounded,
-                                                size: 14,
-                                                color: AppTheme.neonBlue),
+                                        // E7: Desktop Mode Indicator
+                                        if (settings.desktopMode)
+                                          const Tooltip(
+                                            message: 'Desktop mode active',
+                                            child: Padding(
+                                              padding: EdgeInsets.symmetric(
+                                                  horizontal: 4.0),
+                                              child: Icon(
+                                                  Icons.desktop_windows_rounded,
+                                                  size: 14,
+                                                  color: AppTheme.neonBlue),
+                                            ),
+                                          ),
+
+                                        Expanded(
+                                          child: SmartUrlBar(
+                                            controller: _urlController,
+                                            focusNode: _focusNode,
+                                            isDark: isDark,
+                                            isLoading: activeTab.isLoading,
+                                            onNavigate: _navigateToUrl,
+                                            onReload: () {
+                                              if (!activeTab.isHome) {
+                                                _safeReloadTab(activeTab);
+                                              }
+                                            },
+                                            onStopLoading: () {
+                                              activeTab.controller
+                                                  ?.evaluateJavascript(
+                                                      source: 'window.stop();');
+                                              setState(() {
+                                                activeTab.isLoading = false;
+                                              });
+                                            },
                                           ),
                                         ),
-
-                                      Expanded(
-                                        child: SmartUrlBar(
-                                          controller: _urlController,
-                                          focusNode: _focusNode,
-                                          isDark: isDark,
-                                          isLoading: activeTab.isLoading,
-                                          onNavigate: _navigateToUrl,
-                                          onReload: () {
-                                            if (!activeTab.isHome) {
-                                              _safeReloadTab(activeTab);
-                                            }
-                                          },
-                                          onStopLoading: () {
-                                            activeTab.controller?.evaluateJavascript(source: 'window.stop();');
-                                            setState(() {
-                                              activeTab.isLoading = false;
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 4),
-                              if (!activeTab.isHome &&
-                                  (YoutubeService.isYoutubeVideoUrl(
-                                          activeTab.url) ||
-                                      YoutubeService.isPlaylistUrl(
-                                          activeTab.url))) ...[
-                                _YouTubeGrabButton(
-                                  isPlaylist: YoutubeService.isPlaylistUrl(
-                                      activeTab.url),
-                                  isRtl: isRtl,
-                                  isDark: isDark,
-                                  enableGlow: settings.enableGlow,
-                                  onPressed: () =>
-                                      _handleYouTubeGrab(activeTab, settings),
-                                ),
                                 const SizedBox(width: 4),
-                              ],
-                              IconButton(
-                                icon: Icon(
-                                  Icons.arrow_back_ios_new,
-                                  size: 15,
-                                  color:
-                                      (activeTab.canGoBack ||
-                                              (!activeTab.isHome &&
-                                                  activeTab.origin !=
-                                                      TabOrigin.userDirect))
-                                          ? textClr
-                                          : (isDark
-                                              ? AppTheme.textMuted
-                                              : AppTheme.lightTextMuted),
-                                ),
-                                onPressed:
-                                    (activeTab.canGoBack ||
+                                if (!activeTab.isHome &&
+                                    (YoutubeService.isYoutubeVideoUrl(
+                                            activeTab.url) ||
+                                        YoutubeService.isPlaylistUrl(
+                                            activeTab.url))) ...[
+                                  _YouTubeGrabButton(
+                                    isPlaylist: YoutubeService.isPlaylistUrl(
+                                        activeTab.url),
+                                    isRtl: isRtl,
+                                    isDark: isDark,
+                                    enableGlow: settings.enableGlow,
+                                    onPressed: () =>
+                                        _handleYouTubeGrab(activeTab, settings),
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.arrow_back_ios_new,
+                                    size: 15,
+                                    color: (activeTab.canGoBack ||
                                             (!activeTab.isHome &&
                                                 activeTab.origin !=
                                                     TabOrigin.userDirect))
-                                        ? () async {
-                                            triggerHaptic(settings);
-                                            await _goBack();
-                                          }
-                                        : null,
-                              ),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.arrow_forward_ios,
-                                  size: 15,
-                                  color: activeTab.canGoForward
-                                      ? textClr
-                                      : (isDark
-                                          ? AppTheme.textMuted
-                                          : AppTheme.lightTextMuted),
+                                        ? textClr
+                                        : (isDark
+                                            ? AppTheme.textMuted
+                                            : AppTheme.lightTextMuted),
+                                  ),
+                                  onPressed: (activeTab.canGoBack ||
+                                          (!activeTab.isHome &&
+                                              activeTab.origin !=
+                                                  TabOrigin.userDirect))
+                                      ? () async {
+                                          triggerHaptic(settings);
+                                          await _goBack();
+                                        }
+                                      : null,
                                 ),
-                                onPressed: activeTab.canGoForward
-                                    ? () async {
-                                        triggerHaptic(settings);
-                                        await _goForward();
-                                      }
-                                    : null,
-                              ),
-                              // E15: Tab Limit Visual Feedback
-                              GestureDetector(
-                                onTap: () {
-                                  triggerHaptic(settings);
-                                  _showTabSwitcher(context);
-                                },
-                                child: Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    AnimatedContainer(
-                                      duration:
-                                          const Duration(milliseconds: 200),
-                                      margin: const EdgeInsets.symmetric(
-                                          horizontal: 6),
-                                      width: 26,
-                                      height: 26,
-                                      decoration: BoxDecoration(
-                                        border: Border.all(
-                                            color: textClr, width: 1.8),
-                                        borderRadius: BorderRadius.circular(7),
-                                        color: _tabs.length > 1
-                                            ? (isDark
-                                                    ? AppTheme.neonBlue
-                                                    : AppTheme.lightNeonBlue)
-                                                .withValues(alpha: 0.1)
-                                            : Colors.transparent,
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        '${_tabs.length}',
-                                        style: TextStyle(
-                                          color: textClr,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w800,
-                                          fontFamily: 'Space Grotesk',
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.arrow_forward_ios,
+                                    size: 15,
+                                    color: activeTab.canGoForward
+                                        ? textClr
+                                        : (isDark
+                                            ? AppTheme.textMuted
+                                            : AppTheme.lightTextMuted),
+                                  ),
+                                  onPressed: activeTab.canGoForward
+                                      ? () async {
+                                          triggerHaptic(settings);
+                                          await _goForward();
+                                        }
+                                      : null,
+                                ),
+                                // E15: Tab Limit Visual Feedback
+                                GestureDetector(
+                                  onTap: () {
+                                    triggerHaptic(settings);
+                                    _showTabSwitcher(context);
+                                  },
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      AnimatedContainer(
+                                        duration:
+                                            const Duration(milliseconds: 200),
+                                        margin: const EdgeInsets.symmetric(
+                                            horizontal: 6),
+                                        width: 26,
+                                        height: 26,
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                              color: textClr, width: 1.8),
+                                          borderRadius:
+                                              BorderRadius.circular(7),
+                                          color: _tabs.length > 1
+                                              ? (isDark
+                                                      ? AppTheme.neonBlue
+                                                      : AppTheme.lightNeonBlue)
+                                                  .withValues(alpha: 0.1)
+                                              : Colors.transparent,
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          '${_tabs.length}',
+                                          style: TextStyle(
+                                            color: textClr,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            fontFamily: 'Space Grotesk',
+                                          ),
                                         ),
                                       ),
+                                      if (_tabs.length >= settings.maxTabs)
+                                        const Positioned(
+                                          right: -2,
+                                          top: -2,
+                                          child: Tooltip(
+                                            message: 'Tab limit reached',
+                                            child: Icon(
+                                                Icons.warning_amber_rounded,
+                                                size: 12,
+                                                color: Colors.orangeAccent),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuButton<String>(
+                                  icon: Icon(Icons.more_vert,
+                                      size: 18, color: textClr),
+                                  color: (isDark
+                                      ? AppTheme.surface
+                                      : AppTheme.lightSurface),
+                                  onSelected: (value) async {
+                                    triggerHaptic(settings);
+                                    await _handleMenuAction(value);
+                                  },
+                                  itemBuilder: (_) => [
+                                    // Section A: Page actions
+                                    _menuItem(Icons.refresh, 'Reload', 'reload',
+                                        textClr),
+                                    _menuItem(
+                                        Icons.bookmark_add_outlined,
+                                        'Bookmark this page',
+                                        'bookmark',
+                                        textClr),
+                                    _menuItem(Icons.copy, 'Copy URL', 'copy',
+                                        textClr),
+                                    _menuItem(Icons.share, 'Share URL', 'share',
+                                        textClr),
+                                    const PopupMenuDivider(),
+
+                                    // Section B: Library
+                                    _menuItem(
+                                        Icons.bookmarks_outlined,
+                                        'Bookmarks Manager',
+                                        'show_bookmarks',
+                                        textClr),
+                                    _menuItem(Icons.history, 'Browser History',
+                                        'show_history', textClr),
+                                    const PopupMenuDivider(),
+
+                                    // Section C: Page tools
+                                    _menuItem(Icons.menu_book_outlined,
+                                        'Reader Mode', 'reader', textClr),
+                                    _menuItem(
+                                        Icons.save_alt,
+                                        'Save Page Offline',
+                                        'offline',
+                                        textClr),
+                                    const PopupMenuDivider(),
+
+                                    // Section D: Privacy & rendering toggles
+                                    _toggleMenuItem(
+                                      icon: settings.desktopMode
+                                          ? Icons.desktop_mac
+                                          : Icons.smartphone,
+                                      title: settings.desktopMode
+                                          ? 'Desktop mode'
+                                          : 'Mobile mode',
+                                      value: 'desktop',
+                                      isON: settings.desktopMode,
+                                      textClr: textClr,
+                                      isDark: isDark,
                                     ),
-                                    if (_tabs.length >= settings.maxTabs)
-                                      const Positioned(
-                                        right: -2,
-                                        top: -2,
-                                        child: Tooltip(
-                                          message: 'Tab limit reached',
-                                          child: Icon(
-                                              Icons.warning_amber_rounded,
-                                              size: 12,
-                                              color: Colors.orangeAccent),
-                                        ),
-                                      ),
+                                    _toggleMenuItem(
+                                      icon: _isSnifferEnabled
+                                          ? Icons.radar
+                                          : Icons.radar_outlined,
+                                      title: L10n.isRtl(context)
+                                          ? 'كاشف الوسائط'
+                                          : 'Media detector',
+                                      value: 'sniffer',
+                                      isON: _isSnifferEnabled,
+                                      textClr: textClr,
+                                      isDark: isDark,
+                                    ),
+                                    _toggleMenuItem(
+                                      icon: _adBlocker.isEnabled
+                                          ? Icons.shield
+                                          : Icons.shield_outlined,
+                                      title: 'Ad blocker',
+                                      value: 'adblocker',
+                                      isON: _adBlocker.isEnabled,
+                                      textClr: textClr,
+                                      isDark: isDark,
+                                    ),
+                                    _menuItem(Icons.touch_app_outlined,
+                                        'Block Element', 'picker', textClr),
+                                    const PopupMenuDivider(),
+
+                                    // Section E: Advanced
+                                    _menuItem(Icons.code, 'Inject JS / CSS',
+                                        'injector', textClr),
+                                    const PopupMenuDivider(),
+
+                                    // Section F: Session
+                                    _menuItem(
+                                      settings.incognitoEnabled
+                                          ? Icons.visibility_off
+                                          : Icons.visibility,
+                                      settings.incognitoEnabled
+                                          ? 'Exit incognito'
+                                          : 'New incognito tab',
+                                      'incognito',
+                                      textClr,
+                                    ),
                                   ],
                                 ),
-                              ),
-                              PopupMenuButton<String>(
-                                icon: Icon(Icons.more_vert,
-                                    size: 18, color: textClr),
-                                color: (isDark
-                                    ? AppTheme.surface
-                                    : AppTheme.lightSurface),
-                                onSelected: (value) async {
-                                  triggerHaptic(settings);
-                                  await _handleMenuAction(value);
-                                },
-                                itemBuilder: (_) => [
-                                  // Section A: Page actions
-                                  _menuItem(Icons.refresh, 'Reload', 'reload', textClr),
-                                  _menuItem(Icons.bookmark_add_outlined, 'Bookmark this page', 'bookmark', textClr),
-                                  _menuItem(Icons.copy, 'Copy URL', 'copy', textClr),
-                                  _menuItem(Icons.share, 'Share URL', 'share', textClr),
-                                  const PopupMenuDivider(),
-
-                                  // Section B: Library
-                                  _menuItem(Icons.bookmarks_outlined, 'Bookmarks Manager', 'show_bookmarks', textClr),
-                                  _menuItem(Icons.history, 'Browser History', 'show_history', textClr),
-                                  const PopupMenuDivider(),
-
-                                  // Section C: Page tools
-                                  _menuItem(Icons.menu_book_outlined, 'Reader Mode', 'reader', textClr),
-                                  _menuItem(Icons.save_alt, 'Save Page Offline', 'offline', textClr),
-                                  const PopupMenuDivider(),
-
-                                  // Section D: Privacy & rendering toggles
-                                  _toggleMenuItem(
-                                    icon: settings.desktopMode ? Icons.desktop_mac : Icons.smartphone,
-                                    title: settings.desktopMode ? 'Desktop mode' : 'Mobile mode',
-                                    value: 'desktop',
-                                    isON: settings.desktopMode,
-                                    textClr: textClr,
-                                    isDark: isDark,
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.power_settings_new_rounded,
+                                    size: 18,
+                                    color: isDark
+                                        ? AppTheme.neonRed
+                                        : AppTheme.lightNeonRed,
                                   ),
-                                  _toggleMenuItem(
-                                    icon: _isSnifferEnabled ? Icons.radar : Icons.radar_outlined,
-                                    title: L10n.isRtl(context) ? 'كاشف الوسائط' : 'Media detector',
-                                    value: 'sniffer',
-                                    isON: _isSnifferEnabled,
-                                    textClr: textClr,
-                                    isDark: isDark,
-                                  ),
-                                  _toggleMenuItem(
-                                    icon: _adBlocker.isEnabled ? Icons.shield : Icons.shield_outlined,
-                                    title: 'Ad blocker',
-                                    value: 'adblocker',
-                                    isON: _adBlocker.isEnabled,
-                                    textClr: textClr,
-                                    isDark: isDark,
-                                  ),
-                                  _menuItem(Icons.touch_app_outlined, 'Block Element', 'picker', textClr),
-                                  const PopupMenuDivider(),
-
-                                  // Section E: Advanced
-                                  _menuItem(Icons.code, 'Inject JS / CSS', 'injector', textClr),
-                                  const PopupMenuDivider(),
-
-                                  // Section F: Session
-                                  _menuItem(
-                                    settings.incognitoEnabled ? Icons.visibility_off : Icons.visibility,
-                                    settings.incognitoEnabled ? 'Exit incognito' : 'New incognito tab',
-                                    'incognito',
-                                    textClr,
-                                  ),
-                                ],
-                              ),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.power_settings_new_rounded,
-                                  size: 18,
-                                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                  tooltip: L10n.isRtl(context)
+                                      ? 'إنهاء المتصفح'
+                                      : 'Quit browser',
+                                  onPressed: _confirmQuitBrowser,
                                 ),
-                                tooltip: L10n.isRtl(context) ? 'إنهاء المتصفح' : 'Quit browser',
-                                onPressed: _confirmQuitBrowser,
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
                         ),
                       ),
                     ),
@@ -4950,7 +5066,6 @@ class _BrowserScreenState extends State<BrowserScreen>
                                         final tabIndex = _tabs.indexOf(tab);
                                         final isActiveTab =
                                             tabIndex == _currentTabIndex;
-
 
                                         if (tab.isHome) {
                                           return SizedBox(
@@ -5208,7 +5323,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                         .AT_DOCUMENT_START,
                                                               ),
                                                               UserScript(
-                                                                source: AdBlockerService.youtubeEarlyJs,
+                                                                source: AdBlockerService
+                                                                    .youtubeEarlyJs,
                                                                 injectionTime:
                                                                     UserScriptInjectionTime
                                                                         .AT_DOCUMENT_START,
@@ -5259,21 +5375,20 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                     challenge) async {
                                                               final settings =
                                                                   Provider.of<
-                                                                      SettingsProvider>(
+                                                                          SettingsProvider>(
                                                                       context,
                                                                       listen:
                                                                           false);
                                                               if (settings
                                                                   .bypassSSL) {
                                                                 return ServerTrustAuthResponse(
-                                                                    action:
-                                                                        ServerTrustAuthResponseAction
-                                                                            .PROCEED);
+                                                                    action: ServerTrustAuthResponseAction
+                                                                        .PROCEED);
                                                               }
                                                               return ServerTrustAuthResponse(
                                                                   action:
-                                                                        ServerTrustAuthResponseAction
-                                                                            .CANCEL);
+                                                                      ServerTrustAuthResponseAction
+                                                                          .CANCEL);
                                                             },
                                                             onCreateWindow:
                                                                 (controller,
@@ -5282,8 +5397,13 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                   createWindowAction
                                                                       .request
                                                                       .url;
-                                                              if (reqUrl != null) {
-                                                                controller.loadUrl(urlRequest: URLRequest(url: reqUrl));
+                                                              if (reqUrl !=
+                                                                  null) {
+                                                                controller.loadUrl(
+                                                                    urlRequest:
+                                                                        URLRequest(
+                                                                            url:
+                                                                                reqUrl));
                                                               }
                                                               return true;
                                                             },
@@ -5305,36 +5425,51 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                             onLongPressHitTestResult:
                                                                 (controller,
                                                                     hitTestResult) async {
-                                                              triggerHaptic(settings);
+                                                              triggerHaptic(
+                                                                  settings);
                                                               var targetUrl =
                                                                   hitTestResult
                                                                       .extra;
-                                                              String typeOverride =
+                                                              String
+                                                                  typeOverride =
                                                                   '';
-                                                              if (targetUrl == null ||
-                                                                  targetUrl.trim().isEmpty) {
+                                                              if (targetUrl ==
+                                                                      null ||
+                                                                  targetUrl
+                                                                      .trim()
+                                                                      .isEmpty) {
                                                                 try {
                                                                   final jsUrl =
-                                                                      await controller.evaluateJavascript(
-                                                                        source:
-                                                                            _longPressTargetFallbackJs,
-                                                                      );
+                                                                      await controller
+                                                                          .evaluateJavascript(
+                                                                    source:
+                                                                        _longPressTargetFallbackJs,
+                                                                  );
                                                                   final resolved =
                                                                       _parseLongPressTarget(
-                                                                          jsUrl?.toString());
+                                                                          jsUrl
+                                                                              ?.toString());
                                                                   if (resolved !=
                                                                       null) {
                                                                     targetUrl =
-                                                                        resolved.$1;
+                                                                        resolved
+                                                                            .$1;
                                                                     typeOverride =
                                                                         resolved
                                                                             .$2;
                                                                   }
                                                                 } catch (_) {}
                                                               }
-                                                              if (targetUrl != null &&
-                                                                  targetUrl.trim().isNotEmpty) {
-                                                                if (!mounted || !context.mounted) return;
+                                                              if (targetUrl !=
+                                                                      null &&
+                                                                  targetUrl
+                                                                      .trim()
+                                                                      .isNotEmpty) {
+                                                                if (!mounted ||
+                                                                    !context
+                                                                        .mounted) {
+                                                                  return;
+                                                                }
                                                                 String type =
                                                                     typeOverride
                                                                             .isNotEmpty
@@ -5349,19 +5484,25 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                     hType ==
                                                                         InAppWebViewHitTestResultType
                                                                             .SRC_IMAGE_ANCHOR_TYPE) {
-                                                                  type = 'image';
+                                                                  type =
+                                                                      'image';
                                                                 }
-                                                                if (!mounted || !context.mounted) return;
+                                                                if (!mounted ||
+                                                                    !context
+                                                                        .mounted) {
+                                                                  return;
+                                                                }
                                                                 _showLongPressSheet(
                                                                     context,
-                                                                    targetUrl.trim(),
+                                                                    targetUrl
+                                                                        .trim(),
                                                                     type,
                                                                     tabId:
                                                                         tab.id);
                                                               }
                                                             },
-                                                             gestureRecognizers:
-                                                                 const <Factory<OneSequenceGestureRecognizer>>{},
+                                                            gestureRecognizers: const <Factory<
+                                                                OneSequenceGestureRecognizer>>{},
                                                             pullToRefreshController:
                                                                 tab.pullToRefreshController,
                                                             onScrollChanged:
@@ -5389,40 +5530,60 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                       '');
                                                             },
                                                             onLoadStop:
-                                                                 (controller,
-                                                                     url) async {
-                                                               _onPageStop(
-                                                                   tab,
-                                                                   url?.toString() ??
-                                                                       '');
-                                                               if (url == null) return;
-                                                               final res = await _redirectGuard.extractFromPage(
-                                                                 tabId: tab.id,
-                                                                 controller: controller,
-                                                               );
-                                                               switch (res.decision) {
-                                                                 case RedirectDecision.autoFollow:
-                                                                   await Future.delayed(const Duration(milliseconds: 400));
-                                                                   await controller.loadUrl(
-                                                                       urlRequest: URLRequest(url: WebUri(res.targetUrl!)));
-                                                                   break;
-                                                                 case RedirectDecision.promptUser:
-                                                                   if (context.mounted) {
-                                                                     RedirectSheet.show(
-                                                                       context,
-                                                                       candidates: res.candidates,
-                                                                       onSelected: (u) {
-                                                                         controller.loadUrl(
-                                                                             urlRequest: URLRequest(url: WebUri(u)));
-                                                                       },
-                                                                     );
-                                                                   }
-                                                                   break;
-                                                                 case RedirectDecision.block:
-                                                                 case RedirectDecision.ignore:
-                                                                   break;
-                                                               }
-                                                             },
+                                                                (controller,
+                                                                    url) async {
+                                                              _onPageStop(
+                                                                  tab,
+                                                                  url?.toString() ??
+                                                                      '');
+                                                              if (url == null) {
+                                                                return;
+                                                              }
+                                                              final res =
+                                                                  await _redirectGuard
+                                                                      .extractFromPage(
+                                                                tabId: tab.id,
+                                                                controller:
+                                                                    controller,
+                                                              );
+                                                              switch (res
+                                                                  .decision) {
+                                                                case RedirectDecision
+                                                                      .autoFollow:
+                                                                  await Future.delayed(
+                                                                      const Duration(
+                                                                          milliseconds:
+                                                                              400));
+                                                                  await controller.loadUrl(
+                                                                      urlRequest:
+                                                                          URLRequest(
+                                                                              url: WebUri(res.targetUrl!)));
+                                                                  break;
+                                                                case RedirectDecision
+                                                                      .promptUser:
+                                                                  if (context
+                                                                      .mounted) {
+                                                                    RedirectSheet
+                                                                        .show(
+                                                                      context,
+                                                                      candidates:
+                                                                          res.candidates,
+                                                                      onSelected:
+                                                                          (u) {
+                                                                        controller.loadUrl(
+                                                                            urlRequest:
+                                                                                URLRequest(url: WebUri(u)));
+                                                                      },
+                                                                    );
+                                                                  }
+                                                                  break;
+                                                                case RedirectDecision
+                                                                      .block:
+                                                                case RedirectDecision
+                                                                      .ignore:
+                                                                  break;
+                                                              }
+                                                            },
                                                             onProgressChanged:
                                                                 (controller,
                                                                     progress) {
@@ -5450,40 +5611,83 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                     url.toString());
                                                               }
                                                             },
-                                                             onDownloadStartRequest:
-                                                                 (controller,
-                                                                     downloadStartRequest) async {
-                                                               final url = downloadStartRequest.url.toString();
-                                                               _log.info('[Browser] onDownloadStartRequest: $url');
-                                                               _markUrlAsDownloaded(url);
-                                                               final isDark = Provider.of<SettingsProvider>(context, listen: false).isDarkMode;
-                                                               final result = await _interceptor.startDirectDownload(
-                                                                 url,
-                                                                 suggestedName: downloadStartRequest.suggestedFilename,
-                                                                 mimeType: downloadStartRequest.mimeType,
-                                                                 contentLength: downloadStartRequest.contentLength,
-                                                                 contentDisposition: downloadStartRequest.contentDisposition,
-                                                               );
-                                                               if (!context.mounted) return;
-                                                               if (result.status == InterceptDownloadStatus.queued) {
-                                                                 final filename = downloadStartRequest.suggestedFilename ?? fileNameFromUrl(url);
-                                                                 ThemedSnackbar.show(
-                                                                   context,
-                                                                   message: 'Download started: $filename',
-                                                                   icon: Icons.download_done_rounded,
-                                                                   color: AppTheme.neonGreen,
-                                                                   isDarkMode: isDark,
-                                                                 );
-                                                               } else if (result.status == InterceptDownloadStatus.alreadyInProgress) {
-                                                                 ThemedSnackbar.show(
-                                                                   context,
-                                                                   message: 'Download already in progress',
-                                                                   icon: Icons.info_outline,
-                                                                   color: AppTheme.neonAmber,
-                                                                   isDarkMode: isDark,
-                                                                 );
-                                                               }
-                                                             },
+                                                            onDownloadStartRequest:
+                                                                (controller,
+                                                                    downloadStartRequest) async {
+                                                              final url =
+                                                                  downloadStartRequest
+                                                                      .url
+                                                                      .toString();
+                                                              _log.info(
+                                                                  '[Browser] onDownloadStartRequest: $url');
+                                                              _markUrlAsDownloaded(
+                                                                  url);
+                                                              final isDark = Provider.of<
+                                                                          SettingsProvider>(
+                                                                      context,
+                                                                      listen:
+                                                                          false)
+                                                                  .isDarkMode;
+                                                              final result =
+                                                                  await _interceptor
+                                                                      .startDirectDownload(
+                                                                url,
+                                                                suggestedName:
+                                                                    downloadStartRequest
+                                                                        .suggestedFilename,
+                                                                mimeType:
+                                                                    downloadStartRequest
+                                                                        .mimeType,
+                                                                contentLength:
+                                                                    downloadStartRequest
+                                                                        .contentLength,
+                                                                contentDisposition:
+                                                                    downloadStartRequest
+                                                                        .contentDisposition,
+                                                              );
+                                                              if (!context
+                                                                  .mounted) {
+                                                                return;
+                                                              }
+                                                              if (result
+                                                                      .status ==
+                                                                  InterceptDownloadStatus
+                                                                      .queued) {
+                                                                final filename =
+                                                                    downloadStartRequest
+                                                                            .suggestedFilename ??
+                                                                        fileNameFromUrl(
+                                                                            url);
+                                                                ThemedSnackbar
+                                                                    .show(
+                                                                  context,
+                                                                  message:
+                                                                      'Download started: $filename',
+                                                                  icon: Icons
+                                                                      .download_done_rounded,
+                                                                  color: AppTheme
+                                                                      .neonGreen,
+                                                                  isDarkMode:
+                                                                      isDark,
+                                                                );
+                                                              } else if (result
+                                                                      .status ==
+                                                                  InterceptDownloadStatus
+                                                                      .alreadyInProgress) {
+                                                                ThemedSnackbar
+                                                                    .show(
+                                                                  context,
+                                                                  message:
+                                                                      'Download already in progress',
+                                                                  icon: Icons
+                                                                      .info_outline,
+                                                                  color: AppTheme
+                                                                      .neonAmber,
+                                                                  isDarkMode:
+                                                                      isDark,
+                                                                );
+                                                              }
+                                                            },
                                                             onReceivedError:
                                                                 (controller,
                                                                     request,
@@ -5547,39 +5751,74 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                 (controller,
                                                                     request) async {
                                                               // Never block main-frame requests
-                                                              if (request.isForMainFrame == true) {
+                                                              if (request
+                                                                      .isForMainFrame ==
+                                                                  true) {
                                                                 return null;
                                                               }
 
-                                                              final requestHost = request.url.host.toLowerCase();
+                                                              final requestHost =
+                                                                  request
+                                                                      .url.host
+                                                                      .toLowerCase();
 
                                                               // Instant fast-path: Never block YouTube, Google, gstatic, or core media infrastructure
                                                               if (requestHost.contains('youtube') ||
-                                                                  requestHost.contains('youtu.be') ||
-                                                                  requestHost.contains('ytimg') ||
-                                                                  requestHost.contains('googlesyndication') ||
-                                                                  requestHost.contains('googlevideo') ||
-                                                                  requestHost.contains('ggpht') ||
-                                                                  requestHost.contains('googleapis') ||
-                                                                  requestHost.contains('google.com') ||
-                                                                  requestHost.contains('gstatic')) {
+                                                                  requestHost
+                                                                      .contains(
+                                                                          'youtu.be') ||
+                                                                  requestHost
+                                                                      .contains(
+                                                                          'ytimg') ||
+                                                                  requestHost
+                                                                      .contains(
+                                                                          'googlesyndication') ||
+                                                                  requestHost
+                                                                      .contains(
+                                                                          'googlevideo') ||
+                                                                  requestHost
+                                                                      .contains(
+                                                                          'ggpht') ||
+                                                                  requestHost
+                                                                      .contains(
+                                                                          'googleapis') ||
+                                                                  requestHost
+                                                                      .contains(
+                                                                          'google.com') ||
+                                                                  requestHost
+                                                                      .contains(
+                                                                          'gstatic')) {
                                                                 return null;
                                                               }
 
                                                               // Never block same-origin requests (requests to the current site's own domain or subdomains)
-                                                              final pageUrl = tab.url;
-                                                              if (pageUrl.isNotEmpty) {
-                                                                final pageHost = Uri.tryParse(pageUrl)?.host.toLowerCase() ?? '';
-                                                                if (pageHost.isNotEmpty &&
-                                                                    (requestHost == pageHost ||
-                                                                     requestHost.endsWith('.$pageHost') ||
-                                                                     pageHost.endsWith('.$requestHost'))) {
+                                                              final pageUrl =
+                                                                  tab.url;
+                                                              if (pageUrl
+                                                                  .isNotEmpty) {
+                                                                final pageHost =
+                                                                    Uri.tryParse(pageUrl)
+                                                                            ?.host
+                                                                            .toLowerCase() ??
+                                                                        '';
+                                                                if (pageHost
+                                                                        .isNotEmpty &&
+                                                                    (requestHost ==
+                                                                            pageHost ||
+                                                                        requestHost.endsWith(
+                                                                            '.$pageHost') ||
+                                                                        pageHost
+                                                                            .endsWith('.$requestHost'))) {
                                                                   return null;
                                                                 }
                                                               }
 
-                                                              final url = request.url.toString();
-                                                              if (_adBlocker.shouldBlock(url)) {
+                                                              final url = request
+                                                                  .url
+                                                                  .toString();
+                                                              if (_adBlocker
+                                                                  .shouldBlock(
+                                                                      url)) {
                                                                 _blockedAdsCount++;
                                                                 return WebResourceResponse(
                                                                   contentType:
@@ -5610,18 +5849,31 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                 return NavigationActionPolicy
                                                                     .ALLOW;
                                                               }
-                                                              if (_recentDownloadUrls.contains(url)) {
-                                                                _log.info('[Browser] shouldOverrideUrlLoading: ignoring $url (already downloading)');
+                                                              if (_isNavigatingBackForward) {
+                                                                return NavigationActionPolicy
+                                                                    .ALLOW;
+                                                              }
+                                                              if (_recentDownloadUrls
+                                                                  .contains(
+                                                                      url)) {
+                                                                _log.info(
+                                                                    '[Browser] shouldOverrideUrlLoading: ignoring $url (already downloading)');
                                                                 return NavigationActionPolicy
                                                                     .CANCEL;
                                                               }
 
-                                                              final res = await _redirectGuard.evaluate(
+                                                              final res =
+                                                                  await _redirectGuard
+                                                                      .evaluate(
                                                                 tabId: tab.id,
-                                                                navigatingTo: url,
+                                                                navigatingTo:
+                                                                    url,
                                                               );
-                                                              if (res.decision == RedirectDecision.block) {
-                                                                return NavigationActionPolicy.CANCEL;
+                                                              if (res.decision ==
+                                                                  RedirectDecision
+                                                                      .block) {
+                                                                return NavigationActionPolicy
+                                                                    .CANCEL;
                                                               }
 
                                                               // 0. Ad-blocker: cancel navigation-level ad redirects
@@ -5647,7 +5899,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                       url)) {
                                                                 _log.info(
                                                                     '[Browser] Intercepted magnet link in navigation: $url');
-                                                                if (context.mounted) {
+                                                                if (context
+                                                                    .mounted) {
                                                                   _showInterceptionSheet(
                                                                       context,
                                                                       url);
@@ -5675,8 +5928,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                         URLRequest(
                                                                             url:
                                                                                 WebUri(upgraded)));
-                                                                  return NavigationActionPolicy
-                                                                      .CANCEL;
+                                                                return NavigationActionPolicy
+                                                                    .CANCEL;
                                                               }
 
                                                               // 3. Bypass check
@@ -5726,13 +5979,15 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                   // Browser redirects (e.g. http→https, www→non-www)
                                                                   // must navigate inside the current tab, not open a
                                                                   // new one — guard with isRedirect.
-                                                                  if (navigationAction.isRedirect ==
+                                                                  if (navigationAction
+                                                                          .isRedirect ==
                                                                       true) {
                                                                     return NavigationActionPolicy
                                                                         .ALLOW;
                                                                   }
                                                                   // User-triggered tap → open in foreground.
-                                                                  if (navigationAction.hasGesture ==
+                                                                  if (navigationAction
+                                                                          .hasGesture ==
                                                                       true) {
                                                                     _openInNewTab(
                                                                         url,
@@ -5740,8 +5995,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                             .isIncognito,
                                                                         switchToTab:
                                                                             true,
-                                                                        origin: TabOrigin
-                                                                            .userDirect);
+                                                                        origin:
+                                                                            TabOrigin.userDirect);
                                                                     return NavigationActionPolicy
                                                                         .CANCEL;
                                                                   }
@@ -5755,11 +6010,13 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                           false,
                                                                       origin: TabOrigin
                                                                           .adOrPopup);
-                                                                  if (context.mounted) {
-                                                                    final bgSettings =
-                                                                        Provider.of<SettingsProvider>(
-                                                                            context,
-                                                                            listen: false);
+                                                                  if (context
+                                                                      .mounted) {
+                                                                    final bgSettings = Provider.of<
+                                                                            SettingsProvider>(
+                                                                        context,
+                                                                        listen:
+                                                                            false);
                                                                     final bgDark =
                                                                         bgSettings
                                                                             .isDarkMode;
@@ -5795,7 +6052,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                           .action ==
                                                                       PageAction
                                                                           .openNewTabWithWarning) {
-                                                                    if (context.mounted) {
+                                                                    if (context
+                                                                        .mounted) {
                                                                       _showAdWarning(
                                                                           context,
                                                                           url);
@@ -5803,7 +6061,6 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                   }
                                                                   return NavigationActionPolicy
                                                                       .CANCEL;
-
 
                                                                 case PageAction
                                                                       .openBackgroundTab:
@@ -5816,7 +6073,8 @@ class _BrowserScreenState extends State<BrowserScreen>
 
                                                                 case PageAction
                                                                       .directDownload:
-                                                                  if (context.mounted) {
+                                                                  if (context
+                                                                      .mounted) {
                                                                     _showInterceptionSheet(
                                                                         context,
                                                                         url);
@@ -5837,7 +6095,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                               tab.id] =
                                                                           url;
                                                                     });
-                                                                    if (context.mounted) {
+                                                                    if (context
+                                                                        .mounted) {
                                                                       _showInterceptionSheet(
                                                                           context,
                                                                           url);
@@ -6560,7 +6819,8 @@ class _BrowserScreenState extends State<BrowserScreen>
           Switch(
             value: isON,
             onChanged: null,
-            activeThumbColor: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            activeThumbColor:
+                isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
           ),
         ],
       ),
@@ -6578,14 +6838,20 @@ class _BrowserScreenState extends State<BrowserScreen>
       builder: (context) {
         return AlertDialog(
           backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
+              Icon(Icons.warning_amber_rounded,
+                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
               const SizedBox(width: 8),
               Text(
                 isRtl ? 'إنهاء المتصفح' : 'Quit Browser',
-                style: TextStyle(color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary, fontSize: 16),
+                style: TextStyle(
+                    color: isDark
+                        ? AppTheme.textPrimary
+                        : AppTheme.lightTextPrimary,
+                    fontSize: 16),
               ),
             ],
           ),
@@ -6593,7 +6859,11 @@ class _BrowserScreenState extends State<BrowserScreen>
             isRtl
                 ? 'هل أنت تأكد من إغلاق جميع التبويبات والحفظ والخروج؟'
                 : 'Are you sure you want to quit the browser and save your session?',
-            style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary, fontSize: 13),
+            style: TextStyle(
+                color: isDark
+                    ? AppTheme.textSecondary
+                    : AppTheme.lightTextSecondary,
+                fontSize: 13),
           ),
           actions: [
             TextButton(
@@ -6602,13 +6872,16 @@ class _BrowserScreenState extends State<BrowserScreen>
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                backgroundColor:
+                    isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: () => Navigator.of(context).pop(true),
               child: Text(
                 isRtl ? 'إنهاء' : 'Quit',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ),
           ],

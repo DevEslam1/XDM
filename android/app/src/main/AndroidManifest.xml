@@ -123,6 +123,8 @@
                 <action android:name="com.example.dmx.TOGGLE_TASK" />
                 <action android:name="com.example.dmx.OPEN_TASK" />
                 <action android:name="com.example.dmx.SELECT_TAB" />
+                <action android:name="com.example.dmx.PAUSE_TASK" />
+                <action android:name="com.example.dmx.CANCEL_TASK" />
             </intent-filter>
         </receiver>
     </application>
