@@ -2254,7 +2254,7 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
     if (_diskBytes.length > index) {
       final disk = _diskBytes[index];
 
-      return disk > 0 ? disk : estimatedBytes;
+      return disk >= 0 ? disk : estimatedBytes;
     }
 
     return estimatedBytes;

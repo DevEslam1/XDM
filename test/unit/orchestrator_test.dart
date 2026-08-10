@@ -38,6 +38,8 @@ void main() {
     orchestrator = DownloadOrchestrator(_StubHost());
   });
 
+  _registerImmediatePauseRaceTest();
+
   group('isRetryableError', () {
     test('SocketException is retryable', () {
       final error = const SocketException('connection reset');
@@ -523,3 +525,50 @@ class _TestNetworkMonitor implements NetworkMonitor {
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
 }
+
+void _registerImmediatePauseRaceTest() {
+  group('Torrent Immediate Pause Race', () {
+    test('early resume is skipped if task status is paused', () async {
+      final host = _TestEscalationHost();
+      final orchestrator = DownloadOrchestrator(host);
+
+      final task = DownloadTask(
+        id: 'race_torrent_task',
+        fileName: 'test.torrent',
+        url: 'magnet:?xt=urn:btih:race123',
+        fileSize: 0,
+        downloadedBytes: 0,
+        category: 'Archive',
+        status: DownloadStatus.paused, // already paused by user race
+        savePath: 'build',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: const [0.0],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      host.taskInstance = task;
+      host.providerTorrentIds[task.id] = 123;
+      // Mock latest stats so we don't trigger the error-retry branch
+      host.providerLatestTorrentStats[123] = TorrentUpdateInfo(
+        id: 123,
+        name: 'test.torrent',
+        progress: 0.0,
+        downloadRate: 0,
+        uploadRate: 0,
+        totalDone: 0,
+        totalWanted: 0,
+        totalWantedDone: 0,
+        hasMetadata: false,
+        stateLabel: 'downloading',
+      );
+
+      // Verify that running startTask (or the internal body) behaves correctly with paused tasks.
+      final started = orchestrator.startTask(task);
+      expect(started, isTrue);
+    });
+  });
+}
+

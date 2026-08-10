@@ -202,18 +202,20 @@ mixin DownloadTorrentMixin {
   // Upload limit management
   // ---------------------------------------------------------------------------
 
-  /// Returns each torrent file's confirmed downloaded byte count using native
-  /// getFileProgress from the engine.
   Future<List<int>> getTorrentFileActualBytes(String taskId) async {
     final task = findTaskById(taskId);
     if (task == null || task.torrentFiles == null) return [];
 
     final torrentId = providerTorrentIds[taskId];
-    if (torrentId == null) return [];
+    if (torrentId == null) {
+      return task.torrentFiles!
+          .map((f) => (f['downloadedBytes'] as int?) ?? 0)
+          .toList();
+    }
 
     try {
       final files = TorrentService.getFiles(torrentId);
-      return files.map((f) => f.safeDownloadedBytes).toList();
+      return files.map((f) => f.downloadedBytes).toList();
     } catch (e, st) {
       Logger(
         'download_torrent_mixin',

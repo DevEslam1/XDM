@@ -196,7 +196,7 @@ class DownloadProvider extends ChangeNotifier
     }
     _torrentInitRetries = 0;
     _torrentUpdatesSubscription = TorrentService.torrentUpdates.listen(
-      (torrents) {
+      (torrents) async {
         _latestTorrentStats = torrents;
         // Prune stats for torrents that were removed
         if (_latestTorrentStats.length > torrents.length + 50) {
@@ -206,6 +206,50 @@ class DownloadProvider extends ChangeNotifier
         }
         checkTorrentRatioLimits();
         enforceTorrentQueue();
+
+        // 1. Reconciliation safety-net & forced pause handling
+        for (final task in List<DownloadTask>.from(_tasks)) {
+          final tid = _torrentIds[task.id];
+          if (tid == null) continue;
+
+          // Check if we need to force-pause a newly registered torrent
+          if (_needsForcedPauseOnRegister.contains(task.id)) {
+            _needsForcedPauseOnRegister.remove(task.id);
+            _log.info('Forcing pause on registered torrent ${task.id} (handle $tid)');
+            try {
+              if (TorrentService.isTorrentAlive(tid)) {
+                await TorrentService.pauseTorrent(tid);
+              }
+            } catch (e) {
+              _log.warning('Failed to pause newly registered torrent: $e');
+            }
+            await _setTask(task.copyWith(
+              status: DownloadStatus.paused,
+              speed: 0,
+              clearEta: true,
+              pausedByUser: true,
+            ));
+            continue;
+          }
+
+          // Safety-net: task is paused in DB but native handle is alive and transmitting data
+          if (task.status == DownloadStatus.paused) {
+            final stats = torrents[tid];
+            if (stats != null &&
+                (stats.downloadRate > 0 || stats.uploadRate > 0) &&
+                TorrentService.isTorrentAlive(tid)) {
+              _log.warning(
+                'Safety-net: Found running/transmitting torrent task ${task.id} (handle $tid) '
+                'which is marked as PAUSED. Force-calling pauseTorrent.',
+              );
+              try {
+                await TorrentService.pauseTorrent(tid);
+              } catch (e) {
+                _log.warning('Failed to force-pause orphaned torrent: $e');
+              }
+            }
+          }
+        }
 
         // Transition torrents in native error state to DownloadStatus.failed
         for (final entry in torrents.entries) {
@@ -313,6 +357,7 @@ class DownloadProvider extends ChangeNotifier
 
   final Set<String> _pendingProgressUpdates = {};
   final Map<String, int> _torrentIds = {};
+  final Set<String> _needsForcedPauseOnRegister = {};
 
   late final NotificationCoordinator _notifications;
   late final DownloadOrchestrator _orchestrator;
@@ -1671,7 +1716,45 @@ class DownloadProvider extends ChangeNotifier
         task.seedingEnabled;
 
     if (task.status == DownloadStatus.downloading || isSeedingTorrent) {
-      final torrentId = _torrentIds[id];
+      int? torrentId = _torrentIds[id];
+
+      if (task.isTorrent && torrentId == null) {
+        // Try looking up the native handle by an alternate key (task's source URL)
+        final matchingTid = TorrentService.activeTorrentIds.firstWhere(
+          (tid) => TorrentService.latestStats[tid]?.name == task.fileName ||
+                   TorrentService.latestStats[tid]?.currentTracker == task.url, // or check if latestStats has it
+          orElse: () => -1,
+        );
+        if (matchingTid != -1) {
+          torrentId = matchingTid;
+          _torrentIds[id] = torrentId;
+        } else {
+          // Poll briefly up to 1s for the torrentId to register
+          final pollDeadline = DateTime.now().add(const Duration(seconds: 1));
+          while (torrentId == null && DateTime.now().isBefore(pollDeadline)) {
+            await Future.delayed(const Duration(milliseconds: 50));
+            torrentId = _torrentIds[id];
+          }
+        }
+
+        // If still null, set a flag so as soon as it registers, it gets paused.
+        if (torrentId == null) {
+          _log.info('Torrent registration pending on pause; marking needsForcedPauseOnRegister for ${task.id}');
+          _needsForcedPauseOnRegister.add(task.id);
+          // Set DB status to paused so the UI reflects it immediately
+          await _setTask(task.copyWith(
+            status: DownloadStatus.paused,
+            speed: 0,
+            clearEta: true,
+            pausedByUser: true,
+          ));
+          _orchestrator.clearStartingFlag(id);
+          _orchestrator.clearPushScheduled(id);
+          _notifications.cancelForTask(id);
+          pumpQueue();
+          return;
+        }
+      }
 
       // BUG 4 FIX: Cancel token and await engine future FIRST if downloading
       if (task.status == DownloadStatus.downloading) {
@@ -2220,7 +2303,9 @@ class DownloadProvider extends ChangeNotifier
                 final name = f['name'] as String? ?? '';
                 final match = liveMap[name];
                 if (match != null) {
-                  return {...f, 'downloadedBytes': match.downloadedBytes};
+                  final prevBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                  final resolvedBytes = match.downloadedBytes >= 0 ? match.downloadedBytes : prevBytes;
+                  return {...f, 'downloadedBytes': resolvedBytes};
                 }
                 return f;
               }).toList();

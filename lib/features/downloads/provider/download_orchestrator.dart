@@ -2954,10 +2954,19 @@ class DownloadOrchestrator {
                 torrentId = null;
               } else {
                 torrentId = existingTorrentId;
-                // Wake the session early so torrentUpdates starts emitting while
-                // the engine waits for metadata; a paused torrent can otherwise
-                // stay silent and stall the metadata wait.
-                TorrentService.resumeTorrent(existingTorrentId);
+                // Guard: Only resume the torrent if the current task status is still downloading/active,
+                // and it was not paused.
+                final currentTaskState = _host.findTaskById(task.id);
+                if (currentTaskState != null &&
+                    currentTaskState.status != DownloadStatus.paused) {
+                  // Wake the session early so torrentUpdates starts emitting while
+                  // the engine waits for metadata; a paused torrent can otherwise
+                  // stay silent and stall the metadata wait.
+                  TorrentService.resumeTorrent(existingTorrentId);
+                } else {
+                  debugPrint(
+                      '[DMX] Skipping early resume for torrent $existingTorrentId because task state is ${currentTaskState?.status}');
+                }
               }
             } else {
               _host.providerTorrentIds.remove(task.id);
