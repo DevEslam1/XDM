@@ -29,6 +29,10 @@ class AdBlockerService {
   static const _prefKey = 'adBlockerEnabled';
 
   bool _enabled = true;
+    int _contentBlockerGen = 0;
+  void bumpGen() { _contentBlockerGen++; }
+  int _lastBuiltGen = -1;
+
   List<ContentBlocker> _nativeContentBlockers = [];
 
   final ValueNotifier<int> _blockedCountNotifier = ValueNotifier<int>(0);
@@ -105,9 +109,14 @@ class AdBlockerService {
   void _rebuildContentBlockers() {
     if (!_enabled) {
       _nativeContentBlockers = [];
+      _lastBuiltGen = _contentBlockerGen;
+      return;
+    }
+    if (_lastBuiltGen == _contentBlockerGen && _nativeContentBlockers.isNotEmpty) {
       return;
     }
     _nativeContentBlockers = _buildContentBlockers();
+    _lastBuiltGen = _contentBlockerGen;
   }
 
   List<ContentBlocker> get contentBlockers => _nativeContentBlockers;
@@ -275,6 +284,17 @@ class AdBlockerService {
     'zedo.com',
   };
 
+    static bool _matchesAdHostnames(String host) {
+    if (_adHostnames.contains(host)) return true;
+    int dotIndex = host.indexOf('.');
+    while (dotIndex != -1 && dotIndex < host.length - 1) {
+      final suffix = host.substring(dotIndex + 1);
+      if (_adHostnames.contains(suffix)) return true;
+      dotIndex = host.indexOf('.', dotIndex + 1);
+    }
+    return false;
+  }
+
   /// Returns true if [url] should be blocked by the ad blocker.
   bool shouldBlockUrl(String url) {
     if (!_enabled || url.isEmpty) return false;
@@ -306,11 +326,9 @@ class AdBlockerService {
 
       // Fallback: hardcoded known-ad hostnames for instant blocking
       // before the first filter download completes.
-      for (final d in _adHostnames) {
-        if (host == d || host.endsWith('.$d')) {
-          _recordBlocked(host);
-          return true;
-        }
+      if (_matchesAdHostnames(host)) {
+        _recordBlocked(host);
+        return true;
       }
       // Custom hosts from user store
       if (customStore.contains(host)) {

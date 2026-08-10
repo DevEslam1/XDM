@@ -1,3 +1,4 @@
+import '../widgets/shortcuts_grid_widget.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -74,7 +75,11 @@ class BrowserScreen extends StatefulWidget {
 }
 
 class _BrowserScreenState extends State<BrowserScreen>
-    with HapticHelper, WidgetsBindingObserver {
+    with HapticHelper, WidgetsBindingObserver, SingleTickerProviderStateMixin {
+  Timer? _navStateDebounceTimer;
+  SettingsProvider? _cachedSettings;
+  SettingsProvider get _settings =>
+      _cachedSettings ?? Provider.of<SettingsProvider>(context, listen: false);
   final List<Map<String, String>> _userCustomShortcuts = [];
 
   Future<void> _showAddShortcutDialog() async {
@@ -250,9 +255,26 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   // E6: Element Picker State
   bool _isPickerModeActive = false;
+  bool _scriptsInjectedSnackbarShown = false;
+  void _notifyScriptsInjected() {
+    if (!_scriptsInjectedSnackbarShown && mounted) {
+      _scriptsInjectedSnackbarShown = true;
+      final settings = _settings;
+      final isRtl = L10n.isRtl(context);
+      ThemedSnackbar.show(
+        context,
+        message: isRtl ? 'تم تطبيق البرامج النصية والأنماط المخصصة' : 'Custom JS/CSS applied',
+        color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+        icon: Icons.code_rounded,
+        isDarkMode: settings.isDarkMode,
+      );
+    }
+  }
 
   // Fix #10: Per-tab blocked-ad and blocked-popup counters.
   // Using ValueNotifier per tab so increments in shouldInterceptRequest do NOT call setState.
+  static final ValueNotifier<int> _zeroNotifier = ValueNotifier<int>(0);
+  String? _zeroNotifierTabId;
   final Map<String, ValueNotifier<int>> _blockedAdsNotifiers = {};
   final Map<String, int> _blockedAdsPerTab = {};
   final Map<String, int> _blockedPopupsPerTab = {};
@@ -260,10 +282,23 @@ class _BrowserScreenState extends State<BrowserScreen>
   /// ValueNotifier for the currently-active tab's blocked-ad count.
   ValueNotifier<int> get _activeBlockedAdsNotifier {
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) {
-      return ValueNotifier<int>(0);
+      if (_zeroNotifierTabId != null) {
+        _zeroNotifierTabId = null;
+        _zeroNotifier.value = 0;
+      }
+      return _zeroNotifier;
     }
     final tabId = _tabs[_currentTabIndex].id;
-    return _blockedAdsNotifiers.putIfAbsent(tabId, () => ValueNotifier<int>(_blockedAdsPerTab[tabId] ?? 0));
+    final existing = _blockedAdsNotifiers[tabId];
+    if (existing != null) {
+      return existing;
+    }
+    final count = _blockedAdsPerTab[tabId] ?? 0;
+    if (_zeroNotifierTabId != tabId) {
+      _zeroNotifierTabId = tabId;
+      _zeroNotifier.value = count;
+    }
+    return _zeroNotifier;
   }
 
   /// Blocked popups for the currently-active tab.
@@ -306,7 +341,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   /// back/forward to certain pages (e.g. Google search) gets intercepted
   /// by the classifier and either blocked or opened in a new background
   /// tab, effectively "dismissing" the page.
-  bool _isNavigatingBackForward = false;
+  final Map<String, bool> _navigatingBackForwardTabIds = {};
 
   final AdBlockerDelegate _adBlocker = AdBlockerDelegate();
   final RedirectGuard _redirectGuard = RedirectGuard();
@@ -325,7 +360,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   late final BrowserHistoryManager _historyManager = BrowserHistoryManager(
     resolveDatabase: () => Provider.of<DatabaseService>(context, listen: false),
     isIncognito: () =>
-        Provider.of<SettingsProvider>(context, listen: false).incognitoEnabled,
+        _settings.incognitoEnabled,
     cleanUrl: _cleanUrl,
     isActive: () => mounted,
   );
@@ -412,12 +447,15 @@ class _BrowserScreenState extends State<BrowserScreen>
       _lruTabIds.remove(activeTab.id);
       _lruTabIds.insert(0, activeTab.id);
     }
-    if (_lruTabIds.length > 3) {
-      _lruTabIds.removeRange(3, _lruTabIds.length);
+    final settings = _settings;
+    final cap = (settings.maxTabs ~/ 4).clamp(3, 6);
+    if (_lruTabIds.length > cap) {
+      _lruTabIds.removeRange(cap, _lruTabIds.length);
     }
   }
 
   void _onTabSwitched(int oldIndex, int newIndex) {
+    _scriptsInjectedSnackbarShown = false;
     // Fix #10: Counters are now per-tab Maps, so we only need to trigger a
     // rebuild so the URL bar badge reads the new tab's values. No reset needed.
     setState(() {});
@@ -670,7 +708,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     bool autoLoad = true,
     TabOrigin origin = TabOrigin.userDirect,
   }) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     var cleanInitialUrl = (initialUrl.isEmpty || initialUrl == 'about:blank')
         ? 'about:blank'
         : initialUrl;
@@ -716,7 +754,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   Future<void> _applySiteSettings(BrowserTab tab, String url) async {
     if (tab.controller == null) return;
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
     final siteSettings = await SiteSettingsStore.getForHost(host);
     final isDesktop = siteSettings.desktopMode ?? settings.desktopMode;
@@ -783,7 +821,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (uri == null || uri.host.isEmpty) return;
     final host = uri.host.toLowerCase();
 
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
 
@@ -869,7 +907,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _onPageStart(BrowserTab tab, String url) async {
-    // Do NOT reset _isNavigatingBackForward here. Page lifecycle callbacks
+    // Do NOT reset (_navigatingBackForwardTabIds[tab.id] ?? false) here. Page lifecycle callbacks
     // (onLoadStart/onLoadStop/onUrlChange) fire BEFORE client-side redirects
     // (e.g. Google search meta-refresh / JS redirects). Resetting the flag
     // here causes shouldOverrideUrlLoading to intercept the redirect and
@@ -918,7 +956,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       // Fix #20: Restore the correct UA when navigating away from Google login
       // pages. Without this, the Pixel 8 UA set for accounts.google.com
       // persisted permanently for all subsequent pages in the same tab.
-      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      final settings = _settings;
       unawaited(_applyUserAgent(tab, settings));
     }
 
@@ -954,7 +992,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     _injectLongPressScriptToTab(tab);
     _injectCustomJsCss(tab);
 
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     _injectDesktopModeScript(tab, settings);
     // Fix #4: Re-apply per-site settings on every navigation so that
     // site-specific desktop mode and ad-blocker overrides take effect
@@ -966,6 +1004,10 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _onPageStop(BrowserTab tab, String url) {
+    _navStateDebounceTimer?.cancel();
+    _navStateDebounceTimer = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) _updateNavState();
+    });
     _loadingTimeoutTimers[tab.id]?.cancel();
     // Fix #17: Reset the back/forward navigation flag when the page finishes
     // loading. The old approach used a 5-second timer which was wrong for both
@@ -975,22 +1017,16 @@ class _BrowserScreenState extends State<BrowserScreen>
         _currentTabIndex >= 0 &&
         _currentTabIndex < _tabs.length &&
         _tabs[_currentTabIndex].id == tab.id) {
-      _isNavigatingBackForward = false;
+      if (_tabs.isNotEmpty && _currentTabIndex >= 0 && _currentTabIndex < _tabs.length) _navigatingBackForwardTabIds[_tabs[_currentTabIndex].id] = false;
     }
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     unawaited(_injectAllScripts(tab, url));
 
     // Fix #6: Corrected operator precedence — previously evaluated as
     // (mounted && _customJs.isNotEmpty) || _customCss.isNotEmpty, which
     // showed the snackbar even when unmounted if CSS was non-empty.
     if (mounted && (_customJs.isNotEmpty || _customCss.isNotEmpty)) {
-      ThemedSnackbar.show(
-        context,
-        message: 'Scripts injected',
-        icon: Icons.code_rounded,
-        color: AppTheme.neonGreen,
-        isDarkMode: settings.isDarkMode,
-      );
+      _notifyScriptsInjected();
     }
 
     if (mounted) {
@@ -1128,11 +1164,13 @@ class _BrowserScreenState extends State<BrowserScreen>
     await _scriptInjector.injectLongPressScriptToTab(tab);
   }
 
-  Timer? _mediaScanDebounce;
+  final Map<String, Timer> _mediaScanDebouncePerTab = {};
 
   void _scheduleMediaScan(BrowserTab tab) {
-    _mediaScanDebounce?.cancel();
-    _mediaScanDebounce = Timer(const Duration(seconds: 3), () {
+    // per-tab media scan debounce used
+    final tabId = tab.id;
+      _mediaScanDebouncePerTab[tabId]?.cancel();
+      _mediaScanDebouncePerTab[tabId] = Timer(const Duration(seconds: 3), () {
       if (mounted && !tab.isSuspended && !tab.isTimedOut) {
         _scanPageMedia(tab);
       }
@@ -1177,7 +1215,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     setState(() {
       _restoringTabId = tab.id;
     });
-    Future.delayed(const Duration(seconds: 1), () {
+    Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) {
         setState(() {
           _restoringTabId = null;
@@ -1189,7 +1227,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   Future<void> _injectAllScripts(BrowserTab tab, String url) async {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     await _scriptInjector.injectAllScripts(
       tab,
       url,
@@ -1201,6 +1239,9 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _cleanupTabState(String tabId) {
+    _mediaScanDebouncePerTab[tabId]?.cancel();
+    _mediaScanDebouncePerTab.remove(tabId);
+    _navigatingBackForwardTabIds.remove(tabId);
     _sniffer.cleanupTab(tabId);
     _detectedDownloadUrls.remove(tabId);
     _detectedMediaSources.remove(tabId);
@@ -1266,7 +1307,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       if (payload == null) return;
       final url = payload.url;
       final type = payload.type;
-      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      final settings = _settings;
       triggerHaptic(settings);
       _showLongPressSheet(context, url, type,
           text: payload.text, tabId: tab.id);
@@ -1363,7 +1404,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     });
     _saveTabs();
     if (mounted) {
-      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      final settings = _settings;
       final isDark = settings.isDarkMode;
       final isRtl = L10n.isRtl(context);
       ThemedSnackbar.show(
@@ -1412,9 +1453,13 @@ class _BrowserScreenState extends State<BrowserScreen>
         return;
       }
 
-      // 3. If popup landed on an ad page or blocked domain, drop it (do NOT open tab)
-      final isAdBlocked =
-          _adBlocker.shouldBlock(finalUrl) || _adBlocker.shouldBlock(adUrl);
+      // Allowlist check: if allowlisted, bypass ad blocking and open in tab
+      final service = AdBlockerService.instance;
+      final isAllowlisted = service.isAllowListed(finalUrl) || service.isAllowListed(adUrl);
+
+      // 3. If popup landed on an ad page or blocked domain, drop it (unless allowlisted)
+      final isAdBlocked = !isAllowlisted &&
+          (_adBlocker.shouldBlock(finalUrl) || _adBlocker.shouldBlock(adUrl));
       if (isAdBlocked) {
         _log.info(
             '[Browser] Ad redirect resolved to blocked ad page: $finalUrl');
@@ -1447,7 +1492,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         _saveTabs();
         if (mounted) {
           final settings =
-              Provider.of<SettingsProvider>(context, listen: false);
+              _settings;
           final isDark = settings.isDarkMode;
           final isRtl = L10n.isRtl(context);
           ThemedSnackbar.show(
@@ -1493,7 +1538,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _confirmBlockElement(BrowserTab tab, String selector) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final rule = ElementPickerService.blockRule(selector);
@@ -1590,7 +1635,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   void _suggestDownload(String url, PageClassification classification) {
     if (!mounted) return;
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     final isDark = settings.isDarkMode;
 
     ThemedSnackbar.show(
@@ -1609,7 +1654,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   void _showAdWarning(BuildContext context, String url) {
     if (!mounted) return;
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     ThemedSnackbar.show(
       context,
       message: 'This page might be an advertisement',
@@ -1678,21 +1723,32 @@ class _BrowserScreenState extends State<BrowserScreen>
     _handleScroll(y);
   }
 
+  int _lastScrollTimeMs = 0;
+  bool? _lastNavbarVisible;
+
   void _handleScroll(double y) {
     if (!mounted) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastScrollTimeMs < 16) return;
+    _lastScrollTimeMs = now;
+
     final downloadProvider = Provider.of<DownloadProvider>(
       context,
       listen: false,
     );
     if (downloadProvider.activeTabIndex != 1) return;
 
-    // The URL bar is intentionally persistent; scrolling may still update
-    // the surrounding app navigation visibility, but never hides this bar.
     _showBarsNotifier.value = true;
+    bool shouldShow = true;
     if (y <= 0 || y < _lastScrollY) {
-      downloadProvider.setNavbarVisible(true);
+      shouldShow = true;
     } else if (y - _lastScrollY > 40) {
-      downloadProvider.setNavbarVisible(false);
+      shouldShow = false;
+    }
+
+    if (_lastNavbarVisible != shouldShow) {
+      _lastNavbarVisible = shouldShow;
+      downloadProvider.setNavbarVisible(shouldShow);
     }
     _lastScrollY = y;
   }
@@ -1702,7 +1758,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   @override
   void dispose() {
-    _mediaScanDebounce?.cancel();
+    // per-tab media scan debounce used
     _showBarsNotifier.dispose();
     _adBlocker.removeListener(_updateAdBlockSettings);
     _inactivityWatchdog.dispose();
@@ -1882,10 +1938,10 @@ class _BrowserScreenState extends State<BrowserScreen>
     // (a) WebView can go back.
     if (activeTab.canGoBack) {
       _homeReturnUrl = null;
-      _isNavigatingBackForward = true;
+      if (_tabs.isNotEmpty && _currentTabIndex >= 0 && _currentTabIndex < _tabs.length) _navigatingBackForwardTabIds[_tabs[_currentTabIndex].id] = true;
       unawaited(activeTab.controller?.goBack() ?? Future.value());
       Future.delayed(const Duration(seconds: 5), () {
-        if (mounted) _isNavigatingBackForward = false;
+        if (mounted) if (_tabs.isNotEmpty && _currentTabIndex >= 0 && _currentTabIndex < _tabs.length) _navigatingBackForwardTabIds[_tabs[_currentTabIndex].id] = false;
       });
       _updateNavState();
       return true;
@@ -1895,10 +1951,10 @@ class _BrowserScreenState extends State<BrowserScreen>
     final webCanGoBack = await activeTab.controller?.canGoBack() ?? false;
     if (webCanGoBack) {
       _homeReturnUrl = null;
-      _isNavigatingBackForward = true;
+      if (_tabs.isNotEmpty && _currentTabIndex >= 0 && _currentTabIndex < _tabs.length) _navigatingBackForwardTabIds[_tabs[_currentTabIndex].id] = true;
       unawaited(activeTab.controller?.goBack() ?? Future.value());
       Future.delayed(const Duration(seconds: 5), () {
-        if (mounted) _isNavigatingBackForward = false;
+        if (mounted) if (_tabs.isNotEmpty && _currentTabIndex >= 0 && _currentTabIndex < _tabs.length) _navigatingBackForwardTabIds[_tabs[_currentTabIndex].id] = false;
       });
       _updateNavState();
       return true;
@@ -2003,7 +2059,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   void _switchToTabRelative(int offset) {
     if (_tabs.length <= 1) return;
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     triggerHaptic(settings);
     setState(() {
       final newIndex = (_currentTabIndex + offset) % _tabs.length;
@@ -2036,20 +2092,20 @@ class _BrowserScreenState extends State<BrowserScreen>
       return;
     }
 
-    _isNavigatingBackForward = true;
+    if (_tabs.isNotEmpty && _currentTabIndex >= 0 && _currentTabIndex < _tabs.length) _navigatingBackForwardTabIds[_tabs[_currentTabIndex].id] = true;
     unawaited(activeTab.controller?.goForward() ?? Future.value());
     Future.delayed(const Duration(seconds: 5), () {
-      if (mounted) _isNavigatingBackForward = false;
+      if (mounted) if (_tabs.isNotEmpty && _currentTabIndex >= 0 && _currentTabIndex < _tabs.length) _navigatingBackForwardTabIds[_tabs[_currentTabIndex].id] = false;
     });
     _updateNavState();
   }
 
   void _navigateToUrl(String input) {
-    _isNavigatingBackForward = false;
+    if (_tabs.isNotEmpty && _currentTabIndex >= 0 && _currentTabIndex < _tabs.length) _navigatingBackForwardTabIds[_tabs[_currentTabIndex].id] = false;
     var url = input.trim();
     if (url.isEmpty) return;
 
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     final engine = settings.searchEngine;
 
     String searchPrefix = 'https://google.com/search?q=';
@@ -2437,7 +2493,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     final now = DateTime.now();
     if (_lastLongPressSheetUrl == cleanUrl &&
         _lastLongPressSheetAt != null &&
-        now.difference(_lastLongPressSheetAt!) < const Duration(seconds: 1)) {
+        now.difference(_lastLongPressSheetAt!) < const Duration(milliseconds: 300)) {
       return;
     }
     _lastLongPressSheetUrl = cleanUrl;
@@ -2540,7 +2596,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     _lastInterceptedUrl = downloadUrl;
     _lastInterceptedTime = now;
 
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     triggerHaptic(settings);
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
@@ -2791,7 +2847,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       _sniffer.scanPageMedia(tab, tabs: _tabs);
 
   void _showQualityPicker(String tabId, {String? fallbackUrl}) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final detectedSources = _detectedMediaSources[tabId] ?? [];
@@ -2972,7 +3028,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _showDetectedMediaSheet(BuildContext context, String tabId) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final detectedSources = _detectedMediaSources[tabId] ?? [];
@@ -3228,42 +3284,9 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   Future<void> _savePageOffline(BrowserTab tab) async {
     if (tab.isHome) return;
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     triggerHaptic(settings);
     try {
-      final result = await tab.controller?.evaluateJavascript(
-        source: "document.documentElement.outerHTML",
-      );
-      String rawHtml = '';
-      if (result is String) {
-        rawHtml = result;
-        if (rawHtml.startsWith('"') && rawHtml.endsWith('"')) {
-          try {
-            rawHtml = jsonDecode(rawHtml) as String;
-          } catch (e, st) {
-            Logger('browser_screen')
-                .warning('[browser_screen] operation failed', e, st);
-            if (rawHtml.length > 2) {
-              rawHtml = rawHtml.substring(1, rawHtml.length - 1);
-            }
-          }
-        }
-      }
-
-      if (rawHtml.isEmpty) {
-        if (mounted) {
-          ThemedSnackbar.show(
-            context,
-            message: L10n.of(context, 'browser_save_page_failed'),
-            color:
-                settings.isDarkMode ? AppTheme.neonRed : AppTheme.lightNeonRed,
-            icon: Icons.error_outline,
-            isDarkMode: settings.isDarkMode,
-          );
-        }
-        return;
-      }
-
       final offlineTitle =
           mounted ? L10n.of(context, 'browser_offline_page') : 'Offline Page';
       String title = tab.title.isNotEmpty ? tab.title : offlineTitle;
@@ -3272,12 +3295,57 @@ class _BrowserScreenState extends State<BrowserScreen>
       final path = settings.customDownloadPath?.isNotEmpty == true
           ? settings.customDownloadPath!
           : await PermissionService().defaultDownloadDirectory();
-      final filePath = p.join(path, "$title.html");
-      final file = File(filePath);
-      await file.writeAsString(rawHtml);
+
+      String? webArchiveSavedPath;
+      if (Platform.isAndroid && tab.controller != null) {
+        try {
+          final archivePath = p.join(path, "$title.mhtml");
+          final res = await tab.controller?.saveWebArchive(filePath: archivePath, autoname: false);
+          if (res != null && res.isNotEmpty) {
+            webArchiveSavedPath = res;
+          }
+        } catch (_) {}
+      }
+
+      final fileName = webArchiveSavedPath != null ? "$title.mhtml" : "$title.html";
+      final filePath = webArchiveSavedPath ?? p.join(path, fileName);
+      int size = 0;
+
+      if (webArchiveSavedPath != null && File(webArchiveSavedPath).existsSync()) {
+        size = await File(webArchiveSavedPath).length();
+      } else {
+        final result = await tab.controller?.evaluateJavascript(
+          source: "document.documentElement.outerHTML",
+        );
+        String rawHtml = '';
+        if (result is String) {
+          rawHtml = result;
+          if (rawHtml.startsWith('"') && rawHtml.endsWith('"')) {
+            try {
+              rawHtml = jsonDecode(rawHtml) as String;
+            } catch (_) {
+              if (rawHtml.length > 2) rawHtml = rawHtml.substring(1, rawHtml.length - 1);
+            }
+          }
+        }
+        if (rawHtml.isEmpty) {
+          if (mounted) {
+            ThemedSnackbar.show(
+              context,
+              message: L10n.of(context, 'browser_save_page_failed'),
+              color: settings.isDarkMode ? AppTheme.neonRed : AppTheme.lightNeonRed,
+              icon: Icons.error_outline,
+              isDarkMode: settings.isDarkMode,
+            );
+          }
+          return;
+        }
+        final file = File(filePath);
+        await file.writeAsString(rawHtml);
+        size = utf8.encode(rawHtml).length;
+      }
 
       final id = DateTime.now().millisecondsSinceEpoch.toString();
-      final size = utf8.encode(rawHtml).length;
 
       final task = DownloadTask(
         id: id,
@@ -3339,7 +3407,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       context: context,
       builder: (dialogContext) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        final settings = Provider.of<SettingsProvider>(context, listen: false);
+        final settings = _settings;
         final limit = settings.maxTabs;
         return AlertDialog(
           backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
@@ -3421,7 +3489,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   Future<void> _confirmCloseAllTabs(
       BuildContext context, StateSetter setModalState) async {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     triggerHaptic(settings);
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
@@ -3501,7 +3569,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _showTabSwitcher(BuildContext context) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final violet = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
@@ -4176,68 +4244,31 @@ class _BrowserScreenState extends State<BrowserScreen>
             ],
           ),
           const SizedBox(height: 8),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 2.5,
-            children: [
-              _buildShortcutCard(
+          ShortcutsGridWidget(
+            customShortcuts: _userCustomShortcuts,
+            isDark: isDark,
+            isRtl: isRtl,
+            settings: settings,
+            onOpenBookmarks: () async {
+              final cleared = await Navigator.push<bool>(
                 context,
-                title: isRtl ? 'العلامات' : 'Bookmarks',
-                url: '',
-                icon: Icons.bookmark_rounded,
-                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                settings: settings,
-                onTap: () async {
-                  final cleared = await Navigator.push<bool>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const BookmarkManagerScreen(),
-                    ),
-                  );
-                  if (cleared == true && mounted) setState(() {});
-                },
-              ),
-              _buildShortcutCard(
+                MaterialPageRoute(
+                  builder: (_) => const BookmarkManagerScreen(),
+                ),
+              );
+              if (cleared == true && mounted) setState(() {});
+            },
+            onOpenHistory: _openHistory,
+            onOpenScripts: () {
+              Navigator.push(
                 context,
-                title: isRtl ? 'السجل' : 'History',
-                url: '',
-                icon: Icons.history_rounded,
-                color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
-                settings: settings,
-                onTap: _openHistory,
-              ),
-              _buildShortcutCard(
-                context,
-                title: isRtl ? 'السكريبتات' : 'Scripts',
-                url: '',
-                icon: Icons.code_rounded,
-                color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                settings: settings,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ScriptManagerScreen(),
-                    ),
-                  );
-                },
-              ),
-              ..._userCustomShortcuts.map((sc) {
-                return _buildShortcutCard(
-                  context,
-                  title: sc['title'] ?? 'Shortcut',
-                  url: sc['url'] ?? '',
-                  icon: Icons.link,
-                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                  settings: settings,
-                  onLongPress: () => _removeCustomShortcut(sc),
-                );
-              }),
-            ],
+                MaterialPageRoute(
+                  builder: (_) => const ScriptManagerScreen(),
+                ),
+              );
+            },
+            onRemoveShortcut: _removeCustomShortcut,
+            onNavigate: (url) => _navigateToUrl(url),
           ),
 
           const SizedBox(height: 24),
@@ -5386,7 +5417,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                )
                                                          : Stack(
                                                         children: [
-                                                          InAppWebView(
+                                                          RepaintBoundary(child: InAppWebView(
                                                             initialUrlRequest: tab
                                                                     .url.isEmpty
                                                                 ? null
@@ -5961,7 +5992,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                 return NavigationActionPolicy
                                                                     .ALLOW;
                                                               }
-                                                              if (_isNavigatingBackForward) {
+                                                              if ((_navigatingBackForwardTabIds[tab.id] ?? false)) {
                                                                 return NavigationActionPolicy
                                                                     .ALLOW;
                                                               }
@@ -6221,7 +6252,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                               }
                                                             },
                                                           ),
-                                                          // E13: Tab Suspension/Resume Visual Feedback
+                                                        ),
+                                                        // E13: Tab Suspension/Resume Visual Feedback
                                                           if (_restoringTabId ==
                                                               tab.id)
                                                             Positioned.fill(
@@ -6634,7 +6666,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _openBookmarks() async {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     triggerHaptic(settings);
     final url = await Navigator.push<String>(
       context,
@@ -6646,7 +6678,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _openHistory() async {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     triggerHaptic(settings);
     final url = await BrowserHistorySheet.show(context);
     if (url != null && url.isNotEmpty && mounted) {
@@ -6657,6 +6689,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _cachedSettings = _settings;
     final newProvider = Provider.of<DownloadProvider>(context);
     if (_downloadProvider != newProvider) {
       _downloadProvider?.removeListener(_onDownloadProviderChanged);
@@ -6853,7 +6886,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     int? audioSize,
   }) async {
     final settingsProvider =
-        Provider.of<SettingsProvider>(context, listen: false);
+        _settings;
     final isRtl = L10n.isRtl(context);
     final isDark = settingsProvider.isDarkMode;
 
@@ -6940,7 +6973,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   Future<void> _confirmQuitBrowser() async {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     triggerHaptic(settings);
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
@@ -7007,7 +7040,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   Future<void> _quitBrowser() async {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = _settings;
     triggerHaptic(settings);
     try {
       final persistable = <SavedBrowserTab>[];
@@ -7922,7 +7955,7 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
 
   Widget _tabHeader(int index, String label) {
     final isSelected = _activeTab == index;
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = Provider.of<SettingsProvider>(context);
     final accent =
         settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     return GestureDetector(

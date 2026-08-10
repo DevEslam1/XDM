@@ -27,6 +27,45 @@ class _FilterSource {
   });
 }
 
+class _PathTrieNode {
+  final Map<int, _PathTrieNode> children = {};
+  bool isEnd = false;
+}
+
+class _PathTrie {
+  final _PathTrieNode root = _PathTrieNode();
+
+  void insert(String pattern) {
+    if (pattern.isEmpty) return;
+    var current = root;
+    for (var i = 0; i < pattern.length; i++) {
+      final code = pattern.codeUnitAt(i);
+      current = current.children.putIfAbsent(code, () => _PathTrieNode());
+    }
+    current.isEnd = true;
+  }
+
+  bool searchSubstrings(String text) {
+    if (text.isEmpty) return false;
+    final len = text.length;
+    for (var i = 0; i < len; i++) {
+      var current = root;
+      for (var j = i; j < len; j++) {
+        final code = text.codeUnitAt(j);
+        final next = current.children[code];
+        if (next == null) break;
+        if (next.isEnd) return true;
+        current = next;
+      }
+    }
+    return false;
+  }
+
+  void clear() {
+    root.children.clear();
+  }
+}
+
 class AdBlockFilterUpdater {
   // ── Singleton ─────────────────────────────────────────────────────────────
   // CRITICAL FIX: Without a singleton, every AdBlockFilterUpdater() call
@@ -130,6 +169,7 @@ class AdBlockFilterUpdater {
   Set<String> _downloadedDomains = {};
   Set<String> _downloadedTrackingDomains = {};
   final Set<String> _urlPatterns = {};
+  final _PathTrie _urlPatternsTrie = _PathTrie();
   final Set<String> _cosmeticRules = {};
   final Map<String, Set<String>> _siteCosmeticRules = {};
   final Map<String, Set<String>> _cosmeticExceptions = {};
@@ -592,9 +632,7 @@ class AdBlockFilterUpdater {
 
     // FIX #9: Check collected URL path patterns
     if (path.isNotEmpty && _urlPatterns.isNotEmpty) {
-      for (final pattern in _urlPatterns) {
-        if (pattern.isNotEmpty && path.contains(pattern)) return true;
-      }
+      if (_urlPatternsTrie.searchSubstrings(path)) return true;
     }
 
     // FIX: Check allow-list FIRST so excepted domains are never blocked,
