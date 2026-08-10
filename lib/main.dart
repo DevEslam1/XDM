@@ -31,7 +31,6 @@ import 'features/settings/provider/settings_provider.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
 import 'features/onboarding/screens/permission_request_screen.dart';
 import 'shared/widgets/main_navigation_container.dart';
-import 'shared/widgets/share_intent_screen.dart';
 import 'shared/accessibility/xdm_text_scaler.dart';
 import 'core/services/frame_watchdog.dart';
 import 'core/services/power_monitor.dart';
