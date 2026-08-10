@@ -1710,30 +1710,11 @@ class HttpTransferJob {
     // BOTH streams' real-time progress — not just the spawn-time snapshot
     // passed via cmd.ytCounterpartDownloadedBytes which goes stale as soon
     // as the counterpart stream starts downloading.
-    int? ytLiveCounterpartBytes = cmd.ytCounterpartDownloadedBytes;
-    if (cmd.ytStreamKind != null) {
-      final counterpartId = cmd.ytCounterpartTaskId;
-      if (counterpartId != null) {
-        final live = DownloadEngine._ytLiveBytes[counterpartId];
-        if (live != null) {
-          // FIX-YT-LIVE-STALE-GUARD: If the counterpart has already
-          // completed (its live bytes equal its size), use its final
-          // size as the live value. This prevents the combined bar from
-          // flickering when one stream finishes and its cache entry is
-          // cleaned up by unregisterYtCounterpart before the other
-          // stream's next tick.
-          ytLiveCounterpartBytes = live;
-        } else if (cmd.ytCounterpartSize != null &&
-            cmd.ytCounterpartSize! > 0) {
-          // Counterpart finished and was unregistered — use its known
-          // final size as the live bytes.
-          ytLiveCounterpartBytes = cmd.ytCounterpartSize;
-        }
-      }
-      // FIX-YT-LIVE: Update this stream's live bytes cache so the
-      // counterpart can read them on its next progress tick.
-      DownloadEngine._ytLiveBytes[cmd.taskId] = downloaded;
-    }
+    // FIX-YT-LIVE-WORKER: The worker isolate does not share memory with
+    // the main isolate, so it cannot read DownloadEngine._ytLiveBytes.
+    // Send the spawn-time counterpart bytes and let the main isolate
+    // override them with the true live bytes from its shared cache.
+    final ytLiveCounterpartBytes = cmd.ytCounterpartDownloadedBytes;
 
     _send('progress', {
       'downloadedBytes': downloaded,

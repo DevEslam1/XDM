@@ -1670,8 +1670,11 @@ class DownloadEngine {
       // combined audio+video progress bar retains the most accurate data
       // during pause, not the stale spawn-time value.
       final ytPauseCid = _ytCounterpartTaskIds[taskId];
-      final ytPauseLiveCp =
+      int? ytPauseLiveCp =
           ytPauseCid != null ? DownloadEngine._ytLiveBytes[ytPauseCid] : null;
+      if (ytPauseLiveCp == null && ytPauseCid != null) {
+        ytPauseLiveCp = ytCounterpartSize;
+      }
       onProgress(DownloadProgress(
         downloadedBytes: lastDownloadedBytes,
         fileSize: lastFileSize,
@@ -1755,8 +1758,11 @@ class DownloadEngine {
             // counterpart stream progressed between the last tick and the
             // URL expiry error.
             final ytUlcId = _ytCounterpartTaskIds[taskId];
-            final ytUlcLiveCp =
+            int? ytUlcLiveCp =
                 ytUlcId != null ? DownloadEngine._ytLiveBytes[ytUlcId] : null;
+            if (ytUlcLiveCp == null && ytUlcId != null) {
+              ytUlcLiveCp = ytCounterpartSize;
+            }
             final ytUlcLiveSelf = DownloadEngine._ytLiveBytes[taskId];
             onProgress(DownloadProgress(
               downloadedBytes: ytUlcLiveSelf ?? lastDownloadedBytes,
@@ -1800,8 +1806,11 @@ class DownloadEngine {
               errorType == 'receiveTimeout' ||
               errorType == 'sendTimeout';
           final ytFailCid = _ytCounterpartTaskIds[taskId];
-          final ytFailLiveCp =
+          int? ytFailLiveCp =
               ytFailCid != null ? DownloadEngine._ytLiveBytes[ytFailCid] : null;
+          if (ytFailLiveCp == null && ytFailCid != null) {
+            ytFailLiveCp = ytCounterpartSize;
+          }
           onProgress(DownloadProgress(
             downloadedBytes: lastDownloadedBytes,
             fileSize: lastFileSize,
@@ -1940,9 +1949,23 @@ class DownloadEngine {
             DownloadEngine._ytLiveBytes[taskId] = ytEffectiveLive;
           }
           final counterpartId = _ytCounterpartTaskIds[taskId];
-          final liveCounterpart = counterpartId != null
+          int? liveCounterpart = counterpartId != null
               ? DownloadEngine._ytLiveBytes[counterpartId]
               : null;
+          // FIX-YT-LIVE-FALLBACK: If the counterpart finished and was
+          // unregistered, its live bytes cache entry is gone. Use its
+          // known size as the live bytes so the combined progress bar
+          // doesn't drop back to the spawn-time value.
+          if (liveCounterpart == null && counterpartId != null) {
+            liveCounterpart = ytCounterpartSize;
+          }
+          // FIX-YT-LIVE-FALLBACK: If the counterpart finished and was
+          // unregistered, its live bytes cache entry is gone. Use its
+          // known size as the live bytes so the combined progress bar
+          // doesn't drop back to the spawn-time value.
+          if (liveCounterpart == null && counterpartId != null) {
+            liveCounterpart = ytCounterpartSize;
+          }
 
           // FIX-CYCLE-LAST-DATA: Update last-known progress values on
           // every tick so non-active cycle states (paused/failed/
@@ -2146,9 +2169,12 @@ class DownloadEngine {
             // keep cycle as 'downloading' so the UI doesn't show
             // 'completed' prematurely for audio+video downloads.
             final ytDoneCid = _ytCounterpartTaskIds[taskId];
-            final ytDoneLiveCp = ytDoneCid != null
+            int? ytDoneLiveCp = ytDoneCid != null
                 ? DownloadEngine._ytLiveBytes[ytDoneCid]
                 : null;
+            if (ytDoneLiveCp == null && ytDoneCid != null) {
+              ytDoneLiveCp = ytCounterpartSize;
+            }
             if (lastFileSize > 0) {
               lastDownloadedBytes = lastFileSize;
               // FIX-YT-DONE-LIVE: Update the live bytes cache to the final
@@ -2482,62 +2508,6 @@ class DownloadEngine {
           initialFileSize: knownFileSize, getTorrentFiles: getTorrentFiles);
 
       _applyFilePriorities(id, getTorrentFiles?.call());
-
-      // FIX-CYCLE-SEEDING: After download completes, if seeding is enabled,
-      // emit 'seeding' cycle state with full file-level data (all files
-      // marked complete, per-file percentage = 1.0, upload speed distributed)
-      // so the details screen shows accurate single-file percentage and
-      // speed during the seeding phase.
-      TorrentService.torrentUpdates.listen((torrents) {
-        final t = torrents[id];
-        if (t == null) return;
-        final sl = t.stateLabel.toLowerCase();
-        if (sl == 'seeding') {
-          final seedFiles = getTorrentFiles?.call();
-          final sSummary = normalizeTorrentFiles(seedFiles);
-          // Mark all selected files as 100% complete during seeding
-          if (seedFiles != null) {
-            for (final f in seedFiles) {
-              if (isTorrentFileSelected(f)) {
-                final len = (f['length'] as num?)?.toInt() ?? 0;
-                f['downloadedBytes'] = len;
-                f['progress'] = 1.0;
-                f['percent'] = 1.0;
-                f['isComplete'] = true;
-                f['progressEstimated'] = false;
-              }
-              f['speed'] = 0.0;
-            }
-            // Distribute upload rate across selected files
-            final selectedCount =
-                seedFiles.where((f) => isTorrentFileSelected(f)).length;
-            if (selectedCount > 0 && t.uploadRate > 0) {
-              final perFile = t.uploadRate.toDouble() / selectedCount;
-              for (final f in seedFiles) {
-                if (isTorrentFileSelected(f)) {
-                  f['speed'] = perFile;
-                }
-              }
-            }
-          }
-          onProgress(DownloadProgress(
-            downloadedBytes:
-                sSummary.bytes > 0 ? sSummary.bytes : knownFileSize,
-            fileSize: sSummary.bytes > 0 ? sSummary.bytes : knownFileSize,
-            speed: t.uploadRate.toDouble(),
-            eta: null,
-            supportsResume: true,
-            torrentFiles: seedFiles,
-            statusMessage: 'Seeding…',
-            cycleState: 'seeding',
-            torrentId: id,
-            totalFiles: sSummary.total > 0 ? sSummary.total : null,
-            completedFiles: sSummary.total > 0 ? sSummary.total : null,
-            totalFileBytes: sSummary.bytes > 0 ? sSummary.bytes : null,
-            downloadedFileBytes: sSummary.bytes > 0 ? sSummary.bytes : null,
-          ));
-        }
-      });
 
       // RESUME BARRIER (load side): fast-resume data is loaded, hash-verified
       // and applied BEFORE the torrent is resumed and BEFORE any progress
@@ -3191,8 +3161,8 @@ class DownloadEngine {
                     final len = (f['length'] as num?)?.toInt() ?? 0;
                     final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
                     final remaining = (len - dl).clamp(0, len);
-                    f['speed'] = (aggregateRate * remaining / totalRemaining)
-                        .toDouble();
+                    f['speed'] =
+                        (aggregateRate * remaining / totalRemaining).toDouble();
                   }
                 } else {
                   // Equal split fallback when all remaining bytes are 0
@@ -3367,56 +3337,13 @@ class DownloadEngine {
           stateLabel == 'finished';
       final isFullyDownloaded =
           totalSize > 0 ? downloadedBytes >= totalSize : isStableFinished;
-      // FIX-SEEDING-COMPLETE: Only complete the engine if seeding is disabled,
-      // or the torrent finished without entering seeding state. Otherwise,
-      // keep the engine alive to emit live upload speed and 'seeding' state.
-      // FIX-CYCLE-SEEDING-DATA: When torrent is seeding and seeding is
-      // enabled, emit 'seeding' cycle state with full file-level data
-      // (all files complete, per-file percentages at 100%, upload speed
-      // distributed across selected files) so the details screen retains
-      // single-file percentage visibility during seeding.
-      final isSeedingActive = stateLabel == 'seeding' &&
-          SettingsProvider.instance.globalTorrentSeeding &&
-          !isCheckingOrMetadata;
-      if (isSeedingActive && !completer.isCompleted) {
-        int sFiles = 0, sDoneFiles = 0, sTotalBytes = 0, sDlBytes = 0;
-        if (resolvedFiles != null) {
-          for (final f in resolvedFiles) {
-            if (isTorrentFileSelected(f)) {
-              final len = (f['length'] as num?)?.toInt() ?? 0;
-              final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-              sFiles++;
-              sTotalBytes += len;
-              sDlBytes += dl.clamp(0, len);
-              if (len == 0 || dl >= len) sDoneFiles++;
-            }
-          }
-        }
-        onProgress(DownloadProgress(
-          downloadedBytes: downloadedBytes,
-          fileSize: totalSize,
-          speed: torrent.uploadRate.toDouble(),
-          eta: null,
-          fileName: resolvedName,
-          torrentFiles: resolvedFiles,
-          supportsResume: true,
-          statusMessage: 'Seeding',
-          cycleState: 'seeding',
-          totalFiles: sFiles > 0 ? sFiles : null,
-          completedFiles: sFiles > 0 ? sDoneFiles : null,
-          totalFileBytes: sTotalBytes > 0 ? sTotalBytes : null,
-          downloadedFileBytes: sTotalBytes > 0 ? sDlBytes : null,
-          torrentId: id,
-        ));
-        return; // keep listening; don't complete
-      }
-
-      final shouldComplete = isFullyDownloaded &&
-          !isCheckingOrMetadata &&
-          (stateLabel == 'finished' ||
-              stateLabel == 'completed' ||
-              (stateLabel == 'seeding' &&
-                  !SettingsProvider.instance.globalTorrentSeeding));
+      // FIX-SEEDING-COMPLETE: A torrent is fully downloaded when it reaches
+      // 100% or enters a stable finished state. The engine should complete
+      // the download future so the orchestrator can mark the task as done.
+      // If seeding is enabled, the orchestrator handles the 'seeding' cycle
+      // state and live upload speed separately — keeping the engine's
+      // download() future hanging forever blocks the task from completing.
+      final shouldComplete = isFullyDownloaded && !isCheckingOrMetadata;
 
       // FIX F-1: Report upload speed while seeding, download speed otherwise.
       final isSeedingNow = stateLabel == 'seeding';
