@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/services/notification_service.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../provider/settings_provider.dart';
@@ -59,9 +60,13 @@ class NotificationsSettingsPage extends StatelessWidget with HapticHelper {
                     ? 'إظهار شريط التقدم والتنبيهات عند اكتمال التحميل'
                     : 'Show system progress bars and alerts when downloads complete',
                 value: settings.notificationsEnabled,
-                onChanged: (val) {
+                onChanged: (val) async {
                   settings.setNotificationsEnabled(val);
                   triggerHaptic(settings);
+                  if (!val) {
+                    // Cancel all existing notifications when disabled
+                    await NotificationService().cancelAll();
+                  }
                 },
               ),
               SwitchTile(

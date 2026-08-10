@@ -332,23 +332,6 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
       ),
 
-      // Category 2: Network & Security
-      _SettingSearchEntry(
-        categoryTitle: isRtl ? 'الشبكة والأمان' : 'Network & Security',
-        categoryIndex: 2,
-        settingTitle: L10n.of(context, 'settings_proxy'),
-        subtitle: L10n.of(context, 'settings_proxy_sub'),
-        keywords: const ['proxy', 'host', 'port', 'socks', 'http'],
-        accentColor: cyan,
-        builder: (ctx) => SwitchTile(
-          accentColor: cyan,
-          title: L10n.of(ctx, 'settings_proxy'),
-          subtitle: L10n.of(ctx, 'settings_proxy_sub'),
-          value: settings.enableProxy,
-          onChanged: (val) => settings.setEnableProxy(val),
-        ),
-      ),
-
       // Category 3: Notifications
       _SettingSearchEntry(
         categoryTitle:

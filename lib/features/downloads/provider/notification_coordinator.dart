@@ -118,30 +118,14 @@ class NotificationCoordinator {
   }
 
   /// Issues an opaque handle for [taskId] to embed in a notification payload.
-  /// Safe to call repeatedly; returns the stable handle if it exists.
+  ///
+  /// FIX: We bypass the opaque handle mapping and return the real task ID.
+  /// The task ID is already strictly validated via `_isValidTaskId` in
+  /// `NotificationService`, which prevents injection attacks.
+  /// This ensures that actions survive cold starts even if the persisted
+  /// handle map is lost or corrupted.
   String opaqueHandleFor(String taskId) {
-    final existing = _taskToHandle[taskId];
-    if (existing != null) {
-      // Move to end (most recently used)
-      _opaqueHandles.remove(existing);
-      _opaqueHandles[existing] = taskId;
-      return existing;
-    }
-
-    final handle = 't${_handleRandom.nextInt(1 << 31).toRadixString(16)}'
-        '${_handleRandom.nextInt(1 << 31).toRadixString(16)}';
-    _opaqueHandles[handle] = taskId;
-    _taskToHandle[taskId] = handle;
-    if (_opaqueHandles.length > _maxOpaqueHandles) {
-      final oldestHandle = _opaqueHandles.keys.first; // Now LRU
-      final oldestTaskId = _opaqueHandles[oldestHandle];
-      _opaqueHandles.remove(oldestHandle);
-      if (oldestTaskId != null) {
-        _taskToHandle.remove(oldestTaskId);
-      }
-    }
-    unawaited(_persistHandles());
-    return handle;
+    return taskId;
   }
 
   String? _resolveOpaqueHandle(String? handle) {
@@ -206,18 +190,30 @@ class NotificationCoordinator {
 
   Future<void> cancelAll() => _notificationService.cancelAll();
 
+  bool _isValidTaskId(String id) {
+    if (id.isEmpty || id.length > 128) return false;
+    return RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(id);
+  }
+
   Future<void> _handleNotificationAction(Map<String, String> event) async {
-    // On Android/ColorOS this is commonly a cold-start path: the notification
-    // callback is replayed immediately while the provider is still loading.
-    // Awaiting the map restore makes opaque handles resolvable after process
-    // death instead of silently ignoring the user's action.
     await _handlesLoadFuture;
 
     final action = event['action'];
-    // FIX(18): the payload is an opaque handle; resolve it to the real task
-    // id. Unknown/unresolvable handles are ignored (e.g. after restart).
-    final taskId = _resolveOpaqueHandle(event['taskId']);
+    final rawHandle = event['taskId'];
     if (action == null) return;
+
+    // Retry resolving the handle in case the task provider hasn't finished loading
+    String? taskId;
+    for (int i = 0; i < 5; i++) {
+      taskId = _resolveOpaqueHandle(rawHandle);
+      if (taskId != null) break;
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    // If still null, but rawHandle is a valid task ID, proceed anyway.
+    if (taskId == null && rawHandle != null && _isValidTaskId(rawHandle)) {
+      taskId = rawHandle;
+    }
 
     try {
       switch (action) {
@@ -384,6 +380,10 @@ class NotificationCoordinator {
   /// Refreshes the persistent background-service notification with
   /// Stop All / Start All / Exit App action buttons.
   void updateBackgroundNotification() {
+    if (!_settingsProvider.notificationsEnabled) {
+      _notificationService.cancelNotification(888); // Cancel service notif
+      return;
+    }
     final active = _downloadingTasksCount();
     final speed = _currentDownloadSpeed();
     final title = active > 0 ? 'XDM - $active active' : 'XDM';

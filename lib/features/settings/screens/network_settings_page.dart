@@ -22,12 +22,7 @@ class NetworkSettingsPage extends StatefulWidget {
 
 class _NetworkSettingsPageState extends State<NetworkSettingsPage>
     with HapticHelper {
-  late final TextEditingController _proxyHostController;
-  late final TextEditingController _proxyPortController;
-  late final TextEditingController _proxyUsernameController;
-  late final TextEditingController _proxyPasswordController;
   late final TextEditingController _backendUrlController;
-  bool _testingProxy = false;
   // FIX-5: State variable for testing backend health
   bool _testingBackend = false;
   bool _updatingAdblock = false;
@@ -46,23 +41,12 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
   void initState() {
     super.initState();
     final settings = Provider.of<SettingsProvider>(context, listen: false);
-    _proxyHostController = TextEditingController(text: settings.proxyHost);
-    _proxyPortController =
-        TextEditingController(text: settings.proxyPort.toString());
-    _proxyUsernameController =
-        TextEditingController(text: settings.proxyUsername);
-    _proxyPasswordController =
-        TextEditingController(text: settings.proxyPassword);
     _backendUrlController = TextEditingController(text: settings.backendUrl);
     _loadLastAdblockUpdateTime();
   }
 
   @override
   void dispose() {
-    _proxyHostController.dispose();
-    _proxyPortController.dispose();
-    _proxyUsernameController.dispose();
-    _proxyPasswordController.dispose();
     _backendUrlController.dispose();
     super.dispose();
   }
@@ -190,116 +174,6 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          SettingsSectionHeader(
-            title: isRtl ? 'إعدادات البروكسي (Proxy)' : 'HTTP / SOCKS Proxy',
-            accentColor: accent,
-            isDark: isDark,
-          ),
-          SettingsSectionGroup(
-            accentColor: accent,
-            children: [
-              SwitchTile(
-                accentColor: accent,
-                title: L10n.of(context, 'settings_proxy'),
-                subtitle: L10n.of(context, 'settings_proxy_sub'),
-                value: settings.enableProxy,
-                onChanged: (val) {
-                  settings.setEnableProxy(val);
-                  triggerHaptic(settings);
-                },
-              ),
-              if (settings.enableProxy) ...[
-                TextFieldTile(
-                  accentColor: accent,
-                  title: isRtl ? 'عنوان المضيف (Host)' : 'Proxy Host',
-                  subtitle: '127.0.0.1 or proxy.example.com',
-                  controller: _proxyHostController,
-                  onChanged: (val) => settings.setProxyHost(val),
-                  onSubmitted: (val) => settings.setProxyHost(val),
-                ),
-                TextFieldTile(
-                  accentColor: accent,
-                  title: isRtl ? 'المنفذ (Port)' : 'Proxy Port',
-                  subtitle: '8080',
-                  controller: _proxyPortController,
-                  keyboardType: TextInputType.number,
-                  onChanged: (val) {
-                    final port = int.tryParse(val);
-                    if (port != null) settings.setProxyPort(port);
-                  },
-                  onSubmitted: (val) {
-                    final port = int.tryParse(val);
-                    if (port != null) settings.setProxyPort(port);
-                    _proxyPortController.text = settings.proxyPort.toString();
-                  },
-                ),
-                TextFieldTile(
-                  accentColor: accent,
-                  title: isRtl ? 'اسم المستخدم' : 'Proxy Username',
-                  subtitle: 'Optional username',
-                  controller: _proxyUsernameController,
-                  onChanged: (val) => settings.setProxyUsername(val),
-                  onSubmitted: (val) => settings.setProxyUsername(val),
-                ),
-                TextFieldTile(
-                  accentColor: accent,
-                  title: isRtl ? 'كلمة المرور' : 'Proxy Password',
-                  subtitle: 'Stored in Secure Storage',
-                  controller: _proxyPasswordController,
-                  obscureText: true,
-                  onChanged: (val) => settings.setProxyPassword(val),
-                  onSubmitted: (val) => settings.setProxyPassword(val),
-                ),
-              ],
-            ],
-          ),
-          if (settings.enableProxy)
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-              child: NeonGlowButton(
-                isFilled: false,
-                color: accent,
-                text: _testingProxy
-                    ? (isRtl ? 'جاري الاختبار...' : 'TESTING PROXY...')
-                    : (isRtl
-                        ? 'اختبار اتصال البروكسي'
-                        : 'TEST PROXY CONNECTION'),
-                onPressed: _testingProxy
-                    ? null
-                    : () async {
-                        final isRtl = L10n.isRtl(context);
-                        final isDark = settings.isDarkMode;
-                        setState(() => _testingProxy = true);
-                        final success = await settings.testProxyConnection(
-                          settings.proxyHost,
-                          settings.proxyPort,
-                          settings.proxyUsername,
-                          settings.proxyPassword,
-                          bypassSSL: settings.bypassSSL,
-                        );
-                        if (!mounted || !context.mounted) return;
-                        setState(() => _testingProxy = false);
-                        ThemedSnackbar.show(
-                          context,
-                          message: success
-                              ? (isRtl
-                                  ? 'اتصال البروكسي ناجح!'
-                                  : 'Proxy connection successful!')
-                              : (isRtl
-                                  ? 'فشل اتصال البروكسي'
-                                  : 'Proxy connection failed'),
-                          color:
-                              success ? AppTheme.neonGreen : AppTheme.neonRed,
-                          icon: success
-                              ? Icons.check_circle_outline
-                              : Icons.error_outline,
-                          isDarkMode: isDark,
-                        );
-                      },
-              ),
-            ),
           const SizedBox(height: 12),
           SettingsSectionHeader(
             title: isRtl ? 'الأمان والخصوصية' : 'Security & Privacy',

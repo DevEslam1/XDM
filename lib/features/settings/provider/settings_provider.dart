@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -700,54 +699,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<void> setEnableProxy(bool value) async {
-    enableProxy = value;
-    await _prefs.setBool(_enableProxyKey, value);
-    notifyListeners();
-  }
-
-  Future<void> setProxyAddress(String value) async {
-    final trimmed = value.trim();
-    if (trimmed.isNotEmpty) {
-      final validFormat = RegExp(r'^[\w.-]+:\d{1,5}$').hasMatch(trimmed);
-      if (!validFormat) {
-        _log.warning('Invalid proxy address format: $trimmed');
-        return;
-      }
-      final parts = trimmed.split(':');
-      final port = int.tryParse(parts[1]);
-      if (port == null || port <= 0 || port > 65535) {
-        _log.warning('Invalid proxy port in address: $trimmed');
-        return;
-      }
-    }
-    proxyAddress = trimmed;
-    await _prefs.setString(_proxyAddressKey, trimmed);
-    notifyListeners();
-  }
-
-  bool get isProxyAddressValid {
-    if (proxyAddress.isEmpty) return true;
-    final parts = proxyAddress.split(':');
-    if (parts.length != 2) return false;
-    final host = parts[0].trim();
-    final port = int.tryParse(parts[1].trim());
-    if (port == null || port <= 0 || port > 65535 || host.isEmpty) return false;
-
-    // Strict regex validation for RFC-compliant hostnames, IPv4, and IPv6.
-    final hostRegExp = RegExp(
-      r'^(?:'
-      r'(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.'
-      r')*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])' // Hostname
-      r'|'
-      r'^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$' // IPv4
-      r'|'
-      r'^\[?[a-fA-F0-9:]+\]?$', // IPv6 (optional brackets)
-    );
-    if (!hostRegExp.hasMatch(host)) return false;
-    return Uri.tryParse('http://$host') != null && !host.contains(' ');
-  }
-
   Future<void> setCustomUserAgent(String value) async {
     customUserAgent = value;
     await _prefs.setString(_customUserAgentKey, value);
@@ -1008,53 +959,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
-  Future<void> setProxyHost(String value) async {
-    // Validate host format
-    final trimmed = value.trim();
-    if (trimmed.isNotEmpty) {
-      final hostRegExp = RegExp(
-        r'^(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])(?:\.(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9]))*$|^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$|^\[?[a-fA-F0-9:]+\]?$',
-      );
-      if (!hostRegExp.hasMatch(trimmed)) {
-        _log.warning('Invalid proxy host format: $trimmed');
-        return;
-      }
-    }
-    proxyHost = trimmed;
-    await _prefs.setString(_proxyHostKey, trimmed);
-    if (proxyHost.isNotEmpty) {
-      proxyAddress = '$proxyHost:$proxyPort';
-      await _prefs.setString(_proxyAddressKey, proxyAddress);
-    } else {
-      proxyAddress = '';
-      await _prefs.remove(_proxyAddressKey);
-    }
-    notifyListeners();
-  }
-
-  Future<void> setProxyPort(int value) async {
-    // Clamp port to valid range 1-65535
-    proxyPort = value.clamp(1, 65535);
-    await _prefs.setInt(_proxyPortKey, proxyPort);
-    if (proxyHost.isNotEmpty) {
-      proxyAddress = '$proxyHost:$proxyPort';
-      await _prefs.setString(_proxyAddressKey, proxyAddress);
-    }
-    notifyListeners();
-  }
-
-  Future<void> setProxyUsername(String value) async {
-    proxyUsername = value;
-    await _prefs.setString(_proxyUsernameKey, value);
-    notifyListeners();
-  }
-
-  Future<void> setProxyPassword(String value) async {
-    proxyPassword = value;
-    await _secureStorage.write(key: _proxyPasswordKey, value: value);
-    notifyListeners();
-  }
-
   Future<void> setBackendUrl(String value) async {
     backendUrl = value;
     await _prefs.setString(_backendUrlKey, value);
@@ -1090,44 +994,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     _maxTotalConnections = value;
     await _prefs.setInt(_maxTotalConnectionsKey, value);
     notifyListeners();
-  }
-
-  Future<bool> testProxyConnection(
-    String host,
-    int port,
-    String username,
-    String password, {
-    bool bypassSSL = true,
-  }) async {
-    final client = HttpClient();
-    try {
-      client.connectionTimeout = const Duration(seconds: 4);
-      client.findProxy = (uri) {
-        return "PROXY $host:$port";
-      };
-      if (username.isNotEmpty) {
-        client.authenticateProxy = (h, p, scheme, realm) async {
-          client.addProxyCredentials(
-            h,
-            p,
-            realm ?? '',
-            HttpClientBasicCredentials(username, password),
-          );
-          return true;
-        };
-      }
-      if (bypassSSL) {
-        client.badCertificateCallback = (cert, host, port) => true;
-      }
-      final request = await client.getUrl(Uri.parse("https://www.google.com"));
-      final response = await request.close();
-      return response.statusCode == 200;
-    } catch (e) {
-      _log.warning('Proxy connection test failed: $e');
-      return false;
-    } finally {
-      client.close(force: true);
-    }
   }
 
   Future<void> resetToDefaults() async {

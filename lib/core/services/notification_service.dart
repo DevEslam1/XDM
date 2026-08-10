@@ -209,6 +209,16 @@ class NotificationService {
   Future<void>? _initFuture;
   Timer? _pollTimer;
 
+  /// Clears pending notification actions from SharedPreferences.
+  Future<void> _clearPendingActions() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_pendingActionsKey);
+    } catch (e) {
+      debugPrint('[NotificationService] Failed to clear pending actions: $e');
+    }
+  }
+
   /// Process any pending notification actions stored in SharedPreferences.
   Future<void> processPendingBackgroundActions() async {
     if (!isSupported) return;
@@ -216,9 +226,6 @@ class NotificationService {
       final prefs = await SharedPreferences.getInstance();
       final rawList = prefs.getStringList(_pendingActionsKey);
       if (rawList == null || rawList.isEmpty) return;
-
-      // Clear list first to prevent duplicated execution
-      await prefs.remove(_pendingActionsKey);
 
       for (final rawJson in rawList) {
         try {
@@ -249,6 +256,9 @@ class NotificationService {
           );
         }
       }
+
+      // Clear list AFTER successful processing to prevent lost actions
+      await prefs.remove(_pendingActionsKey);
     } catch (e) {
       debugPrint(
         '[NotificationService] Failed to process pending background actions: $e',
@@ -259,7 +269,8 @@ class NotificationService {
   void startPollingPendingActions() {
     if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     if (_pollTimer != null && _pollTimer!.isActive) return;
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) {
+    // Increased to 30 seconds as a safety net to prevent race conditions
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       unawaited(processPendingBackgroundActions());
     });
   }
@@ -334,20 +345,12 @@ class NotificationService {
           final receivedNonce = message['nonce'] as String?;
 
           // Validate nonce to prevent unauthorized actions.
-          // Only reject when BOTH nonces are present and they differ — matching
-          // the lenient check used by processPendingBackgroundActions so that
-          // null nonces (e.g., fresh install before first prefs write) still
-          // get through rather than being silently dropped.
           if (_nonce != null &&
               receivedNonce != null &&
               receivedNonce != _nonce) {
             debugPrint(
               '[NotificationService] Invalid nonce - rejecting action',
             );
-            // Fall back to SharedPreferences path; the action was already
-            // persisted by _forwardBackgroundAction so it will be re-processed
-            // by processPendingBackgroundActions on next resume.
-            unawaited(processPendingBackgroundActions());
             return;
           }
 
@@ -363,9 +366,10 @@ class NotificationService {
               );
             }
           }
+
           // Clear the SharedPreferences backup now that the action was
           // successfully dispatched via the fast port path.
-          unawaited(processPendingBackgroundActions());
+          unawaited(_clearPendingActions());
         }
       });
 
@@ -454,7 +458,8 @@ class NotificationService {
   }) async {
     if (!_initialized) return;
     if (!Platform.isAndroid) return;
-    const serviceNotificationId = 888; // BackgroundService.foregroundNotificationId
+    const serviceNotificationId =
+        888; // BackgroundService.foregroundNotificationId
     const channelId = 'dmx_background_service';
     const channelName = 'XDM Background Service';
 
@@ -472,17 +477,17 @@ class NotificationService {
         AndroidNotificationAction(
           'stop_all',
           'Stop All',
-          showsUserInterface: false,
+          showsUserInterface: true,
         ),
         AndroidNotificationAction(
           'start_all',
           'Start All',
-          showsUserInterface: false,
+          showsUserInterface: true,
         ),
         AndroidNotificationAction(
           'exit_app',
           'Exit App',
-          showsUserInterface: false,
+          showsUserInterface: true,
         ),
       ],
     );
@@ -514,12 +519,12 @@ class NotificationService {
         isPaused
             ? L10n.translate(languageCode, 'resume_btn')
             : L10n.translate(languageCode, 'pause_btn'),
-        showsUserInterface: false,
+        showsUserInterface: true,
       ),
       AndroidNotificationAction(
         'cancel:$payload',
         L10n.translate(languageCode, 'cancel_btn'),
-        showsUserInterface: false,
+        showsUserInterface: true,
       ),
     ];
 
@@ -528,12 +533,12 @@ class NotificationService {
         AndroidNotificationAction(
           'pause_all',
           L10n.translate(languageCode, 'pause_all_btn'),
-          showsUserInterface: false,
+          showsUserInterface: true,
         ),
         AndroidNotificationAction(
           'resume_all',
           L10n.translate(languageCode, 'resume_all_btn'),
-          showsUserInterface: false,
+          showsUserInterface: true,
         ),
       ]);
     }
