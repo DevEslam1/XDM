@@ -33,11 +33,7 @@ class FingerprintManager {
       Object.defineProperty(navigator, 'plugins', {get: () => []});
       Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
       
-      // 4. outerWidth & outerHeight (Android WebViews return 0, which detects them)
-      Object.defineProperty(window, 'outerWidth', {get: () => window.innerWidth});
-      Object.defineProperty(window, 'outerHeight', {get: () => window.innerHeight});
-      
-      // 5. Canvas Data Poisoning (BUG FP3)
+      // 4. Canvas Data Poisoning (BUG FP3)
       var orgGetImageData = CanvasRenderingContext2D.prototype.getImageData;
       CanvasRenderingContext2D.prototype.getImageData = function() {
         var imgData = orgGetImageData.apply(this, arguments);

@@ -132,6 +132,7 @@ class AdBlockFilterUpdater {
   final Set<String> _urlPatterns = {};
   final Set<String> _cosmeticRules = {};
   final Map<String, Set<String>> _siteCosmeticRules = {};
+  final Map<String, Set<String>> _cosmeticExceptions = {};
   final Set<String> _scriptletRules = {};
 
   // PERF (TASK 4): LRU cache for cosmeticRulesForHost.
@@ -256,20 +257,6 @@ class AdBlockFilterUpdater {
   Future<bool> _httpDownload(String url, String destPath) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 20);
-    // Only bypass cert validation for known filter-list hosts that are
-    // notorious for expired/self-signed certs. Never bypass for arbitrary
-    // hosts — that would allow MITM injection of malicious filter lists.
-    client.badCertificateCallback = (cert, host, port) {
-      final knownHosts = {
-        'easylist.to',
-        'easylist-downloads.adblockplus.org',
-        'pgl.yoyo.org',
-        'adguardteam.github.io',
-        'adaway.org',
-        'raw.githubusercontent.com',
-      };
-      return knownHosts.contains(host.toLowerCase());
-    };
     try {
       final uri = Uri.parse(url);
       final request = await client.getUrl(uri);
@@ -321,6 +308,7 @@ class AdBlockFilterUpdater {
     _urlPatterns.clear();
     _cosmeticRules.clear();
     _siteCosmeticRules.clear();
+    _cosmeticExceptions.clear();
     _scriptletRules.clear();
 
     final prefs = await SharedPreferences.getInstance();
@@ -533,8 +521,15 @@ class AdBlockFilterUpdater {
             final domainsList = parts[0].split(',');
             for (var domain in domainsList) {
               domain = domain.trim().toLowerCase();
-              if (domain.isEmpty || domain.startsWith('~')) continue;
-              _siteCosmeticRules.putIfAbsent(domain, () => {}).add(selector);
+              if (domain.isEmpty) continue;
+              if (domain.startsWith('~')) {
+                final excDomain = domain.substring(1).trim();
+                if (excDomain.isNotEmpty) {
+                  _cosmeticExceptions.putIfAbsent(excDomain, () => {}).add(selector);
+                }
+              } else {
+                _siteCosmeticRules.putIfAbsent(domain, () => {}).add(selector);
+              }
             }
           }
         }
@@ -625,6 +620,17 @@ class AdBlockFilterUpdater {
         final parent = parts.sublist(i).join('.');
         if (_siteCosmeticRules.containsKey(parent)) {
           rules.addAll(_siteCosmeticRules[parent]!);
+        }
+      }
+
+      // Remove any selectors exempted for this host or its parent domains (~domain rules)
+      if (_cosmeticExceptions.containsKey(cacheKey)) {
+        rules.removeAll(_cosmeticExceptions[cacheKey]!);
+      }
+      for (var i = 1; i < parts.length - 1; i++) {
+        final parent = parts.sublist(i).join('.');
+        if (_cosmeticExceptions.containsKey(parent)) {
+          rules.removeAll(_cosmeticExceptions[parent]!);
         }
       }
     }

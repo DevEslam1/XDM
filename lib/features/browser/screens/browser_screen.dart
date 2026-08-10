@@ -253,15 +253,18 @@ class _BrowserScreenState extends State<BrowserScreen>
   bool _isPickerModeActive = false;
 
   // Fix #10: Per-tab blocked-ad and blocked-popup counters.
-  // Using Maps keyed by tab ID so switching tabs and back preserves the
-  // previously accumulated counts (old flat ints were reset on every switch).
+  // Using ValueNotifier per tab so increments in shouldInterceptRequest do NOT call setState.
+  final Map<String, ValueNotifier<int>> _blockedAdsNotifiers = {};
   final Map<String, int> _blockedAdsPerTab = {};
   final Map<String, int> _blockedPopupsPerTab = {};
 
-  /// Blocked ads for the currently-active tab (0 when no tab or tab has none).
-  int get _blockedAdsCount {
-    if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return 0;
-    return _blockedAdsPerTab[_tabs[_currentTabIndex].id] ?? 0;
+  /// ValueNotifier for the currently-active tab's blocked-ad count.
+  ValueNotifier<int> get _activeBlockedAdsNotifier {
+    if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) {
+      return ValueNotifier<int>(0);
+    }
+    final tabId = _tabs[_currentTabIndex].id;
+    return _blockedAdsNotifiers.putIfAbsent(tabId, () => ValueNotifier<int>(_blockedAdsPerTab[tabId] ?? 0));
   }
 
   /// Blocked popups for the currently-active tab.
@@ -1206,6 +1209,8 @@ class _BrowserScreenState extends State<BrowserScreen>
     _loadingTimeoutTimers[tabId]?.cancel();
     _loadingTimeoutTimers.remove(tabId);
     // Fix #10: Clean up per-tab counter maps when a tab is closed.
+    _blockedAdsNotifiers[tabId]?.dispose();
+    _blockedAdsNotifiers.remove(tabId);
     _blockedAdsPerTab.remove(tabId);
     _blockedPopupsPerTab.remove(tabId);
 
@@ -4766,33 +4771,36 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                 .lightTextMuted),
                                                   ),
                                                 ),
-                                                if (_adBlocker.isEnabled &&
-                                                    _blockedAdsCount > 0)
-                                                  Positioned(
-                                                    right: -4,
-                                                    top: -4,
-                                                    child: Container(
-                                                      padding:
-                                                          const EdgeInsets.all(
-                                                              2),
-                                                      decoration:
-                                                          const BoxDecoration(
-                                                              color: Colors.red,
-                                                              shape: BoxShape
-                                                                  .circle),
-                                                      constraints:
-                                                          const BoxConstraints(
-                                                              minWidth: 12,
-                                                              minHeight: 12),
-                                                      child: Text(
-                                                          '$_blockedAdsCount',
-                                                          style:
-                                                              const TextStyle(
-                                                                  color: Colors
-                                                                      .white,
-                                                                  fontSize: 8)),
-                                                    ),
-                                                  ),
+                                                ValueListenableBuilder<int>(
+                                                  valueListenable: _activeBlockedAdsNotifier,
+                                                  builder: (context, count, _) {
+                                                    if (!_adBlocker.isEnabled || count <= 0) {
+                                                      return const SizedBox.shrink();
+                                                    }
+                                                    return Positioned(
+                                                      right: -4,
+                                                      top: -4,
+                                                      child: Container(
+                                                        padding: const EdgeInsets.all(2),
+                                                        decoration: const BoxDecoration(
+                                                          color: Colors.red,
+                                                          shape: BoxShape.circle,
+                                                        ),
+                                                        constraints: const BoxConstraints(
+                                                          minWidth: 12,
+                                                          minHeight: 12,
+                                                        ),
+                                                        child: Text(
+                                                          '$count',
+                                                          style: const TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 8,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
                                               ],
                                             ),
                                           ),
@@ -5871,13 +5879,11 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                               if (_adBlocker
                                                                   .shouldBlock(
                                                                       url)) {
-                                                                // Fix #9: Increment per-tab counter inside setState so
-                                                                // the URL bar badge updates immediately on the UI thread.
-                                                                if (mounted) {
-                                                                  setState(() {
-                                                                    _blockedAdsPerTab[tab.id] =
-                                                                        (_blockedAdsPerTab[tab.id] ?? 0) + 1;
-                                                                  });
+                                                                final count = (_blockedAdsPerTab[tab.id] ?? 0) + 1;
+                                                                _blockedAdsPerTab[tab.id] = count;
+                                                                final notifier = _blockedAdsNotifiers[tab.id];
+                                                                if (notifier != null) {
+                                                                  notifier.value = count;
                                                                 }
                                                                 return WebResourceResponse(
                                                                   contentType:

@@ -1119,7 +1119,7 @@ $customCss
   // Native ContentBlockers for WebView-level blocking
   // ─────────────────────────────────────────────────────────────────────
   List<ContentBlocker> _buildContentBlockers() {
-    return [
+    final blockers = <ContentBlocker>[
       // DoubleClick / Google Ads
       ContentBlocker(
         trigger: ContentBlockerTrigger(
@@ -1300,6 +1300,20 @@ $customCss
         action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
       ),
     ];
+
+    // Add downloaded domains to native blockers (limit to 10,000 to respect platform limits)
+    final downloadedDomains = AdBlockFilterUpdater().allBlockedDomains;
+    for (final domain in downloadedDomains.take(10000)) {
+      blockers.add(
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(
+            urlFilter: '.*\\.${RegExp.escape(domain)}.*',
+          ),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+      );
+    }
+    return blockers;
   }
 
   // YouTube-specific UserScript injected at AT_DOCUMENT_START.
