@@ -869,17 +869,14 @@ class DownloadProvider extends ChangeNotifier
         chunks: clampedChunks,
       );
 
-      // Only mark in-flight downloads as paused on initial load.
-      // If a CancelToken exists in the in-memory map, an active download
-      // stream is still running and must not be flipped to paused.
+      // When the app starts, mark any non-completed and non-failed download (downloading, queued, merging) as paused.
       final hasActiveStream = _cancelTokens.containsKey(task.id);
-
-      if (pauseOrphanDownloads &&
-          (task.status == DownloadStatus.downloading ||
-              task.status == DownloadStatus.merging) &&
-          !hasActiveStream) {
+      if (!hasActiveStream &&
+          task.status != DownloadStatus.completed &&
+          task.status != DownloadStatus.failed) {
         return task.copyWith(
           status: DownloadStatus.paused,
+          pausedByUser: true,
           speed: 0,
           clearEta: true,
           errorMessage: task.status == DownloadStatus.merging
@@ -4719,13 +4716,12 @@ class DownloadProvider extends ChangeNotifier
 
   Future<void> _autoResumeIncomplete() async {
     final candidates = _tasks.where((t) {
-      final isPausedOrInterrupted = t.status == DownloadStatus.paused ||
-          t.status == DownloadStatus.failed;
+      final isPaused = t.status == DownloadStatus.paused;
       final isNotUserPausedOrScheduled = !t.pausedByUser &&
           t.errorMessage != DownloadStatusMessages.waitingWifi &&
           t.errorMessage != DownloadStatusMessages.waitingNetwork &&
           (t.scheduledAt == null || t.scheduledAt!.isBefore(DateTime.now()));
-      return isPausedOrInterrupted && isNotUserPausedOrScheduled;
+      return isPaused && isNotUserPausedOrScheduled;
     }).toList();
 
     var updatedAny = false;
