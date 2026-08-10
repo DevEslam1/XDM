@@ -13,16 +13,22 @@ enum DetectedMediaKind {
   unknown
 }
 
+enum DetectionConfidence { high, low }
+
 class DetectedMedia {
   final DetectedMediaKind kind;
   final String url;
   final String? suggestedFileName;
+  final DetectionConfidence confidence;
 
   const DetectedMedia({
     required this.kind,
     required this.url,
     this.suggestedFileName,
+    this.confidence = DetectionConfidence.high,
   });
+
+  bool get isPathBased => confidence == DetectionConfidence.high;
 }
 
 class BrowserDetector {
@@ -163,16 +169,23 @@ class BrowserDetector {
     final lowerUrl = url.toLowerCase();
     for (final entry in _extensionMap.entries) {
       final ext = entry.key;
-      if (trimmedPath.endsWith(ext) ||
-          lowerUrl.contains('$ext?') ||
-          lowerUrl.contains('$ext&') ||
-          lowerUrl.contains('$ext#') ||
-          lowerUrl.contains('file=$ext') ||
-          lowerUrl.contains('filename=') && lowerUrl.contains(ext)) {
+      if (trimmedPath.endsWith(ext)) {
         return DetectedMedia(
           kind: entry.value,
           url: url,
           suggestedFileName: _suggestName(url, ext),
+          confidence: DetectionConfidence.high,
+        );
+      } else if (lowerUrl.contains('$ext?') ||
+          lowerUrl.contains('$ext&') ||
+          lowerUrl.contains('$ext#') ||
+          lowerUrl.contains('file=$ext') ||
+          (lowerUrl.contains('filename=') && lowerUrl.contains(ext))) {
+        return DetectedMedia(
+          kind: entry.value,
+          url: url,
+          suggestedFileName: _suggestName(url, ext),
+          confidence: DetectionConfidence.low,
         );
       }
     }

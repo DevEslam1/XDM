@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
-import 'package:dio/dio.dart' show Dio, Options, ResponseType, ResponseBody;
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -57,7 +56,9 @@ import '../widgets/bookmark_manager_screen.dart';
 import '../widgets/browser_download_sheet.dart';
 import '../widgets/browser_history_sheet.dart';
 import '../widgets/browser_home_page.dart';
+import '../widgets/link_options_sheet.dart';
 import '../widgets/redirect_sheet.dart';
+import '../widgets/smart_url_bar.dart';
 import 'package:logging/logging.dart';
 
 class JavaScriptMessage {
@@ -74,6 +75,113 @@ class BrowserScreen extends StatefulWidget {
 
 class _BrowserScreenState extends State<BrowserScreen>
     with HapticHelper, WidgetsBindingObserver {
+  final List<Map<String, String>> _userCustomShortcuts = [];
+
+  Future<void> _showAddShortcutDialog() async {
+    final titleC = TextEditingController();
+    final urlC = TextEditingController();
+    final isDark = context.read<SettingsProvider>().isDarkMode;
+    final isRtl = L10n.isRtl(context);
+
+    final res = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            isRtl ? 'إضافة اختصار جديد' : 'Add Custom Shortcut',
+            style: TextStyle(color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleC,
+                decoration: InputDecoration(
+                  labelText: isRtl ? 'العنوان' : 'Title',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: urlC,
+                decoration: InputDecoration(
+                  labelText: isRtl ? 'الرابط (URL)' : 'URL',
+                ),
+                keyboardType: TextInputType.url,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(isRtl ? 'إضافة' : 'Add'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (res == true) {
+      final title = titleC.text.trim();
+      var url = urlC.text.trim();
+      if (url.isNotEmpty) {
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          url = 'https://$url';
+        }
+        setState(() {
+          _userCustomShortcuts.add({
+            'title': title.isNotEmpty ? title : url,
+            'url': url,
+          });
+        });
+      }
+    }
+  }
+
+  Future<void> _removeCustomShortcut(Map<String, String> shortcut) async {
+    final isDark = context.read<SettingsProvider>().isDarkMode;
+    final isRtl = L10n.isRtl(context);
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            isRtl ? 'حذف الاختصار' : 'Remove Shortcut',
+            style: TextStyle(color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary),
+          ),
+          content: Text(
+            isRtl ? 'هل تريد حذف هذا الاختصار؟' : 'Remove "${shortcut['title']}" from your shortcuts?',
+            style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonRed),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(isRtl ? 'حذف' : 'Remove', style: const TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      setState(() {
+        _userCustomShortcuts.remove(shortcut);
+      });
+    }
+  }
   static final _log = Logger('BrowserScreen');
 
   late final TabManager _tabManager = TabManager(
@@ -500,6 +608,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     bool isIncognito = false,
     String? id,
     bool autoLoad = true,
+    TabOrigin origin = TabOrigin.userDirect,
   }) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     var cleanInitialUrl = (initialUrl.isEmpty || initialUrl == 'about:blank')
@@ -519,6 +628,7 @@ class _BrowserScreenState extends State<BrowserScreen>
           : cleanInitialUrl,
       isIncognito: isIncognito,
       isHome: cleanInitialUrl == 'about:blank',
+      origin: origin,
     );
 
     // Create PullToRefreshController HERE — before the InAppWebView widget is
@@ -1096,20 +1206,33 @@ class _BrowserScreenState extends State<BrowserScreen>
       return;
     }
 
-    // 4. Open popup URL in new tab directly (Popup Blocking Disabled)
-    _log.info('[Browser] Opening popup URL in new tab: $url');
+    // 4. Open popup URL in background tab (Popup Blocking Disabled).
+    // We intentionally do NOT switch focus — ad/popup tabs must not
+    // interrupt the page the user is currently reading.
+    _log.info('[Browser] Opening popup URL in background tab: $url');
+    _evictStaleAdTabs();
     setState(() {
       final newTab = _createNewTab(
         initialUrl: url,
         isIncognito: parentTab.isIncognito,
+        origin: TabOrigin.adOrPopup,
       );
       _redirectGuard.reset(newTab.id);
       _tabs.add(newTab);
-      _currentTabIndex = _tabs.length - 1;
-      _urlController.text = url;
-      _showBarsNotifier.value = true;
     });
     _saveTabs();
+    if (mounted) {
+      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      final isDark = settings.isDarkMode;
+      final isRtl = L10n.isRtl(context);
+      ThemedSnackbar.show(
+        context,
+        message: isRtl ? 'تم فتح علامة تبويب في الخلفية' : 'Opened in background tab',
+        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+        icon: Icons.tab_rounded,
+        isDarkMode: isDark,
+      );
+    }
   }
 
   /// Silently follows HTTP redirects from a blocked ad popup URL.
@@ -1120,74 +1243,10 @@ class _BrowserScreenState extends State<BrowserScreen>
       String adUrl, BrowserTab parentTab) async {
     try {
       final referer = parentTab.url.isNotEmpty ? parentTab.url : adUrl;
-      final origin = Uri.tryParse(referer)?.origin ?? '';
-
-      final headers = <String, String>{
-        'User-Agent':
-            'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
-            '(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        if (referer.isNotEmpty) 'Referer': referer,
-        if (origin.isNotEmpty) 'Origin': origin,
-      };
-
-      final dio = Dio();
-      dio.options
-        ..connectTimeout = const Duration(seconds: 8)
-        ..receiveTimeout = const Duration(seconds: 8)
-        ..followRedirects = true
-        ..maxRedirects = 10
-        ..validateStatus = (s) => true;
-
-      String finalUrl = adUrl;
-      String contentType = '';
-      String contentDisposition = '';
-
-      // 1. Try HEAD request first
-      try {
-        final response = await dio.head<void>(
-          adUrl,
-          options: Options(
-            responseType: ResponseType.bytes,
-            headers: headers,
-          ),
-        );
-        if (response.statusCode != null && response.statusCode! < 400) {
-          finalUrl = response.realUri.toString().isNotEmpty
-              ? response.realUri.toString()
-              : (response.redirects.isNotEmpty
-                  ? response.redirects.last.location.toString()
-                  : adUrl);
-          contentType = (response.headers.value('content-type') ?? '').toLowerCase();
-          contentDisposition = (response.headers.value('content-disposition') ?? '').toLowerCase();
-        }
-      } catch (e) {
-        _log.fine('[Browser] HEAD request for ad redirect failed: $e');
-      }
-
-      // 2. Fallback: If HEAD failed or returned HTML/empty, try stream GET
-      if (contentType.isEmpty || contentType.contains('text/html')) {
-        try {
-          final response = await dio.get<ResponseBody>(
-            adUrl,
-            options: Options(
-              responseType: ResponseType.stream,
-              headers: headers,
-            ),
-          );
-          finalUrl = response.realUri.toString().isNotEmpty
-              ? response.realUri.toString()
-              : (response.redirects.isNotEmpty
-                  ? response.redirects.last.location.toString()
-                  : adUrl);
-          contentType = (response.headers.value('content-type') ?? '').toLowerCase();
-          contentDisposition = (response.headers.value('content-disposition') ?? '').toLowerCase();
-          
-          response.data?.stream.listen((_) {}).cancel();
-        } catch (e) {
-          _log.fine('[Browser] Stream GET for ad redirect failed: $e');
-        }
-      }
+      final check = await _interceptor.verifyContentType(adUrl, referer: referer);
+      final finalUrl = check.finalUrl;
+      final contentType = check.contentType;
+      final contentDisposition = check.contentDisposition;
 
       final isDownload = contentDisposition.contains('attachment') ||
           contentType.contains('application/octet-stream') ||
@@ -1227,19 +1286,30 @@ class _BrowserScreenState extends State<BrowserScreen>
           lowerFinal.contains('1fichier');
 
       if (isKnownFileHost && mounted) {
-        _log.info('[Browser] Ad redirect was legitimate file host, opening tab: $finalUrl');
+        _log.info('[Browser] Ad redirect was legitimate file host, opening background tab: $finalUrl');
+        _evictStaleAdTabs();
         setState(() {
           final newTab = _createNewTab(
             initialUrl: finalUrl,
             isIncognito: parentTab.isIncognito,
+            origin: TabOrigin.redirect,
           );
           _redirectGuard.reset(newTab.id);
           _tabs.add(newTab);
-          _currentTabIndex = _tabs.length - 1;
-          _urlController.text = finalUrl;
-          _showBarsNotifier.value = true;
         });
         _saveTabs();
+        if (mounted) {
+          final settings = Provider.of<SettingsProvider>(context, listen: false);
+          final isDark = settings.isDarkMode;
+          final isRtl = L10n.isRtl(context);
+          ThemedSnackbar.show(
+            context,
+            message: isRtl ? 'تم فتح علامة تبويب في الخلفية' : 'Opened in background tab',
+            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            icon: Icons.tab_rounded,
+            isDarkMode: isDark,
+          );
+        }
       }
     } catch (e) {
       _log.fine('[Browser] Ad redirect follow error: $e');
@@ -1339,8 +1409,12 @@ class _BrowserScreenState extends State<BrowserScreen>
     );
   }
 
-  void _openInNewTab(String url,
-      {bool isIncognito = false, bool switchToTab = false}) {
+  void _openInNewTab(
+    String url, {
+    bool isIncognito = false,
+    bool switchToTab = false,
+    TabOrigin origin = TabOrigin.userDirect,
+  }) {
     if (!mounted || url.isEmpty) return;
     if (url.startsWith('magnet:') || isMagnetUrl(url)) {
       _log.info('[Browser] Intercepted magnet URL in _openInNewTab: $url');
@@ -1351,6 +1425,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       final newTab = _createNewTab(
         initialUrl: url,
         isIncognito: isIncognito,
+        origin: origin,
       );
       _redirectGuard.reset(newTab.id);
       _tabs.add(newTab);
@@ -1406,6 +1481,49 @@ class _BrowserScreenState extends State<BrowserScreen>
       isDarkMode: isDark,
     );
   }
+
+  /// Maximum number of never-visited ad/popup/redirect background tabs allowed
+  /// before the oldest one is silently evicted.
+  static const int _maxUnvisitedAdTabs = 3;
+
+  /// Silently removes the oldest [TabOrigin.adOrPopup] / [TabOrigin.redirect]
+  /// background tabs when their count is at or above [_maxUnvisitedAdTabs],
+  /// ensuring ad popups cannot fill all available tab slots.
+  ///
+  /// [TabOrigin.userDirect] tabs are NEVER touched by this method.
+  ///
+  /// Call this inside or just before the [setState] that adds a new
+  /// ad/popup/redirect tab.
+  void _evictStaleAdTabs() {
+    final activeId =
+        (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length)
+            ? _tabs[_currentTabIndex].id
+            : null;
+
+    // Collect background ad/redirect tabs, sorted oldest-first.
+    final candidates = _tabs
+        .where((t) =>
+            (t.origin == TabOrigin.adOrPopup ||
+                t.origin == TabOrigin.redirect) &&
+            t.id != activeId)
+        .toList()
+      ..sort((a, b) => a.lastVisitedAt.compareTo(b.lastVisitedAt));
+
+    while (candidates.length >= _maxUnvisitedAdTabs) {
+      final oldest = candidates.removeAt(0);
+      _log.info('[Browser] Evicting stale ad/popup tab: ${oldest.url}');
+      _cleanupTabState(oldest.id);
+      _tabs.remove(oldest);
+      if (_currentTabIndex >= _tabs.length) {
+        _tabManager.currentIndex = _tabs.length - 1;
+      }
+      // Dispose AFTER the frame so the InAppWebView widget has already
+      // been unmounted — prevents double-dispose of pullToRefreshController.
+      WidgetsBinding.instance.addPostFrameCallback((_) => oldest.dispose());
+    }
+  }
+
+
 
   void _onDashboardScroll() {
     if (!_dashboardScrollController.hasClients) return;
@@ -1594,18 +1712,106 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
   }
 
-  Future<void> _goBack() async {
+  /// Unified back handler — single source of truth for both the toolbar back
+  /// button and [PopScope.onPopInvokedWithResult].
+  ///
+  /// Decision order:
+  /// (a) WebView can go back → go back in it.
+  /// (b) Tab has no history AND origin != userDirect → close the tab, return
+  ///     to the previous tab, show an Undo snackbar.
+  /// (c) Tab is not Home → navigate to the tab's Home dashboard.
+  /// (d) Already Home → no-op (handled by the PopScope exit logic).
+  ///
+  /// Returns `true` if it handled the back action, `false` if the caller
+  /// should fall through to exit/switch logic.
+  Future<bool> _goBack() async {
     if (_tabs.isEmpty ||
         _currentTabIndex < 0 ||
         _currentTabIndex >= _tabs.length) {
-      return;
+      return false;
     }
     final activeTab = _tabs[_currentTabIndex];
+
+    // (a) WebView can go back.
     if (activeTab.canGoBack) {
       _homeReturnUrl = null;
       unawaited(activeTab.controller?.goBack() ?? Future.value());
       _updateNavState();
-    } else if (!activeTab.isHome && activeTab.url.isNotEmpty) {
+      return true;
+    }
+
+    // Also async-check with the controller in case the cached flag is stale.
+    final webCanGoBack =
+        await activeTab.controller?.canGoBack() ?? false;
+    if (webCanGoBack) {
+      _homeReturnUrl = null;
+      unawaited(activeTab.controller?.goBack() ?? Future.value());
+      _updateNavState();
+      return true;
+    }
+
+    // (b) No WebView history AND this is an ad/popup/redirect tab → close it.
+    if (!activeTab.isHome && activeTab.origin != TabOrigin.userDirect) {
+      final closedUrl = activeTab.url;
+      final closedIsIncognito = activeTab.isIncognito;
+      final closedOrigin = activeTab.origin;
+      final closedIdx = _currentTabIndex;
+
+      final tabToDispose = activeTab;
+      setState(() {
+        _cleanupTabState(tabToDispose.id);
+        _tabs.removeAt(closedIdx);
+        if (_currentTabIndex >= _tabs.length) {
+          _tabManager.currentIndex = _tabs.length - 1;
+        }
+        if (_tabs.isEmpty) {
+          _tabs.add(_createNewTab());
+          _tabManager.currentIndex = 0;
+        }
+        final nowActive = _tabs[_currentTabIndex];
+        _urlController.text = nowActive.isHome ? '' : nowActive.url;
+      });
+      // Dispose AFTER the frame — widget is now unmounted, no double-dispose.
+      WidgetsBinding.instance.addPostFrameCallback((_) => tabToDispose.dispose());
+      _switchToPreviousTab();
+      _saveTabs();
+
+      // Undo snackbar — re-creates the tab at the same URL if tapped.
+      if (mounted) {
+        final settings = context.read<SettingsProvider>();
+        final isDark = settings.isDarkMode;
+        final isRtl = L10n.isRtl(context);
+        ThemedSnackbar.show(
+          context,
+          message: isRtl ? 'تم إغلاق علامة التبويب' : 'Tab closed',
+          color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+          icon: Icons.tab_rounded,
+          isDarkMode: isDark,
+          actionLabel: isRtl ? 'تراجع' : 'UNDO',
+          onAction: () {
+            if (!mounted) return;
+            _evictStaleAdTabs();
+            setState(() {
+              final restored = _createNewTab(
+                initialUrl: closedUrl,
+                isIncognito: closedIsIncognito,
+                origin: closedOrigin,
+              );
+              _redirectGuard.reset(restored.id);
+              _tabs.add(restored);
+              _currentTabIndex = _tabs.length - 1;
+              _urlController.text = closedUrl;
+              _showBarsNotifier.value = true;
+            });
+            _saveTabs();
+          },
+        );
+      }
+      return true;
+    }
+
+    // (c) Not Home → send tab to its Home dashboard.
+    if (!activeTab.isHome && activeTab.url.isNotEmpty) {
       if (mounted) {
         _homeReturnUrl = activeTab.url;
         setState(() {
@@ -1617,8 +1823,14 @@ class _BrowserScreenState extends State<BrowserScreen>
           _urlController.clear();
         });
       }
+      return true;
     }
+
+    // (d) Already Home — caller handles exit / tab-switch fallback.
+    return false;
   }
+
+
 
   bool _switchToPreviousTab() {
     _tabIdHistory.removeWhere((id) => !_tabs.any((t) => t.id == id));
@@ -1944,7 +2156,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         _savePageOffline(activeTab);
         break;
       case 'quit':
-        await _quitBrowser();
+        await _confirmQuitBrowser();
         break;
     }
   }
@@ -2035,11 +2247,64 @@ class _BrowserScreenState extends State<BrowserScreen>
         .toList();
     final sources = filterSourcesForTarget(discovered, url, type);
 
-    final cleanUrl = url.trim();
-    final isWebUrl = cleanUrl.startsWith('http://') ||
-        cleanUrl.startsWith('https://') ||
-        cleanUrl.startsWith('www.');
+    var cleanUrl = url.trim();
+    if (cleanUrl.isNotEmpty) {
+      if (!cleanUrl.startsWith('http://') &&
+          !cleanUrl.startsWith('https://') &&
+          !cleanUrl.startsWith('magnet:') &&
+          !cleanUrl.startsWith('file:')) {
+        if (cleanUrl.startsWith('//')) {
+          cleanUrl = 'https:$cleanUrl';
+        } else if (cleanUrl.startsWith('/')) {
+          final baseUri = Uri.tryParse(tab.url);
+          if (baseUri != null && baseUri.host.isNotEmpty) {
+            cleanUrl = '${baseUri.scheme}://${baseUri.host}$cleanUrl';
+          } else {
+            cleanUrl = 'https://$cleanUrl';
+          }
+        } else {
+          cleanUrl = 'https://$cleanUrl';
+        }
+      }
+    }
 
+    if (cleanUrl.isEmpty) return;
+
+    final isWebUrl = cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://');
+
+    // Plain link long-press → lightweight navigation sheet.
+    // Media/file long-press → BrowserDownloadSheet (download-forward UI).
+    if (type == 'link') {
+      LinkOptionsSheet.show(
+        context,
+        cleanUrl,
+        onOpen: () => _navigateToUrl(cleanUrl),
+        onOpenInNewTab: () {
+          _openInNewTab(
+            cleanUrl,
+            isIncognito: tab.isIncognito,
+            switchToTab: true,
+            origin: TabOrigin.userDirect,
+          );
+          _saveTabs();
+        },
+        onOpenInBackground: () =>
+            _openInBackgroundTab(cleanUrl, isIncognito: tab.isIncognito),
+        onOpenInIncognito: () {
+          _openInNewTab(
+            cleanUrl,
+            isIncognito: true,
+            switchToTab: true,
+            origin: TabOrigin.userDirect,
+          );
+          _saveTabs();
+        },
+        onDownload: () => _showInterceptionSheet(context, cleanUrl),
+      );
+      return;
+    }
+
+    // Media / file long-press → BrowserDownloadSheet.
     BrowserDownloadSheet.show(
       context,
       url,
@@ -2048,6 +2313,10 @@ class _BrowserScreenState extends State<BrowserScreen>
       downloadPageUrl: tab.isHome ? null : tab.url,
       onQuality: hasMultipleQualities
           ? () => _showQualityPicker(tab.id, fallbackUrl: url)
+          : null,
+      onOpen: isWebUrl ? () => _navigateToUrl(cleanUrl) : null,
+      onOpenInBackground: isWebUrl
+          ? () => _openInBackgroundTab(cleanUrl, isIncognito: tab.isIncognito)
           : null,
       onOpenInNewTab: isWebUrl
           ? () {
@@ -2981,6 +3250,84 @@ class _BrowserScreenState extends State<BrowserScreen>
     );
   }
 
+  Future<void> _confirmCloseAllTabs(
+      BuildContext context, StateSetter setModalState) async {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    triggerHaptic(settings);
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
+              const SizedBox(width: 8),
+              Text(
+                isRtl ? 'إغلاق جميع التبويبات' : 'Close All Tabs',
+                style: TextStyle(
+                  color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            isRtl
+                ? 'هل أنت تأكد من إغلاق جميع التبويبات (${_tabs.length})؟'
+                : 'Close all ${_tabs.length} tabs?',
+            style: TextStyle(
+              color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+              fontSize: 13,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                isRtl ? 'إغلاق الكل' : 'Close All',
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      setModalState(() {
+        setState(() {
+          for (final t in _tabs) {
+            _cleanupTabState(t.id);
+            t.dispose();
+          }
+          _tabs.clear();
+          _tabs.add(_createNewTab());
+          _currentTabIndex = 0;
+          _urlController.text = '';
+        });
+        _saveTabs();
+      });
+      if (context.mounted) Navigator.pop(context);
+    }
+  }
+
   void _showTabSwitcher(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final isDark = settings.isDarkMode;
@@ -3091,6 +3438,13 @@ class _BrowserScreenState extends State<BrowserScreen>
                                         ),
                                       ),
                                       const Spacer(),
+                                      _TabSwitcherAction(
+                                        icon: Icons.delete_sweep_rounded,
+                                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                        tooltip: L10n.isRtl(context) ? 'إغلاق جميع التبويبات' : 'Close all tabs',
+                                        onPressed: () => _confirmCloseAllTabs(context, setModalState),
+                                      ),
+                                      const SizedBox(width: 8),
                                       _TabSwitcherAction(
                                         icon: Icons.visibility_off_rounded,
                                         color: violet,
@@ -3573,50 +3927,6 @@ class _BrowserScreenState extends State<BrowserScreen>
               );
             },
           ),
-          const SizedBox(height: 16),
-          GlassCard(
-            borderRadius: 24,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            isDarkMode: isDark,
-            child: Row(
-              children: [
-                Icon(
-                  Icons.search,
-                  color: isDark
-                      ? AppTheme.textSecondary
-                      : AppTheme.lightTextSecondary,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText:
-                          isRtl ? 'ابحث في الويب...' : 'Search the web...',
-                      hintStyle: TextStyle(
-                        color: isDark
-                            ? AppTheme.textMuted
-                            : AppTheme.lightTextMuted,
-                        fontSize: 12,
-                      ),
-                      border: InputBorder.none,
-                      isDense: true,
-                    ),
-                    style: TextStyle(
-                      color: isDark
-                          ? AppTheme.textPrimary
-                          : AppTheme.lightTextPrimary,
-                    ),
-                    onSubmitted: (val) {
-                      if (val.trim().isNotEmpty) {
-                        _navigateToUrl(val);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -3657,7 +3967,9 @@ class _BrowserScreenState extends State<BrowserScreen>
               ),
             ],
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
+
+          // ── Section 1: Your Shortcuts ───────────────────────────
           Row(
             children: [
               Container(
@@ -3670,7 +3982,7 @@ class _BrowserScreenState extends State<BrowserScreen>
               ),
               const SizedBox(width: 8),
               Text(
-                isRtl ? 'إشارات سريعة (روابط)' : 'Quick access',
+                isRtl ? 'اختصاراتك' : 'Your shortcuts',
                 style: TextStyle(
                   color: isDark
                       ? AppTheme.textSecondary
@@ -3680,9 +3992,18 @@ class _BrowserScreenState extends State<BrowserScreen>
                   fontSize: 12,
                 ),
               ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _showAddShortcutDialog,
+                icon: Icon(Icons.add, size: 16, color: accentColor),
+                label: Text(
+                  isRtl ? 'إضافة' : 'Add',
+                  style: TextStyle(fontSize: 12, color: accentColor, fontWeight: FontWeight.bold),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
@@ -3733,6 +4054,56 @@ class _BrowserScreenState extends State<BrowserScreen>
                   );
                 },
               ),
+              ..._userCustomShortcuts.map((sc) {
+                return _buildShortcutCard(
+                  context,
+                  title: sc['title'] ?? 'Shortcut',
+                  url: sc['url'] ?? '',
+                  icon: Icons.link,
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  settings: settings,
+                  onLongPress: () => _removeCustomShortcut(sc),
+                );
+              }),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // ── Section 2: Suggested Sites ──────────────────────────
+          Row(
+            children: [
+              Container(
+                width: 3,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isRtl ? 'المواقع المقترحة' : 'Suggested sites',
+                style: TextStyle(
+                  color: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 2.5,
+            children: [
               _buildShortcutCard(
                 context,
                 title: 'Google',
@@ -3768,17 +4139,17 @@ class _BrowserScreenState extends State<BrowserScreen>
               ),
               _buildShortcutCard(
                 context,
-                title: 'Archive.org',
-                url: 'https://archive.org',
-                icon: Icons.history_edu,
+                title: 'Wikipedia',
+                url: 'https://wikipedia.org',
+                icon: Icons.menu_book_rounded,
                 color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
                 settings: settings,
               ),
               _buildShortcutCard(
                 context,
-                title: 'Sample Files',
-                url: 'https://file-examples.com',
-                icon: Icons.insert_drive_file_outlined,
+                title: 'DuckDuckGo',
+                url: 'https://duckduckgo.com',
+                icon: Icons.privacy_tip_outlined,
                 color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
                 settings: settings,
               ),
@@ -3797,6 +4168,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     required Color color,
     required SettingsProvider settings,
     VoidCallback? onTap,
+    VoidCallback? onLongPress,
   }) {
     final isDark = settings.isDarkMode;
     final textPrimary =
@@ -3823,6 +4195,7 @@ class _BrowserScreenState extends State<BrowserScreen>
               _navigateToUrl(url);
             }
           },
+          onLongPress: onLongPress,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
@@ -3941,15 +4314,15 @@ class _BrowserScreenState extends State<BrowserScreen>
             }
             return;
           }
-          final activeTab = _tabs[_currentTabIndex];
-          final webCanGoBack =
-              await activeTab.controller?.canGoBack() ?? false;
-          if (activeTab.canGoBack ||
-              webCanGoBack ||
-              (!activeTab.isHome && activeTab.url.isNotEmpty)) {
-            await _goBack();
-            return;
-          }
+          // _goBack() owns the full decision tree (cases a–d):
+          //   (a) WebView history → go back
+          //   (b) ad/popup/redirect tab with no history → close + Undo snackbar
+          //   (c) not Home → go to Home dashboard
+          //   (d) already Home → returns false, fall through to exit
+          // The async canGoBack check is done inside _goBack() itself.
+          final handled = await _goBack();
+          if (handled) return;
+          // Fall through: tab is at Home and has no history to go back through.
           final switched = _switchToPreviousTab();
           if (switched) {
             return;
@@ -4255,106 +4628,22 @@ class _BrowserScreenState extends State<BrowserScreen>
                                         ),
 
                                       Expanded(
-                                        child: ValueListenableBuilder<
-                                            TextEditingValue>(
-                                          valueListenable: _urlController,
-                                          builder: (context, value, child) {
-                                            return TextField(
-                                              controller: _urlController,
-                                              focusNode: _focusNode,
-                                              textAlignVertical:
-                                                  TextAlignVertical.center,
-                                              style: TextStyle(
-                                                  color: textClr, fontSize: 13),
-                                              decoration: InputDecoration(
-                                                isDense: true,
-                                                suffixIcon: IconButton(
-                                                  padding: EdgeInsets.zero,
-                                                  constraints:
-                                                      const BoxConstraints(
-                                                          minWidth: 32,
-                                                          minHeight: 32),
-                                                  icon: Icon(
-                                                    activeTab.isLoading
-                                                        ? Icons.close
-                                                        : (_isFocused &&
-                                                                value.text
-                                                                    .isNotEmpty)
-                                                            ? Icons.clear
-                                                            : Icons.refresh,
-                                                    size: 16,
-                                                    color: _isFocused
-                                                        ? (isDark
-                                                            ? AppTheme.neonBlue
-                                                            : AppTheme
-                                                                .lightNeonBlue)
-                                                        : (isDark
-                                                            ? AppTheme
-                                                                .textSecondary
-                                                            : AppTheme
-                                                                .lightTextSecondary),
-                                                  ),
-                                                  tooltip: activeTab.isLoading
-                                                      ? (isRtl
-                                                          ? 'إلغاء التحميل'
-                                                          : 'Stop loading')
-                                                      : (_isFocused &&
-                                                              value.text
-                                                                  .isNotEmpty)
-                                                          ? (isRtl
-                                                              ? 'مسح'
-                                                              : 'Clear')
-                                                          : (isRtl
-                                                              ? 'إعادة تحميل الصفحة'
-                                                              : 'Refresh page'),
-                                                  onPressed: () {
-                                                    triggerHaptic(settings);
-                                                    if (activeTab.isLoading) {
-                                                      activeTab.controller
-                                                          ?.evaluateJavascript(
-                                                              source:
-                                                                  'window.stop();');
-                                                      setState(() {
-                                                        activeTab.isLoading =
-                                                            false;
-                                                      });
-                                                    } else if (_isFocused &&
-                                                        value.text.isNotEmpty) {
-                                                      _urlController.clear();
-                                                    } else {
-                                                      if (!activeTab.isHome) {
-                                                        _safeReloadTab(
-                                                            activeTab);
-                                                      }
-                                                    }
-                                                  },
-                                                ),
-                                                suffixIconConstraints:
-                                                    const BoxConstraints(
-                                                        minWidth: 32,
-                                                        minHeight: 32),
-                                                hintText: isRtl
-                                                    ? 'ابحث أو ادخل الرابط...'
-                                                    : 'Search or enter URL...',
-                                                hintStyle: TextStyle(
-                                                    color: isDark
-                                                        ? AppTheme.textMuted
-                                                        : AppTheme
-                                                            .lightTextMuted,
-                                                    fontSize: 11),
-                                                filled: false,
-                                                border: InputBorder.none,
-                                                enabledBorder: InputBorder.none,
-                                                focusedBorder: InputBorder.none,
-                                                contentPadding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 4,
-                                                        vertical: 6),
-                                              ),
-                                              onSubmitted: (val) {
-                                                _navigateToUrl(val);
-                                              },
-                                            );
+                                        child: SmartUrlBar(
+                                          controller: _urlController,
+                                          focusNode: _focusNode,
+                                          isDark: isDark,
+                                          isLoading: activeTab.isLoading,
+                                          onNavigate: _navigateToUrl,
+                                          onReload: () {
+                                            if (!activeTab.isHome) {
+                                              _safeReloadTab(activeTab);
+                                            }
+                                          },
+                                          onStopLoading: () {
+                                            activeTab.controller?.evaluateJavascript(source: 'window.stop();');
+                                            setState(() {
+                                              activeTab.isLoading = false;
+                                            });
                                           },
                                         ),
                                       ),
@@ -4479,86 +4768,72 @@ class _BrowserScreenState extends State<BrowserScreen>
                                   await _handleMenuAction(value);
                                 },
                                 itemBuilder: (_) => [
-                                  _menuItem(Icons.refresh, 'Reload', 'reload',
-                                      textClr),
-                                  _menuItem(
-                                      Icons.bookmark_add_outlined,
-                                      'Bookmark this page',
-                                      'bookmark',
-                                      textClr),
-                                  _menuItem(
-                                      Icons.bookmarks_outlined,
-                                      'Bookmarks Manager',
-                                      'show_bookmarks',
-                                      textClr),
-                                  _menuItem(Icons.history, 'Browser History',
-                                      'show_history', textClr),
-                                  _menuItem(
-                                      Icons.copy, 'Copy URL', 'copy', textClr),
-                                  _menuItem(Icons.share, 'Share URL', 'share',
-                                      textClr),
-                                  _menuItem(Icons.save_alt, 'Save Page Offline',
-                                      'offline', textClr),
-                                  _menuItem(Icons.menu_book_outlined,
-                                      'Reader Mode', 'reader', textClr),
-                                  _menuItem(Icons.code, 'Inject JS / CSS',
-                                      'injector', textClr),
+                                  // Section A: Page actions
+                                  _menuItem(Icons.refresh, 'Reload', 'reload', textClr),
+                                  _menuItem(Icons.bookmark_add_outlined, 'Bookmark this page', 'bookmark', textClr),
+                                  _menuItem(Icons.copy, 'Copy URL', 'copy', textClr),
+                                  _menuItem(Icons.share, 'Share URL', 'share', textClr),
                                   const PopupMenuDivider(),
-                                  _menuItem(
-                                    settings.desktopMode
-                                        ? Icons.smartphone
-                                        : Icons.desktop_mac,
-                                    settings.desktopMode
-                                        ? 'Mobile mode'
-                                        : 'Desktop mode',
-                                    'desktop',
-                                    textClr,
+
+                                  // Section B: Library
+                                  _menuItem(Icons.bookmarks_outlined, 'Bookmarks Manager', 'show_bookmarks', textClr),
+                                  _menuItem(Icons.history, 'Browser History', 'show_history', textClr),
+                                  const PopupMenuDivider(),
+
+                                  // Section C: Page tools
+                                  _menuItem(Icons.menu_book_outlined, 'Reader Mode', 'reader', textClr),
+                                  _menuItem(Icons.save_alt, 'Save Page Offline', 'offline', textClr),
+                                  const PopupMenuDivider(),
+
+                                  // Section D: Privacy & rendering toggles
+                                  _toggleMenuItem(
+                                    icon: settings.desktopMode ? Icons.desktop_mac : Icons.smartphone,
+                                    title: settings.desktopMode ? 'Desktop mode' : 'Mobile mode',
+                                    value: 'desktop',
+                                    isON: settings.desktopMode,
+                                    textClr: textClr,
+                                    isDark: isDark,
                                   ),
-                                  _menuItem(
-                                    _isSnifferEnabled
-                                        ? Icons.radar
-                                        : Icons.radar_outlined,
-                                    _isSnifferEnabled
-                                        ? (L10n.isRtl(context)
-                                            ? 'كاشف الوسائط: مفعل'
-                                            : 'Media detector: ON')
-                                        : (L10n.isRtl(context)
-                                            ? 'كاشف الوسائط: معطل'
-                                            : 'Media detector: OFF'),
-                                    'sniffer',
-                                    textClr,
+                                  _toggleMenuItem(
+                                    icon: _isSnifferEnabled ? Icons.radar : Icons.radar_outlined,
+                                    title: L10n.isRtl(context) ? 'كاشف الوسائط' : 'Media detector',
+                                    value: 'sniffer',
+                                    isON: _isSnifferEnabled,
+                                    textClr: textClr,
+                                    isDark: isDark,
                                   ),
-                                  _menuItem(
-                                    _adBlocker.isEnabled
-                                        ? Icons.shield
-                                        : Icons.shield_outlined,
-                                    _adBlocker.isEnabled
-                                        ? 'Ad blocker: ON'
-                                        : 'Ad blocker: OFF',
-                                    'adblocker',
-                                    textClr,
+                                  _toggleMenuItem(
+                                    icon: _adBlocker.isEnabled ? Icons.shield : Icons.shield_outlined,
+                                    title: 'Ad blocker',
+                                    value: 'adblocker',
+                                    isON: _adBlocker.isEnabled,
+                                    textClr: textClr,
+                                    isDark: isDark,
                                   ),
-                                  _menuItem(Icons.touch_app_outlined,
-                                      'Block Element', 'picker', textClr),
+                                  _menuItem(Icons.touch_app_outlined, 'Block Element', 'picker', textClr),
+                                  const PopupMenuDivider(),
+
+                                  // Section E: Advanced
+                                  _menuItem(Icons.code, 'Inject JS / CSS', 'injector', textClr),
+                                  const PopupMenuDivider(),
+
+                                  // Section F: Session
                                   _menuItem(
-                                    settings.incognitoEnabled
-                                        ? Icons.visibility_off
-                                        : Icons.visibility,
-                                    settings.incognitoEnabled
-                                        ? 'Exit incognito'
-                                        : 'New incognito tab',
+                                    settings.incognitoEnabled ? Icons.visibility_off : Icons.visibility,
+                                    settings.incognitoEnabled ? 'Exit incognito' : 'New incognito tab',
                                     'incognito',
                                     textClr,
                                   ),
-                                  _menuItem(
-                                    Icons.exit_to_app_rounded,
-                                    L10n.isRtl(context)
-                                        ? 'إنهاء المتصفح'
-                                        : 'Quit browser',
-                                    'quit',
-                                    textClr,
-                                  ),
                                 ],
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.power_settings_new_rounded,
+                                  size: 18,
+                                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                ),
+                                tooltip: L10n.isRtl(context) ? 'إنهاء المتصفح' : 'Quit browser',
+                                onPressed: _confirmQuitBrowser,
                               ),
                             ],
                           ),
@@ -4971,11 +5246,27 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                             onLongPressHitTestResult:
                                                                 (controller,
                                                                     hitTestResult) async {
-                                                              final url =
+                                                              triggerHaptic(settings);
+                                                              var targetUrl =
                                                                   hitTestResult
                                                                       .extra;
-                                                              if (url != null &&
-                                                                  url.isNotEmpty) {
+                                                              if (targetUrl == null ||
+                                                                  targetUrl.trim().isEmpty) {
+                                                                try {
+                                                                  final jsUrl =
+                                                                      await controller.evaluateJavascript(
+                                                                    source:
+                                                                        "(function() { var sel = window.getSelection(); if (!sel || sel.rangeCount === 0) return ''; var el = sel.anchorNode ? (sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentNode : sel.anchorNode) : null; var a = el ? el.closest('a') : null; return a ? a.href : ''; })()",
+                                                                  );
+                                                                  if (jsUrl != null &&
+                                                                      jsUrl.toString().trim().isNotEmpty) {
+                                                                    targetUrl = jsUrl.toString().trim();
+                                                                  }
+                                                                } catch (_) {}
+                                                              }
+                                                              if (targetUrl != null &&
+                                                                  targetUrl.trim().isNotEmpty) {
+                                                                if (!mounted || !context.mounted) return;
                                                                 String type =
                                                                     'link';
                                                                 final hType =
@@ -4989,23 +5280,17 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                             .SRC_IMAGE_ANCHOR_TYPE) {
                                                                   type = 'image';
                                                                 }
+                                                                if (!mounted || !context.mounted) return;
                                                                 _showLongPressSheet(
                                                                     context,
-                                                                    url,
+                                                                    targetUrl.trim(),
                                                                     type,
                                                                     tabId:
                                                                         tab.id);
                                                               }
                                                             },
-                                                            gestureRecognizers: <Factory<
-                                                                OneSequenceGestureRecognizer>>{
-                                                              Factory<VerticalDragGestureRecognizer>(
-                                                                  () =>
-                                                                      VerticalDragGestureRecognizer()),
-                                                              Factory<HorizontalDragGestureRecognizer>(
-                                                                  () =>
-                                                                      HorizontalDragGestureRecognizer()),
-                                                            },
+                                                             gestureRecognizers:
+                                                                 const <Factory<OneSequenceGestureRecognizer>>{},
                                                             pullToRefreshController:
                                                                 tab.pullToRefreshController,
                                                             onScrollChanged:
@@ -5319,26 +5604,21 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                         URLRequest(
                                                                             url:
                                                                                 WebUri(upgraded)));
-                                                                return NavigationActionPolicy
-                                                                    .CANCEL;
+                                                                  return NavigationActionPolicy
+                                                                      .CANCEL;
                                                               }
 
                                                               // 3. Bypass check
-                                                              if (_interceptor
-                                                                  .consumeBypass(
-                                                                      url)) {
-                                                                return NavigationActionPolicy
-                                                                    .ALLOW;
-                                                              }
-
                                                               // 4. Smart classification
                                                               final classification =
-                                                                  PageIntentClassifier
+                                                                  await PageIntentClassifier
                                                                       .instance
-                                                                      .classifyWithContext(
+                                                                      .classifyWithContextAsync(
                                                                 currentUrl:
                                                                     tab.url,
                                                                 targetUrl: url,
+                                                                interceptor:
+                                                                    _interceptor,
                                                                 isUserInitiated:
                                                                     navigationAction
                                                                         .isForMainFrame,
@@ -5372,12 +5652,66 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                       .openNewTabWithWarning:
                                                                 case PageAction
                                                                       .openNewTabWithDownloadSuggestion:
+                                                                  // Browser redirects (e.g. http→https, www→non-www)
+                                                                  // must navigate inside the current tab, not open a
+                                                                  // new one — guard with isRedirect.
+                                                                  if (navigationAction.isRedirect ==
+                                                                      true) {
+                                                                    return NavigationActionPolicy
+                                                                        .ALLOW;
+                                                                  }
+                                                                  // User-triggered tap → open in foreground.
+                                                                  if (navigationAction.hasGesture ==
+                                                                      true) {
+                                                                    _openInNewTab(
+                                                                        url,
+                                                                        isIncognito: tab
+                                                                            .isIncognito,
+                                                                        switchToTab:
+                                                                            true,
+                                                                        origin: TabOrigin
+                                                                            .userDirect);
+                                                                    return NavigationActionPolicy
+                                                                        .CANCEL;
+                                                                  }
+                                                                  // Auto/ad navigation → background tab.
+                                                                  _evictStaleAdTabs();
                                                                   _openInNewTab(
                                                                       url,
                                                                       isIncognito: tab
                                                                           .isIncognito,
                                                                       switchToTab:
-                                                                          true);
+                                                                          false,
+                                                                      origin: TabOrigin
+                                                                          .adOrPopup);
+                                                                  if (context.mounted) {
+                                                                    final bgSettings =
+                                                                        Provider.of<SettingsProvider>(
+                                                                            context,
+                                                                            listen: false);
+                                                                    final bgDark =
+                                                                        bgSettings
+                                                                            .isDarkMode;
+                                                                    final bgRtl =
+                                                                        L10n.isRtl(
+                                                                            context);
+                                                                    ThemedSnackbar
+                                                                        .show(
+                                                                      context,
+                                                                      message: bgRtl
+                                                                          ? 'تم فتح علامة تبويب في الخلفية'
+                                                                          : 'Opened in background tab',
+                                                                      color: bgDark
+                                                                          ? AppTheme
+                                                                              .neonBlue
+                                                                          : AppTheme
+                                                                              .lightNeonBlue,
+                                                                      icon: Icons
+                                                                          .tab_rounded,
+                                                                      isDarkMode:
+                                                                          bgDark,
+                                                                    );
+                                                                  }
                                                                   if (classification
                                                                           .action ==
                                                                       PageAction
@@ -5399,6 +5733,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                   return NavigationActionPolicy
                                                                       .CANCEL;
 
+
                                                                 case PageAction
                                                                       .openBackgroundTab:
                                                                   _openInBackgroundTab(
@@ -5410,11 +5745,11 @@ class _BrowserScreenState extends State<BrowserScreen>
 
                                                                 case PageAction
                                                                       .directDownload:
-                                                                  _startDirectDownload(
-                                                                      url,
-                                                                      suggestedName:
-                                                                          classification
-                                                                              .detectedFileName);
+                                                                  if (context.mounted) {
+                                                                    _showInterceptionSheet(
+                                                                        context,
+                                                                        url);
+                                                                  }
                                                                   return NavigationActionPolicy
                                                                       .CANCEL;
 
@@ -6131,6 +6466,87 @@ class _BrowserScreenState extends State<BrowserScreen>
             isDarkMode: isDark);
       case InterceptDownloadStatus.skipped:
         break;
+    }
+  }
+
+  PopupMenuItem<String> _toggleMenuItem({
+    required IconData icon,
+    required String title,
+    required String value,
+    required bool isON,
+    required Color textClr,
+    required bool isDark,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: textClr),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(title, style: TextStyle(color: textClr, fontSize: 13)),
+          ),
+          Switch(
+            value: isON,
+            onChanged: null,
+            activeThumbColor: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmQuitBrowser() async {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    triggerHaptic(settings);
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
+              const SizedBox(width: 8),
+              Text(
+                isRtl ? 'إنهاء المتصفح' : 'Quit Browser',
+                style: TextStyle(color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary, fontSize: 16),
+              ),
+            ],
+          ),
+          content: Text(
+            isRtl
+                ? 'هل أنت تأكد من إغلاق جميع التبويبات والحفظ والخروج؟'
+                : 'Are you sure you want to quit the browser and save your session?',
+            style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary, fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(
+                isRtl ? 'إنهاء' : 'Quit',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      await _quitBrowser();
     }
   }
 

@@ -25,6 +25,8 @@ class BrowserDownloadSheet extends StatefulWidget {
   final String? suggestedName;
   final VoidCallback? onQuality;
   final String? downloadPageUrl;
+  final VoidCallback? onOpen;
+  final VoidCallback? onOpenInBackground;
   final VoidCallback? onOpenInNewTab;
   final VoidCallback? onOpenInIncognito;
 
@@ -40,6 +42,8 @@ class BrowserDownloadSheet extends StatefulWidget {
     this.suggestedName,
     this.onQuality,
     this.downloadPageUrl,
+    this.onOpen,
+    this.onOpenInBackground,
     this.onOpenInNewTab,
     this.onOpenInIncognito,
     this.sources = const [],
@@ -53,6 +57,8 @@ class BrowserDownloadSheet extends StatefulWidget {
     String? suggestedName,
     VoidCallback? onQuality,
     String? downloadPageUrl,
+    VoidCallback? onOpen,
+    VoidCallback? onOpenInBackground,
     VoidCallback? onOpenInNewTab,
     VoidCallback? onOpenInIncognito,
     List<MediaSourceItem> sources = const [],
@@ -72,6 +78,8 @@ class BrowserDownloadSheet extends StatefulWidget {
         suggestedName: suggestedName,
         onQuality: onQuality,
         downloadPageUrl: downloadPageUrl,
+        onOpen: onOpen,
+        onOpenInBackground: onOpenInBackground,
         onOpenInNewTab: onOpenInNewTab,
         onOpenInIncognito: onOpenInIncognito,
         sources: sources,
@@ -272,7 +280,7 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
                             children: [
                               Text(
                                 isRtl
-                                    ? 'Ø¥Ø´Ø§Ø±Ø© ØªØ­Ù…ÙŠÙ„ Ù…Ø±ØµÙˆØ¯Ø©'
+                                    ? 'إشارة تحميل مرصودة'
                                     : 'SIGNAL LOCKED',
                                 style: TextStyle(
                                   fontFamily: 'Space Grotesk',
@@ -360,51 +368,98 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
                     ),
                     const SizedBox(height: 20),
                     // ── Link Navigation Actions ────────────────────
-                    if (widget.onOpenInNewTab != null ||
+                    if (widget.onOpen != null ||
+                        widget.onOpenInBackground != null ||
+                        widget.onOpenInNewTab != null ||
                         widget.onOpenInIncognito != null) ...[
-                      Row(
-                        children: [
-                          if (widget.onOpenInNewTab != null)
-                            Expanded(
-                              child: _SheetButton(
-                                label: isRtl
-                                    ? 'فتح في علامة تبويب جديدة'
-                                    : 'OPEN IN NEW TAB',
-                                isDark: isDark,
-                                filled: false,
-                                accent: accent,
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  widget.onOpenInNewTab!();
-                                },
+                      // Row 1: Open + Open in background
+                      if (widget.onOpen != null ||
+                          widget.onOpenInBackground != null) ...[
+                        Row(
+                          children: [
+                            if (widget.onOpen != null)
+                              Expanded(
+                                child: _SheetButton(
+                                  label: isRtl ? 'فتح' : 'OPEN',
+                                  isDark: isDark,
+                                  filled: false,
+                                  accent: accent,
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    widget.onOpen!();
+                                  },
+                                ),
                               ),
-                            ),
-                          if (widget.onOpenInNewTab != null &&
-                              widget.onOpenInIncognito != null)
-                            const SizedBox(width: 10),
-                          if (widget.onOpenInIncognito != null)
-                            Expanded(
-                              child: _SheetButton(
-                                label: isRtl
-                                    ? 'فتح في التصفح الخفي'
-                                    : 'OPEN IN INCOGNITO',
-                                isDark: isDark,
-                                filled: false,
-                                accent: accent,
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  widget.onOpenInIncognito!();
-                                },
+                            if (widget.onOpen != null &&
+                                widget.onOpenInBackground != null)
+                              const SizedBox(width: 10),
+                            if (widget.onOpenInBackground != null)
+                              Expanded(
+                                child: _SheetButton(
+                                  label: isRtl
+                                      ? 'فتح في الخلفية'
+                                      : 'OPEN IN BG',
+                                  isDark: isDark,
+                                  filled: false,
+                                  accent: accent,
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    widget.onOpenInBackground!();
+                                  },
+                                ),
                               ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      // Row 2: Open in new tab + Open in incognito
+                      if (widget.onOpenInNewTab != null ||
+                          widget.onOpenInIncognito != null) ...[
+                        Row(
+                          children: [
+                            if (widget.onOpenInNewTab != null)
+                              Expanded(
+                                child: _SheetButton(
+                                  label: isRtl
+                                      ? 'فتح في علامة تبويب جديدة'
+                                      : 'OPEN IN NEW TAB',
+                                  isDark: isDark,
+                                  filled: false,
+                                  accent: accent,
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    widget.onOpenInNewTab!();
+                                  },
+                                ),
+                              ),
+                            if (widget.onOpenInNewTab != null &&
+                                widget.onOpenInIncognito != null)
+                              const SizedBox(width: 10),
+                            if (widget.onOpenInIncognito != null)
+                              Expanded(
+                                child: _SheetButton(
+                                  label: isRtl
+                                      ? 'فتح في التصفح الخفي'
+                                      : 'OPEN IN INCOGNITO',
+                                  isDark: isDark,
+                                  filled: false,
+                                  accent: accent,
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    widget.onOpenInIncognito!();
+                                  },
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      const SizedBox(height: 4),
                     ],
                     // ── Additional sources (long-press multi-source) ──
                     if (widget.sources.isNotEmpty) ...[
                       Text(
-                        isRtl ? 'Ø§Ù„Ù…ØµØ§Ø¯Ø±' : 'SOURCES',
+                        isRtl ? 'المصادر' : 'SOURCES',
                         style: TextStyle(
                           fontFamily: 'Space Grotesk',
                           fontSize: 10,
@@ -430,7 +485,7 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
                       children: [
                         Expanded(
                           child: _SheetButton(
-                            label: isRtl ? 'Ø¥ØºÙ„Ø§Ø¡' : 'DISMISS',
+                            label: isRtl ? 'إغلاق' : 'DISMISS',
                             isDark: isDark,
                             filled: false,
                             accent: accent,
@@ -442,7 +497,7 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
                           const SizedBox(width: 10),
                           Expanded(
                             child: _SheetButton(
-                              label: isRtl ? 'Ø§Ù„Ø¬ÙˆØ¯Ø©' : 'QUALITY',
+                              label: isRtl ? 'الجودة' : 'QUALITY',
                               isDark: isDark,
                               filled: false,
                               accent: accent,
@@ -457,7 +512,7 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
                         Expanded(
                           flex: widget.type == 'video' ? 1 : 2,
                           child: _SheetButton(
-                            label: isRtl ? 'ØªØ­Ù…ÙŠÙ„' : 'DOWNLOAD',
+                            label: isRtl ? 'تحميل' : 'DOWNLOAD',
                             isDark: isDark,
                             filled: true,
                             accent: accent,

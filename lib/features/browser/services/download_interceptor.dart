@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'package:dio/dio.dart';
 
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
@@ -9,6 +10,35 @@ import '../../downloads/provider/download_provider.dart';
 import '../models/browser_tab.dart';
 import 'browser_detector.dart';
 import 'media_sniffer.dart';
+
+/// Result of content-type verification via HEAD/streamed GET.
+class ContentCheckResult {
+  final String finalUrl;
+  final String contentType;
+  final String contentDisposition;
+  final bool isInconclusive;
+
+  const ContentCheckResult({
+    required this.finalUrl,
+    required this.contentType,
+    required this.contentDisposition,
+    this.isInconclusive = false,
+  });
+
+  bool get isBinaryDownload {
+    if (isInconclusive) return false;
+    final lowerCd = contentDisposition.toLowerCase();
+    final lowerCt = contentType.toLowerCase();
+    if (lowerCd.contains('attachment')) return true;
+    if (lowerCt.isEmpty || lowerCt.contains('text/html') || lowerCt.contains('text/plain')) {
+      return false;
+    }
+    return lowerCt.contains('application/') ||
+        lowerCt.contains('video/') ||
+        lowerCt.contains('audio/') ||
+        lowerCt.contains('image/');
+  }
+}
 
 /// Outcome of [DownloadInterceptor.startDirectDownload].
 enum InterceptDownloadStatus {
@@ -78,16 +108,125 @@ class DownloadInterceptor {
     _interceptedList.clear();
   }
 
+  String _normalizeBypassKey(String url) {
+    try {
+      final uri = Uri.parse(url);
+      return '${uri.scheme}://${uri.host}${uri.path}';
+    } catch (_) {
+      return url.split('?').first.split('#').first;
+    }
+  }
+
   /// Marks [url] so its next navigation is allowed through untouched.
   void addBypass(String url) {
     _bypassedSniffUrls.add(url);
+    _bypassedSniffUrls.add(_normalizeBypassKey(url));
     if (_bypassedSniffUrls.length > 200) {
       _bypassedSniffUrls.remove(_bypassedSniffUrls.first);
     }
   }
 
-  /// One-shot check: returns true (and clears the mark) if [url] was bypassed.
-  bool consumeBypass(String url) => _bypassedSniffUrls.remove(url);
+  /// One-shot check: returns true (and clears the mark) if [url] or domain+path was bypassed.
+  bool consumeBypass(String url) {
+    final key = _normalizeBypassKey(url);
+    final exact = _bypassedSniffUrls.remove(url);
+    final normalized = _bypassedSniffUrls.remove(key);
+    return exact || normalized;
+  }
+
+  /// Reusable HEAD-then-streamed-GET verification logic.
+  Future<ContentCheckResult> verifyContentType(
+    String url, {
+    String? referer,
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    try {
+      final origin = Uri.tryParse(referer ?? '')?.origin ?? '';
+      final headers = <String, String>{
+        'User-Agent':
+            'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
+            '(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        if (referer != null && referer.isNotEmpty) 'Referer': referer,
+        if (origin.isNotEmpty) 'Origin': origin,
+      };
+
+      final dio = Dio();
+      dio.options
+        ..connectTimeout = timeout
+        ..receiveTimeout = timeout
+        ..followRedirects = true
+        ..maxRedirects = 10
+        ..validateStatus = (s) => true;
+
+      String finalUrl = url;
+      String contentType = '';
+      String contentDisposition = '';
+
+      try {
+        final response = await dio.head<void>(
+          url,
+          options: Options(
+            responseType: ResponseType.bytes,
+            headers: headers,
+          ),
+        );
+        if (response.statusCode != null && response.statusCode! < 400) {
+          finalUrl = response.realUri.toString().isNotEmpty
+              ? response.realUri.toString()
+              : (response.redirects.isNotEmpty
+                  ? response.redirects.last.location.toString()
+                  : url);
+          contentType = (response.headers.value('content-type') ?? '').toLowerCase();
+          contentDisposition = (response.headers.value('content-disposition') ?? '').toLowerCase();
+        }
+      } catch (_) {}
+
+      if (contentType.isEmpty || contentType.contains('text/html')) {
+        try {
+          final response = await dio.get<ResponseBody>(
+            url,
+            options: Options(
+              responseType: ResponseType.stream,
+              headers: headers,
+            ),
+          );
+          finalUrl = response.realUri.toString().isNotEmpty
+              ? response.realUri.toString()
+              : (response.redirects.isNotEmpty
+                  ? response.redirects.last.location.toString()
+                  : url);
+          contentType = (response.headers.value('content-type') ?? '').toLowerCase();
+          contentDisposition = (response.headers.value('content-disposition') ?? '').toLowerCase();
+
+          response.data?.stream.listen((_) {}).cancel();
+        } catch (_) {}
+      }
+
+      if (contentType.isEmpty && contentDisposition.isEmpty) {
+        return ContentCheckResult(
+          finalUrl: url,
+          contentType: '',
+          contentDisposition: '',
+          isInconclusive: true,
+        );
+      }
+
+      return ContentCheckResult(
+        finalUrl: finalUrl,
+        contentType: contentType,
+        contentDisposition: contentDisposition,
+        isInconclusive: false,
+      );
+    } catch (_) {
+      return ContentCheckResult(
+        finalUrl: url,
+        contentType: '',
+        contentDisposition: '',
+        isInconclusive: true,
+      );
+    }
+  }
 
   void dispose() {
     _bypassedSniffUrls.clear();
@@ -102,7 +241,6 @@ class DownloadInterceptor {
 
   String? parseFilenameFromContentDispositionString(String value) {
     if (value.isEmpty) return null;
-    // Check RFC 5987 filename*=charset'lang'encoded_value
     final utf8Match = RegExp(
       r"filename\*=(?:UTF-8|ISO-8859-1)''([^;\s]+)",
       caseSensitive: false,

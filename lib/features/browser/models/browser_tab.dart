@@ -2,6 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
 
+/// Describes how a [BrowserTab] was originally created.
+///
+/// - [userDirect]  – opened by an explicit user action (typing a URL, tapping
+///                   a home shortcut, long-pressing "Open in new tab", etc.)
+/// - [adOrPopup]   – opened automatically by an ad-classified navigation or a
+///                   JS popup (window.open / target=_blank intercepted as ad).
+/// - [redirect]    – opened by the browser's own redirect-chain follower when
+///                   it resolved an ad redirect to a legitimate file host.
+enum TabOrigin { userDirect, adOrPopup, redirect }
+
 class BrowserTab {
   final String id;
   InAppWebViewController? controller;
@@ -21,6 +31,10 @@ class BrowserTab {
   int lastVisitedAt = DateTime.now().millisecondsSinceEpoch;
   String? faviconUrl;
 
+  /// How this tab was opened. Used for back-button auto-close and ad-tab
+  /// eviction logic. Defaults to [TabOrigin.userDirect].
+  final TabOrigin origin;
+
   BrowserTab({
     required this.id,
     this.controller,
@@ -35,6 +49,7 @@ class BrowserTab {
     this.isHome = true,
     this.canGoBack = false,
     this.canGoForward = false,
+    this.origin = TabOrigin.userDirect,
   }) : progressNotifier = ValueNotifier<double>(progress);
 
   double get progress => progressNotifier.value;

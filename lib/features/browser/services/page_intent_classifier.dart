@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/site_intelligence/site_intelligence_service.dart';
 import 'ad_blocker_service.dart';
 import 'browser_detector.dart';
+import 'download_interceptor.dart';
 
 /// نوع الصفحة المكتشف
 enum PageIntent {
@@ -380,6 +381,29 @@ class PageIntentClassifier {
     return targetClassification;
   }
 
+  Future<PageClassification> classifyWithContextAsync({
+    required String currentUrl,
+    required String targetUrl,
+    required DownloadInterceptor interceptor,
+    bool isUserInitiated = true,
+    bool isFromClick = false,
+  }) async {
+    final directCheck = await classifyDirectFileAsync(
+      targetUrl,
+      interceptor: interceptor,
+      referer: currentUrl,
+    );
+    if (directCheck != null) {
+      return directCheck;
+    }
+    return classifyWithContext(
+      currentUrl: currentUrl,
+      targetUrl: targetUrl,
+      isUserInitiated: isUserInitiated,
+      isFromClick: isFromClick,
+    );
+  }
+
   PageClassification _classifyMagnet(String url) {
     final analysis = _intelligence.analyzeMagnet(url);
     return PageClassification(
@@ -412,14 +436,24 @@ class PageIntentClassifier {
 
     if (detected.kind == DetectedMediaKind.archive ||
         detected.kind == DetectedMediaKind.executable) {
+      // Heuristic synchronous classification (for high confidence path-based files)
+      if (detected.confidence == DetectionConfidence.high) {
+        return PageClassification(
+          intent: PageIntent.directDownload,
+          action: PageAction.directDownload,
+          url: url,
+          confidence: 0.9,
+          detectedFileName: detected.suggestedFileName,
+          reason: 'Direct file URL (${detected.kind.name}, path-based)',
+          mediaKind: detected.kind,
+        );
+      }
       return PageClassification(
-        intent: PageIntent.directDownload,
-        action: PageAction.directDownload,
+        intent: PageIntent.normalBrowsing,
+        action: PageAction.openSameTab,
         url: url,
-        confidence: 0.9,
-        detectedFileName: detected.suggestedFileName,
-        reason: 'Direct file URL (${detected.kind.name})',
-        mediaKind: detected.kind,
+        confidence: 0.5,
+        reason: 'Query-based file extension requires server verification',
       );
     }
 
@@ -461,6 +495,78 @@ class PageIntentClassifier {
     }
 
     return null;
+  }
+
+  Future<PageClassification?> classifyDirectFileAsync(
+    String url, {
+    required DownloadInterceptor interceptor,
+    String? referer,
+  }) async {
+    final detected = BrowserDetector.detect(url);
+    if (detected == null) return null;
+
+    if (detected.kind == DetectedMediaKind.torrent) {
+      return PageClassification(
+        intent: PageIntent.magnetPage,
+        action: PageAction.openNewTabWithDownloadSuggestion,
+        url: url,
+        confidence: 0.95,
+        detectedFileName: detected.suggestedFileName,
+        reason: 'Torrent file URL detected',
+        mediaKind: DetectedMediaKind.torrent,
+      );
+    }
+
+    if (detected.kind == DetectedMediaKind.archive ||
+        detected.kind == DetectedMediaKind.executable) {
+      final check = await interceptor.verifyContentType(url, referer: referer);
+      if (!check.isInconclusive) {
+        if (check.isBinaryDownload) {
+          return PageClassification(
+            intent: PageIntent.directDownload,
+            action: PageAction.directDownload,
+            url: check.finalUrl,
+            confidence: 0.95,
+            detectedFileName: detected.suggestedFileName,
+            reason: 'Server verified direct file (${detected.kind.name})',
+            mediaKind: detected.kind,
+          );
+        } else {
+          // Server returned HTML -> navigate like normal page
+          return PageClassification(
+            intent: PageIntent.normalBrowsing,
+            action: PageAction.openSameTab,
+            url: url,
+            confidence: 0.9,
+            reason: 'Server returned HTML content for link',
+          );
+        }
+      } else {
+        // Inconclusive/timeout
+        if (detected.confidence == DetectionConfidence.low) {
+          return PageClassification(
+            intent: PageIntent.normalBrowsing,
+            action: PageAction.openSameTab,
+            url: url,
+            confidence: 0.5,
+            reason: 'Inconclusive server check for low confidence extension match',
+          );
+        } else {
+          // Fallback to heuristic directDownload for HIGH confidence (path-based)
+          return PageClassification(
+            intent: PageIntent.directDownload,
+            action: PageAction.directDownload,
+            url: url,
+            confidence: 0.9,
+            detectedFileName: detected.suggestedFileName,
+            reason: 'Direct file URL (${detected.kind.name}, path-based fallback)',
+            mediaKind: detected.kind,
+          );
+        }
+      }
+    }
+
+    return _classifyDirectFile(url);
   }
 
   PageClassification? _classifyAdPage(String url) {
