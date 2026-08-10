@@ -182,6 +182,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
   Timer? _ytDebounceTimer;
 
+  Timer? _analysisDebounceTimer;
+
   late final AnimationController _scanController;
 
   @override
@@ -289,10 +291,17 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     _lastCheckedUrl = url;
 
     _ytDebounceTimer?.cancel();
+    _analysisDebounceTimer?.cancel();
 
-    // FIX-INTEL: Update URL analysis on every change
+    // FIX-INTEL: Update URL analysis with debounce to prevent input lag
     if (url.isNotEmpty) {
-      _urlAnalysis = SiteIntelligenceService().analyzeUrl(url);
+      _analysisDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          setState(() {
+            _urlAnalysis = SiteIntelligenceService().analyzeUrl(url);
+          });
+        }
+      });
     } else {
       _urlAnalysis = null;
     }
@@ -356,13 +365,39 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   Future<void> _loadDefaultPath() async {
     final settings = context.read<SettingsProvider>();
 
-    final path = settings.customDownloadPath?.isNotEmpty == true
-        ? settings.customDownloadPath!
-        : await PermissionService().defaultDownloadDirectory();
+    try {
+      final path = settings.customDownloadPath?.isNotEmpty == true
+          ? settings.customDownloadPath!
+          : await PermissionService().defaultDownloadDirectory();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (_pathController.text.isEmpty) _pathController.text = path;
+      if (_pathController.text.isEmpty) _pathController.text = path;
+    } catch (e) {
+      if (!mounted) return;
+      ThemedSnackbar.show(
+        context,
+        message: L10n.isRtl(context)
+            ? 'مطلوب إذن التخزين أو يتعذر تحديد المجلد الافتراضي'
+            : 'Storage permission required or default directory unavailable',
+        color: context.read<SettingsProvider>().isDarkMode
+            ? AppTheme.neonRed
+            : AppTheme.lightNeonRed,
+        icon: Icons.error_outline,
+        isDarkMode: context.read<SettingsProvider>().isDarkMode,
+      );
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final settings = context.read<SettingsProvider>();
+
+    if (settings.batterySaverMode && _selectedThreads != 2) {
+      _selectedThreads = 2;
+    }
   }
 
   @override
@@ -380,6 +415,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     _pathController.dispose();
 
     _urlFocus.dispose();
+
+    _ytDebounceTimer?.cancel();
+
+    _analysisDebounceTimer?.cancel();
 
     stopPausableLoop();
 
@@ -886,8 +925,13 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
       var duplicateCount = 0;
 
+      var invalidCount = 0;
+
       for (final singleUrl in urls) {
-        if (!isValidTransmissionUrl(singleUrl)) continue;
+        if (!isValidTransmissionUrl(singleUrl)) {
+          invalidCount++;
+          continue;
+        }
 
         if (AddDownloadDialog.wasRecentlyAdded(singleUrl)) {
           duplicateCount++;
@@ -956,11 +1000,23 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
       if (!mounted) return;
 
+      final dupParts = <String>[];
+      if (duplicateCount > 0) {
+        dupParts.add(isRtl
+            ? '$duplicateCount مكرر'
+            : '$duplicateCount duplicate${duplicateCount != 1 ? 's' : ''}');
+      }
+      if (invalidCount > 0) {
+        dupParts.add(isRtl
+            ? '$invalidCount غير صالح'
+            : '$invalidCount invalid');
+      }
+
       if (addedCount > 0) {
-        final dupMsg = duplicateCount > 0
+        final dupMsg = dupParts.isNotEmpty
             ? (isRtl
-                ? ' ($duplicateCount مكرر تم تخطيه)'
-                : ' ($duplicateCount duplicate${duplicateCount != 1 ? 's' : ''} skipped)')
+                ? ' (${dupParts.join('، ')} تم تخطيه)'
+                : ' (${dupParts.join(', ')} skipped)')
             : '';
 
         ThemedSnackbar.show(
@@ -973,17 +1029,19 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           isDarkMode: isDark,
         );
 
+        if (mounted) setState(() => _isSubmitting = false);
         Navigator.pop(context);
-      } else if (duplicateCount > 0) {
+      } else if (dupParts.isNotEmpty) {
         ThemedSnackbar.show(
           context,
           message: isRtl
-              ? 'تم تخطي $duplicateCount رابط مكرر'
-              : 'Skipped $duplicateCount duplicate URL${duplicateCount != 1 ? 's' : ''}',
+              ? 'تم تخطي ${dupParts.join('، ')}'
+              : 'Skipped ${dupParts.join(', ')}',
           color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
           icon: Icons.info_outline,
           isDarkMode: isDark,
         );
+        if (mounted) setState(() => _isSubmitting = false);
       }
 
       return;
@@ -1035,7 +1093,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) {
+        builder: (dialogContext) {
           return AlertDialog(
             backgroundColor: isDark ? AppTheme.surface : Colors.white,
             shape: RoundedRectangleBorder(
@@ -1078,7 +1136,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                 onPressed: () async {
                   triggerHaptic(settings);
 
-                  Navigator.pop(context);
+                  Navigator.pop(dialogContext);
 
                   try {
                     await provider.updateTaskUrlAndResume(
@@ -1099,6 +1157,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       isDarkMode: isDark,
                     );
 
+                    if (mounted) setState(() => _isSubmitting = false);
                     Navigator.pop(context);
                   } catch (e) {
                     if (!mounted) return;
@@ -1112,6 +1171,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       icon: Icons.error_outline,
                       isDarkMode: isDark,
                     );
+                    if (mounted) setState(() => _isSubmitting = false);
                   }
                 },
                 child: Text(
@@ -1139,7 +1199,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                 onPressed: () async {
                   triggerHaptic(settings);
 
-                  Navigator.pop(context);
+                  Navigator.pop(dialogContext);
 
                   try {
                     await provider.startOverTask(duplicateTask!.id, singleUrl);
@@ -1157,6 +1217,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       isDarkMode: isDark,
                     );
 
+                    if (mounted) setState(() => _isSubmitting = false);
                     Navigator.pop(context);
                   } catch (e) {
                     if (!mounted) return;
@@ -1170,6 +1231,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       icon: Icons.error_outline,
                       isDarkMode: isDark,
                     );
+                    if (mounted) setState(() => _isSubmitting = false);
                   }
                 },
                 child: Text(
@@ -1198,7 +1260,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                 onPressed: () async {
                   triggerHaptic(settings);
 
-                  Navigator.pop(context);
+                  Navigator.pop(dialogContext);
 
                   String numberedName = finalFileName;
 
@@ -1252,6 +1314,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
                     AddDownloadDialog.recordAddedUrl(singleUrl);
 
+                    if (mounted) setState(() => _isSubmitting = false);
                     Navigator.pop(context);
                   } catch (e) {
                     if (!mounted) return;
@@ -1265,6 +1328,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       icon: Icons.error_outline,
                       isDarkMode: isDark,
                     );
+                    if (mounted) setState(() => _isSubmitting = false);
                   }
                 },
                 child: Text(
@@ -1281,7 +1345,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                 onPressed: () {
                   triggerHaptic(settings);
 
-                  Navigator.pop(context);
+                  if (mounted) setState(() => _isSubmitting = false);
+                  Navigator.pop(dialogContext);
                 },
                 child: Text(
                   L10n.of(context, 'cancel_btn'),
@@ -1373,10 +1438,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     final settings = context.watch<SettingsProvider>();
 
     final isBatterySaver = settings.batterySaverMode;
-
-    if (isBatterySaver && _selectedThreads != 2) {
-      _selectedThreads = 2;
-    }
 
     final isDark = settings.isDarkMode;
 

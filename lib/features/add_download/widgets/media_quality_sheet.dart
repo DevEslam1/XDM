@@ -766,7 +766,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     required BuildContext context,
     required String title,
     required String content,
-    required bool isDark,
   }) async {
     final result = await DmxConfirmDialog.show(
       context,
@@ -831,7 +830,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                 content: L10n.isRtl(context)
                     ? 'هذا الملف يحتوي على الفيديو فقط وبدون صوت. هل تريد المتابعة؟'
                     : 'This file contains only video and has no audio. Do you want to proceed?',
-                isDark: isDark,
               );
               if (!confirm || !context.mounted) return;
               Navigator.pop(context, stream);

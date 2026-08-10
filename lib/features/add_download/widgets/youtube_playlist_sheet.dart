@@ -213,10 +213,27 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   Future<void> _startBatchDownload() async {
     final provider = context.read<DownloadProvider>();
     final settings = context.read<SettingsProvider>();
-    final savePath = settings.customDownloadPath?.isNotEmpty == true
-        ? settings.customDownloadPath!
-        : await PermissionService().defaultDownloadDirectory();
     final isDark = settings.isDarkMode;
+
+    String savePath;
+    try {
+      savePath = settings.customDownloadPath?.isNotEmpty == true
+          ? settings.customDownloadPath!
+          : await PermissionService().defaultDownloadDirectory();
+    } catch (e) {
+      if (!mounted) return;
+      ThemedSnackbar.show(
+        context,
+        message: L10n.isRtl(context)
+            ? 'مطلوب إذن التخزين أو يتعذر تحديد المجلد الافتراضي'
+            : 'Storage permission required or default directory unavailable',
+        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+        icon: Icons.error_outline,
+        isDarkMode: isDark,
+      );
+      return;
+    }
+
     final playlistId = YoutubeService.extractPlaylistId(widget.playlistUrl) ??
         widget.playlistUrl;
     final playlistTitle = _playlistInfo?['title'] as String? ?? 'Playlist';
