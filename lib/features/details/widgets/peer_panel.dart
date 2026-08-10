@@ -109,7 +109,9 @@ class PeerPanel extends StatelessWidget {
                   size: 16,
                   color: peer.isSeed ? AppTheme.neonGreen : AppTheme.neonBlue,
                 ),
-                title: Text('${peer.ip}:${peer.port} (${peer.country})'),
+                title: Text(peer.country.isEmpty
+                    ? '${peer.ip}:${peer.port}'
+                    : '${peer.ip}:${peer.port} (${peer.country})'),
                 subtitle: Text(
                     '${peer.client} • ${(peer.progress * 100).toStringAsFixed(0)}%'),
                 trailing: Text(

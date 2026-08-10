@@ -3255,7 +3255,7 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
     try {
       await showDialog(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (dialogContext) => AlertDialog(
           backgroundColor: isDark ? AppTheme.surface : Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
@@ -3340,10 +3340,10 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
               onPressed: () {
                 triggerHaptic(settings);
 
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
               },
               child: Text(
-                L10n.of(context, 'cancel_btn'),
+                L10n.of(dialogContext, 'cancel_btn'),
                 style: TextStyle(
                   color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                 ),
@@ -3368,7 +3368,7 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
 
                 if (newUrl.isEmpty) return;
 
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
 
                 try {
                   await provider.updateTaskUrl(task.id, newUrl);

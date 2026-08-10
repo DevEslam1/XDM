@@ -133,7 +133,7 @@ class _TrackerPanelState extends State<TrackerPanel> {
                   itemBuilder: (context, index) {
                     final tracker = trackers[index];
                     return Dismissible(
-                      key: Key(tracker.url),
+                      key: ValueKey('${tracker.url}_$index'),
                       direction: DismissDirection.endToStart,
                       background: Container(
                         color: Colors.red,
