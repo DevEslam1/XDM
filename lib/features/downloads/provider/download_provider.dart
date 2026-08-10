@@ -142,6 +142,9 @@ class DownloadProvider extends ChangeNotifier
       onCancelTask: cancelTask,
       onPauseAll: pauseAllTasks,
       onResumeAll: resumeAllTasks,
+      onStopAll: pauseAllTasks,     // Stop All = pause every active task
+      onStartAll: resumeAllTasks,   // Start All = resume every paused task
+      onExitApp: exitApp,
     );
     _notifications.init();
 
@@ -2434,6 +2437,23 @@ class DownloadProvider extends ChangeNotifier
   Future<void> resumeAllTasks() => mixinResumeAllTasks(notifyListeners);
 
   Future<void> toggleStartStopAll() => mixinToggleStartStopAll(notifyListeners);
+
+  /// Pauses all active downloads, stops the background service and exits the
+  /// process. Triggered from the "Exit App" action on the service notification.
+  Future<void> exitApp() async {
+    try {
+      // Pause every active download so state is saved cleanly.
+      await pauseAllTasks();
+    } catch (_) {}
+    try {
+      await BackgroundService.releaseWakeLock();
+      await BackgroundService.stop();
+    } catch (_) {}
+    // Give the service a moment to clean up, then hard-exit.
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    exit(0);
+  }
+
 
   Future<void> cancelTask(String id) async {
     final task = _findTask(id);

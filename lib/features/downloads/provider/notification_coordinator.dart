@@ -31,11 +31,14 @@ class NotificationCoordinator {
     required int Function() downloadingTasksCount,
     required double Function() currentDownloadSpeed,
     required DownloadTask? Function(String id) findTask,
-    required void Function(String taskId) onPauseTask,
-    required void Function(String taskId) onResumeTask,
-    required void Function(String taskId) onCancelTask,
-    required void Function() onPauseAll,
-    required void Function() onResumeAll,
+    required Future<void> Function(String taskId) onPauseTask,
+    required Future<void> Function(String taskId) onResumeTask,
+    required Future<void> Function(String taskId) onCancelTask,
+    required Future<void> Function() onPauseAll,
+    required Future<void> Function() onResumeAll,
+    required Future<void> Function() onStopAll,
+    required Future<void> Function() onStartAll,
+    required Future<void> Function() onExitApp,
   })  : _notificationService = notificationService,
         _settingsProvider = settingsProvider,
         _downloadingTasksCount = downloadingTasksCount,
@@ -45,18 +48,24 @@ class NotificationCoordinator {
         _onResumeTask = onResumeTask,
         _onCancelTask = onCancelTask,
         _onPauseAll = onPauseAll,
-        _onResumeAll = onResumeAll;
+        _onResumeAll = onResumeAll,
+        _onStopAll = onStopAll,
+        _onStartAll = onStartAll,
+        _onExitApp = onExitApp;
 
   final NotificationService _notificationService;
   final SettingsProvider _settingsProvider;
   final int Function() _downloadingTasksCount;
   final double Function() _currentDownloadSpeed;
   final DownloadTask? Function(String id) _findTask;
-  final void Function(String taskId) _onPauseTask;
-  final void Function(String taskId) _onResumeTask;
-  final void Function(String taskId) _onCancelTask;
-  final void Function() _onPauseAll;
-  final void Function() _onResumeAll;
+  final Future<void> Function(String taskId) _onPauseTask;
+  final Future<void> Function(String taskId) _onResumeTask;
+  final Future<void> Function(String taskId) _onCancelTask;
+  final Future<void> Function() _onPauseAll;
+  final Future<void> Function() _onResumeAll;
+  final Future<void> Function() _onStopAll;
+  final Future<void> Function() _onStartAll;
+  final Future<void> Function() _onExitApp;
 
   StreamSubscription<Map<String, String>>? _actionSubscription;
   final Map<String, int> _notificationIds = {};
@@ -210,31 +219,49 @@ class NotificationCoordinator {
     final taskId = _resolveOpaqueHandle(event['taskId']);
     if (action == null) return;
 
-    switch (action) {
-      case 'pause':
-        if (taskId != null) _onPauseTask(taskId);
-        break;
-      case 'resume':
-        if (taskId != null) _onResumeTask(taskId);
-        break;
-      case 'cancel':
-        if (taskId != null) _onCancelTask(taskId);
-        break;
-      case 'pause_all':
-        _onPauseAll();
-        break;
-      case 'resume_all':
-        _onResumeAll();
-        break;
-      case 'install_apk':
-      case 'tap':
-        if (taskId != null) {
-          final task = _findTask(taskId);
-          if (task != null && task.status == DownloadStatus.completed) {
-            open_filex.OpenFilex.open(task.localFilePath);
+    try {
+      switch (action) {
+        case 'pause':
+          if (taskId != null) await _onPauseTask(taskId);
+          break;
+        case 'resume':
+          if (taskId != null) await _onResumeTask(taskId);
+          break;
+        case 'cancel':
+          if (taskId != null) await _onCancelTask(taskId);
+          break;
+        case 'pause_all':
+          await _onPauseAll();
+          break;
+        case 'resume_all':
+          await _onResumeAll();
+          break;
+        case 'stop_all':
+          await _onStopAll();
+          break;
+        case 'start_all':
+          await _onStartAll();
+          break;
+        case 'exit_app':
+          await _onExitApp();
+          break;
+        case 'install_apk':
+        case 'tap':
+          if (taskId != null) {
+            final task = _findTask(taskId);
+            if (task != null && task.status == DownloadStatus.completed) {
+              open_filex.OpenFilex.open(task.localFilePath);
+            }
           }
-        }
-        break;
+          break;
+      }
+    } catch (e, st) {
+      LoggingService.logger('NotificationCoordinator').warning(
+        '[NotificationCoordinator] Failed to handle notification action "$action" '
+        'for task $taskId: $e',
+        e,
+        st,
+      );
     }
   }
 
@@ -251,9 +278,9 @@ class NotificationCoordinator {
         body: 'App update ${task.fileName} downloaded. Tap to install.',
         playSound: _settingsProvider.soundNotification && !quietHours,
         payload: opaqueHandleFor(task.id),
-        actions: const [
+        actions: [
           AndroidNotificationAction(
-            'install_apk',
+            'install_apk:${opaqueHandleFor(task.id)}',
             'Install',
             showsUserInterface: true,
           ),
@@ -294,6 +321,7 @@ class NotificationCoordinator {
     required String speed,
     required String eta,
     required String payload,
+    bool isPaused = false,
   }) {
     if (!_settingsProvider.notificationsEnabled) return;
     final activeCount = _downloadingTasksCount();
@@ -306,6 +334,7 @@ class NotificationCoordinator {
       eta: eta,
       languageCode: _settingsProvider.languageCode,
       payload: payload,
+      isPaused: isPaused,
       hasMultipleActive: multiple,
       groupKey:
           _groupKey, // FIX(14): always use group key for consistent threadIdentifier
@@ -352,15 +381,24 @@ class NotificationCoordinator {
     );
   }
 
-  /// Refreshes the persistent background-service notification.
+  /// Refreshes the persistent background-service notification with
+  /// Stop All / Start All / Exit App action buttons.
   void updateBackgroundNotification() {
     final active = _downloadingTasksCount();
-    if (active > 0) {
-      BackgroundService.updateNotification(
-        title: 'XDM - $active active',
-        content: '${formatBytes(_currentDownloadSpeed())}/s',
-      );
-    }
+    final speed = _currentDownloadSpeed();
+    final title = active > 0 ? 'XDM - $active active' : 'XDM';
+    final content = active > 0
+        ? '${formatBytes(speed)}/s  •  Tap to open'
+        : 'Ready — tap to open';
+    unawaited(
+      _notificationService
+          .showServiceNotification(title: title, content: content)
+          .catchError((e) {
+        // Fallback to plain background-service notification if flutter_local_notifications
+        // fails (e.g. on first launch before permissions granted).
+        BackgroundService.updateNotification(title: title, content: content);
+      }),
+    );
   }
 
   void dispose() {

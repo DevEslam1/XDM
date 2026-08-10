@@ -43,8 +43,12 @@ class FingerprintManager {
         var imgData = orgGetImageData.apply(this, arguments);
         if (imgData && imgData.data && imgData.data.length >= 4) {
           var len = imgData.data.length;
-          // Poison the last pixel's color slightly to alter fingerprint hash
-          imgData.data[len - 4] = (imgData.data[len - 4] + 1) % 256;
+          // Fix #25: Use a random delta (1 or 2) instead of a constant +1.
+          // Constant +1 produced the same poisoned output every time (same input
+          // → same output) so the fingerprint was still unique and stable.
+          // A random delta ensures different output on each getImageData call.
+          var delta = 1 + Math.floor(Math.random() * 2);
+          imgData.data[len - 4] = (imgData.data[len - 4] + delta) % 256;
         }
         return imgData;
       };

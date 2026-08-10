@@ -10,6 +10,9 @@ enum DetectedMediaKind {
   executable,
   torrent,
   magnet,
+  // Fix #16: Streaming manifests (HLS/DASH) should be played in the browser,
+  // not downloaded. They are classified separately from video files.
+  stream,
   unknown
 }
 
@@ -40,8 +43,11 @@ class BrowserDetector {
     '.webm': DetectedMediaKind.video,
     '.flv': DetectedMediaKind.video,
     '.ts': DetectedMediaKind.video,
-    '.m3u8': DetectedMediaKind.video,
-    '.mpd': DetectedMediaKind.video,
+    // Fix #16: HLS and DASH manifests are streaming formats — browsers can
+    // play them natively. Classifying them as video caused them to be
+    // intercepted as downloads instead of being played in the WebView.
+    '.m3u8': DetectedMediaKind.stream,
+    '.mpd': DetectedMediaKind.stream,
     '.mp3': DetectedMediaKind.audio,
     '.wav': DetectedMediaKind.audio,
     '.flac': DetectedMediaKind.audio,
@@ -236,7 +242,9 @@ class BrowserDetector {
     if (url.startsWith('magnet:')) return true;
     final detected = detect(url);
     if (detected == null) return false;
-    // Only return true for explicit high-confidence direct download formats
+    // Fix #16: Excluded DetectedMediaKind.stream — streaming manifests
+    // (.m3u8, .mpd) should be passed to the browser for playback, not
+    // intercepted as downloads.
     return detected.kind == DetectedMediaKind.archive ||
         detected.kind == DetectedMediaKind.executable ||
         detected.kind == DetectedMediaKind.torrent ||

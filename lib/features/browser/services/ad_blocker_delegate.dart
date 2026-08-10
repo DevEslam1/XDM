@@ -72,14 +72,25 @@ class AdBlockerDelegate {
     }
   }
 
-  /// Stealth anti-detection JS injection disabled — using host-based blocking.
+  /// Injects stealth anti-detection JS (fetch/XHR interceptor + anti-adblock
+  /// globals). Called first at onPageStarted — before page scripts run.
   void injectAntiDetect(BrowserTab tab) {
-    // Disabled JS injection: AdBlocker uses host domain blocking.
+    if (!_adBlocker.isEnabled) return;
+    _eval(tab.controller, _adBlocker.antiDetectJs, 'antiDetect');
   }
 
-  /// Early phase JS injection disabled — using host-based blocking.
+  /// Injects early-phase JS (popup/redirect blocker for ad domains).
+  /// Called second at onPageStarted, immediately after injectAntiDetect.
   void injectEarly(BrowserTab tab) {
-    // Disabled JS injection: AdBlocker uses host domain blocking.
+    if (!_adBlocker.isEnabled) return;
+    // Provide the dynamic domains list so the window.open interceptor knows
+    // which domains to block at the JS level (complements host-level blocking).
+    _eval(
+      tab.controller,
+      'window.__xdmDynamicAdDomains = ${_adBlocker.dynamicDomainsJson};',
+      'dynamicDomains',
+    );
+    _eval(tab.controller, _adBlocker.earlyJs, 'earlyJs');
   }
 
   String cssRulesForUrl(String url) => _adBlocker.cssRulesForUrl(url);

@@ -489,12 +489,13 @@ class AdBlockerService {
     const customCss = '';
 
     final selectorBlock = blockedSelectors.join(',\n');
+    // Fix #13: Use display:none instead of visibility:hidden.
+    // visibility:hidden keeps elements in the layout flow (they still occupy
+    // space), and ad scripts can detect it. display:none is the standard used
+    // by uBlock Origin, AdGuard, and all major ad blockers.
     return '''
 $selectorBlock {
-  visibility: hidden !important;
-  height: 0 !important;
-  overflow: hidden !important;
-  pointer-events: none !important;
+  display: none !important;
 }
 $customCss
 ''';
@@ -1383,29 +1384,27 @@ $customCss
       final extra = AdBlockFilterUpdater().cosmeticRulesForHost(host);
       if (extra.isEmpty) return base;
 
-      // Filter out any selectors that could match download buttons, links, or media elements!
+      // Fix #12: Narrowed the exclusion list — old filter dropped legitimate
+      // ad selectors like .ad-button, .ad-link, .ad-play-button, .sponsor-btn
+      // because it excluded ANY selector containing "button", "link", "play",
+      // "stream", "action", etc. Now we only exclude words that are genuinely
+      // risky (download/file prompts, executable installers) which have no
+      // business appearing in ad-blocking selectors.
       final safeSelectors = extra.where((s) {
         final lower = s.toLowerCase();
         if (lower.contains('download') ||
-            lower.contains('btn') ||
-            lower.contains('button') ||
-            lower.contains('get-') ||
-            lower.contains('file') ||
             lower.contains('apk') ||
-            lower.contains('link') ||
-            lower.contains('href') ||
-            lower.contains('target') ||
-            lower.contains('action') ||
-            lower.contains('play') ||
-            lower.contains('stream')) {
+            lower.contains('file-input') ||
+            lower.contains('upload')) {
           return false;
         }
         return true;
-      }).take(200);
+      }).take(500); // Fix #12: Increased from 200 to 500.
 
       if (safeSelectors.isEmpty) return base;
       final cappedSelectors = safeSelectors.join(',\n');
-      return '$base\n$cappedSelectors {\n  display: none !important;\n  visibility: hidden !important;\n  height: 0 !important;\n  overflow: hidden !important;\n  pointer-events: none !important;\n}\n';
+      // Fix #13: Use display:none (consistent with _buildCssRules).
+      return '$base\n$cappedSelectors {\n  display: none !important;\n}\n';
     } catch (_) {
       return base;
     }

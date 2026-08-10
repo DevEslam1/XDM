@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/localization.dart';
@@ -17,8 +18,16 @@ const String _pendingActionsKey = 'dmx_pending_notification_actions';
 
 @pragma('vm:entry-point')
 void _onBackgroundNotificationResponse(NotificationResponse response) {
-  final actionId = response.actionId ?? 'tap';
-  final payload = response.payload;
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
+  var actionId = response.actionId ?? 'tap';
+  var payload = response.payload;
+
+  if (actionId.contains(':')) {
+    final parts = actionId.split(':');
+    actionId = parts[0];
+    payload = parts[1];
+  }
 
   // Runs in a fresh isolate after the process may have been killed, so the
   // in-memory `_nonce` is not available. Read the persisted nonce and forward
@@ -34,29 +43,30 @@ Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
     }
     final prefs = await SharedPreferences.getInstance();
     final nonce = prefs.getString(_nonceKey);
-    final port = IsolateNameServer.lookupPortByName('dmx_notification_port');
 
-    bool portSendSucceeded = false;
+    // Always persist to SharedPreferences first as a reliable fallback.
+    // If the main isolate is running and port delivery succeeds, processPendingBackgroundActions
+    // will be a no-op (list will be cleared). If port delivery fails or is rejected by the
+    // main isolate (e.g., nonce mismatch), the action will be picked up on next resume.
+    final rawList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
+    final actionJson = jsonEncode({
+      'action': actionId,
+      'taskId': payload,
+      'nonce': nonce,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+    rawList.add(actionJson);
+    await prefs.setStringList(_pendingActionsKey, rawList);
+
+    // Also try the fast path via IsolateNameServer port (main isolate running).
+    final port = IsolateNameServer.lookupPortByName('dmx_notification_port');
     if (port != null) {
       try {
         port.send({'action': actionId, 'taskId': payload, 'nonce': nonce});
-        portSendSucceeded = true;
       } catch (e) {
         debugPrint('[NotificationService] Port send failed: $e');
+        // SharedPreferences fallback already written above.
       }
-    }
-
-    // Only persist to SharedPreferences as a fallback if port send failed
-    if (!portSendSucceeded) {
-      final rawList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
-      final actionJson = jsonEncode({
-        'action': actionId,
-        'taskId': payload,
-        'nonce': nonce,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      });
-      rawList.add(actionJson);
-      await prefs.setStringList(_pendingActionsKey, rawList);
     }
   } catch (e) {
     debugPrint('[NotificationService] Background action forward failed: $e');
@@ -186,7 +196,13 @@ class NotificationService {
     return false;
   }
 
-  static const Set<String> _groupActions = {'pause_all', 'resume_all'};
+  static const Set<String> _groupActions = {
+    'pause_all',
+    'resume_all',
+    'stop_all',
+    'start_all',
+    'exit_app',
+  };
 
   ReceivePort? _receivePort;
   StreamSubscription<dynamic>? _receivePortSub;
@@ -317,11 +333,21 @@ class NotificationService {
           final taskId = message['taskId'] as String?;
           final receivedNonce = message['nonce'] as String?;
 
-          // Validate nonce to prevent unauthorized actions
-          if (receivedNonce != _nonce) {
+          // Validate nonce to prevent unauthorized actions.
+          // Only reject when BOTH nonces are present and they differ — matching
+          // the lenient check used by processPendingBackgroundActions so that
+          // null nonces (e.g., fresh install before first prefs write) still
+          // get through rather than being silently dropped.
+          if (_nonce != null &&
+              receivedNonce != null &&
+              receivedNonce != _nonce) {
             debugPrint(
               '[NotificationService] Invalid nonce - rejecting action',
             );
+            // Fall back to SharedPreferences path; the action was already
+            // persisted by _forwardBackgroundAction so it will be re-processed
+            // by processPendingBackgroundActions on next resume.
+            unawaited(processPendingBackgroundActions());
             return;
           }
 
@@ -337,15 +363,22 @@ class NotificationService {
               );
             }
           }
+          // Clear the SharedPreferences backup now that the action was
+          // successfully dispatched via the fast port path.
+          unawaited(processPendingBackgroundActions());
         }
-        unawaited(processPendingBackgroundActions());
       });
 
       await _plugin.initialize(
         settings: settings,
         onDidReceiveNotificationResponse: (response) {
-          final actionId = response.actionId ?? 'tap';
-          final payload = response.payload;
+          var actionId = response.actionId ?? 'tap';
+          var payload = response.payload;
+          if (actionId.contains(':')) {
+            final parts = actionId.split(':');
+            actionId = parts[0];
+            payload = parts[1];
+          }
           if (_groupActions.contains(actionId)) {
             _addAction({'action': actionId});
           } else if (payload != null && _isValidTaskId(payload)) {
@@ -411,6 +444,56 @@ class NotificationService {
     _initFuture = null;
   }
 
+  /// Posts (or refreshes) the persistent background-service foreground
+  /// notification (ID 888) with Stop All / Start All / Exit App action buttons.
+  /// Replaces the flutter_background_service plugin's basic notification so
+  /// we get full control over the content and actions.
+  Future<void> showServiceNotification({
+    required String title,
+    required String content,
+  }) async {
+    if (!_initialized) return;
+    if (!Platform.isAndroid) return;
+    const serviceNotificationId = 888; // BackgroundService.foregroundNotificationId
+    const channelId = 'dmx_background_service';
+    const channelName = 'XDM Background Service';
+
+    const androidDetails = AndroidNotificationDetails(
+      channelId,
+      channelName,
+      channelDescription: 'Used for XDM background download service',
+      importance: Importance.low,
+      priority: Priority.low,
+      ongoing: true,
+      autoCancel: false,
+      onlyAlertOnce: true,
+      showProgress: false,
+      actions: [
+        AndroidNotificationAction(
+          'stop_all',
+          'Stop All',
+          showsUserInterface: false,
+        ),
+        AndroidNotificationAction(
+          'start_all',
+          'Start All',
+          showsUserInterface: false,
+        ),
+        AndroidNotificationAction(
+          'exit_app',
+          'Exit App',
+          showsUserInterface: false,
+        ),
+      ],
+    );
+    await _plugin.show(
+      id: serviceNotificationId,
+      title: title,
+      body: content,
+      notificationDetails: const NotificationDetails(android: androidDetails),
+    );
+  }
+
   Future<void> showDownloadProgress({
     required int notificationId,
     required String title,
@@ -427,14 +510,14 @@ class NotificationService {
 
     final actions = <AndroidNotificationAction>[
       AndroidNotificationAction(
-        isPaused ? 'resume' : 'pause',
+        isPaused ? 'resume:$payload' : 'pause:$payload',
         isPaused
             ? L10n.translate(languageCode, 'resume_btn')
             : L10n.translate(languageCode, 'pause_btn'),
         showsUserInterface: false,
       ),
       AndroidNotificationAction(
-        'cancel',
+        'cancel:$payload',
         L10n.translate(languageCode, 'cancel_btn'),
         showsUserInterface: false,
       ),

@@ -252,10 +252,24 @@ class _BrowserScreenState extends State<BrowserScreen>
   // E6: Element Picker State
   bool _isPickerModeActive = false;
 
-  // E9 & E10: Blocked Popups and Ads Counters
-  // ignore: unused_field - incremented for state tracking; displayed via ThemedSnackbar
-  int _blockedPopupCount = 0;
-  int _blockedAdsCount = 0;
+  // Fix #10: Per-tab blocked-ad and blocked-popup counters.
+  // Using Maps keyed by tab ID so switching tabs and back preserves the
+  // previously accumulated counts (old flat ints were reset on every switch).
+  final Map<String, int> _blockedAdsPerTab = {};
+  final Map<String, int> _blockedPopupsPerTab = {};
+
+  /// Blocked ads for the currently-active tab (0 when no tab or tab has none).
+  int get _blockedAdsCount {
+    if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return 0;
+    return _blockedAdsPerTab[_tabs[_currentTabIndex].id] ?? 0;
+  }
+
+  /// Blocked popups for the currently-active tab.
+  // ignore: unused_element — tracked for future snackbar/badge display.
+  int get _blockedPopupCount {
+    if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return 0;
+    return _blockedPopupsPerTab[_tabs[_currentTabIndex].id] ?? 0;
+  }
 
   // E13: Tab Suspension/Resume Visual Feedback
   String? _restoringTabId;
@@ -402,11 +416,9 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _onTabSwitched(int oldIndex, int newIndex) {
-    // E9 & E10: Reset counters on tab switch
-    setState(() {
-      _blockedPopupCount = 0;
-      _blockedAdsCount = 0;
-    });
+    // Fix #10: Counters are now per-tab Maps, so we only need to trigger a
+    // rebuild so the URL bar badge reads the new tab's values. No reset needed.
+    setState(() {});
 
     if (oldIndex >= 0 && oldIndex < _tabs.length && oldIndex != newIndex) {
       final oldTab = _tabs[oldIndex];
@@ -855,7 +867,12 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _onPageStart(BrowserTab tab, String url) async {
-    _isNavigatingBackForward = false;
+    // Do NOT reset _isNavigatingBackForward here. Page lifecycle callbacks
+    // (onLoadStart/onLoadStop/onUrlChange) fire BEFORE client-side redirects
+    // (e.g. Google search meta-refresh / JS redirects). Resetting the flag
+    // here causes shouldOverrideUrlLoading to intercept the redirect and
+    // dismiss the page the user is trying to navigate back/forward to.
+    // The flag is managed solely by the timed reset in _goBack/_goForward.
     if (url.startsWith('magnet:') || isMagnetUrl(url)) {
       _log.info(
           '[Browser] Stopped webview from navigating to magnet scheme: $url');
@@ -895,6 +912,12 @@ class _BrowserScreenState extends State<BrowserScreen>
         incognito: tab.isIncognito,
       ));
       _hideWebViewFingerprints(tab);
+    } else {
+      // Fix #20: Restore the correct UA when navigating away from Google login
+      // pages. Without this, the Pixel 8 UA set for accounts.google.com
+      // persisted permanently for all subsequent pages in the same tab.
+      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      unawaited(_applyUserAgent(tab, settings));
     }
 
     if (mounted) {
@@ -931,19 +954,34 @@ class _BrowserScreenState extends State<BrowserScreen>
 
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     _injectDesktopModeScript(tab, settings);
+    // Fix #4: Re-apply per-site settings on every navigation so that
+    // site-specific desktop mode and ad-blocker overrides take effect
+    // when the user navigates to a different domain within the same tab.
+    unawaited(_applySiteSettings(tab, url));
 
     _updateNavState();
     _delayed(const Duration(milliseconds: 500), _updateNavState);
   }
 
   void _onPageStop(BrowserTab tab, String url) {
-    _isNavigatingBackForward = false;
     _loadingTimeoutTimers[tab.id]?.cancel();
+    // Fix #17: Reset the back/forward navigation flag when the page finishes
+    // loading. The old approach used a 5-second timer which was wrong for both
+    // fast (flag stayed true too long, bypassing ad-block for extra seconds) and
+    // slow connections (flag reset before page finished, blocking legit redirects).
+    if (_tabs.isNotEmpty &&
+        _currentTabIndex >= 0 &&
+        _currentTabIndex < _tabs.length &&
+        _tabs[_currentTabIndex].id == tab.id) {
+      _isNavigatingBackForward = false;
+    }
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     unawaited(_injectAllScripts(tab, url));
 
-    // E25: Script Injection Visual Feedback
-    if (mounted && _customJs.isNotEmpty || _customCss.isNotEmpty) {
+    // Fix #6: Corrected operator precedence — previously evaluated as
+    // (mounted && _customJs.isNotEmpty) || _customCss.isNotEmpty, which
+    // showed the snackbar even when unmounted if CSS was non-empty.
+    if (mounted && (_customJs.isNotEmpty || _customCss.isNotEmpty)) {
       ThemedSnackbar.show(
         context,
         message: 'Scripts injected',
@@ -961,7 +999,11 @@ class _BrowserScreenState extends State<BrowserScreen>
         _detectedMediaSources.remove(tab.id);
       });
       tab.controller?.getTitle().then((t) {
-        if (t != null && t.isNotEmpty && mounted && t != tab.title) {
+        if (t != null && t.isNotEmpty && mounted) {
+          // Fix #5: Always update the title and record history regardless of
+          // whether the title changed. The old `t != tab.title` guard silently
+          // skipped history for SPAs and sites where consecutive pages share
+          // the same title (e.g. news article feeds with a constant site name).
           setState(() {
             tab.title = t;
           });
@@ -972,6 +1014,7 @@ class _BrowserScreenState extends State<BrowserScreen>
           }
         }
       });
+
     }
 
     if (url.contains('accounts.google.com') ||
@@ -1028,7 +1071,6 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _onUrlChange(BrowserTab tab, String url) {
-    _isNavigatingBackForward = false;
     if (url.startsWith('magnet:') || isMagnetUrl(url)) return;
     final cleanUrl = _cleanUrl(url);
     if (tab.url == cleanUrl) return;
@@ -1100,6 +1142,10 @@ class _BrowserScreenState extends State<BrowserScreen>
       if (i == _currentTabIndex) continue;
       final tab = _tabs[i];
       if (tab.isHome || tab.isSuspended) continue;
+      // Fix #3: Keep recently-used tabs (top 3 in the LRU list) alive.
+      // Only suspend tabs that haven't been visited recently, so switching
+      // back to a recent tab is instant rather than requiring a full reload.
+      if (_lruTabIds.contains(tab.id)) continue;
       try {
         tab.controller?.evaluateJavascript(source: '''
           try { window.stop(); } catch(e) {}
@@ -1113,6 +1159,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       tab.controller = null;
     }
   }
+
 
   void _resumeTab(BrowserTab tab) {
     if (!tab.isSuspended) return;
@@ -1158,6 +1205,10 @@ class _BrowserScreenState extends State<BrowserScreen>
     _mediaScanFailed.remove(tabId);
     _loadingTimeoutTimers[tabId]?.cancel();
     _loadingTimeoutTimers.remove(tabId);
+    // Fix #10: Clean up per-tab counter maps when a tab is closed.
+    _blockedAdsPerTab.remove(tabId);
+    _blockedPopupsPerTab.remove(tabId);
+
 
     final tabIndex = _tabs.indexWhere((t) => t.id == tabId);
     if (tabIndex != -1) {
@@ -1282,6 +1333,12 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (_adBlocker.isEnabled && _adBlocker.shouldBlock(url)) {
       _log.info('[Browser] Blocked ad popup URL: $url');
       _adBlocker.recordBlocked(url);
+      // Fix #8: Increment the per-tab popup counter so the badge in the URL
+      // bar reflects the number of blocked popups for this tab.
+      setState(() {
+        final tabId = parentTab.id;
+        _blockedPopupsPerTab[tabId] = (_blockedPopupsPerTab[tabId] ?? 0) + 1;
+      });
       _followAndInterceptAdRedirect(url, parentTab);
       return;
     }
@@ -1823,7 +1880,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       _homeReturnUrl = null;
       _isNavigatingBackForward = true;
       unawaited(activeTab.controller?.goBack() ?? Future.value());
-      Future.delayed(const Duration(seconds: 2), () {
+      Future.delayed(const Duration(seconds: 5), () {
         if (mounted) _isNavigatingBackForward = false;
       });
       _updateNavState();
@@ -1836,7 +1893,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       _homeReturnUrl = null;
       _isNavigatingBackForward = true;
       unawaited(activeTab.controller?.goBack() ?? Future.value());
-      Future.delayed(const Duration(seconds: 2), () {
+      Future.delayed(const Duration(seconds: 5), () {
         if (mounted) _isNavigatingBackForward = false;
       });
       _updateNavState();
@@ -1977,7 +2034,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
     _isNavigatingBackForward = true;
     unawaited(activeTab.controller?.goForward() ?? Future.value());
-    Future.delayed(const Duration(seconds: 2), () {
+    Future.delayed(const Duration(seconds: 5), () {
       if (mounted) _isNavigatingBackForward = false;
     });
     _updateNavState();
@@ -2144,7 +2201,10 @@ class _BrowserScreenState extends State<BrowserScreen>
         }
         break;
       case 'share':
-        final url = _urlController.text.trim();
+        // Fix #22: Share the actual current page URL, not the URL bar text.
+        // _urlController.text may contain a half-typed query that has not been
+        // navigated to yet; activeTab.url is always the committed page URL.
+        final url = activeTab.url.isNotEmpty ? activeTab.url : _urlController.text.trim();
         if (url.isNotEmpty) {
           await SharePlus.instance.share(
             ShareParams(text: url, subject: activeTab.title),
@@ -2167,6 +2227,9 @@ class _BrowserScreenState extends State<BrowserScreen>
                 : Icons.phone_android,
             isDarkMode: settings.isDarkMode,
           );
+          // Fix #15: Apply UA to all tabs so future requests use the right agent,
+          // but only reload the active tab. Background tabs will reload naturally
+          // on next activation and _applySiteSettings will re-evaluate desktop mode.
           await Future.wait(
             _tabs.map((t) async {
               await _applyUserAgent(t, settings);
@@ -2183,10 +2246,8 @@ class _BrowserScreenState extends State<BrowserScreen>
               }
             }),
           );
-          for (final t in _tabs) {
-            if (!t.isHome) {
-              await _safeReloadTab(t);
-            }
+          if (!activeTab.isHome) {
+            await _safeReloadTab(activeTab);
           }
         }
         break;
@@ -2819,15 +2880,10 @@ class _BrowserScreenState extends State<BrowserScreen>
                             vertical: 8,
                           ),
                           child: Text(
-                            L10n.isRtl(context)
-                                ? L10n.of(
-                                    context,
-                                    'browser_no_alternative_streams',
-                                  )
-                                : L10n.of(
-                                    context,
-                                    'browser_no_alternative_streams',
-                                  ),
+                            L10n.of(
+                              context,
+                              'browser_no_alternative_streams',
+                            ),
                             style: TextStyle(
                               color: accent,
                               fontSize: 13,
@@ -3453,20 +3509,14 @@ class _BrowserScreenState extends State<BrowserScreen>
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            // E20: Tab Switcher Open/Close Animation
-            return AnimatedSlide(
-              offset: Offset.zero,
-              duration: AppTheme.motionBase,
-              curve: Curves.easeOutCubic,
-              child: AnimatedOpacity(
-                opacity: 1.0,
-                duration: AppTheme.motionBase,
-                child: DraggableScrollableSheet(
-                  expand: false,
-                  initialChildSize: 0.85,
-                  maxChildSize: 0.95,
-                  minChildSize: 0.5,
-                  builder: (context, controller) {
+            // Fix #21: Removed the no-op AnimatedSlide(offset: Offset.zero) /
+            // AnimatedOpacity(opacity: 1.0) wrappers that performed no animation.
+            return DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.85,
+              maxChildSize: 0.95,
+              minChildSize: 0.5,
+              builder: (context, controller) {
                     return ClipRRect(
                       borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(28),
@@ -3924,11 +3974,9 @@ class _BrowserScreenState extends State<BrowserScreen>
                           ),
                         ),
                       ),
-                    );
-                  },
-                ),
-              ),
-            );
+                  );
+                },
+              );
           },
         );
       },
@@ -5399,11 +5447,15 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                       .url;
                                                               if (reqUrl !=
                                                                   null) {
-                                                                controller.loadUrl(
-                                                                    urlRequest:
-                                                                        URLRequest(
-                                                                            url:
-                                                                                reqUrl));
+                                                                // Fix #2: Route window.open() to a new tab via
+                                                                // popup handling (ad-block, download-intercept,
+                                                                // background tab creation) rather than replacing
+                                                                // the current page in the same controller.
+                                                                _handlePopupMessageForTab(
+                                                                    tab,
+                                                                    JavaScriptMessage(
+                                                                        message: reqUrl
+                                                                            .toString()));
                                                               }
                                                               return true;
                                                             },
@@ -5819,7 +5871,14 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                               if (_adBlocker
                                                                   .shouldBlock(
                                                                       url)) {
-                                                                _blockedAdsCount++;
+                                                                // Fix #9: Increment per-tab counter inside setState so
+                                                                // the URL bar badge updates immediately on the UI thread.
+                                                                if (mounted) {
+                                                                  setState(() {
+                                                                    _blockedAdsPerTab[tab.id] =
+                                                                        (_blockedAdsPerTab[tab.id] ?? 0) + 1;
+                                                                  });
+                                                                }
                                                                 return WebResourceResponse(
                                                                   contentType:
                                                                       'text/plain',
@@ -6948,6 +7007,9 @@ class _BrowserScreenState extends State<BrowserScreen>
     _lastYoutubeAuthTimes.clear();
 
     for (final tab in _tabs) {
+      // Fix #1: Clean up per-tab state (clears incognito cache/localStorage/
+      // sessionStorage/cookies) before disposing the tab's progressNotifier.
+      _cleanupTabState(tab.id);
       try {
         tab.dispose();
       } catch (e, st) {
@@ -6958,6 +7020,13 @@ class _BrowserScreenState extends State<BrowserScreen>
     _tabs.clear();
     _currentTabIndex = 0;
     _quitPersisted = false;
+    // Fix #1: Cancel any remaining loading-timeout timers that were not
+    // cleaned up by _cleanupTabState (tabs that finished loading but whose
+    // timers weren't removed from the map).
+    for (final t in _loadingTimeoutTimers.values) {
+      t.cancel();
+    }
+    _loadingTimeoutTimers.clear();
   }
 }
 
@@ -6976,18 +7045,11 @@ class _LiveDotState extends State<_LiveDot>
     super.initState();
     _c = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1200));
-    _c.forward().then((_) {
-      if (mounted) {
-        _c.reverse().then((_) {
-          if (mounted) {
-            _c.forward().then((_) {
-              if (mounted) _c.reverse();
-            });
-          }
-        });
-      }
-    });
+    // Fix #18: Use repeat(reverse: true) for continuous pulsing.
+    // The old approach chained 2 cycles then stopped, making the dot appear frozen.
+    _c.repeat(reverse: true);
   }
+
 
   @override
   void dispose() {
@@ -7035,22 +7097,11 @@ class _PulsingIconBadgeState extends State<_PulsingIconBadge>
     super.initState();
     _c = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1600));
-    _runTwoCycles();
+    // Fix #18: Use repeat(reverse: true) for continuous pulsing.
+    // The old _runTwoCycles() ran exactly 2 cycles and then froze.
+    _c.repeat(reverse: true);
   }
 
-  void _runTwoCycles() {
-    _c.forward().then((_) {
-      if (mounted) {
-        _c.reverse().then((_) {
-          if (mounted) {
-            _c.forward().then((_) {
-              if (mounted) _c.reverse();
-            });
-          }
-        });
-      }
-    });
-  }
 
   @override
   void dispose() {
