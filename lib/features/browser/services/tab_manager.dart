@@ -186,6 +186,23 @@ class TabManager extends ChangeNotifier {
     });
   }
 
+  /// Clears all open tabs and resets state.
+  void clearAllTabs() {
+    for (final tab in _tabs) {
+      cleanupTabState(tab.id);
+      if (!_disposedTabIds.contains(tab.id)) {
+        _disposedTabIds.add(tab.id);
+        try {
+          tab.dispose();
+        } catch (_) {}
+      }
+    }
+    _tabs.clear();
+    _currentIndex = 0;
+    _tabIdHistory.clear();
+    notifyListeners();
+  }
+
   /// Safely evicts stale unvisited ad/popup tabs without interrupting the active tab.
   void evictStaleAdTabs() {
     if (_evictStaleAdTabsInternal()) {

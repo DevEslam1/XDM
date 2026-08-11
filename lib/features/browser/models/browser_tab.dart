@@ -123,7 +123,12 @@ class BrowserTab {
     if (_isDisposed) return;
     _isDisposed = true;
     try {
-      progressNotifier.dispose();
+      // Defer disposing progressNotifier to the next frame to prevent
+      // "A ValueNotifier was used after being disposed" if it is currently
+      // being listened to by a ValueListenableBuilder in the active tree.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        progressNotifier.dispose();
+      });
       // NOTE: pullToRefreshController is owned and disposed synchronously
       // by _InAppWebViewState. Do NOT call prc.dispose() here — the widget
       // framework already handles it and a second call throws

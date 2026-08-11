@@ -312,6 +312,7 @@ class AdBlockFilterUpdater {
         _log.warning(
           '_httpDownload: server returned ${response.statusCode} for $url',
         );
+        await response.drain<void>();
         return false;
       }
 
@@ -533,14 +534,34 @@ class AdBlockFilterUpdater {
         continue;
       }
 
-      // Exception rules @@||
-      if (line.startsWith('@@')) {
-        final inner = line.substring(2);
-        final domainMatch = RegExp(
-          r'^\|\|([a-zA-Z0-9.-]+)\^',
-        ).firstMatch(inner);
-        if (domainMatch != null) {
-          excepted.add(domainMatch.group(1)!.toLowerCase());
+      // Cosmetic rules: ##.ad-container, ###sidebar-ad, site.com##.ad
+      if (line.contains('##')) {
+        final idx = line.indexOf('##');
+        final firstPart = line.substring(0, idx);
+        final secondPart = line.substring(idx + 2);
+        if (secondPart.isNotEmpty && secondPart.length < 100) {
+          final selector = secondPart;
+          if (firstPart.isEmpty) {
+            _cosmeticRules.add(selector);
+          } else {
+            final domainsList = firstPart.split(',');
+            for (var domain in domainsList) {
+              domain = domain.trim().toLowerCase();
+              if (domain.isEmpty) continue;
+              if (domain.startsWith('~')) {
+                final excDomain = domain.substring(1).trim();
+                if (excDomain.isNotEmpty) {
+                  _cosmeticExceptions
+                      .putIfAbsent(excDomain, () => <String>{})
+                      .add(selector);
+                }
+              } else {
+                _siteCosmeticRules
+                    .putIfAbsent(domain, () => <String>{})
+                    .add(selector);
+              }
+            }
+          }
         }
         continue;
       }
@@ -556,37 +577,7 @@ class AdBlockFilterUpdater {
             _scriptletRules.add(scriptlet);
           }
         }
-        continue;
       }
-
-      // Cosmetic rules: ##.ad-container, ###sidebar-ad, site.com##.ad
-      if (line.contains('##')) {
-        final parts = line.split('##');
-        if (parts.length == 2 && parts[1].isNotEmpty && parts[1].length < 100) {
-          final selector = parts[1];
-          if (parts[0].isEmpty) {
-            _cosmeticRules.add(selector);
-          } else {
-            final domainsList = parts[0].split(',');
-            for (var domain in domainsList) {
-              domain = domain.trim().toLowerCase();
-              if (domain.isEmpty) continue;
-              if (domain.startsWith('~')) {
-                final excDomain = domain.substring(1).trim();
-                if (excDomain.isNotEmpty) {
-                  _cosmeticExceptions
-                      .putIfAbsent(excDomain, () => {})
-                      .add(selector);
-                }
-              } else {
-                _siteCosmeticRules.putIfAbsent(domain, () => {}).add(selector);
-              }
-            }
-          }
-        }
-        continue;
-      }
-
       // ABP-style ||domain^ rules
       final domainMatch = RegExp(
         r'^\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9])\^',
@@ -614,6 +605,7 @@ class AdBlockFilterUpdater {
       if (line.startsWith('/') && !line.startsWith('//')) {
         _urlPatterns.add(line);
         _urlPatternsTrie.insert(line);
+        continue;
       }
     }
 

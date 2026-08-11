@@ -104,6 +104,7 @@ class AdBlockerService {
       _log.warning('Failed to persist adblock state: $e');
     }
     _rebuildContentBlockers();
+    _notifyListeners();
   }
 
   void _rebuildContentBlockers() {
