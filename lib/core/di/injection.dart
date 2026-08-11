@@ -19,7 +19,6 @@ import '../services/widget_data_bridge.dart';
 import '../services/site_intelligence/site_intelligence_service.dart';
 
 final getIt = GetIt.instance;
-
 T inject<T extends Object>() => getIt<T>();
 
 Future<void> configureDependencies() async {
@@ -44,9 +43,12 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<SingleInstanceService>(
       () => SingleInstanceService());
   getIt.registerLazySingleton<TrackerManager>(() => TrackerManager());
+  
+  // Fix: Ensure init() is called immediately when instantiated
   getIt.registerLazySingleton<SiteIntelligenceService>(
-      () => SiteIntelligenceService(),
-      dispose: (service) => service.dispose());
-  getIt
-      .registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);
+    () => SiteIntelligenceService()..init(),
+    dispose: (service) => service.dispose(),
+  );
+  
+  getIt.registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);
 }

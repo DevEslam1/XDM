@@ -12,15 +12,12 @@ import '../../settings/provider/settings_provider.dart';
 class MediaQualitySheet extends StatefulWidget {
   final String videoUrl;
   final List<Map<String, dynamic>>? preloadedStreams;
-
   const MediaQualitySheet({
     super.key,
     required this.videoUrl,
     this.preloadedStreams,
   });
-
   static bool _isShowing = false;
-
   static Future<Map<String, dynamic>?> show(
     BuildContext context,
     String videoUrl, {
@@ -49,7 +46,6 @@ class MediaQualitySheet extends StatefulWidget {
       _isShowing = false;
     }
   }
-
   @override
   State<MediaQualitySheet> createState() => _MediaQualitySheetState();
 }
@@ -59,7 +55,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
   bool _isLoading = true;
   String? _errorMessage;
   int _selectedTabIndex = 0;
-
   @override
   void initState() {
     super.initState();
@@ -71,7 +66,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
       _fetchStreams();
     }
   }
-
   Future<void> _fetchStreams() async {
     debugPrint('[MediaQualitySheet] Fetching streams for: ${widget.videoUrl}');
     try {
@@ -91,7 +85,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
         }
       });
     } catch (e, st) {
-      // FIX-4: Actionable error message for backend reachability and rate limits
       debugPrint('[MediaQualitySheet] Error fetching streams: $e\n$st');
       if (!mounted) return;
       final errorStr = e.toString().replaceAll('Exception: ', '');
@@ -131,12 +124,10 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
       });
     }
   }
-
   int _parseQuality(String q) {
     final match = RegExp(r'(\d+)').firstMatch(q);
     return match != null ? int.parse(match.group(1)!) : 0;
   }
-
   IconData _iconForType(String type) {
     switch (type) {
       case 'muxed':
@@ -151,7 +142,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
         return Icons.play_circle_outline;
     }
   }
-
   Color _colorForType(String type, bool isDark) {
     switch (type) {
       case 'muxed':
@@ -166,7 +156,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
         return isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     }
   }
-
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
@@ -179,57 +168,49 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     final glassBorder =
         isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
     final panelBg = isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9);
-
     final audio = _streams.where((s) => s['type'] == 'audio').toList()
       ..sort((a, b) {
-        final aSize = a['size'] as int? ?? 0;
-        final bSize = b['size'] as int? ?? 0;
+        final aSize = (a['size'] as num? ?? 0).toInt();
+        final bSize = (b['size'] as num? ?? 0).toInt();
         return bSize.compareTo(aSize);
       });
-
     final rawVideos = _streams
         .where((s) =>
             s['type'] == 'video_only' ||
             s['type'] == 'combined' ||
             s['type'] == 'muxed')
         .toList();
-
     final Map<int, Map<String, dynamic>> videosByHeight = {};
     for (final s in rawVideos) {
       final qStr = s['quality'] as String? ?? '';
       final h = _parseQuality(qStr);
       final key = h > 0 ? h : rawVideos.indexOf(s);
-
       if (!videosByHeight.containsKey(key)) {
         videosByHeight[key] = Map<String, dynamic>.from(s);
       } else {
         final existing = videosByHeight[key]!;
         final existingExt = (existing['ext'] as String? ?? '').toLowerCase();
         final currentExt = (s['ext'] as String? ?? '').toLowerCase();
-
         if (currentExt == 'mp4' && existingExt != 'mp4') {
           videosByHeight[key] = Map<String, dynamic>.from(s);
         } else if (existingExt == 'mp4' && currentExt != 'mp4') {
-          // Keep existing MP4 stream
         } else {
-          final existingSize = (existing['videoSize'] as int? ?? 0) > 0
-              ? (existing['videoSize'] as int)
-              : (existing['size'] as int? ?? 0);
-          final currentSize = (s['videoSize'] as int? ?? 0) > 0
-              ? (s['videoSize'] as int)
-              : (s['size'] as int? ?? 0);
+          final existingSize = (existing['videoSize'] as num? ?? 0).toInt() > 0
+              ? (existing['videoSize'] as num).toInt()
+              : (existing['size'] as num? ?? 0).toInt();
+          final currentSize = (s['videoSize'] as num? ?? 0).toInt() > 0
+              ? (s['videoSize'] as num).toInt()
+              : (s['size'] as num? ?? 0).toInt();
           if (currentSize > existingSize) {
             videosByHeight[key] = Map<String, dynamic>.from(s);
           }
         }
       }
     }
-
     final videoList = videosByHeight.entries.map((entry) {
       final h = entry.key;
       final v = entry.value;
       final vType = v['type'] as String? ?? 'muxed';
-
       if (audio.isNotEmpty &&
           (vType == 'video_only' ||
               v['audioSrc'] == null ||
@@ -242,24 +223,22 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
         } else {
           pairedAudio = audio.last;
         }
-
         final audioUrl = pairedAudio['src'] ??
             pairedAudio['direct_url'] ??
             pairedAudio['url'];
-        final aSize = (pairedAudio['size'] as int? ?? 0) > 0
-            ? (pairedAudio['size'] as int)
-            : (pairedAudio['audioSize'] as int? ?? 0);
-        final vSize = (v['videoSize'] as int? ?? 0) > 0
-            ? (v['videoSize'] as int)
-            : (v['size'] as int? ?? 0);
-
+        final aSize = (pairedAudio['size'] as num? ?? 0).toInt() > 0
+            ? (pairedAudio['size'] as num).toInt()
+            : (pairedAudio['audioSize'] as num? ?? 0).toInt();
+        final vSize = (v['videoSize'] as num? ?? 0).toInt() > 0
+            ? (v['videoSize'] as num).toInt()
+            : (v['size'] as num? ?? 0).toInt();
         v['audioSrc'] = audioUrl?.toString();
         v['videoSize'] = vSize;
         v['audioSize'] = aSize;
         v['size'] = vSize + aSize;
         v['type'] = 'combined';
         final qLabel = v['quality']?.toString() ?? '';
-        v['label'] = qLabel.isNotEmpty ? '$qLabel MP4' : 'Video MP4';
+        v['label'] ??= qLabel.isNotEmpty ? '$qLabel MP4' : 'Video MP4';
       }
       return v;
     }).toList()
@@ -268,11 +247,9 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
         final bHeight = _parseQuality(b['quality'] as String? ?? '');
         return bHeight.compareTo(aHeight);
       });
-
     final videoTitle = _streams.isNotEmpty
         ? (_streams.first['title'] as String? ?? 'Media')
         : 'Media';
-
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.7,
@@ -311,7 +288,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                       ),
                     ),
                   ),
-                  // ── Header ──
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
@@ -394,7 +370,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                       ],
                     ),
                   ),
-                  // ── Legal banner ──
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
@@ -432,7 +407,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  // ── Tabs with sliding indicator ──
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
@@ -551,7 +525,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // ── Content ──
                   if (_isLoading)
                     Expanded(
                       child: Center(
@@ -704,7 +677,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
       },
     );
   }
-
   Widget _sectionHeader(
     BuildContext context,
     String title,
@@ -733,7 +705,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
       ),
     );
   }
-
   Widget _recommendBadge(bool isDark) {
     final amber = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
     return Container(
@@ -761,7 +732,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
       ),
     );
   }
-
   Future<bool> _showConfirmDialog({
     required BuildContext context,
     required String title,
@@ -777,7 +747,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     );
     return result ?? false;
   }
-
   Widget _streamTile(
     BuildContext context,
     Map<String, dynamic> stream,
@@ -786,7 +755,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
   ) {
     final type = stream['type'] as String? ?? 'muxed';
     final label = stream['label'] as String? ?? 'Stream';
-    final size = stream['size'] as int? ?? 0;
+    final size = (stream['size'] as num? ?? 0).toInt();
     final ext = stream['ext'] as String? ?? '';
     final quality = stream['quality'] as String? ?? '';
     final color = _colorForType(type, isDark);
@@ -794,21 +763,19 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     final secClr =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
-
     String sizeLabel;
     if (size > 0) {
       if (type == 'combined' &&
-          (stream['videoSize'] as int? ?? 0) > 0 &&
-          (stream['audioSize'] as int? ?? 0) > 0) {
+          (stream['videoSize'] as num? ?? 0).toInt() > 0 &&
+          (stream['audioSize'] as num? ?? 0).toInt() > 0) {
         sizeLabel =
-            'V ${formatBytes(stream['videoSize'] as int)} + A ${formatBytes(stream['audioSize'] as int)} = ${formatBytes(size)}';
+            'V ${formatBytes((stream['videoSize'] as num).toDouble())} + A ${formatBytes((stream['audioSize'] as num).toDouble())} = ${formatBytes(size.toDouble())}';
       } else {
-        sizeLabel = formatBytes(size);
+        sizeLabel = formatBytes(size.toDouble());
       }
     } else {
       sizeLabel = '—';
     }
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Material(
@@ -926,5 +893,4 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
   }
 }
 
-/// Backward-compatible alias so existing callers don't break.
 typedef YoutubeQualitySheet = MediaQualitySheet;

@@ -6611,8 +6611,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                             ),
                           ),
                         ),
-                      // UX 3.7: Tab strip for 3+ tabs
-                      if (_tabs.length >= 3)
+                      // UX 3.7: Tab strip for 2+ tabs
+                      if (_tabs.length >= 2)
                         _buildTabStrip(context, settings, isDark, textClr),
                       if (activeTab.isLoading &&
                           !activeTab.isHome &&
@@ -8457,35 +8457,18 @@ class _BrowserScreenState extends State<BrowserScreen>
   void _closeTabAtIndex(int index) {
     if (index < 0 || index >= _tabs.length) return;
 
+    final tab = _tabs[index];
+    _recordClosedTab(tab);
     setState(() {
-      if (_tabs.length <= 1) {
-        // Closing the last tab: open a new blank tab first, then close the old one
-        final oldTab = _tabs[0];
-        final newTab = _createNewTab(isIncognito: oldTab.isIncognito);
-        _tabs.add(newTab);
-        _recordClosedTab(oldTab);
-        _tabManager.closeTab(oldTab.id);
-        _currentTabIndex = 0;
-        _urlController.text = '';
-        _showBarsNotifier.value = true;
-      } else {
-        final tab = _tabs[index];
-        _recordClosedTab(tab);
-        _tabManager.closeTab(tab.id);
-
-        if (index < _currentTabIndex) {
-          _currentTabIndex--;
-        } else if (_currentTabIndex >= _tabs.length) {
-          _currentTabIndex = _tabs.length - 1;
-        }
-
-        // Always update the URL bar — the active tab's position or identity may have changed
-        if (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length) {
-          final active = _tabs[_currentTabIndex];
-          _urlController.text = active.isHome ? '' : active.url;
-        }
-      }
+      // TabManager.closeTab() removes the tab from its internal list, recalculates
+      // _currentIndex (LRU-aware), syncs the URL bar, persists state, and disposes
+      // the tab post-frame. If this was the last tab it creates a fresh blank tab.
+      // Do NOT manually write to _tabs (it is unmodifiable) or re-adjust
+      // _currentTabIndex here — that would double-shift the index.
+      _tabManager.closeTab(tab.id);
     });
+    // Ensure address bars are visible after closing, especially the last tab.
+    _showBarsNotifier.value = true;
   }
 
   void _closeOtherTabs(int keepIndex) {
@@ -8493,23 +8476,13 @@ class _BrowserScreenState extends State<BrowserScreen>
     final keep = _tabs[keepIndex];
     final closed = _tabs.where((t) => t.id != keep.id).toList();
     setState(() {
+      // Record closed-tab history first (before tabs are removed), then close
+      // each via TabManager which handles removal, index adjustment, disposal, and saving.
       for (final t in closed) {
         _recordClosedTab(t);
         _tabManager.closeTab(t.id);
       }
-      // The kept tab is now at a different index — find and select it
-      final newIdx = _tabs.indexWhere((t) => t.id == keep.id);
-      if (newIdx != -1) {
-        _currentTabIndex = newIdx;
-        _urlController.text = keep.isHome ? '' : keep.url;
-      }
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      for (final t in closed) {
-        t.dispose();
-      }
-    });
-    _saveTabs();
   }
 
   void _closeAllTabsFromStrip() {
@@ -8517,15 +8490,13 @@ class _BrowserScreenState extends State<BrowserScreen>
     setState(() {
       for (final t in list) {
         _recordClosedTab(t);
+        // TabManager handles removal, index recalculation, disposal, and saving.
         _tabManager.closeTab(t.id);
       }
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      for (final t in list) {
-        t.dispose();
-      }
-    });
-    _saveTabs();
+    // Ensure bars are shown so the user can start a new URL on the blank tab
+    // that TabManager automatically creates when all tabs are closed.
+    _showBarsNotifier.value = true;
   }
 
   Future<void> _handleYouTubeGrab(

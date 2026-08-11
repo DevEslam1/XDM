@@ -1,20 +1,12 @@
 import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/protocol_cache.dart';
-
-/// Connection intelligence: TLS prewarm and ALPN-based HTTP/2 detection,
-/// cached per host. Never throws — probes degrade to "assume HTTP/1.1".
 class ConnectionManager {
   ConnectionManager();
-
   static final Map<String, _HostProbe> _probes = {};
   static const Duration _cacheTtl = Duration(minutes: 10);
   static const Duration _probeTimeout = Duration(seconds: 4);
-
-  /// Warms a TCP+TLS connection so the first Range request skips the
-  /// handshake. Fire-and-forget; failures are ignored.
   static Future<void> prewarm(String url) async {
     try {
       final uri = Uri.parse(url);
@@ -28,8 +20,6 @@ class ConnectionManager {
       await socket.close();
     } catch (_) {}
   }
-
-  /// True when the host negotiates `h2` via ALPN. Cached for [_cacheTtl].
   static Future<bool> detectHttp2(String url) async {
     try {
       final uri = Uri.parse(url);
@@ -66,18 +56,14 @@ class ConnectionManager {
       return false;
     }
   }
-
   static void invalidate(String host) => _probes.remove(host);
   static void clearCache() => _probes.clear();
-
   static Dio createDownloadDio() {
     final dio = Dio();
     dio.options.connectTimeout = const Duration(milliseconds: 15000);
     dio.options.receiveTimeout = const Duration(milliseconds: 60000);
     return dio;
   }
-
-  /// Creates a Dio instance configured for the detected protocol.
   static Dio createProtocolDio(ProtocolSupport protocol) {
     final dio = createDownloadDio();
     switch (protocol) {
@@ -94,7 +80,6 @@ class ConnectionManager {
     }
     return dio;
   }
-
   static bool isGoawayOrReset(dynamic error) {
     if (error is DioException) {
       final msg = error.message?.toLowerCase() ?? '';
@@ -102,7 +87,6 @@ class ConnectionManager {
     }
     return false;
   }
-
   static Future<ProtocolSupport> detectBestProtocol(String url) async {
     final cached = ProtocolCache.get(url);
     if (cached != null) return cached;
@@ -111,10 +95,10 @@ class ConnectionManager {
       await ProtocolCache.record(url, ProtocolSupport.http2);
       return ProtocolSupport.http2;
     }
+    await ProtocolCache.record(url, ProtocolSupport.http11);
     return ProtocolSupport.http11;
   }
 }
-
 class _HostProbe {
   const _HostProbe({required this.isHttp2, required this.at});
   final bool isHttp2;

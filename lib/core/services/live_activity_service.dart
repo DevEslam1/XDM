@@ -2,26 +2,24 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 
-/// Manages iOS Live Activities (Dynamic Island / Lock Screen) for downloads.
 class LiveActivityService {
   static final _log = Logger('LiveActivityService');
   static const _channel = MethodChannel('com.dmx.app/live_activity');
-
+  
   static bool _supported = false;
   static bool _initialized = false;
-
   static final Map<String, DateTime> _lastUpdateTimes = {};
   static const _minUpdateInterval = Duration(seconds: 10);
 
   static Future<void> init() async {
     if (_initialized) return;
     _initialized = true;
-
+    
     if (!Platform.isIOS) {
       _supported = false;
       return;
     }
-
+    
     try {
       final result = await _channel.invokeMethod<Map>('isSupported');
       _supported = result?['areActivitiesEnabled'] == true;
@@ -45,7 +43,6 @@ class LiveActivityService {
     required String fileName,
   }) async {
     if (!_supported) return;
-
     try {
       await _channel.invokeMethod('startActivity', {
         'taskId': taskId,
@@ -64,14 +61,14 @@ class LiveActivityService {
     required int etaSeconds,
   }) async {
     if (!_supported) return;
-
+    
     final lastUpdate = _lastUpdateTimes[taskId];
     if (lastUpdate != null &&
         DateTime.now().difference(lastUpdate) < _minUpdateInterval) {
       return;
     }
     _lastUpdateTimes[taskId] = DateTime.now();
-
+    
     try {
       await _channel.invokeMethod('updateActivity', {
         'taskId': taskId,
@@ -80,13 +77,13 @@ class LiveActivityService {
         'eta': etaSeconds,
       });
     } catch (e) {
-      // Silent fail
+      // Fixed: Added logging for previously swallowed errors
+      _log.fine('Failed to update Live Activity for $taskId: $e');
     }
   }
 
   static Future<void> end({required String taskId}) async {
     if (!_supported) return;
-
     try {
       await _channel.invokeMethod('endActivity', {'taskId': taskId});
       _lastUpdateTimes.remove(taskId);
@@ -97,7 +94,6 @@ class LiveActivityService {
 
   static Future<void> endAll() async {
     if (!_supported) return;
-
     try {
       await _channel.invokeMethod('endAllActivities');
       _lastUpdateTimes.clear();

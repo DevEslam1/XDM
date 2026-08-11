@@ -62,7 +62,6 @@ class SiteProfile {
   final Duration? tokenExpiry;
   final bool urlsExpire;
   final int reliabilityScore;
-
   const SiteProfile({
     required this.domain,
     required this.type,
@@ -94,7 +93,6 @@ class UrlAnalysisResult {
   final Map<String, String> recommendedHeaders;
   final String inferredCategory;
   final double confidence;
-
   UrlAnalysisResult({
     required this.siteType,
     this.profile,
@@ -130,7 +128,6 @@ class MagnetAnalysis {
   final bool isAudioContent;
   final bool isSoftware;
   final List<String> contentKeywords;
-
   MagnetAnalysis({
     this.displayName,
     this.infoHash,
@@ -156,7 +153,6 @@ class SiteReliability {
   DateTime? lastSuccess;
   DateTime? lastFailure;
   String? lastError;
-
   SiteReliability({
     required this.domain,
     this.totalAttempts = 0,
@@ -167,12 +163,10 @@ class SiteReliability {
     this.lastFailure,
     this.lastError,
   });
-
   int get score {
     if (totalAttempts == 0) return 100;
     return ((successes / totalAttempts) * 100).round();
   }
-
   Map<String, dynamic> toJson() => {
         'domain': domain,
         'totalAttempts': totalAttempts,
@@ -183,10 +177,8 @@ class SiteReliability {
         'lastFailure': lastFailure?.toIso8601String(),
         'lastError': lastError,
       };
-
-  factory SiteReliability.fromJson(Map<String, dynamic> json) =>
-      SiteReliability(
-        domain: json['domain'] as String,
+  factory SiteReliability.fromJson(Map<String, dynamic> json) => SiteReliability(
+        domain: json['domain'] as String? ?? '',
         totalAttempts: json['totalAttempts'] as int? ?? 0,
         successes: json['successes'] as int? ?? 0,
         failures: json['failures'] as int? ?? 0,
@@ -210,8 +202,7 @@ class SiteIntelligenceService {
   static const _reliabilityKey = 'site_reliability_data';
   final Map<String, SiteReliability> _reliability = {};
   bool _loaded = false;
-  // FIX: Debounce persistence to avoid writing to SharedPreferences on every
-  // download outcome. Flushes at most once every 5 seconds.
+  bool _disposed = false;
   Timer? _persistTimer;
   bool _persistPending = false;
 
@@ -221,10 +212,16 @@ class SiteIntelligenceService {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_reliabilityKey);
       if (raw != null) {
-        final Map<String, dynamic> map = jsonDecode(raw);
-        map.forEach((k, v) {
-          _reliability[k] = SiteReliability.fromJson(v as Map<String, dynamic>);
-        });
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          final map = Map<String, dynamic>.from(decoded);
+          map.forEach((k, v) {
+            if (v is Map) {
+              _reliability[k] =
+                  SiteReliability.fromJson(Map<String, dynamic>.from(v));
+            }
+          });
+        }
       }
     } catch (e) {
       _log.warning('Failed to load reliability data: $e');
@@ -233,11 +230,12 @@ class SiteIntelligenceService {
   }
 
   Future<void> _persist() async {
-    if (_persistPending) return;
+    if (_persistPending || _disposed) return;
     _persistPending = true;
     _persistTimer?.cancel();
     _persistTimer = Timer(const Duration(seconds: 5), () async {
       _persistPending = false;
+      if (_disposed) return;
       try {
         final prefs = await SharedPreferences.getInstance();
         final raw =
@@ -249,14 +247,13 @@ class SiteIntelligenceService {
     });
   }
 
-  // FIX-P1-9: Clean up timer and flush pending data on shutdown.
   Future<void> dispose() async {
+    _disposed = true;
     _persistTimer?.cancel();
     _persistTimer = null;
     await flushPending();
   }
 
-  /// Flushes any pending persistence immediately. Call on app dispose.
   Future<void> flushPending() async {
     _persistTimer?.cancel();
     _persistPending = false;
@@ -273,8 +270,6 @@ class SiteIntelligenceService {
   UrlAnalysisResult analyzeUrl(String url) {
     final cleanUrl = url.trim();
     if (cleanUrl.isEmpty) return _fallbackResult();
-
-    // 1. Magnet Check
     if (cleanUrl.startsWith('magnet:')) {
       final magnet = analyzeMagnet(cleanUrl);
       return UrlAnalysisResult(
@@ -286,18 +281,15 @@ class SiteIntelligenceService {
         confidence: 1.0,
       );
     }
-
     final uri = Uri.tryParse(
-        cleanUrl.startsWith('http') ? cleanUrl : 'https://$cleanUrl');
+        (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))
+            ? cleanUrl
+            : 'https://$cleanUrl');
     if (uri == null) return _fallbackResult();
-
     final host = uri.host.toLowerCase();
 
-    // 2. Exact host match from registry
     SiteProfile? profile;
     String? matchedDomain;
-
-    // Check direct domain and subdomains
     final parts = host.split('.');
     for (int i = 0; i < parts.length - 1; i++) {
       final candidate = parts.sublist(i).join('.');
@@ -309,11 +301,10 @@ class SiteIntelligenceService {
       }
     }
 
-    // 3. Pattern analysis
     String? fileName = p.basename(uri.path);
     if (fileName == '/' || fileName.isEmpty) fileName = null;
-
     final String? extension = fileName != null ? p.extension(fileName) : null;
+
     String? quality;
     final qualityMatch = UrlPatterns.qualityRegex.firstMatch(cleanUrl);
     if (qualityMatch != null) {
@@ -331,7 +322,6 @@ class SiteIntelligenceService {
         profile?.strategy ?? DownloadStrategy.directHttp;
     double confidence = profile != null ? 0.9 : 0.4;
 
-    // 4. Heuristics for unknown sites
     if (profile == null) {
       if (extension != null && extension.isNotEmpty) {
         siteType = SiteType.genericDirect;
@@ -408,16 +398,49 @@ class SiteIntelligenceService {
     bool isVideo = false;
     bool isAudio = false;
     bool isSoftware = false;
-    final keywords = <String>[];
+    final keywords = <String>{};
 
     if (name != null) {
       final lowerName = name.toLowerCase();
 
-      // Extract quality
+      // Extract quality keyword (e.g. "1080p", "4k")
       final qMatch = UrlPatterns.qualityRegex.firstMatch(name);
-      if (qMatch != null) inferredQuality = qMatch.group(0);
+      if (qMatch != null) {
+        inferredQuality = qMatch.group(0);
+        keywords.add(qMatch.group(0)!);
+      }
 
-      // Heuristics
+      // Extract video codec keyword (e.g. "x264", "hevc")
+      final codecMatch = UrlPatterns.videoCodecRegex.firstMatch(lowerName);
+      if (codecMatch != null) {
+        keywords.add(codecMatch.group(0)!);
+      }
+
+      // Extract audio codec keyword (e.g. "aac", "flac")
+      final audioCodecMatch = UrlPatterns.audioCodecRegex.firstMatch(lowerName);
+      if (audioCodecMatch != null) {
+        keywords.add(audioCodecMatch.group(0)!);
+      }
+
+      // Extract source keyword (e.g. "bluray", "web-dl")
+      final sourceMatch = UrlPatterns.sourceRegex.firstMatch(lowerName);
+      if (sourceMatch != null) {
+        keywords.add(sourceMatch.group(0)!);
+      }
+
+      // Extract release group (e.g. "[YTS]" → "YTS")
+      final releaseMatch = UrlPatterns.releaseGroupRegex.firstMatch(name);
+      if (releaseMatch != null && releaseMatch.group(1) != null) {
+        keywords.add(releaseMatch.group(1)!);
+      }
+
+      // Extract year (e.g. "2023")
+      final yearMatch = UrlPatterns.yearRegex.firstMatch(name);
+      if (yearMatch != null) {
+        keywords.add(yearMatch.group(0)!);
+      }
+
+      // Determine content type
       if (UrlPatterns.videoCodecRegex.hasMatch(lowerName) ||
           UrlPatterns.sourceRegex.hasMatch(lowerName) ||
           UrlPatterns.videoExtensions.any((ext) => lowerName.contains(ext))) {
@@ -455,7 +478,7 @@ class SiteIntelligenceService {
       isVideoContent: isVideo,
       isAudioContent: isAudio,
       isSoftware: isSoftware,
-      contentKeywords: keywords,
+      contentKeywords: keywords.toList(),
     );
   }
 
@@ -466,7 +489,6 @@ class SiteIntelligenceService {
     ContentHint? contentHint,
     String? magnetName,
   }) {
-    // 1. Explicit content hint
     if (contentHint != null) {
       switch (contentHint) {
         case ContentHint.videoFile:
@@ -487,14 +509,10 @@ class SiteIntelligenceService {
           break;
       }
     }
-
-    // 2. Site type implication
     if (siteType != null) {
       if (siteType == SiteType.videoStreaming) return 'Video';
       if (siteType == SiteType.audioStreaming) return 'Audio';
     }
-
-    // 3. URL/Name keywords
     final searchArea =
         '${url.toLowerCase()} ${fileName?.toLowerCase() ?? ""} ${magnetName?.toLowerCase() ?? ""}';
     if (searchArea.contains('movie') ||
@@ -515,6 +533,7 @@ class SiteIntelligenceService {
         searchArea.contains('installer') ||
         searchArea.contains('.apk') ||
         searchArea.contains('.exe') ||
+        searchArea.contains('.msi') ||
         searchArea.contains('.dmg') ||
         searchArea.contains('.deb') ||
         searchArea.contains('.rpm')) {
@@ -525,27 +544,29 @@ class SiteIntelligenceService {
         searchArea.contains('ebook')) {
       return 'Document';
     }
-
-    // 4. Extension fallback
     if (fileName != null) {
       final ext = p.extension(fileName).toLowerCase();
       if (UrlPatterns.videoExtensions.contains(ext)) return 'Video';
       if (UrlPatterns.audioExtensions.contains(ext)) return 'Audio';
       if (UrlPatterns.archiveExtensions.contains(ext)) return 'Archive';
-      if (UrlPatterns.softwareExtensions.contains(ext)) return 'APK';
+      if (UrlPatterns.softwareExtensions.contains(ext)) return 'Software';
       if (UrlPatterns.documentExtensions.contains(ext)) return 'Document';
       if (UrlPatterns.imageExtensions.contains(ext)) return 'Image';
     }
-
     return 'Other';
   }
 
-  void recordOutcome(String url, bool success, [double? speedMbps]) {
+  void recordOutcome(
+    String url,
+    bool success, [
+    double? speedMbps,
+    String? errorMessage,
+  ]) {
+    if (_disposed) return;
     final uri = Uri.tryParse(url);
     if (uri == null) return;
     final host = uri.host.toLowerCase();
     if (host.isEmpty) return;
-
     final stat =
         _reliability.putIfAbsent(host, () => SiteReliability(domain: host));
     stat.totalAttempts++;
@@ -563,6 +584,9 @@ class SiteIntelligenceService {
     } else {
       stat.failures++;
       stat.lastFailure = DateTime.now();
+      if (errorMessage != null && errorMessage.isNotEmpty) {
+        stat.lastError = errorMessage;
+      }
     }
     _persist();
   }

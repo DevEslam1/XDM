@@ -1,71 +1,39 @@
 import 'dart:async';
-
 import 'dart:io';
-
 import 'package:flutter/material.dart';
-
 import 'package:flutter/services.dart';
-
 import 'package:flutter/foundation.dart';
-
 import 'package:provider/provider.dart';
-
 import 'package:file_picker/file_picker.dart';
-
 import 'package:path/path.dart' as p;
-
 import 'package:url_launcher/url_launcher.dart';
-
 import '../../../core/app_theme.dart';
-
 import '../../../core/services/permission_service.dart';
-
 import '../../../core/services/youtube_service.dart';
-
 import '../../../core/utils/localization.dart';
-
 import '../../../core/utils/url_utils.dart';
-
 import '../../../core/utils/bencode_decoder.dart';
-
 import '../../../core/utils/haptic_helper.dart';
-
 import '../../../core/utils/constants.dart';
-
 import '../../../core/utils/file_utils.dart';
-
 import '../../../core/services/download_engine.dart';
-
 import '../../../core/services/site_intelligence/site_intelligence_service.dart';
-
 import '../../downloads/provider/download_provider.dart';
-
 import '../../downloads/models/download_task.dart';
-
 import '../../settings/provider/settings_provider.dart';
-
 import '../../../shared/widgets/themed_snackbar.dart';
-
 import '../../../shared/widgets/neon_glow_button.dart';
-
 import '../widgets/media_quality_sheet.dart';
-
 import '../widgets/youtube_playlist_sheet.dart';
-
 import 'package:logging/logging.dart';
-
 import '../../../shared/mixins/pausable_loop_animation.dart';
 import '../../../shared/design/dmx_design.dart';
 
 class AddDownloadDialog extends StatefulWidget {
   final String? prefilledUrl;
-
   final String? prefilledName;
-
   final String? downloadPageUrl;
-
   final bool isShareLaunch;
-
   const AddDownloadDialog({
     super.key,
     this.prefilledUrl,
@@ -73,7 +41,6 @@ class AddDownloadDialog extends StatefulWidget {
     this.downloadPageUrl,
     this.isShareLaunch = false,
   });
-
   static Future<T?> show<T>(
     BuildContext context, {
     String? prefilledUrl,
@@ -95,12 +62,9 @@ class AddDownloadDialog extends StatefulWidget {
 
   @override
   State<AddDownloadDialog> createState() => _AddDownloadDialogState();
-
   static final Map<String, DateTime> _recentlyAddedUrls = {};
-
   static bool wasRecentlyAdded(String url) {
     _pruneRecentUrls();
-
     return _recentlyAddedUrls.containsKey(url.trim().toLowerCase());
   }
 
@@ -110,7 +74,6 @@ class AddDownloadDialog extends StatefulWidget {
 
   static void _pruneRecentUrls() {
     final cutoff = DateTime.now().subtract(const Duration(seconds: 30));
-
     _recentlyAddedUrls.removeWhere((_, time) => time.isBefore(cutoff));
   }
 }
@@ -122,70 +85,38 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         WidgetsBindingObserver,
         PausableLoopAnimation<AddDownloadDialog> {
   final _formKey = GlobalKey<FormState>();
-
   final TextEditingController _urlController = TextEditingController();
-
   final TextEditingController _referrerController = TextEditingController();
-
   final TextEditingController _nameController = TextEditingController();
-
   final TextEditingController _extController = TextEditingController();
-
   final TextEditingController _pathController = TextEditingController();
-
   final FocusNode _urlFocus = FocusNode();
-
   String _selectedCategory = 'Auto';
-
   int _selectedThreads = 5;
-
   bool _wifiOnly = false;
-
   bool _retry = true;
-
   bool _useProxy = false;
-
   bool _isScheduled = false;
-
   bool _showAdvanced = false;
-
   DateTime? _scheduledDateTime;
-
   bool _userEditedName = false;
-
   String? _resolvedYoutubeQualityPreset;
-
   String? _resolvedAudioUrl;
-
   int? _resolvedAudioSize;
-
   String? _resolvedThumbnailUrl;
-
   bool _isMetadataResolved = false;
-
   bool _isResolvingLink = false;
   bool _isSubmitting = false;
-
   String _resolvedFileName = '';
-
   int _resolvedFileSize = 0;
-
   int? _resolvedTorrentId;
-
   String _resolvedCategory = 'Auto';
-
   List<Map<String, dynamic>> _torrentFiles = [];
-
   String _lastCheckedUrl = '';
-
   UrlAnalysisResult? _urlAnalysis;
-
   Timer? _ytDebounceTimer;
-
   Timer? _analysisDebounceTimer;
-
   late final AnimationController _scanController;
-
   @override
   AnimationController get loopController => _scanController;
 
@@ -198,7 +129,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     'APK',
     'Other',
   ];
-
   final List<int> _threadsList = kAvailableThreadOptions;
 
   bool get _isTorrentOrMagnet {
@@ -212,88 +142,66 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         lower.contains('.torrent?');
   }
 
+  String _composeFullName(String name, String ext) {
+    if (ext.isEmpty) return name;
+    final dotExt = '.${ext.toLowerCase()}';
+    if (name.toLowerCase().endsWith(dotExt)) return name;
+    return '$name.$ext';
+  }
+
   @override
   void initState() {
     super.initState();
-
     _scanController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2200),
     );
-
     startPausableLoop();
-
     final settings = context.read<SettingsProvider>();
-
     if (_threadsList.contains(settings.defaultThreadCount)) {
       _selectedThreads = settings.defaultThreadCount;
     }
-
     _wifiOnly = settings.wifiOnly;
-
     _useProxy = settings.enableProxy;
-
     _loadDefaultPath();
-
     _urlController.addListener(_onUrlChanged);
-
     if (widget.prefilledUrl != null && widget.prefilledUrl!.trim().isNotEmpty) {
       _urlController.text = widget.prefilledUrl!;
-
       final url = widget.prefilledUrl!.trim();
-
       if (url.toLowerCase().startsWith('magnet:')) {
         final parsed = parseMagnetUrl(url);
-
         final dnName = parsed['name'] ?? 'Torrent Download';
-
         _setNameAndExt(dnName);
-
         _resolvedFileName = dnName;
-
         _resolvedCategory = 'Archive';
-
         _selectedCategory = 'Archive';
-
         _isMetadataResolved = true;
       }
-
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _resolveLinkMetadata();
       });
     }
-
     if (widget.prefilledName != null &&
         widget.prefilledName!.trim().isNotEmpty) {
       _setNameAndExt(widget.prefilledName!);
-
       _resolvedFileName = widget.prefilledName!;
-
       _isMetadataResolved = true;
     }
   }
 
   void _setNameAndExt(String fullName) {
     final ext = p.extension(fullName);
-
     final name = p.basenameWithoutExtension(fullName);
-
     _nameController.text = name;
-
     _extController.text = ext.replaceFirst('.', '');
   }
 
   void _onUrlChanged() {
     final url = _urlController.text.trim();
-
     if (url == _lastCheckedUrl) return;
-
     _lastCheckedUrl = url;
-
     _ytDebounceTimer?.cancel();
     _analysisDebounceTimer?.cancel();
-
-    // FIX-INTEL: Update URL analysis with debounce to prevent input lag
     if (url.isNotEmpty) {
       _analysisDebounceTimer = Timer(const Duration(milliseconds: 300), () {
         if (mounted) {
@@ -305,25 +213,18 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     } else {
       _urlAnalysis = null;
     }
-
     if (url.toLowerCase().startsWith('magnet:')) {
       final parsed = parseMagnetUrl(url);
-
       final dnName = parsed['name'] ?? 'Torrent Download';
-
       setState(() {
         if (!_userEditedName) {
           _setNameAndExt(dnName);
         }
-
         _resolvedFileName = _nameController.text.isNotEmpty
-            ? '${_nameController.text}.${_extController.text}'
+            ? _composeFullName(_nameController.text, _extController.text)
             : dnName;
-
         _resolvedCategory = 'Archive';
-
         _selectedCategory = 'Archive';
-
         _isMetadataResolved = true;
       });
     } else if (YoutubeService.isExtractableMediaUrl(url)) {
@@ -341,37 +242,26 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           _resolvedCategory == 'Archive') {
         setState(() {
           _isMetadataResolved = false;
-
           _resolvedFileName = '';
-
           _resolvedTorrentId = null;
-
           _resolvedAudioUrl = null;
-
           _resolvedAudioSize = null;
-
           _nameController.clear();
-
           _extController.clear();
-
           _userEditedName = false;
         });
       }
     }
-
     if (mounted) setState(() {});
   }
 
   Future<void> _loadDefaultPath() async {
     final settings = context.read<SettingsProvider>();
-
     try {
       final path = settings.customDownloadPath?.isNotEmpty == true
           ? settings.customDownloadPath!
           : await PermissionService().defaultDownloadDirectory();
-
       if (!mounted) return;
-
       if (_pathController.text.isEmpty) _pathController.text = path;
     } catch (e) {
       if (!mounted) return;
@@ -392,9 +282,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
     final settings = context.read<SettingsProvider>();
-
     if (settings.batterySaverMode && _selectedThreads != 2) {
       _selectedThreads = 2;
     }
@@ -403,43 +291,28 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   @override
   void dispose() {
     _urlController.removeListener(_onUrlChanged);
-
     _urlController.dispose();
-
     _referrerController.dispose();
-
     _nameController.dispose();
-
     _extController.dispose();
-
     _pathController.dispose();
-
     _urlFocus.dispose();
-
     _ytDebounceTimer?.cancel();
-
     _analysisDebounceTimer?.cancel();
-
     stopPausableLoop();
-
     _scanController.dispose();
-
     super.dispose();
   }
 
   Future<void> _pasteFromClipboard() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
-
     if (data?.text != null && data!.text!.isNotEmpty) {
       if (!mounted) return;
-
       final text = data.text!.trim();
       _urlController.text = text;
-
       _urlController.selection = TextSelection.fromPosition(
         TextPosition(offset: _urlController.text.length),
       );
-
       if (text.isNotEmpty) {
         _resolveLinkMetadata();
       }
@@ -448,11 +321,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
   void _updateSelectedTorrentSize() {
     if (_torrentFiles.isEmpty) return;
-
     final selectedTotal = _torrentFiles
         .where((f) => f['selected'] == true)
         .fold<int>(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
-
     setState(() => _resolvedFileSize = selectedTotal);
   }
 
@@ -462,30 +333,20 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         type: FileType.custom,
         allowedExtensions: ['torrent'],
       );
-
       if (result != null && result.files.single.path != null) {
         final filePath = result.files.single.path!;
-
         _urlController.text = filePath;
-
         final file = File(filePath);
-
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
-
           final meta = await compute(BencodeDecoder.parseTorrentBytes, bytes);
-
           if (!mounted) return;
-
           if (meta != null) {
             setState(() {
               _resolvedFileName = meta['name'] as String? ?? '';
-
               _resolvedCategory = categoryFromFileName(_resolvedFileName);
-
               _torrentFiles = (meta['files'] as List? ?? []).map((f) {
                 final fileMap = f as Map;
-
                 return {
                   'name': fileMap['name'] as String? ?? '',
                   'length': fileMap['length'] as int? ?? 0,
@@ -495,13 +356,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   'speed': 0.0,
                 };
               }).toList();
-
               _updateSelectedTorrentSize();
-
               _isMetadataResolved = true;
-
               if (!_userEditedName) _setNameAndExt(_resolvedFileName);
-
               if (_categories.contains(_resolvedCategory)) {
                 _selectedCategory = _resolvedCategory;
               }
@@ -514,11 +371,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     }
   }
 
-  // ── LOGIC: resolveLinkMetadata (unchanged) ──────────────────────────────
-
   Future<void> _resolveLinkMetadata() async {
     final url = _urlController.text.trim();
-
     if (url.isEmpty) {
       ThemedSnackbar.show(
         context,
@@ -528,21 +382,16 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         icon: Icons.error_outline,
         isDarkMode: context.read<SettingsProvider>().isDarkMode,
       );
-
       return;
     }
-
     if (YoutubeService.isPlaylistUrl(url)) {
       final isMixed = YoutubeService.isYoutubeVideoUrl(url);
-
       if (isMixed && mounted) {
         final choice = await showDialog<String>(
           context: context,
           builder: (ctx) {
             final isDark = context.read<SettingsProvider>().isDarkMode;
-
             final isRtl = L10n.isRtl(context);
-
             return AlertDialog(
               backgroundColor:
                   isDark ? AppTheme.surface : AppTheme.lightSurface,
@@ -591,15 +440,11 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             );
           },
         );
-
         if (!mounted) return;
-
         if (choice == 'playlist') {
           final result = await YoutubePlaylistSheet.show(context, url);
-
           if (result != null && mounted) {
             final isDark = context.read<SettingsProvider>().isDarkMode;
-
             ThemedSnackbar.show(
               context,
               message: L10n.isRtl(context)
@@ -609,20 +454,16 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
               icon: Icons.playlist_add_check,
               isDarkMode: isDark,
             );
-
             if (mounted) Navigator.pop(context);
           }
-
           return;
         } else if (choice != 'video') {
           return;
         }
       } else if (!isMixed && mounted) {
         final result = await YoutubePlaylistSheet.show(context, url);
-
         if (result != null && mounted) {
           final isDark = context.read<SettingsProvider>().isDarkMode;
-
           ThemedSnackbar.show(
             context,
             message: L10n.isRtl(context)
@@ -632,53 +473,33 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             icon: Icons.playlist_add_check,
             isDarkMode: isDark,
           );
-
           if (mounted) Navigator.pop(context);
         }
-
         return;
       }
     }
-
     if (YoutubeService.isExtractableMediaUrl(url)) {
       if (!mounted) return;
-
       final stream = await YoutubeQualitySheet.show(context, url);
-
       if (!mounted) return;
-
       if (stream != null) {
         final title = stream['title'] as String? ?? 'Media Download';
-
         final ext = stream['ext'] as String? ?? 'mp4';
-
         final streamUrl = stream['src'] as String;
-
-        final streamSize = stream['size'] as int? ?? 0;
-
+        final streamSize = (stream['size'] as num?)?.toInt() ?? 0;
         final audioUrl = stream['audioSrc'] as String?;
-
-        final audioSize = stream['audioSize'] as int?;
-
+        final audioSize = (stream['audioSize'] as num?)?.toInt();
         final streamType = stream['type'] as String? ?? 'muxed';
-
         final thumbnailUrl = stream['thumbnailUrl'] as String?;
-
         final qualityPreset =
             streamType == 'audio' ? 'audio_only' : stream['quality'] as String?;
-
         final category = streamType == 'audio' ? 'Audio' : 'Video';
-
         final fileName = safeFileName('$title.$ext');
-
         final provider = context.read<DownloadProvider>();
-
         final settings = context.read<SettingsProvider>();
-
         final savePath = _pathController.text.trim().isNotEmpty
             ? _pathController.text.trim()
             : settings.customDownloadPath ?? '';
-
         await provider.addDownload(
           name: fileName,
           url: streamUrl,
@@ -692,12 +513,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           audioSize: audioSize ?? 0,
           thumbnailUrl: thumbnailUrl,
         );
-
         if (!mounted) return;
-
         if (provider.lastError != null) {
           final isDark = context.read<SettingsProvider>().isDarkMode;
-
           ThemedSnackbar.show(
             context,
             message: provider.lastError!,
@@ -705,12 +523,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             icon: Icons.error_outline,
             isDarkMode: isDark,
           );
-
           return;
         }
-
         final isDark = context.read<SettingsProvider>().isDarkMode;
-
         ThemedSnackbar.show(
           context,
           message: L10n.isRtl(context) ? 'تم بدء التحميل' : 'Download started',
@@ -718,13 +533,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           icon: Icons.check_circle_outline,
           isDarkMode: isDark,
         );
-
         Navigator.pop(context);
-
         return;
       }
     }
-
     if (!isValidTransmissionUrl(url)) {
       ThemedSnackbar.show(
         context,
@@ -733,56 +545,39 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         icon: Icons.error_outline,
         isDarkMode: context.read<SettingsProvider>().isDarkMode,
       );
-
       return;
     }
-
     setState(() {
       _isResolvingLink = true;
-
       _isMetadataResolved = false;
-
       _resolvedTorrentId = null;
-
       _torrentFiles = [];
     });
-
     try {
       final settings = context.read<SettingsProvider>();
-
       if (url.toLowerCase().startsWith('magnet:')) {
         final parsed = parseMagnetUrl(url);
-
         final rawDnName = parsed['name'] ?? 'Torrent Download';
-
         final dnName = safeFileName(rawDnName);
-
         if (mounted) {
           setState(() {
             if (!_userEditedName) _setNameAndExt(dnName);
-
             _resolvedFileName = dnName;
-
             final cat = categoryFromFileName(dnName);
-
             _resolvedCategory = cat != 'Other' ? cat : 'Video';
-
             if (_categories.contains(_resolvedCategory)) {
               _selectedCategory = _resolvedCategory;
             }
           });
         }
       }
-
       String? localFilePath;
-
       if (url.toLowerCase().startsWith('file://')) {
         try {
           localFilePath = Uri.parse(url).toFilePath();
         } catch (e, st) {
           Logger('add_download_dialog')
               .warning('[add_download_dialog] operation failed', e, st);
-
           localFilePath = url.replaceFirst(
             RegExp(r'^file://', caseSensitive: false),
             '',
@@ -792,28 +587,19 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           File(url).existsSync()) {
         localFilePath = url;
       }
-
       if (localFilePath != null) {
         final file = File(localFilePath);
-
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
-
           final meta = await compute(BencodeDecoder.parseTorrentBytes, bytes);
-
           if (!mounted) return;
-
           if (meta != null) {
             setState(() {
               _resolvedFileName = meta['name'] ?? '';
-
               _resolvedFileSize = meta['length'] ?? 0;
-
               _resolvedCategory = 'Archive';
-
               _torrentFiles = (meta['files'] as List? ?? []).map((f) {
                 final fileMap = f as Map;
-
                 return {
                   'name': fileMap['name'] as String? ?? '',
                   'length': fileMap['length'] as int? ?? 0,
@@ -823,27 +609,20 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   'speed': 0.0,
                 };
               }).toList();
-
               _isMetadataResolved = true;
-
               if (!_userEditedName) _setNameAndExt(_resolvedFileName);
-
               _selectedCategory = 'Archive';
             });
-
             return;
           }
         }
       }
-
       final engine = DownloadEngine();
-
       final nameForReq = _nameController.text.trim().isNotEmpty
-          ? '${_nameController.text}.${_extController.text}'
+          ? _composeFullName(
+              _nameController.text.trim(), _extController.text.trim())
           : null;
-
       DownloadMetadata meta;
-
       try {
         meta = await engine.resolveMetadata(
           url: url,
@@ -860,24 +639,15 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       } finally {
         engine.close();
       }
-
       if (!mounted) return;
-
       setState(() {
         _resolvedFileName = meta.fileName;
-
         _resolvedFileSize = meta.fileSize;
-
         _resolvedTorrentId = meta.torrentId;
-
         _resolvedCategory = meta.category;
-
         _torrentFiles = meta.torrentFiles ?? [];
-
         _isMetadataResolved = true;
-
         if (!_userEditedName) _setNameAndExt(_resolvedFileName);
-
         if (_categories.contains(_resolvedCategory)) {
           _selectedCategory = _resolvedCategory;
         }
@@ -897,72 +667,45 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     }
   }
 
-  // ── LOGIC: duplicate handling / submit (unchanged) ──────────────────────
-
   Future<void> _handleDuplicateOrSubmit() async {
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
     final settings = context.read<SettingsProvider>();
-
     final isDark = settings.isDarkMode;
-
     final isRtl = L10n.isRtl(context);
-
     final provider = context.read<DownloadProvider>();
-
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-
     final urls = _urlController.text
         .split(RegExp(r'[\r\n]+'))
         .map((l) => l.trim())
         .where((l) => l.isNotEmpty)
         .toList();
-
     if (urls.length > 1) {
       var addedCount = 0;
-
       var duplicateCount = 0;
-
       var invalidCount = 0;
-
       for (final singleUrl in urls) {
         if (!isValidTransmissionUrl(singleUrl)) {
           invalidCount++;
           continue;
         }
-
         if (AddDownloadDialog.wasRecentlyAdded(singleUrl)) {
           duplicateCount++;
-
           continue;
         }
-
         final enteredName = _nameController.text.trim();
-
         final enteredExt = _extController.text.trim();
-
-        String fullName = enteredName;
-
-        if (enteredExt.isNotEmpty && !enteredName.endsWith(enteredExt)) {
-          fullName = '$enteredName.$enteredExt';
-        }
-
+        final String fullName = _composeFullName(enteredName, enteredExt);
         String singleName;
-
         if (fullName.isNotEmpty) {
           final safeName = safeFileName(fullName);
-
           final ext = p.extension(safeName);
-
           final base = p.basenameWithoutExtension(safeName);
-
           singleName = addedCount > 0 ? '${base}_$addedCount$ext' : safeName;
         } else {
           singleName = fileNameFromUrl(singleUrl);
         }
-
         try {
           await provider.addDownload(
             name: singleName,
@@ -981,13 +724,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             audioSize: _resolvedAudioSize ?? 0,
             thumbnailUrl: _resolvedThumbnailUrl,
           );
-
           addedCount++;
-
           AddDownloadDialog.recordAddedUrl(singleUrl);
         } catch (e) {
           if (!mounted) return;
-
           ThemedSnackbar.show(
             context,
             message: '$singleUrl: $e',
@@ -997,9 +737,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           );
         }
       }
-
       if (!mounted) return;
-
       final dupParts = <String>[];
       if (duplicateCount > 0) {
         dupParts.add(isRtl
@@ -1007,18 +745,15 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             : '$duplicateCount duplicate${duplicateCount != 1 ? 's' : ''}');
       }
       if (invalidCount > 0) {
-        dupParts.add(isRtl
-            ? '$invalidCount غير صالح'
-            : '$invalidCount invalid');
+        dupParts
+            .add(isRtl ? '$invalidCount غير صالح' : '$invalidCount invalid');
       }
-
       if (addedCount > 0) {
         final dupMsg = dupParts.isNotEmpty
             ? (isRtl
                 ? ' (${dupParts.join('، ')} تم تخطيه)'
                 : ' (${dupParts.join(', ')} skipped)')
             : '';
-
         ThemedSnackbar.show(
           context,
           message:
@@ -1028,7 +763,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           icon: Icons.check_circle_outline,
           isDarkMode: isDark,
         );
-
         if (mounted) setState(() => _isSubmitting = false);
         Navigator.pop(context);
       } else if (dupParts.isNotEmpty) {
@@ -1043,52 +777,32 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         );
         if (mounted) setState(() => _isSubmitting = false);
       }
-
       return;
     }
-
     final enteredName = _nameController.text.trim();
-
     final enteredExt = _extController.text.trim();
-
-    String fullEnteredName = enteredName;
-
-    if (enteredExt.isNotEmpty && !enteredName.endsWith(enteredExt)) {
-      fullEnteredName = '$enteredName.$enteredExt';
-    }
-
+    final String fullEnteredName = _composeFullName(enteredName, enteredExt);
     final singleUrl = urls.isNotEmpty ? urls.first : '';
-
     final finalFileName = fullEnteredName.isNotEmpty
         ? safeFileName(fullEnteredName)
         : fileNameFromUrl(singleUrl);
-
     final int finalSize = _isMetadataResolved ? _resolvedFileSize : 0;
-
     DownloadTask? duplicateTask;
-
     final trimmedUrl = singleUrl.trim();
-
     for (final task in provider.tasks) {
       final normalizedTaskUrl =
           task.url.trim().toLowerCase().replaceAll(RegExp(r'/+$'), '');
-
       final normalizedNewUrl =
           trimmedUrl.toLowerCase().replaceAll(RegExp(r'/+$'), '');
-
       final isSameUrl = normalizedTaskUrl == normalizedNewUrl;
-
       final isSameNameAndSize = finalSize > 0 &&
           task.fileName.toLowerCase() == finalFileName.toLowerCase() &&
           task.fileSize == finalSize;
-
       if (isSameUrl || isSameNameAndSize) {
         duplicateTask = task;
-
         break;
       }
     }
-
     if (duplicateTask != null) {
       showDialog(
         context: context,
@@ -1135,19 +849,14 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                 ),
                 onPressed: () async {
                   triggerHaptic(settings);
-
                   Navigator.pop(dialogContext);
-
                   try {
                     await provider.updateTaskUrlAndResume(
                       duplicateTask!.id,
                       singleUrl,
                     );
-
                     if (!mounted) return;
-
                     if (!context.mounted) return;
-
                     ThemedSnackbar.show(
                       context,
                       message: isRtl ? 'تم تحديث الرابط' : 'Link updated',
@@ -1156,14 +865,11 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       icon: Icons.check_circle_outline,
                       isDarkMode: isDark,
                     );
-
                     if (mounted) setState(() => _isSubmitting = false);
                     Navigator.pop(context);
                   } catch (e) {
                     if (!mounted) return;
-
                     if (!context.mounted) return;
-
                     ThemedSnackbar.show(
                       context,
                       message: e.toString(),
@@ -1198,16 +904,11 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                 ),
                 onPressed: () async {
                   triggerHaptic(settings);
-
                   Navigator.pop(dialogContext);
-
                   try {
                     await provider.startOverTask(duplicateTask!.id, singleUrl);
-
                     if (!mounted) return;
-
                     if (!context.mounted) return;
-
                     ThemedSnackbar.show(
                       context,
                       message: isRtl ? 'بدأ من جديد' : 'Started over',
@@ -1216,14 +917,11 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       icon: Icons.refresh,
                       isDarkMode: isDark,
                     );
-
                     if (mounted) setState(() => _isSubmitting = false);
                     Navigator.pop(context);
                   } catch (e) {
                     if (!mounted) return;
-
                     if (!context.mounted) return;
-
                     ThemedSnackbar.show(
                       context,
                       message: e.toString(),
@@ -1259,34 +957,23 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                 ),
                 onPressed: () async {
                   triggerHaptic(settings);
-
                   Navigator.pop(dialogContext);
-
                   String numberedName = finalFileName;
-
                   final ext = p.extension(finalFileName);
-
                   final base = p.basenameWithoutExtension(finalFileName);
-
                   var counter = 1;
-
                   while (true) {
                     final candidate = '${base}_$counter$ext';
-
                     final exists = provider.tasks.any(
                       (t) =>
                           t.fileName.toLowerCase() == candidate.toLowerCase(),
                     );
-
                     if (!exists) {
                       numberedName = candidate;
-
                       break;
                     }
-
                     counter++;
                   }
-
                   try {
                     await provider.addDownload(
                       name: numberedName,
@@ -1307,20 +994,14 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       audioSize: _resolvedAudioSize ?? 0,
                       thumbnailUrl: _resolvedThumbnailUrl,
                     );
-
                     if (!mounted) return;
-
                     if (!context.mounted) return;
-
                     AddDownloadDialog.recordAddedUrl(singleUrl);
-
                     if (mounted) setState(() => _isSubmitting = false);
                     Navigator.pop(context);
                   } catch (e) {
                     if (!mounted) return;
-
                     if (!context.mounted) return;
-
                     ThemedSnackbar.show(
                       context,
                       message: e.toString(),
@@ -1344,7 +1025,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
               TextButton(
                 onPressed: () {
                   triggerHaptic(settings);
-
                   if (mounted) setState(() => _isSubmitting = false);
                   Navigator.pop(dialogContext);
                 },
@@ -1378,11 +1058,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         audioSize: _resolvedAudioSize ?? 0,
         thumbnailUrl: _resolvedThumbnailUrl,
       );
-
       if (!mounted) return;
-
       if (!context.mounted) return;
-
       if (provider.lastError != null) {
         ThemedSnackbar.show(
           context,
@@ -1391,12 +1068,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           icon: Icons.error_outline,
           isDarkMode: isDark,
         );
-
         return;
       }
-
       AddDownloadDialog.recordAddedUrl(singleUrl);
-
       ThemedSnackbar.show(
         context,
         message: isRtl ? 'تم إنشاء الاتصال' : 'TRANSMISSION ESTABLISHED',
@@ -1404,14 +1078,11 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         icon: Icons.rocket_launch_outlined,
         isDarkMode: isDark,
       );
-
       if (mounted) setState(() => _isSubmitting = false);
       Navigator.pop(context);
     }
     if (mounted) setState(() => _isSubmitting = false);
   }
-
-  // ── UI ──────────────────────────────────────────────────────────────────
 
   bool get _urlValid {
     final lines = _urlController.text
@@ -1419,54 +1090,37 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         .map((l) => l.trim())
         .where((l) => l.isNotEmpty)
         .toList();
-
     return lines.isNotEmpty && lines.every((l) => isValidTransmissionUrl(l));
   }
 
   void _stepThread(int delta) {
     final idx = _threadsList.indexOf(_selectedThreads);
-
     final next = (idx + delta).clamp(0, _threadsList.length - 1);
-
     setState(() => _selectedThreads = _threadsList[next]);
-
     triggerHaptic(context.read<SettingsProvider>());
   }
 
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-
     final isBatterySaver = settings.batterySaverMode;
-
     final isDark = settings.isDarkMode;
-
     final isRtl = L10n.isRtl(context);
-
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-
     final secClr =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
-
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
-
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-
     final amberClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
-
     final borderClr = isDark ? AppTheme.border : AppTheme.lightBorder;
-
     final classicUi = settings.classicUi;
     final panelBg = classicUi
         ? (isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9))
         : (isDark
             ? AppTheme.surface.withValues(alpha: 0.4)
             : AppTheme.lightSurface.withValues(alpha: 0.4));
-
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -1480,7 +1134,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           child: Stack(
             children: [
               AbsorbPointer(
-                absorbing: (_isResolvingLink && !_isTorrentOrMagnet) || _isSubmitting,
+                absorbing:
+                    (_isResolvingLink && !_isTorrentOrMagnet) || _isSubmitting,
                 child: SingleChildScrollView(
                   child: Padding(
                     padding: EdgeInsets.only(
@@ -1495,8 +1150,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // ── Header ──
-
                           Row(
                             children: [
                               Container(
@@ -1562,12 +1215,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                   final messenger = ScaffoldMessenger.of(
                                     context,
                                   );
-
                                   final url = _urlController.text.trim();
-
                                   if (url.isEmpty) {
                                     messenger.removeCurrentSnackBar();
-
                                     messenger.showSnackBar(
                                       SnackBar(
                                         backgroundColor: Colors.transparent,
@@ -1595,12 +1245,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                         ),
                                       ),
                                     );
-
                                     return;
                                   }
-
                                   final uri = Uri.tryParse(url);
-
                                   if (uri != null && await canLaunchUrl(uri)) {
                                     await launchUrl(
                                       uri,
@@ -1608,7 +1255,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                     );
                                   } else if (mounted) {
                                     messenger.removeCurrentSnackBar();
-
                                     messenger.showSnackBar(
                                       SnackBar(
                                         backgroundColor: Colors.transparent,
@@ -1648,11 +1294,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               ),
                             ],
                           ),
-
                           const SizedBox(height: 20),
-
-                          // ── URL Console (hero) ──
-
                           _SectionLabel(
                             text: L10n.of(context, 'link_label'),
                             color: mutedClr,
@@ -1698,11 +1340,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               ],
                             ),
                           ),
-
                           const SizedBox(height: 8),
-
                           _CornerFrame(
-                            color: _urlController.text.isEmpty
+                            color: _urlController.text.trim().isEmpty
                                 ? borderClr
                                 : (_urlValid
                                     ? greenClr
@@ -1722,8 +1362,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                   ),
                                   child: Stack(
                                     children: [
-                                      // scanline sweep while focused
-
                                       if (_urlFocus.hasFocus && isDark)
                                         Positioned.fill(
                                           child: ClipRRect(
@@ -1739,7 +1377,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                           _scanController
                                                               .value -
                                                       60;
-
                                                   return Stack(
                                                     children: [
                                                       Positioned(
@@ -1777,7 +1414,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                             ),
                                           ),
                                         ),
-
                                       TextFormField(
                                         controller: _urlController,
                                         focusNode: _urlFocus,
@@ -1798,20 +1434,17 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                               'url_empty_error',
                                             );
                                           }
-
                                           final lines = val
                                               .split(RegExp(r'[\r\n]+'))
                                               .map((l) => l.trim())
                                               .where((l) => l.isNotEmpty)
                                               .toList();
-
                                           if (lines.isEmpty) {
                                             return L10n.of(
                                               context,
                                               'url_empty_error',
                                             );
                                           }
-
                                           for (final line in lines) {
                                             if (!isValidTransmissionUrl(line)) {
                                               return L10n.of(
@@ -1820,7 +1453,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                               );
                                             }
                                           }
-
                                           return null;
                                         },
                                         decoration: InputDecoration(
@@ -1900,8 +1532,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               },
                             ),
                           ),
-
-                          // FIX-INTEL: Show site intelligence chip
                           if (_urlAnalysis != null &&
                               _urlController.text.isNotEmpty)
                             Padding(
@@ -1909,23 +1539,17 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               child: _IntelligenceChip(
                                   analysis: _urlAnalysis!, isDark: isDark),
                             ),
-
-                          // live validation readout
-
                           AnimatedBuilder(
                             animation: _urlController,
                             builder: (context, child) {
                               if (_urlController.text.trim().isEmpty) {
                                 return const SizedBox.shrink();
                               }
-
                               final valid = _urlValid;
-
                               final lineCount = _urlController.text
                                   .split(RegExp(r'[\r\n]+'))
                                   .where((l) => l.trim().isNotEmpty)
                                   .length;
-
                               return Padding(
                                 padding: const EdgeInsets.only(top: 6),
                                 child: Row(
@@ -1970,11 +1594,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               );
                             },
                           ),
-
                           const SizedBox(height: 14),
-
-                          // ── File config row ──
-
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -2007,7 +1627,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                   'filename_empty_error',
                                                 );
                                               }
-
                                               return null;
                                             },
                                             decoration: InputDecoration(
@@ -2256,7 +1875,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                           onChanged: (val) {
                                             if (val != null) {
                                               runHaptic(settings);
-
                                               setState(
                                                 () => _selectedCategory = val,
                                               );
@@ -2270,16 +1888,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               ),
                             ],
                           ),
-
                           const SizedBox(height: 16),
-
-                          // ── Threads + toggles ──
-
                           Row(
                             children: [
                               if (!_isTorrentOrMagnet) ...[
-                                // Thread stepper
-
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -2339,12 +1951,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                     ],
                                   ),
                                 ),
-
                                 const SizedBox(width: 12),
                               ],
-
-                              // Quick toggles
-
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2383,15 +1991,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               ),
                             ],
                           ),
-
                           const SizedBox(height: 12),
-
-                          // ── Advanced collapse ──
-
                           GestureDetector(
                             onTap: () {
                               triggerHaptic(settings);
-
                               setState(() => _showAdvanced = !_showAdvanced);
                             },
                             child: Container(
@@ -2438,16 +2041,12 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               ),
                             ),
                           ),
-
                           AnimatedCrossFade(
                             firstChild: const SizedBox(width: double.infinity),
                             secondChild: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const SizedBox(height: 10),
-
-                                // ── Referrer ──
-
                                 TextFormField(
                                   controller: _referrerController,
                                   style: TextStyle(
@@ -2512,18 +2111,12 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                     ),
                                   ),
                                 ),
-
                                 const SizedBox(height: 12),
-
-                                // ── Save path ──
-
                                 _SectionLabel(
                                   text: L10n.of(context, 'save_path_label'),
                                   color: mutedClr,
                                 ),
-
                                 const SizedBox(height: 8),
-
                                 Row(
                                   children: [
                                     Expanded(
@@ -2539,7 +2132,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                               val.trim().isEmpty) {
                                             return 'Save path cannot be empty';
                                           }
-
                                           return null;
                                         },
                                         decoration: InputDecoration(
@@ -2613,14 +2205,12 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                       color: blueClr,
                                       onTap: () async {
                                         runHaptic(settings);
-
                                         try {
                                           final result = await FilePicker
                                                   .getDirectoryPath()
                                               .timeout(
                                             const Duration(seconds: 30),
                                           );
-
                                           if (result != null) {
                                             setState(
                                               () =>
@@ -2644,9 +2234,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                     ),
                                   ],
                                 ),
-
                                 const SizedBox(height: 12),
-
                                 _ToggleRow(
                                   icon: Icons.route_rounded,
                                   label: L10n.of(context, 'use_proxy_label'),
@@ -2656,9 +2244,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                   onChanged: (v) =>
                                       setState(() => _useProxy = v),
                                 ),
-
                                 const SizedBox(height: 8),
-
                                 _ToggleRow(
                                   icon: Icons.schedule_rounded,
                                   label: isRtl ? 'جدولة' : 'Schedule',
@@ -2668,7 +2254,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                   onChanged: (v) {
                                     setState(() {
                                       _isScheduled = v;
-
                                       if (_isScheduled &&
                                           _scheduledDateTime == null) {
                                         _scheduledDateTime = DateTime.now().add(
@@ -2678,13 +2263,11 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                     });
                                   },
                                 ),
-
                                 if (_isScheduled) ...[
                                   const SizedBox(height: 8),
                                   GestureDetector(
                                     onTap: () async {
                                       final now = DateTime.now();
-
                                       final date = await showDatePicker(
                                         context: context,
                                         initialDate: _scheduledDateTime ??
@@ -2694,10 +2277,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                           const Duration(days: 365),
                                         ),
                                       );
-
                                       if (date != null && mounted) {
                                         if (!context.mounted) return;
-
                                         final time = await showTimePicker(
                                           context: context,
                                           initialTime: TimeOfDay.fromDateTime(
@@ -2707,7 +2288,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                 ),
                                           ),
                                         );
-
                                         if (time != null && mounted) {
                                           setState(() {
                                             _scheduledDateTime = DateTime(
@@ -2771,9 +2351,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                 : CrossFadeState.showFirst,
                             duration: const Duration(milliseconds: 220),
                           ),
-
-                          // ── Torrent files panel ──
-
                           if (_torrentFiles.isNotEmpty) ...[
                             const SizedBox(height: 16),
                             _TorrentFilesPanel(
@@ -2783,23 +2360,17 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               borderClr: borderClr,
                               onToggle: (i, v) {
                                 _torrentFiles[i]['selected'] = v;
-
                                 _updateSelectedTorrentSize();
                               },
                               onSelectAll: (v) {
                                 for (final f in _torrentFiles) {
                                   f['selected'] = v;
                                 }
-
                                 _updateSelectedTorrentSize();
                               },
                             ),
                           ],
-
                           const SizedBox(height: 20),
-
-                          // ── Footer ──
-
                           Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
@@ -2857,7 +2428,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                 ),
                               const SizedBox(width: 4),
                               NeonGlowButton(
-                                onPressed: ((_isResolvingLink && !_isTorrentOrMagnet) || _isSubmitting)
+                                onPressed: ((_isResolvingLink &&
+                                            !_isTorrentOrMagnet) ||
+                                        _isSubmitting)
                                     ? null
                                     : () {
                                         if (_formKey.currentState!.validate()) {
@@ -2874,7 +2447,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                             : 'Adding...')
                                         : L10n.of(context, 'add_btn'),
                                 icon: Icons.add_circle_outline,
-                                isLoading: (_isResolvingLink && !_isTorrentOrMagnet) || _isSubmitting,
+                                isLoading:
+                                    (_isResolvingLink && !_isTorrentOrMagnet) ||
+                                        _isSubmitting,
                                 color: greenClr,
                                 glowColor: greenClr,
                                 isExpanded: false,
@@ -2896,17 +2471,11 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   }
 }
 
-// ── Small presentational helpers ──────────────────────────────────────────
-
 class _SectionLabel extends StatelessWidget {
   final String text;
-
   final Color color;
-
   final Widget? trailing;
-
   const _SectionLabel({required this.text, required this.color, this.trailing});
-
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -2929,20 +2498,15 @@ class _SectionLabel extends StatelessWidget {
 
 class _CornerFrame extends StatelessWidget {
   final Widget child;
-
   final Color color;
-
   const _CornerFrame({required this.child, required this.color});
-
   @override
   Widget build(BuildContext context) {
     const len = 12.0;
-
     Widget bracket(bool top, bool left) => CustomPaint(
           size: const Size(len, len),
           painter: _BracketPainter(color: color, top: top, left: left),
         );
-
     return Stack(
       children: [
         Padding(padding: const EdgeInsets.all(5), child: child),
@@ -2957,13 +2521,9 @@ class _CornerFrame extends StatelessWidget {
 
 class _BracketPainter extends CustomPainter {
   final Color color;
-
   final bool top;
-
   final bool left;
-
   _BracketPainter({required this.color, required this.top, required this.left});
-
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
@@ -2971,35 +2531,24 @@ class _BracketPainter extends CustomPainter {
       ..strokeWidth = 1.6
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-
     final path = Path();
-
     if (top && left) {
       path.moveTo(0, size.height);
-
       path.lineTo(0, 0);
-
       path.lineTo(size.width, 0);
     } else if (top && !left) {
       path.moveTo(0, 0);
-
       path.lineTo(size.width, 0);
-
       path.lineTo(size.width, size.height);
     } else if (!top && left) {
       path.moveTo(0, 0);
-
       path.lineTo(0, size.height);
-
       path.lineTo(size.width, size.height);
     } else {
       path.moveTo(size.width, 0);
-
       path.lineTo(size.width, size.height);
-
       path.lineTo(0, size.height);
     }
-
     canvas.drawPath(path, paint);
   }
 
@@ -3013,20 +2562,15 @@ class _BracketPainter extends CustomPainter {
 
 class _HeaderAction extends StatelessWidget {
   final IconData icon;
-
   final String tooltip;
-
   final Color color;
-
   final VoidCallback onTap;
-
   const _HeaderAction({
     required this.icon,
     required this.tooltip,
     required this.color,
     required this.onTap,
   });
-
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -3051,9 +2595,7 @@ class _HeaderAction extends StatelessWidget {
 class _IntelligenceChip extends StatelessWidget {
   final UrlAnalysisResult analysis;
   final bool isDark;
-
   const _IntelligenceChip({required this.analysis, required this.isDark});
-
   @override
   Widget build(BuildContext context) {
     final accent = (analysis.siteType == SiteType.videoStreaming ||
@@ -3062,14 +2604,12 @@ class _IntelligenceChip extends StatelessWidget {
         : (analysis.siteType == SiteType.magnetSource
             ? AppTheme.neonViolet
             : AppTheme.neonGreen);
-
     final icon = (analysis.siteType == SiteType.videoStreaming ||
             analysis.contentHint == ContentHint.videoFile)
         ? Icons.play_circle_outline
         : (analysis.siteType == SiteType.magnetSource
             ? Icons.link_rounded
             : Icons.info_outline);
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -3116,17 +2656,13 @@ class _IntelligenceChip extends StatelessWidget {
 
 class _SquareButton extends StatelessWidget {
   final IconData icon;
-
   final Color color;
-
   final VoidCallback onTap;
-
   const _SquareButton({
     required this.icon,
     required this.color,
     required this.onTap,
   });
-
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -3151,17 +2687,13 @@ class _SquareButton extends StatelessWidget {
 
 class _StepBtn extends StatelessWidget {
   final IconData icon;
-
   final VoidCallback? onTap;
-
   final Color color;
-
   const _StepBtn({
     required this.icon,
     required this.onTap,
     required this.color,
   });
-
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -3183,17 +2715,11 @@ class _StepBtn extends StatelessWidget {
 
 class _ToggleChip extends StatelessWidget {
   final IconData icon;
-
   final String label;
-
   final bool active;
-
   final Color color;
-
   final bool isDark;
-
   final VoidCallback onTap;
-
   const _ToggleChip({
     required this.icon,
     required this.label,
@@ -3202,7 +2728,6 @@ class _ToggleChip extends StatelessWidget {
     required this.isDark,
     required this.onTap,
   });
-
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -3251,17 +2776,11 @@ class _ToggleChip extends StatelessWidget {
 
 class _ToggleRow extends StatelessWidget {
   final IconData icon;
-
   final String label;
-
   final bool value;
-
   final Color color;
-
   final bool isDark;
-
   final ValueChanged<bool> onChanged;
-
   const _ToggleRow({
     required this.icon,
     required this.label,
@@ -3270,7 +2789,6 @@ class _ToggleRow extends StatelessWidget {
     required this.isDark,
     required this.onChanged,
   });
-
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -3305,17 +2823,11 @@ class _ToggleRow extends StatelessWidget {
 
 class _TorrentFilesPanel extends StatelessWidget {
   final List<Map<String, dynamic>> files;
-
   final bool isDark;
-
   final Color panelBg;
-
   final Color borderClr;
-
   final void Function(int, bool) onToggle;
-
   final void Function(bool) onSelectAll;
-
   const _TorrentFilesPanel({
     required this.files,
     required this.isDark,
@@ -3324,13 +2836,10 @@ class _TorrentFilesPanel extends StatelessWidget {
     required this.onToggle,
     required this.onSelectAll,
   });
-
   @override
   Widget build(BuildContext context) {
     final violet = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-
     final selectedCount = files.where((f) => f['selected'] == true).length;
-
     return Container(
       decoration: BoxDecoration(
         color: panelBg,
@@ -3417,16 +2926,12 @@ class _TorrentFilesPanel extends StatelessWidget {
                   Divider(color: borderClr.withValues(alpha: 0.3), height: 1),
               itemBuilder: (ctx, idx) {
                 final file = files[idx];
-
                 final isSelected = file['selected'] as bool? ?? true;
-
                 final fileName = (file['name'] as String? ?? '').replaceAll(
                   '+',
                   ' ',
                 );
-
                 final length = (file['length'] as num?)?.toInt() ?? 0;
-
                 return Material(
                   color: Colors.transparent,
                   child: CheckboxListTile(

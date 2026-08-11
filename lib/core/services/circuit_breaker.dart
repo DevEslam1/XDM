@@ -1,13 +1,5 @@
-/// Current state of a [CircuitBreaker].
 enum CircuitBreakerState { closed, open, halfOpen }
 
-/// A stateful retry guard.
-///
-/// In the `closed` state every call is allowed; after [failureThreshold]
-/// consecutive failures the breaker trips to `open`, rejecting all calls for
-/// [openTimeout]. It then transitions to `halfOpen`, where a single probe is
-/// allowed: success re-arms the breaker, failure re-opens it. This prevents
-/// retry storms against a failing host.
 class CircuitBreaker {
   CircuitBreaker({
     this.failureThreshold = 3,
@@ -25,16 +17,13 @@ class CircuitBreaker {
   int _consecutiveFailures = 0;
   DateTime _lastStateChange = DateTime.fromMillisecondsSinceEpoch(0);
   bool _probeInFlight = false;
+  DateTime? _probeStartedAt;
 
   CircuitBreakerState get state => _state;
   int get consecutiveFailures => _consecutiveFailures;
-
-  /// Whether a new attempt is allowed right now.
   bool get isClosed => _state == CircuitBreakerState.closed;
   bool get isOpen => _state == CircuitBreakerState.open;
 
-  /// Whether a call may proceed. Re-opens or half-opens automatically based
-  /// on elapsed time.
   bool allowRequest() {
     final now = _clock();
     switch (_state) {
@@ -47,64 +36,59 @@ class CircuitBreaker {
         }
         return false;
       case CircuitBreakerState.halfOpen:
-        if (_probeInFlight) {
-          // If a probe has been in flight for longer than halfOpenTimeout,
-          // assume it was abandoned or timed out, and allow another probe.
-          // Reset the previous probe flag first.
-          if (now.difference(_lastStateChange) >= halfOpenTimeout) {
+        // If a probe is stuck, timeout and allow a new one
+        if (_probeInFlight && _probeStartedAt != null) {
+          if (now.difference(_probeStartedAt!) >= halfOpenTimeout) {
             _probeInFlight = false;
-            _transition(CircuitBreakerState.halfOpen, now);
-            _probeInFlight = true;
-            return true;
+          } else {
+            return false;
           }
-          return false;
         }
-        // Allow the first probe immediately upon entering halfOpen state.
-        _probeInFlight = true;
-        _lastStateChange = now; // Record when the probe was sent
-        return true;
+        
+        if (!_probeInFlight) {
+          _probeInFlight = true;
+          _probeStartedAt = now;
+          return true;
+        }
+        return false;
     }
   }
 
-  /// Records a successful attempt (re-arms the breaker).
   void recordSuccess() {
     _consecutiveFailures = 0;
     _probeInFlight = false;
+    _probeStartedAt = null;
     if (_state != CircuitBreakerState.closed) {
       _transition(CircuitBreakerState.closed, _clock());
     }
   }
 
   DateTime? _lastFailureTimestamp;
-
-  /// Records a failed attempt, tripping the breaker when the threshold is met.
-  /// Deduplicates concurrent failure reports within 500ms to prevent thread
-  /// amplification. The dedup only guards the open/halfOpen states, where a
-  /// burst of concurrent reports must not keep re-triggering transitions. In
-  /// the closed state every failure counts toward the threshold, so sequential
-  /// failures trip the breaker as expected.
   void recordFailure() {
     final now = _clock();
+    // Debounce rapid concurrent failures
     if (_state != CircuitBreakerState.closed &&
         _lastFailureTimestamp != null &&
         now.difference(_lastFailureTimestamp!) <
             const Duration(milliseconds: 500)) {
       return;
     }
+    
     _lastFailureTimestamp = now;
-
     _consecutiveFailures++;
     _probeInFlight = false;
+    _probeStartedAt = null;
+    
     if (_state == CircuitBreakerState.halfOpen ||
         _consecutiveFailures >= failureThreshold) {
       _transition(CircuitBreakerState.open, now);
     }
   }
 
-  /// Force-resets to the closed state.
   void reset() {
     _consecutiveFailures = 0;
     _probeInFlight = false;
+    _probeStartedAt = null;
     _transition(CircuitBreakerState.closed, _clock());
   }
 

@@ -25,7 +25,6 @@ import '../utils/bencode_decoder.dart';
 import '../utils/file_utils.dart';
 import '../utils/url_utils.dart';
 part 'download_isolate_pool.dart';
-
 class DownloadMetadata {
   final String fileName;
   final String category;
@@ -42,7 +41,6 @@ class DownloadMetadata {
     this.torrentId,
   });
 }
-
 class IsolateSpawnTimeoutException implements Exception {
   final String message;
   const IsolateSpawnTimeoutException([
@@ -51,7 +49,6 @@ class IsolateSpawnTimeoutException implements Exception {
   @override
   String toString() => 'IsolateSpawnTimeoutException: $message';
 }
-
 class InsufficientStorageException implements Exception {
   final String message;
   const InsufficientStorageException([
@@ -61,14 +58,12 @@ class InsufficientStorageException implements Exception {
   @override
   String toString() => 'InsufficientStorageException: $message';
 }
-
 class DownloadIntegrityException implements Exception {
   final String message;
   const DownloadIntegrityException(this.message);
   @override
   String toString() => 'DownloadIntegrityException: $message';
 }
-
 class UrlExpiredException implements Exception {
   final String message;
   final bool refreshAllMirrors;
@@ -76,7 +71,6 @@ class UrlExpiredException implements Exception {
   @override
   String toString() => 'UrlExpiredException: $message';
 }
-
 class TorrentEnginePauseException implements Exception {
   final String message;
   final String url;
@@ -84,7 +78,6 @@ class TorrentEnginePauseException implements Exception {
   @override
   String toString() => 'TorrentEnginePauseException: $message';
 }
-
 enum MergeFailureKind {
   missingBinary,
   formatMismatch,
@@ -93,7 +86,6 @@ enum MergeFailureKind {
   incompleteInput,
   unknown,
 }
-
 MergeFailureKind classifyMergeFailure(Object error) {
   final msg = error.toString().toLowerCase();
   if (msg.contains('no such file') ||
@@ -122,9 +114,7 @@ MergeFailureKind classifyMergeFailure(Object error) {
   }
   return MergeFailureKind.unknown;
 }
-
 enum YtStreamKind { video, audio, combined }
-
 class ChunkDetail {
   final int index;
   final int start;
@@ -161,7 +151,6 @@ class ChunkDetail {
     );
   }
 }
-
 class DownloadProgress {
   final int downloadedBytes;
   final int fileSize;
@@ -420,9 +409,7 @@ class DownloadProgress {
     }).toList();
   }
 }
-
 typedef ValueChangedProgress = void Function(DownloadProgress progress);
-
 class DownloadEngine {
   static const int _progressReportIntervalMs = 500;
   static const int _isolatePoolSize = 4;
@@ -1249,7 +1236,13 @@ class DownloadEngine {
       ));
     }
     final pool = await _ensurePool();
-    final job = pool.submit(command);
+    final PoolJob job;
+    try {
+      job = pool.submit(command);
+    } catch (e) {
+      _activeCancelTokens.remove(cancelToken);
+      rethrow;
+    }
     final completer = Completer<void>();
     bool acked = false;
     bool cancelRequested = false;
@@ -1298,7 +1291,7 @@ class DownloadEngine {
       int? ytPauseLiveCp =
           ytPauseCid != null ? DownloadEngine._ytLiveBytes[ytPauseCid] : null;
       if (ytPauseLiveCp == null && ytPauseCid != null) {
-        ytPauseLiveCp = ytCounterpartSize;
+        ytPauseLiveCp = ytCounterpartDownloadedBytes ?? 0;
       }
       onProgress(DownloadProgress(
         downloadedBytes: lastDownloadedBytes,
@@ -1333,6 +1326,7 @@ class DownloadEngine {
           acked = true;
           watchdog?.cancel();
           if (cancelRequested) job.cancel();
+          break;
         case 'error':
           resetInactivityTimer();
           final errData = message.data;
@@ -1354,7 +1348,7 @@ class DownloadEngine {
             int? ytUlcLiveCp =
                 ytUlcId != null ? DownloadEngine._ytLiveBytes[ytUlcId] : null;
             if (ytUlcLiveCp == null && ytUlcId != null) {
-              ytUlcLiveCp = ytCounterpartSize;
+              ytUlcLiveCp = ytCounterpartDownloadedBytes ?? 0;
             }
             final ytUlcLiveSelf = DownloadEngine._ytLiveBytes[taskId];
             onProgress(DownloadProgress(
@@ -1393,7 +1387,7 @@ class DownloadEngine {
           int? ytFailLiveCp =
               ytFailCid != null ? DownloadEngine._ytLiveBytes[ytFailCid] : null;
           if (ytFailLiveCp == null && ytFailCid != null) {
-            ytFailLiveCp = ytCounterpartSize;
+            ytFailLiveCp = ytCounterpartDownloadedBytes ?? 0;
           }
           onProgress(DownloadProgress(
             downloadedBytes: lastDownloadedBytes,
@@ -1506,7 +1500,7 @@ class DownloadEngine {
               ? DownloadEngine._ytLiveBytes[counterpartId]
               : null;
           if (liveCounterpart == null && counterpartId != null) {
-            liveCounterpart = ytCounterpartSize;
+            liveCounterpart = ytCounterpartDownloadedBytes ?? 0;
           }
           lastDownloadedBytes =
               (p['downloadedBytes'] as num?)?.toInt() ?? lastDownloadedBytes;
@@ -1621,6 +1615,7 @@ class DownloadEngine {
               downloadedFileBytes: lastDownloadedFileBytes,
             ));
           }
+          break;
         case 'done':
           if (ytStreamKind != null && lastFileSize > 0) {
             DownloadEngine._ytLiveBytes[taskId] = lastFileSize;
@@ -1645,7 +1640,7 @@ class DownloadEngine {
                 ? DownloadEngine._ytLiveBytes[ytDoneCid]
                 : null;
             if (ytDoneLiveCp == null && ytDoneCid != null) {
-              ytDoneLiveCp = ytCounterpartSize;
+              ytDoneLiveCp = ytCounterpartDownloadedBytes ?? 0;
             }
             if (lastFileSize > 0) {
               lastDownloadedBytes = lastFileSize;
@@ -1708,6 +1703,7 @@ class DownloadEngine {
               completer.complete();
             }
           }
+          break;
       }
     });
     try {
@@ -3063,7 +3059,6 @@ class DownloadEngine {
     return 'downloading';
   }
 }
-
 Dio buildTransferDio({
   String? url,
   String? customUserAgent,
@@ -3149,7 +3144,6 @@ Dio buildTransferDio({
   }
   return client;
 }
-
 Future<int> actualDownloadedBytes(
   String path, {
   required int threadCount,
@@ -3191,7 +3185,6 @@ Future<int> actualDownloadedBytes(
     return 0;
   }
 }
-
 String _redactUrl(String? url) {
   if (url == null || url.isEmpty) return '<empty>';
   final uri = Uri.tryParse(url);
@@ -3205,19 +3198,16 @@ String _redactUrl(String? url) {
   return '${uri.scheme.isEmpty ? 'https' : uri.scheme}://$host$port'
       '$redactedPath${uri.hasQuery ? '?<redacted>' : ''}';
 }
-
 bool _looksLikePathToken(String segment) {
   if (segment.isEmpty || segment.length < 24) return false;
   if (!RegExp(r'^[A-Za-z0-9._~-]+$').hasMatch(segment)) return false;
   return segment.contains(RegExp(r'[0-9]'));
 }
-
 String? _firstNonEmpty(String? a, String? b) {
   if (a != null && a.trim().isNotEmpty) return a;
   if (b != null && b.trim().isNotEmpty) return b;
   return null;
 }
-
 class _DiskSpaceInfo {
   final int freeBytes;
   const _DiskSpaceInfo({required this.freeBytes});

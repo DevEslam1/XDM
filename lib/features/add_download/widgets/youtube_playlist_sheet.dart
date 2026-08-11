@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
-
 import 'package:path/path.dart' as p;
-
 import '../../../core/app_theme.dart';
 import '../../../core/services/youtube_service.dart';
 import '../../../core/services/permission_service.dart';
@@ -18,12 +16,10 @@ import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
 
-/// Result returned when the user confirms playlist download.
 class PlaylistDownloadResult {
   final List<Map<String, dynamic>> selectedVideos;
   final String qualityPreset;
   final String playlistTitle;
-
   const PlaylistDownloadResult({
     required this.selectedVideos,
     required this.qualityPreset,
@@ -31,23 +27,16 @@ class PlaylistDownloadResult {
   });
 }
 
-/// A draggable bottom sheet that shows all videos in a YouTube playlist,
-/// lets the user select/deselect videos, pick a quality preset, and
-/// batch-enqueue them for download.
 class YoutubePlaylistSheet extends StatefulWidget {
   final String playlistUrl;
   const YoutubePlaylistSheet({super.key, required this.playlistUrl});
-
   static bool _isShowing = false;
-
-  /// Shows the sheet and returns the result, or null if dismissed.
   static Future<PlaylistDownloadResult?> show(
     BuildContext context,
     String playlistUrl,
   ) async {
     if (_isShowing) return null;
     _isShowing = true;
-
     try {
       final settings = Provider.of<SettingsProvider>(context, listen: false);
       runHaptic(settings);
@@ -65,7 +54,6 @@ class YoutubePlaylistSheet extends StatefulWidget {
       _isShowing = false;
     }
   }
-
   @override
   State<YoutubePlaylistSheet> createState() => _YoutubePlaylistSheetState();
 }
@@ -76,15 +64,11 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   bool _isLoading = true;
   bool _isLoadingMore = false;
   bool _hasMoreVideos = true;
-  // Use `dynamic` because the backend may return either an int or a String
-  // cursor token for playlist pagination. Casting to `int?` would throw at
-  // runtime when the backend returns a String.
   dynamic _nextPageToken;
   String? _errorMessage;
   String? _note;
   String _qualityPreset = 'best_combined';
   String _searchQuery = '';
-
   List<Map<String, dynamic>> get _filteredVideos {
     if (_searchQuery.isEmpty) return _videos;
     final query = _searchQuery.toLowerCase();
@@ -93,7 +77,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       return title.contains(query);
     }).toList();
   }
-
   static const List<Map<String, String>> _qualityOptions = [
     {'value': 'best_combined', 'label': 'Best Quality (Auto)'},
     {'value': '2160p', 'label': '2160p (4K Ultra HD)'},
@@ -107,38 +90,30 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     {'value': 'best_muxed', 'label': 'Best Compatible (.mp4)'},
     {'value': 'audio_only', 'label': 'Audio Only'},
   ];
-
   @override
   void initState() {
     super.initState();
     _fetchPlaylist();
   }
-
   Future<void> _loadMoreVideos() async {
     if (_isLoadingMore || !_hasMoreVideos || _nextPageToken == null) return;
     if (_searchQuery.isNotEmpty) return;
-
     setState(() => _isLoadingMore = true);
-
     try {
       final details = await YoutubeService.getPlaylistDetails(
         widget.playlistUrl,
         pageToken: _nextPageToken,
       );
-
       if (!mounted) return;
-
       final videos = List<Map<String, dynamic>>.from(
         (details?['videos'] as List?)?.map(
               (e) => Map<String, dynamic>.from(e as Map),
             ) ??
             [],
       );
-
       setState(() {
         _videos.addAll(videos);
         _hasMoreVideos = videos.isNotEmpty;
-        // No cast: token may be int or String depending on backend.
         _nextPageToken = details?['nextPageToken'];
         _isLoadingMore = false;
       });
@@ -147,14 +122,12 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       setState(() => _isLoadingMore = false);
     }
   }
-
   Future<void> _fetchPlaylist() async {
     try {
       final details = await YoutubeService.getPlaylistDetails(
         widget.playlistUrl,
         pageSize: 50,
       );
-
       if (!mounted) return;
       final info = details?['info'] as Map<String, dynamic>?;
       final videos = List<Map<String, dynamic>>.from(
@@ -163,15 +136,12 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
             ) ??
             [],
       );
-
       final note = details?['note'] as String?;
-
       setState(() {
         _playlistInfo = info;
         _videos = videos;
         _note = note;
         _isLoading = false;
-        // No cast: token may be int or String depending on backend.
         _nextPageToken = details?['nextPageToken'];
         _hasMoreVideos = _nextPageToken != null || videos.length >= 50;
         if (videos.isEmpty && info != null) {
@@ -195,10 +165,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       });
     }
   }
-
   int get _selectedCount =>
       _filteredVideos.where((v) => v['selected'] == true).length;
-
   void _toggleAll(bool selected) {
     setState(() {
       for (int i = 0; i < _filteredVideos.length; i++) {
@@ -209,12 +177,10 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       }
     });
   }
-
   Future<void> _startBatchDownload() async {
     final provider = context.read<DownloadProvider>();
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
-
     String savePath;
     try {
       savePath = settings.customDownloadPath?.isNotEmpty == true
@@ -233,32 +199,25 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       );
       return;
     }
-
     final playlistId = YoutubeService.extractPlaylistId(widget.playlistUrl) ??
         widget.playlistUrl;
     final playlistTitle = _playlistInfo?['title'] as String? ?? 'Playlist';
-
     final selectedVideos = _videos.where((v) => v['selected'] == true).toList();
-
     if (selectedVideos.isEmpty) return;
-
-    // ── Build ALL tasks up-front (no awaiting, no pumping) ──
     final batchTasks = <DownloadTask>[];
     final now = DateTime.now();
-
     for (int i = 0; i < selectedVideos.length; i++) {
       final video = selectedVideos[i];
-      final videoId = video['id'] as String;
+      final videoId = video['id'] as String? ?? '';
+      if (videoId.isEmpty) continue;
       final videoTitle = video['title'] as String? ?? 'video_$videoId';
       final videoThumbnail =
           video['thumbnailUrl'] ?? video['thumbnail'] ?? video['thumbnail_url'];
       final videoUrl = YoutubeService.videoUrl(videoId);
-
       final ext = _qualityPreset == 'audio_only' ? 'm4a' : 'mp4';
       final displayQuality =
           _qualityPreset == 'audio_only' ? 'Audio' : _qualityPreset;
       final fileName = safeFileName('$videoTitle [$displayQuality].$ext');
-
       batchTasks.add(DownloadTask(
         id: '${now.microsecondsSinceEpoch}_$i',
         fileName: fileName,
@@ -292,15 +251,11 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
         audioSize: 0,
       ));
     }
-
-    // ── Single call: adds all, saves all, pumps once ──
     await provider.addBatchDownloads(
       tasks: batchTasks,
       savePath: savePath,
     );
-
     if (!mounted) return;
-
     ThemedSnackbar.show(
       context,
       message: L10n.isRtl(context)
@@ -310,10 +265,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       icon: Icons.check_circle_outline,
       isDarkMode: isDark,
     );
-
     Navigator.of(context).pop();
   }
-
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
@@ -326,7 +279,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
     final glassBorder =
         isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
-
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.85,
@@ -349,7 +301,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
               ),
               child: Column(
                 children: [
-                  // Handle bar
                   Center(
                     child: Container(
                       width: 40,
@@ -361,8 +312,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                       ),
                     ),
                   ),
-
-                  // Header
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
@@ -418,8 +367,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                       ],
                     ),
                   ),
-
-                  // Legal Warning Banner
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
@@ -456,8 +403,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                       ),
                     ),
                   ),
-
-                  // Loading / Error / Content
                   if (_isLoading)
                     Expanded(
                       child: Center(
@@ -580,7 +525,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                           ),
                         ),
                       ),
-                    // Playlist info bar
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 20,
@@ -612,7 +556,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                             style: TextStyle(color: mutedClr, fontSize: 10),
                           ),
                           const Spacer(),
-                          // Select all / deselect all
                           TextButton.icon(
                             onPressed: () {
                               runHaptic(settings);
@@ -643,8 +586,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                         ],
                       ),
                     ),
-
-                    // Search field
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                       child: TextField(
@@ -689,10 +630,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                         style: TextStyle(color: textClr, fontSize: 13),
                       ),
                     ),
-
                     const Divider(height: 1, thickness: 0.5),
-
-                    // Video list
                     Expanded(
                       child: NotificationListener<ScrollNotification>(
                         onNotification: (ScrollNotification scrollInfo) {
@@ -737,7 +675,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                             final author = video['author'] as String? ?? '';
                             final thumbnailUrl =
                                 video['thumbnailUrl'] as String?;
-
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 6),
                               child: GlassCard(
@@ -771,7 +708,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                       ),
                                       child: Row(
                                         children: [
-                                          // Checkbox
                                           SizedBox(
                                             width: 24,
                                             height: 24,
@@ -799,8 +735,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                             ),
                                           ),
                                           const SizedBox(width: 10),
-
-                                          // Thumbnail
                                           ClipRRect(
                                             borderRadius: BorderRadius.circular(
                                               8,
@@ -812,9 +746,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                                       thumbnailUrl.isNotEmpty
                                                   ? CachedNetworkImage(
                                                       imageUrl: thumbnailUrl
-                                                              .startsWith(
-                                                        '//',
-                                                      )
+                                                              .startsWith('//')
                                                           ? 'https:$thumbnailUrl'
                                                           : thumbnailUrl,
                                                       fit: BoxFit.cover,
@@ -880,8 +812,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                             ),
                                           ),
                                           const SizedBox(width: 10),
-
-                                          // Title & info
                                           Expanded(
                                             child: Column(
                                               crossAxisAlignment:
@@ -943,8 +873,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                               ],
                                             ),
                                           ),
-
-                                          // Index number
                                           Text(
                                             '#${index + 1}',
                                             style: TextStyle(
@@ -964,8 +892,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                         ),
                       ),
                     ),
-
-                    // Bottom action bar
                     Container(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                       decoration: BoxDecoration(
@@ -981,7 +907,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Quality selector
                             Row(
                               children: [
                                 Text(
