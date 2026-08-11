@@ -475,23 +475,31 @@ class DatabaseService {
   Future<void> _backupHiveBox(dynamic box, String boxName) async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final backupDir = Directory(p.join(dir.path, 'hive_backups'));
-      if (!await backupDir.exists()) {
-        await backupDir.create(recursive: true);
+      final backupParentDir = Directory(p.join(dir.path, 'hive_backups'));
+      if (!await backupParentDir.exists()) {
+        await backupParentDir.create(recursive: true);
       }
-      final backupPath = p.join(backupDir.path, '${boxName}_backup.hive');
+      final backupPath = p.join(backupParentDir.path, '${boxName}_backup.hive');
       // Hive Box.path is String?
       final String? boxPath =
           box is Box ? box.path : (box as dynamic).path as String?;
       if (boxPath != null) {
+        final srcFile = File(boxPath);
         final srcDir = Directory(boxPath);
-        if (await srcDir.exists()) {
+        if (await srcFile.exists()) {
           final backupFile = File(backupPath);
           if (await backupFile.exists()) {
             await backupFile.delete();
           }
+          await srcFile.copy(backupPath);
+          _log.info('Backed up Hive box file $boxName to $backupPath');
+        } else if (await srcDir.exists()) {
+          final backupDir = Directory(backupPath);
+          if (await backupDir.exists()) {
+            await backupDir.delete(recursive: true);
+          }
           await srcDir.rename(backupPath);
-          _log.info('Backed up Hive box $boxName to $backupPath');
+          _log.info('Backed up Hive box dir $boxName to $backupPath');
         }
       }
     } catch (e) {
@@ -815,10 +823,9 @@ class DatabaseService {
       ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
       ..limit(effectiveMax);
 
-    // FIX-BH-06: Support search filtering by URL or title.
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
-      final pattern = '%${searchQuery.trim()}%';
-      query.where((t) => t.url.like(pattern) | t.title.like(pattern));
+      final term = searchQuery.trim();
+      query.where((t) => t.url.contains(term) | t.title.contains(term));
     }
 
     final rows = await query.get();

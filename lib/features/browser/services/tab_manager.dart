@@ -62,6 +62,13 @@ class TabManager extends ChangeNotifier {
   final List<Timer> pendingTimers = [];
   final Set<String> _disposedTabIds = {};
 
+  void _recordDisposedTabId(String id) {
+    _disposedTabIds.add(id);
+    if (_disposedTabIds.length > 300) {
+      _disposedTabIds.remove(_disposedTabIds.first);
+    }
+  }
+
   List<BrowserTab> get tabs => List.unmodifiable(_tabs);
   int get currentIndex => _currentIndex;
   set currentIndex(int value) {
@@ -180,7 +187,7 @@ class TabManager extends ChangeNotifier {
     // Post-frame disposal prevents double-dispose or widget unmount crashes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_disposedTabIds.contains(closingTab.id)) {
-        _disposedTabIds.add(closingTab.id);
+        _recordDisposedTabId(closingTab.id);
         closingTab.dispose();
       }
     });
@@ -191,7 +198,7 @@ class TabManager extends ChangeNotifier {
     for (final tab in _tabs) {
       cleanupTabState(tab.id);
       if (!_disposedTabIds.contains(tab.id)) {
-        _disposedTabIds.add(tab.id);
+        _recordDisposedTabId(tab.id);
         try {
           tab.dispose();
         } catch (_) {}

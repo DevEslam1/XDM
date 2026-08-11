@@ -90,7 +90,8 @@ class ServerProfileManager {
       return Duration(seconds: (attemptNumber * 30).clamp(30, 300));
     }
 
-    return Duration(seconds: (pow(2, attemptNumber) * 5).toInt().clamp(5, 120));
+    final safeAttempt = attemptNumber.clamp(0, 20);
+    return Duration(seconds: (pow(2, safeAttempt) * 5).toInt().clamp(5, 120));
   }
 
   static void _evictIfNeeded() {

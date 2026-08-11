@@ -922,14 +922,17 @@ class DownloadProvider extends ChangeNotifier
       if (!hasActiveStream &&
           task.status != DownloadStatus.completed &&
           task.status != DownloadStatus.failed) {
+        final wasAlreadyPaused = task.status == DownloadStatus.paused;
         return task.copyWith(
           status: DownloadStatus.paused,
-          pausedByUser: true,
+          pausedByUser: wasAlreadyPaused ? task.pausedByUser : true,
           speed: 0,
           clearEta: true,
-          errorMessage: task.status == DownloadStatus.merging
-              ? 'Merge was interrupted. Tap Resume/Retry to continue.'
-              : DownloadStatusMessages.pausedOrphaned,
+          errorMessage: wasAlreadyPaused
+              ? task.errorMessage
+              : (task.status == DownloadStatus.merging
+                  ? 'Merge was interrupted. Tap Resume/Retry to continue.'
+                  : DownloadStatusMessages.pausedOrphaned),
         );
       }
 
@@ -2592,6 +2595,30 @@ class DownloadProvider extends ChangeNotifier
         errMsg.contains('missing');
 
     // Resource identity changed or non-resumeable auth/gone error force a clean state wipe:
+    var youtubeIdentityChanged = false;
+    if (task.youtubeQualityPreset != null &&
+        task.downloadPageUrl != null &&
+        task.downloadPageUrl!.isNotEmpty) {
+      try {
+        final fresh = await YoutubeService.getFreshStreams(
+          task.downloadPageUrl!,
+          preferredType: task.youtubePreferredType,
+        );
+        if (fresh != null && fresh['url'] != null) {
+          final newUrl = fresh['url'] as String;
+          if (youtubeStreamIdentityChanged(task.url, newUrl)) {
+            youtubeIdentityChanged = true;
+          }
+          task = task.copyWith(
+            url: newUrl,
+            mergedAudioUrl: fresh['audioUrl'] ?? task.mergedAudioUrl,
+          );
+        }
+      } catch (e) {
+        debugPrint('[DMX] YouTube refresh probe during retryTask failed: $e');
+      }
+    }
+
     final shouldClearState = family == ErrorFamily.integrity ||
         family == ErrorFamily.auth ||
         status == 410 ||
@@ -2603,7 +2630,8 @@ class DownloadProvider extends ChangeNotifier
         errMsg.contains('expired') ||
         errMsg.contains('sign in to confirm');
 
-    final shouldResetAllProgressMetadata = shouldClearState || isUnrecoverable;
+    final shouldResetAllProgressMetadata =
+        shouldClearState || isUnrecoverable || youtubeIdentityChanged;
 
     if (shouldResetAllProgressMetadata) {
       debugPrint(
@@ -2816,7 +2844,8 @@ class DownloadProvider extends ChangeNotifier
     await _setTask(
       task.copyWith(
         status: DownloadStatus.queued,
-        downloadedBytes: finalDownloadedBytes,
+        downloadedBytes:
+            shouldResetAllProgressMetadata ? 0 : finalDownloadedBytes,
         chunks: chunks,
         audioProgress: task.audioSize > 0 && audioBytes > 0
             ? (audioBytes / task.audioSize).clamp(0.0, 1.0)

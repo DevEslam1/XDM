@@ -1,10 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/services/user_script_manager.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
+import '../../../shared/design/dmx_design.dart';
 import '../../settings/provider/settings_provider.dart';
 
 class ScriptManagerScreen extends StatefulWidget {
@@ -73,7 +74,15 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
   }
 
   Future<void> _delete(UserScript script) async {
-    await _manager.remove(script.id);
+    final confirmed = await DmxConfirmDialog.show(
+      context,
+      title: '${L10n.of(context, 'delete_btn')} Script',
+      message: 'Are you sure you want to delete "${script.name}"?',
+      isDestructive: true,
+    );
+    if (confirmed == true) {
+      await _manager.remove(script.id);
+    }
   }
 
   @override

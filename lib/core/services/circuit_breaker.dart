@@ -47,12 +47,22 @@ class CircuitBreaker {
         }
         return false;
       case CircuitBreakerState.halfOpen:
-        if (_probeInFlight) return false;
-        if (now.difference(_lastStateChange) >= halfOpenTimeout) {
-          _probeInFlight = true;
-          return true;
+        if (_probeInFlight) {
+          // If a probe has been in flight for longer than halfOpenTimeout,
+          // assume it was abandoned or timed out, and allow another probe.
+          // This prevents a stuck probe from blocking the circuit breaker
+          // forever.
+          if (now.difference(_lastStateChange) >= halfOpenTimeout) {
+            _probeInFlight = true;
+            _lastStateChange = now;
+            return true;
+          }
+          return false;
         }
-        return false;
+        // Allow the first probe immediately upon entering halfOpen state.
+        _probeInFlight = true;
+        _lastStateChange = now; // Record when the probe was sent
+        return true;
     }
   }
 

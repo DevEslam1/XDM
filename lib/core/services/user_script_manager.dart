@@ -333,7 +333,7 @@ if (!window['$marker']) {
       try {
         ${script.code}
       } catch(e) {
-        console.error('[DMX UserScript Error] ${script.name}:', e);
+        console.error('[DMX UserScript Error] ' + ${jsonEncode(script.name)} + ':', e);
       }
     })(sandbox, sandbox, sandbox);
   })();

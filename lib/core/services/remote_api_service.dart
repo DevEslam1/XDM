@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:dmx/core/services/logging_service.dart';
+import '../utils/crypto_utils.dart';
 
 class RemoteApiService {
   static HttpServer? _server;
@@ -139,7 +140,7 @@ class RemoteApiService {
             return;
           }
           final token = authHeader.substring(7).trim();
-          if (!_timingSafeEqual(token, _bearerToken!)) {
+          if (!timingSafeEqual(token, _bearerToken!)) {
             request.response.statusCode = 401;
             request.response.write(jsonEncode({'error': 'Invalid token'}));
             await request.response.close();
@@ -321,24 +322,6 @@ class RemoteApiService {
     }
   }
 
-  /// Timing-safe string comparison to prevent timing side-channel attacks.
-  /// Pads both inputs to [_maxTokenLength] so that length mismatches do not
-  /// short-circuit and leak the token length.
-  static const int _maxTokenLength = 256;
-
-  static bool _timingSafeEqual(String a, String b) {
-    // If either string exceeds the expected max length, they cannot match.
-    // The length check itself is O(1) and safe because legitimate tokens
-    // are always well under [_maxTokenLength].
-    if (a.length > _maxTokenLength || b.length > _maxTokenLength) return false;
-    final paddedA = a.padRight(_maxTokenLength, '\x00');
-    final paddedB = b.padRight(_maxTokenLength, '\x00');
-    int result = 0;
-    for (int i = 0; i < _maxTokenLength; i++) {
-      result |= paddedA.codeUnitAt(i) ^ paddedB.codeUnitAt(i);
-    }
-    return result == 0;
-  }
 
   static void stop() {
     _server?.close(force: true);

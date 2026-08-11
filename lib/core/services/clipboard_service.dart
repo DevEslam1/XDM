@@ -37,14 +37,14 @@ class ClipboardService {
         _initFuture = null;
       }
     }
-    final completer = Completer<void>();
-    _initFuture = completer.future;
+    _initFuture = _doInit();
     try {
-      await _doInit();
-      completer.complete();
+      await _initFuture;
     } catch (e) {
       _initFuture = null;
-      completer.completeError(e);
+      LoggingService.logger('ClipboardService').warning(
+        '[ClipboardService] initialization failed: $e',
+      );
     }
   }
 
@@ -64,14 +64,11 @@ class ClipboardService {
   }
 
   /// Checks if there is a new valid HTTP/HTTPS URL on the clipboard.
-  /// Returns the URL if it's new, otherwise null. Only the *same* URL seen
-  /// again within 30 seconds is skipped (per-URL rate limit) to avoid
-  /// re-prompting without dropping genuinely new links. A different URL
-  /// always passes through immediately.
+  /// Returns the URL if it's new, otherwise null.
   Future<String?> checkClipboardForUrl() async {
-    await _initIfNeeded();
-
     try {
+      await _initIfNeeded();
+
       final prefs = await SharedPreferences.getInstance();
       final enabled = prefs.getBool('clipboard_monitoring_enabled') ?? false;
       if (!enabled) return null;

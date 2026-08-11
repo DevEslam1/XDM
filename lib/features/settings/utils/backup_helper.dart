@@ -7,12 +7,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:logging/logging.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
-import '../../../core/utils/haptic_helper.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../provider/settings_provider.dart';
 
-abstract final class BackupHelper with HapticHelper {
+abstract final class BackupHelper {
   static Future<String?> _showPasswordDialog(
     BuildContext context, {
     required bool isExport,

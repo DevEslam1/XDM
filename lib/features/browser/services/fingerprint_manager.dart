@@ -2,6 +2,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/browser_tab.dart';
+import 'ad_blocker_service.dart';
 
 /// Manages User-Agent spoofing and WebView fingerprint obfuscation
 /// for the XDM browser feature.
@@ -78,15 +79,24 @@ class FingerprintManager {
     SettingsProvider settings,
   ) async {
     try {
-      await tab.controller?.setSettings(
-        settings: InAppWebViewSettings(
-          userAgent: resolveUserAgent(
-            isIncognito: tab.isIncognito,
-            settings: settings,
-          ),
-          incognito: tab.isIncognito,
-        ),
+      final currentSettings = await tab.controller?.getSettings();
+      final ua = resolveUserAgent(
+        isIncognito: tab.isIncognito,
+        settings: settings,
       );
+      if (currentSettings != null) {
+        currentSettings.userAgent = ua;
+        currentSettings.incognito = tab.isIncognito;
+        await tab.controller?.setSettings(settings: currentSettings);
+      } else {
+        await tab.controller?.setSettings(
+          settings: InAppWebViewSettings(
+            userAgent: ua,
+            incognito: tab.isIncognito,
+            contentBlockers: AdBlockerService.instance.contentBlockers,
+          ),
+        );
+      }
     } catch (e) {
       _log.warning('[DMX Browser] UA apply failed for tab ${tab.id}: $e');
     }

@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/app_theme.dart';
@@ -146,9 +149,13 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
         }
       }
       final jsonStr = const JsonEncoder.withIndent('  ').convert(exportData);
+      final tempDir = await getTemporaryDirectory();
+      final name = _selectedTab == 0 ? 'xdm_surfing_history.json' : 'xdm_download_history.json';
+      final file = File(p.join(tempDir.path, name));
+      await file.writeAsString(jsonStr);
       await SharePlus.instance.share(
         ShareParams(
-          text: jsonStr,
+          files: [XFile(file.path)],
           subject: _selectedTab == 0
               ? 'XDM Surfing History'
               : 'XDM Download History',

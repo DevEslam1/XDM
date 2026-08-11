@@ -21,7 +21,7 @@ import '../../../core/services/download_journal.dart';
 import '../../../core/services/download_metrics.dart';
 
 import '../../../core/services/error_taxonomy.dart';
-import '../../../core/services/ffmpeg_mux_service.dart' hide Semaphore;
+import '../../../core/services/ffmpeg_mux_service.dart';
 import 'package:ffmpeg_kit_flutter_new_min/ffprobe_kit.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/torrent_resume_store.dart';
@@ -2756,7 +2756,34 @@ class DownloadOrchestrator {
               fresh['url'] != null &&
               fresh['url'] != task.url) {
             debugPrint('[DMX] R-2: Refreshing stale YouTube URL before start');
-            task = task.copyWith(url: fresh['url'] as String);
+            final newUrl = fresh['url'] as String;
+            final identityChanged =
+                DownloadProvider.youtubeStreamIdentityChanged(task.url, newUrl);
+            if (identityChanged) {
+              for (final path in [
+                task.tempFilePath,
+                '${task.tempFilePath}.dmxstate',
+                '${task.tempFilePath}.journal',
+                '${task.tempFilePath}.audio',
+                '${task.tempFilePath}.audio.dmxstate',
+                '${task.tempFilePath}.audio.journal',
+              ]) {
+                try {
+                  final f = File(path);
+                  if (await f.exists()) await f.delete();
+                } catch (_) {}
+              }
+              task = task.copyWith(
+                url: newUrl,
+                downloadedBytes: 0,
+                chunks: List<double>.filled(
+                    task.threadCount > 0 ? task.threadCount : 1, 0.0),
+                audioProgress: 0.0,
+                audioDownloadedBytes: 0,
+              );
+            } else {
+              task = task.copyWith(url: newUrl);
+            }
             if (fresh['audioUrl'] != null) {
               task = task.copyWith(mergedAudioUrl: fresh['audioUrl']);
             }

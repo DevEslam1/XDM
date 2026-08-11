@@ -166,7 +166,7 @@ class MediaSniffer {
     if (YoutubeService.isPlaylistUrl(scannedUrl)) {
       try {
         final info = await YoutubeService.getPlaylistInfo(scannedUrl)
-            .timeout(const Duration(seconds: 3));
+            .timeout(const Duration(seconds: 15));
         if (info != null && isActive() && tab.url == scannedUrl) {
           final count = info['videoCount'] as int? ?? 0;
           _update(() {
@@ -180,7 +180,7 @@ class MediaSniffer {
       if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
         try {
           final youtubeStreams = await YoutubeService.getStreams(scannedUrl)
-              .timeout(const Duration(seconds: 3));
+              .timeout(const Duration(seconds: 15));
           if (youtubeStreams.isNotEmpty &&
               isActive() &&
               tab.url == scannedUrl) {
@@ -197,7 +197,7 @@ class MediaSniffer {
     if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
       try {
         final youtubeStreams = await YoutubeService.getStreams(scannedUrl)
-            .timeout(const Duration(seconds: 3));
+            .timeout(const Duration(seconds: 15));
         if (youtubeStreams.isNotEmpty && isActive() && tab.url == scannedUrl) {
           _update(() {
             detectedMediaSources[tab.id] = youtubeStreams;

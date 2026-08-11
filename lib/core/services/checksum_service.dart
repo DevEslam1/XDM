@@ -6,12 +6,15 @@ import 'package:logging/logging.dart';
 class ChecksumService {
   static final _log = Logger('ChecksumService');
 
-  static Future<String> sha256File(String path) async {
+  /// Generic chunked file hasher — used by all specific algorithm methods
+  /// to avoid code duplication. Reads the file in 1MB chunks to avoid
+  /// high memory usage on large files.
+  static Future<String> _hashFile(String path, Hash algorithm) async {
     Digest? digest;
     final innerSink = ChunkedConversionSink<Digest>.withCallback((results) {
       digest = results.single;
     });
-    final sink = sha256.startChunkedConversion(innerSink);
+    final sink = algorithm.startChunkedConversion(innerSink);
     final file = File(path);
     final raf = await file.open(mode: FileMode.read);
     try {
@@ -25,52 +28,17 @@ class ChecksumService {
       await raf.close();
     }
     sink.close();
-    return digest.toString();
+    if (digest == null) {
+      throw StateError('Failed to compute file hash digest for $path');
+    }
+    return digest!.toString();
   }
 
-  static Future<String> sha1File(String path) async {
-    Digest? digest;
-    final innerSink = ChunkedConversionSink<Digest>.withCallback((results) {
-      digest = results.single;
-    });
-    final sink = sha1.startChunkedConversion(innerSink);
-    final file = File(path);
-    final raf = await file.open(mode: FileMode.read);
-    try {
-      const bufferSize = 1024 * 1024;
-      while (true) {
-        final bytes = await raf.read(bufferSize);
-        if (bytes.isEmpty) break;
-        sink.add(bytes);
-      }
-    } finally {
-      await raf.close();
-    }
-    sink.close();
-    return digest.toString();
-  }
+  static Future<String> sha256File(String path) => _hashFile(path, sha256);
 
-  static Future<String> md5File(String path) async {
-    Digest? digest;
-    final innerSink = ChunkedConversionSink<Digest>.withCallback((results) {
-      digest = results.single;
-    });
-    final sink = md5.startChunkedConversion(innerSink);
-    final file = File(path);
-    final raf = await file.open(mode: FileMode.read);
-    try {
-      const bufferSize = 1024 * 1024;
-      while (true) {
-        final bytes = await raf.read(bufferSize);
-        if (bytes.isEmpty) break;
-        sink.add(bytes);
-      }
-    } finally {
-      await raf.close();
-    }
-    sink.close();
-    return digest.toString();
-  }
+  static Future<String> sha1File(String path) => _hashFile(path, sha1);
+
+  static Future<String> md5File(String path) => _hashFile(path, md5);
 
   static Future<bool> verify(
     String path,

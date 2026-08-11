@@ -179,12 +179,9 @@ class DownloadTask {
 
   // FIX(05): Audio progress computed getters
   double get audioProgressPercent {
-    // FIX Y-2: Prefer byte-based calculation when possible
-    if (audioSize > 0 && audioDownloadedBytes >= 0) {
+    // FIX Y-2: Prefer byte-based calculation when audioDownloadedBytes > 0
+    if (audioSize > 0 && audioDownloadedBytes > 0) {
       return (audioDownloadedBytes / audioSize).clamp(0.0, 1.0);
-    }
-    if (audioDownloadedBytes > 0) {
-      return audioProgress.clamp(0.0, 1.0);
     }
     return audioProgress.clamp(0.0, 1.0);
   }

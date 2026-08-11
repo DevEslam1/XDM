@@ -257,8 +257,14 @@ class NotificationService {
         }
       }
 
-      // Clear list AFTER successful processing to prevent lost actions
-      await prefs.remove(_pendingActionsKey);
+      // Re-read latest list to prevent wiping actions appended concurrently
+      final latestList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
+      latestList.removeWhere((item) => rawList.contains(item));
+      if (latestList.isEmpty) {
+        await prefs.remove(_pendingActionsKey);
+      } else {
+        await prefs.setStringList(_pendingActionsKey, latestList);
+      }
     } catch (e) {
       debugPrint(
         '[NotificationService] Failed to process pending background actions: $e',

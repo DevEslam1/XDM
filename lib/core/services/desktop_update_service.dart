@@ -197,21 +197,32 @@ class DesktopUpdateService {
 
       final appName = p.basename(appBundle.path);
       final targetPath = '/Applications/$appName';
+      final stagingPath = '/Applications/$appName.new';
 
-      // Remove old version if it exists.
+      // Remove leftover staging dir if any
+      final stagingDir = Directory(stagingPath);
+      if (await stagingDir.exists()) {
+        await stagingDir.delete(recursive: true);
+      }
+
+      // Use ditto to copy to staging path first — preserves resource forks,
+      // extended attributes, and HFS metadata without touching active app.
+      final copyResult =
+          await Process.run('ditto', [appBundle.path, stagingPath]);
+      if (copyResult.exitCode != 0) {
+        _log.severe('Failed to copy app bundle: ${copyResult.stderr}');
+        if (await stagingDir.exists()) {
+          await stagingDir.delete(recursive: true);
+        }
+        return false;
+      }
+
+      // Atomic swap: remove old version only after new version is fully copied
       final oldApp = Directory(targetPath);
       if (await oldApp.exists()) {
         await oldApp.delete(recursive: true);
       }
-
-      // Use ditto to copy — preserves resource forks, extended attributes,
-      // and HFS metadata that cp does not handle correctly for .app bundles.
-      final copyResult =
-          await Process.run('ditto', [appBundle.path, targetPath]);
-      if (copyResult.exitCode != 0) {
-        _log.severe('Failed to copy app bundle: ${copyResult.stderr}');
-        return false;
-      }
+      await stagingDir.rename(targetPath);
 
       // Clean up the downloaded DMG.
       try {
@@ -289,7 +300,10 @@ class DesktopUpdateService {
         await raf.close();
       }
       sink.close();
-      final actual = digest.toString();
+      if (digest == null) {
+        throw StateError('SHA-256 computation produced no digest');
+      }
+      final actual = digest!.toString();
       return actual.toLowerCase() == expectedSha256.toLowerCase();
     } catch (e) {
       _log.warning('SHA-256 verification failed', e);

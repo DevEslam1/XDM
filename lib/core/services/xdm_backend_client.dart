@@ -264,6 +264,7 @@ class XdmBackendClient {
                 data.containsKey('url')) {
               BackendHealthService.instance.markHealthy(baseUrl);
 
+              _evictExpiredStreamsCache();
               _streamsCache[url] = _StreamsCacheEntry(
                 data: data,
                 expiry: DateTime.now().add(const Duration(minutes: 10)),
@@ -615,6 +616,13 @@ class XdmBackendClient {
       }
     } catch (e) {
       _log.warning('Failed to configure SSL bypass for Dio: $e');
+    }
+  }
+
+  void _evictExpiredStreamsCache() {
+    _streamsCache.removeWhere((_, entry) => entry.isExpired);
+    while (_streamsCache.length >= 100) {
+      _streamsCache.remove(_streamsCache.keys.first);
     }
   }
 }

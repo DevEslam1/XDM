@@ -541,4 +541,11 @@ const Map<String, String> deTranslations = {
   'link_copied': 'Link kopiert',
   'items_count_singular': '1 Element',
   'items_count_plural': '{count} Elemente',
+  'cancel': 'Abbrechen',
+  'confirm': 'Bestätigen',
+  'media_choice_title': 'Download-Option wählen',
+  'media_choice_message':
+      'Möchten Sie "{title}" als einzelnes Video oder die gesamte Wiedergabeliste herunterladen?',
+  'media_choice_single': 'Einzelnes Video',
+  'media_choice_playlist': 'Gesamte Wiedergabeliste',
 };

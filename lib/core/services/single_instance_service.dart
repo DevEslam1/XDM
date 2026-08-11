@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'logging_service.dart';
+import '../utils/crypto_utils.dart';
 import '../utils/url_utils.dart';
 
 class SingleInstanceService {
@@ -71,18 +72,7 @@ class SingleInstanceService {
     }
   }
 
-  static const int _maxTokenLength = 256;
 
-  static bool _timingSafeEqual(String a, String b) {
-    if (a.length > _maxTokenLength || b.length > _maxTokenLength) return false;
-    final paddedA = a.padRight(_maxTokenLength, '\x00');
-    final paddedB = b.padRight(_maxTokenLength, '\x00');
-    int result = 0;
-    for (int i = 0; i < _maxTokenLength; i++) {
-      result |= paddedA.codeUnitAt(i) ^ paddedB.codeUnitAt(i);
-    }
-    return result == 0;
-  }
 
   String _generateSecurityToken() {
     final random = Random.secure();
@@ -162,7 +152,7 @@ class SingleInstanceService {
       try {
         final tokenParam = request.uri.queryParameters['token'];
         if (tokenParam == null ||
-            !_timingSafeEqual(tokenParam, _securityToken!)) {
+            !timingSafeEqual(tokenParam, _securityToken!)) {
           request.response.statusCode = HttpStatus.forbidden;
           await request.response.close();
           return;

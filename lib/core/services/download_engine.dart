@@ -84,13 +84,10 @@ class DownloadIntegrityException implements Exception {
 /// resume still works.
 class UrlExpiredException implements Exception {
   final String message;
-  const UrlExpiredException(this.message);
+  final bool refreshAllMirrors;
+  const UrlExpiredException(this.message, {this.refreshAllMirrors = false});
   @override
   String toString() => 'UrlExpiredException: $message';
-}
-
-class _UrlExpiredException extends UrlExpiredException {
-  const _UrlExpiredException(super.message);
 }
 
 /// Raised when the torrent engine enters a paused state without an explicit
@@ -1799,7 +1796,7 @@ class DownloadEngine {
             ));
             if (!completer.isCompleted) {
               // FIX-ERROR-MAP: Route through _mapWorkerError to correctly
-              // construct _UrlExpiredException with refreshAllMirrors flag.
+              // construct UrlExpiredException with refreshAllMirrors flag.
               completer.completeError(_mapWorkerError(message, punyUrl));
             }
             break;
@@ -2327,10 +2324,9 @@ class DownloadEngine {
         // all mirrors share the same expiry signature. The data flag
         // 'refreshAllMirrors' tells the orchestrator to re-resolve every
         // mirror URL (not just the active one) before retrying.
-        return _UrlExpiredException(
-          data['refreshAllMirrors'] == true
-              ? '$errMsg|refreshAllMirrors'
-              : errMsg,
+        return UrlExpiredException(
+          errMsg,
+          refreshAllMirrors: data['refreshAllMirrors'] == true,
         );
       default:
         final DioExceptionType dioType = switch (errType) {
@@ -3721,7 +3717,7 @@ class DownloadEngine {
     // tick so single-file percentage on the details screen stays valid and
     // clamped to [0.0, 1.0] instead of going null/stale during the checking
     // phase. This ensures per-file data percentage is accurate at every
-    // level (overall, per-file, file counts, byte summaries) during recheck. {
+    // level (overall, per-file, file counts, byte summaries) during recheck.
     final completer = Completer<void>();
     StreamSubscription? sub;
     Timer? t;

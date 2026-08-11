@@ -42,7 +42,6 @@ class BrowserDetector {
     '.mov': DetectedMediaKind.video,
     '.webm': DetectedMediaKind.video,
     '.flv': DetectedMediaKind.video,
-    '.ts': DetectedMediaKind.video,
     // Fix #16: HLS and DASH manifests are streaming formats — browsers can
     // play them natively. Classifying them as video caused them to be
     // intercepted as downloads instead of being played in the WebView.

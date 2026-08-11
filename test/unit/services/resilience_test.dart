@@ -110,12 +110,17 @@ void main() {
       expect(breaker.state, CircuitBreakerState.open);
 
       now = now.add(const Duration(seconds: 31));
-      // First call flips to half-open and returns false for that call.
+      // First call while open flips state to halfOpen and returns false.
       expect(breaker.allowRequest(), isFalse);
       expect(breaker.state, CircuitBreakerState.halfOpen);
 
-      // The probe is allowed only after halfOpenTimeout elapses.
+      // Second call in halfOpen state allows the probe.
+      expect(breaker.allowRequest(), isTrue);
+
+      // Third call while probe is in flight is rejected.
       expect(breaker.allowRequest(), isFalse);
+
+      // After halfOpenTimeout elapses, new probe is allowed.
       now = now.add(const Duration(seconds: 6));
       expect(breaker.allowRequest(), isTrue);
     });

@@ -28,11 +28,20 @@ class YoutubeService {
   }
 
   static String? get oauthToken => _oauthToken;
-  static final _authStateController = StreamController<bool>.broadcast();
+  static StreamController<bool> _authStateController =
+      StreamController<bool>.broadcast();
 
-  static Stream<bool> get onAuthStateChanged => _authStateController.stream;
+  static Stream<bool> get onAuthStateChanged {
+    if (_authStateController.isClosed) {
+      _authStateController = StreamController<bool>.broadcast();
+    }
+    return _authStateController.stream;
+  }
 
   static void _notifyAuthState() {
+    if (_authStateController.isClosed) {
+      _authStateController = StreamController<bool>.broadcast();
+    }
     _authStateController.add(isSignedIn);
   }
 

@@ -38,12 +38,10 @@ class _CapabilityGate {
     final target = LibtorrentFlutter.instance;
 
     try {
-      // ignore: avoid_dynamic_calls
       (target as dynamic).getFileProgress(-1);
     } on NoSuchMethodError {
       fileProgressSupported = false;
     } catch (_) {}
-
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).getFilePriorities(-1);
@@ -308,7 +306,8 @@ class TorrentService {
   static bool get isSupported => true;
   static bool get isInitialized => _state == TorrentSessionState.ready;
   static Set<int> get activeTorrentIds => Set.unmodifiable(_activeTorrentIds);
-  static Map<int, TorrentUpdateInfo> get latestStats => Map.unmodifiable(_latestStats);
+  static Map<int, TorrentUpdateInfo> get latestStats =>
+      Map.unmodifiable(_latestStats);
 
   /// Future getter that callers can await to ensure TorrentService is ready.
   static Future<void> get ready {

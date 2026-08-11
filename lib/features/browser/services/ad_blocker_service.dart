@@ -1325,7 +1325,7 @@ $customCss
       blockers.add(
         ContentBlocker(
           trigger: ContentBlockerTrigger(
-            urlFilter: '.*\\.${RegExp.escape(domain)}.*',
+            urlFilter: '.*[./]${RegExp.escape(domain)}.*',
           ),
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
         ),

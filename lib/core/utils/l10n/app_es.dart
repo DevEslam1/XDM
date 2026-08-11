@@ -536,4 +536,11 @@ const Map<String, String> esTranslations = {
   'link_copied': 'Enlace copiado',
   'items_count_singular': '1 elemento',
   'items_count_plural': '{count} elementos',
+  'cancel': 'Cancelar',
+  'confirm': 'Confirmar',
+  'media_choice_title': 'Opción de descarga',
+  'media_choice_message':
+      '¿Deseas descargar "{title}" como un solo video o la lista de reproducción completa?',
+  'media_choice_single': 'Video individual',
+  'media_choice_playlist': 'Lista de reproducción',
 };

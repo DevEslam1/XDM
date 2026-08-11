@@ -8,34 +8,7 @@ import 'package:ffmpeg_kit_flutter_new_min/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
 import 'package:logging/logging.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-
-class Semaphore {
-  final int maxCount;
-  int _currentCount = 0;
-  final List<Completer<void>> _waiters = [];
-
-  Semaphore(this.maxCount);
-
-  Future<void> acquire() async {
-    if (_currentCount < maxCount) {
-      _currentCount++;
-      return;
-    }
-    final completer = Completer<void>();
-    _waiters.add(completer);
-    await completer.future;
-  }
-
-  void release() {
-    if (_waiters.isNotEmpty) {
-      final next = _waiters.removeAt(0);
-      next.complete();
-    } else {
-      _currentCount--;
-      if (_currentCount < 0) _currentCount = 0;
-    }
-  }
-}
+import '../utils/semaphore.dart';
 
 enum MergeStrategy { streamCopy, hwReencode, swFallback }
 

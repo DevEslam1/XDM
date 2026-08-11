@@ -1045,15 +1045,23 @@ class HttpTransferJob {
             _throwIfCancelled();
           }
           final pos = chunk.start + resumeFrom + sessionBytes;
-          await writer.write(-1, pos, piece);
-          sessionBytes += piece.length;
-          if (chunk.size >= 0 && (resumeFrom + sessionBytes) > chunk.size) {
-            // Server sent more bytes than requested — truncate to prevent overwrite
+          final remainingInChunk = chunk.size >= 0
+              ? chunk.size - (resumeFrom + sessionBytes)
+              : piece.length;
+          if (remainingInChunk <= 0) break;
+          final toWrite = remainingInChunk < piece.length
+              ? Uint8List.sublistView(piece, 0, remainingInChunk)
+              : piece;
+
+          await writer.write(-1, pos, toWrite);
+          sessionBytes += toWrite.length;
+          chunk.downloaded = resumeFrom + sessionBytes;
+          _bytesSinceSave += toWrite.length;
+          await _throttledSaveAndReport(writer);
+
+          if (chunk.size >= 0 && (resumeFrom + sessionBytes) >= chunk.size) {
             break;
           }
-          chunk.downloaded = resumeFrom + sessionBytes;
-          _bytesSinceSave += piece.length;
-          await _throttledSaveAndReport(writer);
         }
         failover.reportSuccess();
         attempts = 0;
@@ -1098,8 +1106,9 @@ class HttpTransferJob {
             // state before throwing so the UI shows the correct status
             // during the URL refresh window.
             _emitProgress(0, statusMessage: 'Updating links (URL expired)…');
-            throw _UrlExpiredException(
+            throw UrlExpiredException(
               'Download URL expired (HTTP $status). Refresh required.',
+              refreshAllMirrors: true,
             );
           }
         }
@@ -1354,11 +1363,6 @@ class HttpTransferJob {
         }
 
         final isPartial = response.statusCode == 206;
-        if (resumeFrom > 0 && !isPartial) {
-          // Server ignored Range on a fresh 200 → restart cleanly.
-          chunk.downloaded = 0;
-          if (await tempFile.exists()) await tempFile.delete();
-        }
         if (isPartial) {
           final contentRange = response.headers.value('content-range');
           if (contentRange != null) {

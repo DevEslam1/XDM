@@ -452,9 +452,16 @@ $customJs
 
     if (scripts.isEmpty) return;
 
-    // Single batched call
+    final safeScripts = scripts.map((s) => '''
+try {
+$s
+} catch(e) {
+  console.warn('[DMX Script Injection Error]', e);
+}
+''').join('\n;\n');
+
     try {
-      await controller.evaluateJavascript(source: scripts.join('\n;\n'));
+      await controller.evaluateJavascript(source: safeScripts);
     } catch (e) {
       _log.warning('[Browser] Batched script injection failed: $e');
     }

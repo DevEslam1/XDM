@@ -544,10 +544,20 @@ class AdBlockFilterUpdater {
       // FIX: Do not break early. Breaking causes exception rules (@@||) and
       // cosmetic rules (##.ad) later in the file to be silently ignored.
       // The _maxDomains limit is already safely enforced during the final
-      // prefs.setStringList save step via `.take(_maxDomains)`.
       if (line.isEmpty || line.length > _maxLineLength) continue;
-
       final trimmed = line.trim();
+
+      // ABP Exception rules (@@||domain^)
+      if (trimmed.startsWith('@@')) {
+        final exceptionMatch = RegExp(
+          r'^@@\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9])\^',
+        ).firstMatch(trimmed);
+        if (exceptionMatch != null) {
+          excepted.add(exceptionMatch.group(1)!.toLowerCase());
+          continue;
+        }
+      }
+
       // Parse hosts file line format: "127.0.0.1 domain.com" or "0.0.0.0 domain.com"
       if (trimmed.startsWith('127.0.0.1') || trimmed.startsWith('0.0.0.0')) {
         final parts = trimmed.split(RegExp(r'\s+'));
@@ -566,7 +576,32 @@ class AdBlockFilterUpdater {
       // lines that start with a bare '#' (not '##') as comments.
       if (line.startsWith('!') ||
           line.startsWith('[') ||
-          (line.startsWith('#') && !line.startsWith('##'))) {
+          (line.startsWith('#') &&
+              !line.startsWith('##') &&
+              !line.startsWith('#@#'))) {
+        continue;
+      }
+
+      // Cosmetic exception rules: #@#.ad-container, site.com#@#.ad-container
+      if (line.contains('#@#')) {
+        final idx = line.indexOf('#@#');
+        final firstPart = line.substring(0, idx);
+        final secondPart = line.substring(idx + 3);
+        if (secondPart.isNotEmpty && secondPart.length < 100) {
+          final selector = secondPart;
+          if (firstPart.isEmpty) {
+            _cosmeticRules.remove(selector);
+          } else {
+            final domainsList = firstPart.split(',');
+            for (var domain in domainsList) {
+              domain = domain.trim().toLowerCase();
+              if (domain.isEmpty) continue;
+              _cosmeticExceptions
+                  .putIfAbsent(domain, () => <String>{})
+                  .add(selector);
+            }
+          }
+        }
         continue;
       }
 

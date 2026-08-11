@@ -222,14 +222,13 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
     final settings = context.read<SettingsProvider>();
     final isAmoled = settings.isAmoledMode;
 
-    // Find the toolbar bottom offset so the overlay starts right under the top bar
-    final renderBox = context.findRenderObject() as RenderBox?;
-    final topBarOffset = renderBox != null
-        ? renderBox.localToGlobal(Offset.zero).dy + renderBox.size.height + 6
-        : MediaQuery.of(context).padding.top + 56;
-
     _overlayEntry = OverlayEntry(
-      builder: (context) {
+      builder: (ctx) {
+        final box = context.findRenderObject() as RenderBox?;
+        final dynamicTopBarOffset = box != null && box.attached
+            ? box.localToGlobal(Offset.zero).dy + box.size.height + 6
+            : MediaQuery.of(ctx).padding.top + 56;
+
         return Stack(
           children: [
             // Barrier behind overlay cards: tapping anywhere outside dismisses options and unfocuses
@@ -246,7 +245,7 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
 
             // Full-width cards container under top bar
             Positioned(
-              top: topBarOffset,
+              top: dynamicTopBarOffset,
               left: 10,
               right: 10,
               child: Material(

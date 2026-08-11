@@ -456,7 +456,6 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
 
     switch (state) {
       case AppLifecycleState.paused:
-      case AppLifecycleState.inactive:
         unawaited(_saveTorrentState());
         break;
       case AppLifecycleState.resumed:
@@ -547,9 +546,8 @@ class _AppErrorBoundaryWidgetState extends State<_AppErrorBoundaryWidget> {
   }
 
   void _retry() {
-    if (_consecutiveFailures < 3) {
-      setState(() {});
-    }
+    _consecutiveFailures = 0;
+    setState(() {});
   }
 
   @override

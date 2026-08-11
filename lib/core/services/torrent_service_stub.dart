@@ -10,7 +10,7 @@ class TorrentService {
   static Future<void> get ready => Future.value();
   static final ValueNotifier<bool> isAvailable = ValueNotifier(false);
   static Set<int> get activeTorrentIds => const <int>{};
-  static Uint8List? progressFor(int id) => null;
+  static double progressFor(int id) => 0.0;
   static Uint8List? fetchResumeBytes(int id) => null;
   static Uint8List? resumeBlobFor(int id) => null;
   static bool fileProgressSupported = false;
@@ -57,7 +57,7 @@ class TorrentService {
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
       const Stream.empty();
   static Map<int, TorrentUpdateInfo> get latestStats => const {};
-  static void configureSession(SettingsProvider settings) {}
+  static void configureSession([SettingsProvider? settings]) {}
 
   static List<TrackerInfo> getTrackers(int torrentId) => [];
   static void addTracker(int torrentId, String trackerUrl, {int tier = 0}) {}

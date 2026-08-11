@@ -522,4 +522,11 @@ const Map<String, String> arTranslations = {
   'link_copied': 'تم نسخ الرابط',
   'items_count_singular': 'عنصر واحد',
   'items_count_plural': '{count} عناصر',
+  'cancel': 'إلغاء',
+  'confirm': 'تأكيد',
+  'media_choice_title': 'اختر خيار التنزيل',
+  'media_choice_message':
+      'هل تريد تنزيل "{title}" كفيديو منفرد أم قائمة التشغيل بالكامل؟',
+  'media_choice_single': 'فيديو منفرد',
+  'media_choice_playlist': 'قائمة التشغيل',
 };

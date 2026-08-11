@@ -1,4 +1,5 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../utils/crypto_utils.dart';
 
 /// Secure PIN storage and persisted brute-force protection for the app lock.
 class AppLockService {
@@ -15,7 +16,8 @@ class AppLockService {
   }
 
   static Future<void> setPin(String pin) async {
-    await _storage.write(key: _pinKey, value: pin);
+    final hashed = hashSecret(pin, salt: 'dmx_app_lock_salt');
+    await _storage.write(key: _pinKey, value: hashed);
     await _storage.write(key: _enabledKey, value: 'true');
     await resetFailedAttempts();
   }
@@ -24,9 +26,18 @@ class AppLockService {
   static Future<bool> verifyPin(String pin) async {
     if (await lockoutRemaining() > Duration.zero) return false;
     final storedPin = await _storage.read(key: _pinKey);
-    if (storedPin != null && storedPin == pin) {
-      await resetFailedAttempts();
-      return true;
+    if (storedPin != null) {
+      final hashedInput = hashSecret(pin, salt: 'dmx_app_lock_salt');
+      final matches = timingSafeEqual(storedPin, hashedInput) ||
+          timingSafeEqual(storedPin, pin);
+      if (matches) {
+        if (storedPin == pin) {
+          // Seamlessly upgrade legacy plaintext PIN to hashed PIN
+          await setPin(pin);
+        }
+        await resetFailedAttempts();
+        return true;
+      }
     }
     await _registerFailedAttempt();
     return false;

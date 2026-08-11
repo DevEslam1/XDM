@@ -505,6 +505,16 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   final List<String> _lruTabIds = [];
   final Map<String, Timer> _loadingTimeoutTimers = {};
+  Timer? _siteSettingsReloadTimer;
+
+  void _debouncedSiteSettingsReload(BrowserTab tab) {
+    _siteSettingsReloadTimer?.cancel();
+    _siteSettingsReloadTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        tab.controller?.reload();
+      }
+    });
+  }
 
   final _inactivityWatchdog = InactivityWatchdog();
 
@@ -748,12 +758,23 @@ class _BrowserScreenState extends State<BrowserScreen>
     for (final tab in _tabs) {
       if (tab.controller != null) {
         try {
-          await tab.controller!.setSettings(
-            settings: InAppWebViewSettings(
-              contentBlockers: _adBlocker.contentBlockers,
-              incognito: tab.isIncognito,
-            ),
-          );
+          final currentSettings = await tab.controller!.getSettings();
+          if (currentSettings != null) {
+            currentSettings.contentBlockers = _adBlocker.contentBlockers;
+            currentSettings.incognito = tab.isIncognito;
+            await tab.controller!.setSettings(settings: currentSettings);
+          } else {
+            await tab.controller!.setSettings(
+              settings: InAppWebViewSettings(
+                contentBlockers: _adBlocker.contentBlockers,
+                incognito: tab.isIncognito,
+                userAgent: _settings.desktopMode
+                    ? FingerprintManager.desktopUserAgent
+                    : _resolveUserAgent(
+                        isIncognito: tab.isIncognito, settings: _settings),
+              ),
+            );
+          }
         } catch (e) {
           if (e is MissingPluginException) {
             tab.controller = null;
@@ -767,7 +788,16 @@ class _BrowserScreenState extends State<BrowserScreen>
     _resetInactivityTimer();
   }
 
-  void _resetInactivityTimer() {
+  DateTime? _lastInactivityReset;
+
+  void _resetInactivityTimer({bool force = false}) {
+    final now = DateTime.now();
+    if (!force &&
+        _lastInactivityReset != null &&
+        now.difference(_lastInactivityReset!).inMilliseconds < 1000) {
+      return;
+    }
+    _lastInactivityReset = now;
     _inactivityWatchdog.resetTimer(
       isMounted: mounted,
       onTimeout: _onInactivityTimeout,
@@ -1104,7 +1134,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                       ));
                   await _applySiteSettings(tab, tab.url);
                   if (mounted) setState(() {});
-                  tab.controller?.reload();
+                  _debouncedSiteSettingsReload(tab);
                 },
               ),
               SwitchListTile(
@@ -1122,7 +1152,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                       ));
                   await _applySiteSettings(tab, tab.url);
                   if (mounted) setState(() {});
-                  tab.controller?.reload();
+                  _debouncedSiteSettingsReload(tab);
                 },
               ),
               const SizedBox(height: 12),
@@ -2258,7 +2288,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   @override
   void dispose() {
-    // per-tab media scan debounce used
+    _siteSettingsReloadTimer?.cancel();
     _showBarsNotifier.dispose();
     _tabStripScrollController.dispose();
     _adBlocker.removeListener(_updateAdBlockSettings);
@@ -5799,12 +5829,15 @@ class _BrowserScreenState extends State<BrowserScreen>
       _lastZoomEnabled = settings.pinchToZoom;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         for (final tab in _tabs) {
-          tab.controller?.setSettings(
-            settings: InAppWebViewSettings(
-              supportZoom: settings.pinchToZoom,
-              incognito: tab.isIncognito,
-            ),
-          );
+          if (tab.controller != null) {
+            tab.controller!.getSettings().then((currentSettings) {
+              if (currentSettings != null) {
+                currentSettings.supportZoom = settings.pinchToZoom;
+                currentSettings.incognito = tab.isIncognito;
+                tab.controller?.setSettings(settings: currentSettings);
+              }
+            }).catchError((_) {});
+          }
         }
       });
     }

@@ -1,9 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-
-/// Connection intelligence: TLS prewarm and ALPN-based HTTP/2 detection,
-/// cached per host. Never throws — probes degrade to "assume HTTP/1.1".
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/protocol_cache.dart';
 

@@ -539,4 +539,11 @@ const Map<String, String> enTranslations = {
   'link_copied': 'Link copied',
   'items_count_singular': '1 item',
   'items_count_plural': '{count} items',
+  'cancel': 'Cancel',
+  'confirm': 'Confirm',
+  'media_choice_title': 'Select Download Option',
+  'media_choice_message':
+      'Do you want to download "{title}" as a single video or the entire playlist?',
+  'media_choice_single': 'Single Video',
+  'media_choice_playlist': 'Full Playlist',
 };
