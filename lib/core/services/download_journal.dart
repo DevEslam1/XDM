@@ -673,6 +673,7 @@ class DownloadJournal {
     }
   }
 
+  /// Calculates CRC32 checksum for journal record verification and benchmarking.
   static int crc32(List<int> bytes) {
     var crc = 0xFFFFFFFF;
     for (final byte in bytes) {

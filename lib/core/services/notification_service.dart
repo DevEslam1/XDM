@@ -18,16 +18,13 @@ const String _pendingActionsKey = 'dmx_pending_notification_actions';
 void _onBackgroundNotificationResponse(NotificationResponse response) {
   WidgetsFlutterBinding.ensureInitialized();
   DartPluginRegistrant.ensureInitialized();
-
   var actionId = response.actionId ?? 'tap';
   var payload = response.payload;
-
   if (actionId.contains(':')) {
     final parts = actionId.split(':');
     actionId = parts[0];
     payload = parts[1];
   }
-
   unawaited(_forwardBackgroundAction(actionId, payload));
 }
 
@@ -37,11 +34,9 @@ Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
       debugPrint(
           '[NotificationService] WARNING: null or empty payload for action $actionId');
     }
-
     final prefs = await SharedPreferences.getInstance();
     final nonce = prefs.getString(_nonceKey);
     final rawList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
-
     final actionJson = jsonEncode({
       'action': actionId,
       'taskId': payload,
@@ -70,7 +65,6 @@ class NotificationService {
   NotificationService._() {
     unawaited(_ensureNoncePersisted());
   }
-
   static final NotificationService _instance = NotificationService._();
   factory NotificationService() => _instance;
 
@@ -210,7 +204,6 @@ class NotificationService {
           final action = map['action'] as String?;
           final taskId = map['taskId'] as String?;
           final receivedNonce = map['nonce'] as String?;
-
           if (_nonce != null &&
               receivedNonce != null &&
               receivedNonce != _nonce) {
@@ -219,7 +212,6 @@ class NotificationService {
             );
             continue;
           }
-
           if (action != null) {
             if (_groupActions.contains(action)) {
               _addAction({'action': action});
@@ -237,7 +229,7 @@ class NotificationService {
       final latestList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
       latestList.removeWhere((item) => rawList.contains(item));
       if (latestList.isEmpty) {
-        await prefs.remove(_pendingActionsKey);
+        await _clearPendingActions();
       } else {
         await prefs.setStringList(_pendingActionsKey, latestList);
       }
@@ -263,7 +255,6 @@ class NotificationService {
 
   Future<void> init({bool requestPermission = true}) async {
     if (!isSupported) return;
-
     if (_initFuture != null) {
       if (_receivePort != null &&
           IsolateNameServer.lookupPortByName('dmx_notification_port') != null) {
@@ -282,7 +273,6 @@ class NotificationService {
 
     final completer = Completer<void>();
     _initFuture = completer.future;
-
     try {
       IsolateNameServer.removePortNameMapping('dmx_notification_port');
       _receivePortSub?.cancel();
@@ -322,7 +312,6 @@ class NotificationService {
           final action = message['action'] as String?;
           final taskId = message['taskId'] as String?;
           final receivedNonce = message['nonce'] as String?;
-
           if (_nonce != null &&
               receivedNonce != null &&
               receivedNonce != _nonce) {
@@ -331,7 +320,6 @@ class NotificationService {
             );
             return;
           }
-
           if (action != null) {
             if (_groupActions.contains(action)) {
               _addAction({'action': action});
@@ -344,7 +332,7 @@ class NotificationService {
               );
             }
           }
-          unawaited(_clearPendingActions());
+          unawaited(processPendingBackgroundActions());
         }
       });
 
@@ -353,13 +341,11 @@ class NotificationService {
         onDidReceiveNotificationResponse: (response) {
           var actionId = response.actionId ?? 'tap';
           var payload = response.payload;
-
           if (actionId.contains(':')) {
             final parts = actionId.split(':');
             actionId = parts[0];
             payload = parts[1];
           }
-
           if (_groupActions.contains(actionId)) {
             _addAction({'action': actionId});
           } else if (payload != null && _isValidTaskId(payload)) {
@@ -432,11 +418,9 @@ class NotificationService {
   }) async {
     if (!_initialized) return;
     if (!Platform.isAndroid) return;
-
     const serviceNotificationId = 888;
     const channelId = 'dmx_background_service';
     const channelName = 'XDM Background Service';
-
     const androidDetails = AndroidNotificationDetails(
       channelId,
       channelName,
@@ -465,7 +449,6 @@ class NotificationService {
         ),
       ],
     );
-
     await _plugin.show(
       id: serviceNotificationId,
       title: title,
@@ -487,7 +470,6 @@ class NotificationService {
     String? groupKey,
   }) async {
     if (!_initialized) return;
-
     final actions = <AndroidNotificationAction>[
       AndroidNotificationAction(
         isPaused ? 'resume:$payload' : 'pause:$payload',
@@ -502,7 +484,6 @@ class NotificationService {
         showsUserInterface: true,
       ),
     ];
-
     if (hasMultipleActive) {
       actions.addAll([
         AndroidNotificationAction(
@@ -517,7 +498,6 @@ class NotificationService {
         ),
       ]);
     }
-
     final androidDetails = AndroidNotificationDetails(
       _downloadChannelId,
       _downloadChannelName,
@@ -536,18 +516,15 @@ class NotificationService {
           ? GroupAlertBehavior.all
           : GroupAlertBehavior.children,
     );
-
     final iosDetails = DarwinNotificationDetails(
       presentAlert: !isPaused,
       interruptionLevel: InterruptionLevel.passive,
       threadIdentifier: groupKey ?? 'dmx_downloads',
     );
-
     final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
-
     await _plugin.show(
       id: notificationId,
       title: title,
@@ -565,7 +542,6 @@ class NotificationService {
     String? groupKey,
   }) async {
     if (!_initialized || groupKey == null) return;
-
     final androidDetails = AndroidNotificationDetails(
       _downloadChannelId,
       _downloadChannelName,
@@ -581,19 +557,16 @@ class NotificationService {
       groupKey: groupKey,
       groupAlertBehavior: GroupAlertBehavior.children,
     );
-
     final iosDetails = DarwinNotificationDetails(
       presentAlert: false,
       interruptionLevel: InterruptionLevel.passive,
       threadIdentifier: groupKey,
       subtitle: '$activeCount active',
     );
-
     final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
-
     await _plugin.show(
       id: notificationId,
       title: '$activeCount active downloads',
@@ -611,12 +584,10 @@ class NotificationService {
     List<AndroidNotificationAction>? actions,
   }) async {
     if (!_initialized) return;
-
     final channelId =
         playSound ? 'dmx_download_alerts_sound' : _downloadChannelId;
     final channelName =
         playSound ? 'Download Alerts (Sound)' : _downloadChannelName;
-
     final androidDetails = AndroidNotificationDetails(
       channelId,
       channelName,
@@ -626,7 +597,6 @@ class NotificationService {
       playSound: playSound,
       actions: actions,
     );
-
     final iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       interruptionLevel: playSound
@@ -634,12 +604,10 @@ class NotificationService {
           : InterruptionLevel.passive,
       threadIdentifier: 'dmx_downloads',
     );
-
     final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
-
     await _plugin.show(
       id: notificationId,
       title: title,
@@ -656,12 +624,10 @@ class NotificationService {
     bool playSound = true,
   }) async {
     if (!_initialized) return;
-
     final channelId =
         playSound ? 'dmx_download_alerts_sound' : _downloadChannelId;
     final channelName =
         playSound ? 'Download Alerts (Sound)' : _downloadChannelName;
-
     final androidDetails = AndroidNotificationDetails(
       channelId,
       channelName,
@@ -670,18 +636,15 @@ class NotificationService {
       showProgress: false,
       playSound: playSound,
     );
-
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       interruptionLevel: InterruptionLevel.timeSensitive,
       threadIdentifier: 'dmx_downloads',
     );
-
     final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
-
     await _plugin.show(
       id: notificationId,
       title: title,

@@ -7,8 +7,10 @@ import 'package:dmx/core/services/logging_service.dart';
 import '../utils/crypto_utils.dart';
 
 class RemoteApiService {
-  static HttpServer? _server;
+  /// Fallback port used when parsing legacy single-line token files.
+  /// Active server binds dynamically to port 0 (ephemeral).
   static const int _port = 37129;
+  static HttpServer? _server;
   static String? _bearerToken;
   static String? _cachedTokenFilePath;
 
@@ -115,7 +117,7 @@ class RemoteApiService {
     }
 
     _server!.listen(
-      (request) async {
+      (HttpRequest request) async {
         try {
           final path = request.uri.path;
           final method = request.method;

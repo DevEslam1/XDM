@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Event model for native iOS background transfers.
 class IosBackgroundTransferEvent {
@@ -127,11 +128,21 @@ class IosBackgroundService {
   }
 
   static bool _isRegistered = false;
+  static const String _prefKeyIsRegistered = 'ios_bg_task_registered';
+
+  static Future<bool> _loadIsRegistered() async {
+    if (_isRegistered) return true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isRegistered = prefs.getBool(_prefKeyIsRegistered) ?? false;
+    } catch (_) {}
+    return _isRegistered;
+  }
 
   /// Schedules a native iOS background refresh task via BGTaskScheduler.
   static Future<bool> scheduleBackgroundDownload() async {
     if (kIsWeb || !Platform.isIOS) return false;
-    if (_isRegistered) {
+    if (await _loadIsRegistered()) {
       debugPrint(
           '[IosBackgroundService] BGTaskScheduler already registered. Skipping duplicate registration.');
       return true;
@@ -139,7 +150,13 @@ class IosBackgroundService {
     try {
       final bool success =
           await _channel.invokeMethod<bool>('scheduleDownload') ?? false;
-      if (success) _isRegistered = true;
+      if (success) {
+        _isRegistered = true;
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool(_prefKeyIsRegistered, true);
+        } catch (_) {}
+      }
       return success;
     } catch (e) {
       debugPrint('Failed to schedule iOS background download: $e');
@@ -153,6 +170,11 @@ class IosBackgroundService {
     try {
       final bool success =
           await _channel.invokeMethod<bool>('cancelDownload') ?? false;
+      _isRegistered = false;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_prefKeyIsRegistered, false);
+      } catch (_) {}
       return success;
     } catch (e) {
       debugPrint('Failed to cancel iOS background download: $e');

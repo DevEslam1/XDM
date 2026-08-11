@@ -19,9 +19,9 @@ abstract class BackgroundDownloadService {
 /// // P0-5: Implementation of iOS background download capability contract.
 class IosBackgroundCapability implements BackgroundDownloadService {
   static const MethodChannel _channel =
-      MethodChannel('dmx/ios_background_download');
+      MethodChannel('com.dmx.app/background_download');
   static const EventChannel _eventChannel =
-      EventChannel('dmx/ios_background_download_events');
+      EventChannel('com.dmx.app/background_download_events');
 
   static final IosBackgroundCapability instance =
       IosBackgroundCapability._internal();

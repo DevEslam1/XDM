@@ -94,7 +94,7 @@ void main() {
       expect(normalWait, greaterThan(0));
 
       gov.setTaskLimit('task1', 0);
-      expect(await gov.acquire(2000, taskId: 'task1'), 0);
+      expect(await gov.acquire(2000, taskId: 'task1'), greaterThan(0));
 
       gov.setTaskLimit('task2', 5000);
       final taskWait = await gov.acquire(2000, taskId: 'task2');

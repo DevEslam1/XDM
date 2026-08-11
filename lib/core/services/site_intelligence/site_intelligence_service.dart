@@ -321,8 +321,8 @@ class SiteIntelligenceService {
     }
 
     bool urlsExpire = profile?.urlsExpire ?? false;
-    final hasExpiryParam = uri.queryParameters.keys
-        .any((p) => UrlPatterns.expiryParams.contains(p.toLowerCase()));
+    final hasExpiryParam = uri.queryParameters.entries
+        .any((entry) => UrlPatterns.isExpiryOrSignatureParam(entry.key, entry.value));
     if (hasExpiryParam) urlsExpire = true;
 
     SiteType siteType = profile?.type ?? SiteType.genericWebpage;

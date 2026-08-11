@@ -1,3 +1,5 @@
+import 'dart:collection';
+import 'dart:io';
 import 'dart:math';
 
 class ServerProfile {
@@ -7,7 +9,7 @@ class ServerProfile {
   bool wasRateLimited = false;
   int successCount = 0;
   int failureCount = 0;
-  final List<int> _responseTimes = [];
+  final Queue<int> _responseTimes = Queue<int>();
 
   ServerProfile({required this.host});
 
@@ -31,7 +33,7 @@ class ServerProfile {
     lastAccess = DateTime.now();
     successCount++;
     _responseTimes.add(responseTimeMs);
-    if (_responseTimes.length > 20) _responseTimes.removeAt(0);
+    if (_responseTimes.length > 20) _responseTimes.removeFirst();
     wasRateLimited = false;
   }
 
@@ -41,9 +43,18 @@ class ServerProfile {
     if (statusCode == 429 || statusCode == 503) {
       wasRateLimited = true;
       if (retryAfter != null) {
-        final seconds = int.tryParse(retryAfter);
+        final trimmed = retryAfter.trim();
+        final seconds = int.tryParse(trimmed);
         if (seconds != null) {
           lastRetryAfter = Duration(seconds: seconds.clamp(1, 3600));
+        } else {
+          try {
+            final date = HttpDate.parse(trimmed);
+            final diff = date.difference(DateTime.now()).inSeconds;
+            if (diff > 0) {
+              lastRetryAfter = Duration(seconds: diff.clamp(1, 3600));
+            }
+          } catch (_) {}
         }
       }
     }

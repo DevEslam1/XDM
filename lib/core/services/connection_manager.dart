@@ -78,12 +78,21 @@ class ConnectionManager {
   }
 
   /// Creates a Dio instance configured for the detected protocol.
-  /// Currently both HTTP/2 and HTTP/1.1 use the same Dio configuration
-  /// because Dio's HTTP adapter handles protocol negotiation internally
-  /// via the underlying dart:io HttpClient. The [protocol] parameter is
-  /// reserved for future use when custom adapters may be needed.
   static Dio createProtocolDio(ProtocolSupport protocol) {
-    return createDownloadDio();
+    final dio = createDownloadDio();
+    switch (protocol) {
+      case ProtocolSupport.http3:
+        dio.options.connectTimeout = const Duration(milliseconds: 10000);
+        dio.options.receiveTimeout = const Duration(milliseconds: 45000);
+        break;
+      case ProtocolSupport.http2:
+        dio.options.connectTimeout = const Duration(milliseconds: 12000);
+        dio.options.receiveTimeout = const Duration(milliseconds: 60000);
+        break;
+      case ProtocolSupport.http11:
+        break;
+    }
+    return dio;
   }
 
   static bool isGoawayOrReset(dynamic error) {

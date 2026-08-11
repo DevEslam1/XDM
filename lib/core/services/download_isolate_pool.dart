@@ -7,6 +7,7 @@ class EngineMessage {
   final String taskId;
   final Map<String, dynamic> data;
   final int seq;
+
   static Map<String, dynamic> encode({
     required String type,
     required String taskId,
@@ -20,6 +21,7 @@ class EngineMessage {
         'seq': seq,
         if (data != null) 'data': data,
       };
+
   static EngineMessage? tryDecode(dynamic raw) {
     try {
       if (raw is! Map) return null;
@@ -75,6 +77,7 @@ class DownloadCommand {
     this.ytCounterpartDownloadedBytes,
     this.ytCounterpartTaskId,
   });
+
   final String taskId;
   final String url;
   final String punyUrl;
@@ -105,6 +108,7 @@ class DownloadCommand {
   final int? ytCounterpartSize;
   final int? ytCounterpartDownloadedBytes;
   final String? ytCounterpartTaskId;
+
   Map<String, dynamic> toMap() => {
         'taskId': taskId,
         'url': url,
@@ -139,6 +143,7 @@ class DownloadCommand {
         if (ytCounterpartTaskId != null)
           'ytCounterpartTaskId': ytCounterpartTaskId,
       };
+
   static DownloadCommand fromMap(Map<String, dynamic> m) => DownloadCommand(
         taskId: m['taskId'] as String,
         url: m['url'] as String,
@@ -183,14 +188,17 @@ class DownloadIsolatePool {
   DownloadIsolatePool({int size = 4, bool powerAware = false})
       : _size = size,
         _powerAware = powerAware;
+
   final int _size;
   final bool _powerAware;
   final List<_Worker> _workers = [];
   final List<PoolJob> _queue = [];
   bool _shuttingDown = false;
   int _seq = 0;
+
   int get maxJobsPerWorker =>
       PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ? 1 : 2;
+
   int get workerCount {
     final live = _workers.length;
     if (live <= 0) return 0;
@@ -200,11 +208,13 @@ class DownloadIsolatePool {
     }
     return live;
   }
+
   Future<void> init() async {
     for (var i = 0; i < _size; i++) {
       _workers.add(await _spawnWorker(i));
     }
   }
+
   Future<_Worker> _spawnWorker(int index) async {
     final inbox = ReceivePort();
     final errorPort = ReceivePort();
@@ -221,6 +231,7 @@ class DownloadIsolatePool {
     errorPort.listen((dynamic err) => _onWorkerCrash(worker, err));
     return worker;
   }
+
   PoolJob submit(DownloadCommand command, {int priority = 0}) {
     if (_shuttingDown || _workers.isEmpty) {
       throw const IsolateSpawnTimeoutException();
@@ -234,6 +245,7 @@ class DownloadIsolatePool {
     _dispatch(job, priority);
     return job;
   }
+
   void _dispatch(PoolJob job, int priority) {
     job.priority = priority;
     final slots = maxJobsPerWorker;
@@ -258,6 +270,7 @@ class DownloadIsolatePool {
       'cmd': job.command.toMap(),
     });
   }
+
   void _onWorkerMessage(_Worker worker, dynamic msg) {
     if (msg is! Map) return;
     switch (msg['t']) {
@@ -273,6 +286,7 @@ class DownloadIsolatePool {
         break;
     }
   }
+
   void _drain() {
     while (_queue.isNotEmpty) {
       final slots = maxJobsPerWorker;
@@ -297,6 +311,7 @@ class DownloadIsolatePool {
       });
     }
   }
+
   PoolJob? _removeHighestPriority() {
     if (_queue.isEmpty) return null;
     var best = 0;
@@ -310,6 +325,7 @@ class DownloadIsolatePool {
     }
     return _queue.removeAt(best);
   }
+
   void _onWorkerCrash(_Worker worker, dynamic err) {
     worker.dead = true;
     final jobs = List<PoolJob>.from(worker.pending);
@@ -329,16 +345,19 @@ class DownloadIsolatePool {
       });
     }
   }
+
   void _cancelJob(PoolJob job) {
     job._worker?.commandPort
         ?.send({'t': 'cancel', 'jobId': job.command.taskId});
   }
+
   void updateSpeedLimit(int bytesPerSecond, int activeCount) {
     for (final w in _workers) {
       w.commandPort
           ?.send({'t': 'limits', 'bps': bytesPerSecond, 'active': activeCount});
     }
   }
+
   Future<void> shutdown() async {
     _shuttingDown = true;
     _queue.clear();
@@ -351,12 +370,15 @@ class DownloadIsolatePool {
     }
     _workers.clear();
   }
+
   Future<void> dispose() async {
     await shutdown();
   }
+
   Future<void> drain({Duration? timeout}) async {
     await shutdown();
   }
+
   void onMemoryPressure() {
     if (_workers.length > 1) {
       final w = _workers.removeLast();
@@ -373,6 +395,7 @@ class _Worker {
     required this.inbox,
     required this.errorPort,
   });
+
   final Isolate isolate;
   final ReceivePort inbox;
   final ReceivePort errorPort;
@@ -396,16 +419,20 @@ class PoolJob {
         .cast<EngineMessage>()
         .asBroadcastStream();
   }
+
   final DownloadIsolatePool _pool;
   final DownloadCommand command;
   final int _seq;
   int priority = 0;
   int get seq => _seq;
+
   final ReceivePort _incoming = ReceivePort();
   _Worker? _worker;
   late final Stream<EngineMessage> messages;
   bool _disposed = false;
+
   void cancel() => _pool._cancelJob(this);
+
   void _deliverError(String type, String message, int? status) {
     if (_disposed) return;
     _incoming.sendPort.send(EngineMessage.encode(
@@ -414,6 +441,7 @@ class PoolJob {
       data: {'errorType': type, 'errorMessage': message, 'errorStatus': status},
     ));
   }
+
   void dispose() {
     if (_disposed) return;
     _disposed = true;
@@ -462,6 +490,7 @@ Future<void> _workerEntry(SendPort poolPort) async {
 }
 
 class _RangeUnsupportedException implements Exception {}
+
 class _FileChangedOnServerException implements Exception {
   @override
   String toString() => 'File changed on server. Restart required.';
@@ -481,16 +510,20 @@ class HttpTransferJob {
   int _bytesSinceSave = 0;
   final Stopwatch _stopwatch = Stopwatch();
   final Queue<_SpeedSample> _speedSamples = Queue();
+
   static const int _stateSaveIntervalMs = 2000;
-  static const int _stateSaveByteThreshold = 256 * 1024; 
+  static const int _stateSaveByteThreshold = 256 * 1024;
+
   void requestCancel() {
     _cancelRequested = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('paused');
   }
+
   void _send(String type, [Map<String, dynamic>? data]) {
     out.send(EngineMessage.encode(
         type: type, taskId: cmd.taskId, seq: _seq++, data: data));
   }
+
   void sendUnhandledError(Object e) {
     if (e is DioException && e.type == DioExceptionType.cancel) {
       _send('error', {
@@ -541,10 +574,12 @@ class HttpTransferJob {
     }
     _send('error', {'errorType': 'uncaught', 'errorMessage': e.toString()});
   }
+
   static bool _looksLikeDiskFull(String msg) {
     final m = msg.toLowerCase();
     return m.contains('enospc') || m.contains('no space left');
   }
+
   Future<void> run() async {
     _stopwatch.start();
     final dio = buildTransferDio(
@@ -598,10 +633,12 @@ class HttpTransferJob {
         _state!.totalSize = cmd.knownFileSize;
       }
       _state!.status = DmxStateStatus.active;
-      await StateStore.save(cmd.tempFilePath, _state!); 
+      await StateStore.save(cmd.tempFilePath, _state!);
+
       if (_state!.downloadedBytes > 0 && cmd.supportsResume) {
         await _verifyServerIdentity(dio);
       }
+
       final multiThread = _state!.totalSize > 0 &&
           cmd.supportsResume &&
           cmd.threadCount > 1 &&
@@ -623,6 +660,7 @@ class HttpTransferJob {
       dio.close(force: true);
     }
   }
+
   Future<void> _verifyServerIdentity(Dio dio) async {
     try {
       final response = await dio.get<ResponseBody>(
@@ -647,6 +685,7 @@ class HttpTransferJob {
         final newEtag = response.headers.value('etag');
         final newLm = response.headers.value('last-modified');
         await response.data?.stream.listen((_) {}).cancel();
+
         if (serverTotal != null && serverTotal > 0 && _state!.totalSize > 0) {
           final tolerance =
               (_state!.totalSize * 0.001).clamp(2048.0, 10 * 1024 * 1024);
@@ -663,6 +702,7 @@ class HttpTransferJob {
             throw _FileChangedOnServerException();
           }
         }
+
         final oldIdentity = _firstNonEmpty(_state!.etag, _state!.lastModified);
         final newIdentity = _firstNonEmpty(newEtag, newLm);
         if (oldIdentity != null &&
@@ -709,6 +749,7 @@ class HttpTransferJob {
       debugPrint('[DMX-Job] identity probe failed (continuing): $e');
     }
   }
+
   void _resetToSingleStream() {
     final st = _state!;
     for (final c in st.chunks) {
@@ -721,6 +762,7 @@ class HttpTransferJob {
       if (f.existsSync()) f.deleteSync();
     } catch (_) {}
   }
+
   Future<void> _runMultiThreaded(Dio dio) async {
     final st = _state!;
     if (st.chunks.isEmpty) {
@@ -788,9 +830,11 @@ class HttpTransferJob {
     } finally {
       governor.removeTaskLimit(cmd.taskId);
       governor.unregisterConsumer();
+      governor.dispose();
       await writer.close();
     }
   }
+
   Future<void> _runChunk({
     required Dio dio,
     required ChunkState chunk,
@@ -955,7 +999,7 @@ class HttpTransferJob {
             status != 429 &&
             status != 404 &&
             status != 403) {
-          rethrow; 
+          rethrow;
         }
         if (attempts >= maxAttempts) {
           final next = failover.advance();
@@ -981,6 +1025,7 @@ class HttpTransferJob {
       }
     }
   }
+
   Future<void> _spotCheckResumedBytes(
       Dio dio, TransferState st, PositionalFileWriter writer) async {
     const sampleSize = 64 * 1024;
@@ -1014,10 +1059,10 @@ class HttpTransferJob {
           chunk.downloaded = 0;
           debugPrint('[DMX-Job] spot-check mismatch → chunk reset');
         }
-      } catch (_) {
-      }
+      } catch (_) {}
     }
   }
+
   Future<void> _runSingleStream(Dio dio) async {
     final st = _state!;
     if (st.chunks.isEmpty) {
@@ -1318,37 +1363,52 @@ class HttpTransferJob {
     }
     governor.removeTaskLimit(cmd.taskId);
     governor.unregisterConsumer();
+    governor.dispose();
   }
+
   Future<void> _finalize(Dio dio) async {
     final st = _state!;
-    st.status = DmxStateStatus.complete;
-    await StateStore.save(cmd.tempFilePath, st); 
-    _emitProgress(0, statusMessage: 'Completed');
     if (cmd.tempFilePath != cmd.localFilePath) {
       final tempExists = await File(cmd.tempFilePath).exists();
       if (!tempExists) {
-        debugPrint('[DMX] FIX-C2: temp file gone, skipping rename');
-      } else {
-        final finalFile = File(cmd.localFilePath);
-        await finalFile.parent.create(recursive: true);
-        if (await finalFile.exists()) await finalFile.delete();
-        try {
-          await File(cmd.tempFilePath).rename(cmd.localFilePath);
-        } catch (e) {
-          await File(cmd.tempFilePath).copy(cmd.localFilePath);
-          final copiedLen = await File(cmd.localFilePath).length();
-          final origLen = await File(cmd.tempFilePath).length();
-          if (copiedLen == origLen) {
-            await File(cmd.tempFilePath).delete();
-          } else {
-            throw const DownloadIntegrityException(
-                'File copy verification failed on rename fallback.');
-          }
+        st.status = DmxStateStatus.failed;
+        await StateStore.save(cmd.tempFilePath, st);
+        _emitProgress(0, statusMessage: 'Failed');
+        throw DownloadIntegrityException(
+            'Temporary download file missing: ${cmd.tempFilePath}');
+      }
+      final finalFile = File(cmd.localFilePath);
+      await finalFile.parent.create(recursive: true);
+      if (await finalFile.exists()) await finalFile.delete();
+      try {
+        await File(cmd.tempFilePath).rename(cmd.localFilePath);
+      } catch (e) {
+        await File(cmd.tempFilePath).copy(cmd.localFilePath);
+        final copiedLen = await File(cmd.localFilePath).length();
+        final origLen = await File(cmd.tempFilePath).length();
+        if (copiedLen == origLen) {
+          await File(cmd.tempFilePath).delete();
+        } else {
+          throw const DownloadIntegrityException(
+              'File copy verification failed on rename fallback.');
         }
       }
+    } else {
+      final localExists = await File(cmd.localFilePath).exists();
+      if (!localExists) {
+        st.status = DmxStateStatus.failed;
+        await StateStore.save(cmd.tempFilePath, st);
+        _emitProgress(0, statusMessage: 'Failed');
+        throw DownloadIntegrityException(
+            'Download output file missing: ${cmd.localFilePath}');
+      }
     }
+    st.status = DmxStateStatus.complete;
+    await StateStore.save(cmd.tempFilePath, st);
+    _emitProgress(0, statusMessage: 'Completed');
     await StateStore.remove(cmd.tempFilePath);
   }
+
   int _effectiveGlobalLimit() {
     if (_workerGlobalLimitBps > 0) {
       return (_workerGlobalLimitBps / _workerGlobalActive).floor();
@@ -1357,6 +1417,7 @@ class HttpTransferJob {
         ? (cmd.initialSpeedLimit / max(1, cmd.initialActiveCount)).floor()
         : 0;
   }
+
   void _throwIfCancelled() {
     if (_cancelRequested || _cancelToken.isCancelled) {
       throw DioException(
@@ -1366,6 +1427,7 @@ class HttpTransferJob {
       );
     }
   }
+
   Future<void> _cancellableDelay(Duration duration) async {
     if (_cancelRequested) return;
     final completer = Completer<void>();
@@ -1379,6 +1441,7 @@ class HttpTransferJob {
     await completer.future;
     await sub;
   }
+
   Future<void> _throttledSaveAndReport(
     PositionalFileWriter? writer, {
     Future<void> Function()? preSaveFlush,
@@ -1404,6 +1467,7 @@ class HttpTransferJob {
       _emitProgress(nowMs);
     }
   }
+
   void _emitProgress(int nowMs, {String? statusMessage}) {
     final st = _state!;
     final downloaded = st.downloadedBytes;
@@ -1474,6 +1538,7 @@ class HttpTransferJob {
       if (completedChunks != null) 'completedChunks': completedChunks,
     });
   }
+
   static String _deriveCycleState(
       String? statusMessage, DmxStateStatus status) {
     switch (status) {
@@ -1499,6 +1564,7 @@ class HttpTransferJob {
         return 'downloading';
     }
   }
+
   void _validateContentRange(
     String? value, {
     required int expectedStart,
@@ -1508,7 +1574,11 @@ class HttpTransferJob {
   }) {
     if (value == null || value.trim().isEmpty) {
       if (allowUnknown) return;
-      return;
+      throw DioException(
+        requestOptions: RequestOptions(path: cmd.punyUrl),
+        type: DioExceptionType.badResponse,
+        message: 'Missing Content-Range header during resume.',
+      );
     }
     final match =
         RegExp(r'^bytes\s+(\d+)-(\d+)/(\d+|\*)$', caseSensitive: false)

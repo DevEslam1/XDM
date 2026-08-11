@@ -12,6 +12,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    await MirrorHealthStore.clear();
     await MirrorHealthStore.init();
   });
 

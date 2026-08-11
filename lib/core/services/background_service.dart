@@ -139,7 +139,7 @@ class BackgroundService {
       'iOS background callback invoked but background Dart execution is '
       'not supported. See BackgroundService docs.',
     );
-    return true;
+    return false;
   }
 
   static Future<void> start() async {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
@@ -122,8 +123,8 @@ class _AdaptiveTracker {
   _AdaptiveTracker(this.currentThreads);
 
   final int currentThreads;
-  final List<double> _samples = [];
-  final List<int> _sampleThreads = [];
+  final Queue<double> _samples = Queue<double>();
+  final Queue<int> _sampleThreads = Queue<int>();
   int recommendation = 0;
 
   void add(double bytesPerSec, int threads) {
@@ -131,8 +132,8 @@ class _AdaptiveTracker {
       _samples.add(bytesPerSec);
       _sampleThreads.add(threads);
       if (_samples.length > 12) {
-        _samples.removeAt(0);
-        _sampleThreads.removeAt(0);
+        _samples.removeFirst();
+        _sampleThreads.removeFirst();
       }
     }
   }
@@ -141,11 +142,13 @@ class _AdaptiveTracker {
   double get averagePerThreadSpeed {
     if (_samples.isEmpty) return 0;
     double sum = 0;
-    for (var i = 0; i < _samples.length; i++) {
-      final t = _sampleThreads[i] > 0 ? _sampleThreads[i] : 1;
-      sum += _samples[i] / t;
+    final samplesList = _samples.toList();
+    final threadsList = _sampleThreads.toList();
+    for (var i = 0; i < samplesList.length; i++) {
+      final t = threadsList[i] > 0 ? threadsList[i] : 1;
+      sum += samplesList[i] / t;
     }
-    return sum / _samples.length;
+    return sum / samplesList.length;
   }
 
   /// Plateau detection: three consecutive samples within ±5% mean more
@@ -155,7 +158,7 @@ class _AdaptiveTracker {
   /// start uses the original (higher) thread count.
   void evaluate() {
     if (_samples.length < 6) return;
-    final tail = _samples.sublist(_samples.length - 3);
+    final tail = _samples.toList().sublist(_samples.length - 3);
     final avg = tail.reduce((a, b) => a + b) / tail.length;
     if (avg <= 0) {
       recommendation = 0;

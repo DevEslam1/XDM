@@ -933,6 +933,8 @@ class DownloadEngine {
         return 1;
       }
       if (response.headers.value('accept-ranges') == 'none') return 1;
+      final conn = response.headers.value('connection')?.toLowerCase();
+      if (conn == 'close') return 1;
       return requestedThreads;
     } catch (_) {
       return requestedThreads;
@@ -2672,6 +2674,7 @@ class DownloadEngine {
       if (shouldComplete && !completer.isCompleted) completer.complete();
     });
     cancelToken.whenCancel.then((_) async {
+      if (completer.isCompleted) return;
       await sub?.cancel();
       try {
         TorrentService.pauseTorrent(id);

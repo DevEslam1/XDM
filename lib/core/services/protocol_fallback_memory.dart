@@ -9,7 +9,14 @@ class ProtocolFallbackMemory {
     if (support != ProtocolSupport.http3) return;
     final host = Uri.tryParse(url)?.host;
     if (host != null) {
-      _h3Failures[host] = DateTime.now();
+      final now = DateTime.now();
+      _h3Failures[host] = now;
+      if (_h3Failures.length > 200) {
+        _h3Failures.removeWhere((_, at) => now.difference(at) >= _cooldown);
+        if (_h3Failures.length > 200) {
+          _h3Failures.remove(_h3Failures.keys.first);
+        }
+      }
     }
   }
 

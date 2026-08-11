@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:logging/logging.dart';
@@ -17,6 +18,7 @@ class MirrorHealthStore {
   /// Loads persisted health data from [SharedPreferences].
   /// Safe to call repeatedly; already-loaded data is refreshed from disk.
   static Future<void> init() async {
+    await flushPending();
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_storeKey);
     if (raw == null) {
@@ -93,11 +95,31 @@ class MirrorHealthStore {
     return _cache?[url]?.failures ?? 0;
   }
 
+  static Timer? _persistTimer;
+  static bool _persistPending = false;
+
   static Future<void> _persist() async {
+    if (_cache == null || _persistPending) return;
+    _persistPending = true;
+    _persistTimer?.cancel();
+    _persistTimer = Timer(const Duration(seconds: 5), () async {
+      _persistPending = false;
+      await flushPending();
+    });
+  }
+
+  static Future<void> flushPending() async {
     if (_cache == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    final raw = jsonEncode(_cache!.map((k, v) => MapEntry(k, v.toJson())));
-    await prefs.setString(_storeKey, raw);
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    _persistPending = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = jsonEncode(_cache!.map((k, v) => MapEntry(k, v.toJson())));
+      await prefs.setString(_storeKey, raw);
+    } catch (e) {
+      _log.warning('Failed to persist mirror health data: $e');
+    }
   }
 
   /// Clear all persisted mirror health data.

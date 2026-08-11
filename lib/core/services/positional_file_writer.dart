@@ -5,12 +5,9 @@ import 'package:synchronized/synchronized.dart';
 
 /// I/O failure inside the writer. The engine maps message heuristics
 /// (ENOSPC / "space") onto [InsufficientStorageException].
-class PositionalFileWriterException implements Exception, StateError {
+class PositionalFileWriterException implements Exception {
   const PositionalFileWriterException(this.message);
-  @override
   final String message;
-  @override
-  StackTrace? get stackTrace => null;
   @override
   String toString() => 'PositionalFileWriterException: $message';
 }

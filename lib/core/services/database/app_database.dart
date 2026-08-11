@@ -45,7 +45,9 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
       return [];
     } catch (e) {
       try {
-        final matches = RegExp(r'[0-9]+(?:\.[0-9]+)?').allMatches(fromDb);
+        final arrayMatch = RegExp(r'\[([\s\S]*)\]').firstMatch(fromDb);
+        final targetText = arrayMatch != null ? arrayMatch.group(1)! : fromDb;
+        final matches = RegExp(r'[0-9]+(?:\.[0-9]+)?').allMatches(targetText);
         final result = <double>[];
         for (final match in matches) {
           final valStr = match.group(0);
@@ -108,6 +110,7 @@ class TorrentFilesConverter
     } catch (e) {
       try {
         final result = <Map<String, dynamic>>[];
+        // Regex matches flat JSON metadata objects.
         final regex = RegExp(r'\{[^{}]*\}');
         final matches = regex.allMatches(fromDb);
         for (final match in matches) {

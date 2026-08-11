@@ -86,8 +86,11 @@ class FFmpegMuxService {
           outputPath,
         ];
       case MergeStrategy.hwReencode:
-        final videoCodec =
-            Platform.isAndroid ? 'h264_mediacodec' : 'h264_videotoolbox';
+        final videoCodec = Platform.isAndroid
+            ? 'h264_mediacodec'
+            : Platform.isMacOS
+                ? 'h264_videotoolbox'
+                : 'libx264';
         return [
           '-i',
           videoPath,

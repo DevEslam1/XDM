@@ -217,12 +217,29 @@ class DesktopUpdateService {
         return false;
       }
 
-      // Atomic swap: remove old version only after new version is fully copied
+      // Atomic swap with rollback: backup current version, move staging to target,
+      // and delete backup only on success.
       final oldApp = Directory(targetPath);
-      if (await oldApp.exists()) {
-        await oldApp.delete(recursive: true);
+      final backupPath = '$targetPath.old';
+      final backupDir = Directory(backupPath);
+      if (await backupDir.exists()) {
+        await backupDir.delete(recursive: true);
       }
-      await stagingDir.rename(targetPath);
+      if (await oldApp.exists()) {
+        await oldApp.rename(backupPath);
+      }
+      try {
+        await stagingDir.rename(targetPath);
+        if (await backupDir.exists()) {
+          await backupDir.delete(recursive: true);
+        }
+      } catch (e) {
+        _log.severe('Failed to rename staging to target, rolling back: $e');
+        if (await backupDir.exists()) {
+          await backupDir.rename(targetPath);
+        }
+        rethrow;
+      }
 
       // Clean up the downloaded DMG.
       try {

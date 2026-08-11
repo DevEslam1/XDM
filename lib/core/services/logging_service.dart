@@ -91,14 +91,9 @@ class LoggingService {
     );
     // FIX(21): JWTs (three dot-separated base64url segments, each long).
     // Length guard avoids false positives on normal dotted paths.
-    result = result.replaceAllMapped(
+    result = result.replaceAll(
       RegExp(r'[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}'),
-      (m) {
-        final token = m.group(0)!;
-        // A real JWT header (eyJ...) is 3 segments; this broad pattern may
-        // catch long dotted paths, so require a plausible total length.
-        return token.length >= 60 ? '[JWT REDACTED]' : token;
-      },
+      '[JWT REDACTED]',
     );
     // Redact passwords in URLs
     result = result.replaceAllMapped(

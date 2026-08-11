@@ -127,7 +127,7 @@ void main() {
       await writer.close();
       expect(
         () => writer.write(0, 0, Uint8List.fromList([1])),
-        throwsA(isA<StateError>()),
+        throwsA(isA<PositionalFileWriterException>()),
       );
     });
 

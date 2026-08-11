@@ -1,13 +1,14 @@
+import 'dart:collection';
 import 'package:logging/logging.dart';
 
 class _MirrorState {
-  final List<double> _speeds = [];
+  final Queue<double> _speeds = Queue<double>();
   double get averageSpeed =>
       _speeds.isEmpty ? 0 : _speeds.reduce((a, b) => a + b) / _speeds.length;
 
   void updateSpeed(double speed) {
     _speeds.add(speed);
-    if (_speeds.length > 10) _speeds.removeAt(0);
+    if (_speeds.length > 10) _speeds.removeFirst();
   }
 }
 

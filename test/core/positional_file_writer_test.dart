@@ -106,7 +106,7 @@ void main() {
 
       expect(
         () => writer.write(0, 0, Uint8List(1)),
-        throwsA(isA<StateError>()),
+        throwsA(isA<PositionalFileWriterException>()),
       );
     });
   });

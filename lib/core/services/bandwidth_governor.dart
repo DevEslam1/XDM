@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:ui';
 import 'dart:math';
 
@@ -124,7 +125,7 @@ class BandwidthGovernor {
 
     if (taskId != null && _taskLimits.containsKey(taskId)) {
       final taskLimit = _taskLimits[taskId]!;
-      if (taskLimit == 0) return 0; // Unlimited
+      if (taskLimit <= 0) return 1000; // Blocked
 
       return _lock.synchronized(() {
         final now = DateTime.now();
@@ -219,7 +220,7 @@ class BandwidthGovernor {
 }
 
 class _DomainState {
-  final List<double> _speedHistory = [];
+  final Queue<double> _speedHistory = Queue<double>();
 
   double get averageSpeed => _speedHistory.isEmpty
       ? 0
@@ -228,7 +229,7 @@ class _DomainState {
   void updateSpeed(double speed) {
     _speedHistory.add(speed);
     if (_speedHistory.length > 20) {
-      _speedHistory.removeAt(0);
+      _speedHistory.removeFirst();
     }
   }
 }

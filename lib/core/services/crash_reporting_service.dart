@@ -53,12 +53,12 @@ class CrashReportingService {
   /// Initializes crash reporting. If [dsn] is null or empty, uses [NoOpCrashReporter].
   static Future<void> init({String? dsn}) async {
     if (_initialized) return;
-    _initialized = true;
 
     final effectiveDsn = dsn ?? const String.fromEnvironment('SENTRY_DSN');
 
     if (effectiveDsn.isEmpty) {
       _reporter = NoOpCrashReporter();
+      _initialized = true;
       LoggingService.logger(
         'CrashReportingService',
       ).info('No DSN configured — crash reporting is disabled.');
@@ -98,6 +98,7 @@ class CrashReportingService {
       };
     });
     _reporter = SentryCrashReporter();
+    _initialized = true;
   }
 
   static final RegExp _sensitiveUrlPattern = RegExp(

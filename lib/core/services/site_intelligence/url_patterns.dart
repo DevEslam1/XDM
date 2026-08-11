@@ -94,12 +94,28 @@ class UrlPatterns {
     'expire',
     'signature',
     'sig',
-    'key',
-    'st',
-    'exp',
-    'h',
-    'auth'
+    'auth',
+    'auth_token',
+    'access_token',
+    'exp_time',
+    'st_token',
+    'download_key',
   };
+
+  /// Checks if a query parameter key/value pair indicates URL expiration or signing.
+  static bool isExpiryOrSignatureParam(String key, String value) {
+    final lowerKey = key.toLowerCase();
+    if (expiryParams.contains(lowerKey)) return true;
+    if (lowerKey == 'st' || lowerKey == 'exp') {
+      final numVal = int.tryParse(value);
+      if (numVal != null && numVal > 1000000000) return true;
+    } else if (lowerKey == 'h' || lowerKey == 'key') {
+      if (value.length >= 16 && RegExp(r'^[a-fA-F0-9_-]+$').hasMatch(value)) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   // Torrent group/quality patterns for magnet name parsing
   static final releaseGroupRegex = RegExp(r'^\[([^\]]+)\]');
