@@ -76,13 +76,11 @@ class BackgroundService {
     bool isStopped = false;
     StreamSubscription<Map<String, dynamic>?>? stopSub;
     StreamSubscription<Map<String, dynamic>?>? updateSub;
-    StreamSubscription<dynamic>? heartbeatSub;
 
     void cancelAll() {
       isStopped = true;
       stopSub?.cancel();
       updateSub?.cancel();
-      heartbeatSub?.cancel();
     }
 
     stopSub = service.on('stopService').listen(
@@ -121,9 +119,18 @@ class BackgroundService {
           },
         );
 
-    heartbeatSub = service
-        .on('heartbeat')
-        .listen((_) {}, cancelOnError: false, onError: (_) {});
+    // Subscribe to heartbeat to keep the service's event loop active.
+    // The handler logs at fine level for diagnostic purposes; the
+    // subscription itself prevents the service from being garbage-collected.
+    service.on('heartbeat').listen(
+      (_) {
+        _log.finest('Heartbeat received');
+      },
+      cancelOnError: false,
+      onError: (e) {
+        _log.warning('heartbeat stream error', e);
+      },
+    );
   }
 
   @pragma('vm:entry-point')
@@ -137,6 +144,7 @@ class BackgroundService {
 
   static Future<void> start() async {
     if (!isSupported) {
+      final platformName = kIsWeb ? 'web' : Platform.operatingSystem;
       if (!kIsWeb && Platform.isIOS) {
         _log.warning(
           'iOS does not support background Dart execution. '
@@ -144,7 +152,10 @@ class BackgroundService {
           'A native BGTaskScheduler implementation is required.',
         );
       } else {
-        _log.fine('BackgroundService.start() skipped (iOS or unsupported)');
+        _log.fine(
+          'BackgroundService.start() skipped '
+          '(unsupported platform: $platformName)',
+        );
       }
       return;
     }
@@ -157,7 +168,7 @@ class BackgroundService {
 
   static Future<void> stop() async {
     if (!isSupported) {
-      _log.fine('BackgroundService.stop() skipped (iOS or unsupported)');
+      _log.fine('BackgroundService.stop() skipped (unsupported platform)');
       return;
     }
     final service = FlutterBackgroundService();
@@ -201,9 +212,6 @@ class BackgroundService {
       });
 
       // Start periodic renewal every 15 minutes to prevent native timeout expiry.
-      // A4: Re-acquire unconditionally — the native side handles idempotency
-      //     (release-then-acquire), so a missed/delayed Doze tick self-heals
-      //     on the next cycle even if _wakeLockHeld is stale from another isolate.
       _wakeLockRenewalTimer?.cancel();
       _wakeLockRenewalTimer = Timer.periodic(const Duration(minutes: 15), (
         _,
@@ -222,9 +230,6 @@ class BackgroundService {
   }
 
   /// Releases the partial wake lock. Safe to call even if no lock is held.
-  /// FIX(H6): Always attempt native release regardless of _wakeLockHeld,
-  /// since static state is per-isolate and may be stale if the lock was
-  /// acquired from a different isolate.
   static Future<void> releaseWakeLock() async {
     if (!isSupported) return;
     try {

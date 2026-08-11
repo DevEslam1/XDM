@@ -12,7 +12,7 @@ import 'logging_service.dart';
 ///   2. Pass the DSN via `--dart-define=SENTRY_DSN=...` or secure storage.
 ///   3. Call [CrashReportingService.init()] at app startup.
 ///
-/// When no DSN is configured, [NoOpCrashReporter] is used â€” all calls are
+/// When no DSN is configured, [NoOpCrashReporter] is used — all calls are
 /// silently no-ops.
 abstract class CrashReporter {
   Future<void> init({String? dsn});
@@ -71,6 +71,8 @@ class CrashReportingService {
       options.environment = kDebugMode ? 'dev' : 'production';
       options.beforeSend = (event, hint) {
         // Redact URLs that carry auth tokens (e.g. signed download URLs).
+        // Assign values directly to the event — this is future-proof and
+        // avoids copyWith deprecation.
         if (event.request?.url != null && event.request!.url!.contains('?')) {
           final uri = Uri.tryParse(event.request!.url!);
           if (uri != null) {
@@ -84,15 +86,14 @@ class CrashReportingService {
                     ? '***'
                     : entry.value,
             }).toString();
-            if (event.request != null) {
-              event.request!.url = redacted;
-            }
+            event.request?.url = redacted;
           }
         }
         // Strip credential-bearing exceptions/messages.
-        event.message = event.message != null
-            ? SentryMessage(_redactSensitive(event.message!.formatted))
-            : null;
+        final message = event.message;
+        if (message != null) {
+          event.message = SentryMessage(_redactSensitive(message.formatted));
+        }
         return event;
       };
     });
@@ -105,9 +106,10 @@ class CrashReportingService {
 
   static String _redactSensitive(String input) {
     return input.replaceAllMapped(_sensitiveUrlPattern, (match) {
-      final query = match.group(2) ?? '';
+      final regExpMatch = match as RegExpMatch;
+      final String query = regExpMatch.namedGroup('params') ?? '';
       if (query.isEmpty) return match.group(0)!;
-      final sanitized = query.split('&').map((part) {
+      final sanitized = query.split('&').map((String part) {
         final idx = part.indexOf('=');
         if (idx <= 0) return part;
         final name = part.substring(0, idx).toLowerCase();

@@ -5,14 +5,29 @@ class ApiException implements Exception {
   ApiException(this.statusCode, this.body);
 
   String get userMessage {
-    if (body.contains('Sign in to confirm')) {
+    final lower = body.toLowerCase();
+    if (lower.contains('sign in to confirm')) {
       return 'YouTube requires sign-in. Try again later.';
     }
-    if (body.contains('age')) return 'This video is age-restricted.';
-    if (body.contains('geo')) {
+    if (lower.contains('age-restricted') ||
+        lower.contains('age restricted') ||
+        lower.contains('confirm your age') ||
+        lower.contains('age_gate') ||
+        lower.contains('agegate')) {
+      return 'This video is age-restricted.';
+    }
+    if (lower.contains('geo-restricted') ||
+        lower.contains('geo restricted') ||
+        lower.contains('geo_blocked') ||
+        lower.contains('geo-blocked') ||
+        lower.contains('not available in your country') ||
+        lower.contains('not available in your region') ||
+        lower.contains('not available in your area')) {
       return 'This video is not available in your region.';
     }
-    if (body.contains('No streams')) return 'No downloadable streams found.';
+    if (lower.contains('no streams') || lower.contains('no downloadable')) {
+      return 'No downloadable streams found.';
+    }
     return 'Error $statusCode: $body';
   }
 

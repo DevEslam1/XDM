@@ -135,15 +135,10 @@ class DesktopUpdateService {
       }
 
       if (Platform.isWindows) {
-        // FIX: Use Process.run instead of Process.start to wait for the
-        // installer to complete. Checking pid > 0 only verifies the process
-        // started, not that the update succeeded.
         final result = await Process.run(downloadPath, ['/S']);
         return result.exitCode == 0;
       } else if (Platform.isMacOS) {
-        final mountResult =
-            await Process.run('hdiutil', ['attach', downloadPath]);
-        return mountResult.exitCode == 0;
+        return await _installMacosUpdate(downloadPath);
       } else if (Platform.isLinux) {
         await Process.run('chmod', ['+x', downloadPath]);
         final targetDir = '${Platform.environment['HOME']}/.local/bin';
@@ -156,6 +151,86 @@ class DesktopUpdateService {
     } catch (e) {
       _log.severe('Desktop update download or install failed', e);
       return false;
+    }
+  }
+
+  /// Mounts the DMG, copies the .app bundle to /Applications using ditto
+  /// (preserves macOS metadata/resource forks), then detaches the volume.
+  Future<bool> _installMacosUpdate(String dmgPath) async {
+    String? mountPoint;
+    try {
+      final mountResult = await Process.run(
+        'hdiutil',
+        ['attach', '-nobrowse', '-plist', dmgPath],
+      );
+      if (mountResult.exitCode != 0) {
+        _log.severe('Failed to mount DMG: ${mountResult.stderr}');
+        return false;
+      }
+
+      // Parse mount point from plist XML output.
+      // The output contains <string>/Volumes/SomeName</string> entries;
+      // the mount point is the last /Volumes/ path in the plist.
+      final stdout = mountResult.stdout as String;
+      final volumeMatches =
+          RegExp(r'<string>(/Volumes/[^<]+)</string>').allMatches(stdout);
+      if (volumeMatches.isEmpty) {
+        _log.severe('Could not parse mount point from hdiutil output');
+        return false;
+      }
+      // ignore: unnecessary_null_checks
+      mountPoint = volumeMatches.last.group(1)!;
+
+      // Find .app bundle inside the mounted volume.
+      final entities = Directory(mountPoint).listSync();
+      Directory? appBundle;
+      for (final entity in entities) {
+        if (entity is Directory && entity.path.endsWith('.app')) {
+          appBundle = entity;
+          break;
+        }
+      }
+      if (appBundle == null) {
+        _log.severe('No .app bundle found inside mounted DMG');
+        return false;
+      }
+
+      final appName = p.basename(appBundle.path);
+      final targetPath = '/Applications/$appName';
+
+      // Remove old version if it exists.
+      final oldApp = Directory(targetPath);
+      if (await oldApp.exists()) {
+        await oldApp.delete(recursive: true);
+      }
+
+      // Use ditto to copy — preserves resource forks, extended attributes,
+      // and HFS metadata that cp does not handle correctly for .app bundles.
+      final copyResult =
+          await Process.run('ditto', [appBundle.path, targetPath]);
+      if (copyResult.exitCode != 0) {
+        _log.severe('Failed to copy app bundle: ${copyResult.stderr}');
+        return false;
+      }
+
+      // Clean up the downloaded DMG.
+      try {
+        await File(dmgPath).delete();
+      } catch (_) {}
+
+      return true;
+    } catch (e) {
+      _log.severe('macOS update installation failed', e);
+      return false;
+    } finally {
+      // Always detach the mounted volume, even on failure.
+      if (mountPoint != null) {
+        try {
+          await Process.run('hdiutil', ['detach', mountPoint]);
+        } catch (e) {
+          _log.warning('Failed to detach DMG volume: $e');
+        }
+      }
     }
   }
 
@@ -191,12 +266,31 @@ class DesktopUpdateService {
     return false;
   }
 
+  /// Streaming SHA-256 verification — reads the file in 1MB chunks instead
+  /// of loading the entire file into memory. Prevents OOM on large update
+  /// files (e.g., 500MB+ desktop installers).
   Future<bool> _verifySha256(String filePath, String expectedSha256) async {
     try {
+      Digest? digest;
+      final innerSink = ChunkedConversionSink<Digest>.withCallback((results) {
+        digest = results.single;
+      });
+      final sink = sha256.startChunkedConversion(innerSink);
       final file = File(filePath);
-      final bytes = await file.readAsBytes();
-      final digest = sha256.convert(bytes);
-      return digest.toString().toLowerCase() == expectedSha256.toLowerCase();
+      final raf = await file.open(mode: FileMode.read);
+      try {
+        const bufferSize = 1024 * 1024; // 1MB chunks
+        while (true) {
+          final bytes = await raf.read(bufferSize);
+          if (bytes.isEmpty) break;
+          sink.add(bytes);
+        }
+      } finally {
+        await raf.close();
+      }
+      sink.close();
+      final actual = digest.toString();
+      return actual.toLowerCase() == expectedSha256.toLowerCase();
     } catch (e) {
       _log.warning('SHA-256 verification failed', e);
       return false;

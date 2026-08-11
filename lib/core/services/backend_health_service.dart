@@ -15,12 +15,11 @@ class BackendConfig {
   });
 }
 
-/// // P0-1: Manages backend failover, health tracking, and cooldown recovery.
+/// Manages backend failover, health tracking, and cooldown recovery.
 class BackendHealthService {
   BackendHealthService._internal();
   static final BackendHealthService instance = BackendHealthService._internal();
 
-  // FIX-7: Register fallback backend URL in BackendHealthService
   final List<BackendConfig> _backends = [
     const BackendConfig(
       baseUrl: kDefaultBackendBaseUrl,
@@ -46,15 +45,17 @@ class BackendHealthService {
     _backends.sort((a, b) => a.priority.compareTo(b.priority));
   }
 
-  List<BackendConfig> get activeBackends {
+  /// Removes expired cooldowns. Called internally before every activeBackends
+  /// computation. Exposed as a public method so callers can force cleanup
+  /// (e.g., during maintenance) without relying on getter side-effects.
+  void pruneExpiredCooldowns() {
     final now = DateTime.now();
-    // FIX-P2-22: Clean up expired cooldowns before filtering
-    for (final b in _backends) {
-      final cooldown = _unhealthyCooldowns[b.baseUrl];
-      if (cooldown != null && now.isAfter(cooldown)) {
-        _unhealthyCooldowns.remove(b.baseUrl);
-      }
-    }
+    _unhealthyCooldowns.removeWhere((_, expiry) => now.isAfter(expiry));
+  }
+
+  List<BackendConfig> get activeBackends {
+    pruneExpiredCooldowns();
+
     final healthy = _backends
         .where((b) => !_unhealthyCooldowns.containsKey(b.baseUrl))
         .toList();
@@ -62,7 +63,7 @@ class BackendHealthService {
     healthy.sort((a, b) => a.priority.compareTo(b.priority));
     if (healthy.isNotEmpty) return healthy;
 
-    // FIX: Instead of returning ALL backends (which defeats the purpose of
+    // Instead of returning ALL backends (which defeats the purpose of
     // cooldowns), return only the one whose cooldown expires soonest.
     // This gives the system a chance to recover instead of immediately
     // hammering a known-bad backend.
@@ -83,7 +84,7 @@ class BackendHealthService {
     final duration = customDuration ?? cooldownDuration;
     _unhealthyCooldowns[baseUrl] = DateTime.now().add(duration);
     _log.warning(
-        'P0-1: Marked backend unhealthy ($baseUrl) for ${duration.inSeconds}s');
+        'Marked backend unhealthy ($baseUrl) for ${duration.inSeconds}s');
   }
 
   void markHealthy(String baseUrl) {
@@ -91,7 +92,6 @@ class BackendHealthService {
     _lastHealthyBaseUrl = baseUrl;
   }
 
-  // FIX-7: Ensure activeBaseUrl returns first healthy backend or fallback URL
   String get activeBaseUrl {
     final active = activeBackends;
     if (_lastHealthyBaseUrl != null &&

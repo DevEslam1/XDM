@@ -45,6 +45,26 @@ class AppLockService {
     return remaining;
   }
 
+  /// Computes the lockout duration (in seconds) for a given level.
+  /// Uses a fixed lookup table to avoid integer overflow from bit-shifting.
+  /// Level 1: 30s, 2: 60s, 3: 120s, 4: 300s, 5: 600s, 6+: 900s (max 15 min).
+  static int _lockoutSecondsForLevel(int level) {
+    switch (level) {
+      case 1:
+        return 30;
+      case 2:
+        return 60;
+      case 3:
+        return 120;
+      case 4:
+        return 300;
+      case 5:
+        return 600;
+      default:
+        return 900;
+    }
+  }
+
   static Future<void> _registerFailedAttempt() async {
     final attempts = int.tryParse(
           await _storage.read(key: _failedAttemptsKey) ?? '',
@@ -64,7 +84,7 @@ class AppLockService {
         ) ??
         0;
     final nextLevel = level + 1;
-    final seconds = (30 * (1 << (nextLevel - 1))).clamp(30, 900);
+    final seconds = _lockoutSecondsForLevel(nextLevel);
     final lockedUntil =
         DateTime.now().add(Duration(seconds: seconds)).millisecondsSinceEpoch;
     await _storage.write(key: _failedAttemptsKey, value: '0');
