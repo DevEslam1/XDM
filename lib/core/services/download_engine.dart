@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
+import 'package:dmx/core/services/connection_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -732,7 +733,7 @@ class DownloadEngine {
   DownloadEngine({
     Dio? dio,
     bool enableCleanupTimer = true,
-  }) : _sharedDio = dio ?? Dio() {
+  }) : _sharedDio = dio ?? ConnectionManager.createDownloadDio() {
     if (enableCleanupTimer) {
       _cleanupTimer = Timer.periodic(const Duration(seconds: 120), (_) {
         if (_closed) return;
@@ -1603,7 +1604,6 @@ class DownloadEngine {
     }
 
     final pool = await _ensurePool();
-    await _ensurePool();
     final job = pool.submit(command);
     final completer = Completer<void>();
     bool acked = false;

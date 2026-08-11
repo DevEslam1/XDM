@@ -107,8 +107,12 @@ class DiagnosticService {
       );
     }
 
-    info['dart'] = Platform.version.split(' ').first;
-    info['arch'] = Platform.operatingSystemVersion;
+    if (!kIsWeb) {
+      info['dart'] = Platform.version.split(' ').first;
+      info['arch'] = Platform.operatingSystemVersion;
+    } else {
+      info['dart'] = 'web';
+    }
     return info;
   }
 }

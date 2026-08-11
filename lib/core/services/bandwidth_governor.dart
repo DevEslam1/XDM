@@ -106,11 +106,16 @@ class BandwidthGovernor {
   void removeTaskLimit(String taskId) {
     _taskLimits.remove(taskId);
     _taskLastRefill.remove(taskId);
+    _taskTokens.remove(taskId);
   }
 
   int? getTaskLimit(String taskId) {
     return _taskLimits[taskId];
   }
+
+  // FIX: Per-task token buckets so tasks with different limits don't
+  // corrupt each other's rate-limiting through the shared _availableTokens.
+  final Map<String, double> _taskTokens = {};
 
   /// Returns how many milliseconds the caller should sleep before writing
   /// [bytes] to stay within the configured limit.
@@ -122,18 +127,30 @@ class BandwidthGovernor {
       if (taskLimit == 0) return 0; // Unlimited
 
       return _lock.synchronized(() {
-        _refillWithLimit(taskLimit, taskId);
+        final now = DateTime.now();
+        final last = _taskLastRefill[taskId] ?? now;
+        final elapsedMs = now.difference(last).inMilliseconds;
+        final tokens = _taskTokens[taskId] ?? 0.0;
 
-        _availableTokens -= bytes;
-        final maxDeficit = -(taskLimit * 2.0);
-        if (_availableTokens < maxDeficit) {
-          _availableTokens = maxDeficit;
+        if (elapsedMs > 0) {
+          final newTokens = taskLimit * elapsedMs / 1000.0;
+          _taskTokens[taskId] =
+              min(tokens + newTokens, taskLimit * _burstFactor);
+          _taskLastRefill[taskId] = now;
+        } else {
+          _taskTokens[taskId] = tokens;
         }
-        if (_availableTokens >= 0) {
+
+        _taskTokens[taskId] = (_taskTokens[taskId] ?? 0) - bytes;
+        final maxDeficit = -(taskLimit * 2.0);
+        if ((_taskTokens[taskId] ?? 0) < maxDeficit) {
+          _taskTokens[taskId] = maxDeficit;
+        }
+        if ((_taskTokens[taskId] ?? 0) >= 0) {
           return 0;
         }
 
-        final deficit = -_availableTokens;
+        final deficit = -(_taskTokens[taskId] ?? 0);
         final waitMs = (deficit / taskLimit * 1000.0).ceil();
         return waitMs.clamp(0, 5000);
       });
@@ -158,22 +175,9 @@ class BandwidthGovernor {
 
       final deficit = -_availableTokens;
 
-      // Return the wait time required to repay token debt (proportional up to 5s max).
       final waitMs = (deficit / share * 1000.0).ceil();
       return waitMs.clamp(0, 5000);
     });
-  }
-
-  void _refillWithLimit(int limit, String taskId) {
-    final now = DateTime.now();
-    final last = _taskLastRefill[taskId] ?? now;
-    final elapsedMs = now.difference(last).inMilliseconds;
-
-    if (elapsedMs <= 0) return;
-
-    final newTokens = limit * elapsedMs / 1000.0;
-    _availableTokens = min(_availableTokens + newTokens, limit * _burstFactor);
-    _taskLastRefill[taskId] = now;
   }
 
   void _refill() {

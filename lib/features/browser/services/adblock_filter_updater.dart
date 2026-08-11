@@ -360,6 +360,7 @@ class AdBlockFilterUpdater {
 
     final prefs = await SharedPreferences.getInstance();
     final tempDir = await getTemporaryDirectory();
+    bool allSourcesSucceeded = true;
 
     for (final source in _sources) {
       try {
@@ -374,6 +375,7 @@ class AdBlockFilterUpdater {
         if (!ok) {
           _log.warning(
               'Failed to download source ${source.name} (all URLs failed)');
+          allSourcesSucceeded = false;
           continue;
         }
 
@@ -479,24 +481,58 @@ class AdBlockFilterUpdater {
       '${_domainsKey}_excepted',
       _allowListedDomains.take(_maxDomains).toList(),
     );
-    await prefs.setStringList(
-      _patternsKey,
-      _urlPatterns.take(5000).toList(),
-    );
-    await prefs.setStringList(
-      _cosmeticKey,
-      _cosmeticRules.take(5000).toList(),
-    );
+    if (allSourcesSucceeded) {
+      await prefs.setStringList(
+        _patternsKey,
+        _urlPatterns.take(5000).toList(),
+      );
+      await prefs.setStringList(
+        _cosmeticKey,
+        _cosmeticRules.take(5000).toList(),
+      );
 
-    // Save site-cosmetic rules map to preferences
-    final siteCosmeticsJson =
-        jsonEncode(_siteCosmeticRules.map((k, v) => MapEntry(k, v.toList())));
-    await prefs.setString(_siteCosmeticKey, siteCosmeticsJson);
+      // Save site-cosmetic rules map to preferences
+      final siteCosmeticsJson =
+          jsonEncode(_siteCosmeticRules.map((k, v) => MapEntry(k, v.toList())));
+      await prefs.setString(_siteCosmeticKey, siteCosmeticsJson);
 
-    await prefs.setStringList(
-      _scriptletsKey,
-      _scriptletRules.take(1000).toList(),
-    );
+      await prefs.setStringList(
+        _scriptletsKey,
+        _scriptletRules.take(1000).toList(),
+      );
+    } else {
+      _log.warning(
+          'Some filter sources failed to download. Pattern and cosmetic rule updates were skipped to prevent data loss.');
+      // Reload old patterns/cosmetics from prefs to restore in-memory state
+      _urlPatterns.clear();
+      _urlPatternsTrie.clear();
+      _cosmeticRules.clear();
+      _siteCosmeticRules.clear();
+      _cosmeticExceptions.clear();
+      _scriptletRules.clear();
+
+      final cachedPatterns = prefs.getStringList(_patternsKey) ?? [];
+      final cachedCosmetics = prefs.getStringList(_cosmeticKey) ?? [];
+      final cachedScriptlets = prefs.getStringList(_scriptletsKey) ?? [];
+      _urlPatterns.addAll(cachedPatterns);
+      for (final p in cachedPatterns) {
+        _urlPatternsTrie.insert(p);
+      }
+      _cosmeticRules.addAll(cachedCosmetics);
+      _scriptletRules.addAll(cachedScriptlets);
+
+      final siteCosmeticsStr = prefs.getString(_siteCosmeticKey);
+      if (siteCosmeticsStr != null) {
+        try {
+          final decoded = jsonDecode(siteCosmeticsStr) as Map<String, dynamic>;
+          for (final entry in decoded.entries) {
+            final rules = (entry.value as List).cast<String>();
+            _siteCosmeticRules[entry.key] = rules.toSet();
+          }
+          // ignore: empty_catches
+        } catch (e) {}
+      }
+    }
   }
 
   Future<({Set<String> blocked, Set<String> excepted})> _parseFilterLines(

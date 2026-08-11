@@ -31,6 +31,11 @@ class ConnectionWarmer {
               .reduce((a, b) => a.value.isBefore(b.value) ? a : b);
           _warmedHosts.remove(oldest.key);
         }
+        // FIX: Set timestamp optimistically INSIDE the lock so concurrent
+        // calls for the same host see it as already warmed and skip the
+        // network probe. If the probe fails, the TTL still prevents
+        // retry storms for 5 minutes.
+        _warmedHosts[host] = DateTime.now();
         return true;
       });
       if (!shouldWarm) return;
@@ -38,8 +43,6 @@ class ConnectionWarmer {
       final dio = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 5),
       ));
-      // FIX: Ensure Dio is always closed, even on exception, to prevent
-      // socket and memory leaks during pre-warm probes.
       try {
         await dio.head(
           url,
@@ -52,7 +55,6 @@ class ConnectionWarmer {
         dio.close();
       }
 
-      _warmedHosts[host] = DateTime.now();
       _log.fine('[ConnectionWarmer] Pre-warmed TLS connection to $host');
     } catch (e) {
       _log.info('[ConnectionWarmer] pre-warm skipped: $e');
@@ -74,7 +76,8 @@ class ConnectionWarmer {
       try {
         final host = Uri.parse(url).host;
         final lastWarm = _warmedHosts[host];
-        return lastWarm != null && DateTime.now().difference(lastWarm) < _warmTtl;
+        return lastWarm != null &&
+            DateTime.now().difference(lastWarm) < _warmTtl;
       } catch (e) {
         _log.info(
             '[ConnectionWarmer] URL parse skipped, returning not warmed: $e');

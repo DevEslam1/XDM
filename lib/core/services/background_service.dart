@@ -137,7 +137,7 @@ class BackgroundService {
 
   static Future<void> start() async {
     if (!isSupported) {
-      if (Platform.isIOS) {
+      if (!kIsWeb && Platform.isIOS) {
         _log.warning(
           'iOS does not support background Dart execution. '
           'Downloads will pause when the app is backgrounded. '

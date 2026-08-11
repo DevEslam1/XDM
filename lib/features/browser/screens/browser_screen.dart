@@ -7280,7 +7280,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                               .toLowerCase();
 
                                                                           // Instant fast-path: Never block YouTube, Google, gstatic, or core media infrastructure
-                                                                          const whitelistedDomains = [
+                                                                          const whitelistedDomains =
+                                                                              [
                                                                             'youtube.com',
                                                                             'youtu.be',
                                                                             'ytimg.com',
@@ -7291,9 +7292,13 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                             'google.com',
                                                                             'gstatic.com',
                                                                           ];
-                                                                          bool isWhitelisted = false;
-                                                                          for (final d in whitelistedDomains) {
-                                                                            if (requestHost == d || requestHost.endsWith('.$d')) {
+                                                                          bool
+                                                                              isWhitelisted =
+                                                                              false;
+                                                                          for (final d
+                                                                              in whitelistedDomains) {
+                                                                            if (requestHost == d ||
+                                                                                requestHost.endsWith('.$d')) {
                                                                               isWhitelisted = true;
                                                                               break;
                                                                             }
@@ -7310,7 +7315,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                             final pageHost =
                                                                                 Uri.tryParse(pageUrl)?.host.toLowerCase() ?? '';
                                                                             if (pageHost.isNotEmpty &&
-                                                                                (requestHost == pageHost || requestHost.endsWith('.$pageHost') || pageHost.endsWith('.$requestHost'))) {
+                                                                                (requestHost == pageHost || requestHost.endsWith('.$pageHost') || (requestHost.contains('.') && pageHost.endsWith('.$requestHost')))) {
                                                                               return null;
                                                                             }
                                                                           }
@@ -7320,6 +7325,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                               .toString();
                                                                           if (_adBlocker
                                                                               .shouldBlock(url)) {
+                                                                            _adBlocker.recordBlocked(url);
                                                                             final count =
                                                                                 (_blockedAdsPerTab[tab.id] ?? 0) + 1;
                                                                             _blockedAdsPerTab[tab.id] =

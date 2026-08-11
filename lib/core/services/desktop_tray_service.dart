@@ -11,6 +11,8 @@ class DesktopTrayService with TrayListener {
   DesktopTrayService._();
 
   bool _initialized = false;
+  VoidCallback? _onPauseAll;
+  VoidCallback? _onResumeAll;
 
   Future<void> init({
     VoidCallback? onPauseAll,
@@ -18,6 +20,9 @@ class DesktopTrayService with TrayListener {
   }) async {
     if (_initialized) return;
     if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) return;
+
+    _onPauseAll = onPauseAll;
+    _onResumeAll = onResumeAll;
 
     try {
       _initialized = true;
@@ -60,6 +65,12 @@ class DesktopTrayService with TrayListener {
     switch (menuItem.key) {
       case 'show':
         windowManager.show();
+        break;
+      case 'pause_all':
+        _onPauseAll?.call();
+        break;
+      case 'resume_all':
+        _onResumeAll?.call();
         break;
       case 'quit':
         trayManager.destroy();

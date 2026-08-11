@@ -61,7 +61,7 @@ class CrashReportingService {
       _reporter = NoOpCrashReporter();
       LoggingService.logger(
         'CrashReportingService',
-      ).info('No DSN configured â€” crash reporting is disabled.');
+      ).info('No DSN configured — crash reporting is disabled.');
       return;
     }
 

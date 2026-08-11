@@ -64,10 +64,10 @@ class ClipboardService {
   }
 
   /// Checks if there is a new valid HTTP/HTTPS URL on the clipboard.
-  /// Returns the URL if it's new (or if the last check was >30 minutes ago),
-  /// otherwise null. A *new* URL is always returned; only the *same* URL seen
+  /// Returns the URL if it's new, otherwise null. Only the *same* URL seen
   /// again within 30 seconds is skipped (per-URL rate limit) to avoid
-  /// re-prompting without dropping genuinely new links.
+  /// re-prompting without dropping genuinely new links. A different URL
+  /// always passes through immediately.
   Future<String?> checkClipboardForUrl() async {
     await _initIfNeeded();
 
