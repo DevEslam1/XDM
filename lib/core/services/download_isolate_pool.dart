@@ -1,24 +1,12 @@
 part of 'download_engine.dart';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// VERSIONED ISOLATE PROTOCOL
-//
-// Every message is a self-describing envelope {proto, type, taskId, seq,
-// data}. tryDecode REJECTS unknown protocol versions and malformed payloads
-// (returns null → dropped + logged), so a garbled or version-skewed message
-// can never reach task state.
-// ═══════════════════════════════════════════════════════════════════════════
-
 class EngineMessage {
   EngineMessage._(this.type, this.taskId, this.data, this.seq);
-
   static const int protocolVersion = 1;
-
   final String type;
   final String taskId;
   final Map<String, dynamic> data;
   final int seq;
-
   static Map<String, dynamic> encode({
     required String type,
     required String taskId,
@@ -32,7 +20,6 @@ class EngineMessage {
         'seq': seq,
         if (data != null) 'data': data,
       };
-
   static EngineMessage? tryDecode(dynamic raw) {
     try {
       if (raw is! Map) return null;
@@ -53,8 +40,6 @@ class EngineMessage {
   }
 }
 
-/// Everything a worker isolate needs. Crosses the isolate boundary as a Map
-/// (explicit serialization, no shared-object assumptions).
 class DownloadCommand {
   const DownloadCommand({
     required this.taskId,
@@ -90,7 +75,6 @@ class DownloadCommand {
     this.ytCounterpartDownloadedBytes,
     this.ytCounterpartTaskId,
   });
-
   final String taskId;
   final String url;
   final String punyUrl;
@@ -121,7 +105,6 @@ class DownloadCommand {
   final int? ytCounterpartSize;
   final int? ytCounterpartDownloadedBytes;
   final String? ytCounterpartTaskId;
-
   Map<String, dynamic> toMap() => {
         'taskId': taskId,
         'url': url,
@@ -156,7 +139,6 @@ class DownloadCommand {
         if (ytCounterpartTaskId != null)
           'ytCounterpartTaskId': ytCounterpartTaskId,
       };
-
   static DownloadCommand fromMap(Map<String, dynamic> m) => DownloadCommand(
         taskId: m['taskId'] as String,
         url: m['url'] as String,
@@ -197,28 +179,18 @@ class DownloadCommand {
       );
 }
 
-// ── Pool ────────────────────────────────────────────────────────────────────
-
 class DownloadIsolatePool {
   DownloadIsolatePool({int size = 4, bool powerAware = false})
       : _size = size,
         _powerAware = powerAware;
-
   final int _size;
   final bool _powerAware;
   final List<_Worker> _workers = [];
   final List<PoolJob> _queue = [];
   bool _shuttingDown = false;
   int _seq = 0;
-
-  /// Up to two concurrent jobs per worker isolate at full power; drop to one
-  /// when battery saver is in aggressive mode.
   int get maxJobsPerWorker =>
       PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ? 1 : 2;
-
-  /// Effective pool capacity surface. In power-aware mode an aggressive
-  /// battery collapse is reflected even before isolates are physically
-  /// re-spawned.
   int get workerCount {
     final live = _workers.length;
     if (live <= 0) return 0;
@@ -228,13 +200,11 @@ class DownloadIsolatePool {
     }
     return live;
   }
-
   Future<void> init() async {
     for (var i = 0; i < _size; i++) {
       _workers.add(await _spawnWorker(i));
     }
   }
-
   Future<_Worker> _spawnWorker(int index) async {
     final inbox = ReceivePort();
     final errorPort = ReceivePort();
@@ -251,7 +221,6 @@ class DownloadIsolatePool {
     errorPort.listen((dynamic err) => _onWorkerCrash(worker, err));
     return worker;
   }
-
   PoolJob submit(DownloadCommand command, {int priority = 0}) {
     if (_shuttingDown || _workers.isEmpty) {
       throw const IsolateSpawnTimeoutException();
@@ -265,7 +234,6 @@ class DownloadIsolatePool {
     _dispatch(job, priority);
     return job;
   }
-
   void _dispatch(PoolJob job, int priority) {
     job.priority = priority;
     final slots = maxJobsPerWorker;
@@ -290,14 +258,11 @@ class DownloadIsolatePool {
       'cmd': job.command.toMap(),
     });
   }
-
   void _onWorkerMessage(_Worker worker, dynamic msg) {
     if (msg is! Map) return;
     switch (msg['t']) {
       case 'hello':
         worker.commandPort = msg['port'] as SendPort;
-        // Drain anything queued before the worker said hello — highest priority
-        // first, up to that worker's available slots.
         _drain();
       case 'idle':
         worker.activeJobs = (worker.activeJobs - 1).clamp(0, 1 << 30);
@@ -308,11 +273,8 @@ class DownloadIsolatePool {
         break;
     }
   }
-
   void _drain() {
-    if (_queue.isEmpty) return;
-    var idx = 0;
-    while (idx < _queue.length) {
+    while (_queue.isNotEmpty) {
       final slots = maxJobsPerWorker;
       _Worker? worker;
       for (final w in _workers) {
@@ -333,12 +295,8 @@ class DownloadIsolatePool {
         'reply': job._incoming.sendPort,
         'cmd': job.command.toMap(),
       });
-      idx++;
     }
   }
-
-  /// Returns the queued job with the highest priority, breaking ties by
-  /// submission order (earliest first).
   PoolJob? _removeHighestPriority() {
     if (_queue.isEmpty) return null;
     var best = 0;
@@ -352,13 +310,11 @@ class DownloadIsolatePool {
     }
     return _queue.removeAt(best);
   }
-
   void _onWorkerCrash(_Worker worker, dynamic err) {
     worker.dead = true;
     final jobs = List<PoolJob>.from(worker.pending);
     worker.pending.clear();
     worker.activeJobs = 0;
-    // Surface the crash as a task-level error — never a silent stall.
     for (final job in jobs) {
       job._deliverError('workerDied', 'Worker isolate died: $err', null);
     }
@@ -373,19 +329,16 @@ class DownloadIsolatePool {
       });
     }
   }
-
   void _cancelJob(PoolJob job) {
     job._worker?.commandPort
         ?.send({'t': 'cancel', 'jobId': job.command.taskId});
   }
-
   void updateSpeedLimit(int bytesPerSecond, int activeCount) {
     for (final w in _workers) {
       w.commandPort
           ?.send({'t': 'limits', 'bps': bytesPerSecond, 'active': activeCount});
     }
   }
-
   Future<void> shutdown() async {
     _shuttingDown = true;
     _queue.clear();
@@ -398,15 +351,12 @@ class DownloadIsolatePool {
     }
     _workers.clear();
   }
-
   Future<void> dispose() async {
     await shutdown();
   }
-
   Future<void> drain({Duration? timeout}) async {
     await shutdown();
   }
-
   void onMemoryPressure() {
     if (_workers.length > 1) {
       final w = _workers.removeLast();
@@ -446,7 +396,6 @@ class PoolJob {
         .cast<EngineMessage>()
         .asBroadcastStream();
   }
-
   final DownloadIsolatePool _pool;
   final DownloadCommand command;
   final int _seq;
@@ -456,9 +405,7 @@ class PoolJob {
   _Worker? _worker;
   late final Stream<EngineMessage> messages;
   bool _disposed = false;
-
   void cancel() => _pool._cancelJob(this);
-
   void _deliverError(String type, String message, int? status) {
     if (_disposed) return;
     _incoming.sendPort.send(EngineMessage.encode(
@@ -467,7 +414,6 @@ class PoolJob {
       data: {'errorType': type, 'errorMessage': message, 'errorStatus': status},
     ));
   }
-
   void dispose() {
     if (_disposed) return;
     _disposed = true;
@@ -475,13 +421,8 @@ class PoolJob {
   }
 }
 
-// ── Worker isolate entry ────────────────────────────────────────────────────
-
-/// Per-isolate globals updated by pool control messages.
 int _workerGlobalLimitBps = 0;
 int _workerGlobalActive = 1;
-
-/// Running jobs inside this isolate, keyed by taskId (for cancel routing).
 final Map<String, HttpTransferJob> _runningJobs = {};
 
 Future<void> _workerEntry(SendPort poolPort) async {
@@ -520,10 +461,7 @@ Future<void> _workerEntry(SendPort poolPort) async {
   }
 }
 
-// ── The transfer job (chunk execution) ─────────────────────────────────────
-
 class _RangeUnsupportedException implements Exception {}
-
 class _FileChangedOnServerException implements Exception {
   @override
   String toString() => 'File changed on server. Restart required.';
@@ -531,7 +469,6 @@ class _FileChangedOnServerException implements Exception {
 
 class HttpTransferJob {
   HttpTransferJob(this.cmd, this.out);
-
   final DownloadCommand cmd;
   final SendPort out;
   final CancelToken _cancelToken = CancelToken();
@@ -544,21 +481,16 @@ class HttpTransferJob {
   int _bytesSinceSave = 0;
   final Stopwatch _stopwatch = Stopwatch();
   final Queue<_SpeedSample> _speedSamples = Queue();
-
   static const int _stateSaveIntervalMs = 2000;
-  // FIX H-2: Lower byte threshold to reduce worst-case loss window
-  static const int _stateSaveByteThreshold = 256 * 1024; // 256 KB
-
+  static const int _stateSaveByteThreshold = 256 * 1024; 
   void requestCancel() {
     _cancelRequested = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('paused');
   }
-
   void _send(String type, [Map<String, dynamic>? data]) {
     out.send(EngineMessage.encode(
         type: type, taskId: cmd.taskId, seq: _seq++, data: data));
   }
-
   void sendUnhandledError(Object e) {
     if (e is DioException && e.type == DioExceptionType.cancel) {
       _send('error', {
@@ -583,16 +515,10 @@ class HttpTransferJob {
       });
       return;
     }
-    // FIX-3A: Catch the typed URL expiry exception so the orchestrator
-    // knows to refresh the link and retry, rather than treating it as a
-    // user cancel.
     if (e is UrlExpiredException) {
       _send('error', {
         'errorType': 'urlExpired',
         'errorMessage': e.message,
-        // FIX-URL-EXPIRY-ALL-MIRRORS: YouTube/signed-URL mirrors all
-        // expire together. The orchestrator uses this flag to refresh
-        // every mirror URL before re-submitting the job.
         'refreshAllMirrors': true,
       });
       return;
@@ -615,12 +541,10 @@ class HttpTransferJob {
     }
     _send('error', {'errorType': 'uncaught', 'errorMessage': e.toString()});
   }
-
   static bool _looksLikeDiskFull(String msg) {
     final m = msg.toLowerCase();
     return m.contains('enospc') || m.contains('no space left');
   }
-
   Future<void> run() async {
     _stopwatch.start();
     final dio = buildTransferDio(
@@ -639,8 +563,6 @@ class HttpTransferJob {
     );
     _send('ack');
     try {
-      // 1. Load/migrate/reconcile state — BEFORE any byte moves and BEFORE
-      //    any percentage is emitted.
       final load = await StateStore.loadOrCreate(
         cmd.tempFilePath,
         url: cmd.url,
@@ -648,9 +570,6 @@ class HttpTransferJob {
         knownFileSize: cmd.knownFileSize,
       );
       _state = load.state;
-      // FIX H-R1: If the persisted chunk count differs from the requested
-      // thread count, redistribute saved progress proportionally so the
-      // user does not lose downloaded bytes.
       if (_state!.chunks.isNotEmpty &&
           _state!.chunks.length != cmd.threadCount &&
           _state!.downloadedBytes > 0) {
@@ -660,10 +579,6 @@ class HttpTransferJob {
           totalSize: total,
           threadCount: cmd.threadCount,
         );
-        // FIX-4: Previous code distributed evenly, which can OVER-allocate
-        // bytes to early chunks (clamping hides the loss) and UNDER-allocate
-        // to the last chunk. Use a running-byte cursor instead so the sum of
-        // newChunks[i].downloaded EXACTLY equals savedBytes (when total allows).
         var remaining = savedBytes;
         for (var i = 0; i < newChunks.length; i++) {
           final capacity =
@@ -683,14 +598,10 @@ class HttpTransferJob {
         _state!.totalSize = cmd.knownFileSize;
       }
       _state!.status = DmxStateStatus.active;
-      await StateStore.save(cmd.tempFilePath, _state!); // transition save
-
-      // 2. Resume identity verification (size + ETag/Last-Modified).
+      await StateStore.save(cmd.tempFilePath, _state!); 
       if (_state!.downloadedBytes > 0 && cmd.supportsResume) {
         await _verifyServerIdentity(dio);
       }
-
-      // 3. Execute.
       final multiThread = _state!.totalSize > 0 &&
           cmd.supportsResume &&
           cmd.threadCount > 1 &&
@@ -706,19 +617,12 @@ class HttpTransferJob {
       } else {
         await _runSingleStream(dio);
       }
-
-      // 4. Completion: verify, rename, clean state, final report.
       await _finalize(dio);
       _send('done');
     } finally {
       dio.close(force: true);
     }
   }
-
-  /// Detects the two resume-hostile server changes BEFORE trusting saved
-  /// bytes: (a) total size drift beyond tolerance → hard fail with the exact
-  /// phrase the provider's retry path recognizes; (b) identity (ETag/LM)
-  /// rotation with unchanged size → visible restart from zero.
   Future<void> _verifyServerIdentity(Dio dio) async {
     try {
       final response = await dio.get<ResponseBody>(
@@ -743,7 +647,6 @@ class HttpTransferJob {
         final newEtag = response.headers.value('etag');
         final newLm = response.headers.value('last-modified');
         await response.data?.stream.listen((_) {}).cancel();
-
         if (serverTotal != null && serverTotal > 0 && _state!.totalSize > 0) {
           final tolerance =
               (_state!.totalSize * 0.001).clamp(2048.0, 10 * 1024 * 1024);
@@ -752,7 +655,6 @@ class HttpTransferJob {
               _state!.chunks[i] = ChunkState(
                   start: _state!.chunks[i].start, end: _state!.chunks[i].end);
             }
-            // FIX F4: Delete temp file on size change so single-stream doesn't resume stale bytes
             try {
               final f = File(cmd.tempFilePath);
               if (await f.exists()) await f.delete();
@@ -766,13 +668,10 @@ class HttpTransferJob {
         if (oldIdentity != null &&
             newIdentity != null &&
             oldIdentity != newIdentity) {
-          // Same size, new resource identity: stored bytes no longer belong
-          // to this resource. Restart loudly (status message), never pretend.
           debugPrint('[DMX-Job] resource identity changed — restarting');
           for (final c in _state!.chunks) {
             c.downloaded = 0;
           }
-          // FIX F4: Delete temp file on identity change
           try {
             final f = File(cmd.tempFilePath);
             if (await f.exists()) await f.delete();
@@ -792,10 +691,6 @@ class HttpTransferJob {
     } on _FileChangedOnServerException {
       rethrow;
     } on DioException catch (e) {
-      // FIX-9: On YouTube / signed-URL downloads, a 401/403 during the
-      // identity probe means the URL has expired. Surface as UrlExpired
-      // so the orchestrator refreshes streams and re-submits — never
-      // silently "continue" with no usable resume data.
       final status = e.response?.statusCode;
       final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
       final isYtOrSigned = host.endsWith('.googlevideo.com') ||
@@ -804,9 +699,6 @@ class HttpTransferJob {
           cmd.url.contains('expire=') ||
           cmd.url.contains('signature=');
       if (isYtOrSigned && (status == 401 || status == 403)) {
-        // FIX-YT-UPDATING: Emit a progress update with 'updating_links'
-        // cycle state BEFORE throwing so the UI shows "Updating links…"
-        // during the URL refresh window instead of a generic error.
         _emitProgress(0, statusMessage: 'Updating links (URL expired)…');
         throw UrlExpiredException(
           'YouTube / signed URL expired during identity probe (HTTP $status).',
@@ -817,7 +709,6 @@ class HttpTransferJob {
       debugPrint('[DMX-Job] identity probe failed (continuing): $e');
     }
   }
-
   void _resetToSingleStream() {
     final st = _state!;
     for (final c in st.chunks) {
@@ -825,22 +716,17 @@ class HttpTransferJob {
     }
     st.chunks = ChunkScheduler.singleStream(st.totalSize);
     st.threadCount = 1;
-    // FIX F3: Remove pre-allocated temp file so single-stream does not treat its length as completed progress
     try {
       final f = File(cmd.tempFilePath);
       if (f.existsSync()) f.deleteSync();
     } catch (_) {}
   }
-
-  // ── Multi-threaded execution ─────────────────────────────────────────────
-
   Future<void> _runMultiThreaded(Dio dio) async {
     final st = _state!;
     if (st.chunks.isEmpty) {
       st.chunks = ChunkScheduler.plan(
           totalSize: st.totalSize, threadCount: cmd.threadCount);
     }
-
     PositionalFileWriter writer;
     final hasPriorBytes = st.downloadedBytes > 0;
     if (hasPriorBytes && await File(cmd.tempFilePath).exists()) {
@@ -853,21 +739,16 @@ class HttpTransferJob {
         c.downloaded = 0;
       }
     }
-
     final governor = BandwidthGovernor(_effectiveGlobalLimit());
     governor.registerConsumer();
     if (cmd.speedLimitKbps > 0) {
       governor.setTaskLimit(cmd.taskId, cmd.speedLimitKbps * 125);
     }
-
-    // Optional spot-check of resumed bytes against the server.
     if (hasPriorBytes && SettingsProvider.instance.resumeIntegrityCheck) {
       await _spotCheckResumedBytes(dio, st, writer);
     }
-
     final failover = MirrorFailover([cmd.punyUrl, ...?cmd.mirrorUrls]);
     final work = ChunkScheduler.pendingWork(st.chunks);
-
     try {
       await Future.wait(work.map((chunk) => _runChunk(
             dio: dio,
@@ -877,47 +758,26 @@ class HttpTransferJob {
             failover: failover,
           )));
       await writer.flushAll();
-
-      // Completion verification: chunk sum is the authoritative source.
-      // diskLen is unreliable for pre-allocated files (always equals totalSize).
       final sum = st.downloadedBytes;
       if (st.totalSize > 0 && sum < st.totalSize) {
         throw DownloadIntegrityException(
             'Chunk sum $sum < expected ${st.totalSize}');
       }
-      // Note: diskLen check is informational only for pre-allocated files.
       final diskLen = await writer.length();
       if (st.totalSize > 0 && diskLen < st.totalSize) {
         throw DownloadIntegrityException(
             'On-disk size $diskLen < expected ${st.totalSize}');
       }
     } catch (e) {
-      // Persist whatever IS proven before surfacing the error — retry picks
-      // up the surviving chunks.
       if (e is DioException && e.type == DioExceptionType.cancel) {
         st.status = DmxStateStatus.paused;
-        // FIX-CYCLE-PAUSE: Emit progress with 'paused' cycle state so the
-        // UI immediately transitions from 'downloading' to 'paused'
-        // instead of retaining the last downloading tick until the
-        // orchestrator processes the cancel error.
         _emitProgress(0, statusMessage: 'Paused');
       } else if (e is! _RangeUnsupportedException) {
-        // FIX-11: Tag the state with whether resume is still safe. If at
-        // least one chunk has proven bytes, the next start can resume from
-        // those chunks. If all chunks are zero (e.g., integrity exception
-        // before any byte moved), mark as "restartRequired" so the
-        // orchestrator does NOT attempt a no-op resume.
         final anyProven = st.chunks.any((c) => c.downloaded > 0);
         st.status = DmxStateStatus.failed;
         st.migrationNote =
             '${st.migrationNote ?? ''} ${anyProven ? 'resumable' : 'restartRequired'}'
                 .trim();
-        // FIX-CYCLE-FAIL: Emit progress with 'failed' cycle state so the
-        // UI immediately shows the failed state with the correct
-        // downloaded-bytes snapshot, instead of retaining the last
-        // 'downloading' tick. The orchestrator also receives the error
-        // message, but this progress tick ensures the cycle-state chip
-        // and progress bar update atomically.
         _emitProgress(0, statusMessage: 'Failed');
       }
       try {
@@ -931,7 +791,6 @@ class HttpTransferJob {
       await writer.close();
     }
   }
-
   Future<void> _runChunk({
     required Dio dio,
     required ChunkState chunk,
@@ -942,7 +801,6 @@ class HttpTransferJob {
     var attempts = 0;
     const maxAttempts = 3;
     var activeUrl = failover.activeUrl;
-
     while (!chunk.isComplete) {
       _throwIfCancelled();
       attempts++;
@@ -968,12 +826,9 @@ class HttpTransferJob {
             validateStatus: (_) => true,
           ),
         );
-
         if (response.statusCode == 200) {
           await response.data?.stream.listen((_) {}).cancel();
           if (resumeFrom > 0) {
-            // The orchestrator's one-shot restart path keys on this exact
-            // phrase — preserve it.
             throw DioException(
               requestOptions: response.requestOptions,
               type: DioExceptionType.badResponse,
@@ -1016,7 +871,6 @@ class HttpTransferJob {
             message: 'HTML_INSTEAD_OF_MEDIA',
           );
         }
-
         _validateContentRange(
           response.headers.value('content-range'),
           expectedStart: absStart,
@@ -1025,7 +879,6 @@ class HttpTransferJob {
         );
         _state!.etag ??= response.headers.value('etag');
         _state!.lastModified ??= response.headers.value('last-modified');
-
         final stream = response.data?.stream;
         if (stream == null) {
           throw DioException(
@@ -1034,7 +887,6 @@ class HttpTransferJob {
             message: 'Empty response body.',
           );
         }
-
         var sessionBytes = 0;
         await for (final piece in stream) {
           _throwIfCancelled();
@@ -1052,13 +904,11 @@ class HttpTransferJob {
           final toWrite = remainingInChunk < piece.length
               ? Uint8List.sublistView(piece, 0, remainingInChunk)
               : piece;
-
           await writer.write(-1, pos, toWrite);
           sessionBytes += toWrite.length;
           chunk.downloaded = resumeFrom + sessionBytes;
           _bytesSinceSave += toWrite.length;
           await _throttledSaveAndReport(writer);
-
           if (chunk.size >= 0 && (resumeFrom + sessionBytes) >= chunk.size) {
             break;
           }
@@ -1066,7 +916,6 @@ class HttpTransferJob {
         failover.reportSuccess();
         attempts = 0;
         if (chunk.isComplete) {
-          // FIX H-2: Force save at every chunk boundary completion
           try {
             await writer.flushAll();
             await StateStore.save(cmd.tempFilePath, _state!);
@@ -1079,10 +928,6 @@ class HttpTransferJob {
         if (e.message == 'HTML_INSTEAD_OF_MEDIA') rethrow;
         if (e.message?.startsWith('Server rejected resume') == true) rethrow;
         final status = e.response?.statusCode;
-        // FIX-3: 401/403 on signed/YouTube URLs usually means the URL has
-        // expired. Surface a dedicated error type so the orchestrator can
-        // refresh the link (yt-streams / signed-URL re-issue) and retry the
-        // SAME chunk from the SAME byte offset — never losing progress.
         if (status == 401 || status == 403) {
           final bodyText = (e.response?.data?.toString() ?? '').toLowerCase();
           final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
@@ -1096,15 +941,6 @@ class HttpTransferJob {
               cmd.url.contains('expire=') ||
               cmd.url.contains('signature=');
           if (isLikelyExpired) {
-            // FIX-3B: Throw the typed exception so sendUnhandledError() can
-            // map it to 'urlExpired'. The orchestrator catches this, refreshes
-            // the URL, and re-submits the job WITHOUT losing chunk progress.
-            // FIX-URL-EXPIRY-ALL-MIRRORS: For YouTube / signed URLs, every
-            // mirror shares the same expiry signature — flag this so the
-            // orchestrator refreshes ALL mirrors in one pass.
-            // FIX-YT-UPDATING: Emit progress with 'updating_links' cycle
-            // state before throwing so the UI shows the correct status
-            // during the URL refresh window.
             _emitProgress(0, statusMessage: 'Updating links (URL expired)…');
             throw UrlExpiredException(
               'Download URL expired (HTTP $status). Refresh required.',
@@ -1116,8 +952,10 @@ class HttpTransferJob {
             status >= 400 &&
             status < 500 &&
             status != 408 &&
-            status != 429) {
-          rethrow; // 4xx (except timeouts/429) won't heal by retrying.
+            status != 429 &&
+            status != 404 &&
+            status != 403) {
+          rethrow; 
         }
         if (attempts >= maxAttempts) {
           final next = failover.advance();
@@ -1143,7 +981,6 @@ class HttpTransferJob {
       }
     }
   }
-
   Future<void> _spotCheckResumedBytes(
       Dio dio, TransferState st, PositionalFileWriter writer) async {
     const sampleSize = 64 * 1024;
@@ -1178,33 +1015,21 @@ class HttpTransferJob {
           debugPrint('[DMX-Job] spot-check mismatch → chunk reset');
         }
       } catch (_) {
-        // Probe failure is not fatal; keep stored progress.
       }
     }
   }
-
-  // ── Single-stream execution ──────────────────────────────────────────────
-
   Future<void> _runSingleStream(Dio dio) async {
     final st = _state!;
     if (st.chunks.isEmpty) {
       st.chunks = ChunkScheduler.singleStream(st.totalSize);
     }
     final chunk = st.chunks.first;
-
     final tempFile = File(cmd.tempFilePath);
     await tempFile.parent.create(recursive: true);
-
-    // Single-thread: the file itself is the byte source of truth.
-    // FIX-1: When temp file length >= totalSize, do not trust it blindly —
-    // the temp may be the result of a crashed write or a stale pre-allocated
-    // file. Validate via the saved state first; if no usable state, force a
-    // fresh restart so the byte source of truth is the network, not disk.
     final stateFile = File(StateStore.pathFor(cmd.tempFilePath));
     final hasUsableState = await stateFile.exists() &&
         st.downloadedBytes > 0 &&
         st.chunks.isNotEmpty;
-
     if (await tempFile.exists()) {
       final len = await tempFile.length();
       if (st.totalSize > 0 && len >= st.totalSize) {
@@ -1213,8 +1038,6 @@ class HttpTransferJob {
           _emitProgress(0, statusMessage: 'Completed');
           return;
         }
-        // FIX-1: state missing/incomplete but file is full → corrupt or
-        // stale. Truncate to zero and re-download to guarantee integrity.
         debugPrint(
             '[DMX-Job] FIX-1: temp file full but state unusable — restarting single-stream');
         chunk.downloaded = 0;
@@ -1230,17 +1053,11 @@ class HttpTransferJob {
         await tempFile.delete();
       }
     }
-
     final governor = BandwidthGovernor(_effectiveGlobalLimit());
     governor.registerConsumer();
     if (cmd.speedLimitKbps > 0) {
       governor.setTaskLimit(cmd.taskId, cmd.speedLimitKbps * 125);
     }
-
-    // FIX-2: Single-stream resume spot-check — parity with multi-thread.
-    // Validates the first 64 KB of the resumed prefix against the server so
-    // a truncated/modified temp file is detected BEFORE we append more bytes
-    // and corrupt the final output.
     if (chunk.downloaded > 0 &&
         cmd.supportsResume &&
         SettingsProvider.instance.resumeIntegrityCheck &&
@@ -1287,12 +1104,10 @@ class HttpTransferJob {
         debugPrint('[DMX-Job] FIX-2: spot-check probe failed (continuing): $e');
       }
     }
-
     var attempts = 0;
     const maxAttempts = 3;
     final failover = MirrorFailover([cmd.punyUrl, ...?cmd.mirrorUrls]);
     var activeUrl = failover.activeUrl;
-
     while (!st.isComplete || st.totalSize <= 0) {
       _throwIfCancelled();
       attempts++;
@@ -1315,7 +1130,6 @@ class HttpTransferJob {
             validateStatus: (_) => true,
           ),
         );
-
         if (response.statusCode == 416) {
           await response.data?.stream.listen((_) {}).cancel();
           if (st.totalSize > 0 && chunk.downloaded >= st.totalSize) break;
@@ -1361,7 +1175,6 @@ class HttpTransferJob {
             message: 'HTML_INSTEAD_OF_MEDIA',
           );
         }
-
         final isPartial = response.statusCode == 206;
         if (isPartial) {
           final contentRange = response.headers.value('content-range');
@@ -1375,7 +1188,6 @@ class HttpTransferJob {
             );
           }
         }
-
         st.etag ??= response.headers.value('etag');
         st.lastModified ??= response.headers.value('last-modified');
         final contentLength = int.tryParse(
@@ -1388,11 +1200,9 @@ class HttpTransferJob {
             chunk.end = actual - 1;
           }
         }
-
         sink = tempFile.openWrite(
           mode: chunk.downloaded > 0 ? FileMode.append : FileMode.write,
         );
-
         final stream = response.data?.stream;
         if (stream == null) {
           throw DioException(
@@ -1401,7 +1211,6 @@ class HttpTransferJob {
             message: 'Empty response body.',
           );
         }
-        // FIX-AUDIT-02: Flush and save state on cancel to preserve latest progress
         try {
           await for (final piece in stream) {
             _throwIfCancelled();
@@ -1413,16 +1222,7 @@ class HttpTransferJob {
             }
             sink.add(piece);
             chunk.downloaded += piece.length;
-            // FIX-SIZE-LIVE: For unknown-size streams, do NOT set chunk.end
-            // to downloaded-1 mid-stream. That makes ChunkState.size ==
-            // downloaded and ChunkState.ratio always 1.0, falsely showing
-            // 100% during active download. Keep chunk.end = -1 so ratio
-            // returns 0.0 (indeterminate); the UI renders an indeterminate
-            // bar and uses `downloaded` as the byte indicator. Final size
-            // is confirmed at stream end below.
             _bytesSinceSave += piece.length;
-            // FIX-SINGLE-FLUSH: Flush IOSink before state save so state
-            // file never claims bytes still in OS buffer.
             await _throttledSaveAndReport(
               null,
               preSaveFlush: () async {
@@ -1441,9 +1241,7 @@ class HttpTransferJob {
         sink = null;
         failover.reportSuccess();
         attempts = 0;
-
         if (st.totalSize <= 0) {
-          // Unknown-size transfer finished: the stream IS the total.
           st.totalSize = chunk.downloaded;
           chunk.end = chunk.downloaded - 1;
         }
@@ -1451,20 +1249,16 @@ class HttpTransferJob {
       } on DioException catch (e) {
         if (e.type == DioExceptionType.cancel) {
           _state!.status = DmxStateStatus.paused;
-          // FIX-CYCLE-PAUSE: Emit 'paused' cycle state so the UI shows
-          // 'Paused' immediately instead of retaining 'downloading'.
           _emitProgress(0, statusMessage: 'Paused');
           rethrow;
         }
         if (e.message == 'HTML_INSTEAD_OF_MEDIA') {
           _state!.status = DmxStateStatus.failed;
-          // FIX-CYCLE-FAIL: Emit 'failed' cycle state before rethrowing.
           _emitProgress(0, statusMessage: 'Failed');
           rethrow;
         }
         if (e.message?.startsWith('Server rejected resume') == true) {
           _state!.status = DmxStateStatus.failed;
-          // FIX-CYCLE-FAIL: Emit 'failed' cycle state before rethrowing.
           _emitProgress(0, statusMessage: 'Failed');
           rethrow;
         }
@@ -1473,10 +1267,10 @@ class HttpTransferJob {
             status >= 400 &&
             status < 500 &&
             status != 408 &&
-            status != 429) {
+            status != 429 &&
+            status != 404 &&
+            status != 403) {
           _state!.status = DmxStateStatus.failed;
-          // FIX-CYCLE-FAIL: Emit 'failed' cycle state before rethrowing
-          // on non-retryable 4xx errors.
           _emitProgress(0, statusMessage: 'Failed');
           rethrow;
         }
@@ -1491,8 +1285,6 @@ class HttpTransferJob {
                 statusMessage: 'Retrying (mirror failover)…');
             continue;
           }
-          // FIX-CYCLE-FAIL: Emit 'failed' cycle state before rethrowing
-          // when all retry attempts AND all mirrors are exhausted.
           _emitProgress(0, statusMessage: 'Failed');
           rethrow;
         }
@@ -1505,14 +1297,11 @@ class HttpTransferJob {
           await sink?.flush();
           await sink?.close();
         } catch (_) {}
-        // FIX-14: Always save state on exit (cancel or error)
         try {
           await StateStore.save(cmd.tempFilePath, _state!);
         } catch (_) {}
       }
     }
-
-    // Final integrity: disk must match the claim.
     final actualLen = await tempFile.length();
     if (st.totalSize > 0 && actualLen != st.totalSize) {
       if (actualLen > st.totalSize) {
@@ -1522,10 +1311,6 @@ class HttpTransferJob {
       } else {
         st.status = DmxStateStatus.failed;
         await StateStore.save(cmd.tempFilePath, st);
-        // FIX-CYCLE-FAIL: Emit 'failed' cycle state before throwing the
-        // integrity exception so the UI shows 'Failed' immediately with
-        // the correct byte snapshot, instead of retaining 'downloading'
-        // until the orchestrator processes the error.
         _emitProgress(0, statusMessage: 'Failed');
         throw DownloadIntegrityException(
             'expected ${st.totalSize} bytes, got $actualLen');
@@ -1534,20 +1319,14 @@ class HttpTransferJob {
     governor.removeTaskLimit(cmd.taskId);
     governor.unregisterConsumer();
   }
-
-  // ── Shared helpers ───────────────────────────────────────────────────────
-
   Future<void> _finalize(Dio dio) async {
     final st = _state!;
     st.status = DmxStateStatus.complete;
-    await StateStore.save(cmd.tempFilePath, st); // transition save
+    await StateStore.save(cmd.tempFilePath, st); 
     _emitProgress(0, statusMessage: 'Completed');
-
     if (cmd.tempFilePath != cmd.localFilePath) {
-      // FIX-C2: Skip rename if final file already exists (merge path)
       final tempExists = await File(cmd.tempFilePath).exists();
       if (!tempExists) {
-        // File already moved by merge — skip rename entirely
         debugPrint('[DMX] FIX-C2: temp file gone, skipping rename');
       } else {
         final finalFile = File(cmd.localFilePath);
@@ -1570,7 +1349,6 @@ class HttpTransferJob {
     }
     await StateStore.remove(cmd.tempFilePath);
   }
-
   int _effectiveGlobalLimit() {
     if (_workerGlobalLimitBps > 0) {
       return (_workerGlobalLimitBps / _workerGlobalActive).floor();
@@ -1579,7 +1357,6 @@ class HttpTransferJob {
         ? (cmd.initialSpeedLimit / max(1, cmd.initialActiveCount)).floor()
         : 0;
   }
-
   void _throwIfCancelled() {
     if (_cancelRequested || _cancelToken.isCancelled) {
       throw DioException(
@@ -1589,7 +1366,6 @@ class HttpTransferJob {
       );
     }
   }
-
   Future<void> _cancellableDelay(Duration duration) async {
     if (_cancelRequested) return;
     final completer = Completer<void>();
@@ -1603,9 +1379,6 @@ class HttpTransferJob {
     await completer.future;
     await sub;
   }
-
-  /// Bounded-interval persistence + progress emission, both derived from the
-  /// SAME TransferState snapshot.
   Future<void> _throttledSaveAndReport(
     PositionalFileWriter? writer, {
     Future<void> Function()? preSaveFlush,
@@ -1615,17 +1388,10 @@ class HttpTransferJob {
     final dueSave = nowMs - _lastStateSaveMs >= _stateSaveIntervalMs ||
         _bytesSinceSave >= _stateSaveByteThreshold;
     final dueReport = nowMs - _lastReportMs >= 500;
-
     if (dueSave) {
       _lastStateSaveMs = nowMs;
       _bytesSinceSave = 0;
       try {
-        // FIX-SINGLE-FLUSH: For single-stream downloads (writer == null),
-        // flush the IOSink before saving state so the state file never
-        // claims bytes that are still buffered in the OS file buffer.
-        // Without this, a crash between state save and sink flush leaves
-        // the state file ahead of the actual file on disk, causing a
-        // corrupt resume on the next start.
         if (preSaveFlush != null) await preSaveFlush();
         if (writer != null) await writer.flush();
         await StateStore.save(cmd.tempFilePath, st);
@@ -1638,12 +1404,10 @@ class HttpTransferJob {
       _emitProgress(nowMs);
     }
   }
-
   void _emitProgress(int nowMs, {String? statusMessage}) {
     final st = _state!;
     final downloaded = st.downloadedBytes;
     final total = st.totalSize;
-
     _speedSamples.add(_SpeedSample(_stopwatch.elapsedMilliseconds, downloaded));
     while (_speedSamples.isNotEmpty &&
         _stopwatch.elapsedMilliseconds - _speedSamples.first.timestampMs >
@@ -1666,18 +1430,10 @@ class HttpTransferJob {
     } else {
       _lastEta = null;
     }
-
-    // FIX-CHUNK-DETAILS: Always emit per-chunk details so the HTTP details
-    // screen can render progress for every part — including single-stream
-    // downloads where there is exactly one chunk. Previously chunkDetails
-    // was null for single-stream, so the details screen showed nothing.
     final chunkDetails = st.chunks.isNotEmpty
         ? st.chunks.asMap().entries.map((e) {
             final c = e.value;
             final rawRatio = c.ratio;
-            // FIX-CHUNK-RATIO: Clamp negative sentinel (-1.0 for unknown
-            // size) to 0.0 for wire transport; the UI checks isIndeterminate
-            // via chunkDetails[size < 0] separately.
             final safeRatio = rawRatio < 0.0 ? 0.0 : rawRatio.clamp(0.0, 1.0);
             return <String, dynamic>{
               'index': e.key,
@@ -1691,35 +1447,12 @@ class HttpTransferJob {
             };
           }).toList()
         : null;
-
-    // FIX-HTTP-PARTS: Aggregate chunk completion counts here so the
-    // orchestrator and details screen can render "3 of 8 parts" without
-    // re-iterating chunkDetails. Single-stream downloads report 1/1 (or
-    // 0/1 if indeterminate and not yet finished).
     final totalChunks = st.chunks.isNotEmpty ? st.chunks.length : null;
     final completedChunks = st.chunks.isNotEmpty
         ? st.chunks.where((c) => c.isComplete).length
         : null;
-
-    // FIX-CYCLE-DERIVE: Derive cycleState directly in the worker isolate
-    // from DmxStateStatus + statusMessage so the orchestrator receives a
-    // structured cycle state on every tick — not just a human-readable
-    // string it has to re-parse. This guarantees start/pause/resume/
-    // retry/failed/updating_links/completed are always correctly mapped
-    // regardless of which orchestrator code path consumes the event.
     final cycleState = _deriveCycleState(statusMessage, st.status);
-
-    // FIX-YT-LIVE-COUNTERPART: Read the counterpart's live bytes from the
-    // static cache so the combined audio+video percentage always reflects
-    // BOTH streams' real-time progress — not just the spawn-time snapshot
-    // passed via cmd.ytCounterpartDownloadedBytes which goes stale as soon
-    // as the counterpart stream starts downloading.
-    // FIX-YT-LIVE-WORKER: The worker isolate does not share memory with
-    // the main isolate, so it cannot read DownloadEngine._ytLiveBytes.
-    // Send the spawn-time counterpart bytes and let the main isolate
-    // override them with the true live bytes from its shared cache.
     final ytLiveCounterpartBytes = cmd.ytCounterpartDownloadedBytes;
-
     _send('progress', {
       'downloadedBytes': downloaded,
       'fileSize': total,
@@ -1734,34 +1467,13 @@ class HttpTransferJob {
         'ytCounterpartSize': cmd.ytCounterpartSize,
       if (ytLiveCounterpartBytes != null)
         'ytCounterpartDownloadedBytes': ytLiveCounterpartBytes,
-      // FIX-YT-LIVE: Emit THIS stream's live downloaded bytes so the main
-      // isolate can populate DownloadEngine._ytLiveBytes[taskId] and the
-      // counterpart's combined percentage always reflects BOTH streams.
       'ytDownloadedBytes': downloaded,
-      // FIX-CYCLE: Emit statusMessage so _deriveCycleState can map
-      // 'Completed' → 'completed', 'Updating links…' → 'updating_links',
-      // 'Checking pieces…' → 'checking', etc. Without this, every cycle
-      // state defaults to 'downloading' regardless of actual status.
       'statusMessage': statusMessage,
-      // FIX-CYCLE-DERIVE: Structured cycle state derived from status + msg.
-      // Values: 'downloading', 'paused', 'retrying', 'updating_links',
-      // 'failed', 'completed'. The orchestrator may override with
-      // 'starting' / 'fetching_metadata' / 'seeding' / 'checking' for
-      // torrent and lifecycle transitions it owns.
       'cycleState': cycleState,
-      // FIX-HTTP-PARTS: Aggregate part counts for HTTP/YouTube details
-      // screen — "3 of 8 parts complete".
       if (totalChunks != null) 'totalChunks': totalChunks,
       if (completedChunks != null) 'completedChunks': completedChunks,
     });
   }
-
-  /// Maps an internal [DmxStateStatus] + optional human-readable
-  /// [statusMessage] to the structured cycle-state vocabulary consumed by
-  /// the UI status chips.
-  ///
-  /// Priority: explicit status (complete/failed/paused) > statusMessage
-  /// keyword match > default 'downloading'.
   static String _deriveCycleState(
       String? statusMessage, DmxStateStatus status) {
     switch (status) {
@@ -1778,16 +1490,15 @@ class HttpTransferJob {
         if (msg.contains('restarting') || msg.contains('source changed')) {
           return 'retrying';
         }
-        if (msg.contains('checking')) return 'checking';
+        if (msg.contains('checking') || msg.contains('verifying')) return 'checking';
         if (msg.contains('seeding')) return 'seeding';
         if (msg.contains('completed')) return 'completed';
-        if (msg.contains('starting')) return 'starting';
+        if (msg.contains('starting') || msg.contains('allocating') || msg.contains('preparing')) return 'starting';
         if (msg.contains('resuming')) return 'resuming';
         if (msg.contains('fetching metadata')) return 'fetching_metadata';
         return 'downloading';
     }
   }
-
   void _validateContentRange(
     String? value, {
     required int expectedStart,

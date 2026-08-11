@@ -156,8 +156,14 @@ class PowerMonitor {
         }
       } else if (Platform.isIOS) {
         final raw = await _channel.invokeMethod<int>('getThermalStatus');
-        if (raw != null && raw >= 0 && raw < ThermalStatus.values.length) {
-          _thermal = ThermalStatus.values[raw];
+        if (raw != null) {
+          _thermal = switch (raw) {
+            0 => ThermalStatus.none,
+            1 => ThermalStatus.fair,
+            2 => ThermalStatus.severe,
+            3 => ThermalStatus.critical,
+            _ => ThermalStatus.none,
+          };
         }
       }
       _level = await _battery.batteryLevel;

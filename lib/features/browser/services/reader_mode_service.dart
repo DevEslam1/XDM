@@ -47,7 +47,10 @@ class ReaderModeService {
     InAppWebViewController controller,
   ) async {
     try {
-      final result = await controller.evaluateJavascript(source: _extractJs);
+      final result = await controller
+          .evaluateJavascript(source: _extractJs)
+          .catchError((_) => null);
+      if (result == null) return null;
       final data = jsonDecode(result.toString()) as Map<String, dynamic>;
       return ReaderArticle(
         title: data['title'] as String? ?? 'Untitled',

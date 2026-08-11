@@ -81,9 +81,9 @@ class LoggingService {
     result = result.replaceAllMapped(
       RegExp(
         r'[?&](api[_-]?key|apikey|token|access[_-]?token|secret|password|'
-        r'signature|sig|auth|key|x-amz-signature|x-amz-credential|'
+        r'signature|sig|auth|api_key|access_key|secret_key|x-amz-signature|x-amz-credential|'
         r'x-amz-security-token|awsaccesskeyid|googleaccessid|credential|'
-        r'hdnts|hdnea|st|exp|code|session_token)='
+        r'hdnts|hdnea|st|exp|auth_code|verify_code|session_token)='
         r'[^&\s]+',
         caseSensitive: false,
       ),

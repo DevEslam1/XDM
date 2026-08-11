@@ -679,12 +679,12 @@ class DownloadJournal {
       crc ^= byte;
       for (var i = 0; i < 8; i++) {
         if ((crc & 1) != 0) {
-          crc = (crc >> 1) ^ 0xEDB88320;
+          crc = ((crc >> 1) ^ 0xEDB88320) & 0xFFFFFFFF;
         } else {
-          crc >>= 1;
+          crc = (crc >> 1) & 0xFFFFFFFF;
         }
       }
     }
-    return crc ^ 0xFFFFFFFF;
+    return (crc ^ 0xFFFFFFFF) & 0xFFFFFFFF;
   }
 }

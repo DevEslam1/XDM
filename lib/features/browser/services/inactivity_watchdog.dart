@@ -36,10 +36,12 @@ class InactivityWatchdog {
   void pauseTabMedia(BrowserTab tab) {
     if (!tab.isHome) {
       try {
-        tab.controller?.evaluateJavascript(
-          source:
-              "try { document.querySelectorAll('video,audio').forEach(function(m){m.pause();}); } catch(e){}",
-        );
+        tab.controller
+            ?.evaluateJavascript(
+              source:
+                  "try { document.querySelectorAll('video,audio').forEach(function(m){m.pause();}); } catch(e){}",
+            )
+            .catchError((_) => null);
       } catch (e) {
         _log.warning('[Browser] Pause media error: $e');
       }
@@ -69,8 +71,10 @@ class InactivityWatchdog {
         final tab = tabs[i];
         if (!tab.isHome) {
           try {
-            tab.controller?.evaluateJavascript(
-                source: 'try { window.stop(); } catch(e){}');
+            tab.controller
+                ?.evaluateJavascript(
+                    source: 'try { window.stop(); } catch(e){}')
+                .catchError((_) => null);
           } catch (_) {}
         }
       }

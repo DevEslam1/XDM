@@ -95,10 +95,7 @@ class ChecksumService {
             }
           }
           final normalizedAlgo = algo.replaceFirst('-', '');
-          final expectedLen = normalizedAlgo == 'sha256'
-              ? 64
-              : (normalizedAlgo == 'sha1' ? 40 : 32);
-          if (hexValue.length == expectedLen) {
+          if (hexValue.isNotEmpty) {
             return MapEntry(normalizedAlgo, hexValue);
           }
         }

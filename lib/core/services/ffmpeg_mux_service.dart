@@ -14,11 +14,8 @@ enum MergeStrategy { streamCopy, hwReencode, swFallback }
 
 class FFmpegMuxService {
   static final _log = Logger('FFmpegMuxService');
-
-  /// Semaphore allows up to 2 concurrent merges safely while avoiding CPU thrashing.
   static final Semaphore _mergeSemaphore = Semaphore(2);
 
-  /// Checks if temporary input files exist and can be remuxed without re-downloading.
   static Future<bool> canResumeMerge(
       String videoPath, String? audioPath) async {
     final video = File(videoPath);
@@ -41,7 +38,6 @@ class FFmpegMuxService {
     } catch (e) {
       _log.info('[FFmpegMuxService] wakelock enable skipped: $e');
     }
-
     try {
       return await _mergeLocked(
         videoPath,
@@ -89,7 +85,6 @@ class FFmpegMuxService {
           '-y',
           outputPath,
         ];
-
       case MergeStrategy.hwReencode:
         final videoCodec =
             Platform.isAndroid ? 'h264_mediacodec' : 'h264_videotoolbox';
@@ -118,7 +113,6 @@ class FFmpegMuxService {
           '-y',
           outputPath,
         ];
-
       case MergeStrategy.swFallback:
         return [
           '-i',
@@ -156,13 +150,14 @@ class FFmpegMuxService {
   }) async {
     final file = File(path);
     if (!await file.exists()) return false;
-
     try {
-      final probe = await FFprobeKit.execute(
-        '-v error -show_entries format=duration '
-        '-show_entries stream=codec_type -of default=noprint_wrappers=1 '
-        '"$path"',
-      );
+      final probe = await FFprobeKit.executeWithArguments([
+        '-v', 'error',
+        '-show_entries', 'format=duration',
+        '-show_entries', 'stream=codec_type',
+        '-of', 'default=noprint_wrappers=1',
+        path,
+      ]);
       final logs = await probe.getLogsAsString();
       final hasVideo = logs.contains('codec_type=video');
       final hasAudio = logs.contains('codec_type=audio');
@@ -171,7 +166,6 @@ class FFmpegMuxService {
       final sizeOk = path.isNotEmpty &&
           await file.exists() &&
           (await file.length()) > 1024;
-
       final expectedSecs = expectedDuration != null
           ? expectedDuration.inMilliseconds / 1000.0
           : null;
@@ -179,7 +173,6 @@ class FFmpegMuxService {
           (duration > 0 &&
               (duration - expectedSecs).abs() <=
                   math.max(2.0, expectedSecs * 0.05));
-
       if (!hasVideo || !hasAudio || !sizeOk || !durationOk) {
         debugPrint('[FFmpeg] Merged output invalid '
             '(video=$hasVideo audio=$hasAudio size=$sizeOk dur=$durationOk)');
@@ -188,7 +181,6 @@ class FFmpegMuxService {
         } catch (_) {}
         return false;
       }
-
       return true;
     } catch (e) {
       debugPrint('[FFmpeg] FFprobe validation exception: $e');
@@ -242,7 +234,6 @@ class FFmpegMuxService {
       _log.severe('Input video or audio file missing.');
       return false;
     }
-
     final videoSize = await videoFile.length();
     final audioSize = await audioFile.length();
     if (videoSize == 0 || audioSize == 0) {
@@ -266,10 +257,9 @@ class FFmpegMuxService {
         outputPath: outputPath,
         strategy: strategy,
       );
-
       _log.info('Running merge strategy $strategy with args: $args');
-
       final session = await FFmpegKit.executeWithArguments(args);
+
       final pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
         if (onProgress == null ||
             totalDuration == null ||
@@ -277,21 +267,22 @@ class FFmpegMuxService {
           return;
         }
         final logs = await session.getLogsAsString();
-        final match = RegExp(r'time=(\d+):(\d+):(\d+)\.(\d+)')
-            .allMatches(logs)
-            .lastOrNull;
-        if (match != null) {
-          final secs = int.parse(match.group(1)!) * 3600 +
-              int.parse(match.group(2)!) * 60 +
-              int.parse(match.group(3)!);
-          onProgress((secs / totalDuration.inSeconds).clamp(0.0, 1.0));
+        final lines = logs.split('\n');
+        for (var i = lines.length - 1; i >= 0; i--) {
+          final match = RegExp(r'time=(\d+):(\d+):(\d+)\.(\d+)').firstMatch(lines[i]);
+          if (match != null) {
+            final secs = int.parse(match.group(1)!) * 3600 +
+                int.parse(match.group(2)!) * 60 +
+                int.parse(match.group(3)!);
+            onProgress((secs / totalDuration.inSeconds).clamp(0.0, 1.0));
+            break;
+          }
         }
       });
 
       try {
         final returnCode = await session.getReturnCode();
         pollTimer.cancel();
-
         if (ReturnCode.isSuccess(returnCode)) {
           final targetExpectedDuration = expectedDuration ?? totalDuration;
           if (await _validateOutput(outputPath,
@@ -307,14 +298,12 @@ class FFmpegMuxService {
       }
     }
 
-    // Clean up partial output if all strategies fail
     try {
       final outFile = File(outputPath);
       if (await outFile.exists()) await outFile.delete();
     } catch (e) {
       _log.info('[FFmpegMuxService] deleting partial output failed: $e');
     }
-
     return false;
   }
 }

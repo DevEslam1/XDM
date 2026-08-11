@@ -114,7 +114,9 @@ class FingerprintManager {
     // inject stealth JS without explicit user opt-in.
     if (settings == null || !settings.antiFingerprinting) return;
     try {
-      await tab.controller?.evaluateJavascript(source: fingerprintHideJs);
+      await tab.controller
+          ?.evaluateJavascript(source: fingerprintHideJs)
+          .catchError((_) => null);
     } catch (e) {
       _log.warning('Failed to inject anti-detection JS: $e');
     }

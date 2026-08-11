@@ -28,9 +28,11 @@ class MirrorHealthStore {
       _cache = map.map(
         (k, v) => MapEntry(k, _PersistedMirrorState.fromJson(v)),
       );
-      // Evict expired blacklist entries from memory (persistence keeps the
-      // raw records, but isBlacklisted() already treats them as healthy).
+      final countBefore = _cache!.length;
       _cache!.removeWhere((_, state) => state.isExpired);
+      if (_cache!.length != countBefore) {
+        await _persist();
+      }
     } catch (e) {
       _log.warning('Failed to decode mirror health data: $e');
       _cache = {};
@@ -49,7 +51,6 @@ class MirrorHealthStore {
     if (state.failures >= 5) {
       state.blacklistedUntil =
           DateTime.now().add(_blacklistTtl).millisecondsSinceEpoch;
-      state.failures = 0;
       _log.warning(
         '[MirrorHealth] Blacklisted $url for ${_blacklistTtl.inHours}h',
       );
@@ -73,7 +74,13 @@ class MirrorHealthStore {
     final state = _cache?[url];
     if (state == null) return false;
     if (state.blacklistedUntil == 0) return false;
-    return DateTime.now().millisecondsSinceEpoch < state.blacklistedUntil;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now >= state.blacklistedUntil) {
+      state.blacklistedUntil = 0;
+      state.failures = 0;
+      return false;
+    }
+    return true;
   }
 
   /// Get the persisted speed for ranking mirrors.

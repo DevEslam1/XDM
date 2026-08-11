@@ -51,12 +51,12 @@ class MirrorParallelEngine {
           _mirrorStates.length;
 
       if (state.averageSpeed < avgSpeed * 0.33 && state.averageSpeed > 0) {
-        _redistributeFromSlowMirror(mirrorUrl);
+        _logSlowMirrorDetected(mirrorUrl);
       }
     }
   }
 
-  void _redistributeFromSlowMirror(String slowMirror) {
+  void _logSlowMirrorDetected(String slowMirror) {
     final slowState = _mirrorStates[slowMirror];
     final fastest = _mirrorStates.entries
         .reduce((a, b) => a.value.averageSpeed > b.value.averageSpeed ? a : b);

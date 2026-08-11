@@ -314,7 +314,10 @@ class RedirectGuard {
     if (_AdPatterns.hosts.any((h) => host == h || host.endsWith('.$h'))) {
       score += 0.1;
     }
-    if (target.contains(RegExp(r'\.(mp4|mkv|mp3|zip|rar|7z|apk|exe|iso)'))) {
+    final path = Uri.tryParse(target)?.path.toLowerCase() ?? '';
+    final ext = path.split('.').last;
+    const mediaExts = {'mp4', 'mkv', 'mp3', 'zip', 'rar', '7z', 'apk', 'exe', 'iso'};
+    if (mediaExts.contains(ext)) {
       score += 0.1; // direct file = very likely the real link
     }
     return score.clamp(0.0, 1.0);
@@ -429,7 +432,8 @@ class RedirectGuard {
 ''';
 
     try {
-      final res = await c.evaluateJavascript(source: js);
+      final res =
+          await c.evaluateJavascript(source: js).catchError((_) => null);
       if (res == null) return null;
       final decoded = jsonDecode(res.toString());
       if (decoded is List) {

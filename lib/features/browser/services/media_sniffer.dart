@@ -272,7 +272,7 @@ class MediaSniffer {
   }
   return JSON.stringify(sources);
 })();
-''').timeout(const Duration(seconds: 8));
+''').catchError((_) => null).timeout(const Duration(seconds: 8));
       if (!isActive() || !containsTab(tab)) return;
       if (result is String && result.isNotEmpty && result != 'null') {
         var cleanResult = result;

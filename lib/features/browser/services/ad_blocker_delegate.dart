@@ -64,7 +64,7 @@ class AdBlockerDelegate {
       String tag) async {
     if (ctrl == null) return;
     try {
-      await ctrl.evaluateJavascript(source: source);
+      await ctrl.evaluateJavascript(source: source).catchError((_) => null);
     } on MissingPluginException {
       // WebView channel was disposed (e.g. hot restart) — ignore silently.
     } catch (e) {

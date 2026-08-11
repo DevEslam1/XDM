@@ -43,6 +43,7 @@ class DatabaseService {
   /// database file small and recovery fast.
   Timer? _maintenanceTimer;
   int _maintenanceRuns = 0;
+  int _historyInsertCounter = 0;
 
   // Hive constants for migration
   static const String downloadsBoxName = 'downloads';
@@ -906,23 +907,26 @@ class DatabaseService {
       }
     });
 
-    // FIX-P3-24: Only run DELETE query when total count exceeds the cap.
-    final maxHistory = SettingsProvider.instance.historyMaxEntries;
-    final countResult = await _db
-        .customSelect(
-          'SELECT COUNT(*) as cnt FROM browser_history',
-        )
-        .get();
-    final count = countResult.first.read<int>('cnt');
-    if (count > maxHistory) {
-      await _db.customStatement(
-        'DELETE FROM browser_history WHERE id NOT IN ('
-        '  SELECT id FROM browser_history '
-        '  ORDER BY visited_at DESC '
-        '  LIMIT ?'
-        ')',
-        [maxHistory],
-      );
+    // FIX-P3-24: Only check and trim history every 20 insertions to avoid excess I/O.
+    _historyInsertCounter++;
+    if (_historyInsertCounter % 20 == 0) {
+      final maxHistory = SettingsProvider.instance.historyMaxEntries;
+      final countResult = await _db
+          .customSelect(
+            'SELECT COUNT(*) as cnt FROM browser_history',
+          )
+          .get();
+      final count = countResult.first.read<int>('cnt');
+      if (count > maxHistory) {
+        await _db.customStatement(
+          'DELETE FROM browser_history WHERE id NOT IN ('
+          '  SELECT id FROM browser_history '
+          '  ORDER BY visited_at DESC '
+          '  LIMIT ?'
+          ')',
+          [maxHistory],
+        );
+      }
     }
 
     return id;

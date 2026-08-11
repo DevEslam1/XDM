@@ -308,7 +308,12 @@ class ScriptInjector {
   void injectDesktopModeScript(BrowserTab tab, SettingsProvider settings) {
     if (!settings.desktopMode) return;
     try {
-      tab.controller?.evaluateJavascript(source: kDesktopModeScript);
+      tab.controller
+          ?.evaluateJavascript(source: kDesktopModeScript)
+          .catchError((e) {
+        _log.warning('[DMX Browser] Error injecting desktop script: $e');
+        return null;
+      });
     } catch (e) {
       _log.warning('[DMX Browser] Error injecting desktop script: $e');
     }

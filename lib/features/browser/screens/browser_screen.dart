@@ -1337,7 +1337,7 @@ class _BrowserScreenState extends State<BrowserScreen>
             });
           }
         })();
-      ''');
+      ''').catchError((_) => null);
     }
 
     if (!tab.isIncognito && !settings.incognitoEnabled) {
@@ -1455,7 +1455,7 @@ class _BrowserScreenState extends State<BrowserScreen>
           for (var m = 0; m < media.length; m++) { try { media[m].pause(); } catch(e) {} }
           if (window.__xdmScrollFixInterval) { clearInterval(window.__xdmScrollFixInterval); window.__xdmScrollFixInterval = null; }
           if (window.__xdmYtAdInterval) { clearInterval(window.__xdmYtAdInterval); window.__xdmYtAdInterval = null; }
-        ''');
+        ''').catchError((_) => null);
       } catch (_) {}
       tab.isSuspended = true;
       tab.controller = null;
@@ -1624,9 +1624,11 @@ class _BrowserScreenState extends State<BrowserScreen>
             InAppWebViewController.clearAllCache();
           } catch (_) {}
           try {
-            tab.controller?.evaluateJavascript(
-                source:
-                    'window.localStorage.clear(); window.sessionStorage.clear();');
+            tab.controller
+                ?.evaluateJavascript(
+                    source:
+                        'window.localStorage.clear(); window.sessionStorage.clear();')
+                .catchError((_) => null);
           } catch (_) {}
           if (tab.url.isNotEmpty && tab.url != 'about:blank') {
             try {
@@ -2317,9 +2319,11 @@ class _BrowserScreenState extends State<BrowserScreen>
       if (tab.isIncognito) {
         try {
           unawaited(InAppWebViewController.clearAllCache());
-          tab.controller?.evaluateJavascript(
-              source:
-                  'window.localStorage.clear(); window.sessionStorage.clear();');
+          tab.controller
+              ?.evaluateJavascript(
+                  source:
+                      'window.localStorage.clear(); window.sessionStorage.clear();')
+              .catchError((_) => null);
         } catch (_) {/* ignore: clearing cache/storage on close */}
       }
       try {
@@ -3219,7 +3223,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                 s.remove();
               }
             })();
-          ''');
+          ''').catchError((_) => null);
         } catch (_) {}
       }
     }
