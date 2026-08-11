@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
-/// Constant-time string comparison to prevent timing side-channel attacks on tokens/signatures.
 bool timingSafeEqual(String a, String b) {
+  // Hash both inputs first to normalize length and prevent timing leaks
   final hashA = sha256.convert(utf8.encode(a)).bytes;
   final hashB = sha256.convert(utf8.encode(b)).bytes;
   var result = 0;
@@ -12,7 +12,6 @@ bool timingSafeEqual(String a, String b) {
   return result == 0;
 }
 
-/// Hashes a plaintext secret using SHA-256 with optional salt.
 String hashSecret(String secret, {String salt = ''}) {
   final bytes = utf8.encode('$salt:$secret');
   final digest = sha256.convert(bytes);

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'logging_service.dart';
 import '../utils/crypto_utils.dart';
 import '../utils/url_utils.dart';
@@ -21,9 +22,10 @@ class SingleInstanceService {
   }
 
   File? _overrideTokenFile;
-  static final _log = LoggingService.logger('SingleInstanceService');
 
+  static final _log = LoggingService.logger('SingleInstanceService');
   static const int _port = 37128;
+
   HttpServer? _server;
   StreamSubscription<HttpRequest>? _serverSubscription;
   Timer? _heartbeatTimer;
@@ -33,21 +35,22 @@ class SingleInstanceService {
 
   String? get initialUrl => _initialUrl;
 
+  // FIX: Use p.join() for cross-platform path construction
   File get _tokenFile {
     if (_overrideTokenFile != null) return _overrideTokenFile!;
     if (Platform.isLinux || Platform.isMacOS) {
       final userHome = Platform.environment['HOME'];
       if (userHome != null && userHome.isNotEmpty) {
-        return File('$userHome/.config/xdm/xdm_instance_$_port.token');
+        return File(p.join(userHome, '.config', 'xdm', 'xdm_instance_$_port.token'));
       }
       return File('/nonexistent/xdm_instance_$_port.token');
     } else if (Platform.isWindows) {
       final appData = Platform.environment['APPDATA'] ??
           Platform.environment['LOCALAPPDATA'];
       if (appData != null && appData.isNotEmpty) {
-        return File('$appData\\xdm\\xdm_instance_$_port.token');
+        return File(p.join(appData, 'xdm', 'xdm_instance_$_port.token'));
       }
-      return File('C:\\nonexistent\\xdm_instance_$_port.token');
+      return File(p.join('C:', 'nonexistent', 'xdm_instance_$_port.token'));
     }
     return File('/nonexistent/xdm_instance_$_port.token');
   }
@@ -71,8 +74,6 @@ class SingleInstanceService {
       _log.severe('Failed to create secure token directory', e);
     }
   }
-
-
 
   String _generateSecurityToken() {
     final random = Random.secure();
@@ -106,7 +107,6 @@ class SingleInstanceService {
       }
     }
 
-    // No live primary or heartbeat stale — clean stale token file, become primary.
     try {
       if (await _tokenFile.exists()) await _tokenFile.delete();
     } catch (e) {
@@ -125,8 +125,6 @@ class SingleInstanceService {
 
   Future<void> _startServer(String? candidateUrl) async {
     await _ensureTokenDirectory();
-
-    // Bind with a 3-second startup timeout (B1)
     try {
       _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port)
           .timeout(const Duration(seconds: 3));
@@ -157,11 +155,13 @@ class SingleInstanceService {
           await request.response.close();
           return;
         }
+
         final urlParam = request.uri.queryParameters['url'];
         if (urlParam != null && urlParam.trim().isNotEmpty) {
           final decoded = Uri.decodeComponent(urlParam.trim());
           _onUrlListener?.call(decoded);
         }
+
         request.response.statusCode = HttpStatus.ok;
         await request.response.close();
       } catch (e) {
@@ -309,11 +309,9 @@ class SingleInstanceService {
 
   static String? extractLaunchUrl(List<String> args) {
     if (args.isEmpty) return null;
-
     for (final arg in args) {
       final clean = arg.trim();
       if (clean.isEmpty || clean.startsWith('-')) continue;
-
       if (isMagnetUrl(clean) ||
           isTorrentFileUrl(clean) ||
           isHttpUrl(clean) ||

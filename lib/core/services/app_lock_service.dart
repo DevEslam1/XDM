@@ -1,10 +1,12 @@
+import 'dart:convert';
+import 'dart:math';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/crypto_utils.dart';
 
-/// Secure PIN storage and persisted brute-force protection for the app lock.
 class AppLockService {
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
   static const String _pinKey = 'xdm_app_lock_pin';
+  static const String _saltKey = 'xdm_app_lock_salt';
   static const String _enabledKey = 'xdm_app_lock_enabled';
   static const String _failedAttemptsKey = 'xdm_app_lock_failed_attempts';
   static const String _lockoutLevelKey = 'xdm_app_lock_lockout_level';
@@ -15,26 +17,31 @@ class AppLockService {
     return enabled == 'true';
   }
 
+  static String _generateRandomSalt() {
+    final rng = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rng.nextInt(256));
+    return base64Encode(bytes);
+  }
+
   static Future<void> setPin(String pin) async {
-    final hashed = hashSecret(pin, salt: 'dmx_app_lock_salt');
+    final salt = _generateRandomSalt();
+    await _storage.write(key: _saltKey, value: salt);
+    final hashed = hashSecret(pin, salt: salt);
     await _storage.write(key: _pinKey, value: hashed);
     await _storage.write(key: _enabledKey, value: 'true');
     await resetFailedAttempts();
   }
 
-  /// Returns whether [pin] matches and updates persisted retry protection.
   static Future<bool> verifyPin(String pin) async {
     if (await lockoutRemaining() > Duration.zero) return false;
+
     final storedPin = await _storage.read(key: _pinKey);
+    final salt = await _storage.read(key: _saltKey) ?? 'dmx_app_lock_salt';
+
     if (storedPin != null) {
-      final hashedInput = hashSecret(pin, salt: 'dmx_app_lock_salt');
-      final matches = timingSafeEqual(storedPin, hashedInput) ||
-          timingSafeEqual(storedPin, pin);
+      final hashedInput = hashSecret(pin, salt: salt);
+      final matches = timingSafeEqual(storedPin, hashedInput);
       if (matches) {
-        if (storedPin == pin) {
-          // Seamlessly upgrade legacy plaintext PIN to hashed PIN
-          await setPin(pin);
-        }
         await resetFailedAttempts();
         return true;
       }
@@ -56,9 +63,6 @@ class AppLockService {
     return remaining;
   }
 
-  /// Computes the lockout duration (in seconds) for a given level.
-  /// Uses a fixed lookup table to avoid integer overflow from bit-shifting.
-  /// Level 1: 30s, 2: 60s, 3: 120s, 4: 300s, 5: 600s, 6+: 900s (max 15 min).
   static int _lockoutSecondsForLevel(int level) {
     switch (level) {
       case 1:
@@ -82,6 +86,7 @@ class AppLockService {
         ) ??
         0;
     final nextAttempts = attempts + 1;
+
     if (nextAttempts < 5) {
       await _storage.write(
         key: _failedAttemptsKey,
@@ -98,6 +103,7 @@ class AppLockService {
     final seconds = _lockoutSecondsForLevel(nextLevel);
     final lockedUntil =
         DateTime.now().add(Duration(seconds: seconds)).millisecondsSinceEpoch;
+
     await _storage.write(key: _failedAttemptsKey, value: '0');
     await _storage.write(key: _lockoutLevelKey, value: nextLevel.toString());
     await _storage.write(
@@ -114,6 +120,7 @@ class AppLockService {
 
   static Future<void> disableLock() async {
     await _storage.delete(key: _pinKey);
+    await _storage.delete(key: _saltKey);
     await _storage.write(key: _enabledKey, value: 'false');
     await resetFailedAttempts();
   }

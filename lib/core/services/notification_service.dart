@@ -11,8 +11,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/localization.dart';
 import 'package:dmx/core/services/logging_service.dart';
 
-/// Persistent key holding the notification-action nonce so that action
-/// intents fired after a process restart can still be validated.
 const String _nonceKey = 'dmx_notification_nonce';
 const String _pendingActionsKey = 'dmx_pending_notification_actions';
 
@@ -20,6 +18,7 @@ const String _pendingActionsKey = 'dmx_pending_notification_actions';
 void _onBackgroundNotificationResponse(NotificationResponse response) {
   WidgetsFlutterBinding.ensureInitialized();
   DartPluginRegistrant.ensureInitialized();
+
   var actionId = response.actionId ?? 'tap';
   var payload = response.payload;
 
@@ -29,9 +28,6 @@ void _onBackgroundNotificationResponse(NotificationResponse response) {
     payload = parts[1];
   }
 
-  // Runs in a fresh isolate after the process may have been killed, so the
-  // in-memory `_nonce` is not available. Read the persisted nonce and forward
-  // the action asynchronously.
   unawaited(_forwardBackgroundAction(actionId, payload));
 }
 
@@ -41,14 +37,11 @@ Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
       debugPrint(
           '[NotificationService] WARNING: null or empty payload for action $actionId');
     }
+
     final prefs = await SharedPreferences.getInstance();
     final nonce = prefs.getString(_nonceKey);
-
-    // Always persist to SharedPreferences first as a reliable fallback.
-    // If the main isolate is running and port delivery succeeds, processPendingBackgroundActions
-    // will be a no-op (list will be cleared). If port delivery fails or is rejected by the
-    // main isolate (e.g., nonce mismatch), the action will be picked up on next resume.
     final rawList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
+
     final actionJson = jsonEncode({
       'action': actionId,
       'taskId': payload,
@@ -58,14 +51,12 @@ Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
     rawList.add(actionJson);
     await prefs.setStringList(_pendingActionsKey, rawList);
 
-    // Also try the fast path via IsolateNameServer port (main isolate running).
     final port = IsolateNameServer.lookupPortByName('dmx_notification_port');
     if (port != null) {
       try {
         port.send({'action': actionId, 'taskId': payload, 'nonce': nonce});
       } catch (e) {
         debugPrint('[NotificationService] Port send failed: $e');
-        // SharedPreferences fallback already written above.
       }
     }
   } catch (e) {
@@ -73,15 +64,13 @@ Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
   }
 }
 
-/// Nonce for notification action validation. Persisted across sessions so
-/// pending action intents survive process death; only rotated on explicit
-/// user logout (none exists today, so it is generated once and reused).
 String? _nonce;
 
 class NotificationService {
   NotificationService._() {
     unawaited(_ensureNoncePersisted());
   }
+
   static final NotificationService _instance = NotificationService._();
   factory NotificationService() => _instance;
 
@@ -104,7 +93,6 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
-
   bool _initialized = false;
 
   static bool get isSupported =>
@@ -119,14 +107,7 @@ class NotificationService {
   static const String _downloadChannelDesc =
       'Real-time download transfer progress';
 
-  // Buffered event queue: events emitted before the UI subscribes are held
-  // here and replayed on first listen, so pause/resume/cancel actions are
-  // never silently lost during app startup.
   final List<Map<String, String>> _pendingActions = [];
-
-  // FIX(18): the pre-subscribe replay buffer is bounded. 100 is far more than
-  // the realistic number of user-initiated actions in the startup window, but
-  // we surface drops instead of silently discarding them.
   static const int _maxPendingActions = 100;
 
   static StreamController<Map<String, String>> _createActionStreamController(
@@ -168,15 +149,11 @@ class NotificationService {
     }
   }
 
-  /// Validates that a task ID has a plausible format.
-  /// Provides basic injection protection for notification payloads.
   static bool _isValidTaskId(String id) {
     if (id.isEmpty || id.length > 128) return false;
     return RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(id);
   }
 
-  /// Request notification runtime permission (Android 13+).
-  /// Safe to call multiple times; returns `true` if granted.
   Future<bool> requestNotificationPermission() async {
     if (!isSupported) return true;
     try {
@@ -209,7 +186,6 @@ class NotificationService {
   Future<void>? _initFuture;
   Timer? _pollTimer;
 
-  /// Clears pending notification actions from SharedPreferences.
   Future<void> _clearPendingActions() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -219,7 +195,6 @@ class NotificationService {
     }
   }
 
-  /// Process any pending notification actions stored in SharedPreferences.
   Future<void> processPendingBackgroundActions() async {
     if (!isSupported) return;
     try {
@@ -257,7 +232,6 @@ class NotificationService {
         }
       }
 
-      // Re-read latest list to prevent wiping actions appended concurrently
       final latestList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
       latestList.removeWhere((item) => rawList.contains(item));
       if (latestList.isEmpty) {
@@ -275,7 +249,6 @@ class NotificationService {
   void startPollingPendingActions() {
     if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     if (_pollTimer != null && _pollTimer!.isActive) return;
-    // Increased to 30 seconds as a safety net to prevent race conditions
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       unawaited(processPendingBackgroundActions());
     });
@@ -289,15 +262,12 @@ class NotificationService {
   Future<void> init({bool requestPermission = true}) async {
     if (!isSupported) return;
 
-    // If init is already in progress or completed successfully, reuse it
     if (_initFuture != null) {
-      // Only reset if the port is genuinely missing (crash recovery)
       if (_receivePort != null &&
           IsolateNameServer.lookupPortByName('dmx_notification_port') != null) {
         unawaited(processPendingBackgroundActions());
         return _initFuture!;
       }
-      // Port is missing — need to re-init, but wait for any in-flight init first (with timeout)
       try {
         await _initFuture!.timeout(const Duration(seconds: 5));
       } catch (e) {
@@ -310,6 +280,7 @@ class NotificationService {
 
     final completer = Completer<void>();
     _initFuture = completer.future;
+
     try {
       IsolateNameServer.removePortNameMapping('dmx_notification_port');
       _receivePortSub?.cancel();
@@ -350,7 +321,6 @@ class NotificationService {
           final taskId = message['taskId'] as String?;
           final receivedNonce = message['nonce'] as String?;
 
-          // Validate nonce to prevent unauthorized actions.
           if (_nonce != null &&
               receivedNonce != null &&
               receivedNonce != _nonce) {
@@ -372,9 +342,6 @@ class NotificationService {
               );
             }
           }
-
-          // Clear the SharedPreferences backup now that the action was
-          // successfully dispatched via the fast port path.
           unawaited(_clearPendingActions());
         }
       });
@@ -384,11 +351,13 @@ class NotificationService {
         onDidReceiveNotificationResponse: (response) {
           var actionId = response.actionId ?? 'tap';
           var payload = response.payload;
+
           if (actionId.contains(':')) {
             final parts = actionId.split(':');
             actionId = parts[0];
             payload = parts[1];
           }
+
           if (_groupActions.contains(actionId)) {
             _addAction({'action': actionId});
           } else if (payload != null && _isValidTaskId(payload)) {
@@ -440,6 +409,7 @@ class NotificationService {
           ),
         );
       }
+
       await processPendingBackgroundActions();
       startPollingPendingActions();
       _initialized = true;
@@ -454,18 +424,14 @@ class NotificationService {
     _initFuture = null;
   }
 
-  /// Posts (or refreshes) the persistent background-service foreground
-  /// notification (ID 888) with Stop All / Start All / Exit App action buttons.
-  /// Replaces the flutter_background_service plugin's basic notification so
-  /// we get full control over the content and actions.
   Future<void> showServiceNotification({
     required String title,
     required String content,
   }) async {
     if (!_initialized) return;
     if (!Platform.isAndroid) return;
-    const serviceNotificationId =
-        888; // BackgroundService.foregroundNotificationId
+
+    const serviceNotificationId = 888;
     const channelId = 'dmx_background_service';
     const channelName = 'XDM Background Service';
 
@@ -497,6 +463,7 @@ class NotificationService {
         ),
       ],
     );
+
     await _plugin.show(
       id: serviceNotificationId,
       title: title,
@@ -567,15 +534,18 @@ class NotificationService {
           ? GroupAlertBehavior.all
           : GroupAlertBehavior.children,
     );
+
     final iosDetails = DarwinNotificationDetails(
       presentAlert: !isPaused,
       interruptionLevel: InterruptionLevel.passive,
-      threadIdentifier: groupKey ?? 'dmx_downloads', // FIX(14)
+      threadIdentifier: groupKey ?? 'dmx_downloads',
     );
+
     final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
+
     await _plugin.show(
       id: notificationId,
       title: title,
@@ -587,14 +557,13 @@ class NotificationService {
     );
   }
 
-  /// Posts a collapsed group summary for multiple active downloads, so the
-  /// tray shows one entry instead of N per-task notifications.
   Future<void> showGroupSummary({
     required int notificationId,
     required int activeCount,
     String? groupKey,
   }) async {
     if (!_initialized || groupKey == null) return;
+
     final androidDetails = AndroidNotificationDetails(
       _downloadChannelId,
       _downloadChannelName,
@@ -610,16 +579,19 @@ class NotificationService {
       groupKey: groupKey,
       groupAlertBehavior: GroupAlertBehavior.children,
     );
+
     final iosDetails = DarwinNotificationDetails(
       presentAlert: false,
       interruptionLevel: InterruptionLevel.passive,
       threadIdentifier: groupKey,
-      subtitle: '$activeCount active', // FIX(14)
+      subtitle: '$activeCount active',
     );
+
     final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
+
     await _plugin.show(
       id: notificationId,
       title: '$activeCount active downloads',
@@ -637,10 +609,12 @@ class NotificationService {
     List<AndroidNotificationAction>? actions,
   }) async {
     if (!_initialized) return;
+
     final channelId =
         playSound ? 'dmx_download_alerts_sound' : _downloadChannelId;
     final channelName =
         playSound ? 'Download Alerts (Sound)' : _downloadChannelName;
+
     final androidDetails = AndroidNotificationDetails(
       channelId,
       channelName,
@@ -650,17 +624,20 @@ class NotificationService {
       playSound: playSound,
       actions: actions,
     );
+
     final iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       interruptionLevel: playSound
           ? InterruptionLevel.timeSensitive
           : InterruptionLevel.passive,
-      threadIdentifier: 'dmx_downloads', // FIX(14)
+      threadIdentifier: 'dmx_downloads',
     );
+
     final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
+
     await _plugin.show(
       id: notificationId,
       title: title,
@@ -677,10 +654,12 @@ class NotificationService {
     bool playSound = true,
   }) async {
     if (!_initialized) return;
+
     final channelId =
         playSound ? 'dmx_download_alerts_sound' : _downloadChannelId;
     final channelName =
         playSound ? 'Download Alerts (Sound)' : _downloadChannelName;
+
     final androidDetails = AndroidNotificationDetails(
       channelId,
       channelName,
@@ -689,15 +668,18 @@ class NotificationService {
       showProgress: false,
       playSound: playSound,
     );
-    final iosDetails = const DarwinNotificationDetails(
+
+    const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       interruptionLevel: InterruptionLevel.timeSensitive,
-      threadIdentifier: 'dmx_downloads', // FIX(14)
+      threadIdentifier: 'dmx_downloads',
     );
+
     final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
+
     await _plugin.show(
       id: notificationId,
       title: title,
@@ -711,7 +693,6 @@ class NotificationService {
     await _plugin.cancel(id: notificationId);
   }
 
-  /// Cancels all stale notifications from previous sessions
   Future<void> cancelAll() async {
     if (!_initialized) return;
     await _plugin.cancelAll();

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -98,7 +99,7 @@ SettingsProvider createMockSettingsProvider() {
     'batterySaverMode': false,
   });
   final instance = SettingsProvider.instance;
-  instance.load();
+  unawaited(instance.load().catchError((_) {}));
   return instance;
 }
 

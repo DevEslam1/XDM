@@ -1,37 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DMX TRANSFER STATE — v3
-//
-// One authoritative, versioned state document per transfer stream.
-//
-// Compatibility contract: the v3 JSON is a SUPERSET of the legacy v2 schema.
-// Legacy readers (DownloadProvider._readDmxStateBytes,
-// DownloadOrchestrator._readDmxStateChunks / validateResumeState) read
-// `totalSize`, `threadCount` and `progress` — all still present and always
-// kept consistent with the richer `chunks` array. New code reads `chunks`.
-// ═══════════════════════════════════════════════════════════════════════════
-
-/// Lifecycle of a single stream's state document.
 enum DmxStateStatus { active, paused, complete, failed }
 
-/// One byte-range chunk. `downloaded` is ALWAYS a contiguous prefix of the
-/// range: bytes [start, start + downloaded) are on disk, nothing beyond is
-/// claimed. This invariant is what makes crash reconciliation unambiguous.
 class ChunkState {
   ChunkState({required this.start, required this.end, this.downloaded = 0});
 
-  /// Absolute start byte (inclusive).
   final int start;
-
-  /// Absolute end byte (inclusive). `-1` = open-ended (total size unknown).
   int end;
-
-  /// Contiguous bytes written from [start].
   int downloaded;
 
   int get size => end < 0 ? -1 : end - start + 1;
@@ -39,14 +17,6 @@ class ChunkState {
 
   double get ratio {
     final s = size;
-    // FIX-UNKNOWN-SIZE: Open-ended chunk (size unknown). Reporting 1.0
-    // while bytes are flowing makes the details screen show "100%" for a
-    // still-downloading indeterminate stream. Report -1.0 as a sentinel
-    // so the UI can distinguish "indeterminate" (render an indeterminate
-    // bar) from "0% downloaded" (render a determinate bar at 0%). The
-    // ChunkDetail.isIndeterminate getter already checks `size < 0`, but
-    // some UI paths read `ratio` directly and can't tell the difference
-    // between 0.0 meaning "just started" and 0.0 meaning "unknown size".
     if (s < 0) return -1.0;
     if (s == 0) return downloaded > 0 ? 1.0 : 0.0;
     return (downloaded / s).clamp(0.0, 1.0);
@@ -66,7 +36,6 @@ class ChunkState {
   }
 }
 
-/// The single source of truth for one stream's progress.
 class TransferState {
   TransferState({
     required this.totalSize,
@@ -82,7 +51,6 @@ class TransferState {
 
   static const int currentVersion = 3;
 
-  /// 0 = unknown (learned from headers during transfer).
   int totalSize;
   int threadCount;
   List<ChunkState> chunks;
@@ -91,9 +59,6 @@ class TransferState {
   String? lastModified;
   DmxStateStatus status;
   DateTime updatedAt;
-
-  /// Set when this state was produced by migrating an older format, so
-  /// diagnostics can tell reconstructed progress apart from live progress.
   String? migrationNote;
 
   int get downloadedBytes {
@@ -106,17 +71,10 @@ class TransferState {
   }
 
   bool get isComplete => totalSize > 0 && downloadedBytes >= totalSize;
-
-  /// Chunk ratios derived from the SAME bytes as [downloadedBytes] — the UI
-  /// segmented bar and the percentage can never disagree.
   List<double> get chunkRatios => chunks.map((c) => c.ratio).toList();
-
-  /// Legacy-compatible `progress` array (bytes per chunk).
   List<int> get progressCompat => chunks.map((c) => c.downloaded).toList();
 
   Map<String, dynamic> toJson() => {
-        // Both spellings: v2 readers that check `version` see 3, the engine
-        // checks `v`.
         'version': currentVersion,
         'v': currentVersion,
         'totalSize': totalSize,
@@ -146,8 +104,6 @@ class TransferState {
         migrationNote: migrationNote,
       );
 
-  /// Parses a v3 document. Returns null when the document is not v3 or is
-  /// structurally invalid (caller then falls back to legacy parsing).
   static TransferState? tryParseV3(Map<String, dynamic> json) {
     try {
       final v =
@@ -191,18 +147,14 @@ class TransferState {
       final totalSize = (json['totalSize'] as num?)?.toInt() ?? 0;
       final storedThreadCount =
           (json['threadCount'] as num?)?.toInt() ?? progress.length;
-
-      // FIX H-4: Warn if stored thread count differs from progress length
       if (storedThreadCount != progress.length) {
         debugPrint('[DmxState] V2 migration: threadCount mismatch '
             '(stored=$storedThreadCount, progress.length=${progress.length}). '
             'Using progress.length as authoritative count.');
       }
-
-      final effectiveThreads = progress.length; // Use actual data length
+      final effectiveThreads = progress.length;
       final partSize =
           totalSize > 0 ? (totalSize / effectiveThreads).floor() : 0;
-
       final chunks = <ChunkState>[];
       for (int i = 0; i < effectiveThreads; i++) {
         final downloaded = (progress[i] as num?)?.toInt() ?? 0;
@@ -211,9 +163,6 @@ class TransferState {
             ? totalSize - 1
             : (start + partSize - 1);
         final size = end < 0 ? -1 : end - start + 1;
-        // FIX: Clamp downloaded bytes to the chunk size to prevent legacy
-        // state corruption (downloaded > size) from causing false "complete"
-        // states or NaN progress ratios.
         chunks.add(ChunkState(
           start: start,
           end: end,
@@ -237,7 +186,6 @@ class TransferState {
   }
 }
 
-/// Result of [StateStore.loadOrCreate].
 class StateLoadResult {
   const StateLoadResult({
     required this.state,
@@ -247,30 +195,16 @@ class StateLoadResult {
   });
 
   final TransferState state;
-
-  /// True when no prior state existed and a fresh one was created.
   final bool created;
-
-  /// 'v2' | 'journal' | 'fileLength' when progress was reconstructed.
   final String? migratedFrom;
-
-  /// True when on-disk bytes forced a clamp of the stored claims.
   final bool diskAdjusted;
 }
 
-/// Atomic persistence for [TransferState].
-///
-/// All writes are write-tmp → FSYNC → rename on the same filesystem, so the
-/// state file is ALWAYS either the old complete document or the new complete
-/// document — a crash mid-write cannot produce a corrupt half-document.
 class StateStore {
   StateStore._();
 
   static String pathFor(String tempFilePath) => '$tempFilePath.dmxstate';
 
-  /// Loads, migrates, reconciles and returns the authoritative state for
-  /// [tempFilePath]. Never throws on corrupted input — the worst case is a
-  /// fresh zero-progress state (with [StateLoadResult.created] = true).
   static Future<StateLoadResult> loadOrCreate(
     String tempFilePath, {
     required String url,
@@ -296,11 +230,10 @@ class StateStore {
         }
       } catch (e) {
         debugPrint('[DmxState] unreadable state at $path: $e');
-        state = null; // fall through to journal / disk recovery
+        state = null;
       }
     }
 
-    // Legacy journal recovery — only consulted when there is no usable state.
     if (state == null) {
       final journalBytes =
           await DownloadJournal.recover('$tempFilePath.journal');
@@ -316,8 +249,6 @@ class StateStore {
       }
     }
 
-    // Single-thread fallback: without any sidecar, the file length IS the
-    // truth (no pre-allocation in single-stream mode).
     if (state == null && threadCount <= 1) {
       final tmp = File(tempFilePath);
       if (await tmp.exists()) {
@@ -358,9 +289,6 @@ class StateStore {
               final end = (i == threadCount - 1 && knownFileSize > 0)
                   ? knownFileSize - 1
                   : start + perChunk - 1;
-              // Multi-thread downloads pre-allocate the file; raw file length is not
-              // a reliable indicator of downloaded bytes without a state file.
-              // Treat as fresh download.
               return ChunkState(start: start, end: end, downloaded: 0);
             }),
             url: url,
@@ -377,12 +305,11 @@ class StateStore {
       state = TransferState(
         totalSize: knownFileSize,
         threadCount: threadCount.clamp(1, 64),
-        chunks: const [], // scheduler fills these before transfer starts
+        chunks: const [],
         url: url,
       );
     }
 
-    // Crash-safe reconciliation: disk is the floor of truth.
     final adjusted = await _reconcileWithDisk(tempFilePath, state);
     return StateLoadResult(
       state: state,
@@ -392,8 +319,6 @@ class StateStore {
     );
   }
 
-  /// Rebuilds a v3 state from legacy per-chunk byte counts on a fixed
-  /// partition layout (identical to the layout v2 used).
   static TransferState _stateFromChunkBytes({
     required String tempFilePath,
     required String url,
@@ -415,7 +340,6 @@ class StateStore {
         chunks.add(ChunkState(start: start, end: end, downloaded: bytes));
       }
     } else {
-      // Total unknown: one open-ended chunk holding all recovered bytes.
       chunks.add(ChunkState(
         start: 0,
         end: -1,
@@ -431,7 +355,6 @@ class StateStore {
     );
   }
 
-  /// v2 → v3 migration. v2 stored `{totalSize, threadCount, progress:[ints]}`.
   static TransferState? _migrateV2(Map<String, dynamic> json, int hintThreads) {
     try {
       final totalSize = (json['totalSize'] as num?)?.toInt() ?? 0;
@@ -459,10 +382,6 @@ class StateStore {
     }
   }
 
-  /// Clamps stored claims to what can exist on disk.
-  ///  - temp file missing          → all claims zeroed (nothing to resume)
-  ///  - file shorter than claims   → per-chunk clamp to fit within length
-  ///  - file longer than totalSize → truncated back to totalSize
   static Future<bool> _reconcileWithDisk(
       String tempFilePath, TransferState state) async {
     if (state.downloadedBytes == 0) return false;
@@ -475,10 +394,10 @@ class StateStore {
           '${state.migrationNote ?? ''} disk_reconciled:file_missing'.trim();
       return true;
     }
+
     var adjusted = false;
     final len = await f.length();
     if (state.totalSize > 0 && len > state.totalSize) {
-      // External growth / stale pre-allocation overshoot: truncate.
       try {
         final raf = await f.open(mode: FileMode.append);
         await raf.truncate(state.totalSize);
@@ -486,15 +405,16 @@ class StateStore {
       } catch (_) {}
       adjusted = true;
     }
+
     final limit = state.totalSize > 0 ? len.clamp(0, state.totalSize) : len;
     for (final c in state.chunks) {
-      // Claimed region [start, start+downloaded) must fit within [0, limit).
       final maxForChunk = (limit - c.start).clamp(0, 1 << 62);
       if (c.downloaded > maxForChunk) {
         c.downloaded = maxForChunk;
         adjusted = true;
       }
     }
+
     if (adjusted) {
       state.migrationNote =
           '${state.migrationNote ?? ''} disk_reconciled'.trim();
@@ -502,8 +422,6 @@ class StateStore {
     return adjusted;
   }
 
-  /// Atomic save. Safe to call at any cadence; tmp+rename guarantees the
-  /// document is never observed half-written.
   static Future<void> save(String tempFilePath, TransferState state) async {
     state.updatedAt = DateTime.now();
     final targetPath = pathFor(tempFilePath);
@@ -513,8 +431,6 @@ class StateStore {
       final tmp = File(tmpPath);
       await tmp.parent.create(recursive: true);
       await tmp.writeAsString(payload, flush: true);
-      // writeAsString(flush:true) flushes buffers; re-open to force FSYNC
-      // before rename on platforms where it matters.
       try {
         final raf = await tmp.open(mode: FileMode.append);
         await raf.flush();
@@ -523,8 +439,6 @@ class StateStore {
       await tmp.rename(targetPath);
     } catch (e) {
       debugPrint('[DmxState] save failed for $tempFilePath: $e');
-      // Best-effort cleanup of the orphaned tmp file so a stale
-      // .dmxstate.tmp never pollutes the next save attempt.
       try {
         final tmp = File(tmpPath);
         if (await tmp.exists()) {
@@ -534,9 +448,6 @@ class StateStore {
     }
   }
 
-  /// Removes the state file and its tmp sidecar. Called after a successful
-  /// finalize/rename so the next launch does not treat a completed transfer
-  /// as resumable.
   static Future<void> remove(String tempFilePath) async {
     final targetPath = pathFor(tempFilePath);
     final tmpPath = '$targetPath.tmp';
@@ -551,35 +462,21 @@ class StateStore {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DOWNLOAD JOURNAL — append-only crash-safety journal.
-//
-// Serialized append-only JSON-lines journal used to recover multi-thread
-// download progress after a crash. Hardened behavior:
-//  - all writes are serialized through a lock
-//  - `writeInit()` will not reset an existing non-empty journal
-//  - journal is compacted automatically to avoid unbounded growth
-// ═══════════════════════════════════════════════════════════════════════════
-
 class DownloadJournal {
   final String path;
-
   IOSink? _sink;
   bool _isOpen = false;
-
   int _approxBytes = 0;
+  // FIX: Reduced from 2MB to 512KB for mobile-friendly compaction
   final int compactionThresholdBytes;
-
   final Lock _lock = Lock();
 
-  DownloadJournal(this.path, {this.compactionThresholdBytes = 2 * 1024 * 1024});
+  DownloadJournal(this.path, {this.compactionThresholdBytes = 512 * 1024});
 
   Future<void> open() async {
     await _lock.synchronized(() async {
       if (_isOpen) return;
-
       final file = File(path);
-
       if (await file.exists()) {
         try {
           _approxBytes = await file.length();
@@ -589,75 +486,55 @@ class DownloadJournal {
       } else {
         _approxBytes = 0;
       }
-
       _sink = file.openWrite(mode: FileMode.append);
       _isOpen = true;
     });
   }
 
-  /// Writes an init event.
-  ///
-  /// If the journal already contains data, this method intentionally does
-  /// nothing. This prevents accidentally wiping recovered progress when the
-  /// engine calls `writeInit()` after opening an existing journal.
   Future<void> writeInit(int threadCount, int totalSize) async {
     await _lock.synchronized(() async {
       _ensureOpen();
-
       if (_approxBytes > 0) {
         return;
       }
-
       final line = jsonEncode({
         't': 'init',
         'threads': threadCount,
         'total': totalSize,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
-
       _sink!.writeln(line);
       await _sink!.flush();
-
       _approxBytes += line.length + 1;
     });
   }
 
-  /// Records chunk progress.
-  ///
-  /// This is intentionally not flushed on every call to avoid disk thrashing.
   Future<void> recordChunkProgress(int index, int bytes) async {
     await _lock.synchronized(() {
       _ensureOpen();
-
       final line = jsonEncode({
         't': 'chunk',
         'i': index,
         'b': bytes,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
-
       _sink!.writeln(line);
       _approxBytes += line.length + 1;
     });
   }
 
-  /// Writes a durable checkpoint and flushes it.
   Future<void> writeCheckpoint(List<int> chunkProgress, int totalSize) async {
     await _lock.synchronized(() async {
       _ensureOpen();
-
       final line = jsonEncode({
         't': 'checkpoint',
         'chunks': chunkProgress,
         'total': totalSize,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
-
       _sink!.writeln(line);
       await _sink!.flush();
-
       _approxBytes += line.length + 1;
-
       if (compactionThresholdBytes > 0 &&
           _approxBytes >= compactionThresholdBytes) {
         await _compactLocked(chunkProgress, totalSize);
@@ -665,45 +542,36 @@ class DownloadJournal {
     });
   }
 
-  /// Recovers the latest chunk progress from a journal file.
   static Future<List<int>?> recover(String journalPath) async {
     final file = File(journalPath);
     if (!await file.exists()) return null;
-
     List<int>? lastCheckpoint;
     int? threadCount;
-
     try {
       final lines = file
           .openRead()
           .transform(utf8.decoder)
           .transform(const LineSplitter());
-
       await for (final line in lines) {
         final trimmed = line.trim();
         if (trimmed.isEmpty) continue;
-
         try {
           final event = jsonDecode(trimmed) as Map<String, dynamic>;
-
           switch (event['t']) {
             case 'init':
               threadCount = event['threads'] as int?;
               lastCheckpoint = List.filled(threadCount ?? 0, 0);
               break;
-
             case 'checkpoint':
               final chunks = event['chunks'] as List<dynamic>?;
               if (chunks != null) {
                 lastCheckpoint = chunks.map((e) => (e as num).toInt()).toList();
               }
               break;
-
             case 'chunk':
               if (lastCheckpoint != null) {
                 final i = event['i'] as int?;
                 final b = event['b'] as int?;
-
                 if (i != null &&
                     b != null &&
                     i >= 0 &&
@@ -713,15 +581,12 @@ class DownloadJournal {
               }
               break;
           }
-        } catch (_) {
-          // Ignore malformed lines.
-        }
+        } catch (_) {}
       }
     } catch (e) {
       debugPrint('[DownloadJournal] Recovery failed for $journalPath: $e');
       return null;
     }
-
     if (lastCheckpoint != null && lastCheckpoint.isEmpty) {
       debugPrint(
         '[DownloadJournal] Recovery for $journalPath yielded empty checkpoint. '
@@ -729,7 +594,6 @@ class DownloadJournal {
       );
       return null;
     }
-
     return lastCheckpoint;
   }
 
@@ -743,7 +607,6 @@ class DownloadJournal {
     await _lock.synchronized(() async {
       await _closeLocked();
     });
-
     try {
       final file = File(path);
       if (await file.exists()) {
@@ -756,16 +619,11 @@ class DownloadJournal {
 
   Future<void> _closeLocked() async {
     if (!_isOpen) return;
-
     _isOpen = false;
-
     try {
       await _sink?.flush();
       await _sink?.close();
-    } catch (_) {
-      // Ignore close errors.
-    }
-
+    } catch (_) {}
     _sink = null;
   }
 
@@ -775,35 +633,28 @@ class DownloadJournal {
       await _sink?.close();
 
       final tmp = File('$path.tmp');
-
       final initLine = jsonEncode({
         't': 'init',
         'threads': chunkProgress.length,
         'total': totalSize,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
-
       final checkpointLine = jsonEncode({
         't': 'checkpoint',
         'chunks': chunkProgress,
         'total': totalSize,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
-
       await tmp.writeAsString('$initLine\n$checkpointLine\n');
       await tmp.rename(path);
-
       _sink = File(path).openWrite(mode: FileMode.append);
       _isOpen = true;
       _approxBytes = initLine.length + checkpointLine.length + 2;
     } catch (e) {
       debugPrint('[DownloadJournal] Compaction failed for $path: $e');
-
       try {
         await File('$path.tmp').delete();
       } catch (_) {}
-
-      // Best effort: try to reopen in append mode so writes can continue.
       try {
         _sink = File(path).openWrite(mode: FileMode.append);
         _isOpen = true;

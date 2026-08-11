@@ -9,14 +9,13 @@ import '../../../core/services/power_monitor.dart';
 import '../../../core/services/notification_service.dart';
 
 class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
-  // FIX(R5): Logger instance
   static final _log = Logger('SettingsProvider');
 
-  /// The global singleton instance, set once during app startup.
-  /// Used by services like [YoutubeService] that need access to settings
-  /// without receiving the instance via dependency injection.
   static SettingsProvider? _instance;
   bool _loaded = false;
+  bool _observerAdded = false;
+  Completer<void>? _loadCompleter;
+
   static SettingsProvider get instance {
     _instance ??= SettingsProvider._internal();
     return _instance!;
@@ -26,13 +25,16 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   factory SettingsProvider() => instance;
 
-  /// Call this instead of `instance` when you need guaranteed-loaded settings.
   static SettingsProvider get loadedInstance {
     assert(
       _instance != null && _instance!._loaded,
       'SettingsProvider accessed before load() completed',
     );
     return _instance!;
+  }
+
+  Future<void> ensureLoaded() async {
+    if (_loadCompleter != null) await _loadCompleter!.future;
   }
 
   static const _autoStartKey = 'autoStart';
@@ -48,15 +50,13 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _themeModeKey = 'themeMode';
   static const _showOnboardingKey = 'showOnboarding';
   static const _classicUiKey = 'classicUi';
-
   static const _bandwidthScheduleEnabledKey = 'bandwidthScheduleEnabled';
   static const _scheduleStartTimeKey = 'scheduleStartTime';
   static const _scheduleEndTimeKey = 'scheduleEndTime';
   static const _scheduleSpeedLimitMbKey = 'scheduleSpeedLimitMb';
-
   static const _enableProxyKey = 'enableProxy';
   static const _proxyAddressKey = 'proxyAddress';
-  static const _bypassSSLKey = 'bypassSSL_v2'; // v2: default false
+  static const _bypassSSLKey = 'bypassSSL_v2';
   static const _httpsOnlyKey = 'httpsOnly';
   static const _reduceVisualsKey = 'reduceVisuals';
   static const _textScaleFactorKey = 'textScaleFactor';
@@ -114,37 +114,27 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _openLinksInAppKey = 'openLinksInApp';
   static const _translateTargetLangKey = 'translateTargetLang';
   static const _formAutofillKey = 'formAutofill';
-
   static const _powerAwareIsolatePoolKey = 'powerAwareIsolatePool';
   static const _thermalThreadLimitingKey = 'thermalThreadLimiting';
   static const _jankAutoBatterySaverKey = 'jankAutoBatterySaver';
   static const _diskWriteBatchingKey = 'diskWriteBatching';
   static const _powerBandwidthThrottlingKey = 'powerBandwidthThrottling';
   static const _resumeIntegrityCheckKey = 'resumeIntegrityCheck';
-
   static const _backendUrlKey = 'backend_url';
   static const _backendTokenKey = 'backend_token';
   static const _sendBrowserCookiesToBackendKey =
       'send_browser_cookies_to_backend';
   static const _useLocalYtFallbackKey = 'use_local_yt_fallback';
 
-  // Not `final`: [load] may run more than once on the singleton (e.g. in
-  // tests where each case re-loads settings with fresh mock values).
   late SharedPreferences _prefs;
   final _secureStorage = const FlutterSecureStorage();
 
-  // Debounce timers for rapid-fire settings changes
   Timer? _gridOpacityDebounce;
   Timer? _speedLimitDebounce;
 
   bool autoStart = true;
   String? customDownloadPath;
   int _maxDownloads = 3;
-
-  /// Returns the effective max downloads. When battery saver is active,
-  /// this is forced to 1 regardless of the user's configured value.
-  /// The configured value is preserved in [_maxDownloads] and restored
-  /// when battery saver is disabled.
   int get maxDownloads => batterySaverMode ? 1 : _maxDownloads;
   double speedLimitMb = 0.0;
   bool bandwidthScheduleEnabled = false;
@@ -158,6 +148,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool wifiOnly = false;
   String languageCode = 'en';
   bool _isDarkMode = true;
+
   bool get isDarkMode {
     if (themeMode == 'system') {
       try {
@@ -198,16 +189,14 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool enableProxy = false;
   String proxyAddress = '';
   bool bypassSSL = true;
-  bool developerMode =
-      false; // P0-2: Gate advanced/risky options behind Developer Mode
+  bool developerMode = false;
   bool httpsOnly = false;
   bool reduceVisuals = false;
   double textScaleFactor = 1.0;
   String customUserAgent = '';
   int cleanupDays = 0;
   bool categoryFolders = false;
-  bool antiFingerprinting =
-      true; // Obscure browser WebView automation fingerprints
+  bool antiFingerprinting = true;
 
   int _maxTabs = 15;
   int get maxTabs => _maxTabs;
@@ -243,18 +232,11 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   String backendUrl = '';
   String backendToken = '';
   bool sendBrowserCookiesToBackend = true;
-
-  /// When the remote backend is unreachable (timeout / connection error),
-  /// fall back to the on-device platform extractor (Android NewPipe
-  /// Extractor via the `com.example.dmx/youtube_extractor` channel).
   bool useLocalYtFallback = true;
 
-  // Torrent Seeding settings
   bool globalTorrentSeeding = true;
   bool globalTorrentSeedingLimited = false;
   int globalTorrentSeedingLimitKbps = 500;
-
-  // Advanced Torrent settings
   bool enableDht = true;
   bool enableUpnp = true;
   bool enableNatPmp = true;
@@ -266,9 +248,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool queueTorrents = true;
   bool forceEncrypt = false;
   int torrentConnectionsLimit = 200;
-
   bool sequentialDownload = false;
-  int _maxConcurrentFilesPerTorrent = 0; // 0 = unlimited
+  int _maxConcurrentFilesPerTorrent = 0;
   double shareRatioLimit = 2.0;
   int maxSeedingTimeMinutes = 0;
 
@@ -314,7 +295,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  // FIX(3): Max concurrent files per torrent setting
   int get maxConcurrentFilesPerTorrent => _maxConcurrentFilesPerTorrent;
 
   Future<void> setMaxConcurrentFilesPerTorrent(int value) async {
@@ -326,8 +306,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   int get configuredMaxDownloads => _maxDownloads;
   bool get configuredClassicUi => _classicUi;
   int get configuredDefaultThreadCount => _defaultThreadCount;
-
-  // Issue 5 Fix: Effective getters for battery saver mode overrides
   int get effectiveMaxDownloads => batterySaverMode ? 1 : _maxDownloads;
   bool get effectiveClassicUi => batterySaverMode ? true : _classicUi;
   int get effectiveDefaultThreadCount =>
@@ -336,7 +314,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   int _defaultThreadCount = 16;
   int get defaultThreadCount => batterySaverMode ? 2 : _defaultThreadCount;
 
-  // Browser settings
   bool incognitoEnabled = false;
   bool desktopMode = false;
   bool pinchToZoom = true;
@@ -346,7 +323,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool openLinksInApp = false;
   String translateTargetLang = 'en';
   bool formAutofill = true;
-
   bool notificationsEnabled = true;
   bool quietHoursEnabled = false;
   String quietHoursStart = '23:00';
@@ -365,7 +341,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   int get maxTotalConnections => _maxTotalConnections;
   bool adaptiveThreads = false;
   bool autoVerifyChecksum = false;
-
   bool powerAwareIsolatePool = true;
   bool thermalThreadLimiting = true;
   bool jankAutoBatterySaver = false;
@@ -387,160 +362,175 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> load() async {
-    _prefs = await SharedPreferences.getInstance();
-    WidgetsBinding.instance.addObserver(this);
-    autoStart = _prefs.getBool(_autoStartKey) ?? autoStart;
-    _maxDownloads = _prefs.getInt(_maxDownloadsKey) ?? _maxDownloads;
-    if (![1, 2, 3, 5, 8].contains(_maxDownloads)) _maxDownloads = 3;
-    speedLimitMb = _prefs.getDouble(_speedLimitKey) ?? speedLimitMb;
-    bandwidthScheduleEnabled = _prefs.getBool(_bandwidthScheduleEnabledKey) ??
-        bandwidthScheduleEnabled;
-    scheduleStartTime =
-        _prefs.getString(_scheduleStartTimeKey) ?? scheduleStartTime;
-    scheduleEndTime = _prefs.getString(_scheduleEndTimeKey) ?? scheduleEndTime;
-    scheduleSpeedLimitMb =
-        _prefs.getDouble(_scheduleSpeedLimitMbKey) ?? scheduleSpeedLimitMb;
-    enableGlow = _prefs.getBool(_enableGlowKey) ?? enableGlow;
-    gridOpacity = _prefs.getDouble(_gridOpacityKey) ?? gridOpacity;
-    soundNotification =
-        _prefs.getBool(_soundNotificationKey) ?? soundNotification;
-    vibration = _prefs.getBool(_vibrationKey) ?? vibration;
-    wifiOnly = _prefs.getBool(_wifiOnlyKey) ?? wifiOnly;
-    languageCode = _prefs.getString(_languageCodeKey) ?? languageCode;
-    themeMode = _prefs.getString(_themeModeKey) ?? 'system';
-    // Validate themeMode value
-    if (!['light', 'dark', 'amoled', 'system'].contains(themeMode)) {
-      themeMode = 'system';
+    if (_loadCompleter != null) return _loadCompleter!.future;
+    _loadCompleter = Completer<void>();
+
+    try {
+      _prefs = await SharedPreferences.getInstance();
+
+      // FIX: Only add observer once
+      if (!_observerAdded) {
+        WidgetsBinding.instance.addObserver(this);
+        _observerAdded = true;
+      }
+
+      autoStart = _prefs.getBool(_autoStartKey) ?? autoStart;
+      _maxDownloads = _prefs.getInt(_maxDownloadsKey) ?? _maxDownloads;
+      if (![1, 2, 3, 5, 8].contains(_maxDownloads)) _maxDownloads = 3;
+      speedLimitMb = _prefs.getDouble(_speedLimitKey) ?? speedLimitMb;
+      bandwidthScheduleEnabled = _prefs.getBool(_bandwidthScheduleEnabledKey) ??
+          bandwidthScheduleEnabled;
+      scheduleStartTime =
+          _prefs.getString(_scheduleStartTimeKey) ?? scheduleStartTime;
+      scheduleEndTime = _prefs.getString(_scheduleEndTimeKey) ?? scheduleEndTime;
+      scheduleSpeedLimitMb =
+          _prefs.getDouble(_scheduleSpeedLimitMbKey) ?? scheduleSpeedLimitMb;
+      enableGlow = _prefs.getBool(_enableGlowKey) ?? enableGlow;
+      gridOpacity = _prefs.getDouble(_gridOpacityKey) ?? gridOpacity;
+      soundNotification =
+          _prefs.getBool(_soundNotificationKey) ?? soundNotification;
+      vibration = _prefs.getBool(_vibrationKey) ?? vibration;
+      wifiOnly = _prefs.getBool(_wifiOnlyKey) ?? wifiOnly;
+      languageCode = _prefs.getString(_languageCodeKey) ?? languageCode;
+      themeMode = _prefs.getString(_themeModeKey) ?? 'system';
+      if (!['light', 'dark', 'amoled', 'system'].contains(themeMode)) {
+        themeMode = 'system';
+      }
+      _isDarkMode = _prefs.getBool(_isDarkModeKey) ?? isDarkMode;
+      showOnboarding = _prefs.getBool(_showOnboardingKey) ?? showOnboarding;
+      _classicUi = _prefs.getBool(_classicUiKey) ?? _classicUi;
+      batterySaverMode = _prefs.getBool(_batterySaverModeKey) ?? batterySaverMode;
+      developerMode = _prefs.getBool(_developerModeKey) ?? false;
+      enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
+      proxyAddress = _prefs.getString(_proxyAddressKey) ?? proxyAddress;
+      bypassSSL = _prefs.getBool(_bypassSSLKey) ?? true;
+      httpsOnly = _prefs.getBool(_httpsOnlyKey) ?? httpsOnly;
+      reduceVisuals = _prefs.getBool(_reduceVisualsKey) ?? reduceVisuals;
+      textScaleFactor = _prefs.getDouble(_textScaleFactorKey) ?? textScaleFactor;
+      customUserAgent = _prefs.getString(_customUserAgentKey) ?? customUserAgent;
+      cleanupDays = _prefs.getInt(_cleanupDaysKey) ?? cleanupDays;
+      if (![0, 7, 30].contains(cleanupDays)) cleanupDays = 0;
+      categoryFolders = _prefs.getBool(_categoryFoldersKey) ?? categoryFolders;
+      antiFingerprinting =
+          _prefs.getBool(_antiFingerprintingKey) ?? antiFingerprinting;
+      backendUrl = _prefs.getString(_backendUrlKey) ?? backendUrl;
+      backendToken = await _secureStorage.read(key: _backendTokenKey) ?? '';
+      sendBrowserCookiesToBackend =
+          _prefs.getBool(_sendBrowserCookiesToBackendKey) ??
+              sendBrowserCookiesToBackend;
+      useLocalYtFallback =
+          _prefs.getBool(_useLocalYtFallbackKey) ?? useLocalYtFallback;
+      globalTorrentSeeding =
+          _prefs.getBool(_globalTorrentSeedingKey) ?? globalTorrentSeeding;
+      globalTorrentSeedingLimited =
+          _prefs.getBool(_globalTorrentSeedingLimitedKey) ??
+              globalTorrentSeedingLimited;
+      globalTorrentSeedingLimitKbps =
+          _prefs.getInt(_globalTorrentSeedingLimitKbpsKey) ??
+              globalTorrentSeedingLimitKbps;
+      enableDht = _prefs.getBool(_enableDhtKey) ?? enableDht;
+      enableUpnp = _prefs.getBool(_enableUpnpKey) ?? enableUpnp;
+      enableNatPmp = _prefs.getBool(_enableNatPmpKey) ?? enableNatPmp;
+      enableLpd = _prefs.getBool(_enableLpdKey) ?? enableLpd;
+      enablePex = _prefs.getBool(_enablePexKey) ?? enablePex;
+      maxActiveTorrents =
+          _prefs.getInt(_maxActiveTorrentsKey) ?? maxActiveTorrents;
+      maxActiveDownloads =
+          _prefs.getInt(_maxActiveDownloadsKey) ?? maxActiveDownloads;
+      maxActiveSeeds = _prefs.getInt(_maxActiveSeedsKey) ?? maxActiveSeeds;
+      queueTorrents = _prefs.getBool(_queueTorrentsKey) ?? queueTorrents;
+      forceEncrypt = _prefs.getBool(_forceEncryptKey) ?? forceEncrypt;
+      torrentConnectionsLimit =
+          (_prefs.getInt(_torrentConnectionsLimitKey) ?? torrentConnectionsLimit)
+              .clamp(10, 1000);
+      sequentialDownload =
+          _prefs.getBool(_sequentialDownloadKey) ?? sequentialDownload;
+      _maxConcurrentFilesPerTorrent =
+          _prefs.getInt(_maxConcurrentFilesPerTorrentKey) ?? 0;
+      shareRatioLimit = _prefs.getDouble(_shareRatioLimitKey) ?? shareRatioLimit;
+      maxSeedingTimeMinutes =
+          _prefs.getInt(_maxSeedingTimeKey) ?? maxSeedingTimeMinutes;
+      _defaultThreadCount =
+          _prefs.getInt(_defaultThreadCountKey) ?? _defaultThreadCount;
+      if (![1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16].contains(_defaultThreadCount)) {
+        _defaultThreadCount = 16;
+      }
+      customDownloadPath = _prefs.getString(_customDownloadPathKey);
+      incognitoEnabled = _prefs.getBool(_incognitoEnabledKey) ?? incognitoEnabled;
+      desktopMode = _prefs.getBool(_desktopModeKey) ?? desktopMode;
+      pinchToZoom = _prefs.getBool(_pinchToZoomKey) ?? pinchToZoom;
+      _maxTabs = _prefs.getInt(_maxTabsKey) ?? 15;
+      _historyMaxEntries = _prefs.getInt(_historyMaxEntriesKey) ?? 500;
+      saveBrowserHistory =
+          _prefs.getBool(_saveBrowserHistoryKey) ?? saveBrowserHistory;
+      forceDarkMode = _prefs.getBool(_forceDarkModeKey) ?? forceDarkMode;
+      blockImages = _prefs.getBool(_blockImagesKey) ?? blockImages;
+      openLinksInApp = _prefs.getBool(_openLinksInAppKey) ?? openLinksInApp;
+      translateTargetLang =
+          _prefs.getString(_translateTargetLangKey) ?? translateTargetLang;
+      formAutofill = _prefs.getBool(_formAutofillKey) ?? formAutofill;
+      notificationsEnabled = _prefs.getBool(_notificationsEnabledKey) ?? true;
+      quietHoursEnabled =
+          _prefs.getBool(_quietHoursEnabledKey) ?? quietHoursEnabled;
+      quietHoursStart = _prefs.getString(_quietHoursStartKey) ?? quietHoursStart;
+      quietHoursEnd = _prefs.getString(_quietHoursEndKey) ?? quietHoursEnd;
+      proxyHost = _prefs.getString(_proxyHostKey) ?? '';
+      proxyPort = _prefs.getInt(_proxyPortKey) ?? 8080;
+      proxyUsername = _prefs.getString(_proxyUsernameKey) ?? '';
+      proxyPassword = await _secureStorage.read(key: _proxyPasswordKey) ?? '';
+
+      final legacyPassword = _prefs.getString(_proxyPasswordKey);
+      if (legacyPassword != null &&
+          legacyPassword.isNotEmpty &&
+          proxyPassword.isEmpty) {
+        proxyPassword = legacyPassword;
+        await _secureStorage.write(key: _proxyPasswordKey, value: proxyPassword);
+        await _prefs.remove(_proxyPasswordKey);
+      }
+
+      autoRetryEnabled = _prefs.getBool(_autoRetryEnabledKey) ?? autoRetryEnabled;
+      maxRetries = _prefs.getInt(_maxRetriesKey) ?? maxRetries;
+      if (![1, 2, 3, 5, 10].contains(maxRetries)) {
+        maxRetries = 3;
+      }
+      retryDelaySeconds =
+          _prefs.getInt(_retryDelaySecondsKey) ?? retryDelaySeconds;
+      if (![5, 10, 30, 60].contains(retryDelaySeconds)) {
+        retryDelaySeconds = 10;
+      }
+      searchEngine = _prefs.getString(_searchEngineKey) ?? searchEngine;
+      useRemoteBackend = _prefs.getBool(_useRemoteBackendKey) ?? true;
+      batteryOptimizationPrompted =
+          _prefs.getBool(_batteryOptimizationPromptedKey) ?? false;
+      _maxTotalConnections = _prefs.getInt(_maxTotalConnectionsKey) ?? 32;
+      if (![8, 16, 24, 32, 48, 64].contains(_maxTotalConnections)) {
+        _maxTotalConnections = 32;
+      }
+      adaptiveThreads = _prefs.getBool(_adaptiveThreadsKey) ?? false;
+      autoVerifyChecksum = _prefs.getBool(_autoVerifyChecksumKey) ?? false;
+      powerAwareIsolatePool = _prefs.getBool(_powerAwareIsolatePoolKey) ?? true;
+      thermalThreadLimiting = _prefs.getBool(_thermalThreadLimitingKey) ?? true;
+      jankAutoBatterySaver = _prefs.getBool(_jankAutoBatterySaverKey) ?? false;
+      diskWriteBatching = _prefs.getBool(_diskWriteBatchingKey) ?? true;
+      powerBandwidthThrottling =
+          _prefs.getBool(_powerBandwidthThrottlingKey) ?? true;
+      resumeIntegrityCheck = _prefs.getBool(_resumeIntegrityCheckKey) ?? true;
+
+      PowerMonitor.thermalThreadLimitingEnabled = thermalThreadLimiting;
+      PowerMonitor.powerBandwidthThrottlingEnabled = powerBandwidthThrottling;
+
+      _loaded = true;
+      _instance = this;
+      if (!(_loadCompleter?.isCompleted ?? true)) {
+        _loadCompleter?.complete();
+      }
+    } catch (e) {
+      if (!(_loadCompleter?.isCompleted ?? true)) {
+        _loadCompleter?.completeError(e);
+      }
+      _loadCompleter = null;
+      rethrow;
     }
-    _isDarkMode = _prefs.getBool(_isDarkModeKey) ?? isDarkMode;
-    showOnboarding = _prefs.getBool(_showOnboardingKey) ?? showOnboarding;
-    _classicUi = _prefs.getBool(_classicUiKey) ?? _classicUi;
-    batterySaverMode = _prefs.getBool(_batterySaverModeKey) ?? batterySaverMode;
-    developerMode = _prefs.getBool(_developerModeKey) ?? false;
-
-    enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
-    proxyAddress = _prefs.getString(_proxyAddressKey) ?? proxyAddress;
-    bypassSSL = _prefs.getBool(_bypassSSLKey) ?? true;
-    httpsOnly = _prefs.getBool(_httpsOnlyKey) ?? httpsOnly;
-    reduceVisuals = _prefs.getBool(_reduceVisualsKey) ?? reduceVisuals;
-    textScaleFactor = _prefs.getDouble(_textScaleFactorKey) ?? textScaleFactor;
-    customUserAgent = _prefs.getString(_customUserAgentKey) ?? customUserAgent;
-    cleanupDays = _prefs.getInt(_cleanupDaysKey) ?? cleanupDays;
-    if (![0, 7, 30].contains(cleanupDays)) cleanupDays = 0;
-    categoryFolders = _prefs.getBool(_categoryFoldersKey) ?? categoryFolders;
-    antiFingerprinting =
-        _prefs.getBool(_antiFingerprintingKey) ?? antiFingerprinting;
-
-    backendUrl = _prefs.getString(_backendUrlKey) ?? backendUrl;
-    backendToken = await _secureStorage.read(key: _backendTokenKey) ?? '';
-    sendBrowserCookiesToBackend =
-        _prefs.getBool(_sendBrowserCookiesToBackendKey) ??
-            sendBrowserCookiesToBackend;
-    useLocalYtFallback =
-        _prefs.getBool(_useLocalYtFallbackKey) ?? useLocalYtFallback;
-
-    globalTorrentSeeding =
-        _prefs.getBool(_globalTorrentSeedingKey) ?? globalTorrentSeeding;
-    globalTorrentSeedingLimited =
-        _prefs.getBool(_globalTorrentSeedingLimitedKey) ??
-            globalTorrentSeedingLimited;
-    globalTorrentSeedingLimitKbps =
-        _prefs.getInt(_globalTorrentSeedingLimitKbpsKey) ??
-            globalTorrentSeedingLimitKbps;
-    enableDht = _prefs.getBool(_enableDhtKey) ?? enableDht;
-    enableUpnp = _prefs.getBool(_enableUpnpKey) ?? enableUpnp;
-    enableNatPmp = _prefs.getBool(_enableNatPmpKey) ?? enableNatPmp;
-    enableLpd = _prefs.getBool(_enableLpdKey) ?? enableLpd;
-    enablePex = _prefs.getBool(_enablePexKey) ?? enablePex;
-    maxActiveTorrents =
-        _prefs.getInt(_maxActiveTorrentsKey) ?? maxActiveTorrents;
-    maxActiveDownloads =
-        _prefs.getInt(_maxActiveDownloadsKey) ?? maxActiveDownloads;
-    maxActiveSeeds = _prefs.getInt(_maxActiveSeedsKey) ?? maxActiveSeeds;
-    queueTorrents = _prefs.getBool(_queueTorrentsKey) ?? queueTorrents;
-    forceEncrypt = _prefs.getBool(_forceEncryptKey) ?? forceEncrypt;
-    torrentConnectionsLimit =
-        (_prefs.getInt(_torrentConnectionsLimitKey) ?? torrentConnectionsLimit)
-            .clamp(10, 1000);
-    sequentialDownload =
-        _prefs.getBool(_sequentialDownloadKey) ?? sequentialDownload;
-    _maxConcurrentFilesPerTorrent =
-        _prefs.getInt(_maxConcurrentFilesPerTorrentKey) ?? 0;
-    shareRatioLimit = _prefs.getDouble(_shareRatioLimitKey) ?? shareRatioLimit;
-    maxSeedingTimeMinutes =
-        _prefs.getInt(_maxSeedingTimeKey) ?? maxSeedingTimeMinutes;
-    _defaultThreadCount =
-        _prefs.getInt(_defaultThreadCountKey) ?? _defaultThreadCount;
-    if (![1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16].contains(_defaultThreadCount)) {
-      _defaultThreadCount = 16;
-    }
-    customDownloadPath = _prefs.getString(_customDownloadPathKey);
-    incognitoEnabled = _prefs.getBool(_incognitoEnabledKey) ?? incognitoEnabled;
-    desktopMode = _prefs.getBool(_desktopModeKey) ?? desktopMode;
-    pinchToZoom = _prefs.getBool(_pinchToZoomKey) ?? pinchToZoom;
-    _maxTabs = _prefs.getInt(_maxTabsKey) ?? 15;
-    _historyMaxEntries = _prefs.getInt(_historyMaxEntriesKey) ?? 500;
-    saveBrowserHistory =
-        _prefs.getBool(_saveBrowserHistoryKey) ?? saveBrowserHistory;
-    forceDarkMode = _prefs.getBool(_forceDarkModeKey) ?? forceDarkMode;
-    blockImages = _prefs.getBool(_blockImagesKey) ?? blockImages;
-    openLinksInApp = _prefs.getBool(_openLinksInAppKey) ?? openLinksInApp;
-    translateTargetLang =
-        _prefs.getString(_translateTargetLangKey) ?? translateTargetLang;
-    formAutofill = _prefs.getBool(_formAutofillKey) ?? formAutofill;
-    notificationsEnabled = _prefs.getBool(_notificationsEnabledKey) ?? true;
-    quietHoursEnabled =
-        _prefs.getBool(_quietHoursEnabledKey) ?? quietHoursEnabled;
-    quietHoursStart = _prefs.getString(_quietHoursStartKey) ?? quietHoursStart;
-    quietHoursEnd = _prefs.getString(_quietHoursEndKey) ?? quietHoursEnd;
-    proxyHost = _prefs.getString(_proxyHostKey) ?? '';
-    proxyPort = _prefs.getInt(_proxyPortKey) ?? 8080;
-    proxyUsername = _prefs.getString(_proxyUsernameKey) ?? '';
-
-    proxyPassword = await _secureStorage.read(key: _proxyPasswordKey) ?? '';
-    final legacyPassword = _prefs.getString(_proxyPasswordKey);
-    if (legacyPassword != null &&
-        legacyPassword.isNotEmpty &&
-        proxyPassword.isEmpty) {
-      proxyPassword = legacyPassword;
-      await _secureStorage.write(key: _proxyPasswordKey, value: proxyPassword);
-      await _prefs.remove(_proxyPasswordKey);
-    }
-
-    autoRetryEnabled = _prefs.getBool(_autoRetryEnabledKey) ?? autoRetryEnabled;
-    maxRetries = _prefs.getInt(_maxRetriesKey) ?? maxRetries;
-    if (![1, 2, 3, 5, 10].contains(maxRetries)) {
-      maxRetries = 3;
-    }
-    retryDelaySeconds =
-        _prefs.getInt(_retryDelaySecondsKey) ?? retryDelaySeconds;
-    if (![5, 10, 30, 60].contains(retryDelaySeconds)) {
-      retryDelaySeconds = 10;
-    }
-    searchEngine = _prefs.getString(_searchEngineKey) ?? searchEngine;
-    useRemoteBackend = _prefs.getBool(_useRemoteBackendKey) ?? true;
-    batteryOptimizationPrompted =
-        _prefs.getBool(_batteryOptimizationPromptedKey) ?? false;
-    _maxTotalConnections = _prefs.getInt(_maxTotalConnectionsKey) ?? 32;
-    if (![8, 16, 24, 32, 48, 64].contains(_maxTotalConnections)) {
-      _maxTotalConnections = 32;
-    }
-    adaptiveThreads = _prefs.getBool(_adaptiveThreadsKey) ?? false;
-    autoVerifyChecksum = _prefs.getBool(_autoVerifyChecksumKey) ?? false;
-
-    powerAwareIsolatePool = _prefs.getBool(_powerAwareIsolatePoolKey) ?? true;
-    thermalThreadLimiting = _prefs.getBool(_thermalThreadLimitingKey) ?? true;
-    jankAutoBatterySaver = _prefs.getBool(_jankAutoBatterySaverKey) ?? false;
-    diskWriteBatching = _prefs.getBool(_diskWriteBatchingKey) ?? true;
-    powerBandwidthThrottling =
-        _prefs.getBool(_powerBandwidthThrottlingKey) ?? true;
-    resumeIntegrityCheck = _prefs.getBool(_resumeIntegrityCheckKey) ?? true;
-
-    PowerMonitor.thermalThreadLimitingEnabled = thermalThreadLimiting;
-    PowerMonitor.powerBandwidthThrottlingEnabled = powerBandwidthThrottling;
-
-    _loaded = true;
-    _instance = this;
   }
 
   Future<void> setPowerAwareIsolatePool(bool value) async {
@@ -577,8 +567,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   int get speedLimitBytesPerSecond => (speedLimitMb * 1024 * 1024).round();
 
-  /// Returns the effective download speed limit considering bandwidth schedule
-  /// windows (including overnight wrap).
   int get effectiveSpeedLimitBytesPerSecond {
     if (bandwidthScheduleEnabled &&
         QuietHours.isInQuietHours(
@@ -746,7 +734,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> confirmBypassSSL() async {
     if (!developerMode) return;
     _log.warning(
-        'P0-2: WARNING: SSL certificate validation has been bypassed by user in Developer Mode');
+      'P0-2: WARNING: SSL certificate validation has been bypassed by user in Developer Mode');
     bypassSSL = true;
     _pendingBypassSSLConfirmation = false;
     await _prefs.setBool(_bypassSSLKey, true);
@@ -765,9 +753,10 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  // FIX: Clamp textScaleFactor to safe bounds
   Future<void> setTextScaleFactor(double value) async {
-    textScaleFactor = value;
-    await _prefs.setDouble(_textScaleFactorKey, value);
+    textScaleFactor = value.clamp(0.8, 2.5);
+    await _prefs.setDouble(_textScaleFactorKey, textScaleFactor);
     notifyListeners();
   }
 
@@ -994,8 +983,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  /// Whether the current time falls inside the configured quiet-hours window.
-  /// Always false when quiet hours are disabled.
   bool isInQuietHoursNow([DateTime? now]) {
     if (!quietHoursEnabled) return false;
     return QuietHours.isInQuietHours(
@@ -1044,78 +1031,33 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> resetToDefaults() async {
     final settingsKeys = [
-      _autoStartKey,
-      _maxDownloadsKey,
-      _speedLimitKey,
-      _bandwidthScheduleEnabledKey,
-      _scheduleStartTimeKey,
-      _scheduleEndTimeKey,
-      _scheduleSpeedLimitMbKey,
-      _enableGlowKey,
-      _gridOpacityKey,
-      _soundNotificationKey,
-      _vibrationKey,
-      _wifiOnlyKey,
-      _languageCodeKey,
-      _isDarkModeKey,
-      _themeModeKey,
-      _showOnboardingKey,
-      _classicUiKey,
-      _enableProxyKey,
-      _proxyAddressKey,
-      _bypassSSLKey,
-      _httpsOnlyKey,
-      _reduceVisualsKey,
-      _customUserAgentKey,
-      _cleanupDaysKey,
-      _categoryFoldersKey,
-      _globalTorrentSeedingKey,
-      _globalTorrentSeedingLimitedKey,
-      _globalTorrentSeedingLimitKbpsKey,
-      _enableDhtKey,
-      _enableUpnpKey,
-      _forceEncryptKey,
-      _torrentConnectionsLimitKey,
-      _sequentialDownloadKey,
-      _maxConcurrentFilesPerTorrentKey,
-      _shareRatioLimitKey,
-      _maxSeedingTimeKey,
-      _defaultThreadCountKey,
-      _customDownloadPathKey,
-      _incognitoEnabledKey,
-      _desktopModeKey,
-      _pinchToZoomKey,
-      _batterySaverModeKey,
-      _saveBrowserHistoryKey,
-      _notificationsEnabledKey,
-      _quietHoursEnabledKey,
-      _quietHoursStartKey,
-      _quietHoursEndKey,
-      _proxyHostKey,
-      _proxyPortKey,
-      _proxyUsernameKey,
-      _proxyPasswordKey,
-      _autoRetryEnabledKey,
-      _maxRetriesKey,
-      _retryDelaySecondsKey,
-      _searchEngineKey,
-      _batteryOptimizationPromptedKey,
-      _maxTotalConnectionsKey,
-      _backendUrlKey,
-      _backendTokenKey,
-      _sendBrowserCookiesToBackendKey,
-      _useRemoteBackendKey,
-      _useLocalYtFallbackKey,
-      _maxTabsKey,
-      _historyMaxEntriesKey,
-      _developerModeKey,
-      _antiFingerprintingKey,
-      _forceDarkModeKey,
-      _blockImagesKey,
-      _openLinksInAppKey,
-      _translateTargetLangKey,
+      _autoStartKey, _maxDownloadsKey, _speedLimitKey,
+      _bandwidthScheduleEnabledKey, _scheduleStartTimeKey, _scheduleEndTimeKey,
+      _scheduleSpeedLimitMbKey, _enableGlowKey, _gridOpacityKey,
+      _soundNotificationKey, _vibrationKey, _wifiOnlyKey, _languageCodeKey,
+      _isDarkModeKey, _themeModeKey, _showOnboardingKey, _classicUiKey,
+      _enableProxyKey, _proxyAddressKey, _bypassSSLKey, _httpsOnlyKey,
+      _reduceVisualsKey, _customUserAgentKey, _cleanupDaysKey,
+      _categoryFoldersKey, _globalTorrentSeedingKey,
+      _globalTorrentSeedingLimitedKey, _globalTorrentSeedingLimitKbpsKey,
+      _enableDhtKey, _enableUpnpKey, _forceEncryptKey,
+      _torrentConnectionsLimitKey, _sequentialDownloadKey,
+      _maxConcurrentFilesPerTorrentKey, _shareRatioLimitKey,
+      _maxSeedingTimeKey, _defaultThreadCountKey, _customDownloadPathKey,
+      _incognitoEnabledKey, _desktopModeKey, _pinchToZoomKey,
+      _batterySaverModeKey, _saveBrowserHistoryKey, _notificationsEnabledKey,
+      _quietHoursEnabledKey, _quietHoursStartKey, _quietHoursEndKey,
+      _proxyHostKey, _proxyPortKey, _proxyUsernameKey, _proxyPasswordKey,
+      _autoRetryEnabledKey, _maxRetriesKey, _retryDelaySecondsKey,
+      _searchEngineKey, _batteryOptimizationPromptedKey,
+      _maxTotalConnectionsKey, _backendUrlKey, _backendTokenKey,
+      _sendBrowserCookiesToBackendKey, _useRemoteBackendKey,
+      _useLocalYtFallbackKey, _maxTabsKey, _historyMaxEntriesKey,
+      _developerModeKey, _antiFingerprintingKey, _forceDarkModeKey,
+      _blockImagesKey, _openLinksInAppKey, _translateTargetLangKey,
       _formAutofillKey,
     ];
+
     for (final key in settingsKeys) {
       if (key == _proxyPasswordKey || key == _backendTokenKey) {
         await _secureStorage.delete(key: key);
@@ -1123,6 +1065,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
         await _prefs.remove(key);
       }
     }
+
     _isDarkMode = true;
     _classicUi = true;
     _maxDownloads = 3;
@@ -1145,7 +1088,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     batterySaverMode = false;
     enableProxy = false;
     proxyAddress = '';
-    bypassSSL = true; // default: always trust SSL
+    bypassSSL = true;
     httpsOnly = false;
     _pendingBypassSSLConfirmation = false;
     reduceVisuals = false;
@@ -1204,10 +1147,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _prefs.setInt(_defaultThreadCountKey, _defaultThreadCount);
     await _prefs.setBool(_autoStartKey, autoStart);
     await _prefs.setDouble(_speedLimitKey, speedLimitMb);
-    await _prefs.setBool(
-      _bandwidthScheduleEnabledKey,
-      bandwidthScheduleEnabled,
-    );
+    await _prefs.setBool(_bandwidthScheduleEnabledKey, bandwidthScheduleEnabled);
     await _prefs.setString(_scheduleStartTimeKey, scheduleStartTime);
     await _prefs.setString(_scheduleEndTimeKey, scheduleEndTime);
     await _prefs.setDouble(_scheduleSpeedLimitMbKey, scheduleSpeedLimitMb);
@@ -1230,14 +1170,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _prefs.setInt(_cleanupDaysKey, cleanupDays);
     await _prefs.setBool(_categoryFoldersKey, categoryFolders);
     await _prefs.setBool(_globalTorrentSeedingKey, globalTorrentSeeding);
-    await _prefs.setBool(
-      _globalTorrentSeedingLimitedKey,
-      globalTorrentSeedingLimited,
-    );
-    await _prefs.setInt(
-      _globalTorrentSeedingLimitKbpsKey,
-      globalTorrentSeedingLimitKbps,
-    );
+    await _prefs.setBool(_globalTorrentSeedingLimitedKey, globalTorrentSeedingLimited);
+    await _prefs.setInt(_globalTorrentSeedingLimitKbpsKey, globalTorrentSeedingLimitKbps);
     await _prefs.setBool(_enableDhtKey, enableDht);
     await _prefs.setBool(_enableUpnpKey, enableUpnp);
     await _prefs.setBool(_forceEncryptKey, forceEncrypt);
@@ -1262,35 +1196,34 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _prefs.setInt(_maxRetriesKey, maxRetries);
     await _prefs.setInt(_retryDelaySecondsKey, retryDelaySeconds);
     await _prefs.setString(_searchEngineKey, searchEngine);
-    await _prefs.setBool(
-      _batteryOptimizationPromptedKey,
-      batteryOptimizationPrompted,
-    );
+    await _prefs.setBool(_batteryOptimizationPromptedKey, batteryOptimizationPrompted);
     await _prefs.setInt(_maxTotalConnectionsKey, _maxTotalConnections);
     await _prefs.setString(_backendUrlKey, backendUrl);
-    await _prefs.setBool(
-      _sendBrowserCookiesToBackendKey,
-      sendBrowserCookiesToBackend,
-    );
+    await _prefs.setBool(_sendBrowserCookiesToBackendKey, sendBrowserCookiesToBackend);
     await _prefs.setBool(_useRemoteBackendKey, useRemoteBackend);
     await _prefs.setBool(_developerModeKey, developerMode);
     await _prefs.setBool(_antiFingerprintingKey, antiFingerprinting);
     await _prefs.setBool(_useLocalYtFallbackKey, useLocalYtFallback);
     await _prefs.setInt(_maxTabsKey, _maxTabs);
     await _prefs.setInt(_historyMaxEntriesKey, _historyMaxEntries);
+
     if (customDownloadPath != null) {
       await _prefs.setString(_customDownloadPathKey, customDownloadPath!);
     }
     if (proxyPassword.isNotEmpty) {
       await _secureStorage.write(key: _proxyPasswordKey, value: proxyPassword);
     }
+
     XdmBackendClient().refreshConfig();
     notifyListeners();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    if (_observerAdded) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observerAdded = false;
+    }
     super.dispose();
   }
 }

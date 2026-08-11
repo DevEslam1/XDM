@@ -3,16 +3,14 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dmx/core/services/logging_service.dart';
 
-// FIX(#4): Added enum for granular script permissions
 enum ScriptPermission {
-  domRead, // can read DOM
-  domWrite, // can modify DOM
-  network, // can make network requests (off by default)
-  storage, // can access localStorage/sessionStorage (off by default)
-  cookies, // can read cookies (off by default)
+  domRead,
+  domWrite,
+  network,
+  storage,
+  cookies,
 }
 
-/// A single user-authored script or stylesheet that runs on matching pages.
 class UserScript {
   final String id;
   final String name;
@@ -20,7 +18,6 @@ class UserScript {
   final String code;
   final bool isCss;
   final bool enabled;
-  // FIX(#4): Added permissions field to track what the script is allowed to do
   final Set<ScriptPermission> permissions;
 
   const UserScript({
@@ -30,7 +27,6 @@ class UserScript {
     required this.code,
     this.isCss = false,
     this.enabled = true,
-    // FIX(#4): Default to safe DOM-only permissions for new scripts
     this.permissions = const {
       ScriptPermission.domRead,
       ScriptPermission.domWrite
@@ -43,7 +39,7 @@ class UserScript {
     String? code,
     bool? isCss,
     bool? enabled,
-    Set<ScriptPermission>? permissions, // FIX(#4): Add permissions to copyWith
+    Set<ScriptPermission>? permissions,
   }) =>
       UserScript(
         id: id,
@@ -52,7 +48,7 @@ class UserScript {
         code: code ?? this.code,
         isCss: isCss ?? this.isCss,
         enabled: enabled ?? this.enabled,
-        permissions: permissions ?? this.permissions, // FIX(#4)
+        permissions: permissions ?? this.permissions,
       );
 
   Map<String, dynamic> toJson() => {
@@ -62,12 +58,10 @@ class UserScript {
         'code': code,
         'isCss': isCss,
         'enabled': enabled,
-        // FIX(#4): Serialize permissions as list of strings
         'permissions': permissions.map((e) => e.name).toList(),
       };
 
   factory UserScript.fromJson(Map<String, dynamic> json) {
-    // FIX(#4): Deserialize permissions, defaulting to safe subset for legacy scripts
     final List<dynamic>? permsJson = json['permissions'] as List<dynamic>?;
     final Set<ScriptPermission> perms = permsJson != null
         ? permsJson
@@ -85,25 +79,19 @@ class UserScript {
       code: json['code'] as String? ?? '',
       isCss: json['isCss'] as bool? ?? false,
       enabled: json['enabled'] as bool? ?? true,
-      permissions: perms, // FIX(#4)
+      permissions: perms,
     );
   }
 }
 
-/// Stores and matches per-URL user scripts. Scripts are matched against both
-/// the full URL and its host using a case-insensitive glob ('*' wildcards).
 class UserScriptManager extends ChangeNotifier {
   static const _storeKey = 'browser_user_scripts';
-  // FIX(#4): Logger for security violations
   static final _log = LoggingService.logger('UserScriptManager');
 
   static UserScriptManager? _instance;
   static UserScriptManager get instance => _instance ??= UserScriptManager();
-
   UserScriptManager();
 
-  /// Clears the cached singleton so the next [instance] access rebuilds it
-  /// from storage. Used by tests.
   @visibleForTesting
   static void resetInstance() {
     _instance = null;
@@ -113,7 +101,6 @@ class UserScriptManager extends ChangeNotifier {
   bool _loaded = false;
 
   List<UserScript> get scripts => List.unmodifiable(_scripts);
-
   bool get isLoaded => _loaded;
 
   Future<void> load() async {
@@ -141,17 +128,12 @@ class UserScriptManager extends ChangeNotifier {
     await prefs.setString(_storeKey, raw);
   }
 
-  // FIX(#4): Security validation for script code
   void _validateScript(UserScript script) {
     if (script.isCss) return;
-
     final code = script.code;
-    // 1. Size check
     if (code.length > 50000) {
       throw Exception('Script too large (max 50,000 characters)');
     }
-
-    // 2. Native bridge attempt detection
     if (code.contains('flutter_inappwebview') ||
         code.contains('callHandler') ||
         code.contains('postMessage')) {
@@ -160,8 +142,6 @@ class UserScriptManager extends ChangeNotifier {
       throw Exception(
           'Scripts are not allowed to access native application bridges.');
     }
-
-    // 3. Execution bypass detection
     if (code.contains('eval(') ||
         code.contains('new Function(') ||
         code.contains('importScripts(')) {
@@ -173,7 +153,6 @@ class UserScriptManager extends ChangeNotifier {
   }
 
   Future<void> add(UserScript script) async {
-    // FIX(#4): Enforce security validation on entry
     _validateScript(script);
     _scripts.add(script);
     await _persist();
@@ -181,7 +160,6 @@ class UserScriptManager extends ChangeNotifier {
   }
 
   Future<void> update(UserScript script) async {
-    // FIX(#4): Enforce security validation on update
     _validateScript(script);
     final index = _scripts.indexWhere((s) => s.id == script.id);
     if (index >= 0) {
@@ -212,7 +190,6 @@ class UserScriptManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Enabled scripts whose pattern matches [url] or its host.
   List<UserScript> scriptsForUrl(String url) {
     if (url.isEmpty) return const [];
     return _scripts
@@ -222,7 +199,6 @@ class UserScriptManager extends ChangeNotifier {
         .toList();
   }
 
-  // FIX(#4): Build a robust Proxy-based sandbox to isolate user scripts
   String _buildSandbox(UserScript script) {
     final marker =
         'xdm_user_script_${script.id.replaceAll(RegExp('[^A-Za-z0-9_]'), '_')}';
@@ -240,7 +216,7 @@ class UserScriptManager extends ChangeNotifier {
         'sessionStorage',
         'indexedDB'
       ],
-      'eval', 'Function', 'importScripts', 'Worker', 'SharedWorker', // Always blocked
+      'eval', 'Function', 'importScripts', 'Worker', 'SharedWorker',
     ];
 
     final jsBlocked = blockedList.map((e) => "'$e'").join(',');
@@ -251,11 +227,9 @@ if (!window['$marker']) {
   (function() {
     const _blocked = [$jsBlocked];
     const _root = window;
-    
-    // Custom stubs to block string evaluation in timers (BUG SI_B1)
     const _origSetTimeout = _root.setTimeout;
     const _origSetInterval = _root.setInterval;
-    
+
     const sandboxSetTimeout = function(fn, delay) {
       if (typeof fn === 'string') {
         console.warn('[DMX Sandbox] Blocked setTimeout string execution');
@@ -264,7 +238,7 @@ if (!window['$marker']) {
       var args = Array.prototype.slice.call(arguments, 2);
       return _origSetTimeout.apply(_root, [fn, delay].concat(args));
     };
-    
+
     const sandboxSetInterval = function(fn, delay) {
       if (typeof fn === 'string') {
         console.warn('[DMX Sandbox] Blocked setInterval string execution');
@@ -274,23 +248,17 @@ if (!window['$marker']) {
       return _origSetInterval.apply(_root, [fn, delay].concat(args));
     };
 
-    // Create a restricted proxy for the window/global object
     const sandbox = new Proxy(_root, {
       get(target, prop) {
-        // Prevent prototype escapes (BUG SI_B1)
         if (prop === '__proto__' || prop === 'prototype') {
           return null;
         }
-        
-        // Intercept global references (BUG SI_B1)
-        if (prop === 'window' || prop === 'self' || prop === 'globalThis' || 
+        if (prop === 'window' || prop === 'self' || prop === 'globalThis' ||
             prop === 'parent' || prop === 'top' || prop === 'opener') {
           return sandbox;
         }
-        
         if (prop === 'setTimeout') return sandboxSetTimeout;
         if (prop === 'setInterval') return sandboxSetInterval;
-
         if (_blocked.includes(prop) || (typeof prop === 'string' && prop.startsWith('flutter_'))) {
           console.warn('[DMX Sandbox] Access denied to: ' + prop);
           return undefined;
@@ -309,25 +277,33 @@ if (!window['$marker']) {
         if (prop === '__proto__' || prop === 'prototype') return false;
         if (_blocked.includes(prop)) return false;
         return prop in target;
+      },
+      // FIX: Add ownKeys trap to prevent enumeration of blocked properties
+      ownKeys(target) {
+        return Object.keys(target).filter(k => !_blocked.includes(k) && !k.startsWith('flutter_'));
+      },
+      getOwnPropertyDescriptor(target, prop) {
+        if (_blocked.includes(prop) || (typeof prop === 'string' && prop.startsWith('flutter_'))) {
+          return undefined;
+        }
+        return Object.getOwnPropertyDescriptor(target, prop);
       }
     });
 
-    // Freeze the sandbox definition so it cannot be escaped
     Object.freeze(sandbox);
 
-    // Apply specific restrictions to the document object
     if (!${perms.contains(ScriptPermission.cookies)}) {
       try {
-        Object.defineProperty(document, 'cookie', { 
-          get: function() { return ''; }, 
-          set: function() { return false; }, 
-          configurable: true 
+        Object.defineProperty(document, 'cookie', {
+          get: function() { return ''; },
+          set: function() { return false; },
+          configurable: true
         });
       } catch(e) {}
     }
+
     ${!perms.contains(ScriptPermission.domWrite) ? "const _origWrite = document.write; document.write = () => {}; document.writeln = () => {};" : ""}
 
-    // Execute user code in a scope where 'window', 'self', and 'globalThis' point to the sandbox
     (function(window, self, globalThis) {
       'use strict';
       try {
@@ -341,8 +317,6 @@ if (!window['$marker']) {
 ''';
   }
 
-
-  /// Batches all matching JS and CSS scripts for [url] into a single JS block.
   Future<String> getJsForUrl(String url) async {
     final matches = scriptsForUrl(url);
     if (matches.isEmpty) return '';
@@ -362,22 +336,19 @@ if (!window['$marker']) {
 })();
 ''');
       } else {
-        // FIX(#4): Use sandbox builder instead of direct IIFE
         sb.writeln(_buildSandbox(script));
       }
     }
     return sb.toString();
   }
 
-  /// Case-insensitive glob matcher. '*' matches any run of characters and '?'
-  /// matches a single character. The pattern is matched against the full URL
-  /// as well as the bare host (e.g. `example.com/*` and `example.com`).
   static bool matchesPattern(String pattern, String url) {
     final trimmed = pattern.trim();
     if (trimmed.isEmpty) return false;
 
     final normalizedUrl = url.toLowerCase();
     final candidates = <String>{normalizedUrl};
+
     try {
       final host = Uri.parse(url).host.toLowerCase();
       if (host.isNotEmpty) {
