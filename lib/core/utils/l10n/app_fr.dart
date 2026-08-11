@@ -171,9 +171,7 @@ const Map<String, String> frTranslations = {
   'settings_adv_console': 'Paramètres avancés',
   'settings_ua': 'User-Agent personnalisé',
   'settings_ua_sub': 'Remplacer les en-têtes du client HTTP par défaut',
-  'settings_proxy': 'Tunnel proxy de routage',
-  'settings_proxy_sub': 'Rediriger les flux de données de connexion',
-  'settings_proxy_address': 'Adresse proxy (IP:Port)',
+
   'settings_bypass_ssl': 'Faire confiance à tous les certificats SSL',
   'settings_bypass_ssl_sub':
       'Contourner la validation SSL (AVERTISSEMENT : Risque MITM)',
@@ -225,7 +223,7 @@ const Map<String, String> frTranslations = {
   'storage_label': 'Stockage : ',
   'wifi_only_label': 'Wi-Fi uniquement',
   'retry_label': 'Réessayer',
-  'use_proxy_label': 'Utiliser un proxy',
+
   'hidden_file_label': 'Fichier caché',
   'use_advance_download_label': 'Utiliser la méthode de téléchargement avancée',
   'advance_option_label': 'Option avancée',

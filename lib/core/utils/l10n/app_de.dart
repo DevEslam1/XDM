@@ -169,9 +169,7 @@ const Map<String, String> deTranslations = {
   'settings_adv_console': 'Erweiterte Einstellungen',
   'settings_ua': 'Benutzerdefinierter User-Agent',
   'settings_ua_sub': 'Standard-HTTP-Header überschreiben',
-  'settings_proxy': 'Routing-Proxy-Tunnel',
-  'settings_proxy_sub': 'Verbindungsdatenströme umleiten',
-  'settings_proxy_address': 'Proxy-Adresse (IP:Port)',
+
   'settings_bypass_ssl': 'Allen SSL-Zertifikaten vertrauen',
   'settings_bypass_ssl_sub': 'SSL-Validierung umgehen (WARNUNG: MITM-Risiko)',
   'bypass_ssl_dialog_title': 'SSL-Prüfung deaktivieren?',
@@ -220,7 +218,7 @@ const Map<String, String> deTranslations = {
   'storage_label': 'Speicher: ',
   'wifi_only_label': 'Nur WLAN',
   'retry_label': 'Erneut versuchen',
-  'use_proxy_label': 'Proxy verwenden',
+
   'hidden_file_label': 'Versteckte Datei',
   'use_advance_download_label': 'Erweiterte Download-Methode verwenden',
   'advance_option_label': 'Erweiterte Optionen',

@@ -544,12 +544,6 @@ class DownloadEngine {
     String? url,
     String? customUserAgent,
     String? referer,
-    bool enableProxy = false,
-    String? proxyAddress,
-    String? proxyHost,
-    int? proxyPort,
-    String? proxyUsername,
-    String? proxyPassword,
     bool bypassSSL = true,
     String? cookies,
     String? oauthToken,
@@ -558,12 +552,6 @@ class DownloadEngine {
       url: url,
       customUserAgent: customUserAgent,
       referer: referer,
-      enableProxy: enableProxy,
-      proxyAddress: proxyAddress,
-      proxyHost: proxyHost,
-      proxyPort: proxyPort,
-      proxyUsername: proxyUsername,
-      proxyPassword: proxyPassword,
       bypassSSL: bypassSSL,
       cookies: cookies,
       oauthToken: oauthToken,
@@ -586,12 +574,6 @@ class DownloadEngine {
     String? requestedFileName,
     String? customUserAgent,
     String? referer,
-    bool enableProxy = false,
-    String? proxyAddress,
-    String? proxyHost,
-    int? proxyPort,
-    String? proxyUsername,
-    String? proxyPassword,
     bool bypassSSL = true,
     String? cookies,
     String? oauthToken,
@@ -620,12 +602,6 @@ class DownloadEngine {
       url: punyUrl,
       customUserAgent: customUserAgent,
       referer: referer,
-      enableProxy: enableProxy,
-      proxyAddress: proxyAddress,
-      proxyHost: proxyHost,
-      proxyPort: proxyPort,
-      proxyUsername: proxyUsername,
-      proxyPassword: proxyPassword,
       bypassSSL: bypassSSL,
       cookies: cookies,
       oauthToken: oauthToken,
@@ -1010,12 +986,6 @@ class DownloadEngine {
     int threadCount = 0,
     String? customUserAgent,
     String? referer,
-    bool enableProxy = false,
-    String? proxyAddress,
-    String? proxyHost,
-    int? proxyPort,
-    String? proxyUsername,
-    String? proxyPassword,
     bool bypassSSL = true,
     String? cookies,
     String? oauthToken,
@@ -1058,12 +1028,6 @@ class DownloadEngine {
           url: url,
           customUserAgent: customUserAgent,
           referer: referer,
-          enableProxy: enableProxy,
-          proxyAddress: proxyAddress,
-          proxyHost: proxyHost,
-          proxyPort: proxyPort,
-          proxyUsername: proxyUsername,
-          proxyPassword: proxyPassword,
           bypassSSL: bypassSSL,
           cookies: cookies,
           oauthToken: oauthToken,
@@ -1140,12 +1104,6 @@ class DownloadEngine {
           onProgress: onProgress,
           getTorrentFiles: getTorrentFiles,
           torrentId: torrentId,
-          enableProxy: enableProxy,
-          proxyAddress: proxyAddress,
-          proxyHost: proxyHost,
-          proxyPort: proxyPort,
-          proxyUsername: proxyUsername,
-          proxyPassword: proxyPassword,
           bypassSSL: bypassSSL,
           isRetry: isRetry,
         );
@@ -1170,12 +1128,6 @@ class DownloadEngine {
       threadCount: effectiveThreadCount,
       customUserAgent: customUserAgent,
       referer: referer,
-      enableProxy: enableProxy,
-      proxyAddress: proxyAddress,
-      proxyHost: proxyHost,
-      proxyPort: proxyPort,
-      proxyUsername: proxyUsername,
-      proxyPassword: proxyPassword,
       bypassSSL: bypassSSL,
       cookies: cookies,
       oauthToken: oauthToken,
@@ -1779,12 +1731,6 @@ class DownloadEngine {
     required ValueChangedProgress onProgress,
     List<Map<String, dynamic>>? Function()? getTorrentFiles,
     int? torrentId,
-    bool enableProxy = false,
-    String? proxyAddress,
-    String? proxyHost,
-    int? proxyPort,
-    String? proxyUsername,
-    String? proxyPassword,
     bool bypassSSL = true,
     bool isRetry = false,
   }) async {
@@ -1833,12 +1779,6 @@ class DownloadEngine {
           final tempTorrentFile = File(tempTorrentPath);
           final torrentDio = _buildIsolatedClient(
             url: url,
-            enableProxy: enableProxy,
-            proxyAddress: proxyAddress,
-            proxyHost: proxyHost,
-            proxyPort: proxyPort,
-            proxyUsername: proxyUsername,
-            proxyPassword: proxyPassword,
             bypassSSL: bypassSSL,
           );
           try {
@@ -3063,12 +3003,6 @@ Dio buildTransferDio({
   String? url,
   String? customUserAgent,
   String? referer,
-  bool enableProxy = false,
-  String? proxyAddress,
-  String? proxyHost,
-  int? proxyPort,
-  String? proxyUsername,
-  String? proxyPassword,
   bool bypassSSL = true,
   String? cookies,
   String? oauthToken,
@@ -3113,29 +3047,8 @@ Dio buildTransferDio({
   }
   if (client.httpClientAdapter is IOHttpClientAdapter) {
     final adapter = client.httpClientAdapter as IOHttpClientAdapter;
-    final String proxyHostResolved =
-        (enableProxy && proxyHost != null && proxyHost.trim().isNotEmpty)
-            ? proxyHost.trim()
-            : (enableProxy && proxyAddress != null && proxyAddress.contains(':')
-                ? proxyAddress.split(':')[0].trim()
-                : (enableProxy ? proxyAddress?.trim() ?? '' : ''));
-    final int port = (enableProxy && proxyPort != null && proxyPort > 0)
-        ? proxyPort
-        : (enableProxy && proxyAddress != null && proxyAddress.contains(':')
-            ? int.tryParse(proxyAddress.split(':')[1]) ?? 8080
-            : 8080);
     adapter.createHttpClient = () {
       final httpClient = HttpClient();
-      if (enableProxy && proxyHostResolved.isNotEmpty) {
-        httpClient.findProxy = (uri) => 'PROXY $proxyHostResolved:$port';
-        if (proxyUsername != null && proxyUsername.isNotEmpty) {
-          httpClient.authenticateProxy = (h, p, scheme, realm) async {
-            httpClient.addProxyCredentials(h, p, realm ?? '',
-                HttpClientBasicCredentials(proxyUsername, proxyPassword ?? ''));
-            return true;
-          };
-        }
-      }
       if (bypassSSL) {
         httpClient.badCertificateCallback = (cert, h, p) => true;
       }

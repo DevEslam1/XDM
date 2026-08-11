@@ -124,7 +124,6 @@ class _SettingsScreenState extends State<SettingsScreen>
       return 1;
     }
     if (s.contains('net') ||
-        s.contains('proxy') ||
         s.contains('dns') ||
         s.contains('sec') ||
         s == '03' ||
@@ -617,11 +616,11 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
-                      height: 44,
+                      height: 48,
                       decoration: BoxDecoration(
                         color:
                             isDark ? AppTheme.surface : AppTheme.lightSurface,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: _searchFocusNode.hasFocus
                               ? filterAccentClr
@@ -646,37 +645,37 @@ class _SettingsScreenState extends State<SettingsScreen>
                           color: isDark
                               ? AppTheme.textPrimary
                               : AppTheme.lightTextPrimary,
-                          fontSize: 13,
+                          fontSize: 14,
                           fontFamily: 'Inter',
                         ),
                         decoration: InputDecoration(
                           isDense: true,
                           prefixIcon: Icon(
                             Icons.search_rounded,
-                            size: 18,
+                            size: 20,
                             color: filterAccentClr,
                           ),
                           suffixIcon: _searchQuery.isNotEmpty
                               ? IconButton(
                                   icon: Icon(Icons.clear_rounded,
-                                      size: 16, color: filterAccentClr),
+                                      size: 18, color: filterAccentClr),
                                   onPressed: () {
                                     _searchController.clear();
                                   },
                                 )
                               : null,
                           hintText: isRtl
-                              ? 'ابحث في الإعدادات (مثلاً: proxy, dht, speed)...'
-                              : 'Search all settings (e.g. proxy, dht, speed)...',
+                              ? 'ابحث في الإعدادات (مثلاً: dht, speed)...'
+                              : 'Search all settings (e.g. dht, speed)...',
                           hintStyle: TextStyle(
                             color: isDark
                                 ? AppTheme.textMuted
                                 : AppTheme.lightTextMuted,
-                            fontSize: 12,
+                            fontSize: 13,
                           ),
                           border: InputBorder.none,
                           contentPadding:
-                              const EdgeInsets.symmetric(vertical: 12),
+                              const EdgeInsets.symmetric(vertical: 14),
                         ),
                       ),
                     ),
@@ -756,7 +755,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                                 scrollDirection: Axis.horizontal,
                                 physics: const BouncingScrollPhysics(),
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 4),
+                                    horizontal: 16, vertical: 8),
                                 child: Row(
                                   children:
                                       List.generate(categories.length, (i) {
@@ -765,41 +764,71 @@ class _SettingsScreenState extends State<SettingsScreen>
                                         i == _selectedCategoryIndex;
                                     return Padding(
                                       padding:
-                                          const EdgeInsets.only(right: 8.0),
-                                      child: ChoiceChip(
-                                        showCheckmark: false,
-                                        avatar: Icon(
-                                          cat.icon,
-                                          size: 16,
-                                          color: selected
-                                              ? Colors.white
-                                              : cat.color,
+                                          const EdgeInsets.only(right: 10.0),
+                                      child: GestureDetector(
+                                        onTap: () => _onCategorySelected(i),
+                                        child: AnimatedContainer(
+                                          duration: const Duration(milliseconds: 250),
+                                          curve: Curves.easeInOut,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: selected
+                                                ? cat.color
+                                                : (isDark
+                                                    ? AppTheme.surface
+                                                    : AppTheme.lightSurface),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: selected
+                                                  ? cat.color
+                                                  : cat.color.withValues(
+                                                      alpha: 0.3),
+                                              width: 1.2,
+                                            ),
+                                            boxShadow: selected
+                                                ? [
+                                                    BoxShadow(
+                                                      color: cat.color
+                                                          .withValues(
+                                                              alpha: 0.3),
+                                                      blurRadius: 8,
+                                                      spreadRadius: -2,
+                                                      offset:
+                                                          const Offset(0, 2),
+                                                    )
+                                                  ]
+                                                : null,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                cat.icon,
+                                                size: 18,
+                                                color: selected
+                                                    ? Colors.white
+                                                    : cat.color,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                cat.title,
+                                                style: TextStyle(
+                                                  color: selected
+                                                      ? Colors.white
+                                                      : cat.color,
+                                                  fontFamily: 'Space Grotesk',
+                                                  fontSize: 13,
+                                                  fontWeight: selected
+                                                      ? FontWeight.bold
+                                                      : FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                        label: Text(cat.title),
-                                        labelStyle: TextStyle(
-                                          color: selected
-                                              ? Colors.white
-                                              : cat.color,
-                                          fontFamily: 'Space Grotesk',
-                                          fontSize: 12,
-                                          fontWeight: selected
-                                              ? FontWeight.bold
-                                              : FontWeight.w500,
-                                        ),
-                                        selected: selected,
-                                        selectedColor: cat.color,
-                                        backgroundColor: isDark
-                                            ? AppTheme.surface
-                                            : AppTheme.lightSurface,
-                                        side: BorderSide(
-                                          color: selected
-                                              ? cat.color
-                                              : cat.color
-                                                  .withValues(alpha: 0.3),
-                                          width: 1,
-                                        ),
-                                        onSelected: (_) =>
-                                            _onCategorySelected(i),
                                       ),
                                     );
                                   }),
@@ -856,7 +885,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           icon: Icons.search_off_rounded,
           title: 'No settings found for "$_searchQuery"',
           subtitle:
-              'Try keywords like "proxy", "threads", "schedule", or "dht".',
+              'Try keywords like "threads", "schedule", or "dht".',
         ),
       );
     }

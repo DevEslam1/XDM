@@ -95,7 +95,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   int _selectedThreads = 5;
   bool _wifiOnly = false;
   bool _retry = true;
-  bool _useProxy = false;
+  
   bool _isScheduled = false;
   bool _showAdvanced = false;
   DateTime? _scheduledDateTime;
@@ -162,7 +162,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       _selectedThreads = settings.defaultThreadCount;
     }
     _wifiOnly = settings.wifiOnly;
-    _useProxy = settings.enableProxy;
+    
     _loadDefaultPath();
     _urlController.addListener(_onUrlChanged);
     if (widget.prefilledUrl != null && widget.prefilledUrl!.trim().isNotEmpty) {
@@ -628,12 +628,12 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           url: url,
           requestedFileName: nameForReq,
           customUserAgent: settings.customUserAgent,
-          enableProxy: settings.enableProxy,
-          proxyAddress: settings.proxyAddress,
-          proxyHost: settings.proxyHost,
-          proxyPort: settings.proxyPort,
-          proxyUsername: settings.proxyUsername,
-          proxyPassword: settings.proxyPassword,
+          
+          
+          
+          
+          
+          
           bypassSSL: settings.bypassSSL,
         );
       } finally {
@@ -1113,7 +1113,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-    final amberClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+
     final borderClr = isDark ? AppTheme.border : AppTheme.lightBorder;
     final classicUi = settings.classicUi;
     final panelBg = classicUi
@@ -2235,16 +2235,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                   ],
                                 ),
                                 const SizedBox(height: 12),
-                                _ToggleRow(
-                                  icon: Icons.route_rounded,
-                                  label: L10n.of(context, 'use_proxy_label'),
-                                  value: _useProxy,
-                                  color: amberClr,
-                                  isDark: isDark,
-                                  onChanged: (v) =>
-                                      setState(() => _useProxy = v),
-                                ),
-                                const SizedBox(height: 8),
                                 _ToggleRow(
                                   icon: Icons.schedule_rounded,
                                   label: isRtl ? 'جدولة' : 'Schedule',

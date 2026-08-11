@@ -38,13 +38,19 @@ class AppLockService {
     final storedPin = await _storage.read(key: _pinKey);
     final salt = await _storage.read(key: _saltKey);
 
-    if (storedPin != null && salt != null) {
-      final hashedInput = hashSecret(pin, salt: salt);
-      final matches = timingSafeEqual(storedPin, hashedInput);
-      if (matches) {
-        await resetFailedAttempts();
-        return true;
-      }
+    // FIX: If storedPin or salt is null, the secure storage is corrupted.
+    // Do NOT register a failed attempt — the user's PIN may be correct but
+    // the storage is unreadable. Registering failures here would lock out
+    // users with corrupted storage rather than wrong PINs.
+    if (storedPin == null || salt == null) {
+      return false;
+    }
+
+    final hashedInput = hashSecret(pin, salt: salt);
+    final matches = timingSafeEqual(storedPin, hashedInput);
+    if (matches) {
+      await resetFailedAttempts();
+      return true;
     }
     await _registerFailedAttempt();
     return false;

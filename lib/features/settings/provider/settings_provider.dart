@@ -54,8 +54,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _scheduleStartTimeKey = 'scheduleStartTime';
   static const _scheduleEndTimeKey = 'scheduleEndTime';
   static const _scheduleSpeedLimitMbKey = 'scheduleSpeedLimitMb';
-  static const _enableProxyKey = 'enableProxy';
-  static const _proxyAddressKey = 'proxyAddress';
   static const _bypassSSLKey = 'bypassSSL_v2';
   static const _httpsOnlyKey = 'httpsOnly';
   static const _reduceVisualsKey = 'reduceVisuals';
@@ -94,10 +92,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _quietHoursEnabledKey = 'quietHoursEnabled';
   static const _quietHoursStartKey = 'quietHoursStart';
   static const _quietHoursEndKey = 'quietHoursEnd';
-  static const _proxyHostKey = 'proxyHost';
-  static const _proxyPortKey = 'proxyPort';
-  static const _proxyUsernameKey = 'proxyUsername';
-  static const _proxyPasswordKey = 'proxyPassword';
+
   static const _autoRetryEnabledKey = 'autoRetryEnabled';
   static const _maxRetriesKey = 'maxRetries';
   static const _retryDelaySecondsKey = 'retryDelaySeconds';
@@ -186,8 +181,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  bool enableProxy = false;
-  String proxyAddress = '';
+
   bool bypassSSL = true;
   bool developerMode = false;
   bool httpsOnly = false;
@@ -327,10 +321,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool quietHoursEnabled = false;
   String quietHoursStart = '23:00';
   String quietHoursEnd = '07:00';
-  String proxyHost = '';
-  int proxyPort = 8080;
-  String proxyUsername = '';
-  String proxyPassword = '';
+
   bool autoRetryEnabled = true;
   int maxRetries = 3;
   int retryDelaySeconds = 3;
@@ -401,8 +392,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _classicUi = _prefs.getBool(_classicUiKey) ?? _classicUi;
       batterySaverMode = _prefs.getBool(_batterySaverModeKey) ?? batterySaverMode;
       developerMode = _prefs.getBool(_developerModeKey) ?? false;
-      enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
-      proxyAddress = _prefs.getString(_proxyAddressKey) ?? proxyAddress;
       bypassSSL = _prefs.getBool(_bypassSSLKey) ?? true;
       httpsOnly = _prefs.getBool(_httpsOnlyKey) ?? httpsOnly;
       reduceVisuals = _prefs.getBool(_reduceVisualsKey) ?? reduceVisuals;
@@ -474,20 +463,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
           _prefs.getBool(_quietHoursEnabledKey) ?? quietHoursEnabled;
       quietHoursStart = _prefs.getString(_quietHoursStartKey) ?? quietHoursStart;
       quietHoursEnd = _prefs.getString(_quietHoursEndKey) ?? quietHoursEnd;
-      proxyHost = _prefs.getString(_proxyHostKey) ?? '';
-      proxyPort = _prefs.getInt(_proxyPortKey) ?? 8080;
-      proxyUsername = _prefs.getString(_proxyUsernameKey) ?? '';
-      proxyPassword = await _secureStorage.read(key: _proxyPasswordKey) ?? '';
-
-      final legacyPassword = _prefs.getString(_proxyPasswordKey);
-      if (legacyPassword != null &&
-          legacyPassword.isNotEmpty &&
-          proxyPassword.isEmpty) {
-        proxyPassword = legacyPassword;
-        await _secureStorage.write(key: _proxyPasswordKey, value: proxyPassword);
-        await _prefs.remove(_proxyPasswordKey);
-      }
-
       autoRetryEnabled = _prefs.getBool(_autoRetryEnabledKey) ?? autoRetryEnabled;
       maxRetries = _prefs.getInt(_maxRetriesKey) ?? maxRetries;
       if (![1, 2, 3, 5, 10].contains(maxRetries)) {
@@ -1036,7 +1011,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _scheduleSpeedLimitMbKey, _enableGlowKey, _gridOpacityKey,
       _soundNotificationKey, _vibrationKey, _wifiOnlyKey, _languageCodeKey,
       _isDarkModeKey, _themeModeKey, _showOnboardingKey, _classicUiKey,
-      _enableProxyKey, _proxyAddressKey, _bypassSSLKey, _httpsOnlyKey,
+      _bypassSSLKey, _httpsOnlyKey,
       _reduceVisualsKey, _customUserAgentKey, _cleanupDaysKey,
       _categoryFoldersKey, _globalTorrentSeedingKey,
       _globalTorrentSeedingLimitedKey, _globalTorrentSeedingLimitKbpsKey,
@@ -1047,7 +1022,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _incognitoEnabledKey, _desktopModeKey, _pinchToZoomKey,
       _batterySaverModeKey, _saveBrowserHistoryKey, _notificationsEnabledKey,
       _quietHoursEnabledKey, _quietHoursStartKey, _quietHoursEndKey,
-      _proxyHostKey, _proxyPortKey, _proxyUsernameKey, _proxyPasswordKey,
+
       _autoRetryEnabledKey, _maxRetriesKey, _retryDelaySecondsKey,
       _searchEngineKey, _batteryOptimizationPromptedKey,
       _maxTotalConnectionsKey, _backendUrlKey, _backendTokenKey,
@@ -1059,7 +1034,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     ];
 
     for (final key in settingsKeys) {
-      if (key == _proxyPasswordKey || key == _backendTokenKey) {
+      if (key == _backendTokenKey) {
         await _secureStorage.delete(key: key);
       } else {
         await _prefs.remove(key);
@@ -1086,8 +1061,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     themeMode = 'system';
     showOnboarding = true;
     batterySaverMode = false;
-    enableProxy = false;
-    proxyAddress = '';
+
     bypassSSL = true;
     httpsOnly = false;
     _pendingBypassSSLConfirmation = false;
@@ -1120,10 +1094,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     quietHoursEnabled = false;
     quietHoursStart = '23:00';
     quietHoursEnd = '07:00';
-    proxyHost = '';
-    proxyPort = 8080;
-    proxyUsername = '';
-    proxyPassword = '';
+
     autoRetryEnabled = true;
     maxRetries = 3;
     retryDelaySeconds = 10;
@@ -1160,8 +1131,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _prefs.setString(_themeModeKey, themeMode);
     await _prefs.setBool(_showOnboardingKey, showOnboarding);
     await _prefs.setBool(_batterySaverModeKey, batterySaverMode);
-    await _prefs.setBool(_enableProxyKey, enableProxy);
-    await _prefs.setString(_proxyAddressKey, proxyAddress);
+
     await _prefs.setBool(_bypassSSLKey, bypassSSL);
     await _prefs.setBool(_httpsOnlyKey, httpsOnly);
     await _prefs.setBool(_reduceVisualsKey, reduceVisuals);
@@ -1189,9 +1159,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _prefs.setBool(_quietHoursEnabledKey, quietHoursEnabled);
     await _prefs.setString(_quietHoursStartKey, quietHoursStart);
     await _prefs.setString(_quietHoursEndKey, quietHoursEnd);
-    await _prefs.setString(_proxyHostKey, proxyHost);
-    await _prefs.setInt(_proxyPortKey, proxyPort);
-    await _prefs.setString(_proxyUsernameKey, proxyUsername);
+
     await _prefs.setBool(_autoRetryEnabledKey, autoRetryEnabled);
     await _prefs.setInt(_maxRetriesKey, maxRetries);
     await _prefs.setInt(_retryDelaySecondsKey, retryDelaySeconds);
@@ -1210,9 +1178,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (customDownloadPath != null) {
       await _prefs.setString(_customDownloadPathKey, customDownloadPath!);
     }
-    if (proxyPassword.isNotEmpty) {
-      await _secureStorage.write(key: _proxyPasswordKey, value: proxyPassword);
-    }
+
 
     XdmBackendClient().refreshConfig();
     notifyListeners();

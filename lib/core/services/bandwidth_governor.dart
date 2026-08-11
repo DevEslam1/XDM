@@ -20,7 +20,10 @@ class BandwidthGovernor {
   double _burstFactor;
 
   double _availableTokens = 0;
-  DateTime _lastRefill = DateTime.now();
+  // FIX: Initialize _lastRefill to 1 second in the past so the first acquire()
+  // call gets a full second of tokens (up to the burst cap). Previously the
+  // bucket started empty, causing unnecessary latency on the first write.
+  DateTime _lastRefill = DateTime.now().subtract(const Duration(seconds: 1));
 
   final Lock _lock = Lock();
   VoidCallback? _powerListener;
@@ -63,7 +66,6 @@ class BandwidthGovernor {
     if (_globalBytesPerSecond <= 0 || _activeConsumers <= 0) return 0;
     // FIX-M6: Ensure at least 1 to avoid division by zero from a race
     // where _activeConsumers is decremented to 0 between isUnlimited and here.
-    // clamp(1, 0) is undefined when min > max in Dart; use max(1, ...) instead.
     final consumers = max(1, _activeConsumers);
     final baseShare = _globalBytesPerSecond ~/ consumers;
     return (baseShare * PowerMonitor.throttleFactor).round();
@@ -86,7 +88,6 @@ class BandwidthGovernor {
   /// true shared-memory concurrency for this object instance.
   void registerConsumer() {
     _activeConsumers++;
-    // FIX-P2-19: Do NOT reset shared tokens when a new consumer registers
   }
 
   /// Unregisters a consumer.
@@ -97,7 +98,6 @@ class BandwidthGovernor {
   }
 
   final Map<String, int> _taskLimits = {};
-  // FIX-P2-18: Per-task refill timestamps so acquiring per-task tokens does not corrupt shared refill
   final Map<String, DateTime> _taskLastRefill = {};
 
   void setTaskLimit(String taskId, int limit) {
@@ -163,7 +163,10 @@ class BandwidthGovernor {
       _refill();
 
       final share = perConsumerBytesPerSecond;
-      if (share <= 0) return 0;
+      // FIX: When share <= 0 due to extreme power throttling
+      // (throttleFactor == 0), the governor should BLOCK writes, not
+      // allow them unlimited. Returning 0 would bypass the limit.
+      if (share <= 0) return 1000;
 
       _availableTokens -= bytes;
       final maxDeficit = -(share * 0.5);
@@ -196,8 +199,6 @@ class BandwidthGovernor {
 
     final newTokens = share * elapsedMs / 1000.0;
 
-    // FIX(13): burst window is now configurable; with _burstFactor == 1.0 the
-    // governor never exceeds the configured per-consumer limit.
     _availableTokens = min(_availableTokens + newTokens, share * _burstFactor);
 
     _lastRefill = now;

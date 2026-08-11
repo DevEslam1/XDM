@@ -3970,12 +3970,6 @@ class DownloadProvider extends ChangeNotifier
             url: cleanUrl,
             requestedFileName: task.fileName,
             customUserAgent: _settingsProvider.customUserAgent,
-            enableProxy: _settingsProvider.enableProxy,
-            proxyAddress: _settingsProvider.proxyAddress,
-            proxyHost: _settingsProvider.proxyHost,
-            proxyPort: _settingsProvider.proxyPort,
-            proxyUsername: _settingsProvider.proxyUsername,
-            proxyPassword: _settingsProvider.proxyPassword,
             bypassSSL: _settingsProvider.bypassSSL,
           );
         } catch (e) {
@@ -4074,12 +4068,6 @@ class DownloadProvider extends ChangeNotifier
             url: cleanUrl,
             requestedFileName: task.fileName,
             customUserAgent: _settingsProvider.customUserAgent,
-            enableProxy: _settingsProvider.enableProxy,
-            proxyAddress: _settingsProvider.proxyAddress,
-            proxyHost: _settingsProvider.proxyHost,
-            proxyPort: _settingsProvider.proxyPort,
-            proxyUsername: _settingsProvider.proxyUsername,
-            proxyPassword: _settingsProvider.proxyPassword,
             bypassSSL: _settingsProvider.bypassSSL,
             referer: task.downloadPageUrl,
           );
@@ -4247,10 +4235,6 @@ class DownloadProvider extends ChangeNotifier
           final meta = await _downloadEngine.resolveMetadata(
             url: cleanUrl,
             customUserAgent: _settingsProvider.customUserAgent,
-            enableProxy: _settingsProvider.enableProxy,
-            proxyAddress: _settingsProvider.proxyAddress,
-            proxyHost: _settingsProvider.proxyHost,
-            proxyPort: _settingsProvider.proxyPort,
             bypassSSL: _settingsProvider.bypassSSL,
             referer: task.downloadPageUrl,
           );

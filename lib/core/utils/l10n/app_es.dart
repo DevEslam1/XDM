@@ -164,9 +164,7 @@ const Map<String, String> esTranslations = {
   'settings_adv_console': 'Ajustes avanzados',
   'settings_ua': 'User-Agent personalizado',
   'settings_ua_sub': 'Sobrescribir encabezados de cliente HTTP predeterminados',
-  'settings_proxy': 'Túnel proxy de enrutamiento',
-  'settings_proxy_sub': 'Redirigir flujos de datos de conexión',
-  'settings_proxy_address': 'Dirección del proxy (IP:Puerto)',
+
   'settings_bypass_ssl': 'Confiar en todos los certificados SSL',
   'settings_bypass_ssl_sub': 'Omitir validación SSL (ADVERTENCIA: Riesgo MITM)',
   'bypass_ssl_dialog_title': '¿Desactivar la verificación SSL?',
@@ -215,7 +213,7 @@ const Map<String, String> esTranslations = {
   'storage_label': 'Almacenamiento: ',
   'wifi_only_label': 'Solo Wi-Fi',
   'retry_label': 'Reintentar',
-  'use_proxy_label': 'Usar proxy',
+
   'hidden_file_label': 'Archivo oculto',
   'use_advance_download_label': 'Usar método de descarga avanzado',
   'advance_option_label': 'Opción avanzada',

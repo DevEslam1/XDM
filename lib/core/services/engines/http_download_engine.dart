@@ -94,6 +94,17 @@ class HttpDownloadEngine {
     _trackers[taskId]?.add(bytesPerSec, threads);
   }
 
+  // FIX: Updates the tracker's current thread count when a task restarts
+  // with a different (e.g. recommended) thread count. Previously
+  // currentThreads was final and never updated, causing stale plateau
+  // detection against the original thread count.
+  void updateTrackerThreadCount(String taskId, int newThreadCount) {
+    final tracker = _trackers[taskId];
+    if (tracker != null) {
+      tracker.updateThreadCount(newThreadCount);
+    }
+  }
+
   /// Thread count to use the next time this task starts.
   int recommendedThreads(String taskId, int fallback) {
     final t = _trackers[taskId];
@@ -120,12 +131,24 @@ class HttpDownloadEngine {
 }
 
 class _AdaptiveTracker {
+  // FIX: Changed from final to mutable so updateThreadCount() can refresh
+  // the tracker when a task restarts with a different thread count.
+  int currentThreads;
+
   _AdaptiveTracker(this.currentThreads);
 
-  final int currentThreads;
   final Queue<double> _samples = Queue<double>();
   final Queue<int> _sampleThreads = Queue<int>();
   int recommendation = 0;
+
+  /// Updates the current thread count and clears any stale recommendation
+  /// so the next evaluation uses the new baseline.
+  void updateThreadCount(int newCount) {
+    if (newCount != currentThreads) {
+      currentThreads = newCount;
+      recommendation = 0;
+    }
+  }
 
   void add(double bytesPerSec, int threads) {
     if (bytesPerSec > 0) {

@@ -14,23 +14,7 @@ final _log = LoggingService.logger('BackgroundService');
 /// iOS does NOT support persistent background downloads from a Dart isolate.
 /// The `flutter_background_service` plugin cannot keep Dart code alive after
 /// the app is suspended (iOS lifecycle rules). To support background
-/// downloads on iOS, a native BGTaskScheduler implementation is needed:
-///
-///   1. Create a native Swift/ObjC class that conforms to `BGTaskScheduler`.
-///   2. Register the background task identifier in Info.plist.
-///   3. From Dart, schedule the task via a MethodChannel.
-///   4. The native code performs or resumes the URLSession download.
-///   5. When the download completes, the native code calls back to Dart.
-///
-/// Until that is implemented:
-///   - [start] is a no-op on iOS.
-///   - [stop] is a no-op on iOS.
-///   - [isSupported] returns `false` on iOS so the app never pretends to
-///     run background downloads.
-///   - UI should display a warning when the user opens the app on iOS:
-///     "Downloads only run while the app is in the foreground on iOS."
-///
-/// The setting `iosBackgroundDownloadsEnabled` defaults to `false`.
+/// downloads on iOS, a native BGTaskScheduler implementation is needed.
 /// ═══════════════════════════════════════════════════════════════════════════
 
 @pragma('vm:entry-point')
@@ -119,9 +103,6 @@ class BackgroundService {
           },
         );
 
-    // Subscribe to heartbeat to keep the service's event loop active.
-    // The handler logs at fine level for diagnostic purposes; the
-    // subscription itself prevents the service from being garbage-collected.
     service.on('heartbeat').listen(
       (_) {
         _log.finest('Heartbeat received');
@@ -221,7 +202,14 @@ class BackgroundService {
           await _wakeLockChannel.invokeMethod<void>('acquire');
           _log.fine('Wake lock renewed');
         } catch (e) {
-          _log.warning('Failed to renew wake lock', e);
+          // FIX: If renewal fails, reset _wakeLockHeld so the next
+          // acquireWakeLock() call can attempt re-acquisition. Previously
+          // the flag stayed true, causing the app to think the wake lock
+          // was active when it may have expired natively.
+          _log.warning('Failed to renew wake lock, resetting state', e);
+          _wakeLockHeld = false;
+          _wakeLockRenewalTimer?.cancel();
+          _wakeLockRenewalTimer = null;
         }
       });
     } catch (e) {

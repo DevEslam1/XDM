@@ -206,6 +206,11 @@ class SiteIntelligenceService {
   Timer? _persistTimer;
   bool _persistPending = false;
 
+  // FIX: Regex to detect any valid URL scheme (e.g. http, https, ftp, file).
+  // Previously only http:// and https:// were checked, causing URLs with
+  // other schemes to be mangled by prepending 'https://'.
+  static final _urlSchemeRegex = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://');
+
   Future<void> init() async {
     if (_loaded) return;
     try {
@@ -281,10 +286,11 @@ class SiteIntelligenceService {
         confidence: 1.0,
       );
     }
+    // FIX: Check for any URL scheme, not just http/https. This prevents
+    // mangling URLs with other valid schemes (e.g. ftp://, file://).
+    final hasScheme = _urlSchemeRegex.hasMatch(cleanUrl);
     final uri = Uri.tryParse(
-        (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))
-            ? cleanUrl
-            : 'https://$cleanUrl');
+        hasScheme ? cleanUrl : 'https://$cleanUrl');
     if (uri == null) return _fallbackResult();
     final host = uri.host.toLowerCase();
 
@@ -403,44 +409,37 @@ class SiteIntelligenceService {
     if (name != null) {
       final lowerName = name.toLowerCase();
 
-      // Extract quality keyword (e.g. "1080p", "4k")
       final qMatch = UrlPatterns.qualityRegex.firstMatch(name);
       if (qMatch != null) {
         inferredQuality = qMatch.group(0);
         keywords.add(qMatch.group(0)!);
       }
 
-      // Extract video codec keyword (e.g. "x264", "hevc")
       final codecMatch = UrlPatterns.videoCodecRegex.firstMatch(lowerName);
       if (codecMatch != null) {
         keywords.add(codecMatch.group(0)!);
       }
 
-      // Extract audio codec keyword (e.g. "aac", "flac")
       final audioCodecMatch = UrlPatterns.audioCodecRegex.firstMatch(lowerName);
       if (audioCodecMatch != null) {
         keywords.add(audioCodecMatch.group(0)!);
       }
 
-      // Extract source keyword (e.g. "bluray", "web-dl")
       final sourceMatch = UrlPatterns.sourceRegex.firstMatch(lowerName);
       if (sourceMatch != null) {
         keywords.add(sourceMatch.group(0)!);
       }
 
-      // Extract release group (e.g. "[YTS]" → "YTS")
       final releaseMatch = UrlPatterns.releaseGroupRegex.firstMatch(name);
       if (releaseMatch != null && releaseMatch.group(1) != null) {
         keywords.add(releaseMatch.group(1)!);
       }
 
-      // Extract year (e.g. "2023")
       final yearMatch = UrlPatterns.yearRegex.firstMatch(name);
       if (yearMatch != null) {
         keywords.add(yearMatch.group(0)!);
       }
 
-      // Determine content type
       if (UrlPatterns.videoCodecRegex.hasMatch(lowerName) ||
           UrlPatterns.sourceRegex.hasMatch(lowerName) ||
           UrlPatterns.videoExtensions.any((ext) => lowerName.contains(ext))) {

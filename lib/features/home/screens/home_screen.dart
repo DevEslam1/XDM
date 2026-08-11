@@ -556,10 +556,10 @@ class _HomeScreenState extends State<HomeScreen>
       ),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        height: 44,
+        height: 48,
         decoration: BoxDecoration(
           color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isFocused ? accentClr : accentClr.withValues(alpha: 0.35),
             width: isFocused ? 1.8 : 1.0,
@@ -581,7 +581,7 @@ class _HomeScreenState extends State<HomeScreen>
           cursorColor: accentClr,
           style: TextStyle(
             color: textClr,
-            fontSize: 13,
+            fontSize: 14,
             fontFamily: 'Inter',
           ),
           onChanged: (val) {
@@ -592,12 +592,12 @@ class _HomeScreenState extends State<HomeScreen>
             isDense: true,
             prefixIcon: Icon(
               Icons.search_rounded,
-              size: 18,
+              size: 20,
               color: accentClr,
             ),
             suffixIcon: _searchController.text.isNotEmpty
                 ? IconButton(
-                    icon: Icon(Icons.clear_rounded, size: 16, color: accentClr),
+                    icon: Icon(Icons.clear_rounded, size: 18, color: accentClr),
                     onPressed: () {
                       _searchController.clear();
                       context.read<DownloadProvider>().setSearchQuery('');
@@ -608,10 +608,10 @@ class _HomeScreenState extends State<HomeScreen>
             hintText: L10n.of(context, 'search_placeholder'),
             hintStyle: TextStyle(
               color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-              fontSize: 12,
+              fontSize: 13,
             ),
             border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(vertical: 14),
           ),
         ),
       ),
@@ -642,13 +642,23 @@ class _HomeScreenState extends State<HomeScreen>
           child: Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-              borderRadius: BorderRadius.circular(10),
+              color: isDark
+                  ? AppTheme.surface.withValues(alpha: 0.5)
+                  : AppTheme.lightSurface.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color:
-                    isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+                color: isDark
+                    ? AppTheme.borderSubtle
+                    : AppTheme.lightBorderSubtle,
                 width: 1.0,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Row(
               children: [
@@ -694,10 +704,20 @@ class _HomeScreenState extends State<HomeScreen>
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
             color: selected ? color : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.4),
+                      blurRadius: 8,
+                      spreadRadius: -2,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -711,22 +731,22 @@ class _HomeScreenState extends State<HomeScreen>
                           ? AppTheme.textSecondary
                           : AppTheme.lightTextSecondary),
                   fontFamily: 'Space Grotesk',
-                  fontSize: responsiveFontSize(context, 12),
-                  fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                  fontSize: responsiveFontSize(context, 13),
+                  fontWeight: selected ? FontWeight.bold : FontWeight.w600,
                 ),
               ),
               if (count > 0) ...[
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
+                    horizontal: 7,
+                    vertical: 3,
                   ),
                   decoration: BoxDecoration(
                     color: selected
                         ? Colors.white.withValues(alpha: 0.25)
                         : color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
                     border: selected
                         ? null
                         : Border.all(
@@ -737,7 +757,7 @@ class _HomeScreenState extends State<HomeScreen>
                     style: TextStyle(
                       color: selected ? Colors.white : color,
                       fontFamily: 'Space Grotesk',
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -886,12 +906,12 @@ class _HomeScreenState extends State<HomeScreen>
                 ],
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 7,
+                    horizontal: 12,
+                    vertical: 8,
                   ),
                   decoration: BoxDecoration(
                     color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isDark
                           ? AppTheme.glassBorder
@@ -907,10 +927,10 @@ class _HomeScreenState extends State<HomeScreen>
                             ? Icons.arrow_upward_rounded
                             : Icons.arrow_downward_rounded,
                         color: secClr,
-                        size: 13,
+                        size: 14,
                       ),
-                      const SizedBox(width: 5),
-                      Icon(Icons.sort_rounded, color: secClr, size: 14),
+                      const SizedBox(width: 6),
+                      Icon(Icons.sort_rounded, color: secClr, size: 16),
                     ],
                   ),
                 ),
@@ -936,13 +956,13 @@ class _HomeScreenState extends State<HomeScreen>
                     _showClearHistoryDialog(context, provider, isDark, isRtl),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 7,
+                    horizontal: 12,
+                    vertical: 8,
                   ),
                   decoration: BoxDecoration(
                     color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
                         .withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
                           .withValues(alpha: 0.25),
@@ -952,7 +972,7 @@ class _HomeScreenState extends State<HomeScreen>
                   child: Icon(
                      Icons.delete_sweep_outlined,
                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                     size: 16,
+                     size: 18,
                   ),
                 ),
               );
@@ -1061,7 +1081,7 @@ class _HomeScreenState extends State<HomeScreen>
                 builder: (_) => const AddDownloadDialog(),
               );
             },
-            child: const Icon(Icons.add_rounded, size: 22),
+            child: const Icon(Icons.add_rounded, size: 24),
           ),
         ),
       ),
@@ -1118,7 +1138,7 @@ class _AppBarIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: Icon(icon, color: color, size: 20),
+      icon: Icon(icon, color: color, size: 22),
       tooltip: tooltip,
       onPressed: onPressed,
       style: IconButton.styleFrom(

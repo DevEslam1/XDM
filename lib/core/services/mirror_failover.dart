@@ -76,9 +76,7 @@ class MirrorFailover {
               status >= 400 &&
               status < 500 &&
               status != 408 &&
-              status != 429 &&
-              status != 404 &&
-              status != 403) {
+              status != 429) {
             return null;
           }
         }
