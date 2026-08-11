@@ -671,6 +671,7 @@ class NotificationService {
     _receivePort?.close();
     _receivePort = null;
     IsolateNameServer.removePortNameMapping('dmx_notification_port');
+    _pendingActions.clear();
     if (!_actionStreamController.isClosed) {
       await _actionStreamController.close();
     }

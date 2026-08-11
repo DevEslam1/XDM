@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:logging/logging.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
@@ -76,7 +77,7 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
     runHaptic(settings);
     final db = context.read<DatabaseService>();
     final bm = Bookmark(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: const Uuid().v4(),
       title: result.title,
       url: result.url,
       folder: result.folder,

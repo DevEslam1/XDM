@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:synchronized/synchronized.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import '../utils/crypto_utils.dart';
 
@@ -262,23 +263,27 @@ class RemoteApiService {
     return base64Url.encode(bytes);
   }
 
+  static final Lock _tokenFileLock = Lock();
+
   static Future<void> _writeTokenFile(String token, int port) async {
-    try {
-      final path = await _tokenFilePath();
-      // Format matches single_instance_service: "<token>\n<port>".
-      await File(path).writeAsString('$token\n$port');
-      if (!Platform.isWindows) {
-        try {
-          await Process.run('chmod', ['600', path]);
-        } catch (e) {
-          LoggingService.logger('RemoteApiService').info(
-            '[RemoteApiService] chmod on token file skipped: $e',
-          );
+    return _tokenFileLock.synchronized(() async {
+      try {
+        final path = await _tokenFilePath();
+        // Format matches single_instance_service: "<token>\n<port>".
+        await File(path).writeAsString('$token\n$port');
+        if (!Platform.isWindows) {
+          try {
+            await Process.run('chmod', ['600', path]);
+          } catch (e) {
+            LoggingService.logger('RemoteApiService').info(
+              '[RemoteApiService] chmod on token file skipped: $e',
+            );
+          }
         }
+      } catch (e) {
+        debugPrint('Remote API: failed to write token file: $e');
       }
-    } catch (e) {
-      debugPrint('Remote API: failed to write token file: $e');
-    }
+    });
   }
 
   /// Reads (token, port) from the token file, falling back to the fixed

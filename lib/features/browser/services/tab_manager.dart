@@ -90,6 +90,9 @@ class TabManager extends ChangeNotifier {
     if (oldTab != null) {
       if (_tabIdHistory.isEmpty || _tabIdHistory.last != oldTab.id) {
         _tabIdHistory.add(oldTab.id);
+        if (_tabIdHistory.length > 50) {
+          _tabIdHistory.removeAt(0);
+        }
       }
     }
     _currentIndex = index;
@@ -132,6 +135,9 @@ class TabManager extends ChangeNotifier {
       if (oldActive != null) {
         if (_tabIdHistory.isEmpty || _tabIdHistory.last != oldActive.id) {
           _tabIdHistory.add(oldActive.id);
+          if (_tabIdHistory.length > 50) {
+            _tabIdHistory.removeAt(0);
+          }
         }
       }
       _currentIndex = _tabs.length - 1;
@@ -319,6 +325,8 @@ class TabManager extends ChangeNotifier {
           );
         }
         await db.saveOpenTabs(dbTabs);
+      } else {
+        _log.warning('Database is not initialized. Tabs saved to SharedPreferences only.');
       }
     } catch (e) {
       _log.warning('Failed to save tabs: $e');
@@ -326,6 +334,30 @@ class TabManager extends ChangeNotifier {
   }
 
   Future<void> restoreTabs() async {
+    int attempts = 0;
+    while (attempts < 2) {
+      attempts++;
+      try {
+        await _performRestoreTabs();
+        return;
+      } catch (e, st) {
+        _log.severe('[TabManager] restoreTabs failed (attempt $attempts)', e, st);
+        if (attempts < 2) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      }
+    }
+
+    if (!isActive()) return;
+    final fallback = createTab();
+    _tabs
+      ..clear()
+      ..add(fallback);
+    _currentIndex = 0;
+    notifyListeners();
+  }
+
+  Future<void> _performRestoreTabs() async {
     if (!isActive()) return;
     try {
       final db = resolveDatabase();

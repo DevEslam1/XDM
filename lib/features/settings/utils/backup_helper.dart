@@ -275,7 +275,10 @@ abstract final class BackupHelper {
       isDark: isDark,
     );
     if (password == null) return;
-    final jsonStr = provider.exportBackupJson(password: password);
+    final cleanPassword = password.trim();
+    final jsonStr = provider.exportBackupJson(
+      password: cleanPassword.isNotEmpty ? cleanPassword : null,
+    );
     await SharePlus.instance.share(
       ShareParams(text: jsonStr, subject: 'XDM Backup Signal Logs'),
     );

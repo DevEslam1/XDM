@@ -572,9 +572,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       final visitedAtVal = item['visitedAt'];
       DateTime dt;
       if (visitedAtVal is num) {
-        dt = DateTime.fromMillisecondsSinceEpoch(visitedAtVal.toInt());
+        dt = DateTime.fromMillisecondsSinceEpoch(visitedAtVal.toInt(), isUtc: true).toLocal();
       } else if (visitedAtVal is String) {
-        dt = DateTime.tryParse(visitedAtVal) ?? now;
+        dt = (DateTime.tryParse(visitedAtVal) ?? now).toLocal();
       } else {
         dt = now;
       }

@@ -17,6 +17,8 @@ class ClipboardService {
   bool _initialized = false;
   Future<void>? _initFuture;
 
+  int _initAttempts = 0;
+
   Future<void> _initIfNeeded() async {
     if (_initialized) return;
     
@@ -26,19 +28,27 @@ class ClipboardService {
         return;
       } catch (e) {
         LoggingService.logger('ClipboardService').info(
-          '[ClipboardService] previous init future failed or timed out, will retry: $e',
+          '[ClipboardService] previous init future failed or timed out: $e',
         );
         _initFuture = null;
       }
     }
-    
+
+    if (_initAttempts >= 3) {
+      LoggingService.logger('ClipboardService').warning(
+        '[ClipboardService] Max initialization retries (3) reached. Halting init retries.',
+      );
+      return;
+    }
+
+    _initAttempts++;
     _initFuture = _doInit();
     try {
       await _initFuture!.timeout(const Duration(seconds: 2));
     } catch (e) {
       _initFuture = null;
       LoggingService.logger('ClipboardService').warning(
-        '[ClipboardService] initialization failed or timed out: $e',
+        '[ClipboardService] initialization attempt $_initAttempts failed or timed out: $e',
       );
     }
   }

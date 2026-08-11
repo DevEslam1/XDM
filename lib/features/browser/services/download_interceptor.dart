@@ -138,7 +138,7 @@ class DownloadInterceptor {
 
   // Shared Dio instance — reusing connections across content checks
   // avoids the overhead of creating a new HttpClient per call.
-  static final Dio _sharedDio = Dio(BaseOptions(
+  late final Dio _sharedDio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 4),
     receiveTimeout: const Duration(seconds: 4),
     followRedirects: true,
@@ -243,6 +243,7 @@ class DownloadInterceptor {
   void dispose() {
     _bypassedSniffUrls.clear();
     _interceptedList.clear();
+    _sharedDio.close(force: true);
   }
 
   /// Whether a navigation from a page at [tabUrl] to [requestUrl] should be

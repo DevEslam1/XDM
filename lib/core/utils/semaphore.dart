@@ -22,6 +22,10 @@ class Semaphore {
     if (_waiters.isNotEmpty) {
       _waiters.removeFirst().complete();
     } else {
+      if (_currentCount <= 0) {
+        assert(false, 'Semaphore.release() called when count is already 0');
+        return;
+      }
       _currentCount--;
     }
   }

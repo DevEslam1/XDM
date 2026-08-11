@@ -481,7 +481,13 @@ class AdBlockFilterUpdater {
       '${_domainsKey}_excepted',
       _allowListedDomains.take(_maxDomains).toList(),
     );
-    if (allSourcesSucceeded) {
+
+    final hasCachedPatterns = prefs.containsKey(_patternsKey);
+    final hasCachedCosmetics = prefs.containsKey(_cosmeticKey);
+    final hasCachedScriptlets = prefs.containsKey(_scriptletsKey);
+    final isFirstRun = !hasCachedPatterns && !hasCachedCosmetics && !hasCachedScriptlets;
+
+    if (allSourcesSucceeded || isFirstRun) {
       await prefs.setStringList(
         _patternsKey,
         _urlPatterns.take(5000).toList(),
@@ -816,8 +822,6 @@ class AdBlockFilterUpdater {
     for (final source in _sources) {
       await prefs.remove('adblock_domains_blocked_${source.name}');
       await prefs.remove('adblock_domains_excepted_${source.name}');
-      // FIX: Also remove the per-source size key so the regression check
-      // doesn't reject the next download as "suspiciously small".
       await prefs.remove('adblock_last_size_${source.name}');
     }
     await prefs.remove(_lastUpdateKey);
@@ -837,7 +841,3 @@ class AdBlockFilterUpdater {
     return htmlTags == 0;
   }
 }
-
-// Removed: _BypassHttpOverrides was an empty HttpOverrides subclass that
-// had no effect. SSL bypass is now handled directly on the HttpClient
-// via badCertificateCallback in _httpDownload().

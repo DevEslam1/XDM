@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logging/logging.dart';
+import 'package:synchronized/synchronized.dart';
 
 class SiteSettings {
   final bool? desktopMode;
@@ -52,24 +53,27 @@ class SiteSettings {
 class SiteSettingsStore {
   static const _storeKey = 'browser_site_settings';
   static Map<String, SiteSettings>? _cache;
+  static final Lock _lock = Lock();
 
   static Future<Map<String, SiteSettings>> _load() async {
-    if (_cache != null) return _cache!;
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storeKey);
-    if (raw == null) {
-      _cache = {};
+    return _lock.synchronized(() async {
+      if (_cache != null) return _cache!;
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_storeKey);
+      if (raw == null) {
+        _cache = {};
+        return _cache!;
+      }
+      try {
+        final map = jsonDecode(raw) as Map<String, dynamic>;
+        _cache = map.map((k, v) => MapEntry(k, SiteSettings.fromJson(v)));
+      } catch (e, st) {
+        Logger('site_settings_store')
+            .warning('[site_settings_store] operation failed', e, st);
+        _cache = {};
+      }
       return _cache!;
-    }
-    try {
-      final map = jsonDecode(raw) as Map<String, dynamic>;
-      _cache = map.map((k, v) => MapEntry(k, SiteSettings.fromJson(v)));
-    } catch (e, st) {
-      Logger('site_settings_store')
-          .warning('[site_settings_store] operation failed', e, st);
-      _cache = {};
-    }
-    return _cache!;
+    });
   }
 
   static Future<SiteSettings> getForHost(String host) async {
@@ -84,9 +88,11 @@ class SiteSettingsStore {
   }
 
   static Future<void> _persist(Map<String, SiteSettings> all) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = jsonEncode(all.map((k, v) => MapEntry(k, v.toJson())));
-    await prefs.setString(_storeKey, raw);
+    return _lock.synchronized(() async {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = jsonEncode(all.map((k, v) => MapEntry(k, v.toJson())));
+      await prefs.setString(_storeKey, raw);
+    });
   }
 
   static void clearCache() {

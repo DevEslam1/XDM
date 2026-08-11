@@ -14,6 +14,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:uuid/uuid.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
@@ -281,6 +282,9 @@ class _BrowserScreenState extends State<BrowserScreen>
       if (oldActiveTab != null && oldActiveTab.id != _tabs[value].id) {
         if (_tabIdHistory.isEmpty || _tabIdHistory.last != oldActiveTab.id) {
           _tabIdHistory.add(oldActiveTab.id);
+          if (_tabIdHistory.length > 50) {
+            _tabIdHistory.removeAt(0);
+          }
         }
       }
     }
@@ -2811,7 +2815,7 @@ class _BrowserScreenState extends State<BrowserScreen>
           final db = context.read<DatabaseService>();
           await db.saveBookmark(
             Bookmark(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              id: const Uuid().v4(),
               title: activeTab.title.isNotEmpty ? activeTab.title : currentUrl,
               url: currentUrl,
               createdAt: DateTime.now(),

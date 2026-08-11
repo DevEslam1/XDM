@@ -56,6 +56,9 @@ class MediaSniffer {
   /// tabId -> pending debounce timer for a scheduled scan.
   final Map<String, Timer> mediaScanTimers = {};
 
+  /// tabId -> set of scanned URLs.
+  final Map<String, Set<String>> _tabUrls = {};
+
   int get totalDetectedCount =>
       detectedDownloadUrls.length +
       detectedMediaSources.values
@@ -69,6 +72,7 @@ class MediaSniffer {
       detectedMediaSources.clear();
       detectedPlaylistUrls.clear();
       mediaScanFailed.clear();
+      _tabUrls.clear();
     });
   }
 
@@ -98,6 +102,14 @@ class MediaSniffer {
     detectedPlaylistUrls.remove(tabId);
     lastYoutubeAuthTimes.remove(tabId);
     mediaScanFailed.remove(tabId);
+
+    final urls = _tabUrls.remove(tabId);
+    if (urls != null) {
+      for (final u in urls) {
+        ytDetectionFailed.remove(u);
+      }
+    }
+
     // Evict expired entries older than 10 minutes
     final now = DateTime.now();
     ytDetectionFailed.removeWhere(
@@ -126,6 +138,7 @@ class MediaSniffer {
     ytDetectionFailed.clear();
     mediaScanFailed.clear();
     lastYoutubeAuthTimes.clear();
+    _tabUrls.clear();
   }
 
   Future<void> scanPageMedia(
@@ -138,6 +151,8 @@ class MediaSniffer {
     mediaScanFailed.remove(tab.id);
     if (isYoutubeHost(tab.url)) return;
     final scannedUrl = tab.url;
+
+    _tabUrls.putIfAbsent(tab.id, () => <String>{}).add(scannedUrl);
 
     // FIX-INTEL: Check for known streaming sites for specialized sniffing
     final analysis = SiteIntelligenceService().analyzeUrl(scannedUrl);

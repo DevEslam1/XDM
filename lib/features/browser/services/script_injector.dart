@@ -382,7 +382,7 @@ $customJs
 
     // YouTube-specific ad skip
     if (YoutubeService.isYoutubeUrl(url)) {
-      scripts.add(adBlocker.youtubeJs);
+      scripts.add(AdBlockerService.youtubeEarlyJs);
     }
 
     // Ad blocker CSS injection
@@ -396,7 +396,7 @@ $customJs
     }
 
     if (adBlocker.isEnabled) {
-      scripts.add(adBlocker.lateJs);
+      scripts.add(adBlocker.scriptletJs);
     }
 
     // Desktop mode script

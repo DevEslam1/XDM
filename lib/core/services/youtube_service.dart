@@ -1022,7 +1022,7 @@ class YoutubeService {
     String downloadPageUrl, {
     String? preferredType,
   }) async {
-    if (mockGetFreshStreams != null) {
+    if (kDebugMode && mockGetFreshStreams != null) {
       return mockGetFreshStreams!(downloadPageUrl, preferredType: preferredType);
     }
 

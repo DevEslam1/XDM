@@ -63,14 +63,37 @@ class ElementPickerService {
 })();
 ''';
 
-  /// Sanitizes CSS selector to prevent CSS escape breakouts.
+  /// Sanitizes CSS selector to prevent CSS escape breakouts and injection.
   static String sanitizeSelector(String selector) {
-    return selector.trim().replaceAll(RegExp(r'[\r\n{}<>]'), '');
+    var clean = selector.trim().replaceAll(RegExp(r'[\r\n{}<>]'), '');
+
+    // Strip dangerous function calls and URI schemes
+    clean = clean.replaceAll(
+        RegExp(r'url\s*\([^)]*\)', caseSensitive: false), '');
+    clean = clean.replaceAll(
+        RegExp(r'expression\s*\([^)]*\)', caseSensitive: false), '');
+    clean = clean.replaceAll(
+        RegExp(r'@(import|media|supports|charset|namespace|keyframes|font-face)[^;{]*',
+            caseSensitive: false),
+        '');
+    clean = clean.replaceAll(
+        RegExp(r'(javascript|data|vbscript)\s*:', caseSensitive: false), '');
+    clean = clean.replaceAll(
+        RegExp(r'behavior\s*:[^;}]*', caseSensitive: false), '');
+
+    // Collapse whitespace
+    clean = clean.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    // Reject selectors longer than 200 characters
+    if (clean.length > 200) return '';
+
+    return clean;
   }
 
   /// Generates a CSS rule hiding the targeted selector.
   static String blockRule(String selector) {
     final clean = sanitizeSelector(selector);
+    if (clean.isEmpty) return '';
     return '$clean { display: none !important; }';
   }
 
@@ -78,6 +101,7 @@ class ElementPickerService {
   static String siteScopedRule(String host, String selector) {
     final cleanHost = host.trim().toLowerCase();
     final cleanSelector = sanitizeSelector(selector);
+    if (cleanSelector.isEmpty) return '';
     if (cleanHost.isEmpty) return blockRule(cleanSelector);
     return '$cleanHost##$cleanSelector { display: none !important; }';
   }

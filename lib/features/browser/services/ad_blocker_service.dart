@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,7 +30,7 @@ class AdBlockerService {
   static const _prefKey = 'adBlockerEnabled';
 
   bool _enabled = true;
-    int _contentBlockerGen = 0;
+  int _contentBlockerGen = 0;
   void bumpGen() { _contentBlockerGen++; }
   int _lastBuiltGen = -1;
 
@@ -285,7 +286,7 @@ class AdBlockerService {
     'zedo.com',
   };
 
-    static bool _matchesAdHostnames(String host) {
+  static bool _matchesAdHostnames(String host) {
     if (_adHostnames.contains(host)) return true;
     int dotIndex = host.indexOf('.');
     while (dotIndex != -1 && dotIndex < host.length - 1) {
@@ -793,125 +794,19 @@ $customCss
     if (calls.isEmpty) return '';
 
     final callsJs = calls.join('\n  ');
-    return r'''
+    return '''
 (function() {
   if (window.__xdmScriptlets) return;
   window.__xdmScriptlets = true;
-
-  function _xdmAbortOnRead(prop) {
-    try {
-      var chain = prop.split('.'), obj = window;
-      for (var i = 0; i < chain.length - 1; i++) { obj = obj[chain[i]]; if (!obj) return; }
-      var last = chain[chain.length - 1], orig = obj[last];
-      Object.defineProperty(obj, last, {
-        get: function() { throw new ReferenceError('[XDM] Read aborted: ' + prop); },
-        set: function(v) { orig = v; }, configurable: true
-      });
-    } catch(e) {}
-  }
-
-  function _xdmAbortOnWrite(prop) {
-    try {
-      var chain = prop.split('.'), obj = window;
-      for (var i = 0; i < chain.length - 1; i++) { obj = obj[chain[i]]; if (!obj) return; }
-      var last = chain[chain.length - 1];
-      Object.defineProperty(obj, last, {
-        get: function() { return undefined; },
-        set: function() { throw new ReferenceError('[XDM] Write aborted: ' + prop); },
-        configurable: true
-      });
-    } catch(e) {}
-  }
-
-  function _xdmSetConstant(prop, val) {
-    try {
-      var chain = prop.split('.'), obj = window;
-      for (var i = 0; i < chain.length - 1; i++) {
-        if (!obj[chain[i]]) obj[chain[i]] = {};
-        obj = obj[chain[i]];
-      }
-      Object.defineProperty(obj, chain[chain.length - 1], {
-        get: function() { return val; }, set: function() {}, configurable: false
-      });
-    } catch(e) {}
-  }
-
-  function _xdmNoTimeoutIf(pattern) {
-    try {
-      var _orig = window.setTimeout;
-      window.setTimeout = function(fn, delay) {
-        var src = typeof fn === 'function' ? fn.toString() : String(fn);
-        if (src.indexOf(pattern) !== -1) return 0;
-        return _orig.apply(window, arguments);
-      };
-    } catch(e) {}
-  }
-
-  function _xdmDefuseListener(event, search) {
-    try {
-      var _orig = EventTarget.prototype.addEventListener;
-      EventTarget.prototype.addEventListener = function(type, fn) {
-        if (type === event) {
-          var src = typeof fn === 'function' ? fn.toString() : '';
-          if (src.indexOf(search) !== -1) return;
-        }
-        return _orig.apply(this, arguments);
-      };
-    } catch(e) {}
-  }
-
-  function _xdmJsonPrune(keys) {
-    try {
-      var keyList = keys.split(/\s+/), _orig = JSON.parse;
-      JSON.parse = function(text) {
-        var r = _orig.apply(this, arguments);
-        if (r && typeof r === 'object') keyList.forEach(function(k) { delete r[k]; });
-        return r;
-      };
-    } catch(e) {}
-  }
-
-  function _xdmNoEval() {
-    try {
-      window.eval = new Proxy(window.eval, {
-        apply: function(target, ctx, args) {
-          var src = String(args[0] || '').toLowerCase();
-          if (src.indexOf('adblock') !== -1 || src.indexOf('adblocker') !== -1) return;
-          return target.apply(ctx, args);
-        }
-      });
-    } catch(e) {}
-  }
-
-  function _xdmPreventFetch(pattern) {
-    try {
-      var _orig = window.fetch;
-      window.fetch = function(input) {
-        var url = typeof input === 'string' ? input : (input && input.url) || '';
-        if (url.indexOf(pattern) !== -1)
-          return Promise.resolve(new Response('', { status: 200 }));
-        return _orig.apply(window, arguments);
-      };
-    } catch(e) {}
-  }
-
-  // Apply scriptlets from filter lists:
-  ''' +
-        callsJs +
-        r'''
+  $callsJs
 })();
 ''';
   }
 
-  /// Escapes [s] for safe insertion as a JS single-quoted string literal.
-  static String _jsStr(String s) {
-    final escaped = s.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
-    return "'$escaped'";
-  }
+  String _jsStr(String s) => jsonEncode(s);
 
-  /// Converts a filter-list constant token to a JS literal value.
-  static String _jsConstant(String s) {
-    switch (s.toLowerCase()) {
+  String _jsConstant(String val) {
+    switch (val.toLowerCase()) {
       case 'true':
         return 'true';
       case 'false':
@@ -920,418 +815,220 @@ $customCss
         return 'null';
       case 'undefined':
         return 'undefined';
-      case '0':
-        return '0';
-      case '1':
-        return '1';
-      case '""':
-      case "''":
-      case 'empty-string':
-        return "''";
+      case 'noopfunc':
+      case 'truefunc':
+        return 'function(){return true;}';
+      case 'falsefunc':
+        return 'function(){return false;}';
       default:
-        if (num.tryParse(s) != null) return s;
-        return _jsStr(s);
+        final n = num.tryParse(val);
+        if (n != null) return n.toString();
+        return jsonEncode(val);
     }
   }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // lateJs — injected at onPageFinished for DOM-level cleanup
-  // ─────────────────────────────────────────────────────────────────────
-  String get lateJs => _buildLateJs();
-
-  String _buildLateJs() {
-    if (!_enabled) return '';
-
-    return '''
-(function() {
-  // Remove ad elements by known selectors from the DOM.
-  // Uses the same exact selectors as CSS rules.
-  var selectors = [
-    '.adsbygoogle', '.ad-container', '.ad-wrapper', '.ad-banner',
-    '.ad-slot', '.ad-unit', '.ad-frame', '.ad-box', '.adblock',
-    '.ads-container', '.ads-wrapper', '.ads-banner', '.advert',
-    '.advertisement', '.advertising', '.sponsored', '.popup-ad',
-    '.ad-popup', '.popunder', '.interstitial-ad', '.overlay-ad',
-    '.floating-ad', '.sticky-ad', '.banner-ad', '.leaderboard-ad',
-    '.skyscraper-ad', '.rectangle-ad', '.native-ad', '.in-feed-ad',
-    'ytd-ad-slot-renderer', 'ytd-promoted-sparkles-web-renderer',
-    '#masthead-ad', '#player-ads', '.ytp-ad-module',
-    '.ytp-ad-overlay-container', '.cookie-consent', '.cookie-banner',
-    '.newsletter-popup', '.subscribe-popup', '.exit-intent-popup',
-    '.adblock-warning', '.adblock-overlay', '.anti-adblock'
-  ];
-
-  for (var i = 0; i < selectors.length; i++) {
-    try {
-      var els = document.querySelectorAll(selectors[i]);
-      for (var j = 0; j < els.length; j++) {
-        els[j].style.setProperty('display', 'none', 'important');
-        els[j].style.setProperty('visibility', 'hidden', 'important');
-        els[j].style.setProperty('height', '0', 'important');
-        els[j].style.setProperty('overflow', 'hidden', 'important');
-        els[j].style.setProperty('pointer-events', 'none', 'important');
-      }
-    } catch(e) {}
-  }
-
-  // Remove fixed/absolute overlays covering the page that are ad-related.
-  // IMPORTANT: We must NOT match on generic text like 'ad' — that word
-  // appears in legitimate content ('download', 'upload', 'loading', etc.).
-  // We only hide overlays that have ALL of:
-  //   • Are fixed/absolute with very high z-index
-  //   • Contain an <iframe> (ad iframes) OR have a known ad class/id
-  //   • Do NOT contain a download link or button anywhere inside them
-  try {
-    var all = document.querySelectorAll('div, section, aside');
-    var maxCount = Math.min(all.length, 300);
-    var _adOverlayClasses = [
-      'popup-ad', 'ad-popup', 'popunder', 'interstitial',
-      'overlay-ad', 'ad-overlay', 'floating-ad', 'ad-floating',
-      'fullscreen-ad', 'ad-fullscreen'
-    ];
-    for (var k = 0; k < maxCount; k++) {
-      var el = all[k];
-      var st = window.getComputedStyle(el);
-      if (!((st.position === 'fixed' || st.position === 'absolute') &&
-            st.zIndex > 999 &&
-            st.display !== 'none' &&
-            el.offsetWidth > window.innerWidth * 0.5 &&
-            el.offsetHeight > window.innerHeight * 0.3)) continue;
-
-      // Must have an iframe inside (classic ad overlay), OR match a
-      // known ad overlay class — text content alone is NOT enough.
-      var hasAdIframe = el.querySelector('iframe') !== null;
-      var hasAdClass = false;
-      var elClass = (el.className || '').toLowerCase();
-      var elId = (el.id || '').toLowerCase();
-      for (var m = 0; m < _adOverlayClasses.length; m++) {
-        if (elClass.indexOf(_adOverlayClasses[m]) !== -1 ||
-            elId.indexOf(_adOverlayClasses[m]) !== -1) {
-          hasAdClass = true;
-          break;
-        }
-      }
-      if (!hasAdIframe && !hasAdClass) continue;
-
-      // Extra guard: don't hide if it contains any download link/button
-      var hasDownloadBtn = el.querySelector(
-        'a[download], button[download], a[href*="download"], ' +
-        'button[class*="download"], a[class*="download"], ' +
-        '[class*="download-btn"], [id*="download"]'
-      );
-      if (!hasDownloadBtn) {
-        el.style.setProperty('display', 'none', 'important');
-      }
-    }
-  } catch(e) {}
-})();
-''';
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // YouTube-specific JS
-  // ─────────────────────────────────────────────────────────────────────
-  String get youtubeJs => _buildYoutubeJs();
-
-  String _buildYoutubeJs() {
-    if (!_enabled) return '';
-
-    return '''
-(function() {
-  if (window.__xdmYtAdInterval) clearInterval(window.__xdmYtAdInterval);
-  window.__xdmYtAdSkip = true;
-
-  function trySkip() {
-    // Skip Ad button
-    var skip = document.querySelector(
-      '.ytp-ad-skip-button, .ytp-skip-ad-button,' +
-      'button.ytp-ad-skip-button-modern,' +
-      '.ytp-ad-skip-button-modern .ytp-ad-skip-button-slot,' +
-      '[class*="ytp-ad-skip"], .ytm-ad-skip-button'
-    );
-    if (skip) { try { skip.click(); } catch(e) {} return; }
-
-    // Text-based skip button
-    var btns = document.querySelectorAll('button, div[role="button"]');
-    for (var i = 0; i < btns.length; i++) {
-      var t = (btns[i].textContent || '').trim().toLowerCase();
-      if (t === 'skip ad' || t === 'skip ads' || t === 'skip' ||
-          t.indexOf('skip ad') !== -1) {
-        try { btns[i].click(); } catch(e) {}
-        return;
-      }
-    }
-
-    // If unskippable ad is playing: mute + fast-forward
-    try {
-      var adBadge = document.querySelector(
-        '.ytp-ad-simple-ad-badge, .ytp-ad-preview-container, ' +
-        '.ytp-ad-duration-remaining, .ad-showing, .ad-interrupting'
-      );
-      var video = document.querySelector('video');
-      if (adBadge && video) {
-        if (!video.muted) video.muted = true;
-        if (video.playbackRate < 16) video.playbackRate = 16;
-        if (video.duration && isFinite(video.duration) &&
-            video.currentTime < video.duration) {
-          video.currentTime = video.duration - 0.1;
-        }
-      } else if (video && video.playbackRate > 2) {
-        video.playbackRate = 1;
-        video.muted = false;
-      }
-    } catch(e) {}
-
-    // Close overlay / companion / survey ads
-    var close = document.querySelector(
-      '.ytp-ad-overlay-close-button, .ytp-ad-overlay-close,' +
-      '.ytp-ad-dismiss-button, .ytp-ad-survey-close'
-    );
-    if (close) { try { close.click(); } catch(e) {} }
-
-    // Dismiss adblock enforcement dialog
-    try {
-      var dlg = document.querySelector(
-        'ytd-enforcement-message-view-model, tp-yt-paper-dialog'
-      );
-      if (dlg) {
-        var text = (dlg.textContent || '').toLowerCase();
-        if (text.indexOf('ad blocker') !== -1 ||
-            text.indexOf('adblock') !== -1) {
-          dlg.style.setProperty('display', 'none', 'important');
-          var dBtn = dlg.querySelector(
-            'button, .close-button, [aria-label*="close" i]'
-          );
-          if (dBtn) try { dBtn.click(); } catch(e) {}
-        }
-      }
-    } catch(e) {}
-  }
-
-  trySkip();
-  window.__xdmYtAdInterval = setInterval(trySkip, 600);
-})();
-''';
-  }
-
-  // ─────────────────────────────────────────────────────────────────────
-  // Anti-detect CSS (bait elements stay measurable but invisible)
-  // ─────────────────────────────────────────────────────────────────────
-  String get antiDetectCss => '''
-/* Anti-Adblock: bait element stealth — keeps layout dimensions intact */
-#ad-test, #adsbox, #ads, #ad, .adsbox, .ads,
-.adsbygoogle-noablate,
-[id="ad-test"], [id="adsbox"], [class="ads"], [class="adsbox"] {
-  opacity: 0 !important;
-  pointer-events: none !important;
-  position: fixed !important;
-  left: -9999px !important;
-  top: -9999px !important;
-  width: 1px !important;
-  height: 1px !important;
-  overflow: hidden !important;
-}
-''';
 
   // ─────────────────────────────────────────────────────────────────────
   // Native ContentBlockers for WebView-level blocking
   // ─────────────────────────────────────────────────────────────────────
   List<ContentBlocker> _buildContentBlockers() {
-    final blockers = <ContentBlocker>[
-      // DoubleClick / Google Ads
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(
-          urlFilter: '.*doubleclick\\.net.*',
-          unlessTopUrl: ['.*youtube\\.com.*', '.*youtu\\.be.*'],
-        ),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(
-          urlFilter: '.*googlesyndication\\.com.*',
-          unlessTopUrl: ['.*youtube\\.com.*', '.*youtu\\.be.*'],
-        ),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*googleadservices\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*googletagmanager\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*google-analytics\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      // Major Ad Networks
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*adnxs\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*criteo\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*taboola\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*outbrain\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*pubmatic\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*openx\\.net.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*rubiconproject\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*casalemedia\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*smartadserver\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*adform\\.net.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      // Popup / Redirect Ad Networks
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*popads\\.net.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*popcash\\.net.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*propellerads\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*exoclick\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*trafficjunky\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*trafficjunky\\.net.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*adsterra\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*hilltopads\\.net.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*juicyads\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*clickadu\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*onclickads\\.net.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*mgid\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*revcontent\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*amazon-adsystem\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*moatads\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*hotjar\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*quantserve\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*bidswitch\\.net.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*adskeeper\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      // Tracking / Analytics
-      ContentBlocker(
-        trigger:
-            ContentBlockerTrigger(urlFilter: '.*scorecardresearch\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*chartbeat\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*histats\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*newrelic\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*onesignal\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*pushcrew\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*pushengage\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-      ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: '.*pushails\\.com.*'),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ),
-    ];
-
-    // Add downloaded domains to native blockers (limit to 2500 high-priority domains to maintain engine performance)
-    final downloadedDomains = AdBlockFilterUpdater().allBlockedDomains;
-    for (final domain in downloadedDomains.take(2500)) {
-      blockers.add(
+    if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) {
+      final blockers = <ContentBlocker>[
+        // DoubleClick / Google Ads
         ContentBlocker(
           trigger: ContentBlockerTrigger(
-            urlFilter: '.*[./]${RegExp.escape(domain)}.*',
+            urlFilter: '.*doubleclick\\.net.*',
+            unlessTopUrl: ['.*youtube\\.com.*', '.*youtu\\.be.*'],
           ),
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
         ),
-      );
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(
+            urlFilter: '.*googlesyndication\\.com.*',
+            unlessTopUrl: ['.*youtube\\.com.*', '.*youtu\\.be.*'],
+          ),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*googleadservices\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*googletagmanager\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*google-analytics\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        // Major Ad Networks
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*adnxs\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*criteo\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*taboola\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*outbrain\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*pubmatic\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*openx\\.net.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*rubiconproject\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*casalemedia\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*smartadserver\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*adform\\.net.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        // Popup / Redirect Ad Networks
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*popads\\.net.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*popcash\\.net.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*propellerads\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*exoclick\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*trafficjunky\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*trafficjunky\\.net.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*adsterra\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*hilltopads\\.net.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*juicyads\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*clickadu\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*onclickads\\.net.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*mgid\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*revcontent\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*amazon-adsystem\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*moatads\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*hotjar\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*quantserve\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*bidswitch\\.net.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*adskeeper\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        // Tracking / Analytics
+        ContentBlocker(
+          trigger:
+              ContentBlockerTrigger(urlFilter: '.*scorecardresearch\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*chartbeat\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*histats\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*newrelic\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*onesignal\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*pushcrew\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*pushengage\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(urlFilter: '.*pushails\\.com.*'),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+      ];
+
+      // Add downloaded domains to native blockers (limit to 2500 high-priority domains to maintain engine performance)
+      final downloadedDomains = AdBlockFilterUpdater().allBlockedDomains;
+      for (final domain in downloadedDomains.take(2500)) {
+        blockers.add(
+          ContentBlocker(
+            trigger: ContentBlockerTrigger(
+              urlFilter: '.*[./]${RegExp.escape(domain)}.*',
+            ),
+            action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+          ),
+        );
+      }
+      return blockers;
     }
-    return blockers;
+    return [];
   }
 
   // YouTube-specific UserScript injected at AT_DOCUMENT_START.

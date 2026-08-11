@@ -8,6 +8,8 @@ import '../../../core/services/database_service.dart';
 /// `_BrowserScreenState`).
 class BrowserHistoryManager {
   static final _log = Logger('BrowserHistoryManager');
+  static const Duration _dedupWindow = Duration(seconds: 10);
+
   BrowserHistoryManager({
     required this.resolveDatabase,
     required this.isIncognito,
@@ -31,6 +33,13 @@ class BrowserHistoryManager {
   int? _lastHistoryEntryId;
   final Map<String, ({int id, DateTime visitedAt})> _recentVisits = {};
 
+  /// Resets in-memory dedup tracking when incognito mode is toggled ON.
+  void reset() {
+    _lastHistoryEntryUrl = null;
+    _lastHistoryEntryId = null;
+    _recentVisits.clear();
+  }
+
   void recordHistory(String url, {String? title}) {
     if (url.isEmpty || url == 'about:blank') return;
 
@@ -45,20 +54,19 @@ class BrowserHistoryManager {
     if (isIncognito()) {
       // Clear stale dedup state so the first visit after exiting
       // incognito isn't incorrectly skipped.
-      _lastHistoryEntryUrl = null;
-      _lastHistoryEntryId = null;
+      reset();
       return;
     }
     final now = DateTime.now();
 
-    // Clean up old entries in _recentVisits to prevent leaks (keep last 10 seconds)
+    // Clean up old entries in _recentVisits to prevent leaks
     _recentVisits.removeWhere((key, value) =>
-        now.difference(value.visitedAt) > const Duration(seconds: 10));
+        now.difference(value.visitedAt) > _dedupWindow);
 
-    // Check if the URL was visited in the last 5 seconds (BUG H1)
+    // Check if the URL was visited in the dedup window
     final recent = _recentVisits[clean];
     if (recent != null &&
-        now.difference(recent.visitedAt) < const Duration(seconds: 5)) {
+        now.difference(recent.visitedAt) < _dedupWindow) {
       final id = recent.id;
       _recentVisits[clean] = (id: id, visitedAt: now);
 

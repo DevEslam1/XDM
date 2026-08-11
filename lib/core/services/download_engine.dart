@@ -502,9 +502,8 @@ class DownloadEngine {
         _activeDioClients.removeWhere((client) {
           final hasActiveDownloads =
               _activeDownloadsPerClient[client]?.isNotEmpty ?? false;
-          final age = _dioClientCreationTimes[client] != null
-              ? now.difference(_dioClientCreationTimes[client]!)
-              : Duration.zero;
+          final creationTime = _dioClientCreationTimes[client] ?? now;
+          final age = now.difference(creationTime);
           final reserved = _reservedDioClients.contains(client);
           final stale = (reserved
                   ? age > const Duration(minutes: 10)

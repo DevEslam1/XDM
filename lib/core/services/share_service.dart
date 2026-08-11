@@ -84,9 +84,12 @@ class ShareService {
 
     final now = DateTime.now();
     _arrivalTimestamps.removeWhere(
-      (ts) => now.difference(ts) > const Duration(seconds: 1),
+      (ts) => now.difference(ts) > const Duration(minutes: 5),
     );
-    if (_arrivalTimestamps.length >= _maxQueueSize) {
+    final recentWindowCount = _arrivalTimestamps
+        .where((ts) => now.difference(ts) <= const Duration(seconds: 1))
+        .length;
+    if (recentWindowCount >= _maxQueueSize) {
       _log.warning(
         'Share intent flood detected (>$_maxQueueSize in 1s). Dropping intent.',
       );

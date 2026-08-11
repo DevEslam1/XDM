@@ -122,6 +122,7 @@ class BrowserTab {
   void dispose() {
     if (_isDisposed) return;
     _isDisposed = true;
+    controller = null;
     try {
       // Defer disposing progressNotifier to the next frame to prevent
       // "A ValueNotifier was used after being disposed" if it is currently
