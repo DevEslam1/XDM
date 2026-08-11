@@ -107,18 +107,18 @@ class DatabaseService {
           final activeCount = activeCountResult.first.read<int>('cnt');
           if (activeCount > 0) {
             _log.info(
-              'Skipping periodic DB VACUUM because $activeCount active/paused/queued download(s) in progress',
+              'Skipping periodic DB incremental_vacuum because $activeCount active/paused/queued download(s) in progress',
             );
           } else {
             final swVacuum = Stopwatch()..start();
-            await _db.customStatement('VACUUM');
+            await _db.customStatement('PRAGMA incremental_vacuum(50)');
             swVacuum.stop();
             if (swVacuum.elapsedMilliseconds > 500) {
-              _log.info('VACUUM took ${swVacuum.elapsedMilliseconds}ms');
+              _log.info('incremental_vacuum took ${swVacuum.elapsedMilliseconds}ms');
             }
           }
         } catch (e) {
-          _log.warning('VACUUM failed', e);
+          _log.warning('incremental_vacuum failed', e);
         }
       }
     });

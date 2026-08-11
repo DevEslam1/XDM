@@ -49,6 +49,7 @@ class MirrorHealthStore {
     if (state.failures >= 5) {
       state.blacklistedUntil =
           DateTime.now().add(_blacklistTtl).millisecondsSinceEpoch;
+      state.failures = 0;
       _log.warning(
         '[MirrorHealth] Blacklisted $url for ${_blacklistTtl.inHours}h',
       );

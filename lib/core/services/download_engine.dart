@@ -656,6 +656,8 @@ class DownloadEngine {
   /// audio+video progress bar would freeze below 100%.
   static final Set<String> _ytFinishedStreams = {};
 
+  final Set<Timer> _ytCleanupTimers = {};
+
   void unregisterYtCounterpart(String taskId) {
     _ytFinishedStreams.add(taskId);
     final c = _ytCounterpartTaskIds[taskId];
@@ -679,11 +681,9 @@ class DownloadEngine {
       // byte count. But schedule a safety cleanup in case the counterpart
       // never finishes (crash, unhandled error) — prevents a permanent
       // memory leak of both streams' live byte data.
-      // FIX-YT-LEAK: Safety timeout — if counterpart doesn't finish within
-      // 10 minutes, clean up this stream's entries unconditionally. The
-      // counterpart's data will be cleaned up by its own unregister call
-      // (or by a future safety timeout if it also crashes).
-      Timer(const Duration(minutes: 10), () {
+      Timer? timer;
+      timer = Timer(const Duration(minutes: 10), () {
+        _ytCleanupTimers.remove(timer);
         if (_ytFinishedStreams.contains(taskId) &&
             _ytCounterpartTaskIds.containsKey(taskId)) {
           _ytCounterpartTaskIds.remove(taskId);
@@ -694,6 +694,7 @@ class DownloadEngine {
           _ytFinishedStreams.remove(c);
         }
       });
+      _ytCleanupTimers.add(timer);
     }
   }
 
@@ -709,6 +710,10 @@ class DownloadEngine {
     _closed = true;
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
+    for (final t in _ytCleanupTimers) {
+      t.cancel();
+    }
+    _ytCleanupTimers.clear();
     _httpEngine.stopAdaptiveThreadMonitor();
     _pool?.dispose();
     _sharedDio.close(force: true);
@@ -736,13 +741,16 @@ class DownloadEngine {
         if (_closed) return;
         final now = DateTime.now();
         _activeDioClients.removeWhere((client) {
+          final hasActiveDownloads =
+              _activeDownloadsPerClient[client]?.isNotEmpty ?? false;
           final age = _dioClientCreationTimes[client] != null
               ? now.difference(_dioClientCreationTimes[client]!)
               : Duration.zero;
           final reserved = _reservedDioClients.contains(client);
-          final stale = reserved
-              ? age > const Duration(minutes: 10)
-              : age > const Duration(minutes: 5);
+          final stale = (reserved
+                  ? age > const Duration(minutes: 10)
+                  : age > const Duration(minutes: 5)) &&
+              !hasActiveDownloads;
           if (stale) {
             try {
               client.close(force: true);

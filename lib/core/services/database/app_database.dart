@@ -525,7 +525,7 @@ class AppDatabase extends _$AppDatabase {
           if (from < 8) {
             // Migration 7 -> 8: Change browser_history PK from text to auto-increment int
             await customStatement('''
-          CREATE TABLE browser_history_new (
+          CREATE TABLE IF NOT EXISTS browser_history_new (
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             url TEXT NOT NULL,
             title TEXT NOT NULL,

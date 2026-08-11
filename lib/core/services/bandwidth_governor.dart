@@ -142,7 +142,7 @@ class BandwidthGovernor {
         }
 
         _taskTokens[taskId] = (_taskTokens[taskId] ?? 0) - bytes;
-        final maxDeficit = -(taskLimit * 2.0);
+        final maxDeficit = -(taskLimit * 0.5);
         if ((_taskTokens[taskId] ?? 0) < maxDeficit) {
           _taskTokens[taskId] = maxDeficit;
         }
@@ -152,7 +152,7 @@ class BandwidthGovernor {
 
         final deficit = -(_taskTokens[taskId] ?? 0);
         final waitMs = (deficit / taskLimit * 1000.0).ceil();
-        return waitMs.clamp(0, 5000);
+        return waitMs.clamp(0, 1000);
       });
     }
 
@@ -165,7 +165,7 @@ class BandwidthGovernor {
       if (share <= 0) return 0;
 
       _availableTokens -= bytes;
-      final maxDeficit = -(share * 2.0);
+      final maxDeficit = -(share * 0.5);
       if (_availableTokens < maxDeficit) {
         _availableTokens = maxDeficit;
       }
@@ -176,7 +176,7 @@ class BandwidthGovernor {
       final deficit = -_availableTokens;
 
       final waitMs = (deficit / share * 1000.0).ceil();
-      return waitMs.clamp(0, 5000);
+      return waitMs.clamp(0, 1000);
     });
   }
 

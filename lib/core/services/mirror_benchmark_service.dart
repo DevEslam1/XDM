@@ -9,7 +9,7 @@ class MirrorBenchmarkService {
   static final _log = Logger('MirrorBenchmark');
   static final Map<String, _BenchmarkResult> _results = {};
   static const _cacheTtl = Duration(hours: 1);
-  static const _benchmarkBytes = 64 * 1024; // 64 KB sample
+  static const _benchmarkBytes = 512 * 1024; // 512 KB sample
 
   /// Benchmarks all mirrors and returns them ranked fastest-first by
   /// time-to-first-byte. Failures sort last with a high latency marker.

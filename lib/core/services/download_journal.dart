@@ -628,9 +628,11 @@ class DownloadJournal {
   }
 
   Future<void> _compactLocked(List<int> chunkProgress, int totalSize) async {
+    _isOpen = false;
     try {
       await _sink?.flush();
       await _sink?.close();
+      _sink = null;
 
       final tmp = File('$path.tmp');
       final initLine = jsonEncode({

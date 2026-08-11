@@ -41,7 +41,7 @@ class IosBackgroundService {
 
   /// Stream of native iOS background transfer progress and completion events.
   static Stream<IosBackgroundTransferEvent> get backgroundEvents {
-    if (!Platform.isIOS) return const Stream.empty();
+    if (kIsWeb || !Platform.isIOS) return const Stream.empty();
     return _eventChannel.receiveBroadcastStream().map((dynamic event) {
       if (event is Map) {
         return IosBackgroundTransferEvent.fromMap(event);
@@ -56,7 +56,7 @@ class IosBackgroundService {
     required String url,
     required String destinationPath,
   }) async {
-    if (!Platform.isIOS) return false;
+    if (kIsWeb || !Platform.isIOS) return false;
     try {
       final bool success =
           await _channel.invokeMethod<bool>('startNativeDownload', {
@@ -74,7 +74,7 @@ class IosBackgroundService {
 
   /// Pauses a native iOS background download.
   static Future<bool> pauseNativeDownload(String taskId) async {
-    if (!Platform.isIOS) return false;
+    if (kIsWeb || !Platform.isIOS) return false;
     try {
       final bool success =
           await _channel.invokeMethod<bool>('pauseNativeDownload', {
@@ -94,7 +94,7 @@ class IosBackgroundService {
     required String url,
     required String destinationPath,
   }) async {
-    if (!Platform.isIOS) return false;
+    if (kIsWeb || !Platform.isIOS) return false;
     try {
       final bool success =
           await _channel.invokeMethod<bool>('resumeNativeDownload', {
@@ -112,7 +112,7 @@ class IosBackgroundService {
 
   /// Cancels a native iOS background download.
   static Future<bool> cancelNativeDownload(String taskId) async {
-    if (!Platform.isIOS) return false;
+    if (kIsWeb || !Platform.isIOS) return false;
     try {
       final bool success =
           await _channel.invokeMethod<bool>('cancelNativeDownload', {
@@ -130,7 +130,7 @@ class IosBackgroundService {
 
   /// Schedules a native iOS background refresh task via BGTaskScheduler.
   static Future<bool> scheduleBackgroundDownload() async {
-    if (!Platform.isIOS) return false;
+    if (kIsWeb || !Platform.isIOS) return false;
     if (_isRegistered) {
       debugPrint(
           '[IosBackgroundService] BGTaskScheduler already registered. Skipping duplicate registration.');
@@ -149,7 +149,7 @@ class IosBackgroundService {
 
   /// Cancels any scheduled native iOS background download task.
   static Future<bool> cancelBackgroundDownload() async {
-    if (!Platform.isIOS) return false;
+    if (kIsWeb || !Platform.isIOS) return false;
     try {
       final bool success =
           await _channel.invokeMethod<bool>('cancelDownload') ?? false;

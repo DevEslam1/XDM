@@ -95,7 +95,12 @@ class ChecksumService {
             }
           }
           final normalizedAlgo = algo.replaceFirst('-', '');
-          return MapEntry(normalizedAlgo, hexValue);
+          final expectedLen = normalizedAlgo == 'sha256'
+              ? 64
+              : (normalizedAlgo == 'sha1' ? 40 : 32);
+          if (hexValue.length == expectedLen) {
+            return MapEntry(normalizedAlgo, hexValue);
+          }
         }
       }
     }

@@ -173,10 +173,10 @@ class CrashReportingService {
 
   /// Wraps [main] in a zone that captures unhandled errors.
   /// Usage: `CrashReportingService.runWithErrorCapture(() => runApp(...))`
-  static void runWithErrorCapture(void Function() appRunner) {
+  static void runWithErrorCapture(FutureOr<void> Function() appRunner) {
     runZonedGuarded(
-      () {
-        appRunner();
+      () async {
+        await appRunner();
       },
       (Object error, StackTrace stack) {
         unawaited(

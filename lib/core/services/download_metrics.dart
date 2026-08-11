@@ -37,8 +37,7 @@ class DownloadMetrics {
 
   double get threadEfficiency {
     if (effectiveThreads <= 1 || peakSpeedBps <= 0) return 1.0;
-    final theoretical = peakSpeedBps * effectiveThreads;
-    return (avgSpeedBps / theoretical).clamp(0.0, 1.0);
+    return (avgSpeedBps / peakSpeedBps).clamp(0.0, 1.0);
   }
 
   /// Returns a JSON-safe representation with sensitive query params redacted.

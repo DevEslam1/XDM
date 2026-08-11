@@ -50,11 +50,11 @@ class CircuitBreaker {
         if (_probeInFlight) {
           // If a probe has been in flight for longer than halfOpenTimeout,
           // assume it was abandoned or timed out, and allow another probe.
-          // This prevents a stuck probe from blocking the circuit breaker
-          // forever.
+          // Reset the previous probe flag first.
           if (now.difference(_lastStateChange) >= halfOpenTimeout) {
+            _probeInFlight = false;
+            _transition(CircuitBreakerState.halfOpen, now);
             _probeInFlight = true;
-            _lastStateChange = now;
             return true;
           }
           return false;

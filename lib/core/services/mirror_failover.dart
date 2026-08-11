@@ -2,7 +2,8 @@ import 'package:dio/dio.dart';
 import 'mirror_health_store.dart';
 
 List<String> orderMirrorUrls(List<String> urls, {String? primary}) {
-  final list = List<String>.from(urls.where((u) => u.startsWith('http')));
+  final list = List<String>.from(
+      urls.where((u) => u.startsWith('http://') || u.startsWith('https://')));
   list.sort((a, b) {
     if (a == primary) return -1;
     if (b == primary) return 1;
@@ -23,7 +24,9 @@ List<String> orderMirrorUrls(List<String> urls, {String? primary}) {
 class MirrorFailover {
   MirrorFailover(List<String> urls)
       : _urls = List<String>.unmodifiable(
-          urls.where((u) => u.startsWith('http')).toList(),
+          urls
+              .where((u) => u.startsWith('http://') || u.startsWith('https://'))
+              .toList(),
         );
 
   final List<String> _urls;

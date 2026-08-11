@@ -28,12 +28,7 @@ class LoggingService {
     if (_initialized) return;
     _initialized = true;
 
-    // hierarchicalLoggingEnabled is a top-level setter. Access via Logger.root level.
-    pkg_logging.Logger.root.level =
-        Level.ALL; // Enable all levels, filter in listener
-
     final level = overrideLevel ?? (kReleaseMode ? Level.WARNING : Level.ALL);
-
     pkg_logging.Logger.root.level = level;
 
     pkg_logging.Logger.root.onRecord.listen((pkg_logging.LogRecord record) {

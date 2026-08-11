@@ -54,6 +54,12 @@ class ConnectionManager {
         result = false;
       }
       _probes[host] = _HostProbe(isHttp2: result, at: now);
+      if (_probes.length > 500) {
+        _probes.removeWhere((_, probe) => now.difference(probe.at) >= _cacheTtl);
+        if (_probes.length > 500) {
+          _probes.remove(_probes.keys.first);
+        }
+      }
       return result;
     } catch (e) {
       debugPrint('[ConnectionManager] detectHttp2 failed: $e');

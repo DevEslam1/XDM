@@ -11,7 +11,7 @@ class LiveActivityService {
   static bool _initialized = false;
 
   static final Map<String, DateTime> _lastUpdateTimes = {};
-  static const _minUpdateInterval = Duration(seconds: 1);
+  static const _minUpdateInterval = Duration(seconds: 10);
 
   static Future<void> init() async {
     if (_initialized) return;

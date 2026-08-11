@@ -132,19 +132,21 @@ class NotificationService {
       _actionStreamController.stream;
 
   void _addAction(Map<String, String> event) {
-    _pendingActions.add(event);
-    if (_pendingActions.length > _maxPendingActions) {
-      final dropped = _pendingActions.length - _maxPendingActions;
-      _pendingActions.removeRange(0, dropped);
-      debugPrint(
-        '[NotificationService] Dropped $dropped queued action(s); '
-        'buffer exceeded $_maxPendingActions.',
-      );
-    }
     if (!_actionStreamController.isClosed &&
         _actionStreamController.hasListener) {
       while (_pendingActions.isNotEmpty) {
         _actionStreamController.add(_pendingActions.removeAt(0));
+      }
+      _actionStreamController.add(event);
+    } else {
+      _pendingActions.add(event);
+      if (_pendingActions.length > _maxPendingActions) {
+        final dropped = _pendingActions.length - _maxPendingActions;
+        _pendingActions.removeRange(0, dropped);
+        debugPrint(
+          '[NotificationService] Dropped $dropped queued action(s); '
+          'buffer exceeded $_maxPendingActions.',
+        );
       }
     }
   }

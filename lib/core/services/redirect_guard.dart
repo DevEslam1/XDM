@@ -356,12 +356,12 @@ class RedirectGuard {
   document.querySelectorAll('script').forEach(function(s) {
     var t = s.textContent || '';
     var patterns = [
-      /window\\.location(?:\\.href)?\\s*=\\s*["']([^"']+)["']/gi,
-      /location(?:\\.href)?\\s*=\\s*["']([^"']+)["']/gi,
-      /location\\.replace\\(\\s*["']([^"']+)["']\\s*\\)/gi,
-      /location\\.assign\\(\\s*["']([^"']+)["']\\s*\\)/gi,
-      /window\\.open\\(\\s*["']([^"']+)["']/gi,
-      /setTimeout\\([^,]*,\\s*\\d+\\s*\\)\\s*\\{?[^}]*location[^}]*["']([^"']+)["']/gi
+      /window\.location(?:\.href)?\s*=\s*["']([^"']+)["']/gi,
+      /location(?:\.href)?\s*=\s*["']([^"']+)["']/gi,
+      /location\.replace\(\s*["']([^"']+)["']\s*\)/gi,
+      /location\.assign\(\s*["']([^"']+)["']\s*\)/gi,
+      /window\.open\(\s*["']([^"']+)["']/gi,
+      /setTimeout\([^,]*, \s*\d+\s*\)\s*\{?[^}]*location[^}]*["']([^"']+)["']/gi
     ];
     patterns.forEach(function(p) {
       var m;
@@ -388,7 +388,7 @@ class RedirectGuard {
   });
 
   // 7. Anchor elements whose text/class hints at "continue/download/get link".
-  var hintRe = /continue|proceed|download|get\\s*link|here|click|verify|go\\s*to|next|skip|start/i;
+  var hintRe = /continue|proceed|download|get\s*link|here|click|verify|go\s*to|next|skip|start/i;
   document.querySelectorAll('a[href]').forEach(function(a) {
     var txt = (a.textContent || '').trim();
     var cls = a.className || '';
@@ -410,14 +410,14 @@ class RedirectGuard {
   // 9. onClick handlers with location changes.
   document.querySelectorAll('[onclick]').forEach(function(el) {
     var oc = el.getAttribute('onclick') || '';
-    var m = /location(?:\\.href)?\\s*=\\s*["']([^"']+)["']/i.exec(oc);
+    var m = /location(?:\.href)?\s*=\s*["']([^"']+)["']/i.exec(oc);
     if (m) push(m[1]);
   });
 
   // 10. Visible text "http(s)://..." rendered on the page (some bridges
   //     literally print the link for the user to copy).
   var bodyText = (document.body && document.body.innerText) || '';
-  var urlRe = /https?:\\/\\/[\\w\\-._~:\\/?#\\[\\]@!$&'()*+,;=%]+/gi;
+  var urlRe = /https?:\/\/[a-zA-Z0-9\-._~:\/?#\[\]@!$&'()*+,;=%]+/gi;
   var mm;
   while ((mm = urlRe.exec(bodyText)) !== null) {
     // avoid self-references

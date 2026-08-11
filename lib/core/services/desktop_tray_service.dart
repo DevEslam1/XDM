@@ -25,7 +25,6 @@ class DesktopTrayService with TrayListener {
     _onResumeAll = onResumeAll;
 
     try {
-      _initialized = true;
       await windowManager.ensureInitialized();
       await windowManager.setPreventClose(true);
       await windowManager.setMinimumSize(const Size(420, 320));
@@ -45,6 +44,7 @@ class DesktopTrayService with TrayListener {
         ),
       );
       trayManager.addListener(this);
+      _initialized = true;
     } catch (e) {
       _log.warning('Desktop tray initialization warning: $e');
     }

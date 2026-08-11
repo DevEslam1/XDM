@@ -54,19 +54,17 @@ class BackendHealthService {
   }
 
   List<BackendConfig> get activeBackends {
-    pruneExpiredCooldowns();
-
+    final now = DateTime.now();
     final healthy = _backends
-        .where((b) => !_unhealthyCooldowns.containsKey(b.baseUrl))
+        .where((b) {
+          final expiry = _unhealthyCooldowns[b.baseUrl];
+          return expiry == null || now.isAfter(expiry);
+        })
         .toList();
 
     healthy.sort((a, b) => a.priority.compareTo(b.priority));
     if (healthy.isNotEmpty) return healthy;
 
-    // Instead of returning ALL backends (which defeats the purpose of
-    // cooldowns), return only the one whose cooldown expires soonest.
-    // This gives the system a chance to recover instead of immediately
-    // hammering a known-bad backend.
     if (_unhealthyCooldowns.isEmpty) return List.from(_backends);
     BackendConfig? soonest;
     DateTime? soonestTime;

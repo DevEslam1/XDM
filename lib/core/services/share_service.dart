@@ -135,6 +135,7 @@ class ShareService {
     _intentSub?.cancel();
     _intentSub = null;
     _initialized = false;
+    _initialMediaConsumed = false;
     _onUrlReceived = null;
     _recentShares.clear();
     _arrivalTimestamps.clear();

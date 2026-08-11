@@ -109,7 +109,7 @@ class DiagnosticService {
 
     if (!kIsWeb) {
       info['dart'] = Platform.version.split(' ').first;
-      info['arch'] = Platform.operatingSystemVersion;
+      info['osVersion'] = Platform.operatingSystemVersion;
     } else {
       info['dart'] = 'web';
     }

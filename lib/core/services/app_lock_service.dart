@@ -36,9 +36,9 @@ class AppLockService {
     if (await lockoutRemaining() > Duration.zero) return false;
 
     final storedPin = await _storage.read(key: _pinKey);
-    final salt = await _storage.read(key: _saltKey) ?? 'dmx_app_lock_salt';
+    final salt = await _storage.read(key: _saltKey);
 
-    if (storedPin != null) {
+    if (storedPin != null && salt != null) {
       final hashedInput = hashSecret(pin, salt: salt);
       final matches = timingSafeEqual(storedPin, hashedInput);
       if (matches) {

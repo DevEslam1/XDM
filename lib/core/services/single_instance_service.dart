@@ -216,7 +216,12 @@ class SingleInstanceService {
       try {
         await raf.lock(FileLock.shared);
         final length = await raf.length();
-        final bytes = await raf.read(length);
+        final bytes = <int>[];
+        while (bytes.length < length) {
+          final chunk = await raf.read(length - bytes.length);
+          if (chunk.isEmpty) break;
+          bytes.addAll(chunk);
+        }
         contents = utf8.decode(bytes).trim();
       } finally {
         await raf.unlock();

@@ -135,10 +135,17 @@ class ClipboardService {
 
   /// Sets the last checked URL so we don't prompt for it again.
   Future<void> markAsChecked(String url) async {
-    _lastCheckedUrl = url;
+    final trimmed = url.trim();
+    if (trimmed.isEmpty ||
+        (!isHttpUrl(trimmed) &&
+            !isMagnetUrl(trimmed) &&
+            !isTorrentFileUrl(trimmed))) {
+      return;
+    }
+    _lastCheckedUrl = trimmed;
     _lastCheckedTime = DateTime.now();
     try {
-      await _secureStorage.write(key: 'clipboard_last_url', value: url);
+      await _secureStorage.write(key: 'clipboard_last_url', value: trimmed);
       await _secureStorage.write(
         key: 'clipboard_last_time',
         value: '${_lastCheckedTime!.millisecondsSinceEpoch}',

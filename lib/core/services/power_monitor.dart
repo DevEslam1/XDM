@@ -139,34 +139,39 @@ class PowerMonitor {
     } catch (e) {
       _log.warning('[Power] Battery listener init failed: $e');
     }
-    _pollThermal();
+    await _pollThermalOnce();
+    _startThermalTimer();
+  }
+
+  static Future<void> _pollThermalOnce() async {
+    try {
+      if (Platform.isAndroid) {
+        final status =
+            await _channel.invokeMethod<String>('getThermalStatus');
+        if (status != null) {
+          _thermal = ThermalStatus.values.firstWhere(
+            (t) => t.name == status,
+            orElse: () => ThermalStatus.none,
+          );
+        }
+      } else if (Platform.isIOS) {
+        final raw = await _channel.invokeMethod<int>('getThermalStatus');
+        if (raw != null && raw >= 0 && raw < ThermalStatus.values.length) {
+          _thermal = ThermalStatus.values[raw];
+        }
+      }
+      _level = await _battery.batteryLevel;
+      _notifyThrottleFactor();
+    } catch (e) {
+      _log.info('[PowerMonitor] thermal poll skipped: $e');
+    }
   }
 
   /// Poll thermal status periodically (native bridge on Android/iOS).
-  static void _pollThermal() {
+  static void _startThermalTimer() {
     _thermalTimer?.cancel();
-    _thermalTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
-      try {
-        if (Platform.isAndroid) {
-          final status =
-              await _channel.invokeMethod<String>('getThermalStatus');
-          if (status != null) {
-            _thermal = ThermalStatus.values.firstWhere(
-              (t) => t.name == status,
-              orElse: () => ThermalStatus.none,
-            );
-          }
-        } else if (Platform.isIOS) {
-          final raw = await _channel.invokeMethod<int>('getThermalStatus');
-          if (raw != null && raw >= 0 && raw < ThermalStatus.values.length) {
-            _thermal = ThermalStatus.values[raw];
-          }
-        }
-        _level = await _battery.batteryLevel;
-        _notifyThrottleFactor();
-      } catch (e) {
-        _log.info('[PowerMonitor] thermal poll skipped: $e');
-      }
+    _thermalTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      _pollThermalOnce();
     });
   }
 

@@ -5,8 +5,8 @@ import 'power_monitor.dart';
 
 class PerformanceBudget {
   static const double maxJankRatio = 0.05;
-  static const double maxBuildTimeMs = 16.6;
-  static const double maxRasterTimeMs = 16.6;
+  static double get maxBuildTimeMs => FrameWatchdog.frameBudgetMs;
+  static double get maxRasterTimeMs => FrameWatchdog.frameBudgetMs;
 }
 
 class FrameWatchdog {
