@@ -275,37 +275,43 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                   isAmoled: settingsTuple.isAmoled,
                 ),
                 extendBody: true,
-                body: (showSideNav && currentIndex != 1)
-                    ? Row(
-                        children: [
-                          _NavigationRailWidget(
-                            settingsTuple: settingsTuple,
-                            isDark: isDark,
-                            isRtl: isRtl,
-                            currentIndex: currentIndex,
-                          ),
-                          const VerticalDivider(width: 1),
-                          Expanded(child: bodyWithShortcuts),
-                        ],
-                      )
-                    : bodyWithShortcuts,
-                bottomNavigationBar: showSideNav
-                    ? null
-                    : screenType == ScreenType.phone
-                        ? _PhoneBottomNavBar(
-                            settingsTuple: settingsTuple,
-                            isDark: isDark,
-                            isRtl: isRtl,
-                            navState: navState,
+                body: Stack(
+                  children: [
+                    (showSideNav && currentIndex != 1)
+                        ? Row(
+                            children: [
+                              _NavigationRailWidget(
+                                settingsTuple: settingsTuple,
+                                isDark: isDark,
+                                isRtl: isRtl,
+                                currentIndex: currentIndex,
+                              ),
+                              const VerticalDivider(width: 1),
+                              Expanded(child: bodyWithShortcuts),
+                            ],
                           )
-                        : screenType == ScreenType.tablet
-                            ? _TabletFloatingNavBar(
+                        : bodyWithShortcuts,
+                    if (!showSideNav)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: screenType == ScreenType.phone
+                            ? _PhoneBottomNavBar(
                                 settingsTuple: settingsTuple,
                                 isDark: isDark,
                                 isRtl: isRtl,
                                 navState: navState,
                               )
-                            : null,
+                            : _TabletFloatingNavBar(
+                                settingsTuple: settingsTuple,
+                                isDark: isDark,
+                                isRtl: isRtl,
+                                navState: navState,
+                              ),
+                      ),
+                  ],
+                ),
               ),
             );
           },
@@ -391,73 +397,95 @@ class _PhoneBottomNavBar extends StatelessWidget {
           : const Offset(0, 1.0),
       duration: AppTheme.motionBase,
       curve: AppTheme.motionCurve,
-      child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        child: DmxBackdropFilter(
-          sigmaX: 15,
-          sigmaY: 15,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          margin: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
+          alignment: Alignment.bottomCenter,
           child: Container(
-            decoration: BoxDecoration(
-              color: settingsTuple.classicUi
-                  ? navBg
-                  : navBg.withValues(alpha: settingsTuple.isAmoled ? 1.0 : 0.7),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(24)),
-              border: Border(
-                top: BorderSide(
-                  color: settingsTuple.classicUi
-                      ? (isDark
+            constraints: const BoxConstraints(maxWidth: 480),
+            decoration: settingsTuple.classicUi
+                ? BoxDecoration(
+                    color: navBg,
+                    borderRadius: BorderRadius.circular(32),
+                    border: Border.all(
+                      color: isDark
                           ? (settingsTuple.isAmoled
                               ? AppTheme.amoledBorder
                               : AppTheme.border)
-                          : AppTheme.lightBorder)
-                      : (isDark
+                          : AppTheme.lightBorder,
+                      width: 1.0,
+                    ),
+                  )
+                : BoxDecoration(
+                    color: navBg.withValues(
+                      alpha: settingsTuple.isAmoled ? 1.0 : 0.75,
+                    ),
+                    borderRadius: BorderRadius.circular(32),
+                    border: Border.all(
+                      color: isDark
                           ? (settingsTuple.isAmoled
                               ? AppTheme.amoledBorder
                               : AppTheme.glassBorder)
-                          : AppTheme.lightGlassBorder),
-                  width: settingsTuple.classicUi ? 1.0 : 0.6,
-                ),
-              ),
-            ),
-            child: SafeArea(
-              child: Directionality(
-                textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 68),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12.0, vertical: 4.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _NavItem(
-                        index: 0,
-                        icon: Icons.file_download_outlined,
-                        activeIcon: Icons.file_download,
-                        label: L10n.of(context, 'title_transmissions'),
-                        settingsTuple: settingsTuple,
-                        isDark: isDark,
-                        currentIndex: currentIndex,
-                      ),
-                      _NavItem(
-                        index: 1,
-                        icon: Icons.language_outlined,
-                        activeIcon: Icons.language,
-                        label: L10n.of(context, 'title_browser'),
-                        settingsTuple: settingsTuple,
-                        isDark: isDark,
-                        currentIndex: currentIndex,
-                      ),
-                      _NavItem(
-                        index: 2,
-                        icon: Icons.settings_outlined,
-                        activeIcon: Icons.settings_rounded,
-                        label: L10n.of(context, 'title_config'),
-                        settingsTuple: settingsTuple,
-                        isDark: isDark,
-                        currentIndex: currentIndex,
+                          : AppTheme.lightGlassBorder,
+                      width: 0.8,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(
+                          alpha: isDark ? 0.4 : 0.12,
+                        ),
+                        blurRadius: 24,
+                        spreadRadius: 2,
+                        offset: const Offset(0, 8),
                       ),
                     ],
+                  ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(32),
+              child: DmxBackdropFilter(
+                sigmaX: 16,
+                sigmaY: 16,
+                child: Directionality(
+                  textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 64),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12.0,
+                      vertical: 6.0,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _NavItem(
+                          index: 0,
+                          icon: Icons.file_download_outlined,
+                          activeIcon: Icons.file_download,
+                          label: L10n.of(context, 'title_transmissions'),
+                          settingsTuple: settingsTuple,
+                          isDark: isDark,
+                          currentIndex: currentIndex,
+                        ),
+                        _NavItem(
+                          index: 1,
+                          icon: Icons.language_outlined,
+                          activeIcon: Icons.language,
+                          label: L10n.of(context, 'title_browser'),
+                          settingsTuple: settingsTuple,
+                          isDark: isDark,
+                          currentIndex: currentIndex,
+                        ),
+                        _NavItem(
+                          index: 2,
+                          icon: Icons.settings_outlined,
+                          activeIcon: Icons.settings_rounded,
+                          label: L10n.of(context, 'title_config'),
+                          settingsTuple: settingsTuple,
+                          isDark: isDark,
+                          currentIndex: currentIndex,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -627,53 +655,66 @@ class _NavigationRailWidget extends StatelessWidget {
             : AppTheme.surface)
         : AppTheme.lightSurface;
 
-    return DmxBackdropFilter(
-      sigmaX: 15,
-      sigmaY: 15,
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
       child: Container(
-        decoration: BoxDecoration(
-          color: settingsTuple.classicUi
-              ? navBg
-              : navBg.withValues(
-                  alpha: settingsTuple.isAmoled ? 1.0 : 0.85,
+        decoration: settingsTuple.classicUi
+            ? BoxDecoration(
+                color: navBg,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: isDark
+                      ? (settingsTuple.isAmoled
+                          ? AppTheme.amoledBorder
+                          : AppTheme.border)
+                      : AppTheme.lightBorder,
+                  width: 1.0,
                 ),
-          border: isRtl
-              ? Border(
-                  left: BorderSide(
-                    color: isDark
-                        ? (settingsTuple.isAmoled
-                            ? AppTheme.amoledBorder
-                            : AppTheme.border)
-                        : AppTheme.lightBorder,
-                    width: 1.0,
-                  ),
-                )
-              : Border(
-                  right: BorderSide(
-                    color: isDark
-                        ? (settingsTuple.isAmoled
-                            ? AppTheme.amoledBorder
-                            : AppTheme.border)
-                        : AppTheme.lightBorder,
-                    width: 1.0,
-                  ),
+              )
+            : BoxDecoration(
+                color: navBg.withValues(
+                  alpha: settingsTuple.isAmoled ? 1.0 : 0.8,
                 ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Column(
-              children: [
-                SizedBox(height: isPhoneLandscape(context) ? 4 : 16),
-                Padding(
-                  padding: EdgeInsets.symmetric(
-                    vertical: isPhoneLandscape(context) ? 6 : 16,
-                  ),
-                  child: DmxAppIcon(
-                    size: isPhoneLandscape(context) ? 28 : 40,
-                    showGlow: true,
-                  ),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: isDark
+                      ? (settingsTuple.isAmoled
+                          ? AppTheme.amoledBorder
+                          : AppTheme.glassBorder)
+                      : AppTheme.lightGlassBorder,
+                  width: 0.8,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(
+                      alpha: isDark ? 0.35 : 0.1,
+                    ),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                    offset: const Offset(4, 4),
+                  ),
+                ],
+              ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: DmxBackdropFilter(
+            sigmaX: 16,
+            sigmaY: 16,
+            child: SafeArea(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  children: [
+                    SizedBox(height: isPhoneLandscape(context) ? 4 : 16),
+                    Padding(
+                      padding: EdgeInsets.symmetric(
+                        vertical: isPhoneLandscape(context) ? 6 : 16,
+                      ),
+                      child: DmxAppIcon(
+                        size: isPhoneLandscape(context) ? 28 : 40,
+                        showGlow: true,
+                      ),
+                    ),
                 SizedBox(height: isPhoneLandscape(context) ? 2 : 8),
                 _RailItem(
                   index: 0,
@@ -720,7 +761,9 @@ class _NavigationRailWidget extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 }
 
