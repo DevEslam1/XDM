@@ -286,7 +286,6 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                                 isRtl: isRtl,
                                 currentIndex: currentIndex,
                               ),
-                              const VerticalDivider(width: 1),
                               Expanded(child: bodyWithShortcuts),
                             ],
                           )
@@ -296,19 +295,22 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                         left: 0,
                         right: 0,
                         bottom: 0,
-                        child: screenType == ScreenType.phone
-                            ? _PhoneBottomNavBar(
-                                settingsTuple: settingsTuple,
-                                isDark: isDark,
-                                isRtl: isRtl,
-                                navState: navState,
-                              )
-                            : _TabletFloatingNavBar(
-                                settingsTuple: settingsTuple,
-                                isDark: isDark,
-                                isRtl: isRtl,
-                                navState: navState,
-                              ),
+                        child: IgnorePointer(
+                          ignoring: false,
+                          child: screenType == ScreenType.phone
+                              ? _PhoneBottomNavBar(
+                                  settingsTuple: settingsTuple,
+                                  isDark: isDark,
+                                  isRtl: isRtl,
+                                  navState: navState,
+                                )
+                              : _TabletFloatingNavBar(
+                                  settingsTuple: settingsTuple,
+                                  isDark: isDark,
+                                  isRtl: isRtl,
+                                  navState: navState,
+                                ),
+                        ),
                       ),
                   ],
                 ),
@@ -419,7 +421,7 @@ class _PhoneBottomNavBar extends StatelessWidget {
                   )
                 : BoxDecoration(
                     color: navBg.withValues(
-                      alpha: settingsTuple.isAmoled ? 1.0 : 0.75,
+                      alpha: settingsTuple.isAmoled ? 0.95 : 0.7,
                     ),
                     borderRadius: BorderRadius.circular(32),
                     border: Border.all(
@@ -435,17 +437,17 @@ class _PhoneBottomNavBar extends StatelessWidget {
                         color: Colors.black.withValues(
                           alpha: isDark ? 0.4 : 0.12,
                         ),
-                        blurRadius: 24,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 8),
+                        blurRadius: 20,
+                        spreadRadius: 1,
+                        offset: const Offset(0, 6),
                       ),
                     ],
                   ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(32),
               child: DmxBackdropFilter(
-                sigmaX: 16,
-                sigmaY: 16,
+                sigmaX: 20,
+                sigmaY: 20,
                 child: Directionality(
                   textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
                   child: Container(
@@ -622,9 +624,7 @@ class _TabletFloatingNavBar extends StatelessWidget {
       ),
     );
   }
-}
-
-class _NavigationRailWidget extends StatelessWidget {
+}class _NavigationRailWidget extends StatelessWidget {
   final ({
     bool isDark,
     bool isAmoled,
@@ -655,115 +655,117 @@ class _NavigationRailWidget extends StatelessWidget {
             : AppTheme.surface)
         : AppTheme.lightSurface;
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Container(
-        decoration: settingsTuple.classicUi
-            ? BoxDecoration(
-                color: navBg,
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: isDark
-                      ? (settingsTuple.isAmoled
-                          ? AppTheme.amoledBorder
-                          : AppTheme.border)
-                      : AppTheme.lightBorder,
-                  width: 1.0,
-                ),
-              )
-            : BoxDecoration(
-                color: navBg.withValues(
-                  alpha: settingsTuple.isAmoled ? 1.0 : 0.8,
-                ),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: isDark
-                      ? (settingsTuple.isAmoled
-                          ? AppTheme.amoledBorder
-                          : AppTheme.glassBorder)
-                      : AppTheme.lightGlassBorder,
-                  width: 0.8,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(
-                      alpha: isDark ? 0.35 : 0.1,
-                    ),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                    offset: const Offset(4, 4),
-                  ),
-                ],
+    final isPhoneLandscapeMode = isPhoneLandscape(context);
+    final baseRailWidth = isPhoneLandscapeMode ? 78.0 : 84.0;
+    
+    // Account for camera notch / display cutout on the leading edge (left in LTR, right in RTL)
+    final mediaPadding = MediaQuery.paddingOf(context);
+    final sideInset = isRtl ? mediaPadding.right : mediaPadding.left;
+    final totalRailWidth = baseRailWidth + sideInset;
+
+    final sideBorderColor = isDark
+        ? (settingsTuple.isAmoled
+            ? AppTheme.amoledBorder
+            : (settingsTuple.classicUi ? AppTheme.border : AppTheme.glassBorder))
+        : (settingsTuple.classicUi ? AppTheme.lightBorder : AppTheme.lightGlassBorder);
+
+    return Container(
+      width: totalRailWidth,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: settingsTuple.classicUi
+            ? navBg
+            : navBg.withValues(
+                alpha: settingsTuple.isAmoled ? 1.0 : 0.85,
               ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
-          child: DmxBackdropFilter(
-            sigmaX: 16,
-            sigmaY: 16,
-            child: SafeArea(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  children: [
-                    SizedBox(height: isPhoneLandscape(context) ? 4 : 16),
-                    Padding(
-                      padding: EdgeInsets.symmetric(
-                        vertical: isPhoneLandscape(context) ? 6 : 16,
-                      ),
-                      child: DmxAppIcon(
-                        size: isPhoneLandscape(context) ? 28 : 40,
-                        showGlow: true,
-                      ),
+        border: Border(
+          right: isRtl
+              ? BorderSide.none
+              : BorderSide(color: sideBorderColor, width: 0.8),
+          left: isRtl
+              ? BorderSide(color: sideBorderColor, width: 0.8)
+              : BorderSide.none,
+        ),
+      ),
+      child: DmxBackdropFilter(
+        sigmaX: settingsTuple.classicUi ? 0 : 16,
+        sigmaY: settingsTuple.classicUi ? 0 : 16,
+        child: SafeArea(
+          top: true,
+          bottom: true,
+          left: true,
+          right: true,
+          child: Column(
+            children: [
+              SizedBox(height: isPhoneLandscapeMode ? 6 : 16),
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  vertical: isPhoneLandscapeMode ? 4 : 12,
+                ),
+                child: DmxAppIcon(
+                  size: isPhoneLandscapeMode ? 26 : 34,
+                  showGlow: true,
+                ),
+              ),
+              SizedBox(height: isPhoneLandscapeMode ? 4 : 12),
+              Expanded(
+                child: Center(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _RailItem(
+                          index: 0,
+                          icon: Icons.file_download_outlined,
+                          selectedIcon: Icons.file_download,
+                          label: L10n.of(context, 'title_transmissions'),
+                          isSelected: currentIndex == 0,
+                          activeColor: activeColor,
+                          inactiveColor: inactiveColor,
+                          onTap: () {
+                            if (settingsTuple.vibration) HapticFeedback.lightImpact();
+                            downloadProvider.setActiveTabIndex(0);
+                          },
+                        ),
+                        _RailItem(
+                          index: 1,
+                          icon: Icons.language_outlined,
+                          selectedIcon: Icons.language,
+                          label: L10n.of(context, 'title_browser'),
+                          isSelected: currentIndex == 1,
+                          activeColor: activeColor,
+                          inactiveColor: inactiveColor,
+                          onTap: () {
+                            if (settingsTuple.vibration) HapticFeedback.lightImpact();
+                            downloadProvider.setActiveTabIndex(1);
+                          },
+                        ),
+                        _RailItem(
+                          index: 2,
+                          icon: Icons.settings_outlined,
+                          selectedIcon: Icons.settings_rounded,
+                          label: L10n.of(context, 'title_config'),
+                          isSelected: currentIndex == 2,
+                          activeColor: getSettingsTabColor(
+                              settingsProvider.activeSettingsTabIndex, isDark),
+                          inactiveColor: inactiveColor,
+                          onTap: () {
+                            if (settingsTuple.vibration) HapticFeedback.lightImpact();
+                            downloadProvider.setActiveTabIndex(2);
+                          },
+                        ),
+                      ],
                     ),
-                SizedBox(height: isPhoneLandscape(context) ? 2 : 8),
-                _RailItem(
-                  index: 0,
-                  icon: Icons.file_download_outlined,
-                  selectedIcon: Icons.file_download,
-                  label: L10n.of(context, 'title_transmissions'),
-                  isSelected: currentIndex == 0,
-                  activeColor: activeColor,
-                  inactiveColor: inactiveColor,
-                  onTap: () {
-                    if (settingsTuple.vibration) HapticFeedback.lightImpact();
-                    downloadProvider.setActiveTabIndex(0);
-                  },
+                  ),
                 ),
-                _RailItem(
-                  index: 1,
-                  icon: Icons.language_outlined,
-                  selectedIcon: Icons.language,
-                  label: L10n.of(context, 'title_browser'),
-                  isSelected: currentIndex == 1,
-                  activeColor: activeColor,
-                  inactiveColor: inactiveColor,
-                  onTap: () {
-                    if (settingsTuple.vibration) HapticFeedback.lightImpact();
-                    downloadProvider.setActiveTabIndex(1);
-                  },
-                ),
-                _RailItem(
-                  index: 2,
-                  icon: Icons.settings_outlined,
-                  selectedIcon: Icons.settings_rounded,
-                  label: L10n.of(context, 'title_config'),
-                  isSelected: currentIndex == 2,
-                  activeColor: getSettingsTabColor(
-                      settingsProvider.activeSettingsTabIndex, isDark),
-                  inactiveColor: inactiveColor,
-                  onTap: () {
-                    if (settingsTuple.vibration) HapticFeedback.lightImpact();
-                    downloadProvider.setActiveTabIndex(2);
-                  },
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
-    ),
-  ),
-);
+    );
   }
 }
 
@@ -786,11 +788,14 @@ class _RailItem extends StatelessWidget {
     required this.activeColor,
     required this.inactiveColor,
     required this.onTap,
-  });  @override
+  });
+
+  @override
   Widget build(BuildContext context) {
     final color = isSelected ? activeColor : inactiveColor;
     final displayIcon = isSelected ? selectedIcon : icon;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isLandscapeMode = isPhoneLandscape(context);
 
     return Semantics(
       selected: isSelected,
@@ -798,7 +803,10 @@ class _RailItem extends StatelessWidget {
       button: true,
       hint: 'Double tap to switch tab',
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        padding: EdgeInsets.symmetric(
+          vertical: isLandscapeMode ? 3 : 4,
+          horizontal: 4,
+        ),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
@@ -810,7 +818,10 @@ class _RailItem extends StatelessWidget {
             child: AnimatedContainer(
               duration: AppTheme.motionBase,
               curve: AppTheme.motionCurve,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              padding: EdgeInsets.symmetric(
+                vertical: isLandscapeMode ? 8 : 10,
+                horizontal: isLandscapeMode ? 4 : 6,
+              ),
               decoration: BoxDecoration(
                 color: isSelected
                     ? activeColor.withValues(alpha: 0.12)
@@ -829,7 +840,7 @@ class _RailItem extends StatelessWidget {
                   Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      Icon(displayIcon, color: color, size: 24),
+                      Icon(displayIcon, color: color, size: isLandscapeMode ? 22 : 24),
                       if (index == 0)
                         PositionedDirectional(
                           top: -4,
@@ -840,14 +851,14 @@ class _RailItem extends StatelessWidget {
                               if (count <= 0) return const SizedBox.shrink();
                               return Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 5,
-                                  vertical: 2,
+                                  horizontal: 4,
+                                  vertical: 1,
                                 ),
                                 decoration: BoxDecoration(
                                   color: isDark
                                       ? AppTheme.neonGreen
                                       : AppTheme.lightNeonGreen,
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(8),
                                   boxShadow: [
                                     BoxShadow(
                                       color: (isDark
@@ -872,16 +883,22 @@ class _RailItem extends StatelessWidget {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 10,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  const SizedBox(height: 3),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: isLandscapeMode ? 9.5 : 10.5,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                      ),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),

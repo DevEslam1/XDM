@@ -1030,7 +1030,7 @@ class _HomeScreenState extends State<HomeScreen>
     switch (screenType) {
       case ScreenType.phone:
         bottomPadding =
-            isNavbarVisible ? (20.0 + safeAreaBottom) : (16.0 + safeAreaBottom);
+            isNavbarVisible ? (88.0 + safeAreaBottom) : (16.0 + safeAreaBottom);
         break;
       case ScreenType.tablet:
         bottomPadding =
@@ -1626,8 +1626,10 @@ class _DownloadTaskList extends StatelessWidget {
             contentWidget = KeyedSubtree(
               key: const ValueKey('reorderable'),
               child: ReorderableListView.builder(
-                padding: EdgeInsets.symmetric(
-                  horizontal: screenPadding(context).left,
+                padding: EdgeInsets.only(
+                  left: screenPadding(context).left,
+                  right: screenPadding(context).left,
+                  bottom: 84.0,
                 ),
                 physics: const AlwaysScrollableScrollPhysics(
                   parent: BouncingScrollPhysics(),
@@ -1648,21 +1650,17 @@ class _DownloadTaskList extends StatelessWidget {
 
                   final taskToMove = itemToMove.task!;
                   final oldTaskIndex = p.filteredTasks.indexWhere((t) => t.id == taskToMove.id);
-                  if (oldTaskIndex == -1) return;
-
                   int newTaskIndex;
                   if (newIndex >= renderItems.length) {
-                    newTaskIndex = p.filteredTasks.length;
+                    newTaskIndex = p.filteredTasks.length - 1;
                   } else {
                     final targetItem = renderItems[newIndex];
-                    final targetTask = targetItem.isPlaylist
-                        ? targetItem.items!.first
-                        : targetItem.task!;
-                    newTaskIndex = p.filteredTasks.indexWhere((t) => t.id == targetTask.id);
+                    if (targetItem.isPlaylist) return;
+                    newTaskIndex = p.filteredTasks.indexWhere((t) => t.id == targetItem.task!.id);
                   }
-                  if (newTaskIndex == -1) return;
-
-                  p.reorderTasks(p.filteredTasks, oldTaskIndex, newTaskIndex);
+                  if (oldTaskIndex != -1 && newTaskIndex != -1) {
+                    p.reorderTasks(p.filteredTasks, oldTaskIndex, newTaskIndex);
+                  }
                 },
                 itemBuilder: (context, index) {
                   final item = renderItems[index];
@@ -1680,23 +1678,14 @@ class _DownloadTaskList extends StatelessWidget {
                     card = DownloadCard(
                       key: ValueKey(item.task!.id),
                       task: item.task!,
-                      compact: true,
-                      showDragHandle: false,
+                      compact: false,
+                      showDragHandle: true,
                       index: index,
                     );
                   }
 
                   card = Row(
                     children: [
-                      if (isReorderable && !item.isPlaylist)
-                        Padding(
-                          padding: const EdgeInsetsDirectional.only(end: 8.0),
-                          child: Icon(Icons.drag_handle_rounded,
-                              size: 16,
-                              color: isDark
-                                  ? AppTheme.textMuted
-                                  : AppTheme.lightTextMuted),
-                        ),
                       if (isInSelectionMode && !item.isPlaylist)
                         Padding(
                           padding: const EdgeInsetsDirectional.only(end: 8.0),
@@ -1748,9 +1737,11 @@ class _DownloadTaskList extends StatelessWidget {
               contentWidget = KeyedSubtree(
                 key: const ValueKey('grid'),
                 child: GridView.builder(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: screenPadding(context).left,
-                    vertical: 4,
+                  padding: EdgeInsets.only(
+                    left: screenPadding(context).left,
+                    right: screenPadding(context).left,
+                    top: 4,
+                    bottom: 84.0,
                   ),
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: BouncingScrollPhysics(),
@@ -1827,8 +1818,10 @@ class _DownloadTaskList extends StatelessWidget {
               contentWidget = KeyedSubtree(
                 key: const ValueKey('list'),
                 child: ListView.separated(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: screenPadding(context).left,
+                  padding: EdgeInsets.only(
+                    left: screenPadding(context).left,
+                    right: screenPadding(context).left,
+                    bottom: 84.0,
                   ),
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: BouncingScrollPhysics(),

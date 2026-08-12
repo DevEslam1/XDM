@@ -19,7 +19,12 @@ class PowerSettingsPage extends StatelessWidget with HapticHelper {
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
+      padding: const EdgeInsets.only(
+        left: 12.0,
+        right: 12.0,
+        top: 16.0,
+        bottom: 84.0,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
