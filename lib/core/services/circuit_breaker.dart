@@ -32,7 +32,9 @@ class CircuitBreaker {
       case CircuitBreakerState.open:
         if (now.difference(_lastStateChange) >= openTimeout) {
           _transition(CircuitBreakerState.halfOpen, now);
-          _probeInFlight = false;
+          _probeInFlight = true;
+          _probeStartedAt = now;
+          return true;
         }
         return false;
       case CircuitBreakerState.halfOpen:

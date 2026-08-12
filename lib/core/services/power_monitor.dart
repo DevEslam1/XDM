@@ -43,15 +43,23 @@ class PowerMonitor {
       _state == BatteryState.charging || _state == BatteryState.full;
   static bool get screenOff => !_screenOn;
 
+  static BatterySaverMode? _lastSaverMode;
+
   static BatterySaverMode get batterySaverMode {
-    if (isCharging) return BatterySaverMode.off;
-    if (_level < kBatterySaverAggressiveThreshold) {
-      return BatterySaverMode.aggressive;
+    if (isCharging) {
+      _lastSaverMode = BatterySaverMode.off;
+      return BatterySaverMode.off;
     }
-    if (_level < kBatterySaverModerateThreshold) {
-      return BatterySaverMode.moderate;
+    if (_lastSaverMode != null &&
+        _lastSaverMode != BatterySaverMode.off &&
+        _level >= kBatterySaverRestoreThreshold) {
+      _lastSaverMode = BatterySaverMode.off;
+    } else if (_level < kBatterySaverAggressiveThreshold) {
+      _lastSaverMode = BatterySaverMode.aggressive;
+    } else if (_level < kBatterySaverModerateThreshold) {
+      _lastSaverMode = BatterySaverMode.moderate;
     }
-    return BatterySaverMode.off;
+    return _lastSaverMode ?? BatterySaverMode.off;
   }
 
   /// Thermal and battery-aware thread limiter.

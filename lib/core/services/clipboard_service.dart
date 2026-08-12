@@ -38,6 +38,7 @@ class ClipboardService {
       LoggingService.logger('ClipboardService').warning(
         '[ClipboardService] Max initialization retries (3) reached. Halting init retries.',
       );
+      _initialized = true;
       return;
     }
 

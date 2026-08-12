@@ -128,6 +128,7 @@ class BandwidthGovernor {
       if (taskLimit <= 0) return 1000; // Blocked
 
       return _lock.synchronized(() {
+        _refill();
         final now = DateTime.now();
         final last = _taskLastRefill[taskId] ?? now;
         final elapsedMs = now.difference(last).inMilliseconds;

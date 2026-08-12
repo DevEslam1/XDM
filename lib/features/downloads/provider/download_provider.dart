@@ -18,7 +18,6 @@ import '../../../core/services/youtube_service.dart';
 
 // ignore_for_file: prefer_initializing_formals
 import '../../../core/services/background_service.dart';
-import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/download_engine.dart';
 import '../../../core/services/download_journal.dart';
@@ -393,12 +392,6 @@ class DownloadProvider extends ChangeNotifier
   String? _lastError;
   String? get lastError => _lastError;
 
-  static String _dbCorruptionMessage(String? doubleErr, String? torrentErr) {
-    final parts = <String>[];
-    if (doubleErr != null) parts.add('chunks: $doubleErr');
-    if (torrentErr != null) parts.add('torrent files: $torrentErr');
-    return parts.isEmpty ? 'unknown' : parts.join('; ');
-  }
 
   // ---------------------------------------------------------------------------
   // Mixin contract implementations
@@ -890,20 +883,6 @@ class DownloadProvider extends ChangeNotifier
     final toDelete = <DownloadTask>[];
 
     final dbTasks = await _databaseService.loadTasks();
-
-    // Check for DB converter corruption signals
-    final doubleCorruption = DoubleListConverter.lastConversionError.value;
-    final torrentCorruption = TorrentFilesConverter.lastConversionError.value;
-    if (doubleCorruption != null || torrentCorruption != null) {
-      _log.severe(
-        'DB corruption detected: $_dbCorruptionMessage(doubleCorruption, torrentCorruption)',
-      );
-      lastSaveError.value =
-          'Data corruption detected. Some downloads may need re-downloading.';
-      // Reset notifiers to avoid repeated warnings
-      DoubleListConverter.lastConversionError.value = null;
-      TorrentFilesConverter.lastConversionError.value = null;
-    }
 
     final loaded = dbTasks.map((t) {
       // FIX-AUDIT-4: Clamp downloadedBytes to fileSize and chunks to [0.0, 1.0] to prevent >100% display.

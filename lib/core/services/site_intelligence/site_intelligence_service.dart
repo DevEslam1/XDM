@@ -211,8 +211,17 @@ class SiteIntelligenceService {
   // other schemes to be mangled by prepending 'https://'.
   static final _urlSchemeRegex = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://');
 
+  Future<void>? _initFuture;
+
   Future<void> init() async {
     if (_loaded) return;
+    if (_initFuture != null) return _initFuture!;
+    _initFuture = _doInit();
+    await _initFuture;
+    _initFuture = null;
+  }
+
+  Future<void> _doInit() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_reliabilityKey);

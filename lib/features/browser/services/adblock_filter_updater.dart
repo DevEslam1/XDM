@@ -713,6 +713,17 @@ class AdBlockFilterUpdater {
 
     // FIX #9: Check collected URL path patterns
     if (path.isNotEmpty && _urlPatterns.isNotEmpty) {
+      for (final pattern in _urlPatterns) {
+        if (pattern.contains('*')) {
+          final regexStr =
+              '^${RegExp.escape(pattern).replaceAll(r'\*', '.*')}\$';
+          try {
+            if (RegExp(regexStr, caseSensitive: false).hasMatch(path)) {
+              return true;
+            }
+          } catch (_) {}
+        }
+      }
       if (_urlPatternsTrie.searchSubstrings(path)) return true;
     }
 

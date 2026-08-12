@@ -31,8 +31,9 @@ class SpeedPredictor {
   }
 
   int predictEta(int remainingBytes) {
+    if (remainingBytes <= 0) return 0;
     final speed = predictedSpeed;
-    if (speed <= 0 || remainingBytes <= 0) return -1;
+    if (speed <= 0) return -1;
     return (remainingBytes / speed).ceil();
   }
 

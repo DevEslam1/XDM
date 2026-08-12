@@ -12,11 +12,6 @@ final _dbLog = LoggingService.logger('AppDatabase');
 class DoubleListConverter extends TypeConverter<List<double>, String> {
   const DoubleListConverter();
 
-  /// Set to a non-null value when a conversion fails that could not be
-  /// recovered. Callers should read and reset this notifier to detect DB
-  /// corruption events.
-  static final lastConversionError = ValueNotifier<Object?>(null);
-  
   @override
   List<double> fromSql(String fromDb) {
     if (fromDb.trim().isEmpty) return [];
@@ -62,7 +57,6 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
         _dbLog.warning('DoubleListConverter regex recovery failed: $recEx');
       }
       _dbLog.warning('Error decoding DoubleList from DB: $e');
-      lastConversionError.value = e;
       return [];
     }
   }
@@ -75,11 +69,6 @@ class TorrentFilesConverter
     extends TypeConverter<List<Map<String, dynamic>>, String> {
   const TorrentFilesConverter();
 
-  /// Set to a non-null value when a conversion fails that could not be
-  /// recovered. Callers should read and reset this notifier to detect DB
-  /// corruption events.
-  static final lastConversionError = ValueNotifier<Object?>(null);
-  
   @override
   List<Map<String, dynamic>> fromSql(String fromDb) {
     if (fromDb.trim().isEmpty) return [];
@@ -122,7 +111,6 @@ class TorrentFilesConverter
         _dbLog.warning('TorrentFilesConverter regex recovery failed: $recEx');
       }
       _dbLog.warning('Error decoding TorrentFiles from DB: $e');
-      lastConversionError.value = e;
       return [];
     }
   }
