@@ -296,23 +296,27 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
           // Skip button
           if (_currentPage < _pageCount - 1)
-            GestureDetector(
-              onTap: () {
-                _triggerHaptic(settings);
-                settings.setShowOnboarding(false);
-                if (mounted) {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                      builder: (_) => const PermissionRequestScreen(),
-                    ),
-                  );
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 7,
-                ),
+            Semantics(
+              button: true,
+              label: 'Skip onboarding',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () {
+                  _triggerHaptic(settings);
+                  settings.setShowOnboarding(false);
+                  if (mounted) {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => const PermissionRequestScreen(),
+                      ),
+                    );
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 7,
+                  ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
@@ -331,6 +335,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 ),
               ),
             ),
+          ),
         ],
       ),
     );
@@ -372,10 +377,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // ─── Page Indicators (dots + counter) ───
-              Row(
-                children: [
-                  // Dots
-                  ...List.generate(_pageCount, (index) {
+              Semantics(
+                value: 'Page ${_currentPage + 1} of $_pageCount',
+                container: true,
+                child: Row(
+                  children: [
+                    // Dots
+                    ...List.generate(_pageCount, (index) {
                     final isActive = _currentPage == index;
 
                     return AnimatedContainer(
@@ -424,6 +432,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ),
                 ],
               ),
+            ),
 
               // ─── Next / Start Button ───
               Flexible(
@@ -433,29 +442,29 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
                       : accent,
                   onPressed: () {
-                  _triggerHaptic(settings);
-                  if (_currentPage < _pageCount - 1) {
-                    _pageController.nextPage(
-                      duration: const Duration(milliseconds: 500),
-                      curve: Curves.easeInOutCubicEmphasized,
-                    );
-                  } else {
-                    settings.setShowOnboarding(false);
-                    if (mounted) {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (_) => const PermissionRequestScreen(),
-                        ),
+                    _triggerHaptic(settings);
+                    if (_currentPage < _pageCount - 1) {
+                      _pageController.nextPage(
+                        duration: const Duration(milliseconds: 500),
+                        curve: Curves.easeInOutCubicEmphasized,
                       );
+                    } else {
+                      settings.setShowOnboarding(false);
+                      if (mounted) {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) => const PermissionRequestScreen(),
+                          ),
+                        );
+                      }
                     }
-                  }
-                },
-                text: _currentPage == _pageCount - 1
-                    ? L10n.of(context, 'onboarding_start')
-                    : L10n.of(context, 'onboarding_next'),
+                  },
+                  text: _currentPage == _pageCount - 1
+                      ? L10n.of(context, 'onboarding_start')
+                      : L10n.of(context, 'onboarding_next'),
+                ),
               ),
-            ),
-          ],
+            ],
           ),
         ],
       ),

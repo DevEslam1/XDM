@@ -694,41 +694,83 @@ class _SettingsScreenState extends State<SettingsScreen>
                         ? Row(
                             children: [
                               // Side NavigationRail for Desktop / Tablet / Landscape
-                              NavigationRail(
-                                selectedIndex: _selectedCategoryIndex,
-                                onDestinationSelected: _onCategorySelected,
-                                backgroundColor: isDark
-                                    ? AppTheme.surface.withValues(alpha: 0.7)
-                                    : AppTheme.lightSurface
-                                        .withValues(alpha: 0.7),
-                                labelType: NavigationRailLabelType.all,
-                                selectedIconTheme: IconThemeData(
-                                  color:
-                                      categories[_selectedCategoryIndex].color,
-                                ),
-                                selectedLabelTextStyle: TextStyle(
-                                  color:
-                                      categories[_selectedCategoryIndex].color,
-                                  fontWeight: FontWeight.bold,
-                                  fontFamily: 'Space Grotesk',
-                                  fontSize: 12,
-                                ),
-                                unselectedLabelTextStyle: TextStyle(
-                                  color: isDark
-                                      ? AppTheme.textMuted
-                                      : AppTheme.lightTextMuted,
-                                  fontFamily: 'Inter',
-                                  fontSize: 11,
-                                ),
-                                destinations: categories
-                                    .map(
-                                      (cat) => NavigationRailDestination(
-                                        icon: Icon(cat.icon, size: 20),
-                                        selectedIcon: Icon(cat.icon, size: 22),
-                                        label: Text(cat.title),
+                              LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final isCompactHeight =
+                                      constraints.maxHeight < 520 ||
+                                          isPhoneLandscape(context);
+                                  return SingleChildScrollView(
+                                    physics: const BouncingScrollPhysics(),
+                                    child: ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        minHeight: constraints.maxHeight,
                                       ),
-                                    )
-                                    .toList(),
+                                      child: IntrinsicHeight(
+                                        child: NavigationRail(
+                                          selectedIndex: _selectedCategoryIndex,
+                                          onDestinationSelected:
+                                              _onCategorySelected,
+                                          backgroundColor: isDark
+                                              ? AppTheme.surface
+                                                  .withValues(alpha: 0.7)
+                                              : AppTheme.lightSurface
+                                                  .withValues(alpha: 0.7),
+                                          labelType: isCompactHeight
+                                              ? NavigationRailLabelType.selected
+                                              : NavigationRailLabelType.all,
+                                          useIndicator: true,
+                                          indicatorColor: categories[
+                                                  _selectedCategoryIndex]
+                                              .color
+                                              .withValues(alpha: 0.18),
+                                          selectedIconTheme: IconThemeData(
+                                            color: categories[
+                                                    _selectedCategoryIndex]
+                                                .color,
+                                          ),
+                                          unselectedIconTheme: IconThemeData(
+                                            color: isDark
+                                                ? AppTheme.textMuted
+                                                : AppTheme.lightTextMuted,
+                                          ),
+                                          selectedLabelTextStyle: TextStyle(
+                                            color: categories[
+                                                    _selectedCategoryIndex]
+                                                .color,
+                                            fontWeight: FontWeight.bold,
+                                            fontFamily: 'Space Grotesk',
+                                            fontSize: 12,
+                                          ),
+                                          unselectedLabelTextStyle: TextStyle(
+                                            color: isDark
+                                                ? AppTheme.textMuted
+                                                : AppTheme.lightTextMuted,
+                                            fontFamily: 'Inter',
+                                            fontSize: 11,
+                                          ),
+                                          destinations: categories
+                                              .map(
+                                                (cat) =>
+                                                    NavigationRailDestination(
+                                                  icon: Tooltip(
+                                                    message: cat.title,
+                                                    child:
+                                                        Icon(cat.icon, size: 20),
+                                                  ),
+                                                  selectedIcon: Tooltip(
+                                                    message: cat.title,
+                                                    child:
+                                                        Icon(cat.icon, size: 22),
+                                                  ),
+                                                  label: Text(cat.title),
+                                                ),
+                                              )
+                                              .toList(),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                               const VerticalDivider(width: 1, thickness: 1),
                               Expanded(

@@ -42,61 +42,63 @@ class SectionHeader extends StatelessWidget {
       child: Semantics(
         header: true,
         label: title,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              width: 3,
-              height: subtitle != null ? 22 : 16,
-              decoration: BoxDecoration(
-                color: accent,
-                borderRadius: BorderRadius.circular(2),
-                boxShadow: [
-                  BoxShadow(
-                    color: accent.withValues(alpha: 0.4),
-                    blurRadius: 6,
-                    spreadRadius: 0.5,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            if (icon != null) ...[
-              Icon(icon, size: 16, color: accent),
-              const SizedBox(width: 8),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4,
-                      fontFamily: 'Space Grotesk',
-                    ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle!,
-                      style: TextStyle(
-                        color: textSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w400,
-                        letterSpacing: 0.1,
-                      ),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 3,
+                margin: const EdgeInsets.symmetric(vertical: 2),
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.4),
+                      blurRadius: 6,
+                      spreadRadius: 0.5,
                     ),
                   ],
-                ],
+                ),
               ),
-            ),
-            if (trailing != null) trailing!,
-          ],
+              const SizedBox(width: 10),
+              if (icon != null) ...[
+                Icon(icon, size: 16, color: accent),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.4,
+                        fontFamily: 'Space Grotesk',
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: TextStyle(
+                          color: textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: 0.1,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
         ),
       ),
     );
@@ -301,7 +303,7 @@ class EmptyState extends StatelessWidget {
                 label: Text(actionLabel!),
                 style: FilledButton.styleFrom(
                   backgroundColor: accent,
-                  foregroundColor: Colors.black,
+                  foregroundColor: AppTheme.inkOn(accent),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
                     vertical: 12,

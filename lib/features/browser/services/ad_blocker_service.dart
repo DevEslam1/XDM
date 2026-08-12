@@ -150,7 +150,15 @@ class AdBlockerService {
 
   List<ContentBlocker> get contentBlockers => _nativeContentBlockers;
 
-  int get ruleCount => _nativeContentBlockers.length;
+  int get ruleCount {
+    final updater = AdBlockFilterUpdater();
+    return _nativeContentBlockers.length +
+        updater.downloadedDomainCount +
+        updater.downloadedTrackingCount +
+        updater.cosmeticRules.length +
+        updater.scriptletRules.length +
+        CustomAdBlockStore.instance.hosts.length;
+  }
 
   Future<bool> updateFilters({bool force = false}) async {
     try {
@@ -803,7 +811,7 @@ $customCss
           }
           break;
         case 'json-prune':
-          if (args.isNotEmpty) call = '_xdmJsonPrune(${_jsStr(args[0])});';
+          if (args.isNotEmpty) call = '_xdmJsonPrune(${_jsStr(args.join(' '))});';
           break;
         case 'noeval':
           call = '_xdmNoEval();';
@@ -817,14 +825,134 @@ $customCss
     if (calls.isEmpty) return '';
 
     final callsJs = calls.join('\n  ');
-    return '''
-(function() {
+    return '$_scriptletPreamble  $callsJs\n})();\n';
+  }
+
+
+  // The raw preamble is stored in a separate field so the interpolated
+  // final return string can reference it without triggering the
+  // prefer_adjacent_string_concatenation lint.
+  static const String _scriptletPreamble = r'''(function() {
   if (window.__xdmScriptlets) return;
   window.__xdmScriptlets = true;
-  $callsJs
-})();
-''';
+
+  // ── Scriptlet runtime helpers ─────────────────────────────────────────
+
+  function _xdmAbortOnRead(prop) {
+    try {
+      var parts = prop.split('.');
+      var obj = window;
+      for (var i = 0; i < parts.length - 1; i++) {
+        obj = obj[parts[i]];
+        if (!obj || typeof obj !== 'object') return;
+      }
+      var last = parts[parts.length - 1];
+      Object.defineProperty(obj, last, {
+        get: function() { throw new ReferenceError('[XDM] aborted: ' + prop); },
+        configurable: true
+      });
+    } catch(e) {}
   }
+
+  function _xdmAbortOnWrite(prop) {
+    try {
+      var parts = prop.split('.');
+      var obj = window;
+      for (var i = 0; i < parts.length - 1; i++) {
+        obj = obj[parts[i]];
+        if (!obj || typeof obj !== 'object') return;
+      }
+      var last = parts[parts.length - 1];
+      Object.defineProperty(obj, last, {
+        set: function() { throw new ReferenceError('[XDM] aborted write: ' + prop); },
+        get: function() { return undefined; },
+        configurable: true
+      });
+    } catch(e) {}
+  }
+
+  function _xdmSetConstant(prop, val) {
+    try {
+      var parts = prop.split('.');
+      var obj = window;
+      for (var i = 0; i < parts.length - 1; i++) {
+        if (!obj[parts[i]]) obj[parts[i]] = {};
+        obj = obj[parts[i]];
+      }
+      var last = parts[parts.length - 1];
+      Object.defineProperty(obj, last, {
+        get: function() { return val; },
+        set: function() {},
+        configurable: false
+      });
+    } catch(e) {}
+  }
+
+  function _xdmNoTimeoutIf(pattern) {
+    try {
+      var re = new RegExp(pattern);
+      var orig = window.setTimeout;
+      window.setTimeout = function(fn, delay) {
+        var src = (typeof fn === 'function') ? fn.toString() : String(fn);
+        if (re.test(src)) return 0;
+        return orig.apply(window, arguments);
+      };
+    } catch(e) {}
+  }
+
+  function _xdmDefuseListener(eventName, pattern) {
+    try {
+      var re = new RegExp(pattern);
+      var origAdd = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function(type, fn) {
+        if (type === eventName) {
+          var src = (typeof fn === 'function') ? fn.toString() : String(fn);
+          if (re.test(src)) return;
+        }
+        return origAdd.apply(this, arguments);
+      };
+    } catch(e) {}
+  }
+
+  function _xdmJsonPrune(keysStr) {
+    try {
+      var keys = keysStr.split(/\s+/).filter(Boolean);
+      var origParse = JSON.parse;
+      JSON.parse = function(text) {
+        var obj = origParse.apply(this, arguments);
+        function prune(o) {
+          if (!o || typeof o !== 'object') return o;
+          keys.forEach(function(k) { delete o[k]; });
+          Object.values(o).forEach(function(v) {
+            if (v && typeof v === 'object') prune(v);
+          });
+          return o;
+        }
+        return prune(obj);
+      };
+    } catch(e) {}
+  }
+
+  function _xdmNoEval() {
+    try { window.eval = function() {}; } catch(e) {}
+  }
+
+  function _xdmPreventFetch(pattern) {
+    try {
+      var re = new RegExp(pattern);
+      var origFetch = window.fetch;
+      window.fetch = function(input) {
+        var url = (typeof input === 'string') ? input : (input && input.url) || '';
+        if (re.test(url)) {
+          return Promise.resolve(new Response('', { status: 200 }));
+        }
+        return origFetch.apply(window, arguments);
+      };
+    } catch(e) {}
+  }
+
+''';
+
 
   String _jsStr(String s) => jsonEncode(s);
 

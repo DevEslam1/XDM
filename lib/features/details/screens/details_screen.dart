@@ -1291,26 +1291,35 @@ class _StepBtnState extends State<_StepBtn> {
 
     final color = disabled ? widget.color.withValues(alpha: 0.3) : widget.color;
 
-    return GestureDetector(
-      onTapDown: disabled ? null : (_) => setState(() => _pressed = true),
-      onTapUp: disabled ? null : (_) => setState(() => _pressed = false),
-      onTapCancel: disabled ? null : () => setState(() => _pressed = false),
-      onTap: widget.onPressed,
-      child: AnimatedScale(
-        scale: _pressed ? 0.85 : 1.0,
-        duration: AppTheme.motionFast,
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(
-              color: color.withValues(alpha: 0.3),
-              width: 0.8,
+    return Semantics(
+      button: true,
+      enabled: !disabled,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        child: Center(
+          child: GestureDetector(
+            onTapDown: disabled ? null : (_) => setState(() => _pressed = true),
+            onTapUp: disabled ? null : (_) => setState(() => _pressed = false),
+            onTapCancel: disabled ? null : () => setState(() => _pressed = false),
+            onTap: widget.onPressed,
+            child: AnimatedScale(
+              scale: _pressed ? 0.85 : 1.0,
+              duration: AppTheme.motionFast,
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.3),
+                    width: 0.8,
+                  ),
+                ),
+                child: Icon(widget.icon, size: 16, color: color),
+              ),
             ),
           ),
-          child: Icon(widget.icon, size: 16, color: color),
         ),
       ),
     );
@@ -3454,7 +3463,7 @@ class _MetaRow extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
+                child: SelectableText(
                   value,
                   style: AppTheme.dataStyle(
                     isDark: isDark,
@@ -3462,7 +3471,6 @@ class _MetaRow extends StatelessWidget {
                     weight: isUrl ? FontWeight.w500 : FontWeight.w700,
                   ),
                   maxLines: isUrl ? 2 : 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               if (onEdit != null) ...[

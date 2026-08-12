@@ -134,6 +134,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
 
     return Semantics(
       container: true,
+      explicitChildNodes: true,
       label: semanticLabel,
       hint: L10n.of(context, 'double_tap_details_hint'),
       child: Hero(
@@ -951,7 +952,7 @@ class _ControlButtonState extends State<_ControlButton> {
       button: true,
       label: widget.tooltip,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
         child: Center(
           child: Tooltip(
             message: widget.tooltip,
@@ -968,8 +969,8 @@ class _ControlButtonState extends State<_ControlButton> {
                 duration: AppTheme.motionFast,
                 curve: AppTheme.motionSpring,
                 child: Container(
-                  width: 36,
-                  height: 36,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: widget.filled
                         ? widget.color

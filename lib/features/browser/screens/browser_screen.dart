@@ -24,6 +24,7 @@ import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/file_opener.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../core/utils/url_utils.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../shared/mixins/pausable_loop_animation.dart';
@@ -1939,16 +1940,13 @@ class _BrowserScreenState extends State<BrowserScreen>
     // interrupt the page the user is currently reading.
     _log.info('[Browser] Opening popup URL in background tab: $url');
     _evictStaleAdTabs();
-    setState(() {
-      final newTab = _createNewTab(
-        initialUrl: url,
-        isIncognito: parentTab.isIncognito,
-        origin: TabOrigin.adOrPopup,
-      );
-      _redirectGuard.reset(newTab.id);
-      _tabs.add(newTab);
-    });
-    _saveTabs();
+    final newTab = _createNewTab(
+      initialUrl: url,
+      isIncognito: parentTab.isIncognito,
+      origin: TabOrigin.adOrPopup,
+    );
+    _redirectGuard.reset(newTab.id);
+    _tabManager.addTab(newTab, switchToTab: false);
     if (mounted) {
       final settings = _settings;
       final isDark = settings.isDarkMode;
@@ -2027,16 +2025,13 @@ class _BrowserScreenState extends State<BrowserScreen>
         _log.info(
             '[Browser] Ad redirect was legitimate file host, opening background tab: $finalUrl');
         _evictStaleAdTabs();
-        setState(() {
-          final newTab = _createNewTab(
-            initialUrl: finalUrl,
-            isIncognito: parentTab.isIncognito,
-            origin: TabOrigin.redirect,
-          );
-          _redirectGuard.reset(newTab.id);
-          _tabs.add(newTab);
-        });
-        _saveTabs();
+        final newTab = _createNewTab(
+          initialUrl: finalUrl,
+          isIncognito: parentTab.isIncognito,
+          origin: TabOrigin.redirect,
+        );
+        _redirectGuard.reset(newTab.id);
+        _tabManager.addTab(newTab, switchToTab: false);
         if (mounted) {
           final settings = _settings;
           final isDark = settings.isDarkMode;
@@ -2162,20 +2157,13 @@ class _BrowserScreenState extends State<BrowserScreen>
       AddDownloadDialog.show(context, prefilledUrl: url);
       return;
     }
-    setState(() {
-      final newTab = _createNewTab(
-        initialUrl: url,
-        isIncognito: isIncognito,
-        origin: origin,
-      );
-      _redirectGuard.reset(newTab.id);
-      _tabs.add(newTab);
-    });
-    if (switchToTab) {
-      _switchTab(_tabs.length - 1);
-    } else {
-      _saveTabs();
-    }
+    final newTab = _createNewTab(
+      initialUrl: url,
+      isIncognito: isIncognito,
+      origin: origin,
+    );
+    _redirectGuard.reset(newTab.id);
+    _tabManager.addTab(newTab, switchToTab: switchToTab);
   }
 
   void _suggestDownload(String url, PageClassification classification) {
@@ -2565,8 +2553,7 @@ class _BrowserScreenState extends State<BrowserScreen>
           _tabManager.currentIndex = _tabs.length - 1;
         }
         if (_tabs.isEmpty) {
-          _tabs.add(_createNewTab());
-          _tabManager.currentIndex = 0;
+          _tabManager.addTab(_createNewTab(), switchToTab: true);
         }
         final nowActive = _tabs[_currentTabIndex];
         _urlController.text = nowActive.isHome ? '' : nowActive.url;
@@ -2597,19 +2584,15 @@ class _BrowserScreenState extends State<BrowserScreen>
           onAction: () {
             if (!mounted) return;
             _evictStaleAdTabs();
-            setState(() {
-              final restored = _createNewTab(
-                initialUrl: closedUrl,
-                isIncognito: closedIsIncognito,
-                origin: closedOrigin,
-              );
-              _redirectGuard.reset(restored.id);
-              _tabs.add(restored);
-              _currentTabIndex = _tabs.length - 1;
-              _urlController.text = closedUrl;
-              _showBarsNotifier.value = true;
-            });
-            _saveTabs();
+            final restored = _createNewTab(
+              initialUrl: closedUrl,
+              isIncognito: closedIsIncognito,
+              origin: closedOrigin,
+            );
+            _redirectGuard.reset(restored.id);
+            _tabManager.addTab(restored, switchToTab: true);
+            _urlController.text = closedUrl;
+            _showBarsNotifier.value = true;
           },
         );
       }
@@ -2828,6 +2811,25 @@ class _BrowserScreenState extends State<BrowserScreen>
             ),
           ),
         );
+        break;
+      case 'force_dark_mode':
+        await settings.setForceDarkMode(!settings.forceDarkMode);
+        if (mounted) {
+          ThemedSnackbar.show(
+            context,
+            message: settings.forceDarkMode
+                ? 'Dark mode enabled — reloading page'
+                : 'Dark mode disabled — reloading page',
+            color: settings.isDarkMode
+                ? AppTheme.neonBlue
+                : AppTheme.lightNeonBlue,
+            icon: Icons.dark_mode_rounded,
+            isDarkMode: settings.isDarkMode,
+          );
+          if (!activeTab.isHome) {
+            await _safeReloadTab(activeTab);
+          }
+        }
         break;
       case 'bookmark':
         final currentUrl = _urlController.text.trim();
@@ -4829,8 +4831,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                       _currentTabIndex = _tabs.length - 1;
                     }
                     final tab = _createNewTab(isIncognito: isIncognito);
-                    _tabs.add(tab);
-                    _currentTabIndex = _tabs.length - 1;
+                    _tabManager.addTab(tab, switchToTab: true);
                     _urlController.text = '';
                     _showBarsNotifier.value = true;
                   });
@@ -4857,8 +4858,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                   // Active tab is now at index 0 — open one new blank tab
                   _currentTabIndex = 0;
                   final newTab = _createNewTab(isIncognito: isIncognito);
-                  _tabs.add(newTab);
-                  _currentTabIndex = _tabs.length - 1;
+                  _tabManager.addTab(newTab, switchToTab: true);
                   _urlController.text = '';
                   _showBarsNotifier.value = true;
                 });
@@ -5898,7 +5898,10 @@ class _BrowserScreenState extends State<BrowserScreen>
                   FloatingActionButtonLocation.endFloat,
               body: Builder(
                 builder: (context) {
-                  final isTablet = MediaQuery.of(context).size.width > 900;
+                  final showTabSidebar =
+                      (isDesktop(context) || isTabletLandscape(context)) &&
+                          !isPhoneLandscape(context) &&
+                          MediaQuery.of(context).size.height >= 600;
                   final mainContent = Column(
                     children: [
                       ValueListenableBuilder<bool>(
@@ -5933,23 +5936,29 @@ class _BrowserScreenState extends State<BrowserScreen>
                               padding: EdgeInsets.only(top: statusBarHeight),
                               height: kToolbarHeight + statusBarHeight,
                               decoration: BoxDecoration(
-                                color: settings.classicUi
-                                    ? (isDark
-                                        ? AppTheme.surface
-                                        : AppTheme.lightSurface)
-                                    : (isDark
+                                color: settings.isAmoledMode
+                                    ? Colors.black
+                                    : (settings.classicUi
+                                        ? (isDark
                                             ? AppTheme.surface
                                             : AppTheme.lightSurface)
-                                        .withValues(alpha: 0.88),
+                                        : (isDark
+                                                ? AppTheme.surface
+                                                : AppTheme.lightSurface)
+                                            .withValues(alpha: 0.88)),
                                 border: Border(
                                   bottom: BorderSide(
-                                    color: settings.classicUi
+                                    color: settings.isAmoledMode
                                         ? (isDark
-                                            ? AppTheme.border
+                                            ? const Color(0xFF222222)
                                             : AppTheme.lightBorder)
-                                        : (isDark
-                                            ? AppTheme.glassBorder
-                                            : AppTheme.lightGlassBorder),
+                                        : (settings.classicUi
+                                            ? (isDark
+                                                ? AppTheme.border
+                                                : AppTheme.lightBorder)
+                                            : (isDark
+                                                ? AppTheme.glassBorder
+                                                : AppTheme.lightGlassBorder)),
                                     width: settings.classicUi ? 1.0 : 0.8,
                                   ),
                                 ),
@@ -5994,10 +6003,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                 : isDark
                                                     ? (settings.isAmoledMode
                                                         ? (_isFocused
-                                                            ? AppTheme
-                                                                .amoledSurfaceRaised
-                                                            : AppTheme
-                                                                .amoledBackground)
+                                                            ? const Color(0xFF1E1E2C)
+                                                            : const Color(0xFF12121B))
                                                         : (_isFocused
                                                             ? const Color(
                                                                 0xFF141424)
@@ -6024,33 +6031,51 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                   .lightNeonBlue)
                                                           .withValues(
                                                               alpha: 0.5)
-                                                      : (isDark
-                                                          ? const Color(
-                                                              0x15FFFFFF)
-                                                          : const Color(
-                                                              0x0D000000)),
+                                                      : (settings.isAmoledMode
+                                                          ? AppTheme.neonBlue
+                                                              .withValues(
+                                                                  alpha: 0.35)
+                                                          : (isDark
+                                                              ? const Color(
+                                                                  0x15FFFFFF)
+                                                              : const Color(
+                                                                  0x0D000000))),
                                               width: (activeTab.isIncognito ||
                                                       settings.incognitoEnabled)
                                                   ? 1.0
-                                                  : (_isFocused ? 1.2 : 0.8),
+                                                  : (_isFocused ? 1.2 : (settings.isAmoledMode ? 1.0 : 0.8)),
                                             ),
-                                            boxShadow: (_isFocused &&
-                                                    isDark &&
-                                                    settings.enableGlow)
+                                            boxShadow: settings.isAmoledMode
                                                 ? [
                                                     BoxShadow(
-                                                      color: (isDark
-                                                              ? AppTheme
-                                                                  .neonBlue
-                                                              : AppTheme
-                                                                  .lightNeonBlue)
+                                                      color: AppTheme.neonBlue
                                                           .withValues(
-                                                              alpha: 0.25),
-                                                      blurRadius: 8,
-                                                      spreadRadius: 0.5,
+                                                              alpha: _isFocused
+                                                                  ? 0.40
+                                                                  : 0.20),
+                                                      blurRadius: _isFocused
+                                                          ? 10
+                                                          : 6,
+                                                      spreadRadius: 0,
                                                     ),
                                                   ]
-                                                : null,
+                                                : ((_isFocused &&
+                                                        isDark &&
+                                                        settings.enableGlow)
+                                                    ? [
+                                                        BoxShadow(
+                                                          color: (isDark
+                                                                  ? AppTheme
+                                                                      .neonBlue
+                                                                  : AppTheme
+                                                                      .lightNeonBlue)
+                                                              .withValues(
+                                                                  alpha: 0.25),
+                                                          blurRadius: 8,
+                                                          spreadRadius: 0.5,
+                                                        ),
+                                                      ]
+                                                    : null),
                                           ),
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 4),
@@ -6548,6 +6573,20 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                     : AppTheme.lightNeonViolet)
                                                 : textClr,
                                           ),
+                                          _menuItem(
+                                            settings.forceDarkMode
+                                                ? Icons.dark_mode_rounded
+                                                : Icons.light_mode_outlined,
+                                            settings.forceDarkMode
+                                                ? 'Dark mode: ON'
+                                                : 'Dark mode: OFF',
+                                            'force_dark_mode',
+                                            settings.forceDarkMode
+                                                ? (isDark
+                                                    ? AppTheme.neonBlue
+                                                    : AppTheme.lightNeonBlue)
+                                                : textClr,
+                                          ),
                                           const PopupMenuDivider(),
 
                                           // Section F: Session
@@ -6559,6 +6598,13 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                 ? 'Exit incognito'
                                                 : 'New incognito tab',
                                             'incognito',
+                                            textClr,
+                                          ),
+                                          const PopupMenuDivider(),
+                                          _menuItem(
+                                            Icons.settings_outlined,
+                                            'Browser settings',
+                                            'browser_settings',
                                             textClr,
                                           ),
                                         ],
@@ -8056,7 +8102,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                   );
                   return Row(
                     children: [
-                      if (isTablet) _buildVerticalTabSidebar(context, settings),
+                      if (showTabSidebar) _buildVerticalTabSidebar(context, settings),
                       Expanded(
                         child: Stack(
                           children: [
@@ -8316,11 +8362,9 @@ class _BrowserScreenState extends State<BrowserScreen>
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     return Container(
       height: 40,
-      color: isDark
-          ? (settings.isAmoledMode
-              ? AppTheme.amoledSurfaceRaised
-              : AppTheme.surface)
-          : AppTheme.lightSurface,
+      color: settings.isAmoledMode
+          ? Colors.black
+          : (isDark ? AppTheme.surface : AppTheme.lightSurface),
       child: ListView.builder(
         controller: _tabStripScrollController,
         scrollDirection: Axis.horizontal,

@@ -258,7 +258,7 @@ class _StatusFilterButtons extends StatelessWidget {
         : <BoxShadow>[];
 
     Widget buttonContent = Container(
-      constraints: const BoxConstraints(minHeight: 40),
+      constraints: const BoxConstraints(minHeight: 48),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: bgColor,
@@ -375,9 +375,14 @@ class _CategoryChip extends StatelessWidget {
             child: GestureDetector(
               onTap: onRemove,
               behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: const EdgeInsets.all(4.0),
-                child: Icon(Icons.close_rounded, size: 14, color: color),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: Icon(Icons.close_rounded, size: 14, color: color),
+                  ),
+                ),
               ),
             ),
           ),

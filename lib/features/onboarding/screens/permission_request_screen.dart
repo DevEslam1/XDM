@@ -374,9 +374,11 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
                           ),
                           const SizedBox(height: 10),
                         ],
-                        SizedBox(
-                          width: double.infinity,
-                          height: 52,
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            minHeight: 52,
+                            minWidth: double.infinity,
+                          ),
                           child: ElevatedButton(
                             onPressed: _folderChosen ? _continueToApp : null,
                             style: ElevatedButton.styleFrom(
@@ -448,7 +450,6 @@ class _PermissionCard extends StatelessWidget {
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: bgClr,
@@ -553,8 +554,8 @@ class _PermissionCard extends StatelessWidget {
                     ),
                   ),
                 ],
-                SizedBox(
-                  height: 34,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 44),
                   child: ElevatedButton(
                     onPressed:
                         isPermanentlyDenied ? openAppSettings : onRequest,
@@ -610,7 +611,6 @@ class _DownloadLocationCard extends StatelessWidget {
     final shortPath = path != null ? _shortenPath(path!) : null;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: bgClr,
@@ -668,28 +668,26 @@ class _DownloadLocationCard extends StatelessWidget {
               ),
             )
           else
-            SizedBox(
-              height: 34,
-              child: ElevatedButton(
-                onPressed: onPick,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: accentColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  elevation: 0,
-                  textStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+            ElevatedButton(
+              onPressed: onPick,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentColor,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(48, 48),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(
-                  path != null
-                      ? L10n.of(context, 'permission_download_location_change')
-                      : L10n.of(context, 'permission_download_location_button'),
+                elevation: 0,
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
+              ),
+              child: Text(
+                path != null
+                    ? L10n.of(context, 'permission_download_location_change')
+                    : L10n.of(context, 'permission_download_location_button'),
               ),
             ),
         ],

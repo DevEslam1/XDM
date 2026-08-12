@@ -57,7 +57,9 @@ Future<void> showUpdateInfoDialog(
             ),
             const SizedBox(height: 6),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 180),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.35,
+              ),
               child: SingleChildScrollView(
                 child: Container(
                   padding: const EdgeInsets.all(12),
@@ -130,7 +132,9 @@ Future<void> showMandatoryUpdateDialog(
           title: L10n.of(dialogCtx, 'update_mandatory_title'),
           icon: Icons.system_update_rounded,
           content: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 180),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(dialogCtx).height * 0.35,
+            ),
             child: SingleChildScrollView(
               child: Text(
                 '${L10n.of(dialogCtx, 'update_mandatory_title')}\n\n${update.changelog}',

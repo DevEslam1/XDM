@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
+import '../../core/utils/localization.dart';
 
 /// A crafted, animated snackbar: colored signal rail, popping status icon,
 /// a one-shot shimmer sweep, optional action, and a dismiss control.
@@ -20,9 +21,11 @@ class ThemedSnackbar {
     String? actionLabel,
     VoidCallback? onAction,
   }) {
+    if (!context.mounted) return;
     final isDark =
         isDarkMode ?? Theme.of(context).brightness == Brightness.dark;
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
     messenger.removeCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
@@ -41,7 +44,11 @@ class ThemedSnackbar {
           isDark: isDark,
           actionLabel: actionLabel,
           onAction: onAction,
-          onClose: () => messenger.hideCurrentSnackBar(),
+          onClose: () {
+            try {
+              messenger.hideCurrentSnackBar();
+            } catch (_) {}
+          },
         ),
       ),
     );
@@ -294,16 +301,15 @@ class _SnackbarBodyState extends State<_SnackbarBody>
                   // Optional action
                   if (widget.actionLabel != null && widget.onAction != null)
                     Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      padding: const EdgeInsets.symmetric(vertical: 4),
                       child: TextButton(
                         style: TextButton.styleFrom(
                           foregroundColor: color,
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
+                            horizontal: 12,
+                            vertical: 10,
                           ),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          minimumSize: const Size(64, 48),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -325,19 +331,22 @@ class _SnackbarBodyState extends State<_SnackbarBody>
                     ),
                   // Dismiss
                   Padding(
-                    padding: const EdgeInsetsDirectional.only(end: 6),
+                    padding: const EdgeInsetsDirectional.only(end: 4),
                     child: Semantics(
                       button: true,
-                      label: 'Dismiss notification',
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: widget.onClose,
-                        child: Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: Icon(
-                            Icons.close_rounded,
-                            size: 14,
-                            color: mutedClr,
+                      label: L10n.of(context, 'close_btn'),
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: widget.onClose,
+                          child: Center(
+                            child: Icon(
+                              Icons.close_rounded,
+                              size: 16,
+                              color: mutedClr,
+                            ),
                           ),
                         ),
                       ),

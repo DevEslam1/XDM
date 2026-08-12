@@ -32,7 +32,7 @@ class XdmSemantics {
     final clamped = value.clamp(0.0, 1.0);
     final pct = (clamped * 100).toStringAsFixed(0);
     return Semantics(
-      label: '$label: $pct percent',
+      label: label,
       value: '$pct%',
       liveRegion: true,
       child: child,

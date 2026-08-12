@@ -1138,12 +1138,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                     (_isResolvingLink && !_isTorrentOrMagnet) || _isSubmitting,
                 child: SingleChildScrollView(
                   child: Padding(
-                    padding: EdgeInsets.only(
-                      left: 24,
-                      right: 24,
-                      top: 22,
-                      bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
                     child: Form(
                       key: _formKey,
                       child: Column(
@@ -2563,18 +2558,22 @@ class _HeaderAction extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Tooltip(
-        message: tooltip,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(9),
-          child: Container(
-            width: 32,
-            height: 32,
-            alignment: Alignment.center,
-            child: Icon(icon, size: 17, color: color),
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: Tooltip(
+          message: tooltip,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              width: 48,
+              height: 48,
+              alignment: Alignment.center,
+              child: Icon(icon, size: 18, color: color),
+            ),
           ),
         ),
       ),
@@ -2661,8 +2660,8 @@ class _SquareButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: Container(
-          width: 40,
-          height: 40,
+          width: 48,
+          height: 48,
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(10),
@@ -2691,8 +2690,8 @@ class _StepBtn extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          width: 38,
-          height: 40,
+          width: 48,
+          height: 48,
           alignment: Alignment.center,
           child: Icon(icon,
               size: 17,

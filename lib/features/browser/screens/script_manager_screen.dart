@@ -16,7 +16,8 @@ class ScriptManagerScreen extends StatefulWidget {
   State<ScriptManagerScreen> createState() => _ScriptManagerScreenState();
 }
 
-class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
+class _ScriptManagerScreenState extends State<ScriptManagerScreen>
+    with HapticHelper {
   final UserScriptManager _manager = UserScriptManager.instance;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
@@ -55,7 +56,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
     );
     if (result == null) return;
     if (!mounted) return;
-    runHaptic(context.read<SettingsProvider>());
+    lightPulse(context.read<SettingsProvider>());
     await _manager.add(
       UserScript(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -81,7 +82,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
     );
     if (result == null) return;
     if (!mounted) return;
-    runHaptic(context.read<SettingsProvider>());
+    lightPulse(context.read<SettingsProvider>());
     await _manager.update(
       script.copyWith(
         name: result.name,
@@ -100,13 +101,13 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
       message: 'Are you sure you want to delete "${script.name}"?',
       isDestructive: true,
     );
-    if (confirmed == true) {
+    if (confirmed == true && mounted) {
       await _manager.remove(script.id);
     }
   }
 
   Future<void> _toggleScript(UserScript script, bool val) async {
-    runHaptic(context.read<SettingsProvider>());
+    if (mounted) lightPulse(context.read<SettingsProvider>());
     await _manager.toggle(script.id, val);
   }
 

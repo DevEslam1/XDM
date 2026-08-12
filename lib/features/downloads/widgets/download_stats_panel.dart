@@ -102,8 +102,8 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
                                         .toggleStartStopAll();
                                   },
                                   child: Container(
-                                    width: 40,
-                                    height: 40,
+                                    width: 48,
+                                    height: 48,
                                     decoration: BoxDecoration(
                                       color:
                                           (data.hasActive ? redClr : greenClr)
@@ -213,8 +213,11 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
     final labelClr =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
-    return Column(
-      children: [
+    return Semantics(
+      container: true,
+      label: '$title: $value',
+      child: Column(
+        children: [
         Text(
           title,
           style: TextStyle(
@@ -253,7 +256,8 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
           ],
         ),
       ],
-    );
+    ),
+  );
   }
 }
 

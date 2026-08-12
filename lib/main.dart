@@ -635,6 +635,12 @@ class _AppErrorBoundaryWidgetState extends State<_AppErrorBoundaryWidget> {
                                 text: widget.errorDetails.toString(),
                               ),
                             );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Diagnostics copied to clipboard'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
                           },
                           icon: const Icon(Icons.copy_rounded, size: 14),
                           label: const Text('COPY DIAGNOSTICS'),

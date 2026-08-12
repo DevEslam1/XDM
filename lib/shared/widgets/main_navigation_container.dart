@@ -275,7 +275,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                   isAmoled: settingsTuple.isAmoled,
                 ),
                 extendBody: true,
-                body: showSideNav
+                body: (showSideNav && currentIndex != 1)
                     ? Row(
                         children: [
                           _NavigationRailWidget(
@@ -386,7 +386,9 @@ class _PhoneBottomNavBar extends StatelessWidget {
         : AppTheme.lightSurface;
 
     return AnimatedSlide(
-      offset: currentIndex != 1 ? Offset.zero : const Offset(0, 1.0),
+      offset: (navState.isNavbarVisible && currentIndex != 1)
+          ? Offset.zero
+          : const Offset(0, 1.0),
       duration: AppTheme.motionBase,
       curve: AppTheme.motionCurve,
       child: ClipRRect(
@@ -495,7 +497,9 @@ class _TabletFloatingNavBar extends StatelessWidget {
         : AppTheme.lightSurface;
 
     return AnimatedSlide(
-      offset: currentIndex != 1 ? Offset.zero : const Offset(0, 1.8),
+      offset: (navState.isNavbarVisible && currentIndex != 1)
+          ? Offset.zero
+          : const Offset(0, 1.8),
       duration: AppTheme.motionSlow,
       curve: AppTheme.motionCurve,
       child: SafeArea(
@@ -739,54 +743,105 @@ class _RailItem extends StatelessWidget {
     required this.activeColor,
     required this.inactiveColor,
     required this.onTap,
-  });
-
-  @override
+  });  @override
   Widget build(BuildContext context) {
     final color = isSelected ? activeColor : inactiveColor;
     final displayIcon = isSelected ? selectedIcon : icon;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          focusColor: (Theme.of(context).brightness == Brightness.dark)
-              ? AppTheme.focusRing.withValues(alpha: 0.3)
-              : AppTheme.lightFocusRing.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(12),
-          child: AnimatedContainer(
-            duration: AppTheme.motionBase,
-            curve: AppTheme.motionCurve,
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? activeColor.withValues(alpha: 0.12)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: isSelected
-                  ? Border.all(
-                      color: activeColor.withValues(alpha: 0.3),
-                      width: 0.8,
-                    )
-                  : null,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(displayIcon, color: color, size: 24),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 10,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Semantics(
+      selected: isSelected,
+      label: label,
+      button: true,
+      hint: 'Double tap to switch tab',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            focusColor: isDark
+                ? AppTheme.focusRing.withValues(alpha: 0.3)
+                : AppTheme.lightFocusRing.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(12),
+            child: AnimatedContainer(
+              duration: AppTheme.motionBase,
+              curve: AppTheme.motionCurve,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? activeColor.withValues(alpha: 0.12)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+                border: isSelected
+                    ? Border.all(
+                        color: activeColor.withValues(alpha: 0.3),
+                        width: 0.8,
+                      )
+                    : null,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(displayIcon, color: color, size: 24),
+                      if (index == 0)
+                        PositionedDirectional(
+                          top: -4,
+                          end: -6,
+                          child: Selector<DownloadProvider, int>(
+                            selector: (_, p) => p.downloadingTasksCount,
+                            builder: (_, count, __) {
+                              if (count <= 0) return const SizedBox.shrink();
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? AppTheme.neonGreen
+                                      : AppTheme.lightNeonGreen,
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: (isDark
+                                              ? AppTheme.neonGreen
+                                              : AppTheme.lightNeonGreen)
+                                          .withValues(alpha: 0.4),
+                                      blurRadius: 4,
+                                    ),
+                                  ],
+                                ),
+                                child: Text(
+                                  '$count',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.black : Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                    ],
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 10,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -836,105 +891,112 @@ class _NavItem extends StatelessWidget {
     final displayIcon = isSelected ? activeIcon : icon;
 
     return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            if (settingsTuple.vibration) HapticFeedback.mediumImpact();
-            context.read<DownloadProvider>().setActiveTabIndex(index);
-          },
-          focusColor: isDark
-              ? AppTheme.focusRing.withValues(alpha: 0.3)
-              : AppTheme.lightFocusRing.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  AnimatedContainer(
-                    duration: AppTheme.motionBase,
-                    curve: AppTheme.motionSpring,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
+      child: Semantics(
+        selected: isSelected,
+        label: label,
+        button: true,
+        hint: 'Double tap to switch tab',
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              if (settingsTuple.vibration) HapticFeedback.mediumImpact();
+              context.read<DownloadProvider>().setActiveTabIndex(index);
+            },
+            focusColor: isDark
+                ? AppTheme.focusRing.withValues(alpha: 0.3)
+                : AppTheme.lightFocusRing.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    AnimatedContainer(
+                      duration: AppTheme.motionBase,
+                      curve: AppTheme.motionSpring,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? activeColor.withValues(alpha: 0.12)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(20),
+                        border: isSelected
+                            ? Border.all(
+                                color: activeColor.withValues(alpha: 0.3),
+                                width: 0.8,
+                              )
+                            : null,
+                      ),
+                      child: Icon(displayIcon, color: color, size: 22),
                     ),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? activeColor.withValues(alpha: 0.12)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(20),
-                      border: isSelected
-                          ? Border.all(
-                              color: activeColor.withValues(alpha: 0.3),
-                              width: 0.8,
-                            )
-                          : null,
-                    ),
-                    child: Icon(displayIcon, color: color, size: 22),
-                  ),
-                  // PERF: Badge is scoped to its own Selector so only the
-                  // badge rebuilds on download-count changes, not the whole
-                  // nav bar.
-                  if (index == 0)
-                    Positioned(
-                      top: -4,
-                      right: 4,
-                      child: Selector<DownloadProvider, int>(
-                        selector: (_, p) => p.downloadingTasksCount,
-                        builder: (_, count, __) {
-                          if (count <= 0) return const SizedBox.shrink();
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? AppTheme.neonGreen
-                                  : AppTheme.lightNeonGreen,
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: (isDark
-                                          ? AppTheme.neonGreen
-                                          : AppTheme.lightNeonGreen)
-                                      .withValues(alpha: 0.4),
-                                  blurRadius: 4,
-                                ),
-                              ],
-                            ),
-                            child: Text(
-                              '$count',
-                              style: TextStyle(
-                                color: isDark ? Colors.black : Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
+                    // PERF: Badge is scoped to its own Selector so only the
+                    // badge rebuilds on download-count changes, not the whole
+                    // nav bar.
+                    if (index == 0)
+                      PositionedDirectional(
+                        top: -4,
+                        end: 4,
+                        child: Selector<DownloadProvider, int>(
+                          selector: (_, p) => p.downloadingTasksCount,
+                          builder: (_, count, __) {
+                            if (count <= 0) return const SizedBox.shrink();
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 2,
                               ),
-                            ),
-                          );
-                        },
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppTheme.neonGreen
+                                    : AppTheme.lightNeonGreen,
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: (isDark
+                                            ? AppTheme.neonGreen
+                                            : AppTheme.lightNeonGreen)
+                                        .withValues(alpha: 0.4),
+                                    blurRadius: 4,
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                '$count',
+                                style: TextStyle(
+                                  color: isDark ? Colors.black : Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: color,
-                        fontSize: 10.0,
-                        fontWeight:
-                            isSelected ? FontWeight.bold : FontWeight.w500,
-                        letterSpacing: 0.3,
-                      ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: color,
+                          fontSize: 10.0,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.w500,
+                          letterSpacing: 0.3,
+                        ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

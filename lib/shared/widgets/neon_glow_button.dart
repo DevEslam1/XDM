@@ -62,7 +62,7 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
 
   @override
   Widget build(BuildContext context) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final filledContentColor =
         isDark ? AppTheme.background : AppTheme.lightBackground;
@@ -151,17 +151,20 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
           )
         : content;
 
-    return AnimatedScale(
-      scale: _pressed ? 0.96 : 1.0,
-      duration: AppTheme.motionFast,
-      curve: AppTheme.motionSpring,
-      child: AnimatedOpacity(
-        opacity: enabled ? 1.0 : 0.55,
-        duration: AppTheme.motionBase,
-        child: widget.isFilled
+    return GestureDetector(
+      onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+      onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+      onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+      child: AnimatedScale(
+        scale: _pressed ? 0.96 : 1.0,
+        duration: AppTheme.motionFast,
+        curve: AppTheme.motionSpring,
+        child: AnimatedOpacity(
+          opacity: enabled ? 1.0 : 0.55,
+          duration: AppTheme.motionBase,
+          child: widget.isFilled
             ? FilledButton(
                 onPressed: enabled ? () => widget.onPressed!() : null,
-                onHover: (h) => setState(() => _pressed = h),
                 style: FilledButton.styleFrom(
                   backgroundColor: widget.color,
                   foregroundColor: filledContentColor,
@@ -200,7 +203,6 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
               )
             : OutlinedButton(
                 onPressed: enabled ? () => widget.onPressed!() : null,
-                onHover: (h) => setState(() => _pressed = h),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: widget.color,
                   overlayColor: isDark
@@ -235,6 +237,7 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
                       )
                     : label,
               ),
+        ),
       ),
     );
   }

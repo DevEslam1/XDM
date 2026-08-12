@@ -1,4 +1,5 @@
 const Map<String, String> enTranslations = {
+  'close_btn': 'Close',
   'app_title': 'Xdm',
   'title_transmissions': 'Downloads',
   'title_categories': 'Categories',

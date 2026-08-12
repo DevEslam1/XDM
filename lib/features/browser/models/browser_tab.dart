@@ -109,9 +109,7 @@ class BrowserTab {
     _isDisposed = true;
     controller = null;
     pullToRefreshController = null;
-    try {
-      _findInteractionController?.dispose();
-    } catch (_) {}
+    _findInteractionController = null;
     try {
       progressNotifier.dispose();
     } catch (e, st) {

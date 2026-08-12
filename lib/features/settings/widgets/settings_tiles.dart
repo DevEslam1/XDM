@@ -219,11 +219,15 @@ class SwitchTile extends StatelessWidget {
     );
 
     if (batterySaverOverride) {
-      return GestureDetector(
-        onTap: () => _showBatterySaverLockedMessage(context),
-        behavior: HitTestBehavior.opaque,
-        child: IgnorePointer(
-          child: tile,
+      return Semantics(
+        enabled: false,
+        hint: 'Forced ON by Battery Saver mode',
+        child: GestureDetector(
+          onTap: () => _showBatterySaverLockedMessage(context),
+          behavior: HitTestBehavior.opaque,
+          child: IgnorePointer(
+            child: tile,
+          ),
         ),
       );
     }
@@ -470,42 +474,43 @@ class DropdownTile<T> extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Container(
-            width: 104,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: accentColor.withValues(alpha: 0.3),
-                width: 1,
+          SizedBox(
+            width: 130,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: accentColor.withValues(alpha: 0.3),
+                  width: 1,
+                ),
               ),
-            ),
-            child: Theme(
-              data: Theme.of(context).copyWith(
-                primaryColor: accentColor,
-                focusColor: accentColor.withValues(alpha: 0.15),
-                hoverColor: accentColor.withValues(alpha: 0.1),
-                splashColor: accentColor.withValues(alpha: 0.15),
-                highlightColor: accentColor.withValues(alpha: 0.15),
-                canvasColor: isDark
-                    ? Color.alphaBlend(
-                        accentColor.withValues(alpha: 0.16),
-                        AppTheme.surfaceRaised,
-                      )
-                    : Color.alphaBlend(
-                        accentColor.withValues(alpha: 0.08),
-                        AppTheme.lightSurfaceRaised,
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  primaryColor: accentColor,
+                  focusColor: accentColor.withValues(alpha: 0.15),
+                  hoverColor: accentColor.withValues(alpha: 0.1),
+                  splashColor: accentColor.withValues(alpha: 0.15),
+                  highlightColor: accentColor.withValues(alpha: 0.15),
+                  canvasColor: isDark
+                      ? Color.alphaBlend(
+                          accentColor.withValues(alpha: 0.16),
+                          AppTheme.surfaceRaised,
+                        )
+                      : Color.alphaBlend(
+                          accentColor.withValues(alpha: 0.08),
+                          AppTheme.lightSurfaceRaised,
+                        ),
+                  colorScheme: Theme.of(context).colorScheme.copyWith(
+                        primary: accentColor,
+                        secondary: accentColor,
                       ),
-                colorScheme: Theme.of(context).colorScheme.copyWith(
-                      primary: accentColor,
-                      secondary: accentColor,
-                    ),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<T>(
-                  isDense: true,
-                  isExpanded: true,
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<T>(
+                    isDense: true,
+                    isExpanded: true,
                   dropdownColor: isDark
                       ? Color.alphaBlend(
                           accentColor.withValues(alpha: 0.16),
@@ -614,10 +619,11 @@ class DropdownTile<T> extends StatelessWidget {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 }
 
 /// Standardized TextField tile
@@ -689,7 +695,7 @@ class TextFieldTile extends StatelessWidget {
           Expanded(
             flex: 5,
             child: Container(
-              height: 38,
+              constraints: const BoxConstraints(minHeight: 44),
               decoration: BoxDecoration(
                 color: isDark
                     ? AppTheme.surfaceRaised

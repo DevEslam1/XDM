@@ -328,10 +328,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                               }
                             } finally {
                               if (mounted) {
-                                if (updated) {
                                 _loadLastAdblockUpdateTime();
-                              }
-                              setState(() => _updatingAdblock = false);
+                                setState(() => _updatingAdblock = false);
                               }
                             }
                           },

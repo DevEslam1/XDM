@@ -343,7 +343,10 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
                       Text(t, style: TextStyle(fontSize: 11, color: textClr)),
                   backgroundColor: panelBg,
                   side: BorderSide(color: borderClr, width: 0.8),
-                  deleteIcon: Icon(Icons.close, size: 16, color: mutedClr),
+                  deleteIcon: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.close, size: 16, color: mutedClr),
+                  ),
                   onDeleted: () {
                     setState(() => _trackers.remove(t));
                   },

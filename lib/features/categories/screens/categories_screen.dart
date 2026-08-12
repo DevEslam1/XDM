@@ -153,17 +153,20 @@ class CategoriesScreen extends StatelessWidget {
 
                 // Categories Grid
                 Expanded(
-                  child: GridView.builder(
-                    padding: const EdgeInsets.all(16.0),
-                    physics: const BouncingScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 220,
-                      mainAxisExtent: 160,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
-                    itemCount: categoryCards.length,
+                  child: Builder(
+                    builder: (context) {
+                      final fontScale =
+                          MediaQuery.textScalerOf(context).scale(1.0);
+                      return GridView.builder(
+                        padding: const EdgeInsets.all(16.0),
+                        physics: const BouncingScrollPhysics(),
+                        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 220,
+                          mainAxisExtent: (160 * fontScale).clamp(160.0, 240.0),
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        itemCount: categoryCards.length,
                     itemBuilder: (context, index) {
                       final card = categoryCards[index];
                       final String name = card['name'];
@@ -336,8 +339,9 @@ class CategoriesScreen extends StatelessWidget {
                         ),
                       );
                     },
-                  ),
-                ),
+                  );
+                }),
+              ),
               ],
             ),
           ),
@@ -428,27 +432,30 @@ class CategoriesScreen extends StatelessWidget {
                         sectionsSpace: 2.5,
                       ),
                     ),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          isRtl ? 'الإجمالي' : 'TOTAL',
-                          style: TextStyle(
-                            color: mutedClr,
-                            fontSize: 8,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            isRtl ? 'الإجمالي' : 'TOTAL',
+                            style: TextStyle(
+                              color: mutedClr,
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
                           ),
-                        ),
-                        Text(
-                          totalSizeText,
-                          style: TextStyle(
-                            color: textClr,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
+                          Text(
+                            totalSizeText,
+                            style: TextStyle(
+                              color: textClr,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ],
                 ),

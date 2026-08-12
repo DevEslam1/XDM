@@ -1,4 +1,5 @@
 const Map<String, String> arTranslations = {
+  'close_btn': 'إغلاق',
   'app_title': 'XDM',
   'title_transmissions': 'التنزيلات',
   'title_categories': 'التصنيفات',

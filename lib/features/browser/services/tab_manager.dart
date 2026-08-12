@@ -149,6 +149,27 @@ class TabManager extends ChangeNotifier {
     saveTabs();
   }
 
+  /// Directly adds a tab instance created outside TabManager.
+  void addTab(BrowserTab tab, {bool switchToTab = true}) {
+    _tabs.add(tab);
+    if (switchToTab) {
+      final oldActive = activeTab;
+      if (oldActive != null && oldActive.id != tab.id) {
+        if (_tabIdHistory.isEmpty || _tabIdHistory.last != oldActive.id) {
+          _tabIdHistory.add(oldActive.id);
+          if (_tabIdHistory.length > 50) {
+            _tabIdHistory.removeAt(0);
+          }
+        }
+      }
+      _currentIndex = _tabs.length - 1;
+      syncUrlController();
+      updateNavState();
+    }
+    notifyListeners();
+    saveTabs();
+  }
+
   /// Closes a tab by ID with atomic state update and smooth LRU/adjacent fallback.
   void closeTab(String tabId) {
     final targetIndex = _tabs.indexWhere((t) => t.id == tabId);

@@ -215,18 +215,22 @@ class DmxSectionHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            title.toUpperCase(),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
-              fontFamily: 'Space Grotesk',
-              color: accent,
+          Expanded(
+            child: Text(
+              title.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.5,
+                fontFamily: 'Space Grotesk',
+                color: accent,
+              ),
             ),
           ),
           if (trailing != null) ...[
-            const Spacer(),
+            const SizedBox(width: 8),
             trailing!,
           ],
         ],
@@ -388,8 +392,10 @@ class DmxDialog extends StatelessWidget {
               Flexible(child: SingleChildScrollView(child: content)),
               if (actions != null && actions!.isNotEmpty) ...[
                 const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: actions!,
                 ),
               ],
@@ -610,6 +616,7 @@ class DmxButton extends StatelessWidget {
       duration: AppTheme.motionFast,
       opacity: onPressed == null ? 0.5 : 1.0,
       child: Container(
+        constraints: const BoxConstraints(minHeight: 48),
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(radius),
@@ -690,7 +697,7 @@ class DmxTextField extends StatelessWidget {
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     return Container(
-      constraints: const BoxConstraints(minHeight: 44),
+      constraints: const BoxConstraints(minHeight: 48),
       decoration: BoxDecoration(
         color: AppTheme.panelBg(isDark),
         borderRadius: BorderRadius.circular(12),

@@ -87,14 +87,25 @@ class IsolatedProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-      child: SizedBox(
-        height: height,
-        child: CustomPaint(
-          painter: ChannelProgressPainter(
-            progress: progress,
-            isDark: isDark,
-            isTorrent: isTorrent,
+    return ValueListenableBuilder<double>(
+      valueListenable: progress,
+      builder: (context, val, child) {
+        final pct = (val.clamp(0.0, 1.0) * 100).round();
+        return Semantics(
+          label: 'Download progress',
+          value: '$pct%',
+          child: child,
+        );
+      },
+      child: RepaintBoundary(
+        child: SizedBox(
+          height: height,
+          child: CustomPaint(
+            painter: ChannelProgressPainter(
+              progress: progress,
+              isDark: isDark,
+              isTorrent: isTorrent,
+            ),
           ),
         ),
       ),

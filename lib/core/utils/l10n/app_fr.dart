@@ -1,4 +1,5 @@
 const Map<String, String> frTranslations = {
+  'close_btn': 'Fermer',
   'app_title': 'Xdm',
   'title_transmissions': 'Téléchargements',
   'title_categories': 'Catégories',

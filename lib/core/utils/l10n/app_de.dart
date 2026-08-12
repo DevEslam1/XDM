@@ -1,4 +1,5 @@
 const Map<String, String> deTranslations = {
+  'close_btn': 'Schließen',
   'app_title': 'Xdm',
   'title_transmissions': 'Downloads',
   'title_categories': 'Kategorien',

@@ -169,7 +169,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             ),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
-                              constraints: const BoxConstraints(minHeight: 44),
+                              constraints: const BoxConstraints(minHeight: 48),
                               decoration: BoxDecoration(
                                 color: isDark
                                     ? AppTheme.surface
