@@ -14,7 +14,7 @@ class ElementPickerService {
     const el = document.elementFromPoint(e.clientX, e.clientY);
     if (!el || el === overlay || el === hl) return;
     const r = el.getBoundingClientRect();
-    hl.style.cssText += `display:block;top:${r.top}px;left:${r.left}px;width:${r.width}px;height:${r.height}px;`;
+    hl.style.cssText = `display:block;position:absolute;border:2px solid #3B82F6;background:rgba(59,130,246,.2);pointer-events:none;z-index:2147483647;top:${r.top}px;left:${r.left}px;width:${r.width}px;height:${r.height}px;`;
   });
 
   overlay.addEventListener('click', e => {
@@ -68,12 +68,13 @@ class ElementPickerService {
     var clean = selector.trim().replaceAll(RegExp(r'[\r\n{}<>]'), '');
 
     // Strip dangerous function calls and URI schemes
-    clean = clean.replaceAll(
-        RegExp(r'url\s*\([^)]*\)', caseSensitive: false), '');
+    clean =
+        clean.replaceAll(RegExp(r'url\s*\([^)]*\)', caseSensitive: false), '');
     clean = clean.replaceAll(
         RegExp(r'expression\s*\([^)]*\)', caseSensitive: false), '');
     clean = clean.replaceAll(
-        RegExp(r'@(import|media|supports|charset|namespace|keyframes|font-face)[^;{]*',
+        RegExp(
+            r'@(import|media|supports|charset|namespace|keyframes|font-face)[^;{]*',
             caseSensitive: false),
         '');
     clean = clean.replaceAll(

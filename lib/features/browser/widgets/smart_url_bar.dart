@@ -7,6 +7,7 @@ import '../../../core/utils/localization.dart';
 import '../../settings/provider/settings_provider.dart';
 
 import '../../../core/utils/haptic_helper.dart';
+import '../services/search_engine_config.dart';
 
 enum SuggestionType { url, search, bookmark, history }
 
@@ -196,18 +197,7 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
   }
 
   String _formatSearchUrl(String query, String engine) {
-    String prefix = 'https://www.google.com/search?q=';
-    if (engine == 'DuckDuckGo') {
-      prefix = 'https://duckduckgo.com/?q=';
-    } else if (engine == 'Bing') {
-      prefix = 'https://www.bing.com/search?q=';
-    } else if (engine == 'Yahoo') {
-      prefix = 'https://search.yahoo.com/search?p=';
-    } else if (engine == 'Brave') {
-      prefix = 'https://search.brave.com/search?q=';
-    } else if (engine == 'Ecosia') {
-      prefix = 'https://www.ecosia.org/search?q=';
-    }
+    final prefix = SearchEngineConfig.prefixFor(engine);
     return '$prefix${Uri.encodeComponent(query)}';
   }
 

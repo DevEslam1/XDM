@@ -134,12 +134,13 @@ class BrowserDetector {
 
     if (analysis.contentHint != ContentHint.unknown) {
       final kind = switch (analysis.contentHint) {
-        ContentHint.videoFile ||
-        ContentHint.videoStream =>
-          DetectedMediaKind.video,
-        ContentHint.audioFile ||
-        ContentHint.audioStream =>
-          DetectedMediaKind.audio,
+        ContentHint.videoFile => DetectedMediaKind.video,
+        // Fix: streaming manifests must be playable in the browser — mapping
+        // them to `video` made sites profile a URL as `video`, which triggers
+        // isAutoDownloadable() and wrongly intercepts live streams as downloads.
+        ContentHint.videoStream => DetectedMediaKind.stream,
+        ContentHint.audioFile => DetectedMediaKind.audio,
+        ContentHint.audioStream => DetectedMediaKind.stream,
         ContentHint.image => DetectedMediaKind.image,
         ContentHint.document => DetectedMediaKind.document,
         ContentHint.archiveFile => DetectedMediaKind.archive,

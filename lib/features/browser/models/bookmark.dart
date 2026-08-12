@@ -45,12 +45,17 @@ class Bookmark {
     return palette[domain.hashCode.abs() % palette.length];
   }
 
-  Bookmark copyWith({String? title, String? url, String? folder}) {
+  Bookmark copyWith({
+    String? title,
+    String? url,
+    String? folder,
+    bool clearFolder = false,
+  }) {
     return Bookmark(
       id: id,
       title: title ?? this.title,
       url: url ?? this.url,
-      folder: folder ?? this.folder,
+      folder: clearFolder ? null : (folder ?? this.folder),
       createdAt: createdAt,
     );
   }

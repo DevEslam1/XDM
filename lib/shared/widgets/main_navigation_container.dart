@@ -261,12 +261,15 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             );
 
             return PopScope(
-              canPop: currentIndex == 0,
+              canPop: false,
               onPopInvokedWithResult: (didPop, result) async {
                 if (didPop) return;
                 if (currentIndex != 0) {
-                  Provider.of<DownloadProvider>(context, listen: false)
-                      .setActiveTabIndex(0);
+                  // Only switch back to main home tab if we're not on the Browser tab (which has its own inner back navigation pop scope)
+                  if (currentIndex != 1) {
+                    Provider.of<DownloadProvider>(context, listen: false)
+                        .setActiveTabIndex(0);
+                  }
                 }
               },
               child: Scaffold(

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -178,6 +178,7 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
                       label: isRtl ? '\u0641\u062a\u062d' : 'Open',
                       accent: accent,
                       isDark: isDark,
+                      isRtl: isRtl,
                       onTap: () { Navigator.pop(context); onOpen?.call(); },
                     ),
                     _OptionTile(
@@ -185,6 +186,7 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
                       label: isRtl ? '\u0641\u062a\u062d \u0641\u064a \u0639\u0644\u0627\u0645\u0629 \u062a\u0628\u0648\u064a\u0628 \u062c\u062f\u064a\u062f\u0629' : 'Open in new tab',
                       accent: accent,
                       isDark: isDark,
+                      isRtl: isRtl,
                       onTap: () { Navigator.pop(context); onOpenInNewTab?.call(); },
                     ),
                     _OptionTile(
@@ -192,6 +194,7 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
                       label: isRtl ? '\u0641\u062a\u062d \u0641\u064a \u0627\u0644\u062e\u0644\u0641\u064a\u0629' : 'Open in background',
                       accent: accent,
                       isDark: isDark,
+                      isRtl: isRtl,
                       onTap: () { Navigator.pop(context); onOpenInBackground?.call(); },
                     ),
                     _OptionTile(
@@ -199,6 +202,7 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
                       label: isRtl ? '\u0641\u062a\u062d \u0641\u064a \u0627\u0644\u062a\u0635\u0641\u062d \u0627\u0644\u062e\u0641\u064a' : 'Open in incognito',
                       accent: accent,
                       isDark: isDark,
+                      isRtl: isRtl,
                       onTap: () { Navigator.pop(context); onOpenInIncognito?.call(); },
                     ),
                     const SizedBox(height: 4),
@@ -209,6 +213,7 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
                       label: isRtl ? '\u0646\u0633\u062e \u0627\u0644\u0631\u0627\u0628\u0637' : 'Copy link',
                       accent: accent,
                       isDark: isDark,
+                      isRtl: isRtl,
                       onTap: () async {
                         final rootCtx = Navigator.of(context).context;
                         Navigator.pop(context);
@@ -216,7 +221,7 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
                         if (rootCtx.mounted) {
                           ThemedSnackbar.show(
                             rootCtx,
-                            message: isRtl ? 'تم نسخ الرابط' : 'Link copied',
+                            message: isRtl ? 'ØªÙ… Ù†Ø³Ø® Ø§Ù„Ø±Ø§Ø¨Ø·' : 'Link copied',
                             color: accent,
                             icon: Icons.copy_rounded,
                             isDarkMode: isDark,
@@ -229,6 +234,7 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
                       label: isRtl ? '\u0645\u0634\u0627\u0631\u0643\u0629 \u0627\u0644\u0631\u0627\u0628\u0637' : 'Share link',
                       accent: accent,
                       isDark: isDark,
+                      isRtl: isRtl,
                       onTap: () async {
                         Navigator.pop(context);
                         await SharePlus.instance.share(ShareParams(text: url));
@@ -243,6 +249,7 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
                         label: isRtl ? '\u062a\u062d\u0645\u064a\u0644' : 'Download',
                         accent: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                         isDark: isDark,
+                        isRtl: isRtl,
                         filled: true,
                         onTap: () { Navigator.pop(context); onDownload?.call(); },
                       ),
@@ -264,6 +271,7 @@ class _OptionTile extends StatelessWidget {
   final Color accent;
   final bool isDark;
   final bool filled;
+  final bool isRtl;
   final VoidCallback? onTap;
 
   const _OptionTile({
@@ -272,6 +280,7 @@ class _OptionTile extends StatelessWidget {
     required this.accent,
     required this.isDark,
     this.filled = false,
+    this.isRtl = false,
     this.onTap,
   });
 
@@ -310,7 +319,7 @@ class _OptionTile extends StatelessWidget {
                 ),
               ),
               Icon(
-                Icons.chevron_right_rounded,
+                isRtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
                 color: accent.withValues(alpha: 0.4),
                 size: 18,
               ),

@@ -57,6 +57,7 @@ import '../services/tab_manager.dart';
 import '../../../core/services/redirect_guard.dart';
 import '../services/page_intent_classifier.dart';
 import '../services/site_settings_store.dart';
+import '../services/search_engine_config.dart';
 import '../screens/script_manager_screen.dart';
 import '../widgets/bookmark_manager_screen.dart';
 import '../widgets/browser_download_sheet.dart';
@@ -1838,8 +1839,10 @@ class _BrowserScreenState extends State<BrowserScreen>
   ) =>
       _fingerprintManager.applyUserAgent(tab, settings);
 
-  Future<void> _hideWebViewFingerprints(BrowserTab tab) =>
-      _fingerprintManager.hideWebViewFingerprints(tab);
+  Future<void> _hideWebViewFingerprints(BrowserTab tab) {
+    final settings = _settings;
+    return _fingerprintManager.hideWebViewFingerprints(tab, settings);
+  }
 
   void _injectDesktopModeScript(BrowserTab tab, SettingsProvider settings) =>
       _scriptInjector.injectDesktopModeScript(tab, settings);
@@ -2345,6 +2348,8 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
 
     _tabManager.clearAllTabs();
+    _tabManager.dispose();
+    _sniffer.dispose();
     _detectedDownloadUrls.clear();
     _detectedMediaSources.clear();
     _detectedPlaylistUrls.clear();
@@ -2362,6 +2367,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
     _navDebounce?.cancel();
     _navStateDebounceTimer?.cancel();
+    _interceptor.dispose();
     for (final timer in _mediaScanDebouncePerTab.values) {
       timer.cancel();
     }
@@ -3234,27 +3240,26 @@ class _BrowserScreenState extends State<BrowserScreen>
             ),
           );
         } catch (_) {}
-      } else {
-        try {
-          final css =
-              settings.forceDarkMode ? ScriptInjector.buildForceDarkCss() : '';
-          controller.evaluateJavascript(source: '''
-            (function() {
-              var s = document.getElementById('xdm-force-dark');
-              if (${settings.forceDarkMode}) {
-                if (!s) {
-                  s = document.createElement('style');
-                  s.id = 'xdm-force-dark';
-                  document.head.appendChild(s);
-                }
-                s.textContent = ${jsonEncode(css)};
-              } else if (s) {
-                s.remove();
-              }
-            })();
-          ''').catchError((_) => null);
-        } catch (_) {}
       }
+      try {
+        final css =
+            settings.forceDarkMode ? ScriptInjector.buildForceDarkCss() : '';
+        controller.evaluateJavascript(source: '''
+          (function() {
+            var s = document.getElementById('xdm-force-dark');
+            if (${settings.forceDarkMode}) {
+              if (!s) {
+                s = document.createElement('style');
+                s.id = 'xdm-force-dark';
+                document.head.appendChild(s);
+              }
+              s.textContent = ${jsonEncode(css)};
+            } else if (s) {
+              s.remove();
+            }
+          })();
+        ''').catchError((_) => null);
+      } catch (_) {}
     }
   }
 
@@ -3955,7 +3960,8 @@ class _BrowserScreenState extends State<BrowserScreen>
           ? () => _openInBackgroundTab(cleanUrl, isIncognito: tab.isIncognito)
           : null,
       onOpenInNewTab: isWebUrl
-          ? () => _openInNewTab(cleanUrl, isIncognito: tab.isIncognito, switchToTab: true)
+          ? () => _openInNewTab(cleanUrl,
+              isIncognito: tab.isIncognito, switchToTab: true)
           : null,
       onOpenInIncognito: isWebUrl
           ? () => _openInNewTab(cleanUrl, isIncognito: true, switchToTab: true)
@@ -5526,10 +5532,10 @@ class _BrowserScreenState extends State<BrowserScreen>
                   fontSize: 12,
                 ),
                 icon: Icon(Icons.arrow_drop_down, color: accentColor, size: 16),
-                items: ['Google', 'DuckDuckGo', 'Bing', 'Yahoo'].map((engine) {
+                items: SearchEngineConfig.engines.map((e) {
                   return DropdownMenuItem<String>(
-                    value: engine,
-                    child: Text(engine),
+                    value: e.name,
+                    child: Text(e.name),
                   );
                 }).toList(),
                 onChanged: (val) {
@@ -6003,8 +6009,10 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                 : isDark
                                                     ? (settings.isAmoledMode
                                                         ? (_isFocused
-                                                            ? const Color(0xFF1E1E2C)
-                                                            : const Color(0xFF12121B))
+                                                            ? const Color(
+                                                                0xFF1E1E2C)
+                                                            : const Color(
+                                                                0xFF12121B))
                                                         : (_isFocused
                                                             ? const Color(
                                                                 0xFF141424)
@@ -6043,7 +6051,11 @@ class _BrowserScreenState extends State<BrowserScreen>
                                               width: (activeTab.isIncognito ||
                                                       settings.incognitoEnabled)
                                                   ? 1.0
-                                                  : (_isFocused ? 1.2 : (settings.isAmoledMode ? 1.0 : 0.8)),
+                                                  : (_isFocused
+                                                      ? 1.2
+                                                      : (settings.isAmoledMode
+                                                          ? 1.0
+                                                          : 0.8)),
                                             ),
                                             boxShadow: settings.isAmoledMode
                                                 ? [
@@ -6053,9 +6065,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                               alpha: _isFocused
                                                                   ? 0.40
                                                                   : 0.20),
-                                                      blurRadius: _isFocused
-                                                          ? 10
-                                                          : 6,
+                                                      blurRadius:
+                                                          _isFocused ? 10 : 6,
                                                       spreadRadius: 0,
                                                     ),
                                                   ]
@@ -7071,6 +7082,9 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                               true,
                                                                           cacheEnabled:
                                                                               true,
+                                                                          forceDark: settings.forceDarkMode
+                                                                              ? ForceDark.ON
+                                                                              : ForceDark.OFF,
                                                                           supportZoom:
                                                                               settings.desktopMode || settings.pinchToZoom,
                                                                           contentBlockers:
@@ -7086,10 +7100,10 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                             (controller,
                                                                                 challenge) async {
                                                                           if (!mounted) {
-                                                                            return ServerTrustAuthResponse(
-                                                                                action: ServerTrustAuthResponseAction.CANCEL);
+                                                                            return ServerTrustAuthResponse(action: ServerTrustAuthResponseAction.CANCEL);
                                                                           }
-                                                                          final settings = _settings;
+                                                                          final settings =
+                                                                              _settings;
                                                                           if (settings
                                                                               .bypassSSL) {
                                                                             return ServerTrustAuthResponse(action: ServerTrustAuthResponseAction.PROCEED);
@@ -7105,8 +7119,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                               .url;
                                                                           if (reqUrl !=
                                                                               null) {
-                                                                            _handlePopupMessageForTab(
-                                                                                tab, JavaScriptMessage(message: reqUrl.toString()));
+                                                                            _handlePopupMessageForTab(tab,
+                                                                                JavaScriptMessage(message: reqUrl.toString()));
                                                                           }
                                                                           // Return false to cancel WebView's own window creation.
                                                                           // We handle the popup ourselves via _handlePopupMessageForTab.
@@ -7206,8 +7220,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                           }
                                                                           final res =
                                                                               await _redirectGuard.extractFromPage(
-                                                                            tabId:
-                                                                                tab.id,
+                                                                            tabId: tab.id,
                                                                             controller:
                                                                                 controller,
                                                                           );
@@ -7215,7 +7228,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                               res.decision) {
                                                                             case RedirectDecision.autoFollow:
                                                                               await Future.delayed(const Duration(milliseconds: 400));
-                                                                              if (tab.isDisposed || !mounted) break;
+                                                                              if (tab.isDisposed || !mounted)
+                                                                                break;
                                                                               try {
                                                                                 await controller.loadUrl(urlRequest: URLRequest(url: WebUri(res.targetUrl!)));
                                                                               } catch (e) {
@@ -7516,8 +7530,14 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                             return NavigationActionPolicy.CANCEL;
                                                                           }
 
-                                                                          // 3. Bypass check
-                                                                          // 4. Smart classification
+                                                                          // 3. Bypass check — user tapped "Continue browsing" on the
+                                                                          // interception sheet. The URL was marked via addBypass; a
+                                                                          // one-shot consume lets it load without re-interception.
+                                                                          if (_interceptor
+                                                                              .consumeBypass(url)) {
+                                                                            _log.info('[Browser] Bypassing download interception for: $url');
+                                                                            return NavigationActionPolicy.ALLOW;
+                                                                          }
                                                                           final classification = await PageIntentClassifier
                                                                               .instance
                                                                               .classifyWithContextAsync(
@@ -8102,7 +8122,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                   );
                   return Row(
                     children: [
-                      if (showTabSidebar) _buildVerticalTabSidebar(context, settings),
+                      if (showTabSidebar)
+                        _buildVerticalTabSidebar(context, settings),
                       Expanded(
                         child: Stack(
                           children: [

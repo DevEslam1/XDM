@@ -163,6 +163,10 @@ class AdBlockerService {
   Future<bool> updateFilters({bool force = false}) async {
     try {
       await AdBlockFilterUpdater().updateIfNeeded(force: force);
+      // Bump the generation counter so _rebuildContentBlockers() actually
+      // regenerates the native iOS/macOS content blockers after a filter
+      // update (without this, the _lastBuiltGen guard skipped the rebuild).
+      bumpGen();
       _rebuildContentBlockers();
       return true;
     } catch (e) {

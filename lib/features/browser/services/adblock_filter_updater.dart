@@ -163,6 +163,8 @@ class AdBlockFilterUpdater {
   static const _patternsKey = 'adblock_url_patterns';
   static const _cosmeticKey = 'adblock_cosmetic_rules_v2';
   static const _siteCosmeticKey = 'adblock_site_cosmetic_rules_v2';
+  static const _globalCosmeticExceptionsKey = 'adblock_global_cosmetic_exceptions_v2';
+  static const _siteCosmeticExceptionsKey = 'adblock_site_cosmetic_exceptions_v2';
   static const _scriptletsKey = 'adblock_scriptlet_rules';
 
   bool _initialized = false;
@@ -222,6 +224,10 @@ class AdBlockFilterUpdater {
     _cosmeticRules.addAll(cachedCosmetics);
     _scriptletRules.addAll(cachedScriptlets);
 
+    final globalCosmeticExceptions =
+        prefs.getStringList(_globalCosmeticExceptionsKey) ?? [];
+    _globalCosmeticExceptions.addAll(globalCosmeticExceptions);
+
     final siteCosmeticsStr = prefs.getString(_siteCosmeticKey);
     if (siteCosmeticsStr != null) {
       try {
@@ -232,6 +238,20 @@ class AdBlockFilterUpdater {
         }
       } catch (e) {
         _log.warning('Failed to load site cosmetic rules', e);
+      }
+    }
+
+    final siteCosmeticExceptionsStr = prefs.getString(_siteCosmeticExceptionsKey);
+    if (siteCosmeticExceptionsStr != null) {
+      try {
+        final decoded =
+            jsonDecode(siteCosmeticExceptionsStr) as Map<String, dynamic>;
+        for (final entry in decoded.entries) {
+          final rules = (entry.value as List).cast<String>();
+          _cosmeticExceptions[entry.key] = rules.toSet();
+        }
+      } catch (e) {
+        _log.warning('Failed to load site cosmetic exceptions', e);
       }
     }
   }
@@ -247,7 +267,10 @@ class AdBlockFilterUpdater {
 
   Future<bool> updateIfNeeded({bool force = false}) async {
     if (_inFlightUpdate != null) {
-      return _inFlightUpdate!.future;
+      // If a force-update is requested while one is in flight, wait for the
+      // current one and re-run if it was not a force update.
+      final result = await _inFlightUpdate!.future;
+      return force ? await updateIfNeeded(force: true) : result;
     }
     final completer = Completer<bool>();
     _inFlightUpdate = completer;
@@ -506,6 +529,16 @@ class AdBlockFilterUpdater {
           jsonEncode(_siteCosmeticRules.map((k, v) => MapEntry(k, v.toList())));
       await prefs.setString(_siteCosmeticKey, siteCosmeticsJson);
 
+      // Save cosmetic exceptions (global + per-site) so they survive restarts
+      await prefs.setStringList(
+        _globalCosmeticExceptionsKey,
+        _globalCosmeticExceptions.toList(),
+      );
+      final siteCosmeticExceptionsJson = jsonEncode(
+          _cosmeticExceptions.map((k, v) => MapEntry(k, v.toList())));
+      await prefs.setString(
+          _siteCosmeticExceptionsKey, siteCosmeticExceptionsJson);
+
       await prefs.setStringList(
         _scriptletsKey,
         _scriptletRules.take(1000).toList(),
@@ -531,6 +564,10 @@ class AdBlockFilterUpdater {
       _cosmeticRules.addAll(cachedCosmetics);
       _scriptletRules.addAll(cachedScriptlets);
 
+      _globalCosmeticExceptions.clear();
+      _globalCosmeticExceptions
+          .addAll(prefs.getStringList(_globalCosmeticExceptionsKey) ?? []);
+
       final siteCosmeticsStr = prefs.getString(_siteCosmeticKey);
       if (siteCosmeticsStr != null) {
         try {
@@ -538,6 +575,20 @@ class AdBlockFilterUpdater {
           for (final entry in decoded.entries) {
             final rules = (entry.value as List).cast<String>();
             _siteCosmeticRules[entry.key] = rules.toSet();
+          }
+          // ignore: empty_catches
+        } catch (e) {}
+      }
+
+      final siteCosmeticExceptionsStr =
+          prefs.getString(_siteCosmeticExceptionsKey);
+      if (siteCosmeticExceptionsStr != null) {
+        try {
+          final decoded = jsonDecode(
+                  siteCosmeticExceptionsStr) as Map<String, dynamic>;
+          for (final entry in decoded.entries) {
+            final rules = (entry.value as List).cast<String>();
+            _cosmeticExceptions[entry.key] = rules.toSet();
           }
           // ignore: empty_catches
         } catch (e) {}
@@ -594,13 +645,26 @@ class AdBlockFilterUpdater {
 
       // Scriptlet rules: ##+js(...) or site.com##+js(...)
       if (line.contains('##+js(')) {
-        final parts = line.split('##+js(');
-        if (parts.length == 2 && parts[1].isNotEmpty) {
-          // Extract the content inside the parentheses
-          final scriptlet = parts[1]
-              .substring(0, parts[1].length - (parts[1].endsWith(')') ? 1 : 0));
-          if (scriptlet.isNotEmpty) {
+        final idx = line.indexOf('##+js(');
+        final firstPart = line.substring(0, idx);
+        final scriptlet = line
+            .substring(idx + 6)
+            .substring(0, line.length - (line.endsWith(')') ? 1 : 0) - (idx + 6));
+        if (scriptlet.isNotEmpty) {
+          // A bare `##+js(...)` applies globally; a `domain##+js(...)`
+          // prefix only applies to that site, so it must NOT land in the
+          // global scriptlet set (which runs on every page).
+          if (firstPart.isEmpty) {
             _scriptletRules.add(scriptlet);
+          } else {
+            final domainsList = firstPart.split(',');
+            for (var domain in domainsList) {
+              domain = domain.trim().toLowerCase();
+              if (domain.isEmpty || domain.startsWith('~')) continue;
+              _siteCosmeticRules
+                  .putIfAbsent(domain, () => <String>{})
+                  .add(scriptlet);
+            }
           }
         }
         continue;
@@ -842,6 +906,8 @@ class AdBlockFilterUpdater {
     await prefs.remove(_siteCosmeticKey);
     await prefs.remove(_patternsKey);
     await prefs.remove(_scriptletsKey);
+    await prefs.remove(_globalCosmeticExceptionsKey);
+    await prefs.remove(_siteCosmeticExceptionsKey);
     for (final source in _sources) {
       await prefs.remove('adblock_domains_blocked_${source.name}');
       await prefs.remove('adblock_domains_excepted_${source.name}');

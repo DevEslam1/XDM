@@ -100,10 +100,59 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
     if (result == null) return;
     if (!mounted) return;
     final db = context.read<DatabaseService>();
+
+    // Guard against silently clobbering a *different* bookmark that already
+    // owns the target URL (saveBookmark dedupes by URL and updates that row).
+    final dup = _bookmarks.firstWhere(
+      (b) => b.url == result.url && b.id != bm.id,
+      orElse: () => bm,
+    );
+    if (dup.id != bm.id) {
+      final settings = context.read<SettingsProvider>();
+      final isDark = settings.isDarkMode;
+      final isRtl = L10n.isRtl(context);
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          title: Text(
+            isRtl ? 'إشارة مرجعية مكررة' : 'Duplicate bookmark',
+            style: TextStyle(
+              color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+            ),
+          ),
+          content: Text(
+            isRtl
+                ? 'يوجد بالفعل إشارة مرجعية تحمل هذا الرابط. سيتم دمجها معها بدلاً من إنشاء نسخة جديدة. متابعة؟'
+                : 'A bookmark with this URL already exists. Saving will merge into it instead of creating a new entry. Continue?',
+            style: TextStyle(
+              color:
+                  isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(isRtl ? 'متابعة' : 'Continue'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
+    }
+
     await db.saveBookmark(bm.copyWith(
       title: result.title,
       url: result.url,
       folder: result.folder,
+      clearFolder: result.folder == null,
     ));
     _load();
   }

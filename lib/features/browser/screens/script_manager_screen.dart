@@ -25,6 +25,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
   @override
   void initState() {
     super.initState();
+    _manager.addListener(_onManagerChanged);
     _manager.load();
     _searchController.addListener(() {
       if (mounted) {
@@ -35,8 +36,13 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
     });
   }
 
+  void _onManagerChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _manager.removeListener(_onManagerChanged);
     _searchController.dispose();
     super.dispose();
   }
@@ -117,7 +123,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final isAmoled = settings.isAmoledMode;
-    final manager = context.watch<UserScriptManager>();
+    final manager = _manager;
     final isRtl = L10n.isRtl(context);
 
     return Scaffold(

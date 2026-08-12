@@ -65,6 +65,30 @@ class ReaderModeService {
     }
   }
 
+  static String _escapeHtml(String input) {
+    return input
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+  }
+
+  /// Sanitizes page innerHTML before it is embedded into the reader view.
+  /// Removes executable markup (scripts, iframes, object/embed, forms) and
+  /// strips event-handler/style attributes and javascript:/data: URLs so page
+  /// content cannot execute in reader context.
+  static String _sanitizeContent(String htmlText) {
+    final stripped = htmlText
+        .replaceAll(RegExp(r'<\s*(script|iframe|object|embed|style|form|link)\b[^>]*>.*?<\s*/\s*\1\s*>', caseSensitive: false, dotAll: true), '')
+        .replaceAll(RegExp(r'<\s*(script|iframe|object|embed|style|form|link)\b[^>]*/?>', caseSensitive: false), '')
+        .replaceAll(RegExp(r'''\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)''', caseSensitive: false), '')
+        .replaceAll(RegExp(r'''\sstyle\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)''', caseSensitive: false), '')
+        .replaceAll(RegExp(r'<\s*a\s+[^>]*href\s*=\s*"?\s*(javascript|data)\s*:', caseSensitive: false, dotAll: true), '<a>')
+        .replaceAll(RegExp(r'href\s*=\s*"?\s*javascript\s*:', caseSensitive: false), 'href="#"');
+    return stripped;
+  }
+
   static String buildReaderHtml(
     ReaderArticle article, {
     required double fontSize,
@@ -109,10 +133,10 @@ class ReaderModeService {
 </head>
 <body>
   <div class="xdm-reader-header">
-    <h1>${article.title}</h1>
-    <small>${article.domain}</small>
+    <h1>${_escapeHtml(article.title)}</h1>
+    <small>${_escapeHtml(article.domain)}</small>
   </div>
-  ${article.content}
+  ${_sanitizeContent(article.content)}
 </body>
 </html>
 ''';

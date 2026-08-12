@@ -57,11 +57,27 @@ class ScriptInjector {
     })();
   ''';
 
-  /// CSS fallback for force-dark mode on platforms that do not expose the
-  /// WebView `forceDark` setting (Android handles it natively).
+  /// High-quality, smart Dark Mode CSS engine for non-native WebView rendering or CSS injection.
   static String buildForceDarkCss() => '''
-    html { filter: invert(0) hue-rotate(180deg); }
-    img, video { filter: invert(0) hue-rotate(180deg); }
+    :root {
+      color-scheme: dark !important;
+    }
+    html {
+      filter: invert(0.92) hue-rotate(180deg) !important;
+      background-color: #121212 !important;
+    }
+    /* Preserve natural appearance of multimedia, embedded objects, canvases and photos */
+    img, video, iframe, canvas, svg, picture, [style*="background-image"] {
+      filter: invert(1.08) hue-rotate(180deg) !important;
+    }
+    /* Darken scrollbars */
+    ::-webkit-scrollbar {
+      background-color: #1a1a1a !important;
+      color: #b2b2b2 !important;
+    }
+    ::-webkit-scrollbar-thumb {
+      background-color: #333333 !important;
+    }
   ''';
 
   /// CSS that hides all `<img>` and `<picture>` elements (image blocking).
@@ -448,8 +464,10 @@ $customJs
     final userJs = await UserScriptManager.instance.getJsForUrl(url);
     if (userJs.isNotEmpty) scripts.add(userJs);
 
-    // Fingerprint hiding
-    scripts.add(FingerprintManager.fingerprintHideJs);
+    // Fingerprint hiding (only when the user has opted in)
+    if (settings.antiFingerprinting) {
+      scripts.add(FingerprintManager.fingerprintHideJs);
+    }
 
     // Long-press handler (all pages; guarded against double-injection
     // by the __xdmLongPressInjected flag).
