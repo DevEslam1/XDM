@@ -7228,8 +7228,9 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                               res.decision) {
                                                                             case RedirectDecision.autoFollow:
                                                                               await Future.delayed(const Duration(milliseconds: 400));
-                                                                              if (tab.isDisposed || !mounted)
+                                                                              if (tab.isDisposed || !mounted) {
                                                                                 break;
+                                                                              }
                                                                               try {
                                                                                 await controller.loadUrl(urlRequest: URLRequest(url: WebUri(res.targetUrl!)));
                                                                               } catch (e) {

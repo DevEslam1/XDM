@@ -29,7 +29,7 @@ class DesktopTrayService with TrayListener {
       await windowManager.setPreventClose(true);
       await windowManager.setMinimumSize(const Size(420, 320));
 
-      await trayManager.setIcon('assets/icon/app_icon.png');
+      await trayManager.setIcon('assets/app_icon/icon.png');
       await trayManager.setToolTip('XDM — Extreme Download Manager');
       await trayManager.setContextMenu(
         Menu(
