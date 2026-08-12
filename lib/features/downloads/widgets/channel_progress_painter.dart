@@ -17,7 +17,9 @@ class ChannelProgressPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final value = progress.value.clamp(0.0, 1.0);
+    if (size.width <= 0 || size.height <= 0) return;
+    final rawVal = progress.value;
+    final value = (rawVal.isNaN || rawVal.isInfinite) ? 0.0 : rawVal.clamp(0.0, 1.0);
     final radius = size.height / 2;
 
     // Track

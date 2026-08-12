@@ -690,7 +690,7 @@ class DmxTextField extends StatelessWidget {
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     return Container(
-      height: 44,
+      constraints: const BoxConstraints(minHeight: 44),
       decoration: BoxDecoration(
         color: AppTheme.panelBg(isDark),
         borderRadius: BorderRadius.circular(12),

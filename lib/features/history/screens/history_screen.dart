@@ -169,7 +169,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             ),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
-                              height: 44,
+                              constraints: const BoxConstraints(minHeight: 44),
                               decoration: BoxDecoration(
                                 color: isDark
                                     ? AppTheme.surface
@@ -311,7 +311,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                         gridDelegate:
                                             const SliverGridDelegateWithMaxCrossAxisExtent(
                                           maxCrossAxisExtent: 540,
-                                          mainAxisExtent: 155,
+                                          mainAxisExtent: 175,
                                           crossAxisSpacing: 14,
                                           mainAxisSpacing: 12,
                                         ),
@@ -324,18 +324,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                         },
                                       );
                                     }
-                                    return ListView.builder(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 16.0),
-                                      physics: const BouncingScrollPhysics(),
-                                      itemCount: historyTasks.length,
-                                      itemBuilder: (context, index) {
-                                        return DownloadCard(
-                                          task: historyTasks[index],
-                                          compact: true,
-                                        );
-                                      },
-                                    );
+                                     return ListView.separated(
+                                       padding: const EdgeInsets.symmetric(
+                                           horizontal: 16.0, vertical: 4.0),
+                                       physics: const BouncingScrollPhysics(),
+                                       itemCount: historyTasks.length,
+                                       separatorBuilder: (context, index) =>
+                                           const SizedBox(height: 8),
+                                       itemBuilder: (context, index) {
+                                         return DownloadCard(
+                                           task: historyTasks[index],
+                                           compact: true,
+                                         );
+                                       },
+                                     );
                                   },
                                 ),
                         ),

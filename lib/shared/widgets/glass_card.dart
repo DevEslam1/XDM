@@ -140,16 +140,24 @@ class _GlassCardState extends State<GlassCard> {
 
     if (widget.onTap == null) return withBorder;
 
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTap: widget.onTap,
-      child: AnimatedScale(
-        scale: _pressed ? 0.98 : 1.0,
-        duration: AppTheme.motionFast,
-        curve: AppTheme.motionSpring,
-        child: withBorder,
+    return Semantics(
+      button: true,
+      enabled: true,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _pressed = false),
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          onTap: widget.onTap,
+          child: AnimatedScale(
+            scale: _pressed ? 0.98 : 1.0,
+            duration: AppTheme.motionFast,
+            curve: AppTheme.motionSpring,
+            child: withBorder,
+          ),
+        ),
       ),
     );
   }

@@ -157,11 +157,11 @@ class CategoriesScreen extends StatelessWidget {
                     padding: const EdgeInsets.all(16.0),
                     physics: const BouncingScrollPhysics(),
                     gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 220,
+                      mainAxisExtent: 160,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
-                      childAspectRatio: 1.1,
                     ),
                     itemCount: categoryCards.length,
                     itemBuilder: (context, index) {

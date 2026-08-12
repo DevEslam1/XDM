@@ -138,6 +138,24 @@ class NotificationsSettingsPage extends StatelessWidget with HapticHelper {
                   ),
                 ),
               ],
+              ActionSettingTile(
+                accentColor: accent,
+                title: isRtl ? 'اختبار الإشعارات' : 'Test Notification',
+                subtitle: isRtl
+                    ? 'إرسال إشعار تجريبي للتحقق من التنبيهات'
+                    : 'Send a test alert to verify notification service',
+                buttonText: isRtl ? 'تجربة' : 'TEST',
+                onTap: () async {
+                  triggerHaptic(settings);
+                  await NotificationService().showDownloadComplete(
+                    notificationId: 9999,
+                    title: isRtl ? 'إشعار تجريبي' : 'Test Notification',
+                    body: isRtl
+                        ? 'إشعارات XDM تعمل بنجاح!'
+                        : 'XDM notification engine is active!',
+                  );
+                },
+              ),
             ],
           ),
         ],

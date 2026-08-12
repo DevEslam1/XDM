@@ -174,7 +174,7 @@ class CategoryDetailScreen extends StatelessWidget {
                                 gridDelegate:
                                     const SliverGridDelegateWithMaxCrossAxisExtent(
                                   maxCrossAxisExtent: 540,
-                                  mainAxisExtent: 155,
+                                  mainAxisExtent: 175,
                                   crossAxisSpacing: 14,
                                   mainAxisSpacing: 12,
                                 ),

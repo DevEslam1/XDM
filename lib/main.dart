@@ -558,8 +558,9 @@ class _AppErrorBoundaryWidgetState extends State<_AppErrorBoundaryWidget> {
       theme: ThemeData.dark(),
       home: Scaffold(
         backgroundColor: const Color(0xFF0F1117),
-        body: Center(
-          child: SingleChildScrollView(
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: Container(
               constraints: const BoxConstraints(maxWidth: 440),
@@ -688,8 +689,9 @@ class _AppErrorBoundaryWidgetState extends State<_AppErrorBoundaryWidget> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _FpsOverlay extends StatefulWidget {

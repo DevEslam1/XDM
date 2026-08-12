@@ -179,6 +179,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
                       const SizedBox(height: 24),
                       TextField(
                         controller: _pinController,
+                        autofocus: true,
                         enabled: !_isLockedOut,
                         keyboardType: TextInputType.number,
                         inputFormatters: [

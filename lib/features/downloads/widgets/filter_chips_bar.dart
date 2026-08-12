@@ -258,8 +258,8 @@ class _StatusFilterButtons extends StatelessWidget {
         : <BoxShadow>[];
 
     Widget buttonContent = Container(
-      height: 38,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      constraints: const BoxConstraints(minHeight: 40),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(10),
@@ -369,9 +369,17 @@ class _CategoryChip extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          GestureDetector(
-            onTap: onRemove,
-            child: Icon(Icons.close_rounded, size: 14, color: color),
+          Semantics(
+            button: true,
+            label: 'Remove category filter',
+            child: GestureDetector(
+              onTap: onRemove,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.all(4.0),
+                child: Icon(Icons.close_rounded, size: 14, color: color),
+              ),
+            ),
           ),
         ],
       ),

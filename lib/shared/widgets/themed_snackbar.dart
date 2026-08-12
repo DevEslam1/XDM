@@ -326,15 +326,19 @@ class _SnackbarBodyState extends State<_SnackbarBody>
                   // Dismiss
                   Padding(
                     padding: const EdgeInsetsDirectional.only(end: 6),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: widget.onClose,
-                      child: Padding(
-                        padding: const EdgeInsets.all(6),
-                        child: Icon(
-                          Icons.close_rounded,
-                          size: 14,
-                          color: mutedClr,
+                    child: Semantics(
+                      button: true,
+                      label: 'Dismiss notification',
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: widget.onClose,
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 14,
+                            color: mutedClr,
+                          ),
                         ),
                       ),
                     ),

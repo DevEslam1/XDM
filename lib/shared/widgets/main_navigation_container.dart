@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:dmx/core/utils/localization.dart';
+import 'package:dmx/features/add_download/widgets/add_download_dialog.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/shared/widgets/dmx_app_icon.dart';
@@ -223,11 +224,39 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
           builder: (context, navState, _) {
             final currentIndex = navState.activeTabIndex;
 
-            final bodyContent = Directionality(
-              textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-              child: _FadeIndexedStack(
-                index: currentIndex,
-                children: _screens,
+            final bodyWithShortcuts = CallbackShortcuts(
+              bindings: {
+                const SingleActivator(LogicalKeyboardKey.keyN, control: true):
+                    () {
+                  AddDownloadDialog.show(context);
+                },
+                const SingleActivator(LogicalKeyboardKey.digit1, control: true):
+                    () {
+                  context.read<DownloadProvider>().setActiveTabIndex(0);
+                },
+                const SingleActivator(LogicalKeyboardKey.digit2, control: true):
+                    () {
+                  context.read<DownloadProvider>().setActiveTabIndex(1);
+                },
+                const SingleActivator(LogicalKeyboardKey.digit3, control: true):
+                    () {
+                  context.read<DownloadProvider>().setActiveTabIndex(2);
+                },
+                const SingleActivator(LogicalKeyboardKey.digit4, control: true):
+                    () {
+                  context.read<DownloadProvider>().setActiveTabIndex(3);
+                },
+                const SingleActivator(LogicalKeyboardKey.digit5, control: true):
+                    () {
+                  context.read<DownloadProvider>().setActiveTabIndex(4);
+                },
+              },
+              child: Directionality(
+                textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+                child: _FadeIndexedStack(
+                  index: currentIndex,
+                  children: _screens,
+                ),
               ),
             );
 
@@ -256,10 +285,10 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                             currentIndex: currentIndex,
                           ),
                           const VerticalDivider(width: 1),
-                          Expanded(child: bodyContent),
+                          Expanded(child: bodyWithShortcuts),
                         ],
                       )
-                    : bodyContent,
+                    : bodyWithShortcuts,
                 bottomNavigationBar: showSideNav
                     ? null
                     : screenType == ScreenType.phone
@@ -393,8 +422,9 @@ class _PhoneBottomNavBar extends StatelessWidget {
               child: Directionality(
                 textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
                 child: Container(
-                  height: 68,
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  constraints: const BoxConstraints(minHeight: 68),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12.0, vertical: 4.0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
@@ -473,7 +503,7 @@ class _TabletFloatingNavBar extends StatelessWidget {
         child: Container(
           margin: const EdgeInsets.only(bottom: 24, left: 32, right: 32),
           alignment: Alignment.bottomCenter,
-          height: 70,
+          constraints: const BoxConstraints(minHeight: 70),
           child: Container(
             constraints: const BoxConstraints(maxWidth: 460),
             decoration: settingsTuple.classicUi

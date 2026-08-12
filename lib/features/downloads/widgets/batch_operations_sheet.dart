@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/utils/localization.dart';
+import '../../../core/app_theme.dart';
 import '../provider/download_provider.dart';
 import '../models/download_task.dart';
 
@@ -109,8 +110,8 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
           if (widget.initialAction == null ||
               widget.initialAction == BatchAction.resume) ...[
             ListTile(
-              leading:
-                  const Icon(Icons.play_arrow_rounded, color: Colors.green),
+              leading: const Icon(Icons.play_arrow_rounded,
+                  color: AppTheme.neonGreen),
               title: Text(L10n.of(context, 'resume_selected')),
               onTap: () async {
                 final navigator = Navigator.of(context);
@@ -136,7 +137,8 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
           if (widget.initialAction == null ||
               widget.initialAction == BatchAction.pause) ...[
             ListTile(
-              leading: const Icon(Icons.pause_rounded, color: Colors.amber),
+              leading:
+                  const Icon(Icons.pause_rounded, color: AppTheme.neonAmber),
               title: Text(L10n.of(context, 'pause_selected')),
               onTap: () async {
                 final navigator = Navigator.of(context);
@@ -155,7 +157,8 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
           if (widget.initialAction == null ||
               widget.initialAction == BatchAction.changeCategory) ...[
             ListTile(
-              leading: const Icon(Icons.category_rounded, color: Colors.blue),
+              leading:
+                  const Icon(Icons.category_rounded, color: AppTheme.neonBlue),
               title: Text(L10n.of(context, 'change_category')),
               onTap: () async {
                 final navigator = Navigator.of(context);
@@ -184,7 +187,7 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
                   value: _deleteFiles,
                   title: Text(L10n.of(context, 'delete_files_disk')),
                   controlAffinity: ListTileControlAffinity.leading,
-                  activeColor: Colors.redAccent,
+                  activeColor: AppTheme.neonRed,
                   onChanged: (val) {
                     setCheckboxState(() {
                       _deleteFiles = val ?? false;
@@ -195,12 +198,12 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
             ),
             ListTile(
               leading: const Icon(Icons.delete_forever_rounded,
-                  color: Colors.redAccent),
+                  color: AppTheme.neonRed),
               title: Text(
                 L10n.of(context, 'delete_downloads_count',
                     args: {'count': count}),
                 style: const TextStyle(
-                    color: Colors.redAccent, fontWeight: FontWeight.bold),
+                    color: AppTheme.neonRed, fontWeight: FontWeight.bold),
               ),
               onTap: () async {
                 final navigator = Navigator.of(context);

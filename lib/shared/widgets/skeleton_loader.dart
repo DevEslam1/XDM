@@ -54,21 +54,23 @@ class _SkeletonCardState extends State<SkeletonCard>
     final baseColor = isDark ? AppTheme.surface : AppTheme.lightSurface;
     final highlightColor = isDark ? AppTheme.cardBg : Colors.grey.shade300;
 
-    return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, child) {
-        return Container(
-          height: widget.height,
-          decoration: BoxDecoration(
-            color: Color.lerp(baseColor, highlightColor, _animation.value),
-            borderRadius: BorderRadius.circular(widget.borderRadius),
-            border: Border.all(
-              color: isDark ? AppTheme.border : AppTheme.lightBorder,
-              width: 1.0,
+    return ExcludeSemantics(
+      child: AnimatedBuilder(
+        animation: _animation,
+        builder: (context, child) {
+          return Container(
+            height: widget.height,
+            decoration: BoxDecoration(
+              color: Color.lerp(baseColor, highlightColor, _animation.value),
+              borderRadius: BorderRadius.circular(widget.borderRadius),
+              border: Border.all(
+                color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                width: 1.0,
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

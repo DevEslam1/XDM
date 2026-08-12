@@ -56,22 +56,27 @@ Future<void> showUpdateInfoDialog(
               ),
             ),
             const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.panelBg(isDark),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isDark
-                      ? AppTheme.borderSubtle
-                      : AppTheme.lightBorderSubtle,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 180),
+              child: SingleChildScrollView(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.panelBg(isDark),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDark
+                          ? AppTheme.borderSubtle
+                          : AppTheme.lightBorderSubtle,
+                    ),
+                  ),
+                  child: Text(
+                    update.changelog.isNotEmpty
+                        ? update.changelog
+                        : L10n.of(dialogCtx, 'update_general_fixes'),
+                    style: const TextStyle(fontSize: 13),
+                  ),
                 ),
-              ),
-              child: Text(
-                update.changelog.isNotEmpty
-                    ? update.changelog
-                    : L10n.of(dialogCtx, 'update_general_fixes'),
-                style: const TextStyle(fontSize: 13),
               ),
             ),
           ],
@@ -124,9 +129,14 @@ Future<void> showMandatoryUpdateDialog(
         child: DmxDialog(
           title: L10n.of(dialogCtx, 'update_mandatory_title'),
           icon: Icons.system_update_rounded,
-          content: Text(
-            '${L10n.of(dialogCtx, 'update_mandatory_title')}\n\n${update.changelog}',
-            style: const TextStyle(fontSize: 13),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 180),
+            child: SingleChildScrollView(
+              child: Text(
+                '${L10n.of(dialogCtx, 'update_mandatory_title')}\n\n${update.changelog}',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
           ),
           actions: [
             DmxButton.filled(

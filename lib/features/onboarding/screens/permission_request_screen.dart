@@ -272,140 +272,143 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
           textDirection:
               L10n.isRtl(context) ? TextDirection.rtl : TextDirection.ltr,
           child: SafeArea(
-            child: Column(
-              children: [
-                const Spacer(flex: 1),
-                // Title
-                Text(
-                  L10n.of(context, 'permission_title'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: isDark
-                        ? AppTheme.textPrimary
-                        : AppTheme.lightTextPrimary,
-                    fontFamily: 'Space Grotesk',
-                    fontWeight: FontWeight.bold,
-                    fontSize: 26,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Column(
+                children: [
+                  const SizedBox(height: 16),
+                  // Title
+                  Text(
+                    L10n.of(context, 'permission_title'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textPrimary
+                          : AppTheme.lightTextPrimary,
+                      fontFamily: 'Space Grotesk',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 26,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  L10n.of(context, 'permission_subtitle'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: secClr, fontSize: 14, height: 1.4),
-                ),
-                const SizedBox(height: 40),
-
-                // Permission cards
-                _PermissionCard(
-                  icon: Icons.folder_outlined,
-                  title: L10n.of(context, 'permission_storage_title'),
-                  description: L10n.of(context, 'permission_storage_desc'),
-                  isLoading: _storageOpening,
-                  isGranted: _storageGranted,
-                  isPermanentlyDenied: _storagePermanentlyDenied,
-                  onRequest: _requestStorage,
-                  accentColor:
-                      isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                  isDark: isDark,
-                ),
-                const SizedBox(height: 12),
-                _PermissionCard(
-                  icon: Icons.notifications_outlined,
-                  title: L10n.of(context, 'permission_notifications_title'),
-                  description: L10n.of(
-                    context,
-                    'permission_notifications_desc',
+                  const SizedBox(height: 8),
+                  Text(
+                    L10n.of(context, 'permission_subtitle'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: secClr, fontSize: 14, height: 1.4),
                   ),
-                  isLoading: _notificationsOpening,
-                  isGranted: _notificationsGranted,
-                  isPermanentlyDenied: _notificationsPermanentlyDenied,
-                  onRequest: _requestNotifications,
-                  accentColor:
-                      isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
-                  isDark: isDark,
-                ),
-                const SizedBox(height: 12),
-                _PermissionCard(
-                  icon: Icons.battery_std_outlined,
-                  title: L10n.of(context, 'permission_battery_title'),
-                  description: _batteryOpening
-                      ? L10n.of(context, 'permission_battery_opening')
-                      : L10n.of(context, 'permission_battery_desc'),
-                  isLoading: _batteryOpening,
-                  isGranted: _batteryGranted,
-                  isPermanentlyDenied: false,
-                  onRequest: _requestBattery,
-                  accentColor:
-                      isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
-                  isDark: isDark,
-                ),
-                const SizedBox(height: 12),
-                _DownloadLocationCard(
-                  path: _downloadPath,
-                  isPicking: _isPickingPath,
-                  onPick: _pickDownloadPath,
-                  isDark: isDark,
-                ),
+                  const SizedBox(height: 24),
 
-                const Spacer(flex: 1),
+                  // Permission cards
+                  _PermissionCard(
+                    icon: Icons.folder_outlined,
+                    title: L10n.of(context, 'permission_storage_title'),
+                    description: L10n.of(context, 'permission_storage_desc'),
+                    isLoading: _storageOpening,
+                    isGranted: _storageGranted,
+                    isPermanentlyDenied: _storagePermanentlyDenied,
+                    onRequest: _requestStorage,
+                    accentColor:
+                        isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 12),
+                  _PermissionCard(
+                    icon: Icons.notifications_outlined,
+                    title: L10n.of(context, 'permission_notifications_title'),
+                    description: L10n.of(
+                      context,
+                      'permission_notifications_desc',
+                    ),
+                    isLoading: _notificationsOpening,
+                    isGranted: _notificationsGranted,
+                    isPermanentlyDenied: _notificationsPermanentlyDenied,
+                    onRequest: _requestNotifications,
+                    accentColor:
+                        isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 12),
+                  _PermissionCard(
+                    icon: Icons.battery_std_outlined,
+                    title: L10n.of(context, 'permission_battery_title'),
+                    description: _batteryOpening
+                        ? L10n.of(context, 'permission_battery_opening')
+                        : L10n.of(context, 'permission_battery_desc'),
+                    isLoading: _batteryOpening,
+                    isGranted: _batteryGranted,
+                    isPermanentlyDenied: false,
+                    onRequest: _requestBattery,
+                    accentColor:
+                        isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                    isDark: isDark,
+                  ),
+                  const SizedBox(height: 12),
+                  _DownloadLocationCard(
+                    path: _downloadPath,
+                    isPicking: _isPickingPath,
+                    onPick: _pickDownloadPath,
+                    isDark: isDark,
+                  ),
 
-                // Continue button
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                  child: Column(
-                    children: [
-                      if (!_folderChosen) ...[
-                        Text(
-                          L10n.of(
-                            context,
-                            'permission_download_location_required',
+                  const SizedBox(height: 32),
+
+                  // Continue button
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Column(
+                      children: [
+                        if (!_folderChosen) ...[
+                          Text(
+                            L10n.of(
+                              context,
+                              'permission_download_location_required',
+                            ),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: isDark
+                                  ? AppTheme.neonAmber
+                                  : AppTheme.lightNeonAmber,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: isDark
-                                ? AppTheme.neonAmber
-                                : AppTheme.lightNeonAmber,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                          const SizedBox(height: 10),
+                        ],
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: ElevatedButton(
+                            onPressed: _folderChosen ? _continueToApp : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: (isDark
+                                      ? AppTheme.neonBlue
+                                      : AppTheme.lightNeonBlue)
+                                  .withValues(alpha: 0.3),
+                              disabledForegroundColor: Colors.white70,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: Text(
+                              L10n.of(context, 'permission_continue'),
+                              style: const TextStyle(
+                                fontFamily: 'Space Grotesk',
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 10),
                       ],
-                      SizedBox(
-                        width: double.infinity,
-                        height: 52,
-                        child: ElevatedButton(
-                          onPressed: _folderChosen ? _continueToApp : null,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: isDark
-                                ? AppTheme.neonBlue
-                                : AppTheme.lightNeonBlue,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: (isDark
-                                    ? AppTheme.neonBlue
-                                    : AppTheme.lightNeonBlue)
-                                .withValues(alpha: 0.3),
-                            disabledForegroundColor: Colors.white70,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: Text(
-                            L10n.of(context, 'permission_continue'),
-                            style: const TextStyle(
-                              fontFamily: 'Space Grotesk',
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

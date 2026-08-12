@@ -426,12 +426,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
 
               // ─── Next / Start Button ───
-              NeonGlowButton(
-                isFilled: true,
-                color: _currentPage == _pageCount - 1
-                    ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
-                    : accent,
-                onPressed: () {
+              Flexible(
+                child: NeonGlowButton(
+                  isFilled: true,
+                  color: _currentPage == _pageCount - 1
+                      ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+                      : accent,
+                  onPressed: () {
                   _triggerHaptic(settings);
                   if (_currentPage < _pageCount - 1) {
                     _pageController.nextPage(
@@ -453,7 +454,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     ? L10n.of(context, 'onboarding_start')
                     : L10n.of(context, 'onboarding_next'),
               ),
-            ],
+            ),
+          ],
           ),
         ],
       ),
