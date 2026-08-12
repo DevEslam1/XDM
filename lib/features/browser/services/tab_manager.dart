@@ -246,7 +246,7 @@ class TabManager extends ChangeNotifier {
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_disposedTabIds.contains(oldest.id)) {
-          _disposedTabIds.add(oldest.id);
+          _recordDisposedTabId(oldest.id);
           oldest.dispose();
         }
       });
@@ -412,8 +412,13 @@ class TabManager extends ChangeNotifier {
           }
           for (final oldTab in _tabs) {
             if (_disposedTabIds.contains(oldTab.id)) continue;
-            _disposedTabIds.add(oldTab.id);
+            _recordDisposedTabId(oldTab.id);
             cleanupTabState(oldTab.id);
+            try {
+              oldTab.dispose();
+            } catch (e, st) {
+              Logger('tab_manager').warning('[tab_manager] oldTab dispose failed', e, st);
+            }
           }
           _tabs
             ..clear()
@@ -442,9 +447,10 @@ class TabManager extends ChangeNotifier {
   Future<void> applyRestoredTabs(List<SavedBrowserTab> saved) async {
     for (final tab in _tabs) {
       if (_disposedTabIds.contains(tab.id)) continue;
-      _disposedTabIds.add(tab.id);
+      _recordDisposedTabId(tab.id);
+      cleanupTabState(tab.id);
       try {
-        tab.progressNotifier.dispose();
+        tab.dispose();
       } catch (e, st) {
         Logger('tab_manager').warning('[tab_manager] operation failed', e, st);
       }

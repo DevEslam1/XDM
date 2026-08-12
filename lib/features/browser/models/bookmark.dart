@@ -16,35 +16,31 @@ class Bookmark {
     required this.createdAt,
   });
 
-  /// Hostname stripped of `www.` — used for compact displays.
   String get domain {
     try {
       var host = Uri.parse(url).host;
       if (host.startsWith('www.')) host = host.substring(4);
       return host.isEmpty ? url : host;
     } catch (e, st) {
-      Logger('bookmark').warning('[bookmark] operation failed', e, st);
+      Logger('bookmark').warning('[bookmark] domain parse failed', e, st);
       return url;
     }
   }
 
-  /// First glyph for the avatar tile.
   String get initial {
     final source = title.trim().isNotEmpty ? title.trim() : domain;
     return source.isEmpty ? '?' : source[0].toUpperCase();
   }
 
-  /// Deterministic accent hue derived from the domain, so every bookmark
-  /// gets its own stable identity color.
   Color get accentColor {
     const palette = [
-      Color(0xFF3B82F6), // blue
-      Color(0xFF8B5CF6), // violet
-      Color(0xFF10B981), // green
-      Color(0xFFF59E0B), // amber
-      Color(0xFFEF4444), // red
-      Color(0xFF06B6D4), // cyan
-      Color(0xFFFACC15), // yellow
+      Color(0xFF3B82F6),
+      Color(0xFF8B5CF6),
+      Color(0xFF10B981),
+      Color(0xFFF59E0B),
+      Color(0xFFEF4444),
+      Color(0xFF06B6D4),
+      Color(0xFFFACC15),
     ];
     return palette[domain.hashCode.abs() % palette.length];
   }
@@ -79,8 +75,6 @@ class Bookmark {
     );
   }
 
-  /// FIX(4): accepts INTEGER ms-epoch (current DB format) and legacy ISO
-  /// strings so previously-serialized data keeps parsing.
   static DateTime parseTimestamp(dynamic value) {
     if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
     if (value is num) {
@@ -91,4 +85,12 @@ class Bookmark {
     }
     return DateTime.now();
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Bookmark && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 }

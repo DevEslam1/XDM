@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import '../../../core/app_theme.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
@@ -8,6 +7,51 @@ import '../../../shared/widgets/section_header.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../services/ad_blocker_service.dart';
 import 'script_manager_screen.dart';
+
+/// Centralized search engine definitions — single source of truth.
+/// Used by both [BrowserSettingsScreen] and the browser navigation logic.
+class SearchEngineConfig {
+  final String name;
+  final String searchUrlPrefix;
+
+  const SearchEngineConfig({
+    required this.name,
+    required this.searchUrlPrefix,
+  });
+
+  static const List<SearchEngineConfig> engines = [
+    SearchEngineConfig(
+        name: 'Google', searchUrlPrefix: 'https://google.com/search?q='),
+    SearchEngineConfig(
+        name: 'DuckDuckGo', searchUrlPrefix: 'https://duckduckgo.com/?q='),
+    SearchEngineConfig(
+        name: 'Bing', searchUrlPrefix: 'https://www.bing.com/search?q='),
+    SearchEngineConfig(
+        name: 'Yahoo', searchUrlPrefix: 'https://search.yahoo.com/search?p='),
+    SearchEngineConfig(
+        name: 'Ecosia', searchUrlPrefix: 'https://www.ecosia.org/search?q='),
+    SearchEngineConfig(
+        name: 'Brave', searchUrlPrefix: 'https://search.brave.com/search?q='),
+    SearchEngineConfig(
+        name: 'Startpage',
+        searchUrlPrefix: 'https://www.startpage.com/sp/search?query='),
+  ];
+
+  /// Returns the search URL prefix for [engineName], falling back to Google.
+  static String prefixFor(String engineName) {
+    return engines
+        .firstWhere(
+          (e) => e.name == engineName,
+          orElse: () => engines.first,
+        )
+        .searchUrlPrefix;
+  }
+
+  /// Returns true if [engineName] is a recognized engine.
+  static bool isValid(String engineName) {
+    return engines.any((e) => e.name == engineName);
+  }
+}
 
 class BrowserSettingsScreen extends StatefulWidget {
   final bool isSnifferEnabled;
@@ -45,16 +89,6 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
     if (mounted) setState(() {});
   }
 
-  static const List<String> _searchEngines = [
-    'Google',
-    'DuckDuckGo',
-    'Bing',
-    'Yahoo',
-    'Ecosia',
-    'Brave',
-    'Startpage',
-  ];
-
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
@@ -66,6 +100,11 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
     final textClr = isDark ? Colors.white : Colors.black87;
     final subtitleClr = isDark ? Colors.white54 : Colors.black54;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+
+    // Use centralized engine list; fallback to Google if stored value is invalid.
+    final currentEngine = SearchEngineConfig.isValid(settings.searchEngine)
+        ? settings.searchEngine
+        : 'Google';
 
     return Scaffold(
       backgroundColor: bgClr,
@@ -101,7 +140,6 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          // ── Section 1: Search Engine ──────────────────────────────
           SectionHeader(
             title: L10n.isRtl(context) ? 'البحث والأداء' : 'Search Engine',
             subtitle: L10n.isRtl(context)
@@ -134,24 +172,22 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                       fontSize: 14),
                 ),
                 subtitle: Text(
-                  settings.searchEngine,
+                  currentEngine,
                   style: TextStyle(color: subtitleClr, fontSize: 12),
                 ),
                 trailing: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: _searchEngines.contains(settings.searchEngine)
-                        ? settings.searchEngine
-                        : 'Google',
+                    value: currentEngine,
                     dropdownColor:
                         isDark ? AppTheme.surface : AppTheme.lightSurface,
                     style: TextStyle(color: textClr, fontSize: 14),
                     icon: Icon(Icons.keyboard_arrow_down_rounded,
                         color: accent, size: 22),
                     borderRadius: BorderRadius.circular(14),
-                    items: _searchEngines.map((engine) {
+                    items: SearchEngineConfig.engines.map((engine) {
                       return DropdownMenuItem<String>(
-                        value: engine,
-                        child: Text(engine),
+                        value: engine.name,
+                        child: Text(engine.name),
                       );
                     }).toList(),
                     onChanged: (val) {
@@ -165,10 +201,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
               ),
             ],
           ),
-
           const SizedBox(height: 24),
-
-          // ── Section 2: Privacy & Shield ───────────────────────────
           SectionHeader(
             title:
                 L10n.isRtl(context) ? 'الأمان والخصوصية' : 'Privacy & Shield',
@@ -206,7 +239,9 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
               _divider(isDark),
               _buildSettingsSwitch(
                 context: context,
-                icon: _snifferEnabled ? Icons.radar_rounded : Icons.radar_outlined,
+                icon: _snifferEnabled
+                    ? Icons.radar_rounded
+                    : Icons.radar_outlined,
                 title: L10n.isRtl(context) ? 'كاشف الوسائط' : 'Media Sniffer',
                 subtitle: L10n.isRtl(context)
                     ? 'الكشف عن الفيديوهات وملفات الصوت للتحميل'
@@ -224,10 +259,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
               ),
             ],
           ),
-
           const SizedBox(height: 24),
-
-          // ── Section 3: Display & Web Rendering ────────────────────
           SectionHeader(
             title: L10n.isRtl(context)
                 ? 'العرض والتصفح'
@@ -345,10 +377,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
               ),
             ],
           ),
-
           const SizedBox(height: 24),
-
-          // ── Section 4: Developer & Scripts ────────────────────────
           SectionHeader(
             title: L10n.isRtl(context)
                 ? 'أدوات المطورين والسكربتات'
@@ -409,9 +438,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-          // Footer info
           Center(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -494,7 +521,6 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
   }
 }
 
-/// Polished icon badge used in settings rows.
 class _SettingIconBadge extends StatelessWidget {
   final IconData icon;
   final Color color;

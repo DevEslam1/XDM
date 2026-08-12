@@ -54,21 +54,48 @@ class AdBlockerService {
     _notifyListeners();
   }
 
+  /// Normalizes any domain or URL input into a (host, path) tuple.
+  static (String host, String path) extractHostAndPath(String input) {
+    if (input.isEmpty) return ('', '');
+    var s = input.trim();
+    String path = '';
+    if (s.contains('://')) {
+      try {
+        final uri = Uri.parse(s);
+        return (uri.host.toLowerCase(), uri.path);
+      } catch (_) {}
+    }
+    if (s.startsWith('//')) {
+      try {
+        final uri = Uri.parse('https:$s');
+        return (uri.host.toLowerCase(), uri.path);
+      } catch (_) {}
+    }
+    final slashIdx = s.indexOf('/');
+    if (slashIdx != -1) {
+      path = s.substring(slashIdx);
+      s = s.substring(0, slashIdx);
+    }
+    final colonIdx = s.indexOf(':');
+    if (colonIdx != -1) {
+      s = s.substring(0, colonIdx);
+    }
+    return (s.toLowerCase(), path);
+  }
+
   bool isAllowListed(String domainOrUrl) {
     if (domainOrUrl.isEmpty) return false;
-    final host = domainOrUrl.contains('://')
-        ? (Uri.tryParse(domainOrUrl)?.host ?? domainOrUrl)
-        : domainOrUrl;
-    final lower = host.toLowerCase();
+    final (host, _) = extractHostAndPath(domainOrUrl);
+    if (host.isEmpty) return false;
 
     final allowList = AdBlockFilterUpdater().allowListedDomains;
 
     // Check exact match first (O(1))
-    if (allowList.contains(lower)) return true;
+    if (allowList.contains(host)) return true;
 
     // Walk up the domain tree to check parent domains (O(depth), typically < 5)
     // Avoids O(N) iteration over the entire allowlist (which can be 50k+ domains)
-    final parts = lower.split('.');
+    final parts = host.split('.');
     for (var i = 1; i < parts.length - 1; i++) {
       final parent = parts.sublist(i).join('.');
       if (allowList.contains(parent)) return true;
@@ -298,12 +325,12 @@ class AdBlockerService {
   }
 
   /// Returns true if [url] should be blocked by the ad blocker.
+  /// Returns true if [url] should be blocked by the ad blocker.
   bool shouldBlockUrl(String url) {
     if (!_enabled || url.isEmpty) return false;
     try {
-      final host = url.contains('://')
-          ? (Uri.parse(url).host.toLowerCase())
-          : url.toLowerCase();
+      final (host, path) = extractHostAndPath(url);
+      if (host.isEmpty) return false;
 
       if (isAllowListed(host)) return false;
 
@@ -317,10 +344,8 @@ class AdBlockerService {
         return false;
       }
 
-      // FIX: Check the downloaded filter lists FIRST — these contain
+      // Check the downloaded filter lists FIRST — these contain
       // 50,000+ domains from EasyList, EasyPrivacy, AdGuard, etc.
-      // The old code only checked a hardcoded set of ~50 domains,
-      // making the entire filter download pipeline useless for URL blocking.
       if (AdBlockFilterUpdater().shouldBlock(url)) {
         _recordBlocked(host);
         return true;
@@ -345,10 +370,8 @@ class AdBlockerService {
   void recordBlockedRequest(String url) {
     _log.fine('Blocked: $url');
     try {
-      final host = url.contains('://')
-          ? (Uri.parse(url).host.toLowerCase())
-          : url.toLowerCase();
-      _recordBlocked(host);
+      final (host, _) = extractHostAndPath(url);
+      _recordBlocked(host.isNotEmpty ? host : url);
     } catch (_) {
       _recordBlocked(url);
     }
@@ -1049,15 +1072,37 @@ $customCss
 
   // Force ytcfg settings to disable enforcement
   try {
-    var originalSet = window.ytcfg && window.ytcfg.set;
-    if (originalSet) {
-      window.ytcfg.set = function(key, val) {
-        if (key === 'EXPERIMENT_FLAGS' && val) {
-          val.web_enable_adblock_detection = false;
-          val.web_block_adblock = false;
-        }
-        return originalSet.apply(this, arguments);
-      };
+    function hookYtcfg(ytcfg) {
+      if (!ytcfg || ytcfg.__xdmHooked) return;
+      ytcfg.__xdmHooked = true;
+      var origSet = ytcfg.set;
+      if (typeof origSet === 'function') {
+        ytcfg.set = function(key, val) {
+          if (key === 'EXPERIMENT_FLAGS' && val) {
+            val.web_enable_adblock_detection = false;
+            val.web_block_adblock = false;
+          }
+          if (key === 'PLAYER_VARS' || key === 'WEB_PLAYER_CONTEXT_CONFIGS') {
+            val = stripAds(val);
+          }
+          return origSet.apply(this, arguments);
+        };
+      }
+    }
+    if (window.ytcfg) {
+      hookYtcfg(window.ytcfg);
+    } else {
+      var _ytcfg = undefined;
+      try {
+        Object.defineProperty(window, 'ytcfg', {
+          get: function() { return _ytcfg; },
+          set: function(val) {
+            _ytcfg = val;
+            if (val) hookYtcfg(val);
+          },
+          configurable: true
+        });
+      } catch(e) {}
     }
   } catch(e) {}
 
@@ -1086,16 +1131,6 @@ $customCss
       }
       if (stripTries > 30) clearInterval(stripInterval);
     }, 200);
-    // Also hook into ytcfg.set for PLAYER_VARS responses
-    if (window.ytcfg && window.ytcfg.set) {
-      var _origYtcfgSet = window.ytcfg.set;
-      window.ytcfg.set = function(key, val) {
-        if (key === 'PLAYER_VARS' || key === 'WEB_PLAYER_CONTEXT_CONFIGS') {
-          val = stripAds(val);
-        }
-        return _origYtcfgSet.apply(this, arguments);
-      };
-    }
   } catch(e) {}
 })();
 ''';

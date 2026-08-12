@@ -338,11 +338,15 @@ class _BrowserScreenState extends State<BrowserScreen>
       return _zeroNotifier;
     }
     final tabId = _tabs[_currentTabIndex].id;
+    final count = _blockedAdsPerTab[tabId] ?? 0;
     final existing = _blockedAdsNotifiers[tabId];
     if (existing != null) {
+      // Sync the cached notifier with the latest count to prevent stale badge.
+      if (existing.value != count) {
+        existing.value = count;
+      }
       return existing;
     }
-    final count = _blockedAdsPerTab[tabId] ?? 0;
     if (_zeroNotifierTabId != tabId) {
       _zeroNotifierTabId = tabId;
       _zeroNotifier.value = count;
@@ -972,21 +976,25 @@ class _BrowserScreenState extends State<BrowserScreen>
     final userAgent = isDesktop
         ? FingerprintManager.desktopUserAgent
         : _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings);
-    await tab.controller?.setSettings(
-      settings: InAppWebViewSettings(
-        useShouldOverrideUrlLoading: true,
-        useOnDownloadStart: true,
-        userAgent: userAgent,
-        supportZoom: isDesktop || settings.pinchToZoom,
-        incognito: tab.isIncognito,
-        contentBlockers: isAdBlock ? _adBlocker.contentBlockers : [],
-        javaScriptEnabled: true,
-        domStorageEnabled: true,
-        databaseEnabled: true,
-        supportMultipleWindows: true,
-        javaScriptCanOpenWindowsAutomatically: true,
-      ),
-    );
+    try {
+      await tab.controller?.setSettings(
+        settings: InAppWebViewSettings(
+          useShouldOverrideUrlLoading: true,
+          useOnDownloadStart: true,
+          userAgent: userAgent,
+          supportZoom: isDesktop || settings.pinchToZoom,
+          incognito: tab.isIncognito,
+          contentBlockers: isAdBlock ? _adBlocker.contentBlockers : [],
+          javaScriptEnabled: true,
+          domStorageEnabled: true,
+          databaseEnabled: true,
+          supportMultipleWindows: true,
+          javaScriptCanOpenWindowsAutomatically: true,
+        ),
+      );
+    } catch (e) {
+      _log.warning('[Browser] Failed to apply site settings: $e');
+    }
   }
 
   void _configureController(BrowserTab tab, InAppWebViewController controller) {
@@ -1029,8 +1037,6 @@ class _BrowserScreenState extends State<BrowserScreen>
         _handleAutofillMessage(tab, msg);
       },
     );
-
-    _applySiteSettings(tab, tab.url);
   }
 
   Future<void> _handleAutofillMessage(BrowserTab tab, String message) async {
@@ -1052,9 +1058,22 @@ class _BrowserScreenState extends State<BrowserScreen>
         final name = entry.key.toLowerCase();
         final value = entry.value.toString();
         if (value.length > 200 || value.length < 2) continue;
-        if (name.contains('password') ||
-            name.contains('token') ||
-            name.contains('secret')) {
+        const sensitiveKeywords = [
+          'password',
+          'token',
+          'secret',
+          'card',
+          'cvv',
+          'pan',
+          'ssn',
+          'social_security',
+          'credit',
+          'debit',
+          'iban',
+          'swift',
+          'routing',
+        ];
+        if (sensitiveKeywords.any((kw) => name.contains(kw))) {
           continue;
         }
         if (name.contains('email') ||
@@ -1461,13 +1480,16 @@ class _BrowserScreenState extends State<BrowserScreen>
           if (window.__xdmYtAdInterval) { clearInterval(window.__xdmYtAdInterval); window.__xdmYtAdInterval = null; }
         ''').catchError((_) => null);
       } catch (_) {}
+      // Cancel pending loading timeout to prevent setState on a suspended tab.
+      _loadingTimeoutTimers[tab.id]?.cancel();
+      _loadingTimeoutTimers.remove(tab.id);
+      // Cancel pending media scan debounce.
+      _mediaScanDebouncePerTab[tab.id]?.cancel();
+      _mediaScanDebouncePerTab.remove(tab.id);
       tab.isSuspended = true;
+      tab.isTimedOut = false;
+      tab.isLoading = false;
       tab.controller = null;
-      // Bug #3 fix: null out the PRC so that _resumeTab's ?= guard
-      // re-creates a fresh controller. Without this, the framework disposes
-      // the PRC when the InAppWebView widget is unmounted, but the stale
-      // (disposed) reference remains, causing
-      // "AndroidPullToRefreshController was used after being disposed".
       tab.pullToRefreshController = null;
     }
   }
@@ -1606,13 +1628,15 @@ class _BrowserScreenState extends State<BrowserScreen>
     _mediaScanFailed.remove(tabId);
     _loadingTimeoutTimers[tabId]?.cancel();
     _loadingTimeoutTimers.remove(tabId);
-    // Fix #10: Clean up per-tab counter maps when a tab is closed.
-    final adNotifier = _blockedAdsNotifiers[tabId];
-    _blockedAdsNotifiers.remove(tabId);
+    final adNotifier = _blockedAdsNotifiers.remove(tabId);
     _blockedAdsPerTab.remove(tabId);
     _blockedPopupsPerTab.remove(tabId);
     if (adNotifier != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => adNotifier.dispose());
+      try {
+        adNotifier.dispose();
+      } catch (_) {
+        // Already disposed — safe to ignore.
+      }
     }
 
     final tabIndex = _tabs.indexWhere((t) => t.id == tabId);
@@ -1772,10 +1796,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                               trailing: const Icon(Icons.restore_rounded,
                                   size: 18, color: AppTheme.neonBlue),
                               onTap: () {
+                                _recentlyClosedTabs.removeAt(index);
                                 Navigator.pop(sheetContext);
-                                setSheetState(() {
-                                  _recentlyClosedTabs.removeAt(index);
-                                });
                                 _openInNewTab(
                                   closed.url,
                                   isIncognito: closed.isIncognito,
@@ -2148,13 +2170,12 @@ class _BrowserScreenState extends State<BrowserScreen>
       );
       _redirectGuard.reset(newTab.id);
       _tabs.add(newTab);
-      if (switchToTab) {
-        _currentTabIndex = _tabs.length - 1;
-        _urlController.text = url;
-        _showBarsNotifier.value = true;
-      }
     });
-    _saveTabs();
+    if (switchToTab) {
+      _switchTab(_tabs.length - 1);
+    } else {
+      _saveTabs();
+    }
   }
 
   void _suggestDownload(String url, PageClassification classification) {
@@ -2352,9 +2373,15 @@ class _BrowserScreenState extends State<BrowserScreen>
     _pendingTimers.clear();
 
     _navDebounce?.cancel();
+    _navStateDebounceTimer?.cancel();
+    for (final timer in _mediaScanDebouncePerTab.values) {
+      timer.cancel();
+    }
+    _mediaScanDebouncePerTab.clear();
     _downloadProvider?.removeListener(_onDownloadProviderChanged);
 
     _urlController.dispose();
+    _findTextController.dispose();
     _focusNode.dispose();
     _dashboardScrollController.dispose();
     super.dispose();
@@ -2547,8 +2574,13 @@ class _BrowserScreenState extends State<BrowserScreen>
       // Dispose AFTER the frame — widget is now unmounted, no double-dispose.
       WidgetsBinding.instance
           .addPostFrameCallback((_) => tabToDispose.dispose());
-      _switchToPreviousTab();
-      _saveTabs();
+      if (!_switchToPreviousTab()) {
+        final fallbackIdx = _currentTabIndex.clamp(0, _tabs.length - 1);
+        _tabManager.currentIndex = -1;
+        _switchTab(fallbackIdx);
+      } else {
+        _saveTabs();
+      }
 
       // Undo snackbar — re-creates the tab at the same URL if tapped.
       if (mounted) {
@@ -2685,16 +2717,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (url.isEmpty) return;
 
     final settings = _settings;
-    final engine = settings.searchEngine;
-
-    String searchPrefix = 'https://google.com/search?q=';
-    if (engine == 'DuckDuckGo') {
-      searchPrefix = 'https://duckduckgo.com/?q=';
-    } else if (engine == 'Bing') {
-      searchPrefix = 'https://www.bing.com/search?q=';
-    } else if (engine == 'Yahoo') {
-      searchPrefix = 'https://search.yahoo.com/search?p=';
-    }
+    final searchPrefix = SearchEngineConfig.prefixFor(settings.searchEngine);
 
     final lowerUrl = url.toLowerCase();
     if (lowerUrl.startsWith('http://') ||
@@ -3372,6 +3395,17 @@ class _BrowserScreenState extends State<BrowserScreen>
         for (final task in tasks) {
           if (task.status == DownloadStatus.completed ||
               task.status == DownloadStatus.failed) {
+            // Delete the physical file from disk if it exists.
+            if (task.localFilePath.isNotEmpty) {
+              try {
+                final file = File(task.localFilePath);
+                if (await file.exists()) {
+                  await file.delete();
+                }
+              } catch (_) {
+                // File may be locked or already deleted — safe to ignore.
+              }
+            }
             await db.deleteTask(task.id);
           }
         }
@@ -3705,16 +3739,8 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final settings = _settings;
     if (_tabs.length >= settings.maxTabs) return;
-    final oldIdx = _currentTabIndex;
-    setState(() {
-      _tabs.add(_createNewTab());
-      _currentTabIndex = _tabs.length - 1;
-      _urlController.text = '';
-      _showBarsNotifier.value = true;
-      _updateLruOrder();
-    });
-    _onTabSwitched(oldIdx, _currentTabIndex);
-    _saveTabs();
+    final isIncog = _tabs[_currentTabIndex].isIncognito;
+    _openInNewTab('', isIncognito: isIncog, switchToTab: true);
     _focusUrlBar();
   }
 
@@ -3927,36 +3953,10 @@ class _BrowserScreenState extends State<BrowserScreen>
           ? () => _openInBackgroundTab(cleanUrl, isIncognito: tab.isIncognito)
           : null,
       onOpenInNewTab: isWebUrl
-          ? () {
-              setState(() {
-                final newTab = _createNewTab(
-                  initialUrl: cleanUrl,
-                  isIncognito: tab.isIncognito,
-                );
-                _redirectGuard.reset(newTab.id);
-                _tabs.add(newTab);
-                _currentTabIndex = _tabs.length - 1;
-                _urlController.text = cleanUrl;
-                _showBarsNotifier.value = true;
-              });
-              _saveTabs();
-            }
+          ? () => _openInNewTab(cleanUrl, isIncognito: tab.isIncognito, switchToTab: true)
           : null,
       onOpenInIncognito: isWebUrl
-          ? () {
-              setState(() {
-                final newTab = _createNewTab(
-                  initialUrl: cleanUrl,
-                  isIncognito: true,
-                );
-                _redirectGuard.reset(newTab.id);
-                _tabs.add(newTab);
-                _currentTabIndex = _tabs.length - 1;
-                _urlController.text = cleanUrl;
-                _showBarsNotifier.value = true;
-              });
-              _saveTabs();
-            }
+          ? () => _openInNewTab(cleanUrl, isIncognito: true, switchToTab: true)
           : null,
       sources: sources,
     );
@@ -3995,7 +3995,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return Directionality(
           textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
           child: ClipRRect(
@@ -4164,7 +4164,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                   ),
                                 ),
                                 onPressed: () {
-                                  Navigator.pop(context);
+                                  Navigator.pop(sheetContext);
                                   if (isMagnetSignal) {
                                     AddDownloadDialog.show(context,
                                         prefilledUrl: downloadUrl);
@@ -4200,7 +4200,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                 isFilled: true,
                                 color: accent,
                                 onPressed: () {
-                                  Navigator.pop(context);
+                                  Navigator.pop(sheetContext);
                                   _startDirectDownload(downloadUrl);
                                 },
                                 text: L10n.of(context, 'browser_download_btn'),
@@ -4419,7 +4419,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           child: DmxBackdropFilter(
@@ -4529,7 +4529,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(14),
                                 onTap: () {
-                                  Navigator.pop(context);
+                                  Navigator.pop(sheetContext);
                                   final title = src['title'] as String?;
                                   final ext = src['ext'] as String?;
                                   String? filename;
@@ -4704,13 +4704,17 @@ class _BrowserScreenState extends State<BrowserScreen>
         String rawHtml = '';
         if (result is String) {
           rawHtml = result;
-          if (rawHtml.startsWith('"') && rawHtml.endsWith('"')) {
+          // evaluateJavascript returns a JSON-encoded string for string results.
+          // Always attempt jsonDecode first to correctly unescape \", \\, \n, etc.
+          if (rawHtml.isNotEmpty) {
             try {
-              rawHtml = jsonDecode(rawHtml) as String;
-            } catch (_) {
-              if (rawHtml.length > 2) {
-                rawHtml = rawHtml.substring(1, rawHtml.length - 1);
+              final decoded = jsonDecode(rawHtml);
+              if (decoded is String) {
+                rawHtml = decoded;
               }
+            } catch (_) {
+              // If jsonDecode fails, the result was not JSON-quoted.
+              // Use the raw string as-is.
             }
           }
         }
@@ -4951,15 +4955,7 @@ class _BrowserScreenState extends State<BrowserScreen>
             _cleanupTabState(t.id);
           }
           _tabManager.clearAllTabs();
-          final homeTab = _createNewTab();
-          _tabManager.openInNewTab(homeTab.url, switchToTab: true);
-          _currentTabIndex = 0;
           _urlController.text = '';
-        });
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          for (final t in oldTabs) {
-            t.dispose();
-          }
         });
         _saveTabs();
       });
@@ -7043,9 +7039,11 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                         onReceivedServerTrustAuthRequest:
                                                                             (controller,
                                                                                 challenge) async {
-                                                                          final settings = Provider.of<SettingsProvider>(
-                                                                              context,
-                                                                              listen: false);
+                                                                          if (!mounted) {
+                                                                            return ServerTrustAuthResponse(
+                                                                                action: ServerTrustAuthResponseAction.CANCEL);
+                                                                          }
+                                                                          final settings = _settings;
                                                                           if (settings
                                                                               .bypassSSL) {
                                                                             return ServerTrustAuthResponse(action: ServerTrustAuthResponseAction.PROCEED);
@@ -7061,14 +7059,12 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                               .url;
                                                                           if (reqUrl !=
                                                                               null) {
-                                                                            // Fix #2: Route window.open() to a new tab via
-                                                                            // popup handling (ad-block, download-intercept,
-                                                                            // background tab creation) rather than replacing
-                                                                            // the current page in the same controller.
-                                                                            _handlePopupMessageForTab(tab,
-                                                                                JavaScriptMessage(message: reqUrl.toString()));
+                                                                            _handlePopupMessageForTab(
+                                                                                tab, JavaScriptMessage(message: reqUrl.toString()));
                                                                           }
-                                                                          return true;
+                                                                          // Return false to cancel WebView's own window creation.
+                                                                          // We handle the popup ourselves via _handlePopupMessageForTab.
+                                                                          return false;
                                                                         },
                                                                         onConsoleMessage:
                                                                             (controller,
@@ -7173,15 +7169,25 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                               res.decision) {
                                                                             case RedirectDecision.autoFollow:
                                                                               await Future.delayed(const Duration(milliseconds: 400));
-                                                                              await controller.loadUrl(urlRequest: URLRequest(url: WebUri(res.targetUrl!)));
+                                                                              if (tab.isDisposed || !mounted) break;
+                                                                              try {
+                                                                                await controller.loadUrl(urlRequest: URLRequest(url: WebUri(res.targetUrl!)));
+                                                                              } catch (e) {
+                                                                                _log.warning('[Browser] autoFollow loadUrl failed: $e');
+                                                                              }
                                                                               break;
                                                                             case RedirectDecision.promptUser:
-                                                                              if (context.mounted) {
+                                                                              if (context.mounted && !tab.isDisposed) {
                                                                                 RedirectSheet.show(
                                                                                   context,
                                                                                   candidates: res.candidates,
                                                                                   onSelected: (u) {
-                                                                                    controller.loadUrl(urlRequest: URLRequest(url: WebUri(u)));
+                                                                                    if (tab.isDisposed || !mounted) return;
+                                                                                    try {
+                                                                                      controller.loadUrl(urlRequest: URLRequest(url: WebUri(u)));
+                                                                                    } catch (e) {
+                                                                                      _log.warning('[Browser] promptUser loadUrl failed: $e');
+                                                                                    }
                                                                                   },
                                                                                 );
                                                                               }

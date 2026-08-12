@@ -173,6 +173,7 @@ class AdBlockFilterUpdater {
   final Set<String> _cosmeticRules = {};
   final Map<String, Set<String>> _siteCosmeticRules = {};
   final Map<String, Set<String>> _cosmeticExceptions = {};
+  final Set<String> _globalCosmeticExceptions = {};
   final Set<String> _scriptletRules = {};
 
   // PERF (TASK 4): LRU cache for cosmeticRulesForHost.
@@ -319,10 +320,12 @@ class AdBlockFilterUpdater {
       final file = File(destPath);
       final sink = file.openWrite();
       try {
-        await response.pipe(sink);
-      } finally {
+        await sink.addStream(response);
         await sink.flush();
         await sink.close();
+      } catch (_) {
+        await sink.close();
+        rethrow;
       }
 
       // Reject suspiciously small responses (< 1 KB → probably an error page)
@@ -356,6 +359,7 @@ class AdBlockFilterUpdater {
     _cosmeticRules.clear();
     _siteCosmeticRules.clear();
     _cosmeticExceptions.clear();
+    _globalCosmeticExceptions.clear();
     _scriptletRules.clear();
 
     final prefs = await SharedPreferences.getInstance();
@@ -588,6 +592,20 @@ class AdBlockFilterUpdater {
         continue;
       }
 
+      // Scriptlet rules: ##+js(...) or site.com##+js(...)
+      if (line.contains('##+js(')) {
+        final parts = line.split('##+js(');
+        if (parts.length == 2 && parts[1].isNotEmpty) {
+          // Extract the content inside the parentheses
+          final scriptlet = parts[1]
+              .substring(0, parts[1].length - (parts[1].endsWith(')') ? 1 : 0));
+          if (scriptlet.isNotEmpty) {
+            _scriptletRules.add(scriptlet);
+          }
+        }
+        continue;
+      }
+
       // Cosmetic exception rules: #@#.ad-container, site.com#@#.ad-container
       if (line.contains('#@#')) {
         final idx = line.indexOf('#@#');
@@ -597,6 +615,7 @@ class AdBlockFilterUpdater {
           final selector = secondPart;
           if (firstPart.isEmpty) {
             _cosmeticRules.remove(selector);
+            _globalCosmeticExceptions.add(selector);
           } else {
             final domainsList = firstPart.split(',');
             for (var domain in domainsList) {
@@ -643,18 +662,6 @@ class AdBlockFilterUpdater {
         continue;
       }
 
-      // Scriptlet rules: ##+js(...) or site.com##+js(...)
-      if (line.contains('##+js(')) {
-        final parts = line.split('##+js(');
-        if (parts.length == 2 && parts[1].isNotEmpty) {
-          // Extract the content inside the parentheses
-          final scriptlet = parts[1]
-              .substring(0, parts[1].length - (parts[1].endsWith(')') ? 1 : 0));
-          if (scriptlet.isNotEmpty) {
-            _scriptletRules.add(scriptlet);
-          }
-        }
-      }
       // ABP-style ||domain^ rules
       final domainMatch = RegExp(
         r'^\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9])\^',
@@ -681,7 +688,9 @@ class AdBlockFilterUpdater {
       // URL path patterns: /ads/banner
       if (line.startsWith('/') && !line.startsWith('//')) {
         _urlPatterns.add(line);
-        _urlPatternsTrie.insert(line);
+        if (!line.contains('*')) {
+          _urlPatternsTrie.insert(line);
+        }
         continue;
       }
     }
@@ -761,6 +770,7 @@ class AdBlockFilterUpdater {
 
     // Slow path: compute and store.
     final rules = <String>{}..addAll(_cosmeticRules);
+    rules.removeAll(_globalCosmeticExceptions);
     if (cacheKey.isNotEmpty) {
       if (_siteCosmeticRules.containsKey(cacheKey)) {
         rules.addAll(_siteCosmeticRules[cacheKey]!);
@@ -818,6 +828,8 @@ class AdBlockFilterUpdater {
     _downloadedTrackingDomains.clear();
     _allowListedDomains.clear();
     _siteCosmeticRules.clear();
+    _cosmeticExceptions.clear();
+    _globalCosmeticExceptions.clear();
     _urlPatterns.clear();
     _urlPatternsTrie.clear();
     _cosmeticRules.clear();

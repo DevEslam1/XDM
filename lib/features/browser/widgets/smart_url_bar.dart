@@ -63,6 +63,19 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
   }
 
   @override
+  void didUpdateWidget(SmartUrlBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onTextChanged);
+      widget.controller.addListener(_onTextChanged);
+    }
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode.removeListener(_onFocusChanged);
+      widget.focusNode.addListener(_onFocusChanged);
+    }
+  }
+
+  @override
   void dispose() {
     _debounce?.cancel();
     _removeOverlay();
@@ -384,6 +397,7 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
 
   void _removeOverlay() {
     _overlayEntry?.remove();
+    _overlayEntry?.dispose();
     _overlayEntry = null;
   }
 

@@ -210,12 +210,13 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
                       accent: accent,
                       isDark: isDark,
                       onTap: () async {
+                        final rootCtx = Navigator.of(context).context;
                         Navigator.pop(context);
                         await Clipboard.setData(ClipboardData(text: url));
-                        if (context.mounted) {
+                        if (rootCtx.mounted) {
                           ThemedSnackbar.show(
-                            context,
-                            message: isRtl ? '\u062a\u0645 \u0646\u0633\u062e \u0627\u0644\u0631\u0627\u0628\u0637' : 'Link copied',
+                            rootCtx,
+                            message: isRtl ? 'تم نسخ الرابط' : 'Link copied',
                             color: accent,
                             icon: Icons.copy_rounded,
                             isDarkMode: isDark,
