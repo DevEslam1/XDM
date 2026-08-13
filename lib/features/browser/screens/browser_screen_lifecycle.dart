@@ -3,8 +3,6 @@ part of 'browser_screen.dart';
 /// Widget/app lifecycle: init/dispose, inactivity timeout, settings
 /// reloads, and app close/quit handling.
 mixin _LifecycleMixin on _BrowserScreenStateBase {
-
-
   @override
   void initState() {
     super.initState();
@@ -36,7 +34,6 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     _dashboardScrollController.addListener(_onDashboardScroll);
     unawaited(_adBlocker.init());
   }
-
 
   Future<void> _updateAdBlockSettings() async {
     if (!mounted) return;
@@ -77,7 +74,6 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     _resetInactivityTimer();
   }
 
-
   @override
   void _resetInactivityTimer({bool force = false}) {
     final now = DateTime.now();
@@ -92,7 +88,6 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
       onTimeout: _onInactivityTimeout,
     );
   }
-
 
   void _onInactivityTimeout() {
     _inactivityWatchdog.hibernate(
@@ -110,7 +105,6 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     );
   }
 
-
   @override
   void didHaveMemoryPressure() {
     super.didHaveMemoryPressure();
@@ -126,7 +120,6 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
       });
     }
   }
-
 
   @override
   void dispose() {
@@ -213,7 +206,6 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     super.dispose();
   }
 
-
   Future<void> _loadSnifferPref() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -226,7 +218,6 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
       _log.warning('[DMX Browser] Failed to load sniffer preference: $e');
     }
   }
-
 
   @override
   Future<void> _setSnifferEnabled(bool value) async {
@@ -250,7 +241,6 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     }
   }
 
-
   Future<void> _loadCustomJsCss() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -265,7 +255,6 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
       _log.warning('[DMX Browser] Failed to load custom JS/CSS: $e');
     }
   }
-
 
   @override
   void didChangeDependencies() {
@@ -303,7 +292,6 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
       });
     }
   }
-
 
   @override
   Future<void> _handleCloseOrQuit() async {
@@ -381,7 +369,6 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     }
   }
 
-
   @override
   Future<void> _confirmQuitBrowser() async {
     final settings = _settings;
@@ -450,15 +437,15 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     }
   }
 
-
   Future<void> _quitBrowser() async {
     final settings = _settings;
     triggerHaptic(settings);
     try {
       final normalTabs = _tabs.where((t) => !t.isIncognito).toList();
-      final activeTab = (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length)
-          ? _tabs[_currentTabIndex]
-          : null;
+      final activeTab =
+          (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length)
+              ? _tabs[_currentTabIndex]
+              : null;
       final String? activeTabId = (activeTab != null && !activeTab.isIncognito)
           ? activeTab.id
           : (normalTabs.isNotEmpty ? normalTabs.last.id : null);
@@ -494,7 +481,6 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
       context.read<DownloadProvider>().setActiveTabIndex(0);
     }
   }
-
 
   void _teardownBrowserServices() {
     for (final timer in _pendingTimers) {

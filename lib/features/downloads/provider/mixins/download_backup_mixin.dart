@@ -282,21 +282,59 @@ mixin DownloadBackupMixin {
       final newTasks = <DownloadTask>[];
       for (final item in list) {
         final Map<String, dynamic> map = Map<String, dynamic>.from(item as Map);
-        final task = DownloadTask.fromMap(map);
+        var task = DownloadTask.fromMap(map);
+        // C6: Coerce exported active tasks to paused to prevent zombie live downloads
+        if (task.status == DownloadStatus.downloading ||
+            task.status == DownloadStatus.queued ||
+            task.status == DownloadStatus.merging) {
+          task = task.copyWith(
+            status: DownloadStatus.paused,
+            speed: 0,
+            clearEta: true,
+            pausedByUser: true,
+          );
+        }
         if (replace || !providerTasks.any((t) => t.id == task.id)) {
           newTasks.add(task);
         }
       }
 
-      if (replace) {
-        await providerDatabaseService.clearAllTasks();
-        providerTasks.clear();
-      }
-
       if (newTasks.isNotEmpty) {
-        providerTasks.addAll(newTasks);
-        filteredTasksDirty = true;
+        // C5: Save new tasks first before pruning old tasks so DB failures don't wipe existing tasks
         await providerDatabaseService.saveTasks(newTasks);
+
+        if (replace) {
+          final oldTaskIds = providerTasks.map((t) => t.id).toSet();
+          final newTaskIds = newTasks.map((t) => t.id).toSet();
+          final toRemoveIds = oldTaskIds.difference(newTaskIds);
+
+          providerTasks
+            ..clear()
+            ..addAll(newTasks);
+
+          for (final id in toRemoveIds) {
+            await providerDatabaseService.deleteTask(id);
+          }
+        } else {
+          final existingIds = providerTasks.map((t) => t.id).toSet();
+          for (final task in newTasks) {
+            if (!existingIds.contains(task.id)) {
+              providerTasks.add(task);
+            }
+          }
+        }
+
+        filteredTasksDirty = true;
+        notifyListeners();
+        updateTelemetryWidget();
+      } else if (replace) {
+        // If importing empty list with replace=true
+        final oldTaskIds = providerTasks.map((t) => t.id).toList();
+        providerTasks.clear();
+        for (final id in oldTaskIds) {
+          await providerDatabaseService.deleteTask(id);
+        }
+        filteredTasksDirty = true;
         notifyListeners();
         updateTelemetryWidget();
       }

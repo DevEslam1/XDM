@@ -627,7 +627,9 @@ class _TabletFloatingNavBar extends StatelessWidget {
       ),
     );
   }
-}class _NavigationRailWidget extends StatelessWidget {
+}
+
+class _NavigationRailWidget extends StatelessWidget {
   final ({
     bool isDark,
     bool isAmoled,
@@ -660,7 +662,7 @@ class _TabletFloatingNavBar extends StatelessWidget {
 
     final isPhoneLandscapeMode = isPhoneLandscape(context);
     final baseRailWidth = isPhoneLandscapeMode ? 78.0 : 84.0;
-    
+
     // Account for camera notch / display cutout on the leading edge (left in LTR, right in RTL)
     final mediaPadding = MediaQuery.paddingOf(context);
     final sideInset = isRtl ? mediaPadding.right : mediaPadding.left;
@@ -669,8 +671,12 @@ class _TabletFloatingNavBar extends StatelessWidget {
     final sideBorderColor = isDark
         ? (settingsTuple.isAmoled
             ? AppTheme.amoledBorder
-            : (settingsTuple.classicUi ? AppTheme.border : AppTheme.glassBorder))
-        : (settingsTuple.classicUi ? AppTheme.lightBorder : AppTheme.lightGlassBorder);
+            : (settingsTuple.classicUi
+                ? AppTheme.border
+                : AppTheme.glassBorder))
+        : (settingsTuple.classicUi
+            ? AppTheme.lightBorder
+            : AppTheme.lightGlassBorder);
 
     return Container(
       width: totalRailWidth,
@@ -728,7 +734,9 @@ class _TabletFloatingNavBar extends StatelessWidget {
                           activeColor: activeColor,
                           inactiveColor: inactiveColor,
                           onTap: () {
-                            if (settingsTuple.vibration) HapticFeedback.lightImpact();
+                            if (settingsTuple.vibration) {
+                              HapticFeedback.lightImpact();
+                            }
                             downloadProvider.setActiveTabIndex(0);
                           },
                         ),
@@ -741,7 +749,9 @@ class _TabletFloatingNavBar extends StatelessWidget {
                           activeColor: activeColor,
                           inactiveColor: inactiveColor,
                           onTap: () {
-                            if (settingsTuple.vibration) HapticFeedback.lightImpact();
+                            if (settingsTuple.vibration) {
+                              HapticFeedback.lightImpact();
+                            }
                             downloadProvider.setActiveTabIndex(1);
                           },
                         ),
@@ -755,7 +765,9 @@ class _TabletFloatingNavBar extends StatelessWidget {
                               settingsProvider.activeSettingsTabIndex, isDark),
                           inactiveColor: inactiveColor,
                           onTap: () {
-                            if (settingsTuple.vibration) HapticFeedback.lightImpact();
+                            if (settingsTuple.vibration) {
+                              HapticFeedback.lightImpact();
+                            }
                             downloadProvider.setActiveTabIndex(2);
                           },
                         ),
@@ -843,7 +855,8 @@ class _RailItem extends StatelessWidget {
                   Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      Icon(displayIcon, color: color, size: isLandscapeMode ? 22 : 24),
+                      Icon(displayIcon,
+                          color: color, size: isLandscapeMode ? 22 : 24),
                       if (index == 0)
                         PositionedDirectional(
                           top: -4,
@@ -896,7 +909,8 @@ class _RailItem extends StatelessWidget {
                         style: TextStyle(
                           color: color,
                           fontSize: isLandscapeMode ? 9.5 : 10.5,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.w500,
                         ),
                         maxLines: 1,
                         textAlign: TextAlign.center,

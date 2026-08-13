@@ -41,7 +41,8 @@ class SingleInstanceService {
     if (Platform.isLinux || Platform.isMacOS) {
       final userHome = Platform.environment['HOME'];
       if (userHome != null && userHome.isNotEmpty) {
-        return File(p.join(userHome, '.config', 'xdm', 'xdm_instance_$_port.token'));
+        return File(
+            p.join(userHome, '.config', 'xdm', 'xdm_instance_$_port.token'));
       }
       return File('/nonexistent/xdm_instance_$_port.token');
     } else if (Platform.isWindows) {

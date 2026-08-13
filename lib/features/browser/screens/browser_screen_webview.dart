@@ -3,8 +3,6 @@ part of 'browser_screen.dart';
 /// WebView wiring: controller setup, page start/stop/url events,
 /// script injection, favicon fetch, autofill, and background suspension.
 mixin _WebViewMixin on _BrowserScreenStateBase {
-
-
   @override
   Future<void> _safeReloadTab(BrowserTab tab) async {
     if (!mounted) return;
@@ -53,7 +51,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     }
   }
 
-
   @override
   Future<void> _refreshTabForPull(BrowserTab tab) async {
     await _safeReloadTab(tab);
@@ -74,7 +71,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       }
     }
   }
-
 
   Future<void> _applySiteSettings(BrowserTab tab, String url) async {
     if (tab.controller == null) return;
@@ -125,7 +121,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     }
   }
 
-
   @override
   void _configureController(BrowserTab tab, InAppWebViewController controller) {
     tab.controller = controller;
@@ -168,7 +163,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       },
     );
   }
-
 
   Future<void> _handleAutofillMessage(BrowserTab tab, String message) async {
     final settings = _settings;
@@ -223,7 +217,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
           .warning('[browser_screen] autofill save failed', e, st);
     }
   }
-
 
   @override
   void _showSiteSettingsSheet(BrowserTab tab) async {
@@ -318,7 +311,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       ),
     );
   }
-
 
   @override
   void _onPageStart(BrowserTab tab, String url) async {
@@ -420,7 +412,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     _updateNavState();
     _delayed(const Duration(milliseconds: 500), _updateNavState);
   }
-
 
   @override
   void _onPageStop(BrowserTab tab, String url) {
@@ -525,7 +516,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     }
   }
 
-
   @override
   void _onUrlChange(BrowserTab tab, String url) {
     if (url.startsWith('magnet:') || isMagnetUrl(url)) return;
@@ -576,18 +566,15 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     _delayed(const Duration(milliseconds: 500), _updateNavState);
   }
 
-
   Future<void> _injectTimerSpeedScript(BrowserTab tab) async {
     if (!mounted) return;
     await _scriptInjector.injectTimerSpeedScript(tab);
   }
 
-
   Future<void> _injectLongPressScriptToTab(BrowserTab tab) async {
     if (!mounted) return;
     await _scriptInjector.injectLongPressScriptToTab(tab);
   }
-
 
   void _scheduleMediaScan(BrowserTab tab) {
     // per-tab media scan debounce used
@@ -599,7 +586,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       }
     });
   }
-
 
   @override
   void _suspendBackgroundTabs() {
@@ -634,7 +620,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     }
   }
 
-
   @override
   void _resumeTab(BrowserTab tab) {
     if (!tab.isSuspended) return;
@@ -661,7 +646,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     _safeReloadTab(tab);
   }
 
-
   Future<void> _injectAllScripts(BrowserTab tab, String url) async {
     final settings = _settings;
     await _scriptInjector.injectAllScripts(
@@ -673,7 +657,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       customCss: _customCss,
     );
   }
-
 
   /// UX 3.6: Resolves the tab's favicon URL and downloads its bytes so the
   /// tab switcher / strip can render a favicon instead of a generic icon.
@@ -733,7 +716,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       // Favicon download is best-effort; the tab falls back to the globe icon.
     }
   }
-
 
   /// UX 3.19: Injects saved autofill data (if any) into the current page.
   Future<void> _autofillFormFields(BrowserTab tab) async {

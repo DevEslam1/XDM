@@ -54,6 +54,7 @@ class YoutubePlaylistSheet extends StatefulWidget {
       _isShowing = false;
     }
   }
+
   @override
   State<YoutubePlaylistSheet> createState() => _YoutubePlaylistSheetState();
 }
@@ -77,6 +78,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       return title.contains(query);
     }).toList();
   }
+
   static const List<Map<String, String>> _qualityOptions = [
     {'value': 'best_combined', 'label': 'Best Quality (Auto)'},
     {'value': '2160p', 'label': '2160p (4K Ultra HD)'},
@@ -95,6 +97,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     super.initState();
     _fetchPlaylist();
   }
+
   Future<void> _loadMoreVideos() async {
     if (_isLoadingMore || !_hasMoreVideos || _nextPageToken == null) return;
     if (_searchQuery.isNotEmpty) return;
@@ -122,6 +125,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       setState(() => _isLoadingMore = false);
     }
   }
+
   Future<void> _fetchPlaylist() async {
     try {
       final details = await YoutubeService.getPlaylistDetails(
@@ -165,6 +169,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       });
     }
   }
+
   int get _selectedCount =>
       _filteredVideos.where((v) => v['selected'] == true).length;
   void _toggleAll(bool selected) {
@@ -177,6 +182,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       }
     });
   }
+
   Future<void> _startBatchDownload() async {
     final provider = context.read<DownloadProvider>();
     final settings = context.read<SettingsProvider>();
@@ -267,6 +273,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     );
     Navigator.of(context).pop();
   }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();

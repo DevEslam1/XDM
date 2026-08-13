@@ -43,12 +43,13 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<SingleInstanceService>(
       () => SingleInstanceService());
   getIt.registerLazySingleton<TrackerManager>(() => TrackerManager());
-  
+
   // Fix: Ensure init() is called immediately when instantiated
   getIt.registerLazySingleton<SiteIntelligenceService>(
     () => SiteIntelligenceService()..init(),
     dispose: (service) => service.dispose(),
   );
-  
-  getIt.registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);
+
+  getIt
+      .registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);
 }

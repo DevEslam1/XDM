@@ -633,13 +633,15 @@ class DownloadTask {
     } else if (rawChunks.length > threadCount) {
       final safeThreadCount = threadCount > 0 ? threadCount : 1;
       final totalSum = rawChunks.fold<double>(0.0, (s, c) => s + c);
-      final perChunk = (totalSum / safeThreadCount).clamp(0.0, 1.0);
-      chunks = List<double>.filled(safeThreadCount, perChunk);
+      final overall = rawChunks.isEmpty
+          ? 0.0
+          : (totalSum / rawChunks.length).clamp(0.0, 1.0);
+      chunks = List<double>.filled(safeThreadCount, overall);
       if (kDebugMode) {
         debugPrint(
           'DownloadTask.fromMap: chunk count mismatch for task ${map['id']}: '
           'stored ${rawChunks.length} chunks but threadCount=$threadCount. '
-          'Redistributing progress to $perChunk per chunk.',
+          'Redistributing progress to $overall per chunk.',
         );
       }
     } else {

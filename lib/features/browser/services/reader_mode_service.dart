@@ -80,12 +80,32 @@ class ReaderModeService {
   /// content cannot execute in reader context.
   static String _sanitizeContent(String htmlText) {
     final stripped = htmlText
-        .replaceAll(RegExp(r'<\s*(script|iframe|object|embed|style|form|link)\b[^>]*>.*?<\s*/\s*\1\s*>', caseSensitive: false, dotAll: true), '')
-        .replaceAll(RegExp(r'<\s*(script|iframe|object|embed|style|form|link)\b[^>]*/?>', caseSensitive: false), '')
-        .replaceAll(RegExp(r'''\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)''', caseSensitive: false), '')
-        .replaceAll(RegExp(r'''\sstyle\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)''', caseSensitive: false), '')
-        .replaceAll(RegExp(r'<\s*a\s+[^>]*href\s*=\s*"?\s*(javascript|data)\s*:', caseSensitive: false, dotAll: true), '<a>')
-        .replaceAll(RegExp(r'href\s*=\s*"?\s*javascript\s*:', caseSensitive: false), 'href="#"');
+        .replaceAll(
+            RegExp(
+                r'<\s*(script|iframe|object|embed|style|form|link)\b[^>]*>.*?<\s*/\s*\1\s*>',
+                caseSensitive: false,
+                dotAll: true),
+            '')
+        .replaceAll(
+            RegExp(
+                r'<\s*(script|iframe|object|embed|style|form|link)\b[^>]*/?>',
+                caseSensitive: false),
+            '')
+        .replaceAll(
+            RegExp(r'''\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)''',
+                caseSensitive: false),
+            '')
+        .replaceAll(
+            RegExp(r'''\sstyle\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)''',
+                caseSensitive: false),
+            '')
+        .replaceAll(
+            RegExp(r'<\s*a\s+[^>]*href\s*=\s*"?\s*(javascript|data)\s*:',
+                caseSensitive: false, dotAll: true),
+            '<a>')
+        .replaceAll(
+            RegExp(r'href\s*=\s*"?\s*javascript\s*:', caseSensitive: false),
+            'href="#"');
     return stripped;
   }
 

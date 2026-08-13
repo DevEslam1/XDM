@@ -294,4 +294,3 @@ class _ScanlineProgressState extends State<_ScanlineProgress>
     );
   }
 }
-

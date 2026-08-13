@@ -46,7 +46,7 @@ class CircuitBreaker {
             return false;
           }
         }
-        
+
         if (!_probeInFlight) {
           _probeInFlight = true;
           _probeStartedAt = now;
@@ -75,12 +75,12 @@ class CircuitBreaker {
             const Duration(milliseconds: 500)) {
       return;
     }
-    
+
     _lastFailureTimestamp = now;
     _consecutiveFailures++;
     _probeInFlight = false;
     _probeStartedAt = null;
-    
+
     if (_state == CircuitBreakerState.halfOpen ||
         _consecutiveFailures >= failureThreshold) {
       _transition(CircuitBreakerState.open, now);

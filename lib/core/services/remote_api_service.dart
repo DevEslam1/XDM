@@ -329,7 +329,6 @@ class RemoteApiService {
     }
   }
 
-
   static void stop() {
     _server?.close(force: true);
     _server = null;

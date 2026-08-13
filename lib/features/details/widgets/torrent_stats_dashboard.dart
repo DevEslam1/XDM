@@ -70,10 +70,15 @@ class TorrentStatsDashboard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              Expanded(child: _buildStat('Downloaded', _formatBytes(totalDownloaded))),
-              Expanded(child: _buildStat('Uploaded', _formatBytes(totalUploaded))),
+              Expanded(
+                  child:
+                      _buildStat('Downloaded', _formatBytes(totalDownloaded))),
+              Expanded(
+                  child: _buildStat('Uploaded', _formatBytes(totalUploaded))),
               Expanded(child: _buildStat('Ratio', ratio.toStringAsFixed(2))),
-              Expanded(child: _buildStat('Seeding', _formatDuration(seedingDuration))),
+              Expanded(
+                  child:
+                      _buildStat('Seeding', _formatDuration(seedingDuration))),
             ],
           ),
         ],

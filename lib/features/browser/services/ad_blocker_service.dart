@@ -31,7 +31,10 @@ class AdBlockerService {
 
   bool _enabled = true;
   int _contentBlockerGen = 0;
-  void bumpGen() { _contentBlockerGen++; }
+  void bumpGen() {
+    _contentBlockerGen++;
+  }
+
   int _lastBuiltGen = -1;
 
   List<ContentBlocker> _nativeContentBlockers = [];
@@ -141,7 +144,8 @@ class AdBlockerService {
       _lastBuiltGen = _contentBlockerGen;
       return;
     }
-    if (_lastBuiltGen == _contentBlockerGen && _nativeContentBlockers.isNotEmpty) {
+    if (_lastBuiltGen == _contentBlockerGen &&
+        _nativeContentBlockers.isNotEmpty) {
       return;
     }
     _nativeContentBlockers = _buildContentBlockers();
@@ -204,7 +208,8 @@ class AdBlockerService {
   /// JSON-encoded list of ad domains for dynamic blocking setup.
   /// Cached per generation to avoid expensive JSON encoding on widget rebuilds.
   String get dynamicDomainsJson {
-    if (_cachedDynamicDomainsJson != null && _lastDomainsGen == _contentBlockerGen) {
+    if (_cachedDynamicDomainsJson != null &&
+        _lastDomainsGen == _contentBlockerGen) {
       return _cachedDynamicDomainsJson!;
     }
     final custom = CustomAdBlockStore.instance.hosts;
@@ -821,7 +826,9 @@ $customCss
           }
           break;
         case 'json-prune':
-          if (args.isNotEmpty) call = '_xdmJsonPrune(${_jsStr(args.join(' '))});';
+          if (args.isNotEmpty) {
+            call = '_xdmJsonPrune(${_jsStr(args.join(' '))});';
+          }
           break;
         case 'noeval':
           call = '_xdmNoEval();';
@@ -837,7 +844,6 @@ $customCss
     final callsJs = calls.join('\n  ');
     return '$_scriptletPreamble  $callsJs\n})();\n';
   }
-
 
   // The raw preamble is stored in a separate field so the interpolated
   // final return string can reference it without triggering the
@@ -963,7 +969,6 @@ $customCss
 
 ''';
 
-
   String _jsStr(String s) => jsonEncode(s);
 
   String _jsConstant(String val) {
@@ -1010,15 +1015,18 @@ $customCss
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
         ),
         ContentBlocker(
-          trigger: ContentBlockerTrigger(urlFilter: '.*googleadservices\\.com.*'),
+          trigger:
+              ContentBlockerTrigger(urlFilter: '.*googleadservices\\.com.*'),
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
         ),
         ContentBlocker(
-          trigger: ContentBlockerTrigger(urlFilter: '.*googletagmanager\\.com.*'),
+          trigger:
+              ContentBlockerTrigger(urlFilter: '.*googletagmanager\\.com.*'),
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
         ),
         ContentBlocker(
-          trigger: ContentBlockerTrigger(urlFilter: '.*google-analytics\\.com.*'),
+          trigger:
+              ContentBlockerTrigger(urlFilter: '.*google-analytics\\.com.*'),
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
         ),
         // Major Ad Networks
@@ -1116,7 +1124,8 @@ $customCss
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
         ),
         ContentBlocker(
-          trigger: ContentBlockerTrigger(urlFilter: '.*amazon-adsystem\\.com.*'),
+          trigger:
+              ContentBlockerTrigger(urlFilter: '.*amazon-adsystem\\.com.*'),
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
         ),
         ContentBlocker(

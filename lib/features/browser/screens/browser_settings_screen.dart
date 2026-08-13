@@ -30,12 +30,13 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
   late bool _snifferEnabled;
   final AdBlockerService _adBlocker = AdBlockerService.instance;
 
-    @override
+  @override
   void initState() {
     super.initState();
     _snifferEnabled = widget.isSnifferEnabled;
     _adBlocker.addListener(_onAdBlockerStateChanged);
   }
+
   @override
   void didUpdateWidget(covariant BrowserSettingsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -44,6 +45,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
       _snifferEnabled = widget.isSnifferEnabled;
     }
   }
+
   @override
   void dispose() {
     _adBlocker.removeListener(_onAdBlockerStateChanged);
@@ -264,7 +266,8 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
               _buildSettingsSwitch(
                 context: context,
                 icon: Icons.zoom_in_rounded,
-                title: L10n.isRtl(context) ? 'التقريب بالأصابع' : 'Pinch to Zoom',
+                title:
+                    L10n.isRtl(context) ? 'التقريب بالأصابع' : 'Pinch to Zoom',
                 subtitle: L10n.isRtl(context)
                     ? 'السماح بالتقريب على جميع الصفحات'
                     : 'Allow zoom gesture on all web pages',
@@ -479,8 +482,8 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
           isDark ? const Color(0xFF7F7F90) : const Color(0xFF94A3B8),
       inactiveTrackColor:
           isDark ? const Color(0x1AFFFFFF) : const Color(0x0D000000),
-      trackOutlineColor: WidgetStateProperty.resolveWith(
-          (states) => Colors.transparent),
+      trackOutlineColor:
+          WidgetStateProperty.resolveWith((states) => Colors.transparent),
       onChanged: onChanged,
     );
   }

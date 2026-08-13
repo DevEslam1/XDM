@@ -317,25 +317,25 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     horizontal: 14,
                     vertical: 7,
                   ),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: secClr.withValues(alpha: 0.3),
-                    width: 0.8,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: secClr.withValues(alpha: 0.3),
+                      width: 0.8,
+                    ),
                   ),
-                ),
-                child: Text(
-                  L10n.of(context, 'onboarding_skip'),
-                  style: TextStyle(
-                    color: secClr,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11,
-                    letterSpacing: 0.5,
+                  child: Text(
+                    L10n.of(context, 'onboarding_skip'),
+                    style: TextStyle(
+                      color: secClr,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -384,55 +384,57 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   children: [
                     // Dots
                     ...List.generate(_pageCount, (index) {
-                    final isActive = _currentPage == index;
+                      final isActive = _currentPage == index;
 
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.easeOutCubic,
-                      width: isActive ? 28 : 8,
-                      height: 8,
-                      margin: const EdgeInsetsDirectional.only(end: 6.0),
-                      decoration: BoxDecoration(
-                        color: isActive
-                            ? accent
-                            : (isDark ? AppTheme.border : AppTheme.lightBorder)
-                                .withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(4),
-                        boxShadow: isActive
-                            ? [
-                                BoxShadow(
-                                  color: accent.withValues(alpha: 0.4),
-                                  blurRadius: 6,
-                                  spreadRadius: 0,
-                                ),
-                              ]
-                            : [
-                                const BoxShadow(
-                                  color: Colors.transparent,
-                                  blurRadius: 0,
-                                  spreadRadius: 0,
-                                ),
-                              ],
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeOutCubic,
+                        width: isActive ? 28 : 8,
+                        height: 8,
+                        margin: const EdgeInsetsDirectional.only(end: 6.0),
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? accent
+                              : (isDark
+                                      ? AppTheme.border
+                                      : AppTheme.lightBorder)
+                                  .withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(4),
+                          boxShadow: isActive
+                              ? [
+                                  BoxShadow(
+                                    color: accent.withValues(alpha: 0.4),
+                                    blurRadius: 6,
+                                    spreadRadius: 0,
+                                  ),
+                                ]
+                              : [
+                                  const BoxShadow(
+                                    color: Colors.transparent,
+                                    blurRadius: 0,
+                                    spreadRadius: 0,
+                                  ),
+                                ],
+                        ),
+                      );
+                    }),
+                    const SizedBox(width: 12),
+                    // Page counter
+                    Text(
+                      '${_currentPage + 1}/$_pageCount',
+                      style: TextStyle(
+                        fontFamily: 'Space Grotesk',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: (isDark
+                                ? AppTheme.textMuted
+                                : AppTheme.lightTextMuted)
+                            .withValues(alpha: 0.7),
                       ),
-                    );
-                  }),
-                  const SizedBox(width: 12),
-                  // Page counter
-                  Text(
-                    '${_currentPage + 1}/$_pageCount',
-                    style: TextStyle(
-                      fontFamily: 'Space Grotesk',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: (isDark
-                              ? AppTheme.textMuted
-                              : AppTheme.lightTextMuted)
-                          .withValues(alpha: 0.7),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
 
               // ─── Next / Start Button ───
               Flexible(

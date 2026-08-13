@@ -565,4 +565,3 @@ void _registerImmediatePauseRaceTest() {
     });
   });
 }
-

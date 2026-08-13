@@ -3,7 +3,6 @@ part of 'browser_screen.dart';
 /// Tab lifecycle: creation, switching, closing, restore, LRU order,
 /// the tab strip UI, the vertical sidebar, and recently-closed tabs.
 mixin _TabsMixin on _BrowserScreenStateBase {
-
   @override
   set _currentTabIndex(int value) {
     if (value >= 0 && value < _tabs.length) {
@@ -23,14 +22,16 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     _tabManager.currentIndex = value;
   }
 
-
   @override
   void _ensureTabsExist() {
-    if ((_tabs.isEmpty || (_tabs.length == 1 && _tabs.first.url.isEmpty && !_tabs.first.isIncognito)) && !_isRestoring) {
+    if ((_tabs.isEmpty ||
+            (_tabs.length == 1 &&
+                _tabs.first.url.isEmpty &&
+                !_tabs.first.isIncognito)) &&
+        !_isRestoring) {
       _restoreTabs();
     }
   }
-
 
   @override
   void _debouncedSiteSettingsReload(BrowserTab tab) {
@@ -41,7 +42,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
       }
     });
   }
-
 
   @override
   void _updateLruOrder() {
@@ -63,7 +63,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
       _lruTabIds.removeRange(cap, _lruTabIds.length);
     }
   }
-
 
   void _onTabSwitched(int oldIndex, int newIndex) {
     _scriptsInjectedSnackbarShown = false;
@@ -113,11 +112,17 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     }
   }
 
-
   void _scrollToActiveTabStrip() {
-    if (!_tabStripScrollController.hasClients || _tabStripScrollController.positions.isEmpty) return;
+    if (!_tabStripScrollController.hasClients ||
+        _tabStripScrollController.positions.isEmpty) {
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_tabStripScrollController.hasClients || _tabStripScrollController.positions.isEmpty) return;
+      if (!mounted ||
+          !_tabStripScrollController.hasClients ||
+          _tabStripScrollController.positions.isEmpty) {
+        return;
+      }
       final maxExtent = _tabStripScrollController.position.maxScrollExtent;
       final targetOffset = (_currentTabIndex * 100.0).clamp(0.0, maxExtent);
       _tabStripScrollController.animateTo(
@@ -127,7 +132,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
       );
     });
   }
-
 
   void _switchTab(int newIndex) {
     if (newIndex == _currentTabIndex && _tabs.isNotEmpty) return;
@@ -150,7 +154,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     _suspendBackgroundTabs();
   }
 
-
   Future<void> _restoreTabs() async {
     assert(!_isRestoring, 'restoreTabs re-entered');
     if (_isRestoring) return;
@@ -168,7 +171,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     }
   }
 
-
   @override
   void _checkOnboardingTooltip() async {
     final prefs = await SharedPreferences.getInstance();
@@ -178,7 +180,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     }
   }
 
-
   @override
   void _dismissTabTooltip() async {
     if (_showTabTooltip) {
@@ -187,7 +188,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
       await prefs.setBool('has_seen_tab_tooltip', true);
     }
   }
-
 
   @override
   void _animateFlyingStar() {
@@ -253,7 +253,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     overlayState.insert(entry);
   }
 
-
   @override
   BrowserTab _createNewTab({
     String initialUrl = 'about:blank',
@@ -306,7 +305,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     return tab;
   }
 
-
   @override
   void _cleanupTabState(String tabId) {
     _mediaScanDebouncePerTab[tabId]?.cancel();
@@ -358,7 +356,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     }
   }
 
-
   /// UX 3.5: Pushes a recently-closed tab onto the bounded history list.
   @override
   void _recordClosedTab(BrowserTab tab) {
@@ -377,7 +374,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
           _maxRecentClosedTabs, _recentlyClosedTabs.length);
     }
   }
-
 
   /// UX 3.5: Bottom sheet listing tabs closed during this session.
   @override
@@ -515,7 +511,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     );
   }
 
-
   @override
   bool _switchToPreviousTab() {
     _tabIdHistory.removeWhere((id) => !_tabs.any((t) => t.id == id));
@@ -531,7 +526,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     return false;
   }
 
-
   @override
   void _switchToTabRelative(int offset) {
     if (_tabs.length <= 1) return;
@@ -546,7 +540,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     _switchTab(
         newIndex); // Fix: Delegate to _switchTab to handle all side effects
   }
-
 
   void _showTabLimitDialog(
     BuildContext switcherContext,
@@ -629,7 +622,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     );
   }
 
-
   Future<void> _confirmCloseAllTabs(
       BuildContext context, StateSetter setModalState) async {
     final settings = _settings;
@@ -709,7 +701,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
       if (context.mounted) Navigator.pop(context);
     }
   }
-
 
   @override
   void _showTabSwitcher(BuildContext context) {
@@ -1141,7 +1132,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     );
   }
 
-
   @override
   Widget _buildVerticalTabSidebar(
       BuildContext context, SettingsProvider settings) {
@@ -1320,7 +1310,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     );
   }
 
-
   @override
   Widget _buildTabStrip(
     BuildContext context,
@@ -1425,7 +1414,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     );
   }
 
-
   void _showTabStripMenu(BuildContext context, int index) {
     if (index < 0 || index >= _tabs.length) return;
     final tab = _tabs[index];
@@ -1478,7 +1466,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     );
   }
 
-
   void _closeTabAtIndex(int index) {
     if (index < 0 || index >= _tabs.length) return;
 
@@ -1496,7 +1483,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     _showBarsNotifier.value = true;
   }
 
-
   void _closeOtherTabs(int keepIndex) {
     if (keepIndex < 0 || keepIndex >= _tabs.length) return;
     final keep = _tabs[keepIndex];
@@ -1510,7 +1496,6 @@ mixin _TabsMixin on _BrowserScreenStateBase {
       }
     });
   }
-
 
   void _closeAllTabsFromStrip() {
     final list = List<BrowserTab>.from(_tabs);

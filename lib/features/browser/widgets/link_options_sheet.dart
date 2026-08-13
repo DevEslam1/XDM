@@ -244,9 +244,7 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
                         if (messenger.mounted && rootCtx.mounted) {
                           ThemedSnackbar.show(
                             rootCtx,
-                            message: isRtl
-                                ? 'تم نسخ الرابط'
-                                : 'Link copied',
+                            message: isRtl ? 'تم نسخ الرابط' : 'Link copied',
                             color: accent,
                             icon: Icons.copy_rounded,
                             isDarkMode: isDark,

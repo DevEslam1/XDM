@@ -25,6 +25,7 @@ import '../utils/bencode_decoder.dart';
 import '../utils/file_utils.dart';
 import '../utils/url_utils.dart';
 part 'download_isolate_pool.dart';
+
 class DownloadMetadata {
   final String fileName;
   final String category;
@@ -41,6 +42,7 @@ class DownloadMetadata {
     this.torrentId,
   });
 }
+
 class IsolateSpawnTimeoutException implements Exception {
   final String message;
   const IsolateSpawnTimeoutException([
@@ -49,6 +51,7 @@ class IsolateSpawnTimeoutException implements Exception {
   @override
   String toString() => 'IsolateSpawnTimeoutException: $message';
 }
+
 class InsufficientStorageException implements Exception {
   final String message;
   const InsufficientStorageException([
@@ -58,12 +61,14 @@ class InsufficientStorageException implements Exception {
   @override
   String toString() => 'InsufficientStorageException: $message';
 }
+
 class DownloadIntegrityException implements Exception {
   final String message;
   const DownloadIntegrityException(this.message);
   @override
   String toString() => 'DownloadIntegrityException: $message';
 }
+
 class UrlExpiredException implements Exception {
   final String message;
   final bool refreshAllMirrors;
@@ -71,6 +76,7 @@ class UrlExpiredException implements Exception {
   @override
   String toString() => 'UrlExpiredException: $message';
 }
+
 class TorrentEnginePauseException implements Exception {
   final String message;
   final String url;
@@ -78,6 +84,7 @@ class TorrentEnginePauseException implements Exception {
   @override
   String toString() => 'TorrentEnginePauseException: $message';
 }
+
 enum MergeFailureKind {
   missingBinary,
   formatMismatch,
@@ -86,6 +93,7 @@ enum MergeFailureKind {
   incompleteInput,
   unknown,
 }
+
 MergeFailureKind classifyMergeFailure(Object error) {
   final msg = error.toString().toLowerCase();
   if (msg.contains('no such file') ||
@@ -114,7 +122,9 @@ MergeFailureKind classifyMergeFailure(Object error) {
   }
   return MergeFailureKind.unknown;
 }
+
 enum YtStreamKind { video, audio, combined }
+
 class ChunkDetail {
   final int index;
   final int start;
@@ -129,6 +139,7 @@ class ChunkDetail {
     if (size == 0) return '100%';
     return '${(ratio * 100).toStringAsFixed(0)}%';
   }
+
   const ChunkDetail({
     required this.index,
     required this.start,
@@ -151,6 +162,7 @@ class ChunkDetail {
     );
   }
 }
+
 class DownloadProgress {
   final int downloadedBytes;
   final int fileSize;
@@ -234,7 +246,7 @@ class DownloadProgress {
         final progress = length > 0 ? (dl / length).clamp(0.0, 1.0) : 1.0;
         map['downloadedBytes'] = dl;
         map['progress'] = progress;
-        map['percent'] = progress; 
+        map['percent'] = progress;
         map['isComplete'] = length == 0 || dl >= length;
         return map;
       }).toList();
@@ -322,15 +334,18 @@ class DownloadProgress {
     final totalDownloaded = selfDownloaded + counterpartDownloaded;
     return (totalDownloaded / totalSize).clamp(0.0, 1.0);
   }
+
   int get ytCombinedDownloadedBytes {
     if (ytStreamKind == null) return downloadedBytes;
     final selfBytes = ytDownloadedBytes ?? downloadedBytes;
     return selfBytes + (ytCounterpartDownloadedBytes ?? 0);
   }
+
   int get ytCombinedFileSize {
     if (ytStreamKind == null) return fileSize;
     return fileSize + (ytCounterpartSize ?? 0);
   }
+
   ({
     int totalFiles,
     int completedFiles,
@@ -369,6 +384,7 @@ class DownloadProgress {
       downloadedFileBytes: downloaded,
     );
   }
+
   double get torrentOverallPercent {
     if (totalFileBytes != null && totalFileBytes! > 0) {
       final dl = downloadedFileBytes ?? 0;
@@ -383,6 +399,7 @@ class DownloadProgress {
     }
     return 0.0;
   }
+
   List<Map<String, dynamic>>? get torrentFilePercents {
     if (torrentFiles == null || torrentFiles!.isEmpty) return null;
     final overall = torrentOverallPercent;
@@ -409,7 +426,9 @@ class DownloadProgress {
     }).toList();
   }
 }
+
 typedef ValueChangedProgress = void Function(DownloadProgress progress);
+
 class DownloadEngine {
   static bool appInForeground = true;
   static const int _progressReportIntervalMs = 500;
@@ -421,6 +440,7 @@ class DownloadEngine {
     if (PowerMonitor.throttleFactor < 1.0) return 1000;
     return _progressReportIntervalMs;
   }
+
   final List<CancelToken> _activeCancelTokens = [];
   DownloadIsolatePool? _pool;
   Future<DownloadIsolatePool>? _poolInit;
@@ -433,6 +453,7 @@ class DownloadEngine {
     _ytCounterpartTaskIds[taskId] = counterpartTaskId;
     _ytCounterpartTaskIds[counterpartTaskId] = taskId;
   }
+
   static final Set<String> _ytFinishedStreams = {};
   final Set<Timer> _ytCleanupTimers = {};
   void unregisterYtCounterpart(String taskId) {
@@ -465,6 +486,7 @@ class DownloadEngine {
       _ytCleanupTimers.add(timer);
     }
   }
+
   final Set<Dio> _activeDioClients = {};
   final Set<Dio> _reservedDioClients = {};
   final Map<Dio, DateTime> _dioClientCreationTimes = {};
@@ -496,6 +518,7 @@ class DownloadEngine {
     DownloadEngine._ytLiveBytes.clear();
     _ytFinishedStreams.clear();
   }
+
   DownloadEngine({
     Dio? dio,
     bool enableCleanupTimer = true,
@@ -520,8 +543,9 @@ class DownloadEngine {
           final creationTime = _dioClientCreationTimes[client] ?? now;
           final age = now.difference(creationTime);
           final reserved = _reservedDioClients.contains(client);
-          final stale = (reserved ? age > reservedMaxAge : age > normalMaxAge) &&
-              !hasActiveDownloads;
+          final stale =
+              (reserved ? age > reservedMaxAge : age > normalMaxAge) &&
+                  !hasActiveDownloads;
           if (stale) {
             try {
               client.close(force: true);
@@ -546,12 +570,14 @@ class DownloadEngine {
       return pool;
     }();
   }
+
   @visibleForTesting
   bool isLikelyHtmlResponse(String? contentType) {
     final normalized = (contentType ?? '').toLowerCase();
     return normalized.contains('text/html') ||
         normalized.contains('application/xhtml');
   }
+
   Dio _buildIsolatedClient({
     String? url,
     String? customUserAgent,
@@ -574,6 +600,7 @@ class DownloadEngine {
     _activeDownloadsPerClient[client] = {};
     return client;
   }
+
   void _releaseClient(Dio client) {
     _reservedDioClients.remove(client);
     _activeDioClients.remove(client);
@@ -581,6 +608,7 @@ class DownloadEngine {
     _activeDownloadsPerClient.remove(client);
     client.close(force: true);
   }
+
   Future<DownloadMetadata> resolveMetadata({
     required String url,
     String? requestedFileName,
@@ -705,6 +733,7 @@ class DownloadEngine {
       supportsResume: supportsResume,
     );
   }
+
   Future<DownloadMetadata> _resolveTorrentMetadata({
     required String url,
     String? requestedFileName,
@@ -743,6 +772,7 @@ class DownloadEngine {
           ));
         }
       }
+
       cancelToken?.whenCancel.then((_) => handleCancel());
       if (cancelToken?.isCancelled == true) {
         handleCancel();
@@ -841,10 +871,12 @@ class DownloadEngine {
       torrentFiles: torrentFiles,
     );
   }
+
   void updateSpeedLimit(int bytesPerSecond, int activeCount) {
     TorrentService.setDownloadLimit(bytesPerSecond);
     _pool?.updateSpeedLimit(bytesPerSecond, activeCount);
   }
+
   Future<bool> hasEnoughDiskSpace(String savePath, int requiredBytes) async {
     try {
       final requiredWithMargin = (requiredBytes * 1.1).toInt();
@@ -858,6 +890,7 @@ class DownloadEngine {
       return true;
     }
   }
+
   Future<void> checkLowStorageWarning(String savePath) async {
     try {
       final info = await _getDiskSpace(savePath);
@@ -867,6 +900,7 @@ class DownloadEngine {
       }
     } catch (_) {}
   }
+
   Future<_DiskSpaceInfo?> _getDiskSpace(String path) async {
     try {
       if (Platform.isAndroid || Platform.isLinux || Platform.isMacOS) {
@@ -883,6 +917,7 @@ class DownloadEngine {
       return null;
     }
   }
+
   Future<int> estimateOptimalThreads({
     required String url,
     required int requestedThreads,
@@ -915,6 +950,7 @@ class DownloadEngine {
       return requestedThreads;
     }
   }
+
   String buildLocalFilePath(String directory, String fileName) {
     final safeName = safeFileName(fileName);
     final fullPath = p.join(directory, safeName);
@@ -923,6 +959,7 @@ class DownloadEngine {
     }
     return fullPath;
   }
+
   String buildTempFilePath(String directory, String fileName) {
     final safeName = safeFileName(fileName);
     final fullPath = p.join(directory, '$safeName.dmxpart');
@@ -931,6 +968,7 @@ class DownloadEngine {
     }
     return fullPath;
   }
+
   static Future<void> cleanupOrphanFiles(
     String tempFilePath, {
     bool mergeConfirmed = false,
@@ -984,6 +1022,7 @@ class DownloadEngine {
       debugPrint('[DownloadEngine] cleanupOrphanFiles error: $e');
     }
   }
+
   Future<void> download({
     required String taskId,
     required String url,
@@ -1236,6 +1275,7 @@ class DownloadEngine {
         }
       });
     }
+
     resetInactivityTimer();
     watchdog = Timer(const Duration(seconds: 30), () {
       if (!acked && !completer.isCompleted) {
@@ -1282,6 +1322,7 @@ class DownloadEngine {
         torrentId: torrentId,
       ));
     }
+
     final cancelFuture = cancelToken.whenCancel.then((_) => requestCancel());
     if (cancelToken.isCancelled) requestCancel();
     final sub = job.messages.listen((message) {
@@ -1689,6 +1730,7 @@ class DownloadEngine {
       }
     }
   }
+
   Object _mapWorkerError(EngineMessage message, String url) {
     final data = message.data;
     final errType = data['errorType'] as String? ?? 'uncaught';
@@ -1735,6 +1777,7 @@ class DownloadEngine {
         );
     }
   }
+
   Future<void> _handleTorrentDownload({
     required String url,
     required String currentLocalFilePath,
@@ -1965,6 +2008,7 @@ class DownloadEngine {
       _lastIncompleteSnapshot.remove(id);
     }
   }
+
   Future<void> _waitForMetadata(
     int id,
     String url,
@@ -2002,8 +2046,7 @@ class DownloadEngine {
       final mfSummary = normalizeTorrentFiles(metaFiles);
       onProgress(DownloadProgress(
         downloadedBytes: mfSummary.downloaded,
-        fileSize:
-            initialFileSize > 0 ? initialFileSize : 0, 
+        fileSize: initialFileSize > 0 ? initialFileSize : 0,
         speed: 0,
         eta: null,
         statusMessage: 'Fetching metadata… (${elapsed}s / 300s)',
@@ -2038,6 +2081,7 @@ class DownloadEngine {
       await sub.cancel();
     }
   }
+
   void _applyFilePriorities(
     int id,
     List<Map<String, dynamic>>? currentTorrentFiles,
@@ -2058,6 +2102,7 @@ class DownloadEngine {
         } catch (_) {}
         return decoded.replaceAll('\\', '/').trim().toLowerCase();
       }
+
       final storedByName = <String, Map<String, dynamic>>{};
       for (final f in currentTorrentFiles) {
         storedByName[normalizeName(f['name'] as String? ?? '')] = f;
@@ -2113,6 +2158,7 @@ class DownloadEngine {
     }).toList();
     TorrentService.setFilePriorities(id, priorities);
   }
+
   Future<void> _listenForCompletion(
     int id,
     String url,
@@ -2144,6 +2190,7 @@ class DownloadEngine {
             } catch (_) {}
             return decoded.replaceAll('\\', '/').trim().toLowerCase();
           }
+
           resolvedFiles = files.map((f) {
             final existing =
                 existingFiles.cast<Map<String, dynamic>?>().firstWhere(
@@ -2270,7 +2317,7 @@ class DownloadEngine {
           downloadedFileBytes: fmBytes > 0 ? fmDl : null,
           torrentId: id,
         ));
-        return; 
+        return;
       }
       final int torrentAggregate = torrent.totalWantedDone > 0
           ? torrent.totalWantedDone
@@ -2651,6 +2698,7 @@ class DownloadEngine {
       await sub.cancel();
     }
   }
+
   static final Map<int, DateTime> _lastConcurrentLimitApply = {};
   static final Map<int, Set<int>> _lastIncompleteSnapshot = {};
   static const Duration _concurrentLimitThrottle = Duration(seconds: 2);
@@ -2699,13 +2747,13 @@ class DownloadEngine {
     final priorities = List<int>.generate(files.length, (i) {
       final f = files[i];
       final selected = isTorrentFileSelected(f);
-      if (!selected) return 0; 
+      if (!selected) return 0;
       return (f['priority'] as int?) ?? 4;
     });
     for (var i = 0; i < incompleteSelected.length; i++) {
       final idx = incompleteSelected[i];
       if (i >= maxConcurrentFiles) {
-        priorities[idx] = 0; 
+        priorities[idx] = 0;
       } else {
         priorities[idx] = (files[idx]['priority'] as int?) ?? 4;
       }
@@ -2714,6 +2762,7 @@ class DownloadEngine {
     _lastIncompleteSnapshot[torrentId] = incompleteSet;
     TorrentService.setFilePriorities(torrentId, priorities);
   }
+
   static void normalizeTorrentFile(Map<String, dynamic> f) {
     final len = (f['length'] as num?)?.toInt() ?? 0;
     var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
@@ -2732,6 +2781,7 @@ class DownloadEngine {
       f['progress'] = pf.toDouble().clamp(0.0, 1.0);
     }
   }
+
   static ({int total, int done, int bytes, int downloaded})
       normalizeTorrentFiles(
     List<Map<String, dynamic>>? files,
@@ -2753,6 +2803,7 @@ class DownloadEngine {
     }
     return (total: total, done: done, bytes: bytes, downloaded: downloaded);
   }
+
   static void _distributeEstimatedBytes(
       List<Map<String, dynamic>> files, int totalDownloadedBytes) {
     final needing = files
@@ -2784,6 +2835,7 @@ class DownloadEngine {
       needing[i]['progressEstimated'] = true;
     }
   }
+
   Future<void> _waitForState(
     int id,
     CancelToken cancelToken, {
@@ -2844,7 +2896,7 @@ class DownloadEngine {
               speed: 0.0,
               eta: null,
               statusMessage: 'Checking pieces… ${(recheckPct * 100).toInt()}%',
-              cycleState: 'checking', 
+              cycleState: 'checking',
               torrentFiles: rcFiles,
               totalFiles: rcTotal > 0 ? rcTotal : null,
               completedFiles: rcTotal > 0 ? rcDone : null,
@@ -2949,6 +3001,7 @@ class DownloadEngine {
       await sub.cancel();
     }
   }
+
   void close() {
     _closed = true;
     _cleanupTimer?.cancel();
@@ -2983,6 +3036,7 @@ class DownloadEngine {
     _activeTorrentIds.clear();
     _httpEngine.stopAdaptiveThreadMonitor();
   }
+
   static String _deriveCycleState(
     String? statusMessage,
     bool isCancelled,
@@ -2992,7 +3046,9 @@ class DownloadEngine {
     if (statusMessage == null) return 'downloading';
     final lower = statusMessage.toLowerCase();
     if (lower.contains('completed')) return 'completed';
-    if (lower.contains('checking') || lower.contains('verifying')) return 'checking';
+    if (lower.contains('checking') || lower.contains('verifying')) {
+      return 'checking';
+    }
     if (lower.contains('fetching metadata')) return 'fetching_metadata';
     if (lower.contains('paused') && lower.contains('engine')) return 'retrying';
     if (lower.contains('paused')) return 'paused';
@@ -3005,12 +3061,15 @@ class DownloadEngine {
     if (lower.contains('resum')) {
       return 'resuming';
     }
-    if (lower.contains('starting') || lower.contains('allocating') || lower.contains('preparing')) {
+    if (lower.contains('starting') ||
+        lower.contains('allocating') ||
+        lower.contains('preparing')) {
       return 'starting';
     }
     return 'downloading';
   }
 }
+
 Dio buildTransferDio({
   String? url,
   String? customUserAgent,
@@ -3069,6 +3128,7 @@ Dio buildTransferDio({
   }
   return client;
 }
+
 Future<int> actualDownloadedBytes(
   String path, {
   required int threadCount,
@@ -3077,7 +3137,7 @@ Future<int> actualDownloadedBytes(
     final stateFile = File('$path.dmxstate');
     if (!await stateFile.exists()) {
       if (threadCount > 1) {
-        return 0; 
+        return 0;
       }
       final f = File(path);
       return await f.exists() ? await f.length() : 0;
@@ -3103,13 +3163,14 @@ Future<int> actualDownloadedBytes(
   } catch (e) {
     debugPrint('[DMX] actualDownloadedBytes failed for $path: $e');
     if (threadCount > 1) {
-      return 0; 
+      return 0;
     }
     final f = File(path);
     if (await f.exists()) return f.length();
     return 0;
   }
 }
+
 String _redactUrl(String? url) {
   if (url == null || url.isEmpty) return '<empty>';
   final uri = Uri.tryParse(url);
@@ -3123,16 +3184,19 @@ String _redactUrl(String? url) {
   return '${uri.scheme.isEmpty ? 'https' : uri.scheme}://$host$port'
       '$redactedPath${uri.hasQuery ? '?<redacted>' : ''}';
 }
+
 bool _looksLikePathToken(String segment) {
   if (segment.isEmpty || segment.length < 24) return false;
   if (!RegExp(r'^[A-Za-z0-9._~-]+$').hasMatch(segment)) return false;
   return segment.contains(RegExp(r'[0-9]'));
 }
+
 String? _firstNonEmpty(String? a, String? b) {
   if (a != null && a.trim().isNotEmpty) return a;
   if (b != null && b.trim().isNotEmpty) return b;
   return null;
 }
+
 class _DiskSpaceInfo {
   final int freeBytes;
   const _DiskSpaceInfo({required this.freeBytes});

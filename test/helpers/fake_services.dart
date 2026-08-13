@@ -33,14 +33,17 @@ class FakeDatabaseService extends DatabaseService {
   }
 
   @override
-  Future<List<Bookmark>> loadBookmarks({String? searchQuery}) async => List.unmodifiable(_bookmarks);
+  Future<List<Bookmark>> loadBookmarks({String? searchQuery}) async =>
+      List.unmodifiable(_bookmarks);
 
   @override
   Future<List<Bookmark>> searchBookmarks(String query, {int limit = 3}) async {
     final term = query.trim().toLowerCase();
     if (term.isEmpty) return [];
     return _bookmarks
-        .where((b) => b.title.toLowerCase().contains(term) || b.url.toLowerCase().contains(term))
+        .where((b) =>
+            b.title.toLowerCase().contains(term) ||
+            b.url.toLowerCase().contains(term))
         .take(limit)
         .toList();
   }

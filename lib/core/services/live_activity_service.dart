@@ -5,7 +5,7 @@ import 'package:logging/logging.dart';
 class LiveActivityService {
   static final _log = Logger('LiveActivityService');
   static const _channel = MethodChannel('com.dmx.app/live_activity');
-  
+
   static bool _supported = false;
   static bool _initialized = false;
   static final Map<String, DateTime> _lastUpdateTimes = {};
@@ -14,12 +14,12 @@ class LiveActivityService {
   static Future<void> init() async {
     if (_initialized) return;
     _initialized = true;
-    
+
     if (!Platform.isIOS) {
       _supported = false;
       return;
     }
-    
+
     try {
       final result = await _channel.invokeMethod<Map>('isSupported');
       _supported = result?['areActivitiesEnabled'] == true;
@@ -61,14 +61,14 @@ class LiveActivityService {
     required int etaSeconds,
   }) async {
     if (!_supported) return;
-    
+
     final lastUpdate = _lastUpdateTimes[taskId];
     if (lastUpdate != null &&
         DateTime.now().difference(lastUpdate) < _minUpdateInterval) {
       return;
     }
     _lastUpdateTimes[taskId] = DateTime.now();
-    
+
     try {
       await _channel.invokeMethod('updateActivity', {
         'taskId': taskId,

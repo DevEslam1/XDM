@@ -68,11 +68,16 @@ void main() {
     });
 
     test('extractHostAndPath normalizes hostnames and paths correctly', () {
-      expect(AdBlockerService.extractHostAndPath('https://DOUBLECLICK.NET/ad.js?v=1'),
+      expect(
+          AdBlockerService.extractHostAndPath(
+              'https://DOUBLECLICK.NET/ad.js?v=1'),
           equals(('doubleclick.net', '/ad.js')));
-      expect(AdBlockerService.extractHostAndPath('//adservice.google.com:8080/page'),
+      expect(
+          AdBlockerService.extractHostAndPath(
+              '//adservice.google.com:8080/page'),
           equals(('adservice.google.com', '/page')));
-      expect(AdBlockerService.extractHostAndPath('doubleclick.net/path/to/ad.js'),
+      expect(
+          AdBlockerService.extractHostAndPath('doubleclick.net/path/to/ad.js'),
           equals(('doubleclick.net', '/path/to/ad.js')));
       expect(AdBlockerService.extractHostAndPath('doubleclick.net:8443/ad.js'),
           equals(('doubleclick.net', '/ad.js')));
@@ -80,11 +85,14 @@ void main() {
           equals(('doubleclick.net', '')));
     });
 
-    test('shouldBlockUrl handles schemeless URLs and ports without polluting blockedDomains', () {
+    test(
+        'shouldBlockUrl handles schemeless URLs and ports without polluting blockedDomains',
+        () {
       service.resetStats();
       expect(service.shouldBlockUrl('doubleclick.net/some/path/ad.js'), isTrue);
       expect(service.blockedDomains, contains('doubleclick.net'));
-      expect(service.blockedDomains, isNot(contains('doubleclick.net/some/path/ad.js')));
+      expect(service.blockedDomains,
+          isNot(contains('doubleclick.net/some/path/ad.js')));
 
       expect(service.shouldBlockUrl('doubleclick.net:8080/ad.js'), isTrue);
       expect(service.blockedDomains, contains('doubleclick.net'));
@@ -97,4 +105,3 @@ void main() {
     });
   });
 }
-

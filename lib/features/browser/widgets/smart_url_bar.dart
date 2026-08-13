@@ -255,137 +255,152 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
                   width: _layerLink.leaderSize?.width ??
                       (MediaQuery.of(context).size.width - 32),
                   child: Material(
-                elevation: 12,
-                shadowColor: Colors.black.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(20),
-                color: isDark
-                    ? (isAmoled ? AppTheme.surface : AppTheme.surface.withValues(alpha: 0.96))
-                    : Colors.white.withValues(alpha: 0.96),
-                child: Container(
-                  constraints: const BoxConstraints(maxHeight: 300),
-                  decoration: BoxDecoration(
+                    elevation: 12,
+                    shadowColor: Colors.black.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isDark
-                          ? (isAmoled ? AppTheme.amoledBorder : AppTheme.glassBorder)
-                          : AppTheme.lightGlassBorder,
-                      width: 0.8,
-                    ),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(8),
-                      shrinkWrap: true,
-                      itemCount: _suggestions.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (context, index) {
-                        final s = _suggestions[index];
-                        final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+                    color: isDark
+                        ? (isAmoled
+                            ? AppTheme.surface
+                            : AppTheme.surface.withValues(alpha: 0.96))
+                        : Colors.white.withValues(alpha: 0.96),
+                    child: Container(
+                      constraints: const BoxConstraints(maxHeight: 300),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isDark
+                              ? (isAmoled
+                                  ? AppTheme.amoledBorder
+                                  : AppTheme.glassBorder)
+                              : AppTheme.lightGlassBorder,
+                          width: 0.8,
+                        ),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: ListView.separated(
+                          padding: const EdgeInsets.all(8),
+                          shrinkWrap: true,
+                          itemCount: _suggestions.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 6),
+                          itemBuilder: (context, index) {
+                            final s = _suggestions[index];
+                            final accent = isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue;
 
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? (isAmoled
-                                    ? AppTheme.amoledCardBg
-                                    : Colors.white.withValues(alpha: 0.05))
-                                : Colors.black.withValues(alpha: 0.03),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: isDark ? Colors.white10 : Colors.black12,
-                              width: 0.5,
-                            ),
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            borderRadius: BorderRadius.circular(14),
-                            clipBehavior: Clip.antiAlias,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(14),
-                              onTap: () {
-                                widget.focusNode.unfocus();
-                                _removeOverlay();
-                                widget.onNavigate(s.url);
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 10),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: accent.withValues(alpha: 0.12),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        s.icon,
-                                        size: 16,
-                                        color: accent,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            s.title,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: isDark
-                                                  ? AppTheme.textPrimary
-                                                  : AppTheme.lightTextPrimary,
-                                            ),
-                                          ),
-                                          if (s.title != s.url &&
-                                              s.type != SuggestionType.search) ...[
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              s.url,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: isDark
-                                                    ? AppTheme.textMuted
-                                                    : AppTheme.lightTextMuted,
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Icon(
-                                      Icons.north_west_rounded,
-                                      size: 14,
-                                      color: isDark
-                                          ? AppTheme.textMuted
-                                          : AppTheme.lightTextMuted,
-                                    ),
-                                  ],
+                            return Container(
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? (isAmoled
+                                        ? AppTheme.amoledCardBg
+                                        : Colors.white.withValues(alpha: 0.05))
+                                    : Colors.black.withValues(alpha: 0.03),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color:
+                                      isDark ? Colors.white10 : Colors.black12,
+                                  width: 0.5,
                                 ),
                               ),
-                            ),
-                          ),
-                        );
-                      },
+                              child: Material(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(14),
+                                clipBehavior: Clip.antiAlias,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(14),
+                                  onTap: () {
+                                    widget.focusNode.unfocus();
+                                    _removeOverlay();
+                                    widget.onNavigate(s.url);
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 10),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                accent.withValues(alpha: 0.12),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            s.icon,
+                                            size: 16,
+                                            color: accent,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                s.title,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isDark
+                                                      ? AppTheme.textPrimary
+                                                      : AppTheme
+                                                          .lightTextPrimary,
+                                                ),
+                                              ),
+                                              if (s.title != s.url &&
+                                                  s.type !=
+                                                      SuggestionType
+                                                          .search) ...[
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  s.url,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: isDark
+                                                        ? AppTheme.textMuted
+                                                        : AppTheme
+                                                            .lightTextMuted,
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Icon(
+                                          Icons.north_west_rounded,
+                                          size: 14,
+                                          color: isDark
+                                              ? AppTheme.textMuted
+                                              : AppTheme.lightTextMuted,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
-    },
-  );
 
     overlayState.insert(_overlayEntry!);
   }
@@ -463,8 +478,7 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
                   const BoxConstraints(minWidth: 32, minHeight: 32),
               suffixIcon: IconButton(
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 icon: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
                   child: Icon(

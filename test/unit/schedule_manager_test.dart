@@ -327,18 +327,17 @@ void main() {
         await selectiveManager.checkScheduledDownloads();
 
         // Only the task whose save failed is reverted to paused + scheduled.
-        expect(
-            tasks[0].status, DownloadStatus.queued); // s12: save succeeded
+        expect(tasks[0].status, DownloadStatus.queued); // s12: save succeeded
         expect(
           tasks[1].status,
           DownloadStatus.paused,
         ); // s11: save failed -> reverted
         expect(tasks[1].scheduledAt, pastTime);
         expect(tasks[1].wasScheduledAt, isNull);
-        expect(
-            tasks[2].status, DownloadStatus.queued); // s13: save succeeded
+        expect(tasks[2].status, DownloadStatus.queued); // s13: save succeeded
         // The successful saves were persisted.
-        expect(selectiveDb.savedTasks.map((t) => t.id), containsAll(['s12', 's13']));
+        expect(selectiveDb.savedTasks.map((t) => t.id),
+            containsAll(['s12', 's13']));
         // Listeners told about the partial revert.
         expect(notifyCalls, greaterThanOrEqualTo(1));
         selectiveManager.dispose();

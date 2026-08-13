@@ -45,10 +45,13 @@ class BrowserSheetScaffold extends StatelessWidget {
               decoration: BoxDecoration(
                 color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
                     .withValues(alpha: 0.95),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(28)),
                 border: Border(
                   top: BorderSide(
-                    color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                    color: isDark
+                        ? AppTheme.glassBorder
+                        : AppTheme.lightGlassBorder,
                     width: 0.8,
                   ),
                 ),
@@ -71,7 +74,8 @@ class BrowserSheetScaffold extends StatelessWidget {
 
                     // Header Row
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 8),
                       child: Row(
                         children: [
                           if (icon != null) ...[
@@ -88,7 +92,9 @@ class BrowserSheetScaffold extends StatelessWidget {
                           Text(
                             title,
                             style: TextStyle(
-                              color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                              color: isDark
+                                  ? AppTheme.textPrimary
+                                  : AppTheme.lightTextPrimary,
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),

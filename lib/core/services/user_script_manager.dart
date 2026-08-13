@@ -216,7 +216,11 @@ class UserScriptManager extends ChangeNotifier {
         'sessionStorage',
         'indexedDB'
       ],
-      'eval', 'Function', 'importScripts', 'Worker', 'SharedWorker',
+      'eval',
+      'Function',
+      'importScripts',
+      'Worker',
+      'SharedWorker',
     ];
 
     final jsBlocked = blockedList.map((e) => "'$e'").join(',');

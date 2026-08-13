@@ -19,12 +19,14 @@ class NetworkMonitor {
     required List<DownloadTask> Function() tasks,
     required Map<String, int> Function() torrentIds,
     required Map<String, CancelToken> Function() cancelTokens,
+    Map<String, Future<void>> Function()? activeFutures,
     required bool Function() wifiOnly,
     required Future<void> Function(DownloadTask updated) setTask,
     required void Function() pumpQueue,
   })  : _tasks = tasks,
         _torrentIds = torrentIds,
         _cancelTokens = cancelTokens,
+        _activeFutures = activeFutures ?? (() => <String, Future<void>>{}),
         _wifiOnly = wifiOnly,
         _setTask = setTask,
         _pumpQueue = pumpQueue;
@@ -32,6 +34,7 @@ class NetworkMonitor {
   final List<DownloadTask> Function() _tasks;
   final Map<String, int> Function() _torrentIds;
   final Map<String, CancelToken> Function() _cancelTokens;
+  final Map<String, Future<void>> Function() _activeFutures;
   final bool Function() _wifiOnly;
   final Future<void> Function(DownloadTask updated) _setTask;
   final void Function() _pumpQueue;
@@ -138,8 +141,14 @@ class NetworkMonitor {
         if (torrentId != null) {
           TorrentService.pauseTorrent(torrentId);
         }
-        // No cancellation gate needed - cancel token removal handles resumes.
+        // Cancel token and await active future so old engine completes before returning
         _cancelTokens()[task.id]?.cancel('network_disconnect_pause');
+        final fut = _activeFutures()[task.id];
+        if (fut != null) {
+          try {
+            await fut.timeout(const Duration(seconds: 5));
+          } catch (_) {}
+        }
         _cancelTokens().remove(task.id);
       }
       await _setTask(

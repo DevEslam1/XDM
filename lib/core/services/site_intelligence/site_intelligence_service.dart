@@ -167,6 +167,7 @@ class SiteReliability {
     if (totalAttempts == 0) return 100;
     return ((successes / totalAttempts) * 100).round();
   }
+
   Map<String, dynamic> toJson() => {
         'domain': domain,
         'totalAttempts': totalAttempts,
@@ -177,7 +178,8 @@ class SiteReliability {
         'lastFailure': lastFailure?.toIso8601String(),
         'lastError': lastError,
       };
-  factory SiteReliability.fromJson(Map<String, dynamic> json) => SiteReliability(
+  factory SiteReliability.fromJson(Map<String, dynamic> json) =>
+      SiteReliability(
         domain: json['domain'] as String? ?? '',
         totalAttempts: json['totalAttempts'] as int? ?? 0,
         successes: json['successes'] as int? ?? 0,
@@ -298,8 +300,7 @@ class SiteIntelligenceService {
     // FIX: Check for any URL scheme, not just http/https. This prevents
     // mangling URLs with other valid schemes (e.g. ftp://, file://).
     final hasScheme = _urlSchemeRegex.hasMatch(cleanUrl);
-    final uri = Uri.tryParse(
-        hasScheme ? cleanUrl : 'https://$cleanUrl');
+    final uri = Uri.tryParse(hasScheme ? cleanUrl : 'https://$cleanUrl');
     if (uri == null) return _fallbackResult();
     final host = uri.host.toLowerCase();
 
@@ -327,8 +328,8 @@ class SiteIntelligenceService {
     }
 
     bool urlsExpire = profile?.urlsExpire ?? false;
-    final hasExpiryParam = uri.queryParameters.entries
-        .any((entry) => UrlPatterns.isExpiryOrSignatureParam(entry.key, entry.value));
+    final hasExpiryParam = uri.queryParameters.entries.any((entry) =>
+        UrlPatterns.isExpiryOrSignatureParam(entry.key, entry.value));
     if (hasExpiryParam) urlsExpire = true;
 
     SiteType siteType = profile?.type ?? SiteType.genericWebpage;

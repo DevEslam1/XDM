@@ -64,8 +64,8 @@ class AdBlockerDelegate {
   // Safe JS evaluator — swallows MissingPluginException (disposed WebView),
   // PlatformException, and any other errors silently.
   // ---------------------------------------------------------------------------
-  Future<void> _eval(InAppWebViewController? ctrl, String source,
-      String tag) async {
+  Future<void> _eval(
+      InAppWebViewController? ctrl, String source, String tag) async {
     if (ctrl == null) return;
     try {
       await ctrl.evaluateJavascript(source: source).catchError((_) => null);
@@ -108,7 +108,9 @@ class AdBlockerDelegate {
 
     // Apply cosmetic CSS styling only
     final cssJson = jsonEncode(cssRulesForUrl(url));
-    _eval(ctrl, '''
+    _eval(
+        ctrl,
+        '''
 (function() {
   var s = document.getElementById('xdm-adblock-css');
   if (!s) {
@@ -118,6 +120,7 @@ class AdBlockerDelegate {
   }
   s.textContent = $cssJson;
 })();
-''', 'CSS');
+''',
+        'CSS');
   }
 }

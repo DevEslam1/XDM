@@ -6,7 +6,7 @@ class MirrorBenchmarkService {
   static final _log = Logger('MirrorBenchmark');
   static final Map<String, _BenchmarkResult> _results = {};
   static const _cacheTtl = Duration(hours: 1);
-  static const _benchmarkBytes = 512 * 1024; 
+  static const _benchmarkBytes = 512 * 1024;
   static const _maxCacheSize = 50;
 
   static Future<List<MirrorBenchmarkResult>> benchmarkAll(
@@ -27,7 +27,7 @@ class MirrorBenchmarkService {
         }
       }),
     );
-    
+
     final ranked = List<MirrorBenchmarkResult>.of(results)
       ..sort((a, b) {
         if (a.success != b.success) return a.success ? -1 : 1;
@@ -43,7 +43,7 @@ class MirrorBenchmarkService {
     if (cached != null && !cached.isExpired) {
       return cached.toResult(url);
     }
-    
+
     final stopwatch = Stopwatch()..start();
     final dio = Dio(
       BaseOptions(
@@ -52,12 +52,12 @@ class MirrorBenchmarkService {
       ),
     );
     final cancelToken = CancelToken();
-    
+
     try {
       await dio.head(url, options: Options(validateStatus: (_) => true));
       final ttfb = stopwatch.elapsedMilliseconds;
       stopwatch.reset();
-      
+
       final response = await dio.get<ResponseBody>(
         url,
         cancelToken: cancelToken,
@@ -67,7 +67,7 @@ class MirrorBenchmarkService {
           validateStatus: (_) => true,
         ),
       );
-      
+
       int bytesReceived = 0;
       try {
         await for (final chunk in response.data!.stream) {
@@ -81,23 +81,24 @@ class MirrorBenchmarkService {
           cancelToken.cancel('benchmark_complete');
         }
       }
-      
+
       final downloadMs = stopwatch.elapsedMilliseconds;
-      final speedBps = downloadMs > 0 ? (bytesReceived * 1000.0 / downloadMs) : 0.0;
-      
+      final speedBps =
+          downloadMs > 0 ? (bytesReceived * 1000.0 / downloadMs) : 0.0;
+
       final result = _BenchmarkResult(
         ttfbMs: ttfb,
         downloadMs: downloadMs,
         speedBps: speedBps,
         timestamp: DateTime.now(),
       );
-      
+
       // Enforce cache size limit
       if (_results.length >= _maxCacheSize) {
         _results.remove(_results.keys.first);
       }
       _results[url] = result;
-      
+
       return result.toResult(url);
     } finally {
       dio.close();
@@ -110,7 +111,7 @@ class MirrorBenchmarkResult {
   final int latencyMs;
   final double speedBps;
   final bool success;
-  
+
   const MirrorBenchmarkResult({
     required this.url,
     required this.latencyMs,
@@ -124,7 +125,7 @@ class _BenchmarkResult {
   final int downloadMs;
   final double speedBps;
   final DateTime timestamp;
-  
+
   _BenchmarkResult({
     required this.ttfbMs,
     required this.downloadMs,
@@ -134,7 +135,7 @@ class _BenchmarkResult {
 
   bool get isExpired =>
       DateTime.now().difference(timestamp) > MirrorBenchmarkService._cacheTtl;
-      
+
   MirrorBenchmarkResult toResult(String url) => MirrorBenchmarkResult(
         url: url,
         latencyMs: ttfbMs,

@@ -332,7 +332,8 @@ class _MergeRetryTestHost implements DownloadOrchestratorHost {
   @override
   int effectiveSpeedLimit() => 0;
   @override
-  List<double> buildChunks(int threadCount, int fileSize, int downloadedBytes) =>
+  List<double> buildChunks(
+          int threadCount, int fileSize, int downloadedBytes) =>
       List<double>.filled(threadCount > 0 ? threadCount : 1, 1.0);
   @override
   ({int total, List<Map<String, dynamic>>? files}) scanExistingTorrentData(

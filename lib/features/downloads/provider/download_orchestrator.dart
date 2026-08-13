@@ -372,6 +372,28 @@ class DownloadOrchestrator {
     }
   }
 
+  static bool isYouTubePageUrl(String url) {
+    if (url.isEmpty) return false;
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null) return false;
+    final host = uri.host.toLowerCase();
+    final isYtHost = host == 'youtube.com' ||
+        host.endsWith('.youtube.com') ||
+        host == 'youtu.be' ||
+        host.endsWith('.youtu.be');
+    if (!isYtHost) return false;
+
+    final path = uri.path.toLowerCase();
+    final isPagePath = path.contains('/watch') ||
+        path.contains('/playlist') ||
+        path.contains('/shorts') ||
+        path == '/' ||
+        path.isEmpty;
+    final hasItag = uri.queryParameters.containsKey('itag');
+
+    return isPagePath || !hasItag;
+  }
+
   /// Extract cookies and resolve YouTube stream URLs.
   /// Returns the cookie string needed for download, or null if the task
   /// was queued for retry / marked as failed (caller should return).
@@ -425,8 +447,8 @@ class DownloadOrchestrator {
       try {
         final videoId = YoutubeService.extractVideoId(youtubeUrl);
         if (videoId != null) {
-          // Directly return stored task URL for download start
-          if (task.url.isNotEmpty) {
+          // Directly return stored task URL for download start if it's already a resolved stream URL
+          if (task.url.isNotEmpty && !isYouTubePageUrl(task.url)) {
             return task;
           }
 
@@ -435,9 +457,14 @@ class DownloadOrchestrator {
             streamInfo = await YoutubeService.getStreamForVideo(
               videoId,
               task.youtubeQualityPreset,
+            ).timeout(
+              const Duration(seconds: 35),
+              onTimeout: () =>
+                  throw TimeoutException('Stream resolution timed out (35s)'),
             );
           } catch (e) {
             debugPrint('[DMX] Pre-download stream resolution failed: $e');
+            rethrow;
           }
 
           if (streamInfo != null) {
@@ -738,11 +765,18 @@ class DownloadOrchestrator {
       final mergedFile = File(mergedPath);
       if (await mergedFile.exists()) {
         final mergedLen = await mergedFile.length();
-        if (mergedLen > 1024) {
+        if (current.fileSize > 0 && mergedLen >= 0.9 * current.fileSize) {
           debugPrint(
             '[DMX] FIX-S2: Merge output already exists ($mergedLen bytes), skipping FFmpeg execution',
           );
           return true;
+        } else {
+          debugPrint(
+            '[DMX] H4: Existing merged file is invalid/truncated ($mergedLen bytes, fileSize=${current.fileSize}). Deleting and re-merging.',
+          );
+          try {
+            await mergedFile.delete();
+          } catch (_) {}
         }
       }
 
@@ -793,7 +827,7 @@ class DownloadOrchestrator {
       debugPrint('[DMX]   Video size: $videoLen bytes');
       debugPrint('[DMX]   Audio size: $audioLen bytes');
 
-      // FIX YT-7: Verify video file size before merge
+      // FIX YT-7 & FIX-10 (M10): Consolidated video completeness check
       if (videoLen == 0) {
         await _host.setTaskState(current.copyWith(
           status: DownloadStatus.failed,
@@ -801,17 +835,29 @@ class DownloadOrchestrator {
         ));
         return false;
       }
-      // If we know expected video size, verify it's close
-      if (current.fileSize > 0 && current.audioSize > 0) {
-        final expectedVideo = current.fileSize - current.audioSize;
-        if (expectedVideo > 0 && videoLen < (expectedVideo * 0.95).toInt()) {
-          await _host.setTaskState(current.copyWith(
-            status: DownloadStatus.failed,
-            errorMessage:
-                'Video file incomplete: $videoLen / $expectedVideo bytes.',
-          ));
-          return false;
-        }
+      final expectedVideoSize = current.videoStreamSize > 0
+          ? current.videoStreamSize
+          : (current.fileSize > 0
+              ? (current.fileSize -
+                  (current.audioSize > 0 ? current.audioSize : 0))
+              : 0);
+      if (expectedVideoSize > 0 &&
+          videoLen < (expectedVideoSize * 0.95).toInt()) {
+        final deficit = expectedVideoSize - videoLen;
+        final deficitPct =
+            (deficit / expectedVideoSize * 100).toStringAsFixed(1);
+        debugPrint(
+          '[DMX] M10: video file incomplete: $videoLen / $expectedVideoSize '
+          'bytes ($deficitPct% missing). Failing merge.',
+        );
+        await _host.setTaskState(current.copyWith(
+          status: DownloadStatus.failed,
+          statusMessage: DownloadStatusMessages.ffmpegMergeFailed,
+          errorMessage:
+              '${DownloadStatusMessages.ffmpegMergeFailed}Video file incomplete: '
+              '$videoLen / $expectedVideoSize bytes ($deficitPct% missing). Please retry.',
+        ));
+        return false;
       }
 
       if (audioLen == 0) {
@@ -845,28 +891,6 @@ class DownloadOrchestrator {
                 '${DownloadStatusMessages.ffmpegMergeFailed}Audio file incomplete: '
                 '$audioLen / $expectedAudioSize bytes '
                 '($deficitPct% missing). Please retry the download.',
-          ),
-        );
-        return false;
-      }
-
-      // FIX-10: Validate video file size before merge
-      final expectedVideoSize = current.fileSize > 0
-          ? (current.fileSize - (current.audioSize > 0 ? current.audioSize : 0))
-          : 0;
-      if (expectedVideoSize > 0 &&
-          videoLen < (expectedVideoSize * 0.95).toInt()) {
-        debugPrint(
-          '[DMX] FIX-10: video file incomplete: $videoLen / $expectedVideoSize '
-          'bytes. Failing merge.',
-        );
-        await _host.setTaskState(
-          current.copyWith(
-            status: DownloadStatus.failed,
-            statusMessage: DownloadStatusMessages.ffmpegMergeFailed,
-            errorMessage:
-                '${DownloadStatusMessages.ffmpegMergeFailed}Video file incomplete: '
-                '$videoLen / $expectedVideoSize bytes. Please retry the download.',
           ),
         );
         return false;
@@ -2021,10 +2045,11 @@ class DownloadOrchestrator {
                   statusMessageOverride: progress.statusMessage,
                 );
 // REPLACE:
-                // FIX-AUDIT-A1: Persist audio progress to sidecar at 2s intervals
+                // FIX-AUDIT-A1: Persist audio progress to sidecar at 2s intervals per-task
                 final audioNow = DateTime.now().millisecondsSinceEpoch;
-                if (audioNow - _lastAudioStateSaveMs >= 2000) {
-                  _lastAudioStateSaveMs = audioNow;
+                final lastSave = _lastAudioStateSaveMs[task.id] ?? 0;
+                if (audioNow - lastSave >= 2000) {
+                  _lastAudioStateSaveMs[task.id] = audioNow;
                   unawaited(_persistAudioState(
                       liveAudioTempPath, progress.downloadedBytes, size));
                   // FIX-AUDIO-DB: also persist the task row so a crash does not
@@ -3402,7 +3427,8 @@ class DownloadOrchestrator {
         }
       }
 
-      final downloadFuture = _executeDownload(
+      late final Future<void> guardedFuture;
+      guardedFuture = _executeDownload(
         task,
         runtimeThreadCount,
         cookieString,
@@ -3600,7 +3626,10 @@ class DownloadOrchestrator {
         }
       }).whenComplete(() {
         _host.cancelTokens.remove(task.id);
-        _host.activeFutures.remove(task.id);
+        _lastAudioStateSaveMs.remove(task.id);
+        if (identical(_host.activeFutures[task.id], guardedFuture)) {
+          _host.activeFutures.remove(task.id);
+        }
         // Don't pumpQueue here if this task was set to queued (retry
         // scheduled by catchError). The retry timer will restart it after
         // the configured delay — immediate pumpQueue would defeat the delay
@@ -3620,7 +3649,7 @@ class DownloadOrchestrator {
           earlyReturnCompleter.complete();
         }
       });
-      _host.activeFutures[task.id] = downloadFuture;
+      _host.activeFutures[task.id] = guardedFuture;
     } catch (e, st) {
       // FIX-1: _startTaskBody must never leave a task stuck in queued or leak
       // the _startingTaskIds entry. Any unhandled exception (disk full, resolve
@@ -4053,7 +4082,7 @@ class DownloadOrchestrator {
   }
 
   // FIX-AUDIT-A1: Audio state persistence helper
-  int _lastAudioStateSaveMs = 0;
+  final Map<String, int> _lastAudioStateSaveMs = {};
 
   Future<void> _persistAudioState(
       String audioPath, int downloaded, int totalSize) async {

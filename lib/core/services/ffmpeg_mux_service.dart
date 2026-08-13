@@ -155,10 +155,14 @@ class FFmpegMuxService {
     if (!await file.exists()) return false;
     try {
       final probe = await FFprobeKit.executeWithArguments([
-        '-v', 'error',
-        '-show_entries', 'format=duration',
-        '-show_entries', 'stream=codec_type',
-        '-of', 'default=noprint_wrappers=1',
+        '-v',
+        'error',
+        '-show_entries',
+        'format=duration',
+        '-show_entries',
+        'stream=codec_type',
+        '-of',
+        'default=noprint_wrappers=1',
         path,
       ]);
       final logs = await probe.getLogsAsString();
@@ -272,7 +276,8 @@ class FFmpegMuxService {
         final logs = await session.getLogsAsString();
         final lines = logs.split('\n');
         for (var i = lines.length - 1; i >= 0; i--) {
-          final match = RegExp(r'time=(\d+):(\d+):(\d+)\.(\d+)').firstMatch(lines[i]);
+          final match =
+              RegExp(r'time=(\d+):(\d+):(\d+)\.(\d+)').firstMatch(lines[i]);
           if (match != null) {
             final secs = int.parse(match.group(1)!) * 3600 +
                 int.parse(match.group(2)!) * 60 +

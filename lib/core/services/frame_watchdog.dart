@@ -35,7 +35,8 @@ class FrameWatchdog {
     } catch (e) {
       // FIX: Always fall back to 60Hz if detection fails
       _refreshRate = 60.0;
-      _log.fine('[FrameWatchdog] Refresh rate detection failed, using 60Hz: $e');
+      _log.fine(
+          '[FrameWatchdog] Refresh rate detection failed, using 60Hz: $e');
     }
   }
 

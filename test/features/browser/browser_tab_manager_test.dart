@@ -48,12 +48,15 @@ void main() {
       expect(tabManager.activeTab, isNotNull);
     });
 
-    test('openInNewTab with switchToTab false loads in background without stealing focus', () {
+    test(
+        'openInNewTab with switchToTab false loads in background without stealing focus',
+        () {
       tabManager.openInNewTab('https://example.com', switchToTab: true);
       expect(tabManager.currentIndex, equals(0));
       expect(tabManager.tabs.length, equals(1));
 
-      tabManager.openInNewTab('https://ad.com', switchToTab: false, origin: TabOrigin.adOrPopup);
+      tabManager.openInNewTab('https://ad.com',
+          switchToTab: false, origin: TabOrigin.adOrPopup);
       expect(tabManager.tabs.length, equals(2));
       expect(tabManager.currentIndex, equals(0));
       expect(tabManager.activeTab!.url, equals('https://example.com'));
@@ -72,7 +75,8 @@ void main() {
       expect(tabManager.activeTab!.url, equals('https://tab2.com'));
     });
 
-    test('evictStaleAdTabs cleans up stale ad tabs without evicting active tab', () {
+    test('evictStaleAdTabs cleans up stale ad tabs without evicting active tab',
+        () {
       tabManager.openInNewTab('https://main.com', switchToTab: true);
       for (int i = 0; i < 5; i++) {
         tabManager.openInNewTab(
@@ -84,7 +88,8 @@ void main() {
 
       tabManager.evictStaleAdTabs();
       expect(tabManager.activeTab!.url, equals('https://main.com'));
-      final adTabs = tabManager.tabs.where((t) => t.origin == TabOrigin.adOrPopup).length;
+      final adTabs =
+          tabManager.tabs.where((t) => t.origin == TabOrigin.adOrPopup).length;
       expect(adTabs, lessThanOrEqualTo(3));
     });
   });

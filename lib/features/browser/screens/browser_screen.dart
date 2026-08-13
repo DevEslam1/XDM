@@ -69,7 +69,6 @@ import '../widgets/smart_url_bar.dart';
 import '../widgets/browser_shield_sheet.dart';
 import 'package:logging/logging.dart';
 
-
 part 'browser_screen_base.dart';
 part 'browser_screen_shortcuts.dart';
 part 'browser_screen_tabs.dart';

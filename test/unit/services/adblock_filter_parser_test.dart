@@ -117,8 +117,10 @@ void main() {
   group('AdBlockFilterUpdater host parsing', () {
     final updater = AdBlockFilterUpdater();
 
-    test('parseFilterFile parses multi-host lines and inline comments', () async {
-      final tempDir = await Directory.systemTemp.createTemp('adblock_hosts_test_');
+    test('parseFilterFile parses multi-host lines and inline comments',
+        () async {
+      final tempDir =
+          await Directory.systemTemp.createTemp('adblock_hosts_test_');
       try {
         final f = File(p.join(tempDir.path, 'hosts.txt'));
         await f.writeAsString('''

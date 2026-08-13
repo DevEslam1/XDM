@@ -212,8 +212,8 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
                                   : AppTheme.lightTextMuted,
                               fontSize: 13,
                             ),
-                            prefixIcon:
-                                Icon(Icons.search_rounded, size: 20, color: accent),
+                            prefixIcon: Icon(Icons.search_rounded,
+                                size: 20, color: accent),
                             suffixIcon: _searchQuery.isNotEmpty
                                 ? IconButton(
                                     icon: const Icon(Icons.clear_rounded,
@@ -330,8 +330,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
                                   accent: accent,
                                   onEdit: () => _editScript(script),
                                   onDelete: () => _delete(script),
-                                  onToggle: (val) =>
-                                      _toggleScript(script, val),
+                                  onToggle: (val) => _toggleScript(script, val),
                                 );
                               },
                             ),
@@ -544,10 +543,12 @@ class _ScriptCard extends StatelessWidget {
                   value: script.enabled,
                   activeThumbColor: Colors.white,
                   activeTrackColor: cardColor,
-                  inactiveThumbColor:
-                      isDark ? const Color(0xFF7F7F90) : const Color(0xFF94A3B8),
-                  inactiveTrackColor:
-                      isDark ? const Color(0x1AFFFFFF) : const Color(0x0D000000),
+                  inactiveThumbColor: isDark
+                      ? const Color(0xFF7F7F90)
+                      : const Color(0xFF94A3B8),
+                  inactiveTrackColor: isDark
+                      ? const Color(0x1AFFFFFF)
+                      : const Color(0x0D000000),
                   trackOutlineColor: WidgetStateProperty.resolveWith(
                       (states) => Colors.transparent),
                   onChanged: onToggle,
@@ -651,7 +652,9 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
-              widget.initialName.isEmpty ? Icons.add_rounded : Icons.edit_rounded,
+              widget.initialName.isEmpty
+                  ? Icons.add_rounded
+                  : Icons.edit_rounded,
               color: accent,
               size: 18,
             ),
@@ -728,8 +731,7 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
               },
               decoration: InputDecoration(
                 labelText: L10n.of(context, 'browser_script_url_pattern'),
-                prefixIcon:
-                    Icon(Icons.link_rounded, size: 18, color: accent),
+                prefixIcon: Icon(Icons.link_rounded, size: 18, color: accent),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -755,7 +757,8 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
                     label: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.code, size: 14, color: !_isCss ? accent : null),
+                        Icon(Icons.code,
+                            size: 14, color: !_isCss ? accent : null),
                         const SizedBox(width: 6),
                         Text(L10n.of(context, 'browser_script_js')),
                       ],
@@ -872,8 +875,9 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
               return;
             }
             if (code.isEmpty) {
-              setState(() => _errorMessage =
-                  L10n.isRtl(context) ? 'يرجى إدخال الكود' : 'Please enter script code');
+              setState(() => _errorMessage = L10n.isRtl(context)
+                  ? 'يرجى إدخال الكود'
+                  : 'Please enter script code');
               return;
             }
             Navigator.pop(

@@ -8,7 +8,6 @@ part of 'browser_screen.dart';
 /// of the same library as browser_screen.dart).
 abstract class _BrowserScreenStateBase extends State<BrowserScreen>
     with HapticHelper, WidgetsBindingObserver, SingleTickerProviderStateMixin {
-
   Timer? _navStateDebounceTimer;
 
   SettingsProvider? _cachedSettings;
@@ -18,9 +17,7 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
 
   final List<Map<String, String>> _userCustomShortcuts = [];
 
-
   final Logger _log = Logger('BrowserScreen');
-
 
   final List<String> _tabIdHistory = [];
 
@@ -52,7 +49,6 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
     _sharedHttpClient = null;
   }
 
-
   List<BrowserTab> get _tabs => _tabManager.tabs;
 
   int get _currentTabIndex => _tabManager.currentIndex;
@@ -61,7 +57,6 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
       _tabManager.switchToTab(idx);
     }
   }
-
 
   final TextEditingController _urlController = TextEditingController();
 
@@ -79,12 +74,10 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
 
   String _customCss = '';
 
-
   // E6: Element Picker State
   bool _isPickerModeActive = false;
 
   bool _scriptsInjectedSnackbarShown = false;
-
 
   // Fix #10: Per-tab blocked-ad and blocked-popup counters.
   // Using ValueNotifier per tab so increments in shouldInterceptRequest do NOT call setState.
@@ -98,10 +91,8 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
 
   final Map<String, int> _blockedPopupsPerTab = {};
 
-
   // E13: Tab Suspension/Resume Visual Feedback
   String? _restoringTabId;
-
 
   Map<String, String> get _detectedDownloadUrls =>
       _sniffer.detectedDownloadUrls;
@@ -118,16 +109,13 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
   Map<String, DateTime> get _lastYoutubeAuthTimes =>
       _sniffer.lastYoutubeAuthTimes;
 
-
   Duration get _youtubeAuthCooldown => const Duration(seconds: 30);
 
   Map<String, Timer> get _mediaScanTimers => _sniffer.mediaScanTimers;
 
-
   bool _quitPersisted = false;
 
   bool _isRestoring = false;
-
 
   /// Tracks when a back/forward navigation is in progress so that
   /// [shouldOverrideUrlLoading] doesn't intercept it. Without this,
@@ -136,19 +124,15 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
   /// tab, effectively "dismissing" the page.
   final Map<String, bool> _navigatingBackForwardTabIds = {};
 
-
   final AdBlockerDelegate _adBlocker = AdBlockerDelegate();
 
   final RedirectGuard _redirectGuard = RedirectGuard();
-
 
   String? _lastInterceptedUrl;
 
   DateTime? _lastInterceptedTime;
 
-
   DownloadProvider? _downloadProvider;
-
 
   late final BrowserHistoryManager _historyManager = BrowserHistoryManager(
     resolveDatabase: () => context.read<DatabaseService>(),
@@ -157,23 +141,19 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
     isActive: () => mounted,
   );
 
-
   late final DownloadInterceptor _interceptor = DownloadInterceptor(
-    resolveDownloadProvider: () =>
-        context.read<DownloadProvider>(),
+    resolveDownloadProvider: () => context.read<DownloadProvider>(),
     resolveActiveTab: () =>
         (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length)
             ? _tabs[_currentTabIndex]
             : null,
   );
 
-
   final ScrollController _dashboardScrollController = ScrollController();
 
   List<Timer> get _pendingTimers => _tabManager.pendingTimers;
 
   Timer? _navDebounce;
-
 
   String get _snifferPrefKey => 'browserSnifferEnabled';
 
@@ -189,7 +169,6 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
 
   DateTime? _lastLongPressSheetAt;
 
-
   // UX 3.1: Find-in-page state
   bool _findPanelVisible = false;
 
@@ -199,13 +178,11 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
 
   final TextEditingController _findTextController = TextEditingController();
 
-
   // UX 3.2: Reader-mode controls state
   ReaderArticle? _readerArticle;
 
-  String?
-      _readerTabId;
- // Bug #16 fix: track the specific tab where reader mode was activated
+  String? _readerTabId;
+  // Bug #16 fix: track the specific tab where reader mode was activated
   bool _readerControlsVisible = false;
 
   double _readerFontSize = 16.0;
@@ -214,29 +191,23 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
 
   String _readerFontFamily = 'serif';
 
-
   // UX 3.5: Recently closed tabs
   int get _maxRecentClosedTabs => 10;
 
   final List<_ClosedTab> _recentlyClosedTabs = [];
 
-
   // UX 3.12: Full-page screenshot guard
   bool _capturingPage = false;
-
 
   // UX 3.15: Incognito banner (dismissed per session)
   bool _incognitoBannerDismissed = false;
 
-
   // UX 3.19: Form autofill JS channel
   String get _autofillChannel => 'XDM_Autofill';
-
 
   // UX 3.20: Keyboard shortcuts only on desktop-class platforms
   bool get _shortcutsActive =>
       Platform.isWindows || Platform.isMacOS || Platform.isLinux;
-
 
   String get _longPressChannel => 'XDM_LongPress';
 
@@ -410,7 +381,8 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
 
   void _openInBackgroundTab(String url, {bool isIncognito = false});
 
-  Widget _buildVerticalTabSidebar(BuildContext context, SettingsProvider settings);
+  Widget _buildVerticalTabSidebar(
+      BuildContext context, SettingsProvider settings);
 
   Widget _buildTabStrip(
     BuildContext context,
@@ -425,12 +397,10 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
     String? type,
   });
 
-
   // ─────────────────────────────────────────────────────────────
   // Tab persistence
   // ─────────────────────────────────────────────────────────────
   Future<void> _saveTabs() => _tabManager.saveTabs();
-
 
   final List<String> _lruTabIds = [];
 
@@ -438,18 +408,13 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
 
   Timer? _siteSettingsReloadTimer;
 
-
   final _inactivityWatchdog = InactivityWatchdog();
-
 
   void _pauseTabMedia(BrowserTab tab) => _inactivityWatchdog.pauseTabMedia(tab);
 
-
   bool _showTabTooltip = false;
 
-
   DateTime? _lastInactivityReset;
-
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -461,21 +426,16 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
     );
   }
 
-
   void _recordHistory(String url, {String? title}) =>
       _historyManager.recordHistory(url, title: title);
 
-
   bool _isYoutubeHost(String url) => MediaSniffer.isYoutubeHost(url);
 
-
   final Map<String, Timer> _mediaScanDebouncePerTab = {};
-
 
   final _fingerprintManager = FingerprintManager();
 
   final _scriptInjector = ScriptInjector();
-
 
   String _resolveUserAgent({
     required bool isIncognito,
@@ -486,23 +446,19 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
         settings: settings,
       );
 
-
   Future<void> _applyUserAgent(
     BrowserTab tab,
     SettingsProvider settings,
   ) =>
       _fingerprintManager.applyUserAgent(tab, settings);
 
-
   Future<void> _hideWebViewFingerprints(BrowserTab tab) {
     final settings = _settings;
     return _fingerprintManager.hideWebViewFingerprints(tab, settings);
   }
 
-
   void _injectDesktopModeScript(BrowserTab tab, SettingsProvider settings) =>
       _scriptInjector.injectDesktopModeScript(tab, settings);
-
 
   /// Silently removes the oldest [TabOrigin.adOrPopup] / [TabOrigin.redirect]
   /// background tabs when their count is at or above the manager's cap,
@@ -516,15 +472,12 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
     _tabManager.evictStaleAdTabs();
   }
 
-
   int _lastScrollTimeMs = 0;
 
   bool? _lastNavbarVisible;
 
-
   void _delayed(Duration duration, VoidCallback callback) =>
       _tabManager.delayed(duration, callback);
-
 
   PopupMenuItem<String> _menuItem(
     IconData icon,
@@ -554,7 +507,6 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
     );
   }
 
-
   bool _effectiveForceDark(SettingsProvider settings) {
     // Forcing dark is implied whenever the app UI is in dark/amoled mode;
     // the dedicated switch can still force it on even in light mode.
@@ -562,7 +514,6 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
         settings.isAmoledMode ||
         settings.forceDarkMode;
   }
-
 
   /// UX 3.4: Dialog to clear cache, cookies, history, form data and downloads.
   void _showClearBrowsingDataDialog() {
@@ -667,35 +618,31 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
     );
   }
 
-
   void _focusUrlBar() {
     _focusNode.requestFocus();
   }
 
-
   Set<String> get _appLinkHosts => const {
-    'youtube.com',
-    'youtu.be',
-    'twitter.com',
-    'x.com',
-    'facebook.com',
-    'instagram.com',
-    'tiktok.com',
-    'twitch.tv',
-    'spotify.com',
-    'open.spotify.com',
-    'netflix.com',
-    'maps.google.com',
-    'waze.com',
-    'discord.com',
-    'telegram.me',
-    'reddit.com',
-  };
-
+        'youtube.com',
+        'youtu.be',
+        'twitter.com',
+        'x.com',
+        'facebook.com',
+        'instagram.com',
+        'tiktok.com',
+        'twitch.tv',
+        'spotify.com',
+        'open.spotify.com',
+        'netflix.com',
+        'maps.google.com',
+        'waze.com',
+        'discord.com',
+        'telegram.me',
+        'reddit.com',
+      };
 
   Future<void> _scanPageMedia(BrowserTab tab) =>
       _sniffer.scanPageMedia(tab, tabs: _tabs);
-
 
   Widget _buildQualityTile(
     BuildContext context,
@@ -761,7 +708,6 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
     );
   }
 
-
   Widget _buildOnboardingTooltip(
     BuildContext context,
     SettingsProvider settings,
@@ -805,7 +751,6 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
     );
   }
 
-
   late final TabManager _tabManager = TabManager(
     isActive: () => mounted,
     createTab: _createNewTab,
@@ -820,7 +765,6 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
     },
     updateNavState: _updateNavState,
   );
-
 
   late final MediaSniffer _sniffer = MediaSniffer(
     isActive: () => mounted,

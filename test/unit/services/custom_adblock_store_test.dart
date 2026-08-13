@@ -54,7 +54,8 @@ void main() {
     });
 
     test('addHosts accepts IP addresses and local domain names', () async {
-      await store.addHosts('192.168.1.100, 127.0.0.1, router.local, mydevice.lan');
+      await store
+          .addHosts('192.168.1.100, 127.0.0.1, router.local, mydevice.lan');
       expect(store.hosts, contains('192.168.1.100'));
       expect(store.hosts, contains('127.0.0.1'));
       expect(store.hosts, contains('router.local'));

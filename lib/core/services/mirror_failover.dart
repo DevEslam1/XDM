@@ -56,7 +56,7 @@ class MirrorFailover {
     final validUrls =
         _urls.where((u) => !MirrorHealthStore.isBlacklisted(u)).toList();
     final candidateUrls = validUrls.isNotEmpty ? validUrls : _urls;
-    
+
     for (var i = 0; i < candidateUrls.length; i++) {
       final url = candidateUrls[i];
       if (i > 0) {
@@ -65,7 +65,7 @@ class MirrorFailover {
       try {
         await action(url);
         await MirrorHealthStore.recordSuccess(url);
-        _index = i; 
+        _index = i;
         return url;
       } catch (e) {
         await MirrorHealthStore.recordFailure(url);

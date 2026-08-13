@@ -115,7 +115,8 @@ class CustomAdBlockStore {
 
   Future<void> removeHost(String input) async {
     final sanitized = _sanitizeHost(input);
-    final target = sanitized.isNotEmpty ? sanitized : input.trim().toLowerCase();
+    final target =
+        sanitized.isNotEmpty ? sanitized : input.trim().toLowerCase();
     if (_hosts.remove(target)) {
       await _save();
       AdBlockerService.instance.refresh();
@@ -147,4 +148,3 @@ class CustomAdBlockStore {
     return false;
   }
 }
-

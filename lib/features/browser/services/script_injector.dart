@@ -427,29 +427,25 @@ $customJs
     // dark/amoled or the dedicated force-dark switch is on.
     if (settings.isDarkMode || settings.forceDarkMode) {
       final css = buildForceDarkCss();
-      scripts.add(
-        '(function() {'
-        '  var s = document.getElementById("xdm-force-dark");'
-        '  if (!s) {'
-        '    s = document.createElement("style");'
-        '    s.id = "xdm-force-dark";'
-        '    document.head.appendChild(s);'
-        '  }'
-        '  s.textContent = ${jsonEncode(css)};'
-        '})();'
-      );
+      scripts.add('(function() {'
+          '  var s = document.getElementById("xdm-force-dark");'
+          '  if (!s) {'
+          '    s = document.createElement("style");'
+          '    s.id = "xdm-force-dark";'
+          '    document.head.appendChild(s);'
+          '  }'
+          '  s.textContent = ${jsonEncode(css)};'
+          '})();');
     }
 
     // Image blocking
     if (settings.blockImages) {
       final css = buildBlockImagesCss();
-      scripts.add(
-        '(function() {'
-        '  var s = document.createElement("style");'
-        '  s.textContent = ${jsonEncode(css)};'
-        '  document.head.appendChild(s);'
-        '})();'
-      );
+      scripts.add('(function() {'
+          '  var s = document.createElement("style");'
+          '  s.textContent = ${jsonEncode(css)};'
+          '  document.head.appendChild(s);'
+          '})();');
     }
 
     // Form autofill capture (always safe; gated by the app-side handler)

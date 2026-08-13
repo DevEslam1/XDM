@@ -116,14 +116,14 @@ class BackgroundService {
         );
 
     service.on('heartbeat').listen(
-      (_) {
-        _log.finest('Heartbeat received');
-      },
-      cancelOnError: false,
-      onError: (e) {
-        _log.warning('heartbeat stream error', e);
-      },
-    );
+          (_) {
+            _log.finest('Heartbeat received');
+          },
+          cancelOnError: false,
+          onError: (e) {
+            _log.warning('heartbeat stream error', e);
+          },
+        );
   }
 
   @pragma('vm:entry-point')

@@ -125,6 +125,7 @@ class DownloadProvider extends ChangeNotifier
       tasks: () => _tasks,
       torrentIds: () => _torrentIds,
       cancelTokens: () => _cancelTokens,
+      activeFutures: () => _activeFutures,
       wifiOnly: () => _settingsProvider.wifiOnly,
       setTask: _setTask,
       pumpQueue: pumpQueue,
@@ -142,8 +143,8 @@ class DownloadProvider extends ChangeNotifier
       onCancelTask: cancelTask,
       onPauseAll: pauseAllTasks,
       onResumeAll: resumeAllTasks,
-      onStopAll: pauseAllTasks,     // Stop All = pause every active task
-      onStartAll: resumeAllTasks,   // Start All = resume every paused task
+      onStopAll: pauseAllTasks, // Stop All = pause every active task
+      onStartAll: resumeAllTasks, // Start All = resume every paused task
       onExitApp: exitApp,
     );
     _notifications.init();
@@ -218,7 +219,8 @@ class DownloadProvider extends ChangeNotifier
           // Check if we need to force-pause a newly registered torrent
           if (_needsForcedPauseOnRegister.contains(task.id)) {
             _needsForcedPauseOnRegister.remove(task.id);
-            _log.info('Forcing pause on registered torrent ${task.id} (handle $tid)');
+            _log.info(
+                'Forcing pause on registered torrent ${task.id} (handle $tid)');
             try {
               if (TorrentService.isTorrentAlive(tid)) {
                 await TorrentService.pauseTorrent(tid);
@@ -395,7 +397,6 @@ class DownloadProvider extends ChangeNotifier
 
   String? _lastError;
   String? get lastError => _lastError;
-
 
   // ---------------------------------------------------------------------------
   // Mixin contract implementations
@@ -900,12 +901,21 @@ class DownloadProvider extends ChangeNotifier
         chunks: clampedChunks,
       );
 
-      // When the app starts, mark any non-completed and non-failed download (downloading, queued, merging) as paused.
+      // When the app starts, mark any non-completed and non-failed download (downloading, queued, merging) as paused/queued depending on autoStart.
       final hasActiveStream = _cancelTokens.containsKey(task.id);
       if (!hasActiveStream &&
           task.status != DownloadStatus.completed &&
           task.status != DownloadStatus.failed) {
         final wasAlreadyPaused = task.status == DownloadStatus.paused;
+        if (!wasAlreadyPaused && _settingsProvider.autoStart) {
+          return task.copyWith(
+            status: DownloadStatus.queued,
+            pausedByUser: false,
+            speed: 0,
+            clearEta: true,
+            clearError: true,
+          );
+        }
         return task.copyWith(
           status: DownloadStatus.paused,
           pausedByUser: wasAlreadyPaused ? task.pausedByUser : true,
@@ -1222,11 +1232,33 @@ class DownloadProvider extends ChangeNotifier
       debugPrint('[DMX] batch save failed: $e');
     }
 
-    // 3. Notify UI immediately so all cards appear at once.
+    // 3. Aggregate disk space pre-check across batch before starting queue
+    final totalBatchSize =
+        safeTasks.fold<int>(0, (sum, t) => sum + t.combinedTotalSize);
+    if (totalBatchSize > 0) {
+      try {
+        final hasSpace =
+            await _downloadEngine.hasEnoughDiskSpace(savePath, totalBatchSize);
+        if (!hasSpace) {
+          _log.warning(
+              '[Disk Check] Batch size ($totalBatchSize bytes) exceeds available space at $savePath');
+          _lastError = 'Insufficient disk space for batch download.';
+          return;
+        }
+      } catch (e) {
+        debugPrint('[Disk Check] Batch disk space check failed: $e');
+      }
+    }
+
+    // 4. Notify UI immediately so all cards appear at once.
     notifyListeners();
 
-    // 4. Pump once with the full batch size as the concurrency ceiling.
-    pumpQueue(maxConcurrentOverride: safeTasks.length);
+    // 5. Pump once with capped concurrency ceiling (max(maxDownloads, min(batch, 8))).
+    final override = max(
+      _settingsProvider.maxDownloads,
+      min(safeTasks.length, 8),
+    );
+    pumpQueue(maxConcurrentOverride: override);
   }
 
   Future<void> addDownload({
@@ -1710,8 +1742,10 @@ class DownloadProvider extends ChangeNotifier
       if (task.isTorrent && torrentId == null) {
         // Try looking up the native handle by an alternate key (task's source URL)
         final matchingTid = TorrentService.activeTorrentIds.firstWhere(
-          (tid) => TorrentService.latestStats[tid]?.name == task.fileName ||
-                   TorrentService.latestStats[tid]?.currentTracker == task.url, // or check if latestStats has it
+          (tid) =>
+              TorrentService.latestStats[tid]?.name == task.fileName ||
+              TorrentService.latestStats[tid]?.currentTracker ==
+                  task.url, // or check if latestStats has it
           orElse: () => -1,
         );
         if (matchingTid != -1) {
@@ -1728,7 +1762,8 @@ class DownloadProvider extends ChangeNotifier
 
         // If still null, set a flag so as soon as it registers, it gets paused.
         if (torrentId == null) {
-          _log.info('Torrent registration pending on pause; marking needsForcedPauseOnRegister for ${task.id}');
+          _log.info(
+              'Torrent registration pending on pause; marking needsForcedPauseOnRegister for ${task.id}');
           _needsForcedPauseOnRegister.add(task.id);
           // Set DB status to paused so the UI reflects it immediately
           await _setTask(task.copyWith(
@@ -1984,10 +2019,25 @@ class DownloadProvider extends ChangeNotifier
     // FIX P-1 / FIX(H-7): Validate state file integrity before reading progress
     final stateFile = File('${latest.tempFilePath}.dmxstate');
     if (await stateFile.exists()) {
+      bool parseOk = false;
       try {
         final content = await stateFile.readAsString();
         jsonDecode(content); // throws on corrupt JSON
+        parseOk = true;
       } catch (e) {
+        // M1: Wait ~250ms and retry parsing once in case of a mid-write race during pause timeout
+        await Future.delayed(const Duration(milliseconds: 250));
+        try {
+          if (await stateFile.exists()) {
+            final retryContent = await stateFile.readAsString();
+            jsonDecode(retryContent);
+            parseOk = true;
+            debugPrint('[DMX] M1: 250ms retry recovered valid .dmxstate parse');
+          }
+        } catch (_) {}
+      }
+
+      if (!parseOk) {
         debugPrint(
             '[DMX] pauseTask: .dmxstate corrupt, attempting journal fallback');
         // Try journal recovery BEFORE deleting
@@ -2292,8 +2342,11 @@ class DownloadProvider extends ChangeNotifier
                 final name = f['name'] as String? ?? '';
                 final match = liveMap[name];
                 if (match != null) {
-                  final prevBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-                  final resolvedBytes = match.downloadedBytes >= 0 ? match.downloadedBytes : prevBytes;
+                  final prevBytes =
+                      (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                  final resolvedBytes = match.downloadedBytes >= 0
+                      ? match.downloadedBytes
+                      : prevBytes;
                   return {...f, 'downloadedBytes': resolvedBytes};
                 }
                 return f;
@@ -2439,7 +2492,6 @@ class DownloadProvider extends ChangeNotifier
     await Future<void>.delayed(const Duration(milliseconds: 400));
     exit(0);
   }
-
 
   Future<void> cancelTask(String id) async {
     final task = _findTask(id);
@@ -2795,7 +2847,8 @@ class DownloadProvider extends ChangeNotifier
     try {
       if (task.isTorrent) {
         final totalFromFiles = torrentBytesFromFiles(task.torrentFiles);
-        final resolvedTotal = totalFromFiles > 0 ? totalFromFiles : realBytesOnDisk;
+        final resolvedTotal =
+            totalFromFiles > 0 ? totalFromFiles : realBytesOnDisk;
         realBytesOnDisk = task.resolvedFileSize > 0
             ? resolvedTotal.clamp(0, task.resolvedFileSize)
             : max(0, resolvedTotal);
@@ -2978,15 +3031,36 @@ class DownloadProvider extends ChangeNotifier
     }
 
     // 5. Delete from DB (with retries)
+    bool dbDeleteSucceeded = false;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
         await _databaseService.deleteTask(id);
+        dbDeleteSucceeded = true;
         break;
       } catch (e) {
         debugPrint('[DMX] deleteTask DB attempt ${attempt + 1} failed: $e');
         if (attempt < 2) {
           await Future.delayed(Duration(milliseconds: 200 * (attempt + 1)));
         }
+      }
+    }
+
+    if (!dbDeleteSucceeded) {
+      debugPrint(
+          '[DMX] M3: All DB delete attempts failed for $id. Re-adding task with delete error.');
+      final failedTask = task.copyWith(
+        status: DownloadStatus.failed,
+        errorMessage: 'Database deletion failed. Tap delete to retry.',
+        speed: 0,
+        clearEta: true,
+      );
+      try {
+        await _databaseService.saveTask(failedTask);
+      } catch (_) {}
+      if (!_tasks.any((t) => t.id == id)) {
+        _tasks.add(failedTask);
+        filteredTasksDirty = true;
+        notifyListeners();
       }
     }
 
@@ -3219,6 +3293,14 @@ class DownloadProvider extends ChangeNotifier
     // Terminal states are never overwritten by non-terminal incoming updates.
     if (live.status == DownloadStatus.completed &&
         incoming.status != DownloadStatus.completed) {
+      return live;
+    }
+    // C3: Reject stale promotion of user-paused tasks by asynchronous updates
+    if (live.status == DownloadStatus.paused &&
+        live.pausedByUser == true &&
+        incoming.pausedByUser == true &&
+        (incoming.status == DownloadStatus.queued ||
+            incoming.status == DownloadStatus.downloading)) {
       return live;
     }
     // FIX-H5: Protect merging status from stale downloading snapshots
@@ -3691,7 +3773,8 @@ class DownloadProvider extends ChangeNotifier
               ? 10
               : 5);
 
-      _widgetTimer = Timer.periodic(Duration(seconds: timerIntervalSec), (timer) {
+      _widgetTimer =
+          Timer.periodic(Duration(seconds: timerIntervalSec), (timer) {
         if (_disposed) {
           timer.cancel();
           return;
@@ -4005,7 +4088,10 @@ class DownloadProvider extends ChangeNotifier
         notifyListeners();
 
         if (wasDownloading) {
-          await resumeTask(taskId);
+          final t = _findTask(taskId);
+          if (t != null && !t.pausedByUser) {
+            await resumeTask(taskId);
+          }
         }
 
         return;
@@ -4047,7 +4133,10 @@ class DownloadProvider extends ChangeNotifier
               await _databaseService.saveTask(updatedTask);
               notifyListeners();
               if (wasDownloading) {
-                await resumeTask(taskId);
+                final t = _findTask(taskId);
+                if (t != null && !t.pausedByUser) {
+                  await resumeTask(taskId);
+                }
               }
               return;
             }
@@ -4451,11 +4540,17 @@ class DownloadProvider extends ChangeNotifier
       notifyListeners();
 
       if (wasDownloading) {
-        await resumeTask(taskId);
+        final t = _findTask(taskId);
+        if (t != null && !t.pausedByUser) {
+          await resumeTask(taskId);
+        }
       }
     } catch (e) {
       if (wasDownloading) {
-        unawaited(resumeTask(taskId));
+        final t = _findTask(taskId);
+        if (t != null && !t.pausedByUser) {
+          unawaited(resumeTask(taskId));
+        }
       }
       rethrow;
     }
@@ -4906,25 +5001,31 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
-
-
   static bool youtubeStreamIdentityChanged(String oldUrl, String newUrl) {
     try {
       final oldUri = Uri.tryParse(oldUrl);
       final newUri = Uri.tryParse(newUrl);
       if (oldUri == null || newUri == null) return false;
+      if (!oldUri.hasAuthority || !newUri.hasAuthority) return false;
 
       final oldItag = oldUri.queryParameters['itag'];
       final newItag = newUri.queryParameters['itag'];
       final oldMime = oldUri.queryParameters['mime'];
       final newMime = newUri.queryParameters['mime'];
+      final oldClen = oldUri.queryParameters['clen'];
+      final newClen = newUri.queryParameters['clen'];
 
-      final hostPathChanged =
-          (oldUri.host != newUri.host) || (oldUri.path != newUri.path);
+      final hasItag = oldItag != null && newItag != null;
+      final hasMime = oldMime != null && newMime != null;
+      final hasClen = oldClen != null && newClen != null;
 
-      return (oldItag != null && newItag != null && oldItag != newItag) ||
-          (oldMime != null && newMime != null && oldMime != newMime) ||
-          hostPathChanged;
+      if (!hasItag && !hasMime && !hasClen) return false;
+
+      if (hasItag && oldItag != newItag) return true;
+      if (hasMime && oldMime != newMime) return true;
+      if (hasClen && oldClen != newClen) return true;
+
+      return false;
     } catch (_) {
       return false;
     }

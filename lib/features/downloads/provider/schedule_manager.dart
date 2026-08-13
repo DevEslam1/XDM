@@ -173,6 +173,7 @@ class ScheduleManager {
           clearCompletedAt: true,
           clearScheduledAt: true,
           wasScheduledAt: task.scheduledAt, // SCHED-FIX-1: preserve origin
+          pausedByUser: false,
         );
         promotedIndices.add(i);
         saves.add(_databaseService.saveTask(tasks[i]));
@@ -191,8 +192,7 @@ class ScheduleManager {
             await entry.value;
             return true; // save at index `entry.key` succeeded
           } catch (e) {
-            debugPrint(
-                '[ScheduleManager] Save failed for '
+            debugPrint('[ScheduleManager] Save failed for '
                 '${tasks[promotedIndices[entry.key]].id}: $e');
             return false;
           }

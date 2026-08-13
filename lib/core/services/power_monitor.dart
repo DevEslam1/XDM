@@ -169,8 +169,7 @@ class PowerMonitor {
   static Future<void> _pollThermalOnce() async {
     try {
       if (Platform.isAndroid) {
-        final status =
-            await _channel.invokeMethod<String>('getThermalStatus');
+        final status = await _channel.invokeMethod<String>('getThermalStatus');
         if (status != null) {
           _thermal = ThermalStatus.values.firstWhere(
             (t) => t.name == status,
@@ -224,4 +223,3 @@ class PowerMonitor {
     _thermalTimer?.cancel();
   }
 }
-

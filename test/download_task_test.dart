@@ -701,12 +701,14 @@ void main() {
   });
 
   group('DMX Audit Bug Fixes', () {
-    test('Bug 1: combinedDownloadedBytes when video is 100% and audio is 40%', () {
+    test('Bug 1: combinedDownloadedBytes when video is 100% and audio is 40%',
+        () {
       final task = DownloadTask(
         id: 'bug1_task',
         fileName: 'yt_video.mp4',
         url: 'https://youtube.com/watch?v=123',
-        fileSize: 100, // combinedTotalSize: videoStreamSize (80) + audioSize (20) = 100
+        fileSize:
+            100, // combinedTotalSize: videoStreamSize (80) + audioSize (20) = 100
         downloadedBytes: 80, // video leg fully completed
         videoStreamSize: 80,
         audioSize: 20,
@@ -730,14 +732,28 @@ void main() {
       expect(task.combinedDownloadedBytes, 88);
     });
 
-    test('Bug 2: isTorrentFileSelected missing/null default value behaves consistently', () {
-      final fileWithSelectedTrue = {'name': '1.mp4', 'length': 1000, 'selected': true};
-      final fileWithSelectedFalse = {'name': '2.mp4', 'length': 2000, 'selected': false};
-      final fileWithSelectedNull = {'name': '3.mp4', 'length': 3000}; // missing/null selected key
+    test(
+        'Bug 2: isTorrentFileSelected missing/null default value behaves consistently',
+        () {
+      final fileWithSelectedTrue = {
+        'name': '1.mp4',
+        'length': 1000,
+        'selected': true
+      };
+      final fileWithSelectedFalse = {
+        'name': '2.mp4',
+        'length': 2000,
+        'selected': false
+      };
+      final fileWithSelectedNull = {
+        'name': '3.mp4',
+        'length': 3000
+      }; // missing/null selected key
 
       expect(isTorrentFileSelected(fileWithSelectedTrue), isTrue);
       expect(isTorrentFileSelected(fileWithSelectedFalse), isFalse);
-      expect(isTorrentFileSelected(fileWithSelectedNull), isTrue, reason: 'missing/null selected key defaults to true');
+      expect(isTorrentFileSelected(fileWithSelectedNull), isTrue,
+          reason: 'missing/null selected key defaults to true');
 
       final task = DownloadTask(
         id: 'bug2_task',

@@ -44,7 +44,6 @@ class DatabaseService {
   Timer? _maintenanceTimer;
   int _maintenanceRuns = 0;
 
-
   // Hive constants for migration
   static const String downloadsBoxName = 'downloads';
   static const String bookmarksBoxName = 'browser_bookmarks';
@@ -115,7 +114,8 @@ class DatabaseService {
             await _db.customStatement('PRAGMA incremental_vacuum(50)');
             swVacuum.stop();
             if (swVacuum.elapsedMilliseconds > 500) {
-              _log.info('incremental_vacuum took ${swVacuum.elapsedMilliseconds}ms');
+              _log.info(
+                  'incremental_vacuum took ${swVacuum.elapsedMilliseconds}ms');
             }
           }
         } catch (e) {
@@ -777,7 +777,9 @@ class DatabaseService {
           t.url.lower().like(term) |
           t.folder.lower().like(term));
     }
-    final rows = await (query..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)])).get();
+    final rows = await (query
+          ..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)]))
+        .get();
     return rows.map(_rowToBookmark).toList();
   }
 

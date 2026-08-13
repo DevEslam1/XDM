@@ -167,7 +167,8 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                                 UserScriptInjectionTime.AT_DOCUMENT_START,
                           ),
                           UserScript(
-                            source: 'window.__xdmDynamicAdDomains = ${widget.state._adBlocker.dynamicDomainsJson};\n${widget.state._adBlocker.earlyJs}',
+                            source:
+                                'window.__xdmDynamicAdDomains = ${widget.state._adBlocker.dynamicDomainsJson};\n${widget.state._adBlocker.earlyJs}',
                             injectionTime:
                                 UserScriptInjectionTime.AT_DOCUMENT_START,
                           ),
@@ -213,8 +214,8 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                         onCreateWindow: (controller, createWindowAction) async {
                           final reqUrl = createWindowAction.request.url;
                           if (reqUrl != null) {
-                            widget.state._handlePopupMessageForTab(
-                                tab, BrowserJsMessage(message: reqUrl.toString()));
+                            widget.state._handlePopupMessageForTab(tab,
+                                BrowserJsMessage(message: reqUrl.toString()));
                           }
                           return false;
                         },
@@ -304,8 +305,8 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                               }
                               try {
                                 await controller.loadUrl(
-                                    urlRequest:
-                                        URLRequest(url: WebUri(res.targetUrl!)));
+                                    urlRequest: URLRequest(
+                                        url: WebUri(res.targetUrl!)));
                               } catch (e) {
                                 widget.state._log.warning(
                                     '[Browser] autoFollow loadUrl failed: $e');
@@ -320,7 +321,8 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                                     if (tab.isDisposed || !mounted) return;
                                     try {
                                       controller.loadUrl(
-                                          urlRequest: URLRequest(url: WebUri(u)));
+                                          urlRequest:
+                                              URLRequest(url: WebUri(u)));
                                     } catch (e) {
                                       widget.state._log.warning(
                                           '[Browser] promptUser loadUrl failed: $e');
@@ -353,12 +355,13 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                         onDownloadStartRequest:
                             (controller, downloadStartRequest) async {
                           final url = downloadStartRequest.url.toString();
-                          widget.state._log.info(
-                              '[Browser] onDownloadStartRequest: $url');
+                          widget.state._log
+                              .info('[Browser] onDownloadStartRequest: $url');
                           widget.state._markUrlAsDownloaded(url);
-                          final isDark = context.read<SettingsProvider>().isDarkMode;
-                          final result =
-                              await widget.state._interceptor.startDirectDownload(
+                          final isDark =
+                              context.read<SettingsProvider>().isDarkMode;
+                          final result = await widget.state._interceptor
+                              .startDirectDownload(
                             url,
                             suggestedName:
                                 downloadStartRequest.suggestedFilename,
@@ -484,7 +487,9 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                             if (widget.state._currentTabIndex >= 0 &&
                                 widget.state._currentTabIndex <
                                     widget.state._tabs.length &&
-                                widget.state._tabs[widget.state._currentTabIndex]
+                                widget
+                                        .state
+                                        ._tabs[widget.state._currentTabIndex]
                                         .id ==
                                     tab.id) {
                               if (widget.state._zeroNotifierTabId == tab.id) {
@@ -515,8 +520,8 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                           if (url.isEmpty) {
                             return NavigationActionPolicy.ALLOW;
                           }
-                          if ((widget.state
-                                  ._navigatingBackForwardTabIds[tab.id] ??
+                          if ((widget
+                                  .state._navigatingBackForwardTabIds[tab.id] ??
                               false)) {
                             return NavigationActionPolicy.ALLOW;
                           }
@@ -526,7 +531,8 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                             return NavigationActionPolicy.CANCEL;
                           }
 
-                          final res = await widget.state._redirectGuard.evaluate(
+                          final res =
+                              await widget.state._redirectGuard.evaluate(
                             tabId: tab.id,
                             navigatingTo: url,
                           );
@@ -599,7 +605,8 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                             case PageAction.block:
                               AdBlockerService.instance
                                   .recordBlockedRequest(url);
-                              widget.state._log.warning('[AdBlocker] Blocked: $url');
+                              widget.state._log
+                                  .warning('[AdBlocker] Blocked: $url');
                               return NavigationActionPolicy.CANCEL;
 
                             case PageAction.openNewTab:
@@ -643,8 +650,7 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                                 );
                               }
                               if (classification.action ==
-                                  PageAction
-                                      .openNewTabWithDownloadSuggestion) {
+                                  PageAction.openNewTabWithDownloadSuggestion) {
                                 widget.state
                                     ._suggestDownload(url, classification);
                               }
@@ -705,8 +711,10 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                     ListenableBuilder(
                       listenable: widget.state._sniffer,
                       builder: (context, child) {
-                        final detectedSources = widget.state._sniffer.detectedMediaSources[tab.id];
-                        if (detectedSources == null || detectedSources.isEmpty) {
+                        final detectedSources =
+                            widget.state._sniffer.detectedMediaSources[tab.id];
+                        if (detectedSources == null ||
+                            detectedSources.isEmpty) {
                           return const SizedBox.shrink();
                         }
                         return Positioned(
@@ -745,8 +753,7 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                                           shape: BoxShape.circle),
                                       constraints: const BoxConstraints(
                                           minWidth: 14, minHeight: 14),
-                                      child: Text(
-                                          '${detectedSources.length}',
+                                      child: Text('${detectedSources.length}',
                                           style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 9,
@@ -780,7 +787,8 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                                     child: Text(
                                         'Element Picker Mode — Tap an element to block it',
                                         style: TextStyle(
-                                            color: Colors.white, fontSize: 12))),
+                                            color: Colors.white,
+                                            fontSize: 12))),
                                 TextButton(
                                     onPressed: () => widget.state.setState(() =>
                                         widget.state._isPickerModeActive =
@@ -822,7 +830,8 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                                   tween: Tween(begin: 0.8, end: 1.2),
                                   duration: const Duration(milliseconds: 800),
                                   builder: (context, value, child) =>
-                                      Transform.scale(scale: value, child: child),
+                                      Transform.scale(
+                                          scale: value, child: child),
                                   child: const Icon(Icons.warning_amber_rounded,
                                       size: 16, color: Colors.white),
                                 ),

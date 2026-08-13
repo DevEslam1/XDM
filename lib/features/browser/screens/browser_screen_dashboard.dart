@@ -3,8 +3,6 @@ part of 'browser_screen.dart';
 /// The home-dashboard grid, shortcut cards, bookmarks/history entry
 /// points.
 mixin _DashboardMixin on _BrowserScreenStateBase {
-
-
   @override
   Widget _buildHomeDashboard(
     BuildContext context,
@@ -314,7 +312,6 @@ mixin _DashboardMixin on _BrowserScreenStateBase {
     );
   }
 
-
   Widget _buildShortcutCard(
     BuildContext context, {
     required String title,
@@ -405,7 +402,6 @@ mixin _DashboardMixin on _BrowserScreenStateBase {
     );
   }
 
-
   @override
   void _openBookmarks() async {
     final settings = _settings;
@@ -418,7 +414,6 @@ mixin _DashboardMixin on _BrowserScreenStateBase {
       _navigateToUrl(url);
     }
   }
-
 
   @override
   void _openHistory() async {

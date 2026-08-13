@@ -2,8 +2,6 @@ part of 'browser_screen.dart';
 
 /// The main build() method for the whole browser screen.
 mixin _BuildMixin on _BrowserScreenStateBase {
-
-
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
@@ -86,10 +84,15 @@ mixin _BuildMixin on _BrowserScreenStateBase {
                   final activeTab = _tabs[_currentTabIndex];
                   final showFab = !activeTab.isHome &&
                       (_sniffer.detectedDownloadUrls[activeTab.id] != null ||
-                          (_sniffer.detectedMediaSources[activeTab.id]?.isNotEmpty ?? false) ||
-                          _sniffer.detectedPlaylistUrls.containsKey(activeTab.id) ||
+                          (_sniffer.detectedMediaSources[activeTab.id]
+                                  ?.isNotEmpty ??
+                              false) ||
+                          _sniffer.detectedPlaylistUrls
+                              .containsKey(activeTab.id) ||
                           (_sniffer.mediaScanFailed[activeTab.id] ?? false));
-                  return showFab ? _buildDownloadFab(context, settings) : const SizedBox.shrink();
+                  return showFab
+                      ? _buildDownloadFab(context, settings)
+                      : const SizedBox.shrink();
                 },
               ),
               floatingActionButtonLocation:
@@ -551,20 +554,30 @@ mixin _BuildMixin on _BrowserScreenStateBase {
                                                     });
                                                   },
                                                   onShieldPressed: () {
-                                                    if (activeTab.isHome) return;
+                                                    if (activeTab.isHome) {
+                                                      return;
+                                                    }
                                                     final blockedAds =
-                                                        _blockedAdsPerTab[activeTab.id] ?? 0;
+                                                        _blockedAdsPerTab[
+                                                                activeTab.id] ??
+                                                            0;
                                                     final blockedPopups =
-                                                        _blockedPopupsPerTab[activeTab.id] ?? 0;
+                                                        _blockedPopupsPerTab[
+                                                                activeTab.id] ??
+                                                            0;
                                                     BrowserShieldSheet.show(
                                                       context: context,
                                                       currentUrl: activeTab.url,
-                                                      blockedAdsCount: blockedAds,
-                                                      blockedPopupsCount: blockedPopups,
+                                                      blockedAdsCount:
+                                                          blockedAds,
+                                                      blockedPopupsCount:
+                                                          blockedPopups,
                                                       onStartElementPicker: () =>
-                                                          _startElementPicker(activeTab),
+                                                          _startElementPicker(
+                                                              activeTab),
                                                       onReloadTab: () =>
-                                                          _safeReloadTab(activeTab),
+                                                          _safeReloadTab(
+                                                              activeTab),
                                                     );
                                                   },
                                                   isHttps: activeTab.url

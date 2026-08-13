@@ -2,8 +2,6 @@ part of 'browser_screen.dart';
 
 /// Custom home-page shortcut CRUD (add/save/load/remove).
 mixin _ShortcutsMixin on _BrowserScreenStateBase {
-
-
   @override
   Future<void> _showAddShortcutDialog() async {
     final titleC = TextEditingController();
@@ -75,7 +73,6 @@ mixin _ShortcutsMixin on _BrowserScreenStateBase {
     }
   }
 
-
   Future<void> _saveCustomShortcuts() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -85,7 +82,6 @@ mixin _ShortcutsMixin on _BrowserScreenStateBase {
       _log.warning('Failed to save custom shortcuts: $e');
     }
   }
-
 
   @override
   Future<void> _loadCustomShortcuts() async {
@@ -123,7 +119,6 @@ mixin _ShortcutsMixin on _BrowserScreenStateBase {
       _log.warning('Failed to load custom shortcuts: $e');
     }
   }
-
 
   @override
   Future<void> _removeCustomShortcut(Map<String, String> shortcut) async {

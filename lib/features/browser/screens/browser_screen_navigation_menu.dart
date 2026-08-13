@@ -3,8 +3,6 @@ part of 'browser_screen.dart';
 /// Back/forward/url-bar navigation, the toolbar menu, find-in-page,
 /// reader mode, force-dark, zoom, clear-browsing-data, translate, print.
 mixin _NavigationMenuMixin on _BrowserScreenStateBase {
-
-
   @override
   Future<void> _updateNavState() async {
     if (!mounted || _tabs.isEmpty) return;
@@ -54,7 +52,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     }
   }
 
-
   /// Unified back handler — single source of truth for both the toolbar back
   /// button and [PopScope.onPopInvokedWithResult].
   ///
@@ -77,7 +74,8 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     final activeTab = _tabs[_currentTabIndex];
 
     // (a) WebView can go back.
-    final webCanGoBack = activeTab.canGoBack || (await activeTab.controller?.canGoBack() ?? false);
+    final webCanGoBack = activeTab.canGoBack ||
+        (await activeTab.controller?.canGoBack() ?? false);
     if (webCanGoBack && activeTab.controller != null) {
       _homeReturnUrl = null;
       final currentTabId = activeTab.id;
@@ -165,7 +163,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     return false;
   }
 
-
   @override
   Future<void> _goForward() async {
     if (_tabs.isEmpty ||
@@ -201,7 +198,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     });
     _updateNavState();
   }
-
 
   @override
   void _navigateToUrl(String input) {
@@ -262,7 +258,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     _delayed(const Duration(milliseconds: 300), _updateNavState);
   }
 
-
   @override
   String _cleanUrl(String url) {
     if (url.isEmpty || url == 'about:blank') return '';
@@ -272,7 +267,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     // endpoints where `/foo` and `/foo/` are distinct resources.
     return uri.toString();
   }
-
 
   @override
   Future<void> _handleMenuAction(String value) async {
@@ -410,7 +404,8 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
               currentSettings.supportZoom =
                   settings.desktopMode || settings.pinchToZoom;
               currentSettings.incognito = activeTab.isIncognito;
-              await activeTab.controller?.setSettings(settings: currentSettings);
+              await activeTab.controller
+                  ?.setSettings(settings: currentSettings);
             }
           } catch (e, st) {
             Logger('browser_screen')
@@ -536,7 +531,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     }
   }
 
-
   Future<void> _activateReaderMode(BrowserTab activeTab) async {
     final settings = context.read<SettingsProvider>();
     if (activeTab.isHome || activeTab.url.isEmpty) return;
@@ -587,7 +581,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     }
   }
 
-
   /// UX 3.2: Rebuilds the reader view with the current appearance settings.
   @override
   Future<void> _updateReaderConfig() async {
@@ -620,7 +613,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     );
   }
 
-
   /// UX 3.1: Opens the find-in-page panel for the active tab.
   void _openFindPanel() {
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
@@ -644,7 +636,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     }
   }
 
-
   @override
   void _closeFindPanel() {
     if (!mounted) return;
@@ -661,7 +652,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     });
   }
 
-
   @override
   void _findNext(bool forward) {
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
@@ -672,7 +662,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
       controller.findNext(forward: forward);
     } catch (_) {}
   }
-
 
   @override
   void _updateFindQuery(BrowserTab tab, String query) {
@@ -697,7 +686,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     } catch (_) {}
   }
 
-
   /// UX 3.3: Toggles force-dark mode and applies it to every live tab.
   Future<void> _toggleForceDark(BrowserTab activeTab) async {
     final settings = context.read<SettingsProvider>();
@@ -720,7 +708,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
       }
     }
   }
-
 
   @override
   Future<void> _applyForceDarkToAll() async {
@@ -760,7 +747,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
       } catch (_) {}
     }
   }
-
 
   @override
   Future<void> _clearBrowsingData({
@@ -828,7 +814,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
           .warning('[browser_screen] clear browsing data failed', e, st);
     }
   }
-
 
   /// UX 3.9: Zoom controls dialog — applies textZoom live, persists per host.
   Future<void> _showZoomDialog(BrowserTab activeTab) async {
@@ -946,7 +931,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     }
   }
 
-
   /// UX 3.12: Captures the visible page and saves it as a PNG.
   Future<void> _capturePage(BrowserTab activeTab) async {
     if (_capturingPage || activeTab.isHome) return;
@@ -992,7 +976,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
       if (mounted) setState(() => _capturingPage = false);
     }
   }
-
 
   /// UX 3.13: Opens translate.google.com for the current page.
   Future<void> _showTranslateMenu(BrowserTab activeTab) async {
@@ -1082,7 +1065,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     );
   }
 
-
   /// UX 3.14: Print/PDF — html2pdf data-URI fallback when the native print
   /// API is unavailable.
   Future<void> _printPage(BrowserTab activeTab) async {
@@ -1108,7 +1090,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
       }
     }
   }
-
 
   /// UX 3.20: Keyboard shortcuts (desktop only): Ctrl+T/W/L/R/F.
   @override
@@ -1147,7 +1128,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     return KeyEventResult.ignored;
   }
 
-
   void _newTabViaShortcut() {
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final settings = _settings;
@@ -1156,7 +1136,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     _openInNewTab('', isIncognito: isIncog, switchToTab: true);
     _focusUrlBar();
   }
-
 
   void _closeActiveTabViaShortcut() {
     if (_tabs.length <= 1) {
@@ -1173,7 +1152,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     final active = _tabs[_currentTabIndex];
     _urlController.text = active.isHome ? '' : active.url;
   }
-
 
   /// UX 3.10: Launches app-linkable URLs in an external app when enabled.
   @override
@@ -1206,7 +1184,6 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
       return false;
     }
   }
-
 
   @override
   Future<void> _startElementPicker(BrowserTab activeTab) async {

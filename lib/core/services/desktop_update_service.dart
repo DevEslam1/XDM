@@ -281,7 +281,8 @@ class DesktopUpdateService {
       } else if (Platform.isLinux) {
         final sigFile = '$filePath.sig';
         if (!await File(sigFile).exists()) {
-          _log.warning('Linux update signature file missing ($sigFile) — rejecting update');
+          _log.warning(
+              'Linux update signature file missing ($sigFile) — rejecting update');
           return false;
         }
         final result = await Process.run('gpg', [

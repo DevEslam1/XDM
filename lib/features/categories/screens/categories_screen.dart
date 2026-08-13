@@ -153,195 +153,194 @@ class CategoriesScreen extends StatelessWidget {
 
                 // Categories Grid
                 Expanded(
-                  child: Builder(
-                    builder: (context) {
-                      final fontScale =
-                          MediaQuery.textScalerOf(context).scale(1.0);
-                      return GridView.builder(
-                        padding: const EdgeInsets.all(16.0),
-                        physics: const BouncingScrollPhysics(),
-                        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 220,
-                          mainAxisExtent: (160 * fontScale).clamp(160.0, 240.0),
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        itemCount: categoryCards.length,
-                    itemBuilder: (context, index) {
-                      final card = categoryCards[index];
-                      final String name = card['name'];
-                      final IconData icon = card['icon'];
-                      final Color color = card['color'];
-                      final String desc = card['description'];
+                  child: Builder(builder: (context) {
+                    final fontScale =
+                        MediaQuery.textScalerOf(context).scale(1.0);
+                    return GridView.builder(
+                      padding: const EdgeInsets.all(16.0),
+                      physics: const BouncingScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 220,
+                        mainAxisExtent: (160 * fontScale).clamp(160.0, 240.0),
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                      ),
+                      itemCount: categoryCards.length,
+                      itemBuilder: (context, index) {
+                        final card = categoryCards[index];
+                        final String name = card['name'];
+                        final IconData icon = card['icon'];
+                        final Color color = card['color'];
+                        final String desc = card['description'];
 
-                      final count = counts[name] ?? 0;
-                      final sizeMb = sizes[name] ?? 0.0;
+                        final count = counts[name] ?? 0;
+                        final sizeMb = sizes[name] ?? 0.0;
 
-                      // Format size
-                      String sizeText;
-                      if (sizeMb >= 1024) {
-                        sizeText = '${(sizeMb / 1024).toStringAsFixed(2)} GB';
-                      } else {
-                        sizeText = '${sizeMb.toStringAsFixed(1)} MB';
-                      }
+                        // Format size
+                        String sizeText;
+                        if (sizeMb >= 1024) {
+                          sizeText = '${(sizeMb / 1024).toStringAsFixed(2)} GB';
+                        } else {
+                          sizeText = '${sizeMb.toStringAsFixed(1)} MB';
+                        }
 
-                      return GestureDetector(
-                        onTap: () {
-                          if (settings.vibration) {
-                            HapticFeedback.lightImpact();
-                          }
-                          Navigator.of(context).push(
-                            PageRouteBuilder(
-                              pageBuilder:
-                                  (ctx, animation, secondaryAnimation) =>
-                                      CategoryDetailScreen(
-                                categoryName: name,
-                                categoryColor: color,
-                                categoryIcon: icon,
-                              ),
-                              transitionsBuilder:
-                                  (ctx, animation, secondaryAnimation, child) {
-                                return FadeTransition(
-                                  opacity: CurvedAnimation(
-                                    parent: animation,
-                                    curve: Curves.easeOut,
-                                  ),
-                                  child: SlideTransition(
-                                    position: Tween(
-                                      begin: const Offset(0.05, 0),
-                                      end: Offset.zero,
-                                    ).animate(CurvedAnimation(
+                        return GestureDetector(
+                          onTap: () {
+                            if (settings.vibration) {
+                              HapticFeedback.lightImpact();
+                            }
+                            Navigator.of(context).push(
+                              PageRouteBuilder(
+                                pageBuilder:
+                                    (ctx, animation, secondaryAnimation) =>
+                                        CategoryDetailScreen(
+                                  categoryName: name,
+                                  categoryColor: color,
+                                  categoryIcon: icon,
+                                ),
+                                transitionsBuilder: (ctx, animation,
+                                    secondaryAnimation, child) {
+                                  return FadeTransition(
+                                    opacity: CurvedAnimation(
                                       parent: animation,
-                                      curve: AppTheme.motionCurve,
-                                    )),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              transitionDuration: AppTheme.motionBase,
-                            ),
-                          );
-                        },
-                        child: DmxCardShell(
-                          accent: color,
-                          radius: 20,
-                          showRail: false,
-                          child: Padding(
-                            padding: const EdgeInsets.all(14.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: color.withValues(
-                                          alpha: 0.08,
-                                        ),
-                                        borderRadius: BorderRadius.circular(
-                                          12,
-                                        ),
-                                      ),
-                                      child: Icon(
-                                        icon,
-                                        color: color,
-                                        size: 22,
-                                      ),
+                                      curve: Curves.easeOut,
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: isDark
-                                            ? AppTheme.glassBg
-                                            : AppTheme.lightGlassBg,
-                                        borderRadius: BorderRadius.circular(
-                                          12,
+                                    child: SlideTransition(
+                                      position: Tween(
+                                        begin: const Offset(0.05, 0),
+                                        end: Offset.zero,
+                                      ).animate(CurvedAnimation(
+                                        parent: animation,
+                                        curve: AppTheme.motionCurve,
+                                      )),
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                                transitionDuration: AppTheme.motionBase,
+                              ),
+                            );
+                          },
+                          child: DmxCardShell(
+                            accent: color,
+                            radius: 20,
+                            showRail: false,
+                            child: Padding(
+                              padding: const EdgeInsets.all(14.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: color.withValues(
+                                            alpha: 0.08,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                         ),
-                                        border: Border.all(
+                                        child: Icon(
+                                          icon,
+                                          color: color,
+                                          size: 22,
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
                                           color: isDark
-                                              ? AppTheme.glassBorder
-                                              : AppTheme.lightGlassBorder,
-                                          width: 0.6,
+                                              ? AppTheme.glassBg
+                                              : AppTheme.lightGlassBg,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color: isDark
+                                                ? AppTheme.glassBorder
+                                                : AppTheme.lightGlassBorder,
+                                            width: 0.6,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '$count ${isRtl ? 'عناصر' : 'ITEMS'}',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelMedium
+                                              ?.copyWith(
+                                                color: textClr,
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.bold,
+                                              ),
                                         ),
                                       ),
-                                      child: Text(
-                                        '$count ${isRtl ? 'عناصر' : 'ITEMS'}',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelMedium
-                                            ?.copyWith(
-                                              color: textClr,
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const Spacer(),
-                                Text(
-                                  _translateCategoryName(context, name)
-                                      .toUpperCase(),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.8,
-                                        color: textClr,
-                                      ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  desc,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                        fontSize: 9,
-                                        color: mutedClr,
-                                      ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  sizeText,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelLarge
-                                      ?.copyWith(
-                                        fontSize: 13,
-                                        color: color,
-                                        fontWeight: FontWeight.bold,
-                                        shadows: isDark
-                                            ? [
-                                                Shadow(
-                                                  color: color.withValues(
-                                                    alpha: 0.25,
+                                    ],
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    _translateCategoryName(context, name)
+                                        .toUpperCase(),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.8,
+                                          color: textClr,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    desc,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          fontSize: 9,
+                                          color: mutedClr,
+                                        ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    sizeText,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelLarge
+                                        ?.copyWith(
+                                          fontSize: 13,
+                                          color: color,
+                                          fontWeight: FontWeight.bold,
+                                          shadows: isDark
+                                              ? [
+                                                  Shadow(
+                                                    color: color.withValues(
+                                                      alpha: 0.25,
+                                                    ),
+                                                    blurRadius: 4.0,
                                                   ),
-                                                  blurRadius: 4.0,
-                                                ),
-                                              ]
-                                            : null,
-                                      ),
-                                ),
-                              ],
+                                                ]
+                                              : null,
+                                        ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    },
-                  );
-                }),
-              ),
+                        );
+                      },
+                    );
+                  }),
+                ),
               ],
             ),
           ),

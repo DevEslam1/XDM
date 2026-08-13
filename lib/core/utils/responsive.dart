@@ -115,4 +115,3 @@ EdgeInsets responsiveInsets(
     vertical: responsiveValue(context, vertical),
   );
 }
-

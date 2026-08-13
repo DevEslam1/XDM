@@ -403,12 +403,15 @@ mixin DownloadTorrentMixin {
     final selectedSize = files
         .where((f) => isTorrentFileSelected(f))
         .fold(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
-    final selectedDownloaded = files.where((f) => isTorrentFileSelected(f)).fold(
-        0, (sum, f) => sum + ((f['downloadedBytes'] as num?)?.toInt() ?? 0));
+    final selectedDownloaded = files
+        .where((f) => isTorrentFileSelected(f))
+        .fold(0,
+            (sum, f) => sum + ((f['downloadedBytes'] as num?)?.toInt() ?? 0));
 
     String updatedCategory = task.category;
     if (task.category == 'Other' || task.category.isEmpty) {
-      final selectedFiles = files.where((f) => isTorrentFileSelected(f)).toList();
+      final selectedFiles =
+          files.where((f) => isTorrentFileSelected(f)).toList();
       final sample = selectedFiles.isNotEmpty
           ? selectedFiles.first
           : (files.isNotEmpty ? files.first : null);

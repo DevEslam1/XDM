@@ -169,7 +169,6 @@ const Map<String, String> enTranslations = {
   'settings_adv_console': 'Advanced settings',
   'settings_ua': 'Custom user-agent',
   'settings_ua_sub': 'Override default HTTP client headers',
-
   'settings_bypass_ssl': 'Trust all ssl certificates',
   'settings_bypass_ssl_sub':
       'Bypass SSL validation (WARNING: MITM vulnerability)',
@@ -219,7 +218,6 @@ const Map<String, String> enTranslations = {
   'storage_label': 'Storage: ',
   'wifi_only_label': 'Wifi only',
   'retry_label': 'Retry',
-
   'hidden_file_label': 'Hidden file',
   'use_advance_download_label': 'Use advance download method',
   'advance_option_label': 'Advance option',

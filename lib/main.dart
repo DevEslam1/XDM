@@ -564,143 +564,144 @@ class _AppErrorBoundaryWidgetState extends State<_AppErrorBoundaryWidget> {
         body: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 440),
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFF161A22),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: const Color(0xFFEF4444).withValues(alpha: 0.3),
-                  width: 1.2,
+              padding: const EdgeInsets.all(24.0),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 440),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161A22),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                      blurRadius: 24,
+                      spreadRadius: 2,
+                    ),
+                  ],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFEF4444).withValues(alpha: 0.12),
-                    blurRadius: 24,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFFEF4444).withValues(alpha: 0.1),
-                      border: Border.all(
-                        color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                        border: Border.all(
+                          color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.warning_amber_rounded,
+                        size: 36,
+                        color: Color(0xFFEF4444),
                       ),
                     ),
-                    child: const Icon(
-                      Icons.warning_amber_rounded,
-                      size: 36,
-                      color: Color(0xFFEF4444),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'SIGNAL DIAGNOSTIC ERROR',
+                      style: TextStyle(
+                        fontFamily: 'Space Grotesk',
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                        color: Color(0xFFF2F4F8),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'SIGNAL DIAGNOSTIC ERROR',
-                    style: TextStyle(
-                      fontFamily: 'Space Grotesk',
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5,
-                      color: Color(0xFFF2F4F8),
+                    const SizedBox(height: 8),
+                    Text(
+                      kDebugMode
+                          ? widget.errorDetails.exceptionAsString()
+                          : 'An unexpected application exception occurred.',
+                      textAlign: TextAlign.center,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                        color: Color(0xFF9AA3B5),
+                        height: 1.4,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    kDebugMode
-                        ? widget.errorDetails.exceptionAsString()
-                        : 'An unexpected application exception occurred.',
-                    textAlign: TextAlign.center,
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 12,
-                      color: Color(0xFF9AA3B5),
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            Clipboard.setData(
-                              ClipboardData(
-                                text: widget.errorDetails.toString(),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Clipboard.setData(
+                                ClipboardData(
+                                  text: widget.errorDetails.toString(),
+                                ),
+                              );
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content:
+                                      Text('Diagnostics copied to clipboard'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.copy_rounded, size: 14),
+                            label: const Text('COPY DIAGNOSTICS'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF9AA3B5),
+                              side: const BorderSide(color: Color(0xFF2A3040)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
                               ),
-                            );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Diagnostics copied to clipboard'),
-                                duration: Duration(seconds: 2),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              textStyle: const TextStyle(
+                                fontFamily: 'Space Grotesk',
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
                               ),
-                            );
-                          },
-                          icon: const Icon(Icons.copy_rounded, size: 14),
-                          label: const Text('COPY DIAGNOSTICS'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF9AA3B5),
-                            side: const BorderSide(color: Color(0xFF2A3040)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            textStyle: const TextStyle(
-                              fontFamily: 'Space Grotesk',
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: canRetry ? _retry : () => exit(0),
-                          icon: Icon(
-                            canRetry
-                                ? Icons.refresh_rounded
-                                : Icons.power_settings_new_rounded,
-                            size: 14,
-                          ),
-                          label: Text(canRetry ? 'RETRY' : 'RELOAD APP'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: canRetry
-                                ? const Color(0xFF3B82F6)
-                                : const Color(0xFFEF4444),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: canRetry ? _retry : () => exit(0),
+                            icon: Icon(
+                              canRetry
+                                  ? Icons.refresh_rounded
+                                  : Icons.power_settings_new_rounded,
+                              size: 14,
                             ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            textStyle: const TextStyle(
-                              fontFamily: 'Space Grotesk',
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
+                            label: Text(canRetry ? 'RETRY' : 'RELOAD APP'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: canRetry
+                                  ? const Color(0xFF3B82F6)
+                                  : const Color(0xFFEF4444),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              textStyle: const TextStyle(
+                                fontFamily: 'Space Grotesk',
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
 class _FpsOverlay extends StatefulWidget {

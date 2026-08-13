@@ -55,12 +55,10 @@ class BackendHealthService {
 
   List<BackendConfig> get activeBackends {
     final now = DateTime.now();
-    final healthy = _backends
-        .where((b) {
-          final expiry = _unhealthyCooldowns[b.baseUrl];
-          return expiry == null || now.isAfter(expiry);
-        })
-        .toList();
+    final healthy = _backends.where((b) {
+      final expiry = _unhealthyCooldowns[b.baseUrl];
+      return expiry == null || now.isAfter(expiry);
+    }).toList();
 
     healthy.sort((a, b) => a.priority.compareTo(b.priority));
     if (healthy.isNotEmpty) return healthy;

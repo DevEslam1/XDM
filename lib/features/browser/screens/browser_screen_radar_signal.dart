@@ -340,4 +340,3 @@ class _SignalFabState extends State<_SignalFab>
     );
   }
 }
-

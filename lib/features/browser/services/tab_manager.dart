@@ -306,8 +306,6 @@ class TabManager extends ChangeNotifier {
     super.dispose();
   }
 
-
-
   Timer? _saveTabsDebounce;
 
   /// Debounced save: batches frequent tab state changes (e.g. scrolling, switching)

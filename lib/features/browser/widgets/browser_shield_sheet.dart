@@ -86,7 +86,9 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
         ? Colors.black
         : (isDark ? AppTheme.surface : AppTheme.lightSurface);
     final cardBg = isDark
-        ? (isAmoled ? AppTheme.amoledCardBg : Colors.white.withValues(alpha: 0.05))
+        ? (isAmoled
+            ? AppTheme.amoledCardBg
+            : Colors.white.withValues(alpha: 0.05))
         : Colors.black.withValues(alpha: 0.03);
     final borderClr = isDark
         ? (isAmoled ? AppTheme.amoledBorder : AppTheme.glassBorder)
@@ -293,7 +295,8 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
                 if (val) {
                   filterUpdater.allowListedDomains.add(_domain.toLowerCase());
                 } else {
-                  filterUpdater.allowListedDomains.remove(_domain.toLowerCase());
+                  filterUpdater.allowListedDomains
+                      .remove(_domain.toLowerCase());
                 }
                 widget.onReloadTab?.call();
               },

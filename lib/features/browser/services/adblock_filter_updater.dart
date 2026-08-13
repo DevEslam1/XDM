@@ -163,8 +163,10 @@ class AdBlockFilterUpdater {
   static const _patternsKey = 'adblock_url_patterns';
   static const _cosmeticKey = 'adblock_cosmetic_rules_v2';
   static const _siteCosmeticKey = 'adblock_site_cosmetic_rules_v2';
-  static const _globalCosmeticExceptionsKey = 'adblock_global_cosmetic_exceptions_v2';
-  static const _siteCosmeticExceptionsKey = 'adblock_site_cosmetic_exceptions_v2';
+  static const _globalCosmeticExceptionsKey =
+      'adblock_global_cosmetic_exceptions_v2';
+  static const _siteCosmeticExceptionsKey =
+      'adblock_site_cosmetic_exceptions_v2';
   static const _scriptletsKey = 'adblock_scriptlet_rules';
 
   bool _initialized = false;
@@ -241,7 +243,8 @@ class AdBlockFilterUpdater {
       }
     }
 
-    final siteCosmeticExceptionsStr = prefs.getString(_siteCosmeticExceptionsKey);
+    final siteCosmeticExceptionsStr =
+        prefs.getString(_siteCosmeticExceptionsKey);
     if (siteCosmeticExceptionsStr != null) {
       try {
         final decoded =
@@ -512,7 +515,8 @@ class AdBlockFilterUpdater {
     final hasCachedPatterns = prefs.containsKey(_patternsKey);
     final hasCachedCosmetics = prefs.containsKey(_cosmeticKey);
     final hasCachedScriptlets = prefs.containsKey(_scriptletsKey);
-    final isFirstRun = !hasCachedPatterns && !hasCachedCosmetics && !hasCachedScriptlets;
+    final isFirstRun =
+        !hasCachedPatterns && !hasCachedCosmetics && !hasCachedScriptlets;
 
     if (allSourcesSucceeded || isFirstRun) {
       await prefs.setStringList(
@@ -584,8 +588,8 @@ class AdBlockFilterUpdater {
           prefs.getString(_siteCosmeticExceptionsKey);
       if (siteCosmeticExceptionsStr != null) {
         try {
-          final decoded = jsonDecode(
-                  siteCosmeticExceptionsStr) as Map<String, dynamic>;
+          final decoded =
+              jsonDecode(siteCosmeticExceptionsStr) as Map<String, dynamic>;
           for (final entry in decoded.entries) {
             final rules = (entry.value as List).cast<String>();
             _cosmeticExceptions[entry.key] = rules.toSet();
@@ -654,9 +658,8 @@ class AdBlockFilterUpdater {
       if (line.contains('##+js(')) {
         final idx = line.indexOf('##+js(');
         final firstPart = line.substring(0, idx);
-        final scriptlet = line
-            .substring(idx + 6)
-            .substring(0, line.length - (line.endsWith(')') ? 1 : 0) - (idx + 6));
+        final scriptlet = line.substring(idx + 6).substring(
+            0, line.length - (line.endsWith(')') ? 1 : 0) - (idx + 6));
         if (scriptlet.isNotEmpty) {
           // A bare `##+js(...)` applies globally; a `domain##+js(...)`
           // prefix only applies to that site, so it must NOT land in the

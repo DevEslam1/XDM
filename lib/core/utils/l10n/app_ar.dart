@@ -163,7 +163,6 @@ const Map<String, String> arTranslations = {
   'settings_adv_console': 'إعدادات متقدمة',
   'settings_ua': 'عميل مستخدم مخصص (User-Agent)',
   'settings_ua_sub': 'تجاوز ترويسات عميل HTTP الافتراضية',
-
   'settings_bypass_ssl': 'الوثوق بجميع شهادات SSL',
   'settings_bypass_ssl_sub': 'تجاوز التحقق من الشهادات (تحذير: عرضة للاختراق)',
   'bypass_ssl_dialog_title': 'تعطيل التحقق من SSL؟',
@@ -210,7 +209,6 @@ const Map<String, String> arTranslations = {
   'storage_label': 'التخزين: ',
   'wifi_only_label': 'واي فاي فقط',
   'retry_label': 'إعادة المحاولة',
-
   'hidden_file_label': 'ملف مخفي',
   'use_advance_download_label': 'استخدام طريقة التنزيل المتقدمة',
   'advance_option_label': 'خيارات متقدمة',

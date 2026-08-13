@@ -3,7 +3,6 @@ part of 'browser_screen.dart';
 /// Ad/popup interception, long-press + element-picker message
 /// handling, and blocked-count notifiers.
 mixin _PopupsAdsMixin on _BrowserScreenStateBase {
-
   @override
   void _notifyScriptsInjected() {
     if (!_scriptsInjectedSnackbarShown && mounted) {
@@ -21,7 +20,6 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
       );
     }
   }
-
 
   /// ValueNotifier for the currently-active tab's blocked-ad count.
   @override
@@ -50,14 +48,12 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
     return _zeroNotifier;
   }
 
-
   /// Blocked popups for the currently-active tab.
   // ignore: unused_element — tracked for future snackbar/badge display.
   int get _blockedPopupCount {
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return 0;
     return _blockedPopupsPerTab[_tabs[_currentTabIndex].id] ?? 0;
   }
-
 
   /// Fallback used by [onLongPressHitTestResult] when the OS hit test gives no
   /// URL. It resolves the element at the point stored by the injected
@@ -94,7 +90,6 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
 })()
 ''';
 
-
   @override
   void _handleLongPressMessageForTab(
     BrowserTab tab,
@@ -116,7 +111,6 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
       );
     }
   }
-
 
   /// Parses the {url, type} JSON returned by [_longPressTargetFallbackJs].
   @override
@@ -144,7 +138,6 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
     } catch (_) {}
     return null;
   }
-
 
   @override
   void _handlePopupMessageForTab(
@@ -218,7 +211,6 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
       );
     }
   }
-
 
   /// Silently follows HTTP redirects from a blocked ad popup URL.
   /// If the redirect chain ends at a downloadable file (APK, ZIP, video, etc.)
@@ -309,7 +301,6 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
     }
   }
 
-
   @override
   void _handlePickerMessageForTab(
     BrowserTab tab,
@@ -336,7 +327,6 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
     });
     _confirmBlockElement(tab, selector.trim());
   }
-
 
   void _confirmBlockElement(BrowserTab tab, String selector) {
     final settings = _settings;
@@ -405,7 +395,6 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
     );
   }
 
-
   @override
   void _openInNewTab(
     String url, {
@@ -428,7 +417,6 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
     _tabManager.addTab(newTab, switchToTab: switchToTab);
   }
 
-
   @override
   void _suggestDownload(String url, PageClassification classification) {
     if (!mounted) return;
@@ -449,7 +437,6 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
     );
   }
 
-
   @override
   void _showAdWarning(BuildContext context, String url) {
     if (!mounted) return;
@@ -462,7 +449,6 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
       isDarkMode: settings.isDarkMode,
     );
   }
-
 
   @override
   void _openInBackgroundTab(String url, {bool isIncognito = false}) {
@@ -478,14 +464,12 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
     );
   }
 
-
   @override
   void _onDashboardScroll() {
     if (!_dashboardScrollController.hasClients) return;
     final y = _dashboardScrollController.offset;
     _handleScroll(y);
   }
-
 
   @override
   void _handleScroll(double y) {

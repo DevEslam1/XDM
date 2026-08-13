@@ -218,46 +218,46 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
       label: '$title: $value',
       child: Column(
         children: [
-        Text(
-          title,
-          style: TextStyle(
-            color: labelClr,
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-            fontFamily: 'Space Grotesk',
+          Text(
+            title,
+            style: TextStyle(
+              color: labelClr,
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+              fontFamily: 'Space Grotesk',
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-        ),
-        const SizedBox(height: 4),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 5,
-              height: 5,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isZero ? mutedClr.withValues(alpha: 0.4) : color,
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 5,
+                height: 5,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isZero ? mutedClr.withValues(alpha: 0.4) : color,
+                ),
               ),
-            ),
-            const SizedBox(width: 5),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'Space Grotesk',
-                color: isZero ? mutedClr : primaryClr,
+              const SizedBox(width: 5),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Space Grotesk',
+                  color: isZero ? mutedClr : primaryClr,
+                ),
               ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

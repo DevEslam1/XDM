@@ -1028,7 +1028,8 @@ void main() {
       expect(redistributed, [0.5, 0.5]);
     });
 
-    test('Bug 3: _autoResumeIncomplete wifi-only and waiting-network pauses', () async {
+    test('Bug 3: _autoResumeIncomplete wifi-only and waiting-network pauses',
+        () async {
       MockConnectivityPlatform.results = [ConnectivityResult.none];
       addTearDown(() {
         MockConnectivityPlatform.results = [ConnectivityResult.wifi];
@@ -1125,13 +1126,18 @@ void main() {
       settings.autoStart = true;
       await provider.load();
 
-      expect(provider.tasks.firstWhere((t) => t.id == 'user_paused').status, DownloadStatus.paused);
-      expect(provider.tasks.firstWhere((t) => t.id == 'waiting_wifi').status, DownloadStatus.paused);
-      expect(provider.tasks.firstWhere((t) => t.id == 'waiting_network').status, DownloadStatus.paused);
-      expect(provider.tasks.firstWhere((t) => t.id == 'normal_paused').status, DownloadStatus.queued);
+      expect(provider.tasks.firstWhere((t) => t.id == 'user_paused').status,
+          DownloadStatus.paused);
+      expect(provider.tasks.firstWhere((t) => t.id == 'waiting_wifi').status,
+          DownloadStatus.paused);
+      expect(provider.tasks.firstWhere((t) => t.id == 'waiting_network').status,
+          DownloadStatus.paused);
+      expect(provider.tasks.firstWhere((t) => t.id == 'normal_paused').status,
+          DownloadStatus.queued);
     });
 
-    test('Bug 4: retryTask resets metadata when isUnrecoverable is true', () async {
+    test('Bug 4: retryTask resets metadata when isUnrecoverable is true',
+        () async {
       final (database, settings) = await _setupServices();
       final now = DateTime.now();
 
@@ -1168,24 +1174,37 @@ void main() {
 
       await provider.retryTask('retry_unrecoverable');
 
-      final updatedTask = provider.tasks.firstWhere((t) => t.id == 'retry_unrecoverable');
+      final updatedTask =
+          provider.tasks.firstWhere((t) => t.id == 'retry_unrecoverable');
       expect(updatedTask.downloadedBytes, 0);
       expect(updatedTask.videoStreamSize, 0);
       expect(updatedTask.audioDownloadedBytes, 0);
     });
 
-    test('Bug 6: youtubeStreamIdentityChanged detects actual stream changes', () {
-      const urlOld = 'https://r5---sn-5uaezney.googlevideo.com/videoplayback?expire=1627000000&itag=22&mime=video%2Fmp4';
-      const urlNewSame = 'https://r5---sn-5uaezney.googlevideo.com/videoplayback?expire=1627050000&itag=22&mime=video%2Fmp4';
-      const urlNewDiffItag = 'https://r5---sn-5uaezney.googlevideo.com/videoplayback?expire=1627050000&itag=137&mime=video%2Fmp4';
-      const urlNewDiffHost = 'https://r1---sn-abc.googlevideo.com/videoplayback?expire=1627050000&itag=22&mime=video%2Fmp4';
+    test('Bug 6: youtubeStreamIdentityChanged detects actual stream changes',
+        () {
+      const urlOld =
+          'https://r5---sn-5uaezney.googlevideo.com/videoplayback?expire=1627000000&itag=22&mime=video%2Fmp4';
+      const urlNewSame =
+          'https://r5---sn-5uaezney.googlevideo.com/videoplayback?expire=1627050000&itag=22&mime=video%2Fmp4';
+      const urlNewDiffItag =
+          'https://r5---sn-5uaezney.googlevideo.com/videoplayback?expire=1627050000&itag=137&mime=video%2Fmp4';
+      const urlNewDiffHost =
+          'https://r1---sn-abc.googlevideo.com/videoplayback?expire=1627050000&itag=22&mime=video%2Fmp4';
 
-      expect(DownloadProvider.youtubeStreamIdentityChanged(urlOld, urlNewSame), isFalse);
-      expect(DownloadProvider.youtubeStreamIdentityChanged(urlOld, urlNewDiffItag), isTrue);
-      expect(DownloadProvider.youtubeStreamIdentityChanged(urlOld, urlNewDiffHost), isTrue);
+      expect(DownloadProvider.youtubeStreamIdentityChanged(urlOld, urlNewSame),
+          isFalse);
+      expect(
+          DownloadProvider.youtubeStreamIdentityChanged(urlOld, urlNewDiffItag),
+          isTrue);
+      expect(
+          DownloadProvider.youtubeStreamIdentityChanged(urlOld, urlNewDiffHost),
+          isTrue);
     });
 
-    test('Bug 6 & 7: retryTask YouTube refresh handles same-identity and different-identity', () async {
+    test(
+        'Bug 6 & 7: retryTask YouTube refresh handles same-identity and different-identity',
+        () async {
       final (database, settings) = await _setupServices();
       final now = DateTime.now();
 
@@ -1204,7 +1223,8 @@ void main() {
       final taskSame = DownloadTask(
         id: 'yt_same_task',
         fileName: 'yt_same.mp4',
-        url: 'https://googlevideo.com/playback?expire=1000&itag=22&mime=video%2Fmp4', // expired
+        url:
+            'https://googlevideo.com/playback?expire=1000&itag=22&mime=video%2Fmp4', // expired
         fileSize: 1000,
         downloadedBytes: 500,
         category: 'Video',
@@ -1236,7 +1256,8 @@ void main() {
       final taskDiff = DownloadTask(
         id: 'yt_diff_task',
         fileName: 'yt_diff.mp4',
-        url: 'https://googlevideo.com/playback?expire=1000&itag=22&mime=video%2Fmp4', // expired
+        url:
+            'https://googlevideo.com/playback?expire=1000&itag=22&mime=video%2Fmp4', // expired
         fileSize: 1000,
         downloadedBytes: 500,
         category: 'Video',
@@ -1258,13 +1279,15 @@ void main() {
         if (pageUrl.contains('same')) {
           // returns same itag/mime, different signature/expire
           return {
-            'url': 'https://googlevideo.com/playback?expire=999999&itag=22&mime=video%2Fmp4',
+            'url':
+                'https://googlevideo.com/playback?expire=999999&itag=22&mime=video%2Fmp4',
             'audioUrl': null,
           };
         } else {
           // returns different itag
           return {
-            'url': 'https://googlevideo.com/playback?expire=999999&itag=137&mime=video%2Fmp4',
+            'url':
+                'https://googlevideo.com/playback?expire=999999&itag=137&mime=video%2Fmp4',
             'audioUrl': null,
           };
         }
@@ -1281,13 +1304,15 @@ void main() {
 
       // Retry same task -> should preserve downloadedBytes and files
       await provider.retryTask('yt_same_task');
-      final updatedSame = provider.tasks.firstWhere((t) => t.id == 'yt_same_task');
+      final updatedSame =
+          provider.tasks.firstWhere((t) => t.id == 'yt_same_task');
       expect(updatedSame.downloadedBytes, 500);
       expect(await tempVideoSame.exists(), isTrue);
 
       // Retry diff task -> should reset downloadedBytes to 0 and delete files
       await provider.retryTask('yt_diff_task');
-      final updatedDiff = provider.tasks.firstWhere((t) => t.id == 'yt_diff_task');
+      final updatedDiff =
+          provider.tasks.firstWhere((t) => t.id == 'yt_diff_task');
       expect(updatedDiff.downloadedBytes, 0);
       expect(await tempVideoDiff.exists(), isFalse);
       expect(await tempStateDiff.exists(), isFalse);

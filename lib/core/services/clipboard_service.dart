@@ -21,7 +21,7 @@ class ClipboardService {
 
   Future<void> _initIfNeeded() async {
     if (_initialized) return;
-    
+
     if (_initFuture != null) {
       try {
         await _initFuture!.timeout(const Duration(seconds: 2));
@@ -75,10 +75,10 @@ class ClipboardService {
       final prefs = await SharedPreferences.getInstance();
       final enabled = prefs.getBool('clipboard_monitoring_enabled') ?? false;
       if (!enabled) return null;
-      
+
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       final text = data?.text?.trim();
-      
+
       if (text != null &&
           (isHttpUrl(text) || isMagnetUrl(text) || isTorrentFileUrl(text))) {
         final lower = text.toLowerCase();
@@ -87,7 +87,7 @@ class ClipboardService {
             lower.startsWith('vbscript:')) {
           return null;
         }
-        
+
         final now = DateTime.now();
         if (text == _lastCheckedUrl && _lastCheckedTime != null) {
           final elapsed = now.difference(_lastCheckedTime!);
@@ -107,7 +107,7 @@ class ClipboardService {
           }
           return text;
         }
-        
+
         _lastCheckedUrl = text;
         _lastCheckedTime = now;
         try {
@@ -137,10 +137,10 @@ class ClipboardService {
             !isTorrentFileUrl(trimmed))) {
       return;
     }
-    
+
     _lastCheckedUrl = trimmed;
     _lastCheckedTime = DateTime.now();
-    
+
     try {
       await _secureStorage.write(key: 'clipboard_last_url', value: trimmed);
       await _secureStorage.write(

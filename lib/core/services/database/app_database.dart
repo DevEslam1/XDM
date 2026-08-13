@@ -32,7 +32,8 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
         }
         return result;
       }
-      _dbLog.warning('DoubleListConverter: unexpected type ${decoded.runtimeType} for input');
+      _dbLog.warning(
+          'DoubleListConverter: unexpected type ${decoded.runtimeType} for input');
       return [];
     } catch (e) {
       try {
@@ -50,7 +51,8 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
           }
         }
         if (result.isNotEmpty) {
-          _dbLog.info('Successfully recovered ${result.length} double items from corrupted JSON');
+          _dbLog.info(
+              'Successfully recovered ${result.length} double items from corrupted JSON');
           return result;
         }
       } catch (recEx) {
@@ -85,7 +87,8 @@ class TorrentFilesConverter
         }
         return result;
       }
-      _dbLog.warning('TorrentFilesConverter: unexpected type ${decoded.runtimeType} for input');
+      _dbLog.warning(
+          'TorrentFilesConverter: unexpected type ${decoded.runtimeType} for input');
       return [];
     } catch (e) {
       try {
@@ -104,7 +107,8 @@ class TorrentFilesConverter
           }
         }
         if (result.isNotEmpty) {
-          _dbLog.info('Successfully recovered ${result.length} torrent file entries from corrupted JSON');
+          _dbLog.info(
+              'Successfully recovered ${result.length} torrent file entries from corrupted JSON');
           return result;
         }
       } catch (recEx) {
@@ -123,7 +127,7 @@ class TorrentFilesConverter
 
 class StringListConverter extends TypeConverter<List<String>, String> {
   const StringListConverter();
-  
+
   @override
   List<String> fromSql(String fromDb) {
     if (fromDb.trim().isEmpty) return [];
@@ -132,7 +136,8 @@ class StringListConverter extends TypeConverter<List<String>, String> {
       if (decoded is List) {
         return decoded.map((e) => e.toString()).toList();
       }
-      _dbLog.warning('StringListConverter: unexpected type ${decoded.runtimeType} for input');
+      _dbLog.warning(
+          'StringListConverter: unexpected type ${decoded.runtimeType} for input');
       return [];
     } catch (e) {
       _dbLog.warning('Error decoding StringList from DB: $e');
@@ -181,11 +186,10 @@ class DownloadTasks extends Table {
       .nullable()();
   TextColumn get downloadPageUrl => text().nullable()();
   TextColumn get mergedAudioUrl => text().nullable()();
-  IntColumn get audioSize => integer().withDefault(const Constant(0))(); 
+  IntColumn get audioSize => integer().withDefault(const Constant(0))();
   IntColumn get audioDownloadedBytes =>
-      integer().withDefault(const Constant(0))(); 
-  IntColumn get videoStreamSize =>
-      integer().withDefault(const Constant(0))(); 
+      integer().withDefault(const Constant(0))();
+  IntColumn get videoStreamSize => integer().withDefault(const Constant(0))();
   RealColumn get audioProgress => real().withDefault(const Constant(0.0))();
   BoolColumn get pausedByUser => boolean().withDefault(const Constant(false))();
   TextColumn get youtubeQualityPreset => text().nullable()();
@@ -194,16 +198,14 @@ class DownloadTasks extends Table {
   TextColumn get playlistTitle => text().nullable()();
   TextColumn get thumbnailUrl => text().nullable()();
   BoolColumn get isAppUpdate => boolean().withDefault(const Constant(false))();
-  IntColumn get uploadedBytes =>
-      integer().withDefault(const Constant(0))(); 
+  IntColumn get uploadedBytes => integer().withDefault(const Constant(0))();
   IntColumn get priority => integer().withDefault(const Constant(0))();
-  IntColumn get queueOrder =>
-      integer().withDefault(const Constant(0))(); 
+  IntColumn get queueOrder => integer().withDefault(const Constant(0))();
   TextColumn get expectedSha256 => text().nullable()();
   TextColumn get mirrorUrls => text()
       .map(const NullAwareTypeConverter.wrap(StringListConverter()))
       .nullable()();
-      
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -215,7 +217,7 @@ class Bookmarks extends Table {
   TextColumn get url => text()();
   TextColumn get folder => text().nullable()();
   IntColumn get createdAt => integer()();
-  
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -240,7 +242,7 @@ class BrowserTabs extends Table {
   IntColumn get createdAt => integer()();
   IntColumn get lastVisitedAt => integer().withDefault(const Constant(0))();
   TextColumn get faviconUrl => text().nullable()();
-  
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -263,23 +265,32 @@ LazyDatabase _openConnection(String path) {
 class AppDatabase extends _$AppDatabase {
   AppDatabase(String path) : super(_openConnection(path));
   AppDatabase.forTesting(super.e);
-  
+
   @override
-  int get schemaVersion => 17; 
-  
+  int get schemaVersion => 17;
+
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async {
           await m.createAll();
-          await customStatement('CREATE INDEX idx_download_tasks_status ON download_tasks (status)');
-          await customStatement('CREATE INDEX idx_download_tasks_category ON download_tasks (category)');
-          await customStatement('CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)');
-          await customStatement('CREATE INDEX idx_download_tasks_playlist_id ON download_tasks (playlist_id)');
-          await customStatement('CREATE INDEX idx_browser_history_visited_at ON browser_history (visited_at)');
-          await customStatement('CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks (created_at)');
-          await customStatement('CREATE INDEX IF NOT EXISTS idx_browser_history_url ON browser_history (url)');
-          await customStatement('CREATE INDEX IF NOT EXISTS idx_bookmarks_url ON bookmarks (url)');
-          await customStatement('CREATE INDEX IF NOT EXISTS idx_browser_tabs_position ON browser_tabs (position)');
+          await customStatement(
+              'CREATE INDEX idx_download_tasks_status ON download_tasks (status)');
+          await customStatement(
+              'CREATE INDEX idx_download_tasks_category ON download_tasks (category)');
+          await customStatement(
+              'CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)');
+          await customStatement(
+              'CREATE INDEX idx_download_tasks_playlist_id ON download_tasks (playlist_id)');
+          await customStatement(
+              'CREATE INDEX idx_browser_history_visited_at ON browser_history (visited_at)');
+          await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks (created_at)');
+          await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_browser_history_url ON browser_history (url)');
+          await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_bookmarks_url ON bookmarks (url)');
+          await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_browser_tabs_position ON browser_tabs (position)');
         },
         onUpgrade: (m, from, to) async {
           debugPrint('AppDatabase: Upgrading schema from $from to $to');
@@ -360,24 +371,36 @@ class AppDatabase extends _$AppDatabase {
               FROM download_tasks
             ''');
             await customStatement('DROP TABLE download_tasks');
-            await customStatement('ALTER TABLE download_tasks_new RENAME TO download_tasks');
-            await customStatement('CREATE INDEX idx_download_tasks_status ON download_tasks (status)');
-            await customStatement('CREATE INDEX idx_download_tasks_category ON download_tasks (category)');
-            await customStatement('CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)');
-            await customStatement('UPDATE download_tasks SET created_at = 0 WHERE created_at < 0');
-            await customStatement('UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0');
-            final badDates = await customSelect('SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0').get();
+            await customStatement(
+                'ALTER TABLE download_tasks_new RENAME TO download_tasks');
+            await customStatement(
+                'CREATE INDEX idx_download_tasks_status ON download_tasks (status)');
+            await customStatement(
+                'CREATE INDEX idx_download_tasks_category ON download_tasks (category)');
+            await customStatement(
+                'CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)');
+            await customStatement(
+                'UPDATE download_tasks SET created_at = 0 WHERE created_at < 0');
+            await customStatement(
+                'UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0');
+            final badDates = await customSelect(
+                    'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0')
+                .get();
             final badCount = badDates.first.read<int>('cnt');
             if (badCount > 0) {
-              debugPrint('WARNING: $badCount tasks have epoch (0) created_at after migration');
+              debugPrint(
+                  'WARNING: $badCount tasks have epoch (0) created_at after migration');
             }
             final recoveredFromUpdated = await customSelect(
               'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at > 0',
             ).get();
-            final recoverFromUpdatedCount = recoveredFromUpdated.first.read<int>('cnt');
+            final recoverFromUpdatedCount =
+                recoveredFromUpdated.first.read<int>('cnt');
             if (recoverFromUpdatedCount > 0) {
-              await customStatement('UPDATE download_tasks SET created_at = updated_at WHERE created_at = 0 AND updated_at > 0');
-              debugPrint('[DMX] Migration v2→v3: recovered $recoverFromUpdatedCount rows (created_at = updated_at)');
+              await customStatement(
+                  'UPDATE download_tasks SET created_at = updated_at WHERE created_at = 0 AND updated_at > 0');
+              debugPrint(
+                  '[DMX] Migration v2→v3: recovered $recoverFromUpdatedCount rows (created_at = updated_at)');
             }
             final recoveredFromNow = await customSelect(
               'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0',
@@ -387,7 +410,8 @@ class AppDatabase extends _$AppDatabase {
               await customStatement(
                 "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0",
               );
-              debugPrint('[DMX] Migration v2→v3: recovered $recoverFromNowCount rows (created_at = now)');
+              debugPrint(
+                  '[DMX] Migration v2→v3: recovered $recoverFromNowCount rows (created_at = now)');
             }
           }
           if (from < 4) {
@@ -427,14 +451,18 @@ class AppDatabase extends _$AppDatabase {
           SELECT url, title, visited_at FROM browser_history
         ''');
             await customStatement('DROP TABLE browser_history');
-            await customStatement('ALTER TABLE browser_history_new RENAME TO browser_history');
+            await customStatement(
+                'ALTER TABLE browser_history_new RENAME TO browser_history');
           }
           if (from < 9) {
-            await customStatement('CREATE INDEX IF NOT EXISTS idx_download_tasks_playlist_id ON download_tasks (playlist_id)');
-            await customStatement('CREATE INDEX IF NOT EXISTS idx_browser_history_visited_at ON browser_history (visited_at)');
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_download_tasks_playlist_id ON download_tasks (playlist_id)');
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_browser_history_visited_at ON browser_history (visited_at)');
           }
           if (from < 10) {
-            await customStatement('ALTER TABLE download_tasks ADD COLUMN thumbnail_url TEXT');
+            await customStatement(
+                'ALTER TABLE download_tasks ADD COLUMN thumbnail_url TEXT');
           }
           if (from < 11) {
             await customStatement('''
@@ -463,8 +491,10 @@ class AppDatabase extends _$AppDatabase {
           FROM bookmarks
         ''');
             await customStatement('DROP TABLE bookmarks');
-            await customStatement('ALTER TABLE bookmarks_new RENAME TO bookmarks');
-            await customStatement('CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks (created_at)');
+            await customStatement(
+                'ALTER TABLE bookmarks_new RENAME TO bookmarks');
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks (created_at)');
             await customStatement('''
           CREATE TABLE browser_history_new (
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -485,54 +515,77 @@ class AppDatabase extends _$AppDatabase {
             )
           FROM browser_history
         ''');
-            await customStatement('DROP INDEX IF EXISTS idx_browser_history_visited_at');
+            await customStatement(
+                'DROP INDEX IF EXISTS idx_browser_history_visited_at');
             await customStatement('DROP TABLE browser_history');
-            await customStatement('ALTER TABLE browser_history_new RENAME TO browser_history');
-            await customStatement('CREATE INDEX idx_browser_history_visited_at ON browser_history (visited_at)');
-            final badBookmarks = await customSelect('SELECT COUNT(*) as cnt FROM bookmarks WHERE created_at <= 0').get();
+            await customStatement(
+                'ALTER TABLE browser_history_new RENAME TO browser_history');
+            await customStatement(
+                'CREATE INDEX idx_browser_history_visited_at ON browser_history (visited_at)');
+            final badBookmarks = await customSelect(
+                    'SELECT COUNT(*) as cnt FROM bookmarks WHERE created_at <= 0')
+                .get();
             final badBookmarksCount = badBookmarks.first.read<int>('cnt');
             if (badBookmarksCount > 0) {
               await customStatement(
                 "UPDATE bookmarks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at <= 0",
               );
-              _dbLog.warning('Migration v10→v11: recovered $badBookmarksCount bookmarks stuck at invalid created_at');
+              _dbLog.warning(
+                  'Migration v10→v11: recovered $badBookmarksCount bookmarks stuck at invalid created_at');
             }
-            final badHistory = await customSelect('SELECT COUNT(*) as cnt FROM browser_history WHERE visited_at <= 0').get();
+            final badHistory = await customSelect(
+                    'SELECT COUNT(*) as cnt FROM browser_history WHERE visited_at <= 0')
+                .get();
             final badHistoryCount = badHistory.first.read<int>('cnt');
             if (badHistoryCount > 0) {
               await customStatement(
                 "UPDATE browser_history SET visited_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE visited_at <= 0",
               );
-              _dbLog.warning('Migration v10→v11: recovered $badHistoryCount browser history rows stuck at invalid visited_at');
+              _dbLog.warning(
+                  'Migration v10→v11: recovered $badHistoryCount browser history rows stuck at invalid visited_at');
             }
           }
           if (from < 12) {
-            await customStatement('ALTER TABLE download_tasks ADD COLUMN mirror_urls TEXT');
+            await customStatement(
+                'ALTER TABLE download_tasks ADD COLUMN mirror_urls TEXT');
           }
           if (from < 13) {
-            await customStatement('ALTER TABLE download_tasks ADD COLUMN queue_order INTEGER NOT NULL DEFAULT 0');
-            await customStatement('UPDATE download_tasks SET queue_order = (SELECT COUNT(*) FROM download_tasks t2 WHERE t2.created_at < download_tasks.created_at)');
+            await customStatement(
+                'ALTER TABLE download_tasks ADD COLUMN queue_order INTEGER NOT NULL DEFAULT 0');
+            await customStatement(
+                'UPDATE download_tasks SET queue_order = (SELECT COUNT(*) FROM download_tasks t2 WHERE t2.created_at < download_tasks.created_at)');
           }
           if (from < 14) {
-            await customStatement('ALTER TABLE download_tasks ADD COLUMN video_stream_size INTEGER NOT NULL DEFAULT 0');
+            await customStatement(
+                'ALTER TABLE download_tasks ADD COLUMN video_stream_size INTEGER NOT NULL DEFAULT 0');
           }
           if (from < 15) {
-            await customStatement('ALTER TABLE download_tasks ADD COLUMN audio_downloaded_bytes INTEGER NOT NULL DEFAULT 0');
+            await customStatement(
+                'ALTER TABLE download_tasks ADD COLUMN audio_downloaded_bytes INTEGER NOT NULL DEFAULT 0');
           }
           if (from < 16) {
-            await customStatement('ALTER TABLE download_tasks ADD COLUMN uploaded_bytes INTEGER NOT NULL DEFAULT 0');
+            await customStatement(
+                'ALTER TABLE download_tasks ADD COLUMN uploaded_bytes INTEGER NOT NULL DEFAULT 0');
           }
           if (from < 17) {
-            await customStatement('ALTER TABLE browser_history ADD COLUMN visit_count INTEGER NOT NULL DEFAULT 1');
-            await customStatement('ALTER TABLE browser_history ADD COLUMN favicon_url TEXT');
-            await customStatement('ALTER TABLE browser_tabs ADD COLUMN last_visited_at INTEGER NOT NULL DEFAULT 0');
-            await customStatement('ALTER TABLE browser_tabs ADD COLUMN favicon_url TEXT');
-            await customStatement('CREATE INDEX IF NOT EXISTS idx_browser_history_url ON browser_history (url)');
-            await customStatement('CREATE INDEX IF NOT EXISTS idx_bookmarks_url ON bookmarks (url)');
-            await customStatement('CREATE INDEX IF NOT EXISTS idx_browser_tabs_position ON browser_tabs (position)');
+            await customStatement(
+                'ALTER TABLE browser_history ADD COLUMN visit_count INTEGER NOT NULL DEFAULT 1');
+            await customStatement(
+                'ALTER TABLE browser_history ADD COLUMN favicon_url TEXT');
+            await customStatement(
+                'ALTER TABLE browser_tabs ADD COLUMN last_visited_at INTEGER NOT NULL DEFAULT 0');
+            await customStatement(
+                'ALTER TABLE browser_tabs ADD COLUMN favicon_url TEXT');
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_browser_history_url ON browser_history (url)');
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_bookmarks_url ON bookmarks (url)');
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_browser_tabs_position ON browser_tabs (position)');
           }
           if (to > 17) {
-            _dbLog.warning('AppDatabase: Upgrade target version $to is higher than version 17, no specific migrations defined!');
+            _dbLog.warning(
+                'AppDatabase: Upgrade target version $to is higher than version 17, no specific migrations defined!');
           }
         },
       );

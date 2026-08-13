@@ -181,7 +181,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-
   bool bypassSSL = true;
   bool developerMode = false;
   bool httpsOnly = false;
@@ -373,7 +372,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
           bandwidthScheduleEnabled;
       scheduleStartTime =
           _prefs.getString(_scheduleStartTimeKey) ?? scheduleStartTime;
-      scheduleEndTime = _prefs.getString(_scheduleEndTimeKey) ?? scheduleEndTime;
+      scheduleEndTime =
+          _prefs.getString(_scheduleEndTimeKey) ?? scheduleEndTime;
       scheduleSpeedLimitMb =
           _prefs.getDouble(_scheduleSpeedLimitMbKey) ?? scheduleSpeedLimitMb;
       enableGlow = _prefs.getBool(_enableGlowKey) ?? enableGlow;
@@ -390,13 +390,16 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _isDarkMode = _prefs.getBool(_isDarkModeKey) ?? isDarkMode;
       showOnboarding = _prefs.getBool(_showOnboardingKey) ?? showOnboarding;
       _classicUi = _prefs.getBool(_classicUiKey) ?? _classicUi;
-      batterySaverMode = _prefs.getBool(_batterySaverModeKey) ?? batterySaverMode;
+      batterySaverMode =
+          _prefs.getBool(_batterySaverModeKey) ?? batterySaverMode;
       developerMode = _prefs.getBool(_developerModeKey) ?? false;
       bypassSSL = _prefs.getBool(_bypassSSLKey) ?? true;
       httpsOnly = _prefs.getBool(_httpsOnlyKey) ?? httpsOnly;
       reduceVisuals = _prefs.getBool(_reduceVisualsKey) ?? reduceVisuals;
-      textScaleFactor = _prefs.getDouble(_textScaleFactorKey) ?? textScaleFactor;
-      customUserAgent = _prefs.getString(_customUserAgentKey) ?? customUserAgent;
+      textScaleFactor =
+          _prefs.getDouble(_textScaleFactorKey) ?? textScaleFactor;
+      customUserAgent =
+          _prefs.getString(_customUserAgentKey) ?? customUserAgent;
       cleanupDays = _prefs.getInt(_cleanupDaysKey) ?? cleanupDays;
       if (![0, 7, 30].contains(cleanupDays)) cleanupDays = 0;
       categoryFolders = _prefs.getBool(_categoryFoldersKey) ?? categoryFolders;
@@ -429,14 +432,15 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       maxActiveSeeds = _prefs.getInt(_maxActiveSeedsKey) ?? maxActiveSeeds;
       queueTorrents = _prefs.getBool(_queueTorrentsKey) ?? queueTorrents;
       forceEncrypt = _prefs.getBool(_forceEncryptKey) ?? forceEncrypt;
-      torrentConnectionsLimit =
-          (_prefs.getInt(_torrentConnectionsLimitKey) ?? torrentConnectionsLimit)
-              .clamp(10, 1000);
+      torrentConnectionsLimit = (_prefs.getInt(_torrentConnectionsLimitKey) ??
+              torrentConnectionsLimit)
+          .clamp(10, 1000);
       sequentialDownload =
           _prefs.getBool(_sequentialDownloadKey) ?? sequentialDownload;
       _maxConcurrentFilesPerTorrent =
           _prefs.getInt(_maxConcurrentFilesPerTorrentKey) ?? 0;
-      shareRatioLimit = _prefs.getDouble(_shareRatioLimitKey) ?? shareRatioLimit;
+      shareRatioLimit =
+          _prefs.getDouble(_shareRatioLimitKey) ?? shareRatioLimit;
       maxSeedingTimeMinutes =
           _prefs.getInt(_maxSeedingTimeKey) ?? maxSeedingTimeMinutes;
       _defaultThreadCount =
@@ -445,7 +449,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
         _defaultThreadCount = 16;
       }
       customDownloadPath = _prefs.getString(_customDownloadPathKey);
-      incognitoEnabled = _prefs.getBool(_incognitoEnabledKey) ?? incognitoEnabled;
+      incognitoEnabled =
+          _prefs.getBool(_incognitoEnabledKey) ?? incognitoEnabled;
       desktopMode = _prefs.getBool(_desktopModeKey) ?? desktopMode;
       pinchToZoom = _prefs.getBool(_pinchToZoomKey) ?? pinchToZoom;
       _maxTabs = _prefs.getInt(_maxTabsKey) ?? 15;
@@ -461,9 +466,11 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       notificationsEnabled = _prefs.getBool(_notificationsEnabledKey) ?? true;
       quietHoursEnabled =
           _prefs.getBool(_quietHoursEnabledKey) ?? quietHoursEnabled;
-      quietHoursStart = _prefs.getString(_quietHoursStartKey) ?? quietHoursStart;
+      quietHoursStart =
+          _prefs.getString(_quietHoursStartKey) ?? quietHoursStart;
       quietHoursEnd = _prefs.getString(_quietHoursEndKey) ?? quietHoursEnd;
-      autoRetryEnabled = _prefs.getBool(_autoRetryEnabledKey) ?? autoRetryEnabled;
+      autoRetryEnabled =
+          _prefs.getBool(_autoRetryEnabledKey) ?? autoRetryEnabled;
       maxRetries = _prefs.getInt(_maxRetriesKey) ?? maxRetries;
       if (![1, 2, 3, 5, 10].contains(maxRetries)) {
         maxRetries = 3;
@@ -709,7 +716,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> confirmBypassSSL() async {
     if (!developerMode) return;
     _log.warning(
-      'P0-2: WARNING: SSL certificate validation has been bypassed by user in Developer Mode');
+        'P0-2: WARNING: SSL certificate validation has been bypassed by user in Developer Mode');
     bypassSSL = true;
     _pendingBypassSSLConfirmation = false;
     await _prefs.setBool(_bypassSSLKey, true);
@@ -1006,30 +1013,70 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> resetToDefaults() async {
     final settingsKeys = [
-      _autoStartKey, _maxDownloadsKey, _speedLimitKey,
-      _bandwidthScheduleEnabledKey, _scheduleStartTimeKey, _scheduleEndTimeKey,
-      _scheduleSpeedLimitMbKey, _enableGlowKey, _gridOpacityKey,
-      _soundNotificationKey, _vibrationKey, _wifiOnlyKey, _languageCodeKey,
-      _isDarkModeKey, _themeModeKey, _showOnboardingKey, _classicUiKey,
-      _bypassSSLKey, _httpsOnlyKey,
-      _reduceVisualsKey, _customUserAgentKey, _cleanupDaysKey,
-      _categoryFoldersKey, _globalTorrentSeedingKey,
-      _globalTorrentSeedingLimitedKey, _globalTorrentSeedingLimitKbpsKey,
-      _enableDhtKey, _enableUpnpKey, _forceEncryptKey,
-      _torrentConnectionsLimitKey, _sequentialDownloadKey,
-      _maxConcurrentFilesPerTorrentKey, _shareRatioLimitKey,
-      _maxSeedingTimeKey, _defaultThreadCountKey, _customDownloadPathKey,
-      _incognitoEnabledKey, _desktopModeKey, _pinchToZoomKey,
-      _batterySaverModeKey, _saveBrowserHistoryKey, _notificationsEnabledKey,
-      _quietHoursEnabledKey, _quietHoursStartKey, _quietHoursEndKey,
-
-      _autoRetryEnabledKey, _maxRetriesKey, _retryDelaySecondsKey,
-      _searchEngineKey, _batteryOptimizationPromptedKey,
-      _maxTotalConnectionsKey, _backendUrlKey, _backendTokenKey,
-      _sendBrowserCookiesToBackendKey, _useRemoteBackendKey,
-      _useLocalYtFallbackKey, _maxTabsKey, _historyMaxEntriesKey,
-      _developerModeKey, _antiFingerprintingKey, _forceDarkModeKey,
-      _blockImagesKey, _openLinksInAppKey, _translateTargetLangKey,
+      _autoStartKey,
+      _maxDownloadsKey,
+      _speedLimitKey,
+      _bandwidthScheduleEnabledKey,
+      _scheduleStartTimeKey,
+      _scheduleEndTimeKey,
+      _scheduleSpeedLimitMbKey,
+      _enableGlowKey,
+      _gridOpacityKey,
+      _soundNotificationKey,
+      _vibrationKey,
+      _wifiOnlyKey,
+      _languageCodeKey,
+      _isDarkModeKey,
+      _themeModeKey,
+      _showOnboardingKey,
+      _classicUiKey,
+      _bypassSSLKey,
+      _httpsOnlyKey,
+      _reduceVisualsKey,
+      _customUserAgentKey,
+      _cleanupDaysKey,
+      _categoryFoldersKey,
+      _globalTorrentSeedingKey,
+      _globalTorrentSeedingLimitedKey,
+      _globalTorrentSeedingLimitKbpsKey,
+      _enableDhtKey,
+      _enableUpnpKey,
+      _forceEncryptKey,
+      _torrentConnectionsLimitKey,
+      _sequentialDownloadKey,
+      _maxConcurrentFilesPerTorrentKey,
+      _shareRatioLimitKey,
+      _maxSeedingTimeKey,
+      _defaultThreadCountKey,
+      _customDownloadPathKey,
+      _incognitoEnabledKey,
+      _desktopModeKey,
+      _pinchToZoomKey,
+      _batterySaverModeKey,
+      _saveBrowserHistoryKey,
+      _notificationsEnabledKey,
+      _quietHoursEnabledKey,
+      _quietHoursStartKey,
+      _quietHoursEndKey,
+      _autoRetryEnabledKey,
+      _maxRetriesKey,
+      _retryDelaySecondsKey,
+      _searchEngineKey,
+      _batteryOptimizationPromptedKey,
+      _maxTotalConnectionsKey,
+      _backendUrlKey,
+      _backendTokenKey,
+      _sendBrowserCookiesToBackendKey,
+      _useRemoteBackendKey,
+      _useLocalYtFallbackKey,
+      _maxTabsKey,
+      _historyMaxEntriesKey,
+      _developerModeKey,
+      _antiFingerprintingKey,
+      _forceDarkModeKey,
+      _blockImagesKey,
+      _openLinksInAppKey,
+      _translateTargetLangKey,
       _formAutofillKey,
     ];
 
@@ -1118,7 +1165,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _prefs.setInt(_defaultThreadCountKey, _defaultThreadCount);
     await _prefs.setBool(_autoStartKey, autoStart);
     await _prefs.setDouble(_speedLimitKey, speedLimitMb);
-    await _prefs.setBool(_bandwidthScheduleEnabledKey, bandwidthScheduleEnabled);
+    await _prefs.setBool(
+        _bandwidthScheduleEnabledKey, bandwidthScheduleEnabled);
     await _prefs.setString(_scheduleStartTimeKey, scheduleStartTime);
     await _prefs.setString(_scheduleEndTimeKey, scheduleEndTime);
     await _prefs.setDouble(_scheduleSpeedLimitMbKey, scheduleSpeedLimitMb);
@@ -1140,8 +1188,10 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _prefs.setInt(_cleanupDaysKey, cleanupDays);
     await _prefs.setBool(_categoryFoldersKey, categoryFolders);
     await _prefs.setBool(_globalTorrentSeedingKey, globalTorrentSeeding);
-    await _prefs.setBool(_globalTorrentSeedingLimitedKey, globalTorrentSeedingLimited);
-    await _prefs.setInt(_globalTorrentSeedingLimitKbpsKey, globalTorrentSeedingLimitKbps);
+    await _prefs.setBool(
+        _globalTorrentSeedingLimitedKey, globalTorrentSeedingLimited);
+    await _prefs.setInt(
+        _globalTorrentSeedingLimitKbpsKey, globalTorrentSeedingLimitKbps);
     await _prefs.setBool(_enableDhtKey, enableDht);
     await _prefs.setBool(_enableUpnpKey, enableUpnp);
     await _prefs.setBool(_forceEncryptKey, forceEncrypt);
@@ -1164,10 +1214,12 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _prefs.setInt(_maxRetriesKey, maxRetries);
     await _prefs.setInt(_retryDelaySecondsKey, retryDelaySeconds);
     await _prefs.setString(_searchEngineKey, searchEngine);
-    await _prefs.setBool(_batteryOptimizationPromptedKey, batteryOptimizationPrompted);
+    await _prefs.setBool(
+        _batteryOptimizationPromptedKey, batteryOptimizationPrompted);
     await _prefs.setInt(_maxTotalConnectionsKey, _maxTotalConnections);
     await _prefs.setString(_backendUrlKey, backendUrl);
-    await _prefs.setBool(_sendBrowserCookiesToBackendKey, sendBrowserCookiesToBackend);
+    await _prefs.setBool(
+        _sendBrowserCookiesToBackendKey, sendBrowserCookiesToBackend);
     await _prefs.setBool(_useRemoteBackendKey, useRemoteBackend);
     await _prefs.setBool(_developerModeKey, developerMode);
     await _prefs.setBool(_antiFingerprintingKey, antiFingerprinting);
@@ -1178,7 +1230,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (customDownloadPath != null) {
       await _prefs.setString(_customDownloadPathKey, customDownloadPath!);
     }
-
 
     XdmBackendClient().refreshConfig();
     notifyListeners();

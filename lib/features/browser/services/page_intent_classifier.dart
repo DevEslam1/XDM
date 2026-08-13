@@ -335,7 +335,8 @@ class PageIntentClassifier {
             lowerTarget.contains('gofile') ||
             lowerTarget.contains('mega.nz');
 
-        if (!isAdBlocked && (isFileHost || BrowserDetector.isAutoDownloadable(targetUrl))) {
+        if (!isAdBlocked &&
+            (isFileHost || BrowserDetector.isAutoDownloadable(targetUrl))) {
           return PageClassification(
             intent: PageIntent.normalBrowsing,
             action: PageAction.openSameTab,
@@ -549,7 +550,8 @@ class PageIntentClassifier {
             action: PageAction.openSameTab,
             url: url,
             confidence: 0.5,
-            reason: 'Inconclusive server check for low confidence extension match',
+            reason:
+                'Inconclusive server check for low confidence extension match',
           );
         } else {
           // Fallback to heuristic directDownload for HIGH confidence (path-based)
@@ -559,7 +561,8 @@ class PageIntentClassifier {
             url: url,
             confidence: 0.9,
             detectedFileName: detected.suggestedFileName,
-            reason: 'Direct file URL (${detected.kind.name}, path-based fallback)',
+            reason:
+                'Direct file URL (${detected.kind.name}, path-based fallback)',
             mediaKind: detected.kind,
           );
         }

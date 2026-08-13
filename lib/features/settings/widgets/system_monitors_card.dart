@@ -22,7 +22,8 @@ class SystemMonitorsCard extends StatefulWidget {
   State<SystemMonitorsCard> createState() => _SystemMonitorsCardState();
 }
 
-class _SystemMonitorsCardState extends State<SystemMonitorsCard> with WidgetsBindingObserver {
+class _SystemMonitorsCardState extends State<SystemMonitorsCard>
+    with WidgetsBindingObserver {
   Timer? _refreshTimer;
   bool _isResumed = true;
 
@@ -54,10 +55,11 @@ class _SystemMonitorsCardState extends State<SystemMonitorsCard> with WidgetsBin
     // Adaptive refresh rate to save CPU, GPU & battery:
     // - Battery saver mode or Thermal stress: Refresh every 4s
     // - Normal mode: Refresh every 2s (instead of 1s)
-    final int intervalSec = (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ||
-            PowerMonitor.throttleFactor < 0.8)
-        ? 4
-        : 2;
+    final int intervalSec =
+        (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ||
+                PowerMonitor.throttleFactor < 0.8)
+            ? 4
+            : 2;
 
     _refreshTimer = Timer.periodic(Duration(seconds: intervalSec), (_) {
       if (mounted && _isResumed && !PowerMonitor.screenOff) {
@@ -97,7 +99,9 @@ class _SystemMonitorsCardState extends State<SystemMonitorsCard> with WidgetsBin
     return switch (status) {
       ThermalStatus.none || ThermalStatus.fair => Icons.thermostat_outlined,
       ThermalStatus.moderate => Icons.device_thermostat,
-      ThermalStatus.severe || ThermalStatus.critical => Icons.local_fire_department,
+      ThermalStatus.severe ||
+      ThermalStatus.critical =>
+        Icons.local_fire_department,
     };
   }
 
@@ -126,7 +130,8 @@ class _SystemMonitorsCardState extends State<SystemMonitorsCard> with WidgetsBin
         : AppTheme.lightCardBg.withAlpha(240);
     final borderColor = widget.accentColor.withAlpha(80);
 
-    final bool isBatterySaver = saverMode != BatterySaverMode.off || settings.classicUi;
+    final bool isBatterySaver =
+        saverMode != BatterySaverMode.off || settings.classicUi;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16.0),
@@ -205,7 +210,8 @@ class _SystemMonitorsCardState extends State<SystemMonitorsCard> with WidgetsBin
             builder: (context, constraints) {
               final isWide = constraints.maxWidth > 400;
               final crossCount = isWide ? 3 : 2;
-              final width = (constraints.maxWidth - (crossCount - 1) * 8) / crossCount;
+              final width =
+                  (constraints.maxWidth - (crossCount - 1) * 8) / crossCount;
 
               return Wrap(
                 spacing: 8,
@@ -214,10 +220,17 @@ class _SystemMonitorsCardState extends State<SystemMonitorsCard> with WidgetsBin
                   // Power & Battery
                   _buildMonitorPill(
                     width: width,
-                    icon: isCharging ? Icons.battery_charging_full : Icons.battery_std,
-                    iconColor: isCharging ? Colors.greenAccent : (batteryLevel < 20 ? Colors.redAccent : widget.accentColor),
+                    icon: isCharging
+                        ? Icons.battery_charging_full
+                        : Icons.battery_std,
+                    iconColor: isCharging
+                        ? Colors.greenAccent
+                        : (batteryLevel < 20
+                            ? Colors.redAccent
+                            : widget.accentColor),
                     label: isRtl ? 'البطارية' : 'Battery',
-                    value: '$batteryLevel% ${isCharging ? (isRtl ? '(شحن)' : '(Charging)') : ''}',
+                    value:
+                        '$batteryLevel% ${isCharging ? (isRtl ? '(شحن)' : '(Charging)') : ''}',
                     subValue: saverMode != BatterySaverMode.off
                         ? '${saverMode.name.toUpperCase()} SAVER'
                         : (isRtl ? 'عادي' : 'Normal'),
@@ -230,14 +243,17 @@ class _SystemMonitorsCardState extends State<SystemMonitorsCard> with WidgetsBin
                     iconColor: _getThermalColor(thermal),
                     label: isRtl ? 'الحرارة' : 'Thermal State',
                     value: thermal.name.toUpperCase(),
-                    subValue: '${(throttleFactor * 100).toInt()}% ${isRtl ? 'طاقة' : 'Power Cap'}',
+                    subValue:
+                        '${(throttleFactor * 100).toInt()}% ${isRtl ? 'طاقة' : 'Power Cap'}',
                   ),
 
                   // UI Jank / Performance
                   _buildMonitorPill(
                     width: width,
                     icon: Icons.speed,
-                    iconColor: double.parse(jankPct) > 5.0 ? Colors.orangeAccent : Colors.cyanAccent,
+                    iconColor: double.parse(jankPct) > 5.0
+                        ? Colors.orangeAccent
+                        : Colors.cyanAccent,
                     label: isRtl ? 'أداء الواجهة' : 'UI Jank Ratio',
                     value: '$jankPct%',
                     subValue: '${avgBuildMs}ms Build | ${avgRasterMs}ms Raster',
@@ -247,9 +263,11 @@ class _SystemMonitorsCardState extends State<SystemMonitorsCard> with WidgetsBin
                   _buildMonitorPill(
                     width: width,
                     icon: isWifi ? Icons.wifi : Icons.signal_cellular_alt,
-                    iconColor: isWifi ? Colors.lightBlueAccent : Colors.amberAccent,
+                    iconColor:
+                        isWifi ? Colors.lightBlueAccent : Colors.amberAccent,
                     label: isRtl ? 'الشبكة' : 'Network',
-                    value: isWifi ? 'Wi-Fi / LAN' : (isRtl ? 'خلوي' : 'Cellular'),
+                    value:
+                        isWifi ? 'Wi-Fi / LAN' : (isRtl ? 'خلوي' : 'Cellular'),
                     subValue: settings.wifiOnly
                         ? (isRtl ? 'Wi-Fi فقط' : 'Wi-Fi Only')
                         : (isRtl ? 'جميع الشبكات' : 'Any Network'),
@@ -259,10 +277,13 @@ class _SystemMonitorsCardState extends State<SystemMonitorsCard> with WidgetsBin
                   _buildMonitorPill(
                     width: width,
                     icon: Icons.downloading,
-                    iconColor: activeDownloads > 0 ? Colors.greenAccent : Colors.grey,
+                    iconColor:
+                        activeDownloads > 0 ? Colors.greenAccent : Colors.grey,
                     label: isRtl ? 'التحميلات النشطة' : 'Active Downloads',
                     value: '$activeDownloads ${isRtl ? 'نشط' : 'active'}',
-                    subValue: screenOff ? (isRtl ? 'الشاشة مغلقة' : 'Screen Off') : (isRtl ? 'الشاشة تعمل' : 'Screen On'),
+                    subValue: screenOff
+                        ? (isRtl ? 'الشاشة مغلقة' : 'Screen Off')
+                        : (isRtl ? 'الشاشة تعمل' : 'Screen On'),
                   ),
                 ],
               );

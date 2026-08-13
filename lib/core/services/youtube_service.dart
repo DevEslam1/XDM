@@ -14,7 +14,6 @@ class YoutubeService {
   static const _secureStorage = FlutterSecureStorage();
   static const _cookiesStorageKey = 'youtube_cookies_persisted';
 
-
   static Future<void> init() async {
     try {
       final savedCookies = await _secureStorage.read(key: _cookiesStorageKey);
@@ -636,9 +635,6 @@ class YoutubeService {
     }
   }
 
-
-
-
   // Retry stream resolution for transient errors and cold starts
   static Future<List<Map<String, dynamic>>?> _resolveWithRetry(
     String url, {
@@ -1016,14 +1012,16 @@ class YoutubeService {
     return null;
   }
 
-  static Future<Map<String, String?>?> Function(String, {String? preferredType})? mockGetFreshStreams;
+  static Future<Map<String, String?>?> Function(String,
+      {String? preferredType})? mockGetFreshStreams;
 
   static Future<Map<String, String?>?> getFreshStreams(
     String downloadPageUrl, {
     String? preferredType,
   }) async {
     if (kDebugMode && mockGetFreshStreams != null) {
-      return mockGetFreshStreams!(downloadPageUrl, preferredType: preferredType);
+      return mockGetFreshStreams!(downloadPageUrl,
+          preferredType: preferredType);
     }
 
     final videoId = extractVideoId(downloadPageUrl) ??

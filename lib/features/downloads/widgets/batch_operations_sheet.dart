@@ -231,12 +231,12 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
 
   Future<String?> _showCategoryDialog(BuildContext context) {
     final categories = [
-      'General',
       'Video',
       'Audio',
-      'Documents',
-      'Archives',
-      'Software'
+      'Document',
+      'Archive',
+      'APK',
+      'Other',
     ];
     return showDialog<String>(
       context: context,

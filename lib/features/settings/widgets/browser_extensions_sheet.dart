@@ -79,11 +79,13 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
   }
 
   void _testDeepLink(BuildContext context) {
-    const testUrl = 'dmx://add?url=https%3A%2F%2Fsample-videos.com%2Fvideo321%2Fmp4%2F720%2Fbig_buck_bunny_720p_1mb.mp4&name=Sample_Video.mp4&source=browser_ext';
+    const testUrl =
+        'dmx://add?url=https%3A%2F%2Fsample-videos.com%2Fvideo321%2Fmp4%2F720%2Fbig_buck_bunny_720p_1mb.mp4&name=Sample_Video.mp4&source=browser_ext';
     ShareUrlHandler.handleDeepLink(
       Uri.parse(testUrl),
       onUrl: (url) {
-        ShareUrlHandler.handle(context, url, isShareLaunch: false, prefilledName: 'Sample_Video.mp4');
+        ShareUrlHandler.handle(context, url,
+            isShareLaunch: false, prefilledName: 'Sample_Video.mp4');
       },
     );
   }
@@ -117,14 +119,17 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+                      color: isDark
+                          ? AppTheme.borderSubtle
+                          : AppTheme.lightBorderSubtle,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
 
                   // Header
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
                     child: Row(
                       children: [
                         Container(
@@ -136,7 +141,8 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
                               color: accent.withValues(alpha: 0.3),
                             ),
                           ),
-                          child: Icon(Icons.extension_rounded, color: accent, size: 24),
+                          child: Icon(Icons.extension_rounded,
+                              color: accent, size: 24),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -144,11 +150,15 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                isRtl ? 'ملحقات المتصفح (Browser Plugins)' : 'Browser Plugins & Interceptor',
+                                isRtl
+                                    ? 'ملحقات المتصفح (Browser Plugins)'
+                                    : 'Browser Plugins & Interceptor',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                                  color: isDark
+                                      ? AppTheme.textPrimary
+                                      : AppTheme.lightTextPrimary,
                                   fontFamily: 'Space Grotesk',
                                 ),
                               ),
@@ -159,7 +169,9 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
                                     : 'Auto-intercept & redirect downloads directly to XDM',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                                  color: isDark
+                                      ? AppTheme.textMuted
+                                      : AppTheme.lightTextMuted,
                                   fontFamily: 'Inter',
                                 ),
                               ),
@@ -181,14 +193,17 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
                       color: isDark ? AppTheme.surface : AppTheme.lightSurface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+                        color: isDark
+                            ? AppTheme.borderSubtle
+                            : AppTheme.lightBorderSubtle,
                       ),
                     ),
                     child: TabBar(
                       controller: _tabController,
                       indicatorColor: accent,
                       labelColor: accent,
-                      unselectedLabelColor: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                      unselectedLabelColor:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                       tabs: const [
                         Tab(
                           icon: FaIcon(FontAwesomeIcons.firefox, size: 16),
@@ -209,8 +224,10 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
                     child: TabBarView(
                       controller: _tabController,
                       children: [
-                        _buildFirefoxTab(context, scrollController, accent, isDark, isRtl),
-                        _buildSafariTab(context, scrollController, accent, isDark, isRtl),
+                        _buildFirefoxTab(
+                            context, scrollController, accent, isDark, isRtl),
+                        _buildSafariTab(
+                            context, scrollController, accent, isDark, isRtl),
                       ],
                     ),
                   ),
@@ -237,16 +254,28 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
         _buildInfoCard(
           isDark: isDark,
           accent: accent,
-          title: isRtl ? 'ملحق Firefox Android' : 'Firefox (Android) Redirector',
+          title:
+              isRtl ? 'ملحق Firefox Android' : 'Firefox (Android) Redirector',
           description: isRtl
               ? 'يقوم الملحق بمراقبة كل تنزيل يتم البدء فيه داخل متصفح Firefox، وإلغائه فورياً داخل المتصفح، وتحويل رابط التنزيل إلى تطبيق XDM لتنزيله بأقصى سرعة.'
               : 'Every download initiated in Firefox is cancelled in the browser and passed to XDM via dmx:// deep link.',
           icon: FontAwesomeIcons.firefox,
         ),
         const SizedBox(height: 16),
-        _buildStepHeader(isDark, isRtl ? 'خطوات التثبيت والتفعيل:' : 'Installation & Setup Steps:'),
-        _buildStepItem(isDark, '1', isRtl ? 'افتح متصفح Firefox على جهاز Android.' : 'Open Firefox on your Android device.'),
-        _buildStepItem(isDark, '2', isRtl ? 'افتح القائمة السريعة -> الملحقات (Add-ons).' : 'Open Menu -> Add-ons / Extensions.'),
+        _buildStepHeader(isDark,
+            isRtl ? 'خطوات التثبيت والتفعيل:' : 'Installation & Setup Steps:'),
+        _buildStepItem(
+            isDark,
+            '1',
+            isRtl
+                ? 'افتح متصفح Firefox على جهاز Android.'
+                : 'Open Firefox on your Android device.'),
+        _buildStepItem(
+            isDark,
+            '2',
+            isRtl
+                ? 'افتح القائمة السريعة -> الملحقات (Add-ons).'
+                : 'Open Menu -> Add-ons / Extensions.'),
         _buildStepItem(
           isDark,
           '3',
@@ -269,8 +298,13 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
                 text: isRtl ? 'نسخ بروتوكول dmx://' : 'Copy dmx:// Protocol',
                 color: accent,
                 onPressed: () {
-                  Clipboard.setData(const ClipboardData(text: 'dmx://add?url='));
-                  _showCopiedSnackbar(context, isRtl ? 'تم نسخ البروتوكول dmx://' : 'Copied dmx:// scheme to clipboard');
+                  Clipboard.setData(
+                      const ClipboardData(text: 'dmx://add?url='));
+                  _showCopiedSnackbar(
+                      context,
+                      isRtl
+                          ? 'تم نسخ البروتوكول dmx://'
+                          : 'Copied dmx:// scheme to clipboard');
                 },
               ),
             ),
@@ -283,7 +317,8 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
                   foregroundColor: accent,
                   side: BorderSide(color: accent),
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: () => _testDeepLink(context),
               ),
@@ -308,17 +343,35 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
         _buildInfoCard(
           isDark: isDark,
           accent: accent,
-          title: isRtl ? 'ملحق Safari Web Extension (iOS)' : 'Safari (iOS) Web Extension',
+          title: isRtl
+              ? 'ملحق Safari Web Extension (iOS)'
+              : 'Safari (iOS) Web Extension',
           description: isRtl
               ? 'ملحق متكامل مع نظام iOS يمنع تنزيل الملفات بطيئة السرعة داخل Safari ويفتح تطبيق XDM فورياً لبدء التنزيل المتعدد.'
               : 'Built into iOS via Safari Web Extensions. It stops Safari background downloads and forwards the media URL directly to XDM.',
           icon: FontAwesomeIcons.safari,
         ),
         const SizedBox(height: 16),
-        _buildStepHeader(isDark, isRtl ? 'خطوات التفعيل في نظام iOS:' : 'iOS Activation Steps:'),
-        _buildStepItem(isDark, '1', isRtl ? 'افتح تطبيق الإعدادات (Settings) في iOS.' : 'Open iOS Settings app.'),
-        _buildStepItem(isDark, '2', isRtl ? 'انتقل إلى Safari -> الملحقات (Extensions).' : 'Navigate to Safari -> Extensions.'),
-        _buildStepItem(isDark, '3', isRtl ? 'قم بتفعيل ملحق "XDM Download Redirect".' : 'Turn ON "XDM Download Redirect".'),
+        _buildStepHeader(isDark,
+            isRtl ? 'خطوات التفعيل في نظام iOS:' : 'iOS Activation Steps:'),
+        _buildStepItem(
+            isDark,
+            '1',
+            isRtl
+                ? 'افتح تطبيق الإعدادات (Settings) في iOS.'
+                : 'Open iOS Settings app.'),
+        _buildStepItem(
+            isDark,
+            '2',
+            isRtl
+                ? 'انتقل إلى Safari -> الملحقات (Extensions).'
+                : 'Navigate to Safari -> Extensions.'),
+        _buildStepItem(
+            isDark,
+            '3',
+            isRtl
+                ? 'قم بتفعيل ملحق "XDM Download Redirect".'
+                : 'Turn ON "XDM Download Redirect".'),
         _buildStepItem(
           isDark,
           '4',
@@ -345,7 +398,8 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
                   foregroundColor: accent,
                   side: BorderSide(color: accent),
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: () => _testDeepLink(context),
               ),
@@ -389,7 +443,9 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                    color: isDark
+                        ? AppTheme.textPrimary
+                        : AppTheme.lightTextPrimary,
                     fontFamily: 'Space Grotesk',
                   ),
                 ),
@@ -399,7 +455,9 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.4,
-                    color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                    color: isDark
+                        ? AppTheme.textSecondary
+                        : AppTheme.lightTextSecondary,
                     fontFamily: 'Inter',
                   ),
                 ),
@@ -440,7 +498,8 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
               color: isDark ? AppTheme.surface : AppTheme.lightSurface,
               shape: BoxShape.circle,
               border: Border.all(
-                color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+                color:
+                    isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
               ),
             ),
             child: Text(
@@ -458,7 +517,9 @@ class _BrowserExtensionsSheetState extends State<BrowserExtensionsSheet>
               text,
               style: TextStyle(
                 fontSize: 12,
-                color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                color: isDark
+                    ? AppTheme.textSecondary
+                    : AppTheme.lightTextSecondary,
                 fontFamily: 'Inter',
               ),
             ),

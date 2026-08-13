@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/protocol_cache.dart';
+
 class ConnectionManager {
   ConnectionManager();
   static final Map<String, _HostProbe> _probes = {};
@@ -20,6 +21,7 @@ class ConnectionManager {
       await socket.close();
     } catch (_) {}
   }
+
   static Future<bool> detectHttp2(String url) async {
     try {
       final uri = Uri.parse(url);
@@ -45,7 +47,8 @@ class ConnectionManager {
       }
       _probes[host] = _HostProbe(isHttp2: result, at: now);
       if (_probes.length > 500) {
-        _probes.removeWhere((_, probe) => now.difference(probe.at) >= _cacheTtl);
+        _probes
+            .removeWhere((_, probe) => now.difference(probe.at) >= _cacheTtl);
         if (_probes.length > 500) {
           _probes.remove(_probes.keys.first);
         }
@@ -56,6 +59,7 @@ class ConnectionManager {
       return false;
     }
   }
+
   static void invalidate(String host) => _probes.remove(host);
   static void clearCache() => _probes.clear();
   static Dio createDownloadDio() {
@@ -64,6 +68,7 @@ class ConnectionManager {
     dio.options.receiveTimeout = const Duration(milliseconds: 60000);
     return dio;
   }
+
   static Dio createProtocolDio(ProtocolSupport protocol) {
     final dio = createDownloadDio();
     switch (protocol) {
@@ -80,6 +85,7 @@ class ConnectionManager {
     }
     return dio;
   }
+
   static bool isGoawayOrReset(dynamic error) {
     if (error is DioException) {
       final msg = error.message?.toLowerCase() ?? '';
@@ -87,6 +93,7 @@ class ConnectionManager {
     }
     return false;
   }
+
   static Future<ProtocolSupport> detectBestProtocol(String url) async {
     final cached = ProtocolCache.get(url);
     if (cached != null) return cached;
@@ -99,6 +106,7 @@ class ConnectionManager {
     return ProtocolSupport.http11;
   }
 }
+
 class _HostProbe {
   const _HostProbe({required this.isHttp2, required this.at});
   final bool isHttp2;

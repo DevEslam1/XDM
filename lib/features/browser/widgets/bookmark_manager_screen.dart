@@ -139,7 +139,8 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                backgroundColor:
+                    isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
               ),
               onPressed: () => Navigator.pop(dialogContext, true),
               child: Text(isRtl ? 'متابعة' : 'Continue'),
@@ -245,7 +246,9 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: isRtl ? 'بحث في الإشارات المرجعية...' : 'Search bookmarks...',
+                hintText: isRtl
+                    ? 'بحث في الإشارات المرجعية...'
+                    : 'Search bookmarks...',
                 prefixIcon: Icon(Icons.search, size: 20, color: accent),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
@@ -257,7 +260,8 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                 fillColor: isDark
                     ? (isAmoled ? AppTheme.amoledCardBg : AppTheme.surface)
                     : AppTheme.lightSurface,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -349,7 +353,8 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                             icon: const Icon(Icons.add, size: 18),
                             label: Text(
                               isRtl ? 'إضافة إشارة مرجعية' : 'Add Bookmark',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
                             ),
                             onPressed: _addBookmarkDialog,
                           ),
@@ -360,9 +365,13 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                 : grouped.isEmpty
                     ? Center(
                         child: Text(
-                          isRtl ? 'لا توجد نتائج متطابقة' : 'No matching bookmarks',
+                          isRtl
+                              ? 'لا توجد نتائج متطابقة'
+                              : 'No matching bookmarks',
                           style: TextStyle(
-                            color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                            color: isDark
+                                ? AppTheme.textMuted
+                                : AppTheme.lightTextMuted,
                           ),
                         ),
                       )
@@ -371,7 +380,8 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                         children: grouped.entries.map((entry) {
                           final folderName = entry.key;
                           final bmsInFolder = entry.value;
-                          final isCollapsed = _collapsedFolders.contains(folderName);
+                          final isCollapsed =
+                              _collapsedFolders.contains(folderName);
 
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -389,11 +399,14 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                                 },
                                 borderRadius: BorderRadius.circular(8),
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 8, horizontal: 4),
                                   child: Row(
                                     children: [
                                       Icon(
-                                        isCollapsed ? Icons.folder_outlined : Icons.folder_open_rounded,
+                                        isCollapsed
+                                            ? Icons.folder_outlined
+                                            : Icons.folder_open_rounded,
                                         size: 20,
                                         color: accent,
                                       ),
@@ -401,7 +414,9 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                                       Text(
                                         folderName,
                                         style: TextStyle(
-                                          color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                                          color: isDark
+                                              ? AppTheme.textPrimary
+                                              : AppTheme.lightTextPrimary,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 14,
                                         ),
@@ -410,7 +425,9 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                                       Text(
                                         '(${bmsInFolder.length})',
                                         style: TextStyle(
-                                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                                          color: isDark
+                                              ? AppTheme.textMuted
+                                              : AppTheme.lightTextMuted,
                                           fontSize: 12,
                                         ),
                                       ),
@@ -419,7 +436,9 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                                         isCollapsed
                                             ? Icons.keyboard_arrow_down_rounded
                                             : Icons.keyboard_arrow_up_rounded,
-                                        color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                                        color: isDark
+                                            ? AppTheme.textMuted
+                                            : AppTheme.lightTextMuted,
                                         size: 20,
                                       ),
                                     ],
@@ -431,7 +450,8 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                                 ...bmsInFolder.map((bm) {
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 6),
-                                    child: _buildBookmarkTile(context, bm, isDark, isAmoled, accent),
+                                    child: _buildBookmarkTile(
+                                        context, bm, isDark, isAmoled, accent),
                                   );
                                 }),
 
@@ -552,9 +572,7 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                 IconButton(
                   icon: Icon(Icons.delete_outline,
                       size: 16,
-                      color: isDark
-                          ? AppTheme.neonRed
-                          : AppTheme.lightNeonRed),
+                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
                   tooltip: L10n.of(context, 'browser_delete'),
                   onPressed: () => _delete(bm),
                 ),
@@ -715,7 +733,8 @@ class _AddBookmarkDialogState extends State<_AddBookmarkDialog> {
 
             String? folderResult;
             if (_isNewFolder) {
-              folderResult = _folderC.text.trim().isEmpty ? null : _folderC.text.trim();
+              folderResult =
+                  _folderC.text.trim().isEmpty ? null : _folderC.text.trim();
             } else {
               folderResult = _selectedFolder;
             }

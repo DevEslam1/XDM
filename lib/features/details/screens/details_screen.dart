@@ -258,15 +258,17 @@ class _DetailsScreenState extends State<DetailsScreen>
                                         task: task,
                                         statusColor: statusColor,
                                         speedText: speedTextInsideCircle,
-                                        etaText:
-                                            (task.status == DownloadStatus.downloading ||
-                                                    isSeeding)
-                                                ? L10n.translateStatus(
-                                                    context,
-                                                    task.status,
-                                                    task.etaFormatted,
-                                                  )
-                                                : L10n.of(context, 'details_inactive_eta'),
+                                        etaText: (task.status ==
+                                                    DownloadStatus
+                                                        .downloading ||
+                                                isSeeding)
+                                            ? L10n.translateStatus(
+                                                context,
+                                                task.status,
+                                                task.etaFormatted,
+                                              )
+                                            : L10n.of(context,
+                                                'details_inactive_eta'),
                                         pulse: _pulse,
                                       ),
                                     ),
@@ -324,7 +326,8 @@ class _DetailsScreenState extends State<DetailsScreen>
                                       ),
                                     ),
                                   ),
-                                  if (_graphExpanded) const SizedBox(height: 14),
+                                  if (_graphExpanded)
+                                    const SizedBox(height: 14),
                                   _stagger(
                                     0.5,
                                     _TorrentFilesPanel(
@@ -333,7 +336,8 @@ class _DetailsScreenState extends State<DetailsScreen>
                                       settings: settings,
                                     ),
                                   ),
-                                  if (task.isTorrent) const SizedBox(height: 14),
+                                  if (task.isTorrent)
+                                    const SizedBox(height: 14),
                                   _stagger(
                                     0.6,
                                     _MetadataPanel(
@@ -357,15 +361,16 @@ class _DetailsScreenState extends State<DetailsScreen>
                                   task: task,
                                   statusColor: statusColor,
                                   speedText: speedTextInsideCircle,
-                                  etaText:
-                                      (task.status == DownloadStatus.downloading ||
-                                              isSeeding)
-                                          ? L10n.translateStatus(
-                                              context,
-                                              task.status,
-                                              task.etaFormatted,
-                                            )
-                                          : L10n.of(context, 'details_inactive_eta'),
+                                  etaText: (task.status ==
+                                              DownloadStatus.downloading ||
+                                          isSeeding)
+                                      ? L10n.translateStatus(
+                                          context,
+                                          task.status,
+                                          task.etaFormatted,
+                                        )
+                                      : L10n.of(
+                                          context, 'details_inactive_eta'),
                                   pulse: _pulse,
                                 ),
                               ),
@@ -1300,7 +1305,8 @@ class _StepBtnState extends State<_StepBtn> {
           child: GestureDetector(
             onTapDown: disabled ? null : (_) => setState(() => _pressed = true),
             onTapUp: disabled ? null : (_) => setState(() => _pressed = false),
-            onTapCancel: disabled ? null : () => setState(() => _pressed = false),
+            onTapCancel:
+                disabled ? null : () => setState(() => _pressed = false),
             onTap: widget.onPressed,
             child: AnimatedScale(
               scale: _pressed ? 0.85 : 1.0,

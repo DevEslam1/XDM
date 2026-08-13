@@ -95,7 +95,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   int _selectedThreads = 5;
   bool _wifiOnly = false;
   bool _retry = true;
-  
+
   bool _isScheduled = false;
   bool _showAdvanced = false;
   DateTime? _scheduledDateTime;
@@ -162,7 +162,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       _selectedThreads = settings.defaultThreadCount;
     }
     _wifiOnly = settings.wifiOnly;
-    
+
     _loadDefaultPath();
     _urlController.addListener(_onUrlChanged);
     if (widget.prefilledUrl != null && widget.prefilledUrl!.trim().isNotEmpty) {
@@ -628,12 +628,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           url: url,
           requestedFileName: nameForReq,
           customUserAgent: settings.customUserAgent,
-          
-          
-          
-          
-          
-          
           bypassSSL: settings.bypassSSL,
         );
       } finally {

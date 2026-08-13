@@ -11,18 +11,21 @@ final _log = LoggingService.logger('RedirectGuard');
 enum RedirectDecision {
   /// No action — page looks legitimate or no target was found.
   ignore,
+
   /// Auto-navigate to [RedirectResult.targetUrl] without prompting.
   autoFollow,
+
   /// Show the redirect confirmation sheet (low confidence / multiple candidates).
   promptUser,
+
   /// Detected an ad loop — block navigation.
   block,
 }
 
 class RedirectResult {
   final String? targetUrl;
-  final String strategy;       // how the target was discovered
-  final double confidence;     // 0.0 – 1.0
+  final String strategy; // how the target was discovered
+  final double confidence; // 0.0 – 1.0
   final RedirectDecision decision;
   final List<String> candidates;
   const RedirectResult({
@@ -72,22 +75,53 @@ class _AdPatterns {
   };
 
   static const pathMarkers = <String>[
-    '/go/', '/redirect/', '/dl/', '/download/',
-    '/continue/', '/proceed/', '/step/', '/verify/',
+    '/go/',
+    '/redirect/',
+    '/dl/',
+    '/download/',
+    '/continue/',
+    '/proceed/',
+    '/step/',
+    '/verify/',
   ];
 
   static const queryKeys = <String>{
-    'go', 'redir', 'redirect', 'link', 'url', 'target', 'next', 'to',
-    'return', 'returnurl', 'return_url', 'id', 'file', 'fid',
+    'go',
+    'redir',
+    'redirect',
+    'link',
+    'url',
+    'target',
+    'next',
+    'to',
+    'return',
+    'returnurl',
+    'return_url',
+    'id',
+    'file',
+    'fid',
   };
 
   // Ad-network hosts we should NEVER auto-follow into.
   static const adNetworks = <String>{
-    'doubleclick.net', 'googlesyndication.com', 'googletagservices.com',
-    'amazon-adsystem.com', 'taboola.com', 'outbrain.com', 'criteo.com',
-    'adnxs.com', '2mdn.net', 'moatads.com', 'rubiconproject.com',
-    'openx.net', 'pubmatic.com', 'propellerads.com', 'popads.net',
-    'popcash.net', 'adcash.com', 'adsterra.com',
+    'doubleclick.net',
+    'googlesyndication.com',
+    'googletagservices.com',
+    'amazon-adsystem.com',
+    'taboola.com',
+    'outbrain.com',
+    'criteo.com',
+    'adnxs.com',
+    '2mdn.net',
+    'moatads.com',
+    'rubiconproject.com',
+    'openx.net',
+    'pubmatic.com',
+    'propellerads.com',
+    'popads.net',
+    'popcash.net',
+    'adcash.com',
+    'adsterra.com',
   };
 }
 
@@ -196,9 +230,8 @@ class RedirectGuard {
         .where((u) => Uri.tryParse(u)?.host != Uri.tryParse(currentUrl)?.host)
         .toList();
 
-    final target = differentHost.isNotEmpty
-        ? differentHost.first
-        : unique.first;
+    final target =
+        differentHost.isNotEmpty ? differentHost.first : unique.first;
 
     final confidence = _scoreConfidence(
       target: target,
@@ -255,8 +288,8 @@ class RedirectGuard {
 
   bool _isAdNetwork(String url) {
     final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
-    return _AdPatterns.adNetworks.any((h) =>
-        host == h || host.endsWith('.$h') || host.contains(h));
+    return _AdPatterns.adNetworks
+        .any((h) => host == h || host.endsWith('.$h') || host.contains(h));
   }
 
   String? _normalizeUrl(String raw, {required String baseUrl}) {
@@ -291,8 +324,7 @@ class RedirectGuard {
     if (!RegExp(r'^[A-Za-z0-9+/_-]{16,}={0,2}$').hasMatch(s)) return null;
     try {
       final normalized = s.replaceAll('-', '+').replaceAll('_', '/');
-      final padded = normalized +
-          '=' * ((4 - normalized.length % 4) % 4);
+      final padded = normalized + '=' * ((4 - normalized.length % 4) % 4);
       final bytes = base64.decode(padded);
       final out = utf8.decode(bytes, allowMalformed: true);
       if (out.contains('http')) return out;
@@ -316,7 +348,17 @@ class RedirectGuard {
     }
     final path = Uri.tryParse(target)?.path.toLowerCase() ?? '';
     final ext = path.split('.').last;
-    const mediaExts = {'mp4', 'mkv', 'mp3', 'zip', 'rar', '7z', 'apk', 'exe', 'iso'};
+    const mediaExts = {
+      'mp4',
+      'mkv',
+      'mp3',
+      'zip',
+      'rar',
+      '7z',
+      'apk',
+      'exe',
+      'iso'
+    };
     if (mediaExts.contains(ext)) {
       score += 0.1; // direct file = very likely the real link
     }
@@ -437,7 +479,10 @@ class RedirectGuard {
       if (res == null) return null;
       final decoded = jsonDecode(res.toString());
       if (decoded is List) {
-        return decoded.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+        return decoded
+            .map((e) => e.toString())
+            .where((s) => s.isNotEmpty)
+            .toList();
       }
     } catch (e) {
       _log.warning('JS extraction failed: $e');

@@ -1,4 +1,5 @@
 part of 'download_engine.dart';
+
 class EngineMessage {
   EngineMessage._(this.type, this.taskId, this.data, this.seq);
   static const int protocolVersion = 1;
@@ -38,6 +39,7 @@ class EngineMessage {
     }
   }
 }
+
 class DownloadCommand {
   const DownloadCommand({
     required this.taskId,
@@ -103,7 +105,6 @@ class DownloadCommand {
         'threadCount': threadCount,
         'customUserAgent': customUserAgent,
         'referer': referer,
-
         'bypassSSL': bypassSSL,
         'cookies': cookies,
         'oauthToken': oauthToken,
@@ -132,7 +133,6 @@ class DownloadCommand {
         threadCount: (m['threadCount'] as num?)?.toInt() ?? 1,
         customUserAgent: m['customUserAgent'] as String?,
         referer: m['referer'] as String?,
-
         bypassSSL: m['bypassSSL'] as bool? ?? true,
         cookies: m['cookies'] as String?,
         oauthToken: m['oauthToken'] as String?,
@@ -155,6 +155,7 @@ class DownloadCommand {
         ytCounterpartTaskId: m['ytCounterpartTaskId'] as String?,
       );
 }
+
 class DownloadIsolatePool {
   DownloadIsolatePool({int size = 4, bool powerAware = false})
       : _size = size,
@@ -176,6 +177,7 @@ class DownloadIsolatePool {
     }
     return live;
   }
+
   bool _isSpawning = false;
   Timer? _idleCheckTimer;
 
@@ -459,6 +461,7 @@ class _Worker {
   bool dead = false;
   DateTime lastActiveTime = DateTime.now();
 }
+
 class PoolJob {
   PoolJob._(this._pool, this.command, this._seq) {
     messages = _incoming
@@ -491,12 +494,14 @@ class PoolJob {
       data: {'errorType': type, 'errorMessage': message, 'errorStatus': status},
     ));
   }
+
   void dispose() {
     if (_disposed) return;
     _disposed = true;
     _incoming.close();
   }
 }
+
 int _workerGlobalLimitBps = 0;
 int _workerGlobalActive = 1;
 final Map<String, HttpTransferJob> _runningJobs = {};
@@ -538,11 +543,14 @@ Future<void> _workerEntry(SendPort poolPort) async {
     }
   }
 }
+
 class _RangeUnsupportedException implements Exception {}
+
 class _FileChangedOnServerException implements Exception {
   @override
   String toString() => 'File changed on server. Restart required.';
 }
+
 class HttpTransferJob {
   HttpTransferJob(this.cmd, this.out);
   final DownloadCommand cmd;
@@ -563,10 +571,12 @@ class HttpTransferJob {
     _cancelRequested = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('paused');
   }
+
   void _send(String type, [Map<String, dynamic>? data]) {
     out.send(EngineMessage.encode(
         type: type, taskId: cmd.taskId, seq: _seq++, data: data));
   }
+
   void sendUnhandledError(Object e) {
     if (e is DioException && e.type == DioExceptionType.cancel) {
       _send('error', {
@@ -617,10 +627,12 @@ class HttpTransferJob {
     }
     _send('error', {'errorType': 'uncaught', 'errorMessage': e.toString()});
   }
+
   static bool _looksLikeDiskFull(String msg) {
     final m = msg.toLowerCase();
     return m.contains('enospc') || m.contains('no space left');
   }
+
   Future<void> run() async {
     _stopwatch.start();
     final dio = buildTransferDio(
@@ -693,6 +705,7 @@ class HttpTransferJob {
       dio.close(force: true);
     }
   }
+
   Future<void> _verifyServerIdentity(Dio dio) async {
     try {
       final response = await dio.get<ResponseBody>(
@@ -779,6 +792,7 @@ class HttpTransferJob {
       debugPrint('[DMX-Job] identity probe failed (continuing): $e');
     }
   }
+
   void _resetToSingleStream() {
     final st = _state!;
     for (final c in st.chunks) {
@@ -791,6 +805,7 @@ class HttpTransferJob {
       if (f.existsSync()) f.deleteSync();
     } catch (_) {}
   }
+
   Future<void> _runMultiThreaded(Dio dio) async {
     final st = _state!;
     if (st.chunks.isEmpty) {
@@ -862,6 +877,7 @@ class HttpTransferJob {
       await writer.close();
     }
   }
+
   Future<void> _runChunk({
     required Dio dio,
     required ChunkState chunk,
@@ -1050,6 +1066,7 @@ class HttpTransferJob {
       }
     }
   }
+
   Future<void> _spotCheckResumedBytes(
       Dio dio, TransferState st, PositionalFileWriter writer) async {
     const sampleSize = 64 * 1024;
@@ -1086,6 +1103,7 @@ class HttpTransferJob {
       } catch (_) {}
     }
   }
+
   Future<void> _runSingleStream(Dio dio) async {
     final st = _state!;
     if (st.chunks.isEmpty) {
@@ -1386,6 +1404,7 @@ class HttpTransferJob {
     governor.unregisterConsumer();
     governor.dispose();
   }
+
   Future<void> _finalize(Dio dio) async {
     final st = _state!;
     if (cmd.tempFilePath != cmd.localFilePath) {
@@ -1428,6 +1447,7 @@ class HttpTransferJob {
     _emitProgress(0, statusMessage: 'Completed');
     await StateStore.remove(cmd.tempFilePath);
   }
+
   int _effectiveGlobalLimit() {
     if (_workerGlobalLimitBps > 0) {
       return (_workerGlobalLimitBps / _workerGlobalActive).floor();
@@ -1436,6 +1456,7 @@ class HttpTransferJob {
         ? (cmd.initialSpeedLimit / max(1, cmd.initialActiveCount)).floor()
         : 0;
   }
+
   void _throwIfCancelled() {
     if (_cancelRequested || _cancelToken.isCancelled) {
       throw DioException(
@@ -1445,6 +1466,7 @@ class HttpTransferJob {
       );
     }
   }
+
   Future<void> _cancellableDelay(Duration duration) async {
     if (_cancelRequested) return;
     final completer = Completer<void>();
@@ -1458,6 +1480,7 @@ class HttpTransferJob {
     await completer.future;
     await sub;
   }
+
   Future<void> _throttledSaveAndReport(
     PositionalFileWriter? writer, {
     Future<void> Function()? preSaveFlush,
@@ -1483,6 +1506,7 @@ class HttpTransferJob {
       _emitProgress(nowMs);
     }
   }
+
   void _emitProgress(int nowMs, {String? statusMessage}) {
     final st = _state!;
     final downloaded = st.downloadedBytes;
@@ -1553,6 +1577,7 @@ class HttpTransferJob {
       if (completedChunks != null) 'completedChunks': completedChunks,
     });
   }
+
   static String _deriveCycleState(
       String? statusMessage, DmxStateStatus status) {
     switch (status) {
@@ -1569,15 +1594,22 @@ class HttpTransferJob {
         if (msg.contains('restarting') || msg.contains('source changed')) {
           return 'retrying';
         }
-        if (msg.contains('checking') || msg.contains('verifying')) return 'checking';
+        if (msg.contains('checking') || msg.contains('verifying')) {
+          return 'checking';
+        }
         if (msg.contains('seeding')) return 'seeding';
         if (msg.contains('completed')) return 'completed';
-        if (msg.contains('starting') || msg.contains('allocating') || msg.contains('preparing')) return 'starting';
+        if (msg.contains('starting') ||
+            msg.contains('allocating') ||
+            msg.contains('preparing')) {
+          return 'starting';
+        }
         if (msg.contains('resuming')) return 'resuming';
         if (msg.contains('fetching metadata')) return 'fetching_metadata';
         return 'downloading';
     }
   }
+
   void _validateContentRange(
     String? value, {
     required int expectedStart,
@@ -1621,6 +1653,7 @@ class HttpTransferJob {
     }
   }
 }
+
 class _SpeedSample {
   final int timestampMs;
   final int bytes;

@@ -46,6 +46,7 @@ class MediaQualitySheet extends StatefulWidget {
       _isShowing = false;
     }
   }
+
   @override
   State<MediaQualitySheet> createState() => _MediaQualitySheetState();
 }
@@ -66,6 +67,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
       _fetchStreams();
     }
   }
+
   Future<void> _fetchStreams() async {
     debugPrint('[MediaQualitySheet] Fetching streams for: ${widget.videoUrl}');
     try {
@@ -124,10 +126,12 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
       });
     }
   }
+
   int _parseQuality(String q) {
     final match = RegExp(r'(\d+)').firstMatch(q);
     return match != null ? int.parse(match.group(1)!) : 0;
   }
+
   IconData _iconForType(String type) {
     switch (type) {
       case 'muxed':
@@ -142,6 +146,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
         return Icons.play_circle_outline;
     }
   }
+
   Color _colorForType(String type, bool isDark) {
     switch (type) {
       case 'muxed':
@@ -156,6 +161,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
         return isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     }
   }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
@@ -677,6 +683,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
       },
     );
   }
+
   Widget _sectionHeader(
     BuildContext context,
     String title,
@@ -705,6 +712,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
       ),
     );
   }
+
   Widget _recommendBadge(bool isDark) {
     final amber = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
     return Container(
@@ -732,6 +740,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
       ),
     );
   }
+
   Future<bool> _showConfirmDialog({
     required BuildContext context,
     required String title,
@@ -747,6 +756,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     );
     return result ?? false;
   }
+
   Widget _streamTile(
     BuildContext context,
     Map<String, dynamic> stream,

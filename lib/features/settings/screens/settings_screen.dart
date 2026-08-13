@@ -269,7 +269,9 @@ class _SettingsScreenState extends State<SettingsScreen>
       _SettingSearchEntry(
         categoryTitle: isRtl ? 'التحميلات والتكامل' : 'Downloads & Plugins',
         categoryIndex: 1,
-        settingTitle: isRtl ? 'ملحقات المتصفح (Firefox & Safari)' : 'Browser Plugins (Firefox & Safari)',
+        settingTitle: isRtl
+            ? 'ملحقات المتصفح (Firefox & Safari)'
+            : 'Browser Plugins (Firefox & Safari)',
         subtitle: isRtl
             ? 'إلغاء تنزيلات المتصفح تلقائياً وتحويلها إلى XDM'
             : 'Auto-intercept & redirect downloads from Firefox Android & Safari iOS',
@@ -598,7 +600,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                     isRtl
                         ? Icons.arrow_forward_rounded
                         : Icons.arrow_back_rounded,
-                    color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                    color: isDark
+                        ? AppTheme.textPrimary
+                        : AppTheme.lightTextPrimary,
                   ),
                   onPressed: () {
                     triggerHaptic(settings);
@@ -702,7 +706,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                   )
                 else
                   Expanded(
-                    child: (isDesktop || isTablet(context) || isLandscape(context))
+                    child: (isDesktop ||
+                            isTablet(context) ||
+                            isLandscape(context))
                         ? Row(
                             children: [
                               // Side NavigationRail for Desktop / Tablet / Landscape
@@ -731,10 +737,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                                               ? NavigationRailLabelType.selected
                                               : NavigationRailLabelType.all,
                                           useIndicator: true,
-                                          indicatorColor: categories[
-                                                  _selectedCategoryIndex]
-                                              .color
-                                              .withValues(alpha: 0.18),
+                                          indicatorColor:
+                                              categories[_selectedCategoryIndex]
+                                                  .color
+                                                  .withValues(alpha: 0.18),
                                           selectedIconTheme: IconThemeData(
                                             color: categories[
                                                     _selectedCategoryIndex]
@@ -766,13 +772,13 @@ class _SettingsScreenState extends State<SettingsScreen>
                                                     NavigationRailDestination(
                                                   icon: Tooltip(
                                                     message: cat.title,
-                                                    child:
-                                                        Icon(cat.icon, size: 20),
+                                                    child: Icon(cat.icon,
+                                                        size: 20),
                                                   ),
                                                   selectedIcon: Tooltip(
                                                     message: cat.title,
-                                                    child:
-                                                        Icon(cat.icon, size: 22),
+                                                    child: Icon(cat.icon,
+                                                        size: 22),
                                                   ),
                                                   label: Text(cat.title),
                                                 ),
@@ -823,7 +829,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                                       child: GestureDetector(
                                         onTap: () => _onCategorySelected(i),
                                         child: AnimatedContainer(
-                                          duration: const Duration(milliseconds: 250),
+                                          duration:
+                                              const Duration(milliseconds: 250),
                                           curve: Curves.easeInOut,
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 16,
@@ -840,8 +847,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                                             border: Border.all(
                                               color: selected
                                                   ? cat.color
-                                                  : cat.color.withValues(
-                                                      alpha: 0.3),
+                                                  : cat.color
+                                                      .withValues(alpha: 0.3),
                                               width: 1.2,
                                             ),
                                             boxShadow: selected
@@ -939,8 +946,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         child: EmptyStateView(
           icon: Icons.search_off_rounded,
           title: 'No settings found for "$_searchQuery"',
-          subtitle:
-              'Try keywords like "threads", "schedule", or "dht".',
+          subtitle: 'Try keywords like "threads", "schedule", or "dht".',
         ),
       );
     }
