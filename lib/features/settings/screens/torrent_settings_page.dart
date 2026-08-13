@@ -122,9 +122,29 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                   triggerHaptic(settings);
                 },
               ),
+              SwitchTile(
+                accentColor: accent,
+                title: 'Enable uTP Protocol',
+                subtitle: 'Micro Transport Protocol for congestion control',
+                value: settings.enableUtp,
+                onChanged: (val) {
+                  settings.setEnableUtp(val);
+                  triggerHaptic(settings);
+                },
+              ),
+              SwitchTile(
+                accentColor: accent,
+                title: 'Enable LSD (Local Service Discovery)',
+                subtitle: 'Discover local subnet BitTorrent clients',
+                value: settings.enableLsd,
+                onChanged: (val) {
+                  settings.setEnableLsd(val);
+                  triggerHaptic(settings);
+                },
+              ),
               SliderTile(
                 accentColor: accent,
-                title: isRtl ? 'أقصى عدد للاتصالات' : 'Connection Limit',
+                title: isRtl ? 'أقصى عدد للاتصالات' : 'Global Connection Limit',
                 subtitle: '${settings.torrentConnectionsLimit} peers',
                 value: settings.torrentConnectionsLimit.toDouble(),
                 min: 10,
@@ -132,6 +152,18 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                 divisions: 99,
                 onChanged: (val) {
                   settings.setTorrentConnectionsLimit(val.round());
+                },
+              ),
+              SliderTile(
+                accentColor: accent,
+                title: 'Max Connections per Torrent',
+                subtitle: '${settings.maxPeerConnectionsPerTorrent} peers',
+                value: settings.maxPeerConnectionsPerTorrent.toDouble(),
+                min: 5,
+                max: 500,
+                divisions: 99,
+                onChanged: (val) {
+                  settings.setMaxPeerConnectionsPerTorrent(val.round());
                 },
               ),
             ],
@@ -156,6 +188,26 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                 value: settings.globalTorrentSeeding,
                 onChanged: (val) {
                   settings.setGlobalTorrentSeeding(val);
+                  triggerHaptic(settings);
+                },
+              ),
+              SwitchTile(
+                accentColor: accent,
+                title: 'Seed Only When Charging',
+                subtitle: 'Pause seeding when running on battery',
+                value: settings.seedOnlyWhenCharging,
+                onChanged: (val) {
+                  settings.setSeedOnlyWhenCharging(val);
+                  triggerHaptic(settings);
+                },
+              ),
+              SwitchTile(
+                accentColor: accent,
+                title: 'Seed Only On Wi-Fi',
+                subtitle: 'Prevent seeding over cellular data',
+                value: settings.seedOnlyOnWifi,
+                onChanged: (val) {
+                  settings.setSeedOnlyOnWifi(val);
                   triggerHaptic(settings);
                 },
               ),
@@ -275,6 +327,49 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                     settings.setMaxSeedingTime(val);
                     triggerHaptic(settings);
                   }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SettingsSectionHeader(
+            title: 'Disk Cache & Privacy',
+            accentColor: accent,
+            isDark: isDark,
+          ),
+          SettingsSectionGroup(
+            accentColor: accent,
+            children: [
+              SliderTile(
+                accentColor: accent,
+                title: 'Disk Cache Size (MB)',
+                subtitle: '${settings.diskCacheSizeMb} MB',
+                value: settings.diskCacheSizeMb.toDouble(),
+                min: 64,
+                max: 2048,
+                divisions: 31,
+                onChanged: (val) {
+                  settings.setDiskCacheSizeMb(val.round());
+                },
+              ),
+              SwitchTile(
+                accentColor: accent,
+                title: 'Enable IP Filter / Blocklist',
+                subtitle: 'Block known bad/malicious peers via P2P blocklist',
+                value: settings.enableIpFilter,
+                onChanged: (val) {
+                  settings.setEnableIpFilter(val);
+                  triggerHaptic(settings);
+                },
+              ),
+              SwitchTile(
+                accentColor: accent,
+                title: 'Anonymous Mode',
+                subtitle: 'Conceal client identity & user-agent strings',
+                value: settings.enableAnonymousMode,
+                onChanged: (val) {
+                  settings.setEnableAnonymousMode(val);
+                  triggerHaptic(settings);
                 },
               ),
             ],

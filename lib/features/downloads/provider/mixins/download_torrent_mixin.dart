@@ -466,6 +466,13 @@ mixin DownloadTorrentMixin {
   // ---------------------------------------------------------------------------
   void checkTorrentRatioLimits() {
     final settings = providerSettingsProvider;
+    final policy = SeedingPolicy(
+      maxRatio: settings.shareRatioLimit,
+      maxSeedTime: Duration(minutes: settings.maxSeedingTimeMinutes),
+      seedOnlyWhenCharging: settings.seedOnlyWhenCharging,
+      seedOnlyOnWifi: settings.seedOnlyOnWifi,
+    );
+
     for (final task in providerTasks) {
       if (!task.isTorrent || !task.seedingEnabled) continue;
       if (task.status != DownloadStatus.completed) continue;
@@ -476,16 +483,30 @@ mixin DownloadTorrentMixin {
       final stats = providerLatestTorrentStats[torrentId];
       if (stats == null) continue;
 
-      final stop = TorrentService.shouldStopSeeding(
-        progress: stats.progress,
-        uploadedBytes: stats.totalPayloadUpload,
-        downloadedBytes: stats.totalPayloadDownload > 0
-            ? stats.totalPayloadDownload
-            : task.downloadedBytes, // FIX-L3: use actual downloaded bytes
-        shareRatioLimit: settings.shareRatioLimit,
-        maxSeedingMinutes: settings.maxSeedingTimeMinutes,
-        completedAt: task.completedAt,
-      );
+      final seedDuration = task.completedAt != null
+          ? DateTime.now().difference(task.completedAt!)
+          : Duration.zero;
+
+      final downloadedBytes = stats.totalPayloadDownload > 0
+          ? stats.totalPayloadDownload
+          : (task.downloadedBytes > 0 ? task.downloadedBytes : 1);
+      final currentRatio = stats.totalPayloadUpload / downloadedBytes;
+
+      final stop = policy.shouldStopSeeding(
+            currentRatio: currentRatio,
+            seedDuration: seedDuration,
+            uploadedBytes: stats.totalPayloadUpload,
+            isCharging: true,
+            isOnWifi: true,
+          ) ||
+          TorrentService.shouldStopSeeding(
+            progress: stats.progress,
+            uploadedBytes: stats.totalPayloadUpload,
+            downloadedBytes: downloadedBytes,
+            shareRatioLimit: settings.shareRatioLimit,
+            maxSeedingMinutes: settings.maxSeedingTimeMinutes,
+            completedAt: task.completedAt,
+          );
 
       if (stats.totalPayloadUpload >= 0 &&
           stats.totalPayloadUpload != task.uploadedBytes) {

@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
 
 enum HealthLevel {
-  dead(Color(0xFFEF4444), Icons.signal_cellular_off_rounded, 'DEAD'),
-  poor(Color(0xFFF97316), Icons.signal_cellular_alt_1_bar_rounded, 'POOR'),
-  fair(Color(0xFFF59E0B), Icons.signal_cellular_alt_2_bar_rounded, 'FAIR'),
-  good(Color(0xFF22C55E), Icons.signal_cellular_alt_rounded, 'GOOD'),
-  excellent(Color(0xFF10B981), Icons.signal_cellular_alt_rounded, 'EXCELLENT');
+  dead(Color(0xFFEF4444), Icons.signal_cellular_off_rounded, 'No seeds, no peers'),
+  poor(Color(0xFFF97316), Icons.signal_cellular_alt_1_bar_rounded, 'Few peers, slow'),
+  fair(Color(0xFFF59E0B), Icons.signal_cellular_alt_2_bar_rounded, 'Moderate availability'),
+  good(Color(0xFF22C55E), Icons.signal_cellular_alt_rounded, 'Good availability'),
+  excellent(Color(0xFF10B981), Icons.signal_cellular_alt_rounded, 'Excellent, fast');
 
   final Color color;
   final IconData icon;
@@ -14,11 +14,26 @@ enum HealthLevel {
   const HealthLevel(this.color, this.icon, this.label);
 }
 
+HealthLevel calculateHealth({
+  required int seeds,
+  required int peers,
+  required double availability,
+  required double distributedCopies,
+  required double downloadRate,
+}) {
+  if (seeds == 0 && peers == 0) return HealthLevel.dead;
+  if (availability < 1.0) return HealthLevel.poor;
+  if (distributedCopies < 1.0 || seeds < 3) return HealthLevel.fair;
+  if (seeds >= 10 && downloadRate > 100 * 1024) return HealthLevel.excellent;
+  return HealthLevel.good;
+}
+
 class TorrentHealthIndicator extends StatelessWidget {
   final double availability;
   final double distributedCopies;
   final int seeds;
   final int peers;
+  final double downloadRate;
   final bool isDark;
 
   const TorrentHealthIndicator({
@@ -27,17 +42,17 @@ class TorrentHealthIndicator extends StatelessWidget {
     required this.distributedCopies,
     required this.seeds,
     required this.peers,
+    this.downloadRate = 0.0,
     required this.isDark,
   });
 
-  HealthLevel get _level {
-    if (seeds == 0 && availability < 1.0) return HealthLevel.dead;
-    if (seeds == 0 && availability >= 1.0) return HealthLevel.poor;
-    if (distributedCopies < 1.0) return HealthLevel.poor;
-    if (seeds < 3) return HealthLevel.fair;
-    if (seeds < 10) return HealthLevel.good;
-    return HealthLevel.excellent;
-  }
+  HealthLevel get _level => calculateHealth(
+        seeds: seeds,
+        peers: peers,
+        availability: availability,
+        distributedCopies: distributedCopies,
+        downloadRate: downloadRate,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -55,13 +70,13 @@ class TorrentHealthIndicator extends StatelessWidget {
           Icon(level.icon, size: 14, color: level.color),
           const SizedBox(width: 6),
           Text(
-            level.label,
+            level.name.toUpperCase(),
             style: TextStyle(
                 color: level.color, fontSize: 10, fontWeight: FontWeight.w800),
           ),
           const SizedBox(width: 8),
           Text(
-            'AVAIL: ${availability.toStringAsFixed(2)}',
+            level.label,
             style: TextStyle(
                 color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                 fontSize: 9),

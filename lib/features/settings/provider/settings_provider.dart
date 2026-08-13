@@ -81,6 +81,18 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       'maxConcurrentFilesPerTorrent';
   static const _shareRatioLimitKey = 'shareRatioLimit';
   static const _maxSeedingTimeKey = 'maxSeedingTimeMinutes';
+  static const _maxPeerConnectionsPerTorrentKey =
+      'maxPeerConnectionsPerTorrent';
+  static const _maxHalfOpenConnectionsKey = 'maxHalfOpenConnections';
+  static const _enableUtpKey = 'enableUtp';
+  static const _enableLsdKey = 'enableLsd';
+  static const _diskCacheSizeMbKey = 'diskCacheSizeMb';
+  static const _useOsCacheKey = 'useOsCache';
+  static const _seedOnlyWhenChargingKey = 'seedOnlyWhenCharging';
+  static const _seedOnlyOnWifiKey = 'seedOnlyOnWifi';
+  static const _enableIpFilterKey = 'enableIpFilter';
+  static const _ipFilterPathKey = 'ipFilterPath';
+  static const _enableAnonymousModeKey = 'enableAnonymousMode';
   static const _defaultThreadCountKey = 'defaultThreadCount';
   static const _customDownloadPathKey = 'customDownloadPath';
   static const _incognitoEnabledKey = 'incognitoEnabled';
@@ -245,6 +257,17 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   int _maxConcurrentFilesPerTorrent = 0;
   double shareRatioLimit = 2.0;
   int maxSeedingTimeMinutes = 0;
+  int maxPeerConnectionsPerTorrent = 50;
+  int maxHalfOpenConnections = 20;
+  bool enableUtp = true;
+  bool enableLsd = true;
+  int diskCacheSizeMb = 512;
+  bool useOsCache = true;
+  bool seedOnlyWhenCharging = false;
+  bool seedOnlyOnWifi = false;
+  bool enableIpFilter = false;
+  String ipFilterPath = '';
+  bool enableAnonymousMode = false;
 
   Future<void> setEnableNatPmp(bool value) async {
     enableNatPmp = value;
@@ -443,6 +466,25 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
           _prefs.getDouble(_shareRatioLimitKey) ?? shareRatioLimit;
       maxSeedingTimeMinutes =
           _prefs.getInt(_maxSeedingTimeKey) ?? maxSeedingTimeMinutes;
+      maxPeerConnectionsPerTorrent =
+          _prefs.getInt(_maxPeerConnectionsPerTorrentKey) ??
+              maxPeerConnectionsPerTorrent;
+      maxHalfOpenConnections =
+          _prefs.getInt(_maxHalfOpenConnectionsKey) ?? maxHalfOpenConnections;
+      enableUtp = _prefs.getBool(_enableUtpKey) ?? enableUtp;
+      enableLsd = _prefs.getBool(_enableLsdKey) ?? enableLsd;
+      diskCacheSizeMb =
+          _prefs.getInt(_diskCacheSizeMbKey) ?? diskCacheSizeMb;
+      useOsCache = _prefs.getBool(_useOsCacheKey) ?? useOsCache;
+      seedOnlyWhenCharging =
+          _prefs.getBool(_seedOnlyWhenChargingKey) ?? seedOnlyWhenCharging;
+      seedOnlyOnWifi =
+          _prefs.getBool(_seedOnlyOnWifiKey) ?? seedOnlyOnWifi;
+      enableIpFilter =
+          _prefs.getBool(_enableIpFilterKey) ?? enableIpFilter;
+      ipFilterPath = _prefs.getString(_ipFilterPathKey) ?? ipFilterPath;
+      enableAnonymousMode =
+          _prefs.getBool(_enableAnonymousModeKey) ?? enableAnonymousMode;
       _defaultThreadCount =
           _prefs.getInt(_defaultThreadCountKey) ?? _defaultThreadCount;
       if (![1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16].contains(_defaultThreadCount)) {
@@ -799,6 +841,72 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> setMaxSeedingTime(int value) async {
     maxSeedingTimeMinutes = value;
     await _prefs.setInt(_maxSeedingTimeKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setMaxPeerConnectionsPerTorrent(int value) async {
+    maxPeerConnectionsPerTorrent = value.clamp(5, 500);
+    await _prefs.setInt(_maxPeerConnectionsPerTorrentKey, maxPeerConnectionsPerTorrent);
+    notifyListeners();
+  }
+
+  Future<void> setMaxHalfOpenConnections(int value) async {
+    maxHalfOpenConnections = value.clamp(1, 100);
+    await _prefs.setInt(_maxHalfOpenConnectionsKey, maxHalfOpenConnections);
+    notifyListeners();
+  }
+
+  Future<void> setEnableUtp(bool value) async {
+    enableUtp = value;
+    await _prefs.setBool(_enableUtpKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setEnableLsd(bool value) async {
+    enableLsd = value;
+    await _prefs.setBool(_enableLsdKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setDiskCacheSizeMb(int value) async {
+    diskCacheSizeMb = value.clamp(16, 4096);
+    await _prefs.setInt(_diskCacheSizeMbKey, diskCacheSizeMb);
+    notifyListeners();
+  }
+
+  Future<void> setUseOsCache(bool value) async {
+    useOsCache = value;
+    await _prefs.setBool(_useOsCacheKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setSeedOnlyWhenCharging(bool value) async {
+    seedOnlyWhenCharging = value;
+    await _prefs.setBool(_seedOnlyWhenChargingKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setSeedOnlyOnWifi(bool value) async {
+    seedOnlyOnWifi = value;
+    await _prefs.setBool(_seedOnlyOnWifiKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setEnableIpFilter(bool value) async {
+    enableIpFilter = value;
+    await _prefs.setBool(_enableIpFilterKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setIpFilterPath(String value) async {
+    ipFilterPath = value;
+    await _prefs.setString(_ipFilterPathKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setEnableAnonymousMode(bool value) async {
+    enableAnonymousMode = value;
+    await _prefs.setBool(_enableAnonymousModeKey, value);
     notifyListeners();
   }
 

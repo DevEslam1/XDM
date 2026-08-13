@@ -1,11 +1,17 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show ValueNotifier, listEquals;
-import 'package:libtorrent_flutter/libtorrent_flutter.dart' hide formatBytes;
+import 'package:libtorrent_flutter/libtorrent_flutter.dart' hide formatBytes, TrackerManager;
 import 'package:logging/logging.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import 'torrent_models.dart';
 import 'torrent_resume_store.dart';
+import 'tracker_manager.dart';
 
 final _log = Logger('TorrentService');
 
@@ -23,6 +29,8 @@ class _CapabilityGate {
   bool createTorrentSupported = true;
   bool ipFilterSupported = true;
   bool sequentialDownloadSupported = true;
+  bool superSeedingSupported = true;
+  bool pieceDeadlineSupported = true;
 
   /// Probes capabilities ONCE during initialization.
   void probeCapabilities() {
@@ -34,6 +42,8 @@ class _CapabilityGate {
     createTorrentSupported = true;
     ipFilterSupported = true;
     sequentialDownloadSupported = true;
+    superSeedingSupported = true;
+    pieceDeadlineSupported = true;
 
     final target = LibtorrentFlutter.instance;
 
@@ -95,12 +105,27 @@ class _CapabilityGate {
       sequentialDownloadSupported = false;
     } catch (_) {}
 
+    try {
+      // ignore: avoid_dynamic_calls
+      (target as dynamic).setSuperSeeding(-1, false);
+    } on NoSuchMethodError {
+      superSeedingSupported = false;
+    } catch (_) {}
+
+    try {
+      // ignore: avoid_dynamic_calls
+      (target as dynamic).setPieceDeadline(-1, 0, 0);
+    } on NoSuchMethodError {
+      pieceDeadlineSupported = false;
+    } catch (_) {}
+
     _log.fine(
       'Capability probe complete: fileProgress=$fileProgressSupported, '
       'filePriorities=$filePrioritiesSupported, resumeData=$resumeDataSupported, '
       'forceRecheck=$forceRecheckSupported, trackers=$trackersSupported, '
       'createTorrent=$createTorrentSupported, ipFilter=$ipFilterSupported, '
-      'sequentialDownload=$sequentialDownloadSupported',
+      'sequentialDownload=$sequentialDownloadSupported, superSeeding=$superSeedingSupported, '
+      'pieceDeadline=$pieceDeadlineSupported',
     );
   }
 
@@ -269,6 +294,27 @@ class _CapabilityGate {
       _log.warning('setSequentialDownload failed for id $id: $e');
     }
   }
+
+  void setSuperSeeding(int id, bool enabled) {
+    if (!superSeedingSupported) return;
+    try {
+      // ignore: avoid_dynamic_calls
+      (LibtorrentFlutter.instance as dynamic).setSuperSeeding(id, enabled);
+    } catch (e) {
+      _log.warning('setSuperSeeding failed for id $id: $e');
+    }
+  }
+
+  void setPieceDeadline(int id, int pieceIndex, int deadlineMs) {
+    if (!pieceDeadlineSupported) return;
+    try {
+      // ignore: avoid_dynamic_calls
+      (LibtorrentFlutter.instance as dynamic)
+          .setPieceDeadline(id, pieceIndex, deadlineMs);
+    } catch (e) {
+      _log.warning('setPieceDeadline failed for id $id: $e');
+    }
+  }
 }
 
 enum TorrentSessionState {
@@ -401,6 +447,29 @@ class TorrentService {
   static double get shareRatioLimit => _shareRatioLimit;
   static int get maxSeedingTimeMinutes => _maxSeedingTimeMinutes;
 
+  static const List<String> _dhtBootstrapNodes = [
+    'router.bittorrent.com:6881',
+    'dht.transmissionbt.com:6881',
+    'router.utorrent.com:6881',
+    'dht.aelitis.com:6881',
+    'router.silotis.us:6881',
+    'dht.libtorrent.org:25401',
+  ];
+
+  static void _injectDhtNodes() {
+    try {
+      final s = SettingsProvider.instance;
+      if (!s.enableDht) return;
+      for (final node in _dhtBootstrapNodes) {
+        final parts = node.split(':');
+        // ignore: avoid_dynamic_calls
+        (LibtorrentFlutter.instance as dynamic).addDhtNode(parts[0], int.parse(parts[1]));
+      }
+    } catch (e) {
+      _log.fine('DHT bootstrap node injection skipped/failed: $e');
+    }
+  }
+
   static void configureSession([SettingsProvider? settings]) {
     try {
       final s = settings ?? SettingsProvider.instance;
@@ -415,6 +484,7 @@ class TorrentService {
                 : 0,
           );
       LibtorrentFlutter.instance.configureSession(config);
+      _injectDhtNodes();
 
       _sequentialDownload = s.sequentialDownload;
       _shareRatioLimit = s.shareRatioLimit;
@@ -698,50 +768,72 @@ class TorrentService {
     }
   }
 
-  /// Adds a magnet link and waits up to [timeout] for metadata, emitting periodic status messages.
+  /// Adds a magnet link and waits up to [timeout] for metadata, emitting periodic status messages with retry capability.
   static Future<int> addMagnetWithMetadataTimeout(
     String magnetUri,
     String savePath, {
     Duration timeout = const Duration(seconds: 300),
     void Function(String message)? onStatusUpdate,
+    int maxRetries = 2,
+    Duration retryDelay = const Duration(seconds: 10),
   }) async {
-    final id = addMagnet(magnetUri, savePath);
-    if (id < 0) return -1;
+    _injectDhtNodes();
+    int attempt = 0;
 
-    final stopwatch = Stopwatch()..start();
-    final completer = Completer<int>();
-    Timer? messageTimer;
-    StreamSubscription? sub;
+    while (attempt <= maxRetries) {
+      attempt++;
+      final id = addMagnet(magnetUri, savePath);
+      if (id < 0) return -1;
 
-    messageTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      final elapsedSec = stopwatch.elapsed.inSeconds;
-      final msg = 'Fetching metadata… ${elapsedSec}s';
-      onStatusUpdate?.call(msg);
-      _log.fine('Magnet $id: $msg');
-    });
+      final stopwatch = Stopwatch()..start();
+      final completer = Completer<int>();
+      Timer? messageTimer;
+      StreamSubscription? sub;
 
-    sub = torrentUpdates.listen((updateMap) {
-      final info = updateMap[id];
-      if (info != null && info.hasMetadata) {
-        messageTimer?.cancel();
-        sub?.cancel();
+      messageTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        final elapsedSec = stopwatch.elapsed.inSeconds;
+        final msg = 'Fetching metadata... (${elapsedSec}s elapsed)';
+        onStatusUpdate?.call(msg);
+        _log.fine('Magnet $id: $msg');
+      });
+
+      sub = torrentUpdates.listen((updateMap) {
+        final info = updateMap[id];
+        if (info != null && info.hasMetadata) {
+          messageTimer?.cancel();
+          sub?.cancel();
+          stopwatch.stop();
+          if (!completer.isCompleted) completer.complete(id);
+        }
+      });
+
+      try {
+        return await completer.future.timeout(timeout);
+      } on TimeoutException {
+        messageTimer.cancel();
+        sub.cancel();
         stopwatch.stop();
-        if (!completer.isCompleted) completer.complete(id);
-      }
-    });
+        _log.warning(
+          'Magnet metadata fetch timed out (attempt $attempt/${maxRetries + 1}) for $magnetUri',
+        );
 
-    try {
-      return await completer.future.timeout(timeout);
-    } on TimeoutException {
-      messageTimer.cancel();
-      sub.cancel();
-      stopwatch.stop();
-      _log.warning(
-        'Magnet metadata fetch timed out after ${timeout.inSeconds}s for $magnetUri',
-      );
-      removeTorrent(id, deleteFiles: true);
-      throw TimeoutException('Magnet metadata fetch timed out', timeout);
+        if (attempt <= maxRetries) {
+          onStatusUpdate?.call(
+            'Retrying metadata fetch with additional default trackers (Attempt ${attempt + 1})...',
+          );
+          for (final tracker in TrackerManager.defaultTrackers) {
+            addTracker(id, tracker);
+          }
+          await Future.delayed(retryDelay);
+          continue;
+        }
+
+        removeTorrent(id, deleteFiles: true);
+        onStatusUpdate?.call('Metadata fetch failed. Try adding trackers manually.');
+        throw TimeoutException('Magnet metadata fetch timed out after $maxRetries retries', timeout);
+      }
     }
+    return -1;
   }
 
   static int addTorrentFile(
@@ -903,7 +995,15 @@ class TorrentService {
 
   static bool isTorrentAlive(int id) {
     if (!isInitialized || id < 0) return false;
-    return _activeTorrentIds.contains(id);
+    if (!_activeTorrentIds.contains(id)) return false;
+    try {
+      // ignore: avoid_dynamic_calls
+      final status = (LibtorrentFlutter.instance as dynamic).getTorrentStatus(id);
+      return status != null;
+    } catch (_) {
+      _activeTorrentIds.remove(id);
+      return false;
+    }
   }
 
   static void recheckTorrent(int id) {
@@ -1083,7 +1183,82 @@ class TorrentService {
 
   static Future<bool> loadIpFilter(String filePath) async {
     if (!isInitialized) return false;
+    final file = File(filePath);
+    if (!await file.exists()) return false;
     return _CapabilityGate.instance.loadIpFilter(filePath);
+  }
+
+  static Future<bool> downloadAndApplyBlocklist(String url) async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final tempPath = p.join(tempDir.path, 'blocklist.p2p');
+      final dio = Dio();
+      await dio.download(url, tempPath);
+      return loadIpFilter(tempPath);
+    } catch (e) {
+      _log.warning('downloadAndApplyBlocklist failed: $e');
+      return false;
+    }
+  }
+
+  static void enableSequentialDownload(int torrentId, bool enabled) {
+    if (!isInitialized || torrentId < 0) return;
+    _CapabilityGate.instance.setSequentialDownload(torrentId, enabled);
+  }
+
+  static void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) {
+    if (!isInitialized || torrentId < 0) return;
+    _CapabilityGate.instance.setPieceDeadline(torrentId, pieceIndex, deadlineMs);
+  }
+
+  static void enableSuperSeeding(int torrentId, bool enabled) {
+    if (!isInitialized || torrentId < 0) return;
+    _CapabilityGate.instance.setSuperSeeding(torrentId, enabled);
+  }
+
+  static Future<List<TorrentFileProgress>> getAccurateFileProgress(
+    int torrentId,
+    String savePath,
+  ) async {
+    if (!isInitialized || torrentId < 0) return [];
+    try {
+      final nativeFiles = LibtorrentFlutter.instance.getFiles(torrentId);
+      final progress = <TorrentFileProgress>[];
+
+      for (var i = 0; i < nativeFiles.length; i++) {
+        final native = nativeFiles[i];
+        final filePath = p.join(savePath, native.name);
+        final file = File(filePath);
+
+        int diskBytes = 0;
+        bool exists = false;
+        if (await file.exists()) {
+          exists = true;
+          diskBytes = await file.length();
+          if (diskBytes > 0 && diskBytes >= native.size) {
+            final raf = await file.open(mode: FileMode.read);
+            final probe = await raf.read(math.min(4096, diskBytes));
+            final hasContent = probe.any((b) => b != 0);
+            await raf.close();
+            if (!hasContent) diskBytes = 0;
+          }
+        }
+
+        progress.add(TorrentFileProgress(
+          index: i,
+          name: native.name,
+          size: native.size,
+          downloadedBytes: diskBytes,
+          progress: native.size > 0 ? (diskBytes / native.size).clamp(0.0, 1.0) : 1.0,
+          exists: exists,
+          isComplete: diskBytes >= native.size,
+        ));
+      }
+      return progress;
+    } catch (e) {
+      _log.warning('getAccurateFileProgress failed for torrent $torrentId: $e');
+      return [];
+    }
   }
 
   /// Pure function evaluator for seeding policy auto-stop.

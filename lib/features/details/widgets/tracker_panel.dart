@@ -100,6 +100,12 @@ class _TrackerPanelState extends State<TrackerPanel> {
                   Row(
                     children: [
                       IconButton(
+                        icon: const Icon(Icons.flash_on_rounded, size: 18),
+                        tooltip: 'Add Default Trackers',
+                        onPressed: () => widget.trackerManager
+                            .autoAddDefaultsIfSparse(widget.torrentId),
+                      ),
+                      IconButton(
                         icon: const Icon(Icons.refresh),
                         tooltip: L10n.of(context, 'announce_now'),
                         onPressed: () =>
@@ -132,6 +138,8 @@ class _TrackerPanelState extends State<TrackerPanel> {
                   itemCount: trackers.length,
                   itemBuilder: (context, index) {
                     final tracker = trackers[index];
+                    final healthScore =
+                        widget.trackerManager.trackerHealthScore(tracker);
                     return Dismissible(
                       key: ValueKey('${tracker.url}_$index'),
                       direction: DismissDirection.endToStart,
@@ -158,7 +166,7 @@ class _TrackerPanelState extends State<TrackerPanel> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(
-                          'Seeds: ${tracker.seeds} | Peers: ${tracker.peers} ${tracker.message.isNotEmpty ? '• ${tracker.message}' : ''}',
+                          'Seeds: ${tracker.seeds} | Peers: ${tracker.peers} • Health: ${(healthScore * 100).toInt()}% ${tracker.message.isNotEmpty ? '• ${tracker.message}' : ''}',
                           style: const TextStyle(fontSize: 12),
                         ),
                         trailing: IconButton(

@@ -81,6 +81,26 @@ class TorrentStatsDashboard extends StatelessWidget {
                       _buildStat('Seeding', _formatDuration(seedingDuration))),
             ],
           ),
+          if (stats != null && stats!.piecesTotal > 0) ...[
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Expanded(
+                  child: _buildStat(
+                    'Pieces',
+                    '${stats!.piecesHave}/${stats!.piecesTotal}',
+                  ),
+                ),
+                Expanded(
+                  child: _buildStat(
+                    'Availability',
+                    '${stats!.distributedCopies.toStringAsFixed(2)}x',
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

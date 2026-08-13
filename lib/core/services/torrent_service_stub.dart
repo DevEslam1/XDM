@@ -33,6 +33,8 @@ class TorrentService {
     String savePath, {
     Duration timeout = const Duration(seconds: 300),
     void Function(String message)? onStatusUpdate,
+    int maxRetries = 2,
+    Duration retryDelay = const Duration(seconds: 10),
   }) async =>
       -1;
 
@@ -75,6 +77,17 @@ class TorrentService {
       null;
 
   static Future<bool> loadIpFilter(String filePath) async => false;
+  static Future<bool> downloadAndApplyBlocklist(String url) async => false;
+
+  static void enableSequentialDownload(int torrentId, bool enabled) {}
+  static void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) {}
+  static void enableSuperSeeding(int torrentId, bool enabled) {}
+
+  static Future<List<TorrentFileProgress>> getAccurateFileProgress(
+    int torrentId,
+    String savePath,
+  ) async =>
+      [];
 
   static bool shouldStopSeeding({
     required double progress,

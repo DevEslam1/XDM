@@ -11,7 +11,9 @@ class PeerInfo {
   final int uploadSpeed;
   final bool isSeed;
   final bool isEncrypted;
+  final bool isOutgoing;
   final String flags;
+  final double relevance;
 
   const PeerInfo({
     required this.ip,
@@ -23,7 +25,9 @@ class PeerInfo {
     required this.uploadSpeed,
     required this.isSeed,
     required this.isEncrypted,
+    this.isOutgoing = false,
     required this.flags,
+    this.relevance = 1.0,
   });
 }
 
@@ -104,16 +108,27 @@ class PeerPanel extends StatelessWidget {
               return ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  peer.isEncrypted ? Icons.lock_outline : Icons.link_rounded,
-                  size: 16,
-                  color: peer.isSeed ? AppTheme.neonGreen : AppTheme.neonBlue,
+                leading: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      peer.isEncrypted ? Icons.lock_outline : Icons.link_rounded,
+                      size: 16,
+                      color: peer.isSeed ? AppTheme.neonGreen : AppTheme.neonBlue,
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      peer.isOutgoing ? Icons.north_east : Icons.south_west,
+                      size: 12,
+                      color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                    ),
+                  ],
                 ),
                 title: Text(peer.country.isEmpty
                     ? '${peer.ip}:${peer.port}'
                     : '${peer.ip}:${peer.port} (${peer.country})'),
                 subtitle: Text(
-                    '${peer.client} • ${(peer.progress * 100).toStringAsFixed(0)}%'),
+                    '${peer.client.isNotEmpty ? peer.client : 'Peer'} • ${(peer.progress * 100).toStringAsFixed(0)}% • Quality: ${(peer.relevance * 100).toStringAsFixed(0)}%'),
                 trailing: Text(
                     '↓ ${_formatSpeed(peer.downloadSpeed)}  ↑ ${_formatSpeed(peer.uploadSpeed)}'),
               );

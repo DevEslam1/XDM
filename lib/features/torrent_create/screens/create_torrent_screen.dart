@@ -22,14 +22,18 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
   final TextEditingController _outputController = TextEditingController();
   final TextEditingController _commentController = TextEditingController();
   final TextEditingController _trackerInputController = TextEditingController();
+  final TextEditingController _webSeedInputController = TextEditingController();
+  final TextEditingController _sourceTagController = TextEditingController();
 
   final List<String> _trackers = [
     'udp://tracker.opentrackr.org:1337/announce',
     'udp://open.stealth.si:80/announce',
   ];
 
+  final List<String> _webSeeds = [];
+
   bool _isPrivate = false;
-  final int _pieceSize = 0; // 0 = auto
+  int _pieceSize = 0; // 0 = auto
   bool _isCreating = false;
 
   @override
@@ -38,6 +42,8 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
     _outputController.dispose();
     _commentController.dispose();
     _trackerInputController.dispose();
+    _webSeedInputController.dispose();
+    _sourceTagController.dispose();
     super.dispose();
   }
 
@@ -89,6 +95,16 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
     }
   }
 
+  void _addWebSeed() {
+    final text = _webSeedInputController.text.trim();
+    if (text.isNotEmpty && !_webSeeds.contains(text)) {
+      setState(() {
+        _webSeeds.add(text);
+        _webSeedInputController.clear();
+      });
+    }
+  }
+
   Future<void> _handleCreate() async {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
@@ -116,24 +132,27 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
     setState(() => _isCreating = true);
 
     try {
+      final fullComment = [
+        _commentController.text.trim(),
+        if (_sourceTagController.text.trim().isNotEmpty)
+          'Source: ${_sourceTagController.text.trim()}',
+      ].where((s) => s.isNotEmpty).join(' | ');
+
       final res = await TorrentService.createTorrent(
         sourcePath: source,
         outputPath: output,
         trackers: _trackers,
-        comment: _commentController.text.trim(),
+        comment: fullComment,
         pieceSize: _pieceSize,
         isPrivate: _isPrivate,
       );
 
       if (!mounted) return;
 
-      // FIX: Safely check file existence to avoid FileSystemException crashes
       bool fileExists = false;
       try {
         fileExists = File(output).existsSync();
-      } catch (_) {
-        // Ignore stat errors, rely on `res`
-      }
+      } catch (_) {}
 
       if (res != null || fileExists) {
         ThemedSnackbar.show(
@@ -209,7 +228,7 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
                         color: textClr, fontSize: 12, fontFamily: 'monospace'),
                     decoration: InputDecoration(
                       hintText: isRtl
-                          ? 'اختر ملفاً أو مجلداً...'
+                          ? 'اختر ملفاً أو مجلد...'
                           : 'Select file or folder...',
                       hintStyle: TextStyle(color: mutedClr, fontSize: 12),
                       filled: true,
@@ -293,6 +312,36 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
             const SizedBox(height: 16),
 
             _SectionLabel(
+              text: isRtl ? 'حجم القطعة (Piece Size)' : 'Piece Size',
+              color: textClr,
+            ),
+            const SizedBox(height: 6),
+            DropdownButtonFormField<int>(
+              initialValue: _pieceSize,
+              dropdownColor: panelBg,
+              style: TextStyle(color: textClr, fontSize: 13),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: panelBg,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: borderClr, width: 0.8),
+                ),
+              ),
+              items: const [
+                DropdownMenuItem(value: 0, child: Text('Auto (Recommended)')),
+                DropdownMenuItem(value: 262144, child: Text('256 KB')),
+                DropdownMenuItem(value: 524288, child: Text('512 KB')),
+                DropdownMenuItem(value: 1048576, child: Text('1 MB')),
+                DropdownMenuItem(value: 2097152, child: Text('2 MB')),
+                DropdownMenuItem(value: 4194304, child: Text('4 MB')),
+                DropdownMenuItem(value: 8388608, child: Text('8 MB')),
+              ],
+              onChanged: (val) => setState(() => _pieceSize = val ?? 0),
+            ),
+            const SizedBox(height: 16),
+
+            _SectionLabel(
               text: isRtl ? 'المتتبعات' : 'Trackers',
               color: textClr,
             ),
@@ -356,6 +405,78 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
             const SizedBox(height: 16),
 
             _SectionLabel(
+              text: isRtl ? 'روابط Web Seeds' : 'Web Seeds (HTTP/FTP)',
+              color: textClr,
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _webSeedInputController,
+                    style: TextStyle(
+                        color: textClr, fontSize: 12, fontFamily: 'monospace'),
+                    decoration: InputDecoration(
+                      hintText: 'https://example.com/files/video.mp4',
+                      hintStyle: TextStyle(color: mutedClr, fontSize: 12),
+                      filled: true,
+                      fillColor: panelBg,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: borderClr, width: 0.8),
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.add_link, color: accentClr),
+                  onPressed: _addWebSeed,
+                  tooltip: 'Add Web Seed',
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: _webSeeds.map((ws) {
+                return Chip(
+                  label:
+                      Text(ws, style: TextStyle(fontSize: 11, color: textClr)),
+                  backgroundColor: panelBg,
+                  side: BorderSide(color: borderClr, width: 0.8),
+                  deleteIcon: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.close, size: 16, color: mutedClr),
+                  ),
+                  onDeleted: () => setState(() => _webSeeds.remove(ws)),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+
+            _SectionLabel(
+              text: isRtl ? 'مصدر العلامة (Source Tag)' : 'Source Tag',
+              color: textClr,
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _sourceTagController,
+              style: TextStyle(color: textClr, fontSize: 12),
+              decoration: InputDecoration(
+                hintText: 'e.g., DMX-Release',
+                hintStyle: TextStyle(color: mutedClr, fontSize: 12),
+                filled: true,
+                fillColor: panelBg,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: borderClr, width: 0.8),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            _SectionLabel(
               text: isRtl ? 'تعليق' : 'Comment',
               color: textClr,
             ),
@@ -372,15 +493,6 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: borderClr, width: 0.8),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: borderClr, width: 0.8),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                      color: accentClr.withValues(alpha: 0.5), width: 1.2),
-                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -392,16 +504,27 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
                     color: textClr, fontWeight: FontWeight.w600, fontSize: 13),
               ),
               subtitle: Text(
-                L10n.of(context, 'disables_dht_pex'),
+                'Private torrents disable DHT & PEX peer exchange for privacy',
                 style: TextStyle(color: mutedClr, fontSize: 11),
               ),
               value: _isPrivate,
               activeThumbColor: accentClr,
               onChanged: (val) => setState(() => _isPrivate = val),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
 
-            // FIX: Replaced layout-shifting ternary with isLoading property
+            if (_isCreating) ...[
+              const LinearProgressIndicator(),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  'Hashing files & constructing torrent metadata...',
+                  style: TextStyle(color: mutedClr, fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
             NeonGlowButton(
               text: isRtl ? 'إنشاء ملف .torrent' : 'Create .torrent File',
               onPressed: _isCreating ? null : _handleCreate,

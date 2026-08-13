@@ -121,3 +121,88 @@ class TorrentTrackerInfo {
     );
   }
 }
+
+class TorrentFileProgress {
+  final int index;
+  final String name;
+  final int size;
+  final int downloadedBytes;
+  final double progress;
+  final bool exists;
+  final bool isComplete;
+
+  const TorrentFileProgress({
+    required this.index,
+    required this.name,
+    required this.size,
+    required this.downloadedBytes,
+    required this.progress,
+    required this.exists,
+    required this.isComplete,
+  });
+}
+
+class PeerConnectionQuality {
+  final String ip;
+  final int port;
+  final String client;
+  final double downloadSpeed;
+  final double uploadSpeed;
+  final double progress;
+  final bool isSeed;
+  final bool isEncrypted;
+  final bool isOutgoing;
+  final Duration connectedDuration;
+  final int failedHashChecks;
+  final double relevance;
+
+  const PeerConnectionQuality({
+    required this.ip,
+    required this.port,
+    required this.client,
+    required this.downloadSpeed,
+    required this.uploadSpeed,
+    required this.progress,
+    required this.isSeed,
+    required this.isEncrypted,
+    this.isOutgoing = false,
+    this.connectedDuration = Duration.zero,
+    this.failedHashChecks = 0,
+    this.relevance = 0.0,
+  });
+}
+
+class SeedingPolicy {
+  final double maxRatio;
+  final Duration maxSeedTime;
+  final int maxUploadBytes;
+  final bool seedOnlyWhenCharging;
+  final bool seedOnlyOnWifi;
+  final int minSeedTimeMinutes;
+
+  const SeedingPolicy({
+    this.maxRatio = 2.0,
+    this.maxSeedTime = Duration.zero,
+    this.maxUploadBytes = 0,
+    this.seedOnlyWhenCharging = false,
+    this.seedOnlyOnWifi = false,
+    this.minSeedTimeMinutes = 0,
+  });
+
+  bool shouldStopSeeding({
+    required double currentRatio,
+    required Duration seedDuration,
+    required int uploadedBytes,
+    required bool isCharging,
+    required bool isOnWifi,
+  }) {
+    if (seedDuration.inMinutes < minSeedTimeMinutes) return false;
+    if (seedOnlyWhenCharging && !isCharging) return true;
+    if (seedOnlyOnWifi && !isOnWifi) return true;
+    if (maxRatio > 0 && currentRatio >= maxRatio) return true;
+    if (maxSeedTime > Duration.zero && seedDuration >= maxSeedTime) return true;
+    if (maxUploadBytes > 0 && uploadedBytes >= maxUploadBytes) return true;
+    return false;
+  }
+}
+

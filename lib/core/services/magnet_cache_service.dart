@@ -30,14 +30,16 @@ class MagnetCacheService {
 
   static Future<void> cacheMetadata(
     String infoHash,
-    Map<String, dynamic> metadata,
-  ) async {
+    Map<String, dynamic> metadata, {
+    List<String>? trackers,
+  }) async {
     if (_basePath == null) await init();
     final file = File(p.join(_basePath!, '$infoHash.json'));
     final data = {
       'hash': infoHash,
       'cachedAt': DateTime.now().millisecondsSinceEpoch,
       'metadata': metadata,
+      if (trackers != null) 'trackers': trackers,
     };
     await file.writeAsString(jsonEncode(data));
     _log.fine('[MagnetCache] Cached metadata for infoHash: $infoHash');
@@ -60,7 +62,12 @@ class MagnetCacheService {
         return null;
       }
 
-      return data['metadata'] as Map<String, dynamic>?;
+      final metadata = Map<String, dynamic>.from(
+          data['metadata'] as Map<String, dynamic>? ?? {});
+      if (data.containsKey('trackers')) {
+        metadata['trackers'] = data['trackers'];
+      }
+      return metadata;
     } catch (e) {
       _log.warning('[MagnetCache] Failed to read cache for $infoHash: $e');
       return null;
