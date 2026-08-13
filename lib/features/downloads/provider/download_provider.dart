@@ -792,16 +792,12 @@ class DownloadProvider extends ChangeNotifier
       }
     }
 
-    int audioBytes = 0;
-    if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
-      final audioPath = '${task.tempFilePath}.audio';
-      audioBytes = await actualDownloadedBytes(
-        audioPath,
-        threadCount: task.audioThreadCount > 0 ? task.audioThreadCount : 1,
-      );
-    }
-
-    return videoBytes + audioBytes;
+    // FIX-YT-RECONCILE: Do NOT fold audio bytes into the return value.
+    // downloadedBytes must hold ONLY video bytes. Audio is tracked separately
+    // via audioDownloadedBytes / audioProgress. Combining them here causes:
+    //   1. resumeTask to skip video chunks (inflated video start offset).
+    //   2. combinedDownloadedBytes to double-count audio → progress > 100%.
+    return videoBytes;
   }
 
   Future<DownloadTask> _reconcilePartialProgress(DownloadTask task) async {
@@ -834,15 +830,44 @@ class DownloadProvider extends ChangeNotifier
     // Reading temporary HTTP chunk files would break torrent progress.
     if (task.isTorrent) return task;
 
-    final actualBytes = await _actualPartialBytes(task);
-    if (actualBytes == null || actualBytes == task.downloadedBytes) return task;
+    final actualVideoBytes = await _actualPartialBytes(task);
+    if (actualVideoBytes == null) return task;
 
-    final bytes =
-        task.fileSize > 0 ? actualBytes.clamp(0, task.fileSize) : actualBytes;
+    // FIX-YT-RECONCILE: For YouTube tasks with merged audio, also reconcile
+    // the audio sidecar bytes separately — never mixed into downloadedBytes.
+    DownloadTask reconciled = task;
+    if (task.hasMergedAudio) {
+      final audioPath = '${task.tempFilePath}.audio';
+      final audioBytes = await actualDownloadedBytes(
+        audioPath,
+        threadCount: task.audioThreadCount > 0 ? task.audioThreadCount : 1,
+      );
+      if (audioBytes != task.audioDownloadedBytes) {
+        reconciled = reconciled.copyWith(
+          audioDownloadedBytes: audioBytes,
+          audioProgress: task.audioSize > 0
+              ? (audioBytes / task.audioSize).clamp(0.0, 1.0)
+              : task.audioProgress,
+        );
+      }
+    }
 
-    return task.copyWith(
+    if (actualVideoBytes == task.downloadedBytes) return reconciled;
+
+    // Use fileSize for clamping when available; for YouTube with separate
+    // audio size, clamp to video-only size so bytes can't exceed the video part.
+    final videoOnlySize = task.hasMergedAudio && task.videoStreamSize > 0
+        ? task.videoStreamSize
+        : (task.hasMergedAudio && task.audioSize > 0 && task.fileSize > task.audioSize
+            ? task.fileSize - task.audioSize
+            : task.fileSize);
+    final bytes = videoOnlySize > 0
+        ? actualVideoBytes.clamp(0, videoOnlySize)
+        : actualVideoBytes;
+
+    return reconciled.copyWith(
       downloadedBytes: bytes,
-      chunks: _buildChunks(task.threadCount, task.fileSize, bytes),
+      chunks: _buildChunks(task.threadCount, videoOnlySize, bytes),
     );
   }
 
@@ -2978,7 +3003,8 @@ class DownloadProvider extends ChangeNotifier
         // FIX-B10: Guard with alive check
         try {
           TorrentService.pauseTorrent(torrentId);
-          TorrentService.removeTorrent(torrentId, deleteFiles: false);
+          // User-initiated delete: wipe resume data so re-added torrent is clean.
+          TorrentService.removeTorrent(torrentId, deleteFiles: false, deleteResumeData: true);
         } catch (e) {
           _log.warning('[deleteTask] Torrent cleanup failed: $e');
         }
@@ -3985,7 +4011,9 @@ class DownloadProvider extends ChangeNotifier
       if (wasTorrent || isNewTorrent) {
         final torrentId = _torrentIds[taskId];
         if (torrentId != null) {
-          TorrentService.removeTorrent(torrentId, deleteFiles: false);
+          // URL changed: resume data is invalidated below via TorrentResumeStore.deleteResumeDataForSource.
+          // Pass deleteResumeData: false to avoid a double-delete race.
+          TorrentService.removeTorrent(torrentId, deleteFiles: false, deleteResumeData: false);
           _torrentIds.remove(taskId);
         }
 

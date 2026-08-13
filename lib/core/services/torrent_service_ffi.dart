@@ -787,15 +787,30 @@ class TorrentService {
     }
   }
 
-  static void removeTorrent(int id, {bool deleteFiles = false}) {
+  static void removeTorrent(
+    int id, {
+    bool deleteFiles = false,
+    // FIX-TORR-RESTART-3: Default to false to preserve fast-resume blobs.
+    // Previously removeTorrent always wiped TorrentResumeStore, so any
+    // internal error/retry path that called removeTorrent destroyed the
+    // resume data and forced a full piece-recheck on next launch ("start
+    // over"). Only pass deleteResumeData: true when the user explicitly
+    // deletes the task (or on a definitive retry that requires a clean slate).
+    bool deleteResumeData = false,
+  }) {
     if (!isInitialized) return;
     if (id >= 0) {
       try {
         LibtorrentFlutter.instance.removeTorrent(id, deleteFiles: deleteFiles);
-        unawaited(TorrentResumeStore.delete(id));
-        final source = _torrentSources.remove(id);
-        if (source != null) {
-          unawaited(TorrentResumeStore.deleteResumeDataForSource(source));
+        if (deleteResumeData) {
+          unawaited(TorrentResumeStore.delete(id));
+          final source = _torrentSources.remove(id);
+          if (source != null) {
+            unawaited(TorrentResumeStore.deleteResumeDataForSource(source));
+          }
+        } else {
+          // Just remove from the in-memory source map; the blob stays on disk.
+          _torrentSources.remove(id);
         }
         _latestProgress.remove(id);
         _activeTorrentIds.remove(id);

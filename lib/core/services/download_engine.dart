@@ -1996,14 +1996,27 @@ class DownloadEngine {
           ));
         }
         try {
-          TorrentService.removeTorrent(id, deleteFiles: false);
+          // FIX-TORR-RESTART-1: Use pauseTorrent instead of removeTorrent here.
+          // removeTorrent deletes the fast-resume blob from TorrentResumeStore,
+          // so next launch finds no resume data and rechecks from piece 0
+          // ("start over"). Pausing preserves the blob so the next resume
+          // uses it for instant fast-resume without a full recheck.
+          TorrentService.pauseTorrent(id);
         } catch (_) {}
       }
       rethrow;
     } finally {
       torrentCompleted = true;
       _activeTorrentIds.remove(id);
-      TorrentResumeStore.unregisterSource(url);
+      // FIX-TORR-RESTART-2: Only unregister the source URL when the download
+      // truly completed (status == completed / seeding). If this cycle ended
+      // via cancel (pause) or error, keep the registry entry so the periodic
+      // TorrentResumeStore.saveAll() can still find the source and persist
+      // fresh resume blobs. Without this, saveAll silently skips the torrent
+      // ("no source registered for id X") and next launch has no resume data.
+      if (torrentCompleted && !cancelToken.isCancelled) {
+        TorrentResumeStore.unregisterSource(url);
+      }
       _lastConcurrentLimitApply.remove(id);
       _lastIncompleteSnapshot.remove(id);
     }
