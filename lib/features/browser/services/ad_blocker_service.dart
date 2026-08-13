@@ -192,6 +192,66 @@ class AdBlockerService {
     }
   }
 
+  /// Dynamic ad blocking script via MutationObserver.
+  static const String dynamicAdBlockJs = '''
+(function() {
+  if (window.__xdmDynamicAdBlock) return;
+  window.__xdmDynamicAdBlock = true;
+  
+  const adSelectors = [
+    '.adsbygoogle', '[id^="ad-"]', '[class*="ad-slot"]',
+    '[class*="sponsored"]', '[data-ad]', 'ins.adsbygoogle',
+    '[id*="taboola"]', '[id*="outbrain"]', 'iframe[src*="doubleclick"]'
+  ];
+  
+  function removeAds(root) {
+    adSelectors.forEach(sel => {
+      try {
+        root.querySelectorAll(sel).forEach(el => {
+          el.remove();
+        });
+      } catch(e) {}
+    });
+  }
+  
+  removeAds(document);
+  
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(m => {
+      m.addedNodes.forEach(node => {
+        if (node.nodeType === 1) removeAds(node);
+      });
+    });
+  });
+  
+  observer.observe(document.body || document.documentElement, {
+    childList: true,
+    subtree: true
+  });
+})();
+''';
+
+  /// Compiled regex cache for pattern matching.
+  final Map<String, RegExp> _compiledPatterns = {};
+
+  /// Fast-path pattern matching using compiled regex cache.
+  bool matchesPatternCached(String url, List<String> patterns) {
+    final host = Uri.tryParse(url)?.host.toLowerCase();
+    if (host != null && _blockedDomains.contains(host)) {
+      return true;
+    }
+    for (final pattern in patterns) {
+      final regex = _compiledPatterns.putIfAbsent(
+        pattern,
+        () => RegExp(pattern, caseSensitive: false),
+      );
+      if (regex.hasMatch(url)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /// Unblocks page scroll (injected at document_start).
   static const String scrollUnblockJs = '''
 (function() {

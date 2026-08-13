@@ -9,6 +9,7 @@ import 'package:logging/logging.dart';
 import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
 import '../models/browser_tab.dart';
+import '../models/tab_group.dart';
 import 'page_intent_classifier.dart';
 
 /// Signature matching the screen's `_createNewTab` factory.
@@ -56,8 +57,94 @@ class TabManager extends ChangeNotifier {
   final VoidCallback updateNavState;
 
   final List<BrowserTab> _tabs = [];
+  final List<TabGroup> _tabGroups = [];
   int _currentIndex = 0;
   final List<String> _tabIdHistory = [];
+
+  List<TabGroup> get tabGroups => List.unmodifiable(_tabGroups);
+
+  Future<TabGroup> createTabGroup(String name, Color color) async {
+    final group = TabGroup(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      name: name,
+      color: color,
+      tabIds: [],
+    );
+    _tabGroups.add(group);
+    await _persistTabGroups();
+    notifyListeners();
+    return group;
+  }
+
+  Future<void> moveTabToGroup(String tabId, String? groupId) async {
+    for (final group in _tabGroups) {
+      group.tabIds.remove(tabId);
+    }
+    final tabIndex = _tabs.indexWhere((t) => t.id == tabId);
+    if (tabIndex != -1) {
+      _tabs[tabIndex].tabGroupId = groupId;
+    }
+    if (groupId != null) {
+      final targetGroup = _tabGroups.firstWhere(
+        (g) => g.id == groupId,
+        orElse: () => throw Exception('Group not found'),
+      );
+      if (!targetGroup.tabIds.contains(tabId)) {
+        targetGroup.tabIds.add(tabId);
+      }
+    }
+    await _persistTabGroups();
+    notifyListeners();
+  }
+
+  Future<void> closeTabGroup(String groupId, {bool closeTabs = false}) async {
+    final idx = _tabGroups.indexWhere((g) => g.id == groupId);
+    if (idx == -1) return;
+    final group = _tabGroups[idx];
+
+    if (closeTabs) {
+      final idsToClose = List<String>.from(group.tabIds);
+      for (final tabId in idsToClose) {
+        closeTab(tabId);
+      }
+    } else {
+      for (final tabId in group.tabIds) {
+        final tabIndex = _tabs.indexWhere((t) => t.id == tabId);
+        if (tabIndex != -1) {
+          _tabs[tabIndex].tabGroupId = null;
+        }
+      }
+    }
+
+    _tabGroups.removeAt(idx);
+    await _persistTabGroups();
+    notifyListeners();
+  }
+
+  Future<void> _persistTabGroups() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final data = _tabGroups.map((g) => g.toJson()).toList();
+      await prefs.setString('browser_tab_groups', jsonEncode(data));
+    } catch (e) {
+      _log.warning('Failed to persist tab groups: $e');
+    }
+  }
+
+  Future<void> _restoreTabGroups() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString('browser_tab_groups');
+      if (jsonStr != null && jsonStr.isNotEmpty) {
+        final decoded = jsonDecode(jsonStr) as List<dynamic>;
+        _tabGroups
+          ..clear()
+          ..addAll(decoded.map((e) => TabGroup.fromJson(e as Map<String, dynamic>)));
+      }
+    } catch (e) {
+      _log.warning('Failed to restore tab groups: $e');
+    }
+  }
 
   /// Maximum allowed background ad/popup tabs before auto-eviction.
   final int _maxUnvisitedAdTabs = 3;
@@ -424,6 +511,7 @@ class TabManager extends ChangeNotifier {
 
   Future<void> _performRestoreTabs() async {
     if (!isActive()) return;
+    await _restoreTabGroups();
     try {
       final db = resolveDatabase();
       if (db.isInitialized) {

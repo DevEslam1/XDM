@@ -15,6 +15,24 @@ import '../../settings/provider/settings_provider.dart';
 import '../services/browser_detector.dart';
 import '../services/long_press_parser.dart';
 
+class DownloadOptions {
+  final String? quality;
+  final String? format;
+  final String? savePath;
+  final int? threadCount;
+  final bool startImmediately;
+  final String? scheduledAt;
+
+  const DownloadOptions({
+    this.quality,
+    this.format,
+    this.savePath,
+    this.threadCount,
+    this.startImmediately = true,
+    this.scheduledAt,
+  });
+}
+
 /// Signal-intercept console shown when the sniffer locks onto a downloadable
 /// resource. Corner-bracket targeting frame, pulsing lock indicator, and a
 /// monospace URL readout give it a distinct "capture" feel.
@@ -29,10 +47,9 @@ class BrowserDownloadSheet extends StatefulWidget {
   final VoidCallback? onOpenInBackground;
   final VoidCallback? onOpenInNewTab;
   final VoidCallback? onOpenInIncognito;
-
-  /// Additional discovered sources (alternative qualities/streams) for the
-  /// long-pressed media. Each is offered as its own download tile.
   final List<MediaSourceItem> sources;
+  final List<String> qualities;
+  final List<String> formats;
 
   const BrowserDownloadSheet({
     super.key,
@@ -47,6 +64,8 @@ class BrowserDownloadSheet extends StatefulWidget {
     this.onOpenInNewTab,
     this.onOpenInIncognito,
     this.sources = const [],
+    this.qualities = const [],
+    this.formats = const [],
   });
 
   static Future<void> show(

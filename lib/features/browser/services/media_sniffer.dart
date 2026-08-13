@@ -249,15 +249,16 @@ class MediaSniffer extends ChangeNotifier {
   var videos = document.getElementsByTagName('video');
   for (var i = 0; i < videos.length; i++) {
     var v = videos[i];
-    if (v.src && v.src.trim() !== '' && !v.src.startsWith('blob:')) {
-      sources.push({ src: v.src, label: 'Video Stream (Default)' });
+    if (v.src && v.src.trim() !== '') {
+      var type = v.src.includes('.m3u8') ? 'HLS Stream' : (v.src.includes('.mpd') ? 'DASH Stream' : 'Video Stream');
+      sources.push({ src: v.src, label: type });
     }
     var childSources = v.getElementsByTagName('source');
     for (var j = 0; j < childSources.length; j++) {
       var s = childSources[j];
-      if (s.src && s.src.trim() !== '' && !s.src.startsWith('blob:')) {
-        var label = s.getAttribute('label') || s.getAttribute('res') || s.getAttribute('type') || ('Resolution ' + (j + 1));
-        sources.push({ src: s.src, label: label });
+      if (s.src && s.src.trim() !== '') {
+        var stype = s.src.includes('.m3u8') ? 'HLS Source' : (s.src.includes('.mpd') ? 'DASH Source' : (s.getAttribute('label') || 'Source ' + (j + 1)));
+        sources.push({ src: s.src, label: stype });
       }
     }
     var poster = v.getAttribute('poster');
@@ -268,26 +269,37 @@ class MediaSniffer extends ChangeNotifier {
   var audios = document.getElementsByTagName('audio');
   for (var i = 0; i < audios.length; i++) {
     var a = audios[i];
-    if (a.src && a.src.trim() !== '' && !a.src.startsWith('blob:')) {
+    if (a.src && a.src.trim() !== '') {
       sources.push({ src: a.src, label: 'Audio Stream' });
     }
   }
   var lazyVideos = document.querySelectorAll('[data-src],[data-video-src]');
   for (var i = 0; i < lazyVideos.length; i++) {
     var src = lazyVideos[i].getAttribute('data-src') || lazyVideos[i].getAttribute('data-video-src');
-    if (src && src.trim() !== '' && !src.startsWith('blob:') && (src.includes('.mp4') || src.includes('.webm') || src.includes('.m3u8'))) {
-      sources.push({ src: src, label: 'Lazy-Loaded Video' });
+    if (src && src.trim() !== '' && (src.includes('.mp4') || src.includes('.webm') || src.includes('.m3u8') || src.includes('.mpd'))) {
+      var label = src.includes('.m3u8') ? 'HLS Stream (Lazy)' : (src.includes('.mpd') ? 'DASH Stream (Lazy)' : 'Lazy Video');
+      sources.push({ src: src, label: label });
     }
   }
   var iframes = document.getElementsByTagName('iframe');
   for (var i = 0; i < iframes.length; i++) {
     var src = iframes[i].src;
     if (src && src.trim() !== '') {
-      if (src.includes('youtube.com/embed/') || src.includes('player.vimeo.com/video/') || src.includes('.mp4') || src.includes('.m3u8')) {
-        sources.push({ src: src, label: 'Embedded Video' });
+      if (src.includes('youtube.com/embed/') || src.includes('player.vimeo.com/video/') || src.includes('.mp4') || src.includes('.m3u8') || src.includes('.mpd')) {
+        sources.push({ src: src, label: 'Embedded Media' });
       }
     }
   }
+  try {
+    var resources = window.performance.getEntriesByType('resource');
+    for (var r = 0; r < resources.length; r++) {
+      var rUrl = resources[r].name;
+      if (rUrl && (rUrl.includes('.m3u8') || rUrl.includes('.mpd') || rUrl.includes('.m4s'))) {
+        var label = rUrl.includes('.m3u8') ? 'HLS Manifest (Network)' : (rUrl.includes('.mpd') ? 'DASH Manifest (Network)' : 'DASH Segment');
+        sources.push({ src: rUrl, label: label });
+      }
+    }
+  } catch(e) {}
   return JSON.stringify(sources);
 })();
 ''').catchError((_) => null).timeout(const Duration(seconds: 8));

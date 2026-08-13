@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'package:dio/dio.dart';
 
@@ -277,6 +278,8 @@ class DownloadInterceptor {
     return null;
   }
 
+  final Set<String> _pendingInterceptions = {};
+
   Future<InterceptDownloadResult> startDirectDownload(
     String url, {
     String? suggestedName,
@@ -289,6 +292,15 @@ class DownloadInterceptor {
     int? contentLength,
     String? contentDisposition,
   }) async {
+    // Debounce rapid interceptions for identical URLs
+    if (_pendingInterceptions.contains(url)) {
+      return const InterceptDownloadResult(InterceptDownloadStatus.alreadyInProgress);
+    }
+    _pendingInterceptions.add(url);
+    Timer(const Duration(seconds: 2), () {
+      _pendingInterceptions.remove(url);
+    });
+
     final downloadProvider = resolveDownloadProvider();
     final existingTasks =
         downloadProvider.tasks.where((t) => t.url == url).toList();
@@ -395,5 +407,37 @@ class DownloadInterceptor {
         e.toString(),
       );
     }
+  }
+
+  /// Intercepts multiple URLs in batch mode.
+  Future<void> interceptBatch(List<String> urls) async {
+    final downloadProvider = resolveDownloadProvider();
+    final tasks = <DownloadAddSpec>[];
+    for (final url in urls) {
+      final fileName = fileNameFromUrl(url);
+      final category = resolveCategorySmart(url: url, fileName: fileName);
+      tasks.add(DownloadAddSpec(
+        name: fileName,
+        url: url,
+        size: 0,
+        category: category,
+        savePath: '',
+      ));
+    }
+    await downloadProvider.addDownloadsBatch(tasks);
+  }
+
+  /// Queues a single download with priority integration.
+  Future<void> queueDownload(String url, {int priority = 0, String? name}) async {
+    final downloadProvider = resolveDownloadProvider();
+    final fileName = name ?? fileNameFromUrl(url);
+    final category = resolveCategorySmart(url: url, fileName: fileName);
+    await downloadProvider.addDownload(
+      name: fileName,
+      url: url,
+      size: 0,
+      category: category,
+      savePath: '',
+    );
   }
 }

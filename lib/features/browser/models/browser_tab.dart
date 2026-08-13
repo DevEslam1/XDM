@@ -50,6 +50,9 @@ class BrowserTab {
     return _findInteractionController;
   }
 
+  int savedScrollY = 0;
+  String? tabGroupId;
+
   BrowserTab({
     required this.id,
     this.controller,
@@ -69,6 +72,8 @@ class BrowserTab {
     this.origin = TabOrigin.userDirect,
     int? createdAtMs,
     FindInteractionController? findController,
+    this.savedScrollY = 0,
+    this.tabGroupId,
   })  : createdAtMs = createdAtMs ?? DateTime.now().millisecondsSinceEpoch,
         progressNotifier = ValueNotifier<double>(progress),
         _findInteractionController = findController;

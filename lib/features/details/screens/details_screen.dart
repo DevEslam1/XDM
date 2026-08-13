@@ -48,6 +48,12 @@ import 'package:dmx/core/services/site_intelligence/site_intelligence_service.da
 
 import '../../../shared/mixins/pausable_loop_animation.dart';
 
+import '../../../core/services/tracker_manager.dart';
+import '../widgets/peer_panel.dart';
+import '../widgets/tracker_panel.dart';
+import '../widgets/torrent_health_indicator.dart';
+import '../widgets/torrent_stats_dashboard.dart';
+
 class DetailsScreen extends StatefulWidget {
   final String taskId;
 
@@ -1380,43 +1386,47 @@ class _StepBtnState extends State<_StepBtn> {
 
 class _SpeedGraphPanel extends StatelessWidget {
   final DownloadTask task;
-
   final DownloadProvider provider;
 
   const _SpeedGraphPanel({required this.task, required this.provider});
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Provider.of<SettingsProvider>(
-      context,
-    ).isDarkMode;
-
+    final isDark = Provider.of<SettingsProvider>(context).isDarkMode;
     final primaryClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     final speedHistory = provider.getSpeedHistory(task.id);
+    final uploadHistory = provider.getUploadSpeedHistory(task.id);
 
     final isDownloading = task.status == DownloadStatus.downloading;
-
     final isSeeding = task.status == DownloadStatus.completed &&
         task.isTorrent &&
         task.seedingEnabled;
 
     final showUploadSpeed = task.isTorrent && (isDownloading || isSeeding);
-
     final uploadSpeed =
         showUploadSpeed ? provider.getTorrentUploadSpeed(task.id) : 0.0;
 
-    final List<FlSpot> spots = List.generate(speedHistory.length, (i) {
+    final List<FlSpot> downloadSpots = List.generate(speedHistory.length, (i) {
       return FlSpot(i.toDouble(), speedHistory[i]);
     });
-
-    if (spots.length == 1) {
-      spots.add(FlSpot(1.0, spots[0].y));
+    if (downloadSpots.length == 1) {
+      downloadSpots.add(FlSpot(1.0, downloadSpots[0].y));
     }
+
+    final List<FlSpot> uploadSpots = List.generate(uploadHistory.length, (i) {
+      return FlSpot(i.toDouble(), uploadHistory[i]);
+    });
+    if (uploadSpots.length == 1) {
+      uploadSpots.add(FlSpot(1.0, uploadSpots[0].y));
+    }
+
+    final maxLen = math.max(
+      downloadSpots.length,
+      uploadSpots.isNotEmpty ? uploadSpots.length : 1,
+    );
 
     return DmxCardShell(
       showRail: false,
@@ -1425,44 +1435,73 @@ class _SpeedGraphPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              L10n.isRtl(context)
-                  ? 'مخطط سرعة التنزيل'
-                  : 'DOWNLOAD SPEED CHART',
-              style: AppTheme.microLabel(isDark: isDark, size: 10),
-            ),
-            if (showUploadSpeed) ...[
-              const SizedBox(height: 6),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Icon(Icons.upload_rounded, size: 11, color: violetClr),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${L10n.isRtl(context) ? 'رفع' : 'UL'}: ${formatBytes(uploadSpeed)}/s',
-                    style: AppTheme.dataStyle(
-                      isDark: isDark,
-                      size: 10,
-                      weight: FontWeight.w600,
-                      color: violetClr,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  L10n.isRtl(context)
+                      ? 'مخطط السرعة'
+                      : 'TRANSFER SPEED CHART',
+                  style: AppTheme.microLabel(isDark: isDark, size: 10),
+                ),
+                Row(
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: primaryClr,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 4),
+                    Text(
+                      '${L10n.isRtl(context) ? 'تحميل' : 'DL'}: ${formatBytes(task.speed)}/s',
+                      style: AppTheme.dataStyle(
+                        isDark: isDark,
+                        size: 10,
+                        weight: FontWeight.w600,
+                        color: primaryClr,
+                      ),
+                    ),
+                    if (showUploadSpeed) ...[
+                      const SizedBox(width: 10),
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: violetClr,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${L10n.isRtl(context) ? 'رفع' : 'UL'}: ${formatBytes(uploadSpeed)}/s',
+                        style: AppTheme.dataStyle(
+                          isDark: isDark,
+                          size: 10,
+                          weight: FontWeight.w600,
+                          color: violetClr,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
-            if (!isDownloading || spots.isEmpty)
+            if ((!isDownloading && !isSeeding) || downloadSpots.isEmpty)
               Container(
                 height: 120,
                 alignment: Alignment.center,
                 child: Text(
-                  isDownloading
+                  (isDownloading || isSeeding)
                       ? (L10n.isRtl(context)
                           ? 'جاري تجميع البيانات...'
                           : 'AWAITING SPEED DATA...')
                       : (L10n.isRtl(context)
                           ? 'محرك التنزيل غير نشط'
-                          : 'DOWNLOAD ENGINE INACTIVE'),
+                          : 'TRANSFER ENGINE INACTIVE'),
                   style: AppTheme.microLabel(isDark: isDark, color: mutedClr),
                 ),
               )
@@ -1498,7 +1537,6 @@ class _SpeedGraphPanel extends StatelessWidget {
                                 ),
                               );
                             }
-
                             return const SizedBox.shrink();
                           },
                         ),
@@ -1507,10 +1545,10 @@ class _SpeedGraphPanel extends StatelessWidget {
                     borderData: FlBorderData(show: false),
                     lineTouchData: const LineTouchData(enabled: false),
                     minX: 0,
-                    maxX: spots.length > 1 ? spots.length.toDouble() - 1 : 1.0,
+                    maxX: maxLen > 1 ? maxLen.toDouble() - 1 : 1.0,
                     lineBarsData: [
                       LineChartBarData(
-                        spots: spots,
+                        spots: downloadSpots,
                         isCurved: true,
                         color: primaryClr,
                         barWidth: 2.5,
@@ -1528,6 +1566,26 @@ class _SpeedGraphPanel extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (showUploadSpeed && uploadSpots.isNotEmpty)
+                        LineChartBarData(
+                          spots: uploadSpots,
+                          isCurved: true,
+                          color: violetClr,
+                          barWidth: 2.0,
+                          isStrokeCapRound: true,
+                          dotData: const FlDotData(show: false),
+                          belowBarData: BarAreaData(
+                            show: true,
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                violetClr.withValues(alpha: 0.15),
+                                violetClr.withValues(alpha: 0.0),
+                              ],
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -1865,46 +1923,48 @@ class _SpeedStepButton extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────
 
-class _TorrentStatsPanel extends StatelessWidget {
+class _TorrentStatsPanel extends StatefulWidget {
   final DownloadTask task;
-
   final DownloadProvider provider;
 
   const _TorrentStatsPanel({required this.task, required this.provider});
 
   @override
-  Widget build(BuildContext context) {
-    final isDark = Provider.of<SettingsProvider>(
-      context,
-    ).isDarkMode;
+  State<_TorrentStatsPanel> createState() => _TorrentStatsPanelState();
+}
 
+class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
+  bool _showTrackers = false;
+  bool _showPeers = false;
+
+  DownloadTask get task => widget.task;
+  DownloadProvider get provider => widget.provider;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Provider.of<SettingsProvider>(context).isDarkMode;
     final isRtl = L10n.isRtl(context);
 
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
-
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-
     final amberClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
-
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     final seeds = provider.getTorrentSeeds(task.id);
-
     final peers = provider.getTorrentPeers(task.id);
 
     final isActive = task.status == DownloadStatus.downloading;
-
     final isSeeding = task.status == DownloadStatus.completed &&
         task.isTorrent &&
         task.seedingEnabled;
 
     final dlSpeed = task.speed;
-
     final ulSpeed = isSeeding
         ? task.speed
         : (task.isTorrent ? provider.getTorrentUploadSpeed(task.id) : 0.0);
+
+    final torrentId = int.tryParse(task.id) ?? 0;
 
     return DmxCardShell(
       accent: violetClr,
@@ -1914,9 +1974,22 @@ class _TorrentStatsPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              isRtl ? 'حالة اتصال التورنت' : 'TORRENT CONNECTION STATUS',
-              style: AppTheme.microLabel(isDark: isDark, size: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  isRtl ? 'حالة اتصال التورنت' : 'TORRENT CONNECTION STATUS',
+                  style: AppTheme.microLabel(isDark: isDark, size: 10),
+                ),
+                TorrentHealthIndicator(
+                  seeds: seeds,
+                  peers: peers,
+                  availability: 1.0,
+                  distributedCopies: 1.0,
+                  downloadRate: dlSpeed,
+                  isDark: isDark,
+                ),
+              ],
             ),
             const SizedBox(height: 14),
             if (isActive || isSeeding) ...[
@@ -1997,15 +2070,75 @@ class _TorrentStatsPanel extends StatelessWidget {
                 ),
               ],
             ),
-            if (isActive || isSeeding) ...[
-              const SizedBox(height: 10),
-              _StatCell(
-                icon: Icons.swap_vert_rounded,
-                color: violetClr,
-                label: isRtl ? 'نسبة الرفع/التحميل' : 'UL/DL RATIO',
-                value:
-                    '${formatBytes(ulSpeed)}/s • ${task.downloadedSizeFormatted} ${isRtl ? 'تم تحميلها' : 'downloaded'}',
+            const SizedBox(height: 12),
+            TorrentStatsDashboard(
+              task: task,
+              stats: null,
+              isDark: isDark,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => setState(() => _showTrackers = !_showTrackers),
+                    icon: Icon(
+                      _showTrackers ? Icons.expand_less : Icons.add_link,
+                      size: 14,
+                      color: amberClr,
+                    ),
+                    label: Text(
+                      _showTrackers
+                          ? (isRtl ? 'إخفاء المتتبعات' : 'Hide Trackers')
+                          : (isRtl ? 'إدارة المتتبعات' : 'Trackers Panel'),
+                      style: TextStyle(fontSize: 11, color: amberClr),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: amberClr.withValues(alpha: 0.3)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => setState(() => _showPeers = !_showPeers),
+                    icon: Icon(
+                      _showPeers ? Icons.expand_less : Icons.people_alt_outlined,
+                      size: 14,
+                      color: blueClr,
+                    ),
+                    label: Text(
+                      _showPeers
+                          ? (isRtl ? 'إخفاء الأقران' : 'Hide Peers')
+                          : (isRtl ? 'تفاصيل الأقران' : 'Peers Panel'),
+                      style: TextStyle(fontSize: 11, color: blueClr),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: blueClr.withValues(alpha: 0.3)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_showTrackers) ...[
+              const SizedBox(height: 12),
+              TrackerPanel(
+                torrentId: torrentId,
+                trackerManager: TrackerManager(),
+              ),
+            ],
+            if (_showPeers) ...[
+              const SizedBox(height: 12),
+              PeerPanel(
+                torrentId: torrentId,
                 isDark: isDark,
+                peers: const [],
               ),
             ],
           ],

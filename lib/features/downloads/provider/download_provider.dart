@@ -306,6 +306,20 @@ class DownloadProvider extends ChangeNotifier
           final tid = entry.key;
           final info = entry.value;
 
+          final taskId = _torrentIds.entries
+              .where((e) => e.value == tid)
+              .map((e) => e.key)
+              .firstOrNull;
+          if (taskId != null) {
+            final downloadQueue = _speedHistories[taskId] ??= Queue<double>();
+            downloadQueue.add(info.downloadRate.toDouble());
+            if (downloadQueue.length > 20) downloadQueue.removeFirst();
+
+            final uploadQueue = _uploadSpeedHistories[taskId] ??= Queue<double>();
+            uploadQueue.add(info.uploadRate.toDouble());
+            if (uploadQueue.length > 20) uploadQueue.removeFirst();
+          }
+
           // FIX T-5: Sync uploadedBytes in real-time during seeding
           if (info.totalPayloadUpload > 0) {
             final taskIdx = _tasks.indexWhere((t) {
@@ -322,11 +336,6 @@ class DownloadProvider extends ChangeNotifier
 
           final stateLabel = info.stateLabel.toLowerCase();
           if (stateLabel.contains('error')) {
-            // Find the task for this torrent id
-            final taskId = _torrentIds.entries
-                .where((e) => e.value == tid)
-                .map((e) => e.key)
-                .firstOrNull;
             if (taskId != null) {
               final task = _findTask(taskId);
               if (task != null && task.status == DownloadStatus.downloading) {
@@ -358,6 +367,7 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, CancelToken> _cancelTokens = {};
   final Map<String, bool> _resumeRejectionRestarts = {};
   final Map<String, Queue<double>> _speedHistories = {};
+  final Map<String, Queue<double>> _uploadSpeedHistories = {};
   final Map<String, Future<void>> _dbSaveQueues = {};
 
   /// Per-task progress and speed ValueNotifiers for isolated repainting.
@@ -427,6 +437,9 @@ class DownloadProvider extends ChangeNotifier
 
   List<double> getSpeedHistory(String id) =>
       _speedHistories[id]?.toList() ?? const [];
+
+  List<double> getUploadSpeedHistory(String id) =>
+      _uploadSpeedHistories[id]?.toList() ?? const [];
 
   late final NetworkMonitor _networkMonitor;
   late final ScheduleManager _scheduleManager;

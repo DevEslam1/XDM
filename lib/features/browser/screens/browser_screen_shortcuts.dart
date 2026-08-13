@@ -171,4 +171,55 @@ mixin _ShortcutsMixin on _BrowserScreenStateBase {
       _saveCustomShortcuts(); // Bug #8 fix: persist removal to SharedPreferences
     }
   }
+
+  @override
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final hw = HardwareKeyboard.instance;
+    final ctrl = hw.isControlPressed || hw.isMetaPressed;
+
+    if (!ctrl) return KeyEventResult.ignored;
+
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.keyT:
+        _openInNewTab('about:blank', switchToTab: true);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyW:
+        final active = _tabManager.activeTab;
+        if (active != null) {
+          _tabManager.closeTab(active.id);
+        }
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyR:
+        final active = _tabManager.activeTab;
+        if (active != null) {
+          _safeReloadTab(active);
+        }
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyL:
+        _focusNode.requestFocus();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyD:
+        _openBookmarks();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyH:
+        _openHistory();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.arrowLeft:
+        if (hw.isAltPressed) {
+          _tabManager.activeTab?.controller?.goBack();
+          return KeyEventResult.handled;
+        }
+        break;
+      case LogicalKeyboardKey.arrowRight:
+        if (hw.isAltPressed) {
+          _tabManager.activeTab?.controller?.goForward();
+          return KeyEventResult.handled;
+        }
+        break;
+    }
+
+    return KeyEventResult.ignored;
+  }
 }

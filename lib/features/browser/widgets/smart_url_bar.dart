@@ -11,6 +11,13 @@ import '../services/search_engine_config.dart';
 
 enum SuggestionType { url, search, bookmark, history }
 
+enum UrlSecurityLevel {
+  secure,
+  insecure,
+  dangerous,
+  unknown,
+}
+
 class _Suggestion {
   final SuggestionType type;
   final String title;
@@ -35,6 +42,9 @@ class SmartUrlBar extends StatefulWidget {
   final VoidCallback? onStopLoading;
   final VoidCallback? onShieldPressed;
   final bool isHttps;
+  final UrlSecurityLevel? securityLevel;
+  final bool hasActiveDownloads;
+  final List<String> suggestions;
 
   const SmartUrlBar({
     super.key,
@@ -47,6 +57,9 @@ class SmartUrlBar extends StatefulWidget {
     this.onStopLoading,
     this.onShieldPressed,
     this.isHttps = false,
+    this.securityLevel,
+    this.hasActiveDownloads = false,
+    this.suggestions = const [],
   });
 
   @override

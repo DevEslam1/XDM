@@ -34,22 +34,27 @@
 - **Disk Space & I/O Smartness**: Disk-space guardrails, low-storage warnings, batched 256KB disk writes, cross-filesystem copy-based relocation, and orphan-file cleanup on cancel.
 
 ### 🧲 BitTorrent Client
-- **Full Torrent & Magnet Support**: BitTorrent v1/v2 magnet links, `.torrent` files, IP-filter blocklists, and in-app **torrent creation** (`.dat`/`.torrent`).
-- **Peer Discovery**: DHT, UPnP, NAT-PMP, LPD, and PEX with optional forced protocol encryption.
-- **Seeding Management**: Global seeding toggle, upload speed caps, share-ratio limits, max seeding time, and a torrent queue enforcing concurrent download/seed limits.
-- **Tracker Control**: Live tracker inspection, add/remove, and announce-now with tier priority tuning.
-- **Resilience**: Resume-data persistence per file, background-state saves on pause/resume, sequential download for video streaming, and per-file selection/priority.
+- **Full Torrent & Magnet Support**: BitTorrent v1/v2 magnet links, `.torrent` files, retryable magnet metadata resolution with progress callbacks, and in-app **torrent creation** (`.dat`/`.torrent`).
+- **DHT & Peer Discovery**: Integrated DHT bootstrap node injection (`router.bittorrent.com:6881`, etc.), UPnP, NAT-PMP, LPD, and PEX with forced protocol encryption.
+- **Tracker & Peer Management**: Live tracker health scoring, quick "Add Default Trackers" action (10 open UDP trackers), auto-reannounce, and peer connection quality, encryption lock, and direction indicators.
+- **Dual-Speed Charting & Health Indicator**: Dual download & upload speed history charting in the transfer speed graph, alongside granular health evaluations (Dead, Poor, Fair, Good, Excellent).
+- **Seeding Management & Smart Guardrails**: Global seeding toggle, upload speed caps, share-ratio limits, max seeding time, super seeding, charging-only mode (`seedOnlyWhenCharging`), and Wi-Fi-only mode (`seedOnlyOnWifi`).
+- **Disk-Verified Per-File Progress**: Disk-level content probing to handle pre-allocated zero-fill files cleanly.
+- **Torrent Creation**: Flexible piece size selection (Auto, 256KB to 8MB), Web Seeds URL input, source tagging, comment embedding, and private torrent toggles.
 
 ### 🌐 Smart Built-in Web Browser
-- **Multi-Tab Engine**: Tab strip (3+ tabs), tab preview switcher, favicons, recently-closed tabs, tab restore, and background-tab loading.
-- **Incognito Mode**: Isolated sessions with a purple incognito banner reminder.
+- **Multi-Tab & Tab Groups Engine**: Tab strip, visual tab switcher, tab group organization (color-coded grouping, moving, closing), persistent scroll-position tab suspension, recently-closed tab restoration, and background tab memory management.
+- **Incognito Mode**: Isolated sessions with cookie/storage purge on tab close and purple incognito indicators.
 - **Smart Force Dark Mode**: High-contrast dark styling engine with media-preservation filters for `img/video/canvas/svg` plus native Android `ForceDark` rendering.
-- **Ad-Blocker & Redirect Guard**: Auto-updating blocklists from 3 sources, rule counts, URL-bar ad-block counters, and redirect protections.
-- **Advanced Media Sniffer**: Auto-detects downloadable video/audio/direct links and streams while browsing, with batch quality sheets and a per-page radar toggle.
-- **UserScript / CSS Injector**: Custom script manager with granular permission sandboxing and a JS/CSS editor.
-- **Reader & Productivity Tools**: Reader mode (font size + light/dark/sepia themes), Find-in-Page, page translation, zoom presets (50–200%), page screenshots, print/PDF export, offline-page saving, and form autofill.
-- **Long-Press & Interception**: Long-press links/images/videos to download; DOM `<video>`/`<audio>` scanning and download interception.
-- **Desktop & Mobile UX**: Desktop mode (user-agent), keyboard shortcuts (`Ctrl+T/W/L/R/F`), block images, open-in-app links, site settings, element blocking, and shortcut grid.
+- **Ad-Blocker & Dynamic Content Guard**: High-performance ad blocking with MutationObserver dynamic ad element removal, compiled regex cache, fast-path $O(1)$ domain lookups, custom host store, and redirect protection.
+- **Privacy Dashboard**: Real-time stats dashboard tracking blocked trackers, ads, and popups per domain and overall totals.
+- **Advanced Media Sniffer**: Automatic detection of video/audio/direct links, HLS (`.m3u8`) and DASH (`.mpd`) streaming manifests, blob sources, and network performance resource inspection with batch download quality sheets.
+- **Debounced Download Interception**: Intelligently intercepts binary files and stream downloads with rapid-click debouncing, batch enqueuing, priority queue integration, and multi-source download sheets.
+- **Reader Mode v2**: Intelligent Readability-style article extraction capturing title, author, published date, clean HTML content, text preview, images, word count, and estimated reading time across light/dark/sepia themes.
+- **Smart URL Bar & Security Indicators**: Dynamic address bar displaying `UrlSecurityLevel` badges (HTTPS secure, HTTP insecure, dangerous, unknown), active download badges, and instant URL/bookmark/history suggestions.
+- **UserScript / CSS Injector**: Custom script manager with granular permission sandboxing and a live JS/CSS editor.
+- **Desktop Keyboard Shortcuts**: Complete desktop hotkey suite (`Ctrl+T` new tab, `Ctrl+W` close tab, `Ctrl+R` reload, `Ctrl+L` address bar, `Ctrl+D` bookmark, `Ctrl+H` history, `Alt+Left/Right` navigation).
+- **Picture-in-Picture & Capture Tools**: Native HTML5 Picture-in-Picture mode for HTML5 video, single-viewport capture, and full-page stitched screenshot export.
 - **Browser Extensions**: Companion extensions for **Firefox Android** (`xdm-firefox/`) redirect browser downloads to XDM.
 
 ### 📺 YouTube & Cloud Stream Integration

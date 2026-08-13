@@ -395,6 +395,9 @@ $customJs
     // never legitimate page timers. Safe to run first.
     scripts.add(AdBlockerService.intervalCleanupJs);
 
+    // Dynamic ad blocker MutationObserver
+    scripts.add(AdBlockerService.dynamicAdBlockJs);
+
     // Scroll unblock (all pages)
     scripts.add(AdBlockerService.scrollUnblockJs);
 
