@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/crypto_utils.dart';
 
@@ -11,6 +12,20 @@ class AppLockService {
   static const String _failedAttemptsKey = 'xdm_app_lock_failed_attempts';
   static const String _lockoutLevelKey = 'xdm_app_lock_lockout_level';
   static const String _lockedUntilKey = 'xdm_app_lock_locked_until';
+  static const String _lockoutDurationKey = 'xdm_app_lock_lockout_duration';
+  static const String _lockoutStartElapsedKey = 'xdm_app_lock_start_elapsed';
+
+  static final Stopwatch _lockoutStopwatch = Stopwatch()..start();
+  static int? _monotonicLockoutStartMs;
+  static int? _totalLockoutDurationMs;
+
+  @visibleForTesting
+  static void resetMonotonicState() {
+    _monotonicLockoutStartMs = null;
+    _totalLockoutDurationMs = null;
+    _lockoutStopwatch.reset();
+    _lockoutStopwatch.start();
+  }
 
   static Future<bool> isLockEnabled() async {
     final enabled = await _storage.read(key: _enabledKey);
@@ -38,10 +53,6 @@ class AppLockService {
     final storedPin = await _storage.read(key: _pinKey);
     final salt = await _storage.read(key: _saltKey);
 
-    // FIX: If storedPin or salt is null, the secure storage is corrupted.
-    // Do NOT register a failed attempt — the user's PIN may be correct but
-    // the storage is unreadable. Registering failures here would lock out
-    // users with corrupted storage rather than wrong PINs.
     if (storedPin == null || salt == null) {
       return false;
     }
@@ -57,16 +68,46 @@ class AppLockService {
   }
 
   static Future<Duration> lockoutRemaining() async {
-    final raw = await _storage.read(key: _lockedUntilKey);
-    final lockedUntil = int.tryParse(raw ?? '');
-    if (lockedUntil == null) return Duration.zero;
-    final remaining = DateTime.fromMillisecondsSinceEpoch(lockedUntil)
-        .difference(DateTime.now());
-    if (remaining <= Duration.zero) {
-      await _storage.delete(key: _lockedUntilKey);
+    // 1. Monotonic in-memory check (immune to clock changes during process runtime)
+    if (_monotonicLockoutStartMs != null && _totalLockoutDurationMs != null) {
+      final elapsedSinceStart =
+          _lockoutStopwatch.elapsedMilliseconds - _monotonicLockoutStartMs!;
+      final remainingMs = _totalLockoutDurationMs! - elapsedSinceStart;
+      if (remainingMs <= 0) {
+        await resetFailedAttempts();
+        return Duration.zero;
+      }
+      return Duration(milliseconds: remainingMs);
+    }
+
+    // 2. Storage check across process restarts
+    final rawUntil = await _storage.read(key: _lockedUntilKey);
+    final rawDuration = await _storage.read(key: _lockoutDurationKey);
+    final lockedUntil = int.tryParse(rawUntil ?? '');
+    final totalDurationMs = int.tryParse(rawDuration ?? '');
+
+    if (lockedUntil == null || totalDurationMs == null) {
       return Duration.zero;
     }
-    return remaining;
+
+    final wallRemaining = DateTime.fromMillisecondsSinceEpoch(lockedUntil)
+        .difference(DateTime.now());
+
+    // If wall clock was manipulated backwards, enforce full duration
+    if (wallRemaining.inMilliseconds > totalDurationMs + 1000) {
+      _monotonicLockoutStartMs = _lockoutStopwatch.elapsedMilliseconds;
+      _totalLockoutDurationMs = totalDurationMs;
+      return Duration(milliseconds: totalDurationMs);
+    }
+
+    if (wallRemaining <= Duration.zero) {
+      await resetFailedAttempts();
+      return Duration.zero;
+    }
+
+    _monotonicLockoutStartMs = _lockoutStopwatch.elapsedMilliseconds;
+    _totalLockoutDurationMs = wallRemaining.inMilliseconds;
+    return wallRemaining;
   }
 
   static int _lockoutSecondsForLevel(int level) {
@@ -107,8 +148,12 @@ class AppLockService {
         0;
     final nextLevel = level + 1;
     final seconds = _lockoutSecondsForLevel(nextLevel);
+    final durationMs = seconds * 1000;
     final lockedUntil =
         DateTime.now().add(Duration(seconds: seconds)).millisecondsSinceEpoch;
+
+    _monotonicLockoutStartMs = _lockoutStopwatch.elapsedMilliseconds;
+    _totalLockoutDurationMs = durationMs;
 
     await _storage.write(key: _failedAttemptsKey, value: '0');
     await _storage.write(key: _lockoutLevelKey, value: nextLevel.toString());
@@ -116,12 +161,24 @@ class AppLockService {
       key: _lockedUntilKey,
       value: lockedUntil.toString(),
     );
+    await _storage.write(
+      key: _lockoutDurationKey,
+      value: durationMs.toString(),
+    );
+    await _storage.write(
+      key: _lockoutStartElapsedKey,
+      value: _monotonicLockoutStartMs.toString(),
+    );
   }
 
   static Future<void> resetFailedAttempts() async {
+    _monotonicLockoutStartMs = null;
+    _totalLockoutDurationMs = null;
     await _storage.delete(key: _failedAttemptsKey);
     await _storage.delete(key: _lockoutLevelKey);
     await _storage.delete(key: _lockedUntilKey);
+    await _storage.delete(key: _lockoutDurationKey);
+    await _storage.delete(key: _lockoutStartElapsedKey);
   }
 
   static Future<void> disableLock() async {

@@ -7,6 +7,8 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'dart:collection';
+import 'package:synchronized/synchronized.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/localization.dart';
 import 'package:dmx/core/services/logging_service.dart';
@@ -101,48 +103,66 @@ class NotificationService {
   static const String _downloadChannelDesc =
       'Real-time download transfer progress';
 
-  final List<Map<String, String>> _pendingActions = [];
-  static const int _maxPendingActions = 100;
+  static const int _maxPendingActions = 50;
+  static const Duration _actionStaleThreshold = Duration(seconds: 30);
+  final Queue<_BufferedNotificationAction> _actionQueue = Queue();
+  final Lock _actionQueueLock = Lock();
 
-  static StreamController<Map<String, String>> _createActionStreamController(
-    List<Map<String, String>> pending,
-  ) {
-    StreamController<Map<String, String>>? c;
-    c = StreamController<Map<String, String>>.broadcast(
-      sync: true,
-      onListen: () {
-        while (pending.isNotEmpty) {
-          c!.add(pending.removeAt(0));
-        }
-      },
-    );
-    return c;
-  }
-
-  late StreamController<Map<String, String>> _actionStreamController =
-      _createActionStreamController(_pendingActions);
+  late final StreamController<Map<String, String>> _actionStreamController =
+      StreamController<Map<String, String>>.broadcast(
+    sync: true,
+    onListen: () {
+      unawaited(_drainActionQueue());
+    },
+  );
 
   Stream<Map<String, String>> get onActionTapped =>
       _actionStreamController.stream;
 
+  Future<void> _drainActionQueue() async {
+    await _actionQueueLock.synchronized(() {
+      final now = DateTime.now();
+      while (_actionQueue.isNotEmpty) {
+        final item = _actionQueue.removeFirst();
+        if (now.difference(item.timestamp) <= _actionStaleThreshold) {
+          _actionStreamController.add(item.event);
+        } else {
+          debugPrint(
+            '[NotificationService] Discarded stale action (${item.event}) older than 30s',
+          );
+        }
+      }
+    });
+  }
+
   void _addAction(Map<String, String> event) {
-    if (!_actionStreamController.isClosed &&
-        _actionStreamController.hasListener) {
-      while (_pendingActions.isNotEmpty) {
-        _actionStreamController.add(_pendingActions.removeAt(0));
+    unawaited(_actionQueueLock.synchronized(() {
+      final item = _BufferedNotificationAction(
+        event: Map<String, String>.unmodifiable(event),
+        timestamp: DateTime.now(),
+      );
+
+      if (_actionStreamController.hasListener) {
+        final now = DateTime.now();
+        while (_actionQueue.isNotEmpty) {
+          final queued = _actionQueue.removeFirst();
+          if (now.difference(queued.timestamp) <= _actionStaleThreshold) {
+            _actionStreamController.add(queued.event);
+          }
+        }
+        _actionStreamController.add(item.event);
+      } else {
+        _actionQueue.add(item);
+        if (_actionQueue.length > _maxPendingActions) {
+          _actionQueue.removeFirst();
+        }
       }
-      _actionStreamController.add(event);
-    } else {
-      _pendingActions.add(event);
-      if (_pendingActions.length > _maxPendingActions) {
-        final dropped = _pendingActions.length - _maxPendingActions;
-        _pendingActions.removeRange(0, dropped);
-        debugPrint(
-          '[NotificationService] Dropped $dropped queued action(s); '
-          'buffer exceeded $_maxPendingActions.',
-        );
-      }
-    }
+    }));
+  }
+
+  @visibleForTesting
+  void handleNotificationActionForTest(Map<String, String> event) {
+    _addAction(event);
   }
 
   static bool _isValidTaskId(String id) {
@@ -282,11 +302,7 @@ class NotificationService {
 
       await _ensureNoncePersisted();
 
-      if (_actionStreamController.isClosed) {
-        _actionStreamController = _createActionStreamController(
-          _pendingActions,
-        );
-      }
+
 
       const androidSettings = AndroidInitializationSettings(
         '@mipmap/ic_launcher',
@@ -671,9 +687,18 @@ class NotificationService {
     _receivePort?.close();
     _receivePort = null;
     IsolateNameServer.removePortNameMapping('dmx_notification_port');
-    _pendingActions.clear();
-    if (!_actionStreamController.isClosed) {
-      await _actionStreamController.close();
-    }
+    await _actionQueueLock.synchronized(() {
+      _actionQueue.clear();
+    });
   }
+}
+
+class _BufferedNotificationAction {
+  const _BufferedNotificationAction({
+    required this.event,
+    required this.timestamp,
+  });
+
+  final Map<String, String> event;
+  final DateTime timestamp;
 }

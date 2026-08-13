@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -12,30 +13,52 @@ class PositionalFileWriterException implements Exception {
   String toString() => 'PositionalFileWriterException: $message';
 }
 
-/// Random-access writer for chunked downloads.
-///
-/// Contract:
-///  - `open()` creates and PRE-ALLOCATES the file to `totalSize`. Because the
-///    file length is therefore meaningless until complete, progress must
-///    always be read from the TransferState document, never from `length()`.
-///  - `openForResume()` never truncates existing data; it only extends or
-///    trims the container to `totalSize`.
-///  - All operations are serialized; writes outside the declared total are
-///    rejected so a buggy caller can never corrupt the container.
-class PositionalFileWriter {
-  PositionalFileWriter._(
-    this._raf,
-    this.path,
-    this.totalSize,
-    this.threadCount,
-  ) : _highWater = List<int>.filled(threadCount < 1 ? 1 : threadCount, 0);
+/// Buffer for accumulating writes per chunk before performing disk I/O.
+class _ChunkBuffer {
+  _ChunkBuffer(this.maxCapacity);
 
-  final RandomAccessFile _raf;
+  final int maxCapacity;
+  int startPos = -1;
+  final BytesBuilder builder = BytesBuilder(copy: false);
+
+  int get length => builder.length;
+  bool get isEmpty => builder.isEmpty;
+  bool get isNotEmpty => builder.isNotEmpty;
+
+  void add(int absolutePosition, Uint8List data) {
+    if (isEmpty) {
+      startPos = absolutePosition;
+    }
+    builder.add(data);
+  }
+
+  Uint8List takeBytes() {
+    final bytes = builder.takeBytes();
+    startPos = -1;
+    return bytes;
+  }
+}
+
+/// Random-access writer for chunked downloads with per-chunk handles and write buffers.
+class PositionalFileWriter {
+  PositionalFileWriter._({
+    required this.path,
+    required this.totalSize,
+    required this.threadCount,
+    int? bufferSize,
+  })  : _bufferSize = bufferSize ?? 256 * 1024,
+        _highWater = List<int>.filled(threadCount < 1 ? 1 : threadCount, 0);
+
   final String path;
   final int totalSize;
   final int threadCount;
-  final Lock _lock = Lock();
+  final int _bufferSize;
+  final Lock _metaLock = Lock();
   final List<int> _highWater;
+
+  final Map<int, RandomAccessFile> _handles = {};
+  final Map<int, Lock> _handleLocks = {};
+  final Map<int, _ChunkBuffer> _buffers = {};
   bool _closed = false;
 
   static Future<PositionalFileWriter> open(
@@ -51,7 +74,15 @@ class PositionalFileWriter {
       if (totalSize > 0) {
         await raf.truncate(totalSize);
       }
-      return PositionalFileWriter._(raf, path, totalSize, threadCount);
+      await raf.close();
+
+      final writer = PositionalFileWriter._(
+        path: path,
+        totalSize: totalSize,
+        threadCount: threadCount,
+        bufferSize: bufferSize,
+      );
+      return writer;
     } catch (e) {
       throw PositionalFileWriterException('open failed: $e');
     }
@@ -65,16 +96,33 @@ class PositionalFileWriter {
   }) async {
     try {
       final file = File(path);
-      await file.parent.create(recursive: true);
-      // FileMode.append: read+write, preserves existing content or creates new.
-      final raf = await file.open(mode: FileMode.append);
-      if (totalSize != null && totalSize > 0) {
-        final len = await raf.length();
-        if (len != totalSize) {
+      if (!await file.exists()) {
+        await file.parent.create(recursive: true);
+        final raf = await file.open(mode: FileMode.write);
+        if (totalSize != null && totalSize > 0) {
           await raf.truncate(totalSize);
         }
+        await raf.close();
+      } else {
+        final raf = await file.open(mode: FileMode.append);
+        try {
+          if (totalSize != null && totalSize > 0) {
+            final len = await raf.length();
+            if (len != totalSize) {
+              await raf.truncate(totalSize);
+            }
+          }
+        } finally {
+          await raf.close();
+        }
       }
-      return PositionalFileWriter._(raf, path, totalSize ?? 0, threadCount);
+
+      return PositionalFileWriter._(
+        path: path,
+        totalSize: totalSize ?? 0,
+        threadCount: threadCount,
+        bufferSize: bufferSize,
+      );
     } on PositionalFileWriterException {
       rethrow;
     } catch (e) {
@@ -82,28 +130,61 @@ class PositionalFileWriter {
     }
   }
 
-  /// Writes [data] at [absolutePosition]. Throws when the write would fall
-  /// outside the declared total — the scheduler must never produce that, and
-  /// failing loudly is cheaper than a silently corrupted file.
+  Future<RandomAccessFile> _getHandle(int threadIndex) async {
+    if (_closed) throw const PositionalFileWriterException('writer is closed');
+    final key = threadIndex < 0 ? 0 : threadIndex;
+    if (_handles.containsKey(key)) return _handles[key]!;
+
+    return _metaLock.synchronized(() async {
+      _checkOpen();
+      if (_handles.containsKey(key)) return _handles[key]!;
+      try {
+        final file = File(path);
+        final raf = await file.open(mode: FileMode.append);
+        _handles[key] = raf;
+        _handleLocks[key] = Lock();
+        _buffers[key] = _ChunkBuffer(_bufferSize);
+        return raf;
+      } catch (e) {
+        throw PositionalFileWriterException('failed to open thread handle: $e');
+      }
+    });
+  }
+
+  /// Writes [data] at [absolutePosition].
   Future<void> write(
       int threadIndex, int absolutePosition, Uint8List data) async {
-    await _lock.synchronized(() async {
+    _checkOpen();
+    if (data.isEmpty) return;
+    if (absolutePosition < 0) {
+      throw const PositionalFileWriterException('negative write position');
+    }
+    if (totalSize > 0 && absolutePosition + data.length > totalSize) {
+      throw PositionalFileWriterException(
+          'write exceeds declared total: pos=$absolutePosition '
+          'len=${data.length} total=$totalSize');
+    }
+
+    final key = threadIndex < 0 ? 0 : threadIndex;
+    final raf = await _getHandle(key);
+    final handleLock = _handleLocks[key]!;
+    final buffer = _buffers[key]!;
+
+    await handleLock.synchronized(() async {
       _checkOpen();
-      if (data.isEmpty) return;
-      if (absolutePosition < 0) {
-        throw const PositionalFileWriterException('negative write position');
+
+      // Check if write is non-sequential with buffer start
+      if (buffer.isNotEmpty &&
+          buffer.startPos + buffer.length != absolutePosition) {
+        await _flushBufferInternal(raf, buffer);
       }
-      if (totalSize > 0 && absolutePosition + data.length > totalSize) {
-        throw PositionalFileWriterException(
-            'write exceeds declared total: pos=$absolutePosition '
-            'len=${data.length} total=$totalSize');
+
+      buffer.add(absolutePosition, data);
+
+      if (buffer.length >= _bufferSize) {
+        await _flushBufferInternal(raf, buffer);
       }
-      try {
-        await _raf.setPosition(absolutePosition);
-        await _raf.writeFrom(data);
-      } catch (e) {
-        throw PositionalFileWriterException('write failed: $e');
-      }
+
       if (threadIndex >= 0 && threadIndex < _highWater.length) {
         final end = absolutePosition + data.length;
         if (end > _highWater[threadIndex]) _highWater[threadIndex] = end;
@@ -111,51 +192,113 @@ class PositionalFileWriter {
     });
   }
 
-  /// Durability barrier. [threadIndex] is accepted for API compatibility;
-  /// the underlying handle is shared, so every flush is global.
-  Future<void> flush([int threadIndex = -1]) async {
-    await _lock.synchronized(() async {
-      _checkOpen();
-      try {
-        await _raf.flush();
-      } catch (e) {
-        throw PositionalFileWriterException('flush failed: $e');
-      }
-    });
+  Future<void> _flushBufferInternal(
+      RandomAccessFile raf, _ChunkBuffer buffer) async {
+    if (buffer.isEmpty) return;
+    final pos = buffer.startPos;
+    final bytes = buffer.takeBytes();
+    try {
+      await raf.setPosition(pos);
+      await raf.writeFrom(bytes);
+    } catch (e) {
+      throw PositionalFileWriterException('write failed: $e');
+    }
   }
 
-  Future<void> flushAll() => flush();
+  /// Durability barrier for a specific [threadIndex] or all if -1.
+  Future<void> flush([int threadIndex = -1]) async {
+    _checkOpen();
+    if (threadIndex >= 0) {
+      final handle = _handles[threadIndex];
+      final lock = _handleLocks[threadIndex];
+      final buffer = _buffers[threadIndex];
+      if (handle != null && lock != null && buffer != null) {
+        await lock.synchronized(() async {
+          _checkOpen();
+          await _flushBufferInternal(handle, buffer);
+          await handle.flush();
+        });
+      }
+    } else {
+      await flushAll();
+    }
+  }
 
-  /// Reads a byte range back from disk (resume spot-checks).
+  Future<void> flushAll() async {
+    _checkOpen();
+    for (final entry in _handles.entries) {
+      final key = entry.key;
+      final handle = entry.value;
+      final lock = _handleLocks[key]!;
+      final buffer = _buffers[key]!;
+      await lock.synchronized(() async {
+        if (!_closed) {
+          await _flushBufferInternal(handle, buffer);
+          await handle.flush();
+        }
+      });
+    }
+  }
+
+  /// Reads a byte range back from disk.
   Future<Uint8List> readRange(int start, int length) async {
-    return _lock.synchronized(() async {
+    return _metaLock.synchronized(() async {
       _checkOpen();
+      await flushAll();
+      RandomAccessFile? tempRaf;
       try {
-        await _raf.setPosition(start);
-        final bytes = await _raf.read(length);
+        final file = File(path);
+        tempRaf = await file.open(mode: FileMode.read);
+        await tempRaf.setPosition(start);
+        final bytes = await tempRaf.read(length);
         return bytes;
       } catch (e) {
         throw PositionalFileWriterException('readRange failed: $e');
+      } finally {
+        await tempRaf?.close();
       }
     });
   }
 
   Future<int> length() async {
-    return _lock.synchronized(() async {
+    return _metaLock.synchronized(() async {
       _checkOpen();
-      return _raf.length();
+      await flushAll();
+      final file = File(path);
+      if (await file.exists()) {
+        return file.length();
+      }
+      return 0;
     });
   }
 
   Future<int> fileSize() => length();
 
   Future<void> close() async {
-    await _lock.synchronized(() async {
+    await _metaLock.synchronized(() async {
       if (_closed) return;
       _closed = true;
-      try {
-        await _raf.close();
-      } catch (_) {}
+
+      for (final entry in _handles.entries) {
+        final key = entry.key;
+        final handle = entry.value;
+        final lock = _handleLocks[key];
+        final buffer = _buffers[key];
+        if (lock != null && buffer != null) {
+          try {
+            await lock.synchronized(() async {
+              try {
+                await _flushBufferInternal(handle, buffer);
+                await handle.flush();
+              } catch (_) {}
+              await handle.close();
+            });
+          } catch (_) {}
+        }
+      }
+      _handles.clear();
+      _handleLocks.clear();
+      _buffers.clear();
     });
   }
 

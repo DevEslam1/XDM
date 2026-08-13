@@ -62,6 +62,13 @@ class InsufficientStorageException implements Exception {
   String toString() => 'InsufficientStorageException: $message';
 }
 
+class InvalidPathException implements Exception {
+  final String message;
+  const InvalidPathException(this.message);
+  @override
+  String toString() => 'InvalidPathException: $message';
+}
+
 class DownloadIntegrityException implements Exception {
   final String message;
   const DownloadIntegrityException(this.message);
@@ -429,7 +436,134 @@ class DownloadProgress {
 
 typedef ValueChangedProgress = void Function(DownloadProgress progress);
 
+class TimestampedEntry<V> {
+  TimestampedEntry(this.value, [DateTime? time])
+      : lastAccessed = time ?? DateTime.now();
+  final V value;
+  DateTime lastAccessed;
+}
+
+class TimestampedLruMap<K, V> {
+  TimestampedLruMap({this.maxCapacity = 100});
+  final int maxCapacity;
+  final LinkedHashMap<K, TimestampedEntry<V>> _map = LinkedHashMap();
+
+  int get length => _map.length;
+
+  V? get(K key) {
+    final entry = _map.remove(key);
+    if (entry == null) return null;
+    entry.lastAccessed = DateTime.now();
+    _map[key] = entry;
+    return entry.value;
+  }
+
+  void put(K key, V value) {
+    _map.remove(key);
+    if (_map.length >= maxCapacity) {
+      _map.remove(_map.keys.first);
+    }
+    _map[key] = TimestampedEntry(value);
+  }
+
+  V? operator [](K key) => get(key);
+  void operator []=(K key, V value) => put(key, value);
+
+  V putIfAbsent(K key, V Function() ifAbsent) {
+    final existing = get(key);
+    if (existing != null) return existing;
+    final val = ifAbsent();
+    put(key, val);
+    return val;
+  }
+
+  V? remove(K key) {
+    final entry = _map.remove(key);
+    return entry?.value;
+  }
+
+  bool containsKey(K key) => _map.containsKey(key);
+
+  void clear() => _map.clear();
+
+  int removeStale(Duration threshold) {
+    final now = DateTime.now();
+    final toRemove = <K>[];
+    _map.forEach((key, entry) {
+      if (now.difference(entry.lastAccessed) > threshold) {
+        toRemove.add(key);
+      }
+    });
+    for (final k in toRemove) {
+      _map.remove(k);
+    }
+    return toRemove.length;
+  }
+
+  List<K> get keys => _map.keys.toList();
+}
+
 class DownloadEngine {
+  static Future<void> validateSavePath(
+    String savePath, {
+    int requiredSizeBytes = 0,
+    List<String>? allowedStorageRoots,
+  }) async {
+    if (savePath.contains('..')) {
+      throw const InvalidPathException('Path traversal attempt detected in save path');
+    }
+
+    final normalized = p.normalize(savePath);
+
+    if (RegExp(r'[\*\?<>\|"\x00]').hasMatch(savePath)) {
+      throw const InvalidPathException('Save path contains invalid characters');
+    }
+
+    final dir = Directory(normalized);
+    try {
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+    } catch (e) {
+      throw InvalidPathException('Cannot create save directory: $e');
+    }
+
+    final randSuffix = Random().nextInt(100000);
+    final testFile = File(p.join(dir.path, '.dmx_write_test_$randSuffix'));
+    try {
+      await testFile.writeAsString('test');
+      if (await testFile.exists()) {
+        await testFile.delete();
+      }
+    } catch (e) {
+      throw InvalidPathException('Save directory is not writable: $e');
+    }
+
+    if (allowedStorageRoots != null && allowedStorageRoots.isNotEmpty) {
+      final isAllowed = allowedStorageRoots.any(
+        (root) =>
+            p.isWithin(p.normalize(root), normalized) ||
+            p.equals(p.normalize(root), normalized),
+      );
+      if (!isAllowed) {
+        throw const InvalidPathException(
+            'Save path is outside allowed storage locations');
+      }
+    }
+
+    if (requiredSizeBytes > 0) {
+      try {
+        final stat = await dir.stat();
+        if (stat.type == FileSystemEntityType.notFound) {
+          throw const InsufficientStorageException(
+              'Target save directory stat failed');
+        }
+      } catch (e) {
+        if (e is InsufficientStorageException) rethrow;
+      }
+    }
+  }
+
   static bool appInForeground = true;
   static const int _progressReportIntervalMs = 500;
   static const int _isolatePoolSize = 4;
@@ -447,19 +581,25 @@ class DownloadEngine {
   final _httpEngine = HttpDownloadEngine();
   final Set<int> _activeTorrentIds = <int>{};
   final Dio _sharedDio;
-  final Map<String, String> _ytCounterpartTaskIds = {};
-  static final Map<String, int> _ytLiveBytes = {};
+  final TimestampedLruMap<String, String> _ytCounterpartTaskIds =
+      TimestampedLruMap<String, String>(maxCapacity: 100);
+  static final TimestampedLruMap<String, int> _ytLiveBytes =
+      TimestampedLruMap<String, int>(maxCapacity: 100);
+  static final TimestampedLruMap<String, bool> _ytFinishedStreams =
+      TimestampedLruMap<String, bool>(maxCapacity: 100);
+
   void registerYtCounterpart(String taskId, String counterpartTaskId) {
-    _ytCounterpartTaskIds[taskId] = counterpartTaskId;
-    _ytCounterpartTaskIds[counterpartTaskId] = taskId;
+    _ytCounterpartTaskIds.put(taskId, counterpartTaskId);
+    _ytCounterpartTaskIds.put(counterpartTaskId, taskId);
   }
 
-  static final Set<String> _ytFinishedStreams = {};
   final Set<Timer> _ytCleanupTimers = {};
+  Timer? _ytPeriodicTimer;
+
   void unregisterYtCounterpart(String taskId) {
-    _ytFinishedStreams.add(taskId);
-    final c = _ytCounterpartTaskIds[taskId];
-    if (c != null && _ytFinishedStreams.contains(c)) {
+    _ytFinishedStreams.put(taskId, true);
+    final c = _ytCounterpartTaskIds.get(taskId);
+    if (c != null && _ytFinishedStreams.containsKey(c)) {
       _ytCounterpartTaskIds.remove(taskId);
       _ytCounterpartTaskIds.remove(c);
       DownloadEngine._ytLiveBytes.remove(taskId);
@@ -473,7 +613,7 @@ class DownloadEngine {
       Timer? timer;
       timer = Timer(const Duration(minutes: 10), () {
         _ytCleanupTimers.remove(timer);
-        if (_ytFinishedStreams.contains(taskId) &&
+        if (_ytFinishedStreams.containsKey(taskId) &&
             _ytCounterpartTaskIds.containsKey(taskId)) {
           _ytCounterpartTaskIds.remove(taskId);
           _ytCounterpartTaskIds.remove(c);
@@ -493,10 +633,13 @@ class DownloadEngine {
   final Map<Dio, Set<String>> _activeDownloadsPerClient = {};
   Timer? _cleanupTimer;
   bool _closed = false;
+
   void dispose() {
     _closed = true;
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
+    _ytPeriodicTimer?.cancel();
+    _ytPeriodicTimer = null;
     for (final t in _ytCleanupTimers) {
       t.cancel();
     }
@@ -524,6 +667,12 @@ class DownloadEngine {
     bool enableCleanupTimer = true,
   }) : _sharedDio = dio ?? ConnectionManager.createDownloadDio() {
     if (enableCleanupTimer) {
+      _ytPeriodicTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+        if (_closed) return;
+        _ytCounterpartTaskIds.removeStale(const Duration(minutes: 10));
+        DownloadEngine._ytLiveBytes.removeStale(const Duration(minutes: 10));
+        DownloadEngine._ytFinishedStreams.removeStale(const Duration(minutes: 10));
+      });
       _cleanupTimer = Timer.periodic(const Duration(seconds: 60), (_) {
         if (_closed) return;
         final now = DateTime.now();
@@ -1820,6 +1969,7 @@ class DownloadEngine {
     }
     if (id == -1) {
       final saveDir = File(currentLocalFilePath).parent.path;
+      await validateSavePath(saveDir);
       if (url.startsWith('magnet:')) {
         id = TorrentService.addMagnet(url, saveDir);
       } else {

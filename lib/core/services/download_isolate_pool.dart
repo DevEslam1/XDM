@@ -465,6 +465,22 @@ class _Worker {
   DateTime lastActiveTime = DateTime.now();
 }
 
+class ChunkResult {
+  const ChunkResult({
+    required this.chunk,
+    required this.success,
+    this.error,
+    this.stackTrace,
+    this.attempts = 1,
+  });
+
+  final ChunkState chunk;
+  final bool success;
+  final Object? error;
+  final StackTrace? stackTrace;
+  final int attempts;
+}
+
 class PoolJob {
   PoolJob._(this._pool, this.command, this._seq) {
     messages = _incoming
@@ -838,13 +854,75 @@ class HttpTransferJob {
     final failover = MirrorFailover([cmd.punyUrl, ...?cmd.mirrorUrls]);
     final work = ChunkScheduler.pendingWork(st.chunks);
     try {
-      await Future.wait(work.map((chunk) => _runChunk(
-            dio: dio,
+      final results = await Future.wait<ChunkResult>(
+        work.map((chunk) async {
+          var attempts = 0;
+          const maxAttempts = 3;
+          Object? lastError;
+          StackTrace? lastSt;
+
+          while (attempts < maxAttempts) {
+            attempts++;
+            try {
+              await _runChunk(
+                dio: dio,
+                chunk: chunk,
+                writer: writer,
+                governor: governor,
+                failover: failover,
+              );
+              return ChunkResult(
+                chunk: chunk,
+                success: true,
+                attempts: attempts,
+              );
+            } catch (e, st) {
+              lastError = e;
+              lastSt = st;
+              if (e is DioException && e.type == DioExceptionType.cancel) {
+                return ChunkResult(
+                  chunk: chunk,
+                  success: false,
+                  error: e,
+                  stackTrace: st,
+                  attempts: attempts,
+                );
+              }
+              if (e is _RangeUnsupportedException ||
+                  e is PositionalFileWriterException) {
+                return ChunkResult(
+                  chunk: chunk,
+                  success: false,
+                  error: e,
+                  stackTrace: st,
+                  attempts: attempts,
+                );
+              }
+              if (attempts < maxAttempts) {
+                await _cancellableDelay(
+                  Duration(milliseconds: 200 * (1 << attempts)),
+                );
+              }
+            }
+          }
+          return ChunkResult(
             chunk: chunk,
-            writer: writer,
-            governor: governor,
-            failover: failover,
-          )));
+            success: false,
+            error: lastError,
+            stackTrace: lastSt,
+            attempts: attempts,
+          );
+        }),
+        eagerError: false,
+      );
+
+      final failed = results.where((r) => !r.success).toList();
+      if (failed.isNotEmpty) {
+        final firstError = failed.first.error ??
+            const DownloadIntegrityException('Chunk download failed permanently');
+        throw firstError;
+      }
+
       await writer.flushAll();
       final sum = st.downloadedBytes;
       if (st.totalSize > 0 && sum < st.totalSize) {

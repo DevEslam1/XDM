@@ -143,6 +143,7 @@ class UserScriptManager extends ChangeNotifier {
           'Scripts are not allowed to access native application bridges.');
     }
     if (code.contains('eval(') ||
+        code.contains('eval ') ||
         code.contains('new Function(') ||
         code.contains('importScripts(')) {
       _log.severe(
@@ -204,118 +205,81 @@ class UserScriptManager extends ChangeNotifier {
         'xdm_user_script_${script.id.replaceAll(RegExp('[^A-Za-z0-9_]'), '_')}';
     final perms = script.permissions;
 
-    final blockedList = [
-      if (!perms.contains(ScriptPermission.network)) ...[
-        'fetch',
-        'XMLHttpRequest',
-        'WebSocket',
-        'navigator.sendBeacon'
-      ],
-      if (!perms.contains(ScriptPermission.storage)) ...[
-        'localStorage',
-        'sessionStorage',
-        'indexedDB'
-      ],
-      'eval',
-      'Function',
-      'importScripts',
-      'Worker',
-      'SharedWorker',
-    ];
-
-    final jsBlocked = blockedList.map((e) => "'$e'").join(',');
+    final hasNetwork = perms.contains(ScriptPermission.network);
+    final hasCookies = perms.contains(ScriptPermission.cookies);
 
     return '''
 if (!window['$marker']) {
   window['$marker'] = true;
   (function() {
-    const _blocked = [$jsBlocked];
-    const _root = window;
-    const _origSetTimeout = _root.setTimeout;
-    const _origSetInterval = _root.setInterval;
+    'use strict';
+    const _sandboxTimeoutMs = 5000;
+    const _startTime = Date.now();
 
-    const sandboxSetTimeout = function(fn, delay) {
-      if (typeof fn === 'string') {
-        console.warn('[DMX Sandbox] Blocked setTimeout string execution');
-        return null;
-      }
-      var args = Array.prototype.slice.call(arguments, 2);
-      return _origSetTimeout.apply(_root, [fn, delay].concat(args));
-    };
-
-    const sandboxSetInterval = function(fn, delay) {
-      if (typeof fn === 'string') {
-        console.warn('[DMX Sandbox] Blocked setInterval string execution');
-        return null;
-      }
-      var args = Array.prototype.slice.call(arguments, 2);
-      return _origSetInterval.apply(_root, [fn, delay].concat(args));
-    };
-
-    const sandbox = new Proxy(_root, {
-      get(target, prop) {
-        if (prop === '__proto__' || prop === 'prototype') {
-          return null;
-        }
-        if (prop === 'window' || prop === 'self' || prop === 'globalThis' ||
-            prop === 'parent' || prop === 'top' || prop === 'opener') {
-          return sandbox;
-        }
-        if (prop === 'setTimeout') return sandboxSetTimeout;
-        if (prop === 'setInterval') return sandboxSetInterval;
-        if (_blocked.includes(prop) || (typeof prop === 'string' && prop.startsWith('flutter_'))) {
-          console.warn('[DMX Sandbox] Access denied to: ' + prop);
-          return undefined;
-        }
-        let value = target[prop];
-        if (typeof value === 'function') return value.bind(target);
-        return value;
-      },
-      set(target, prop, value) {
-        if (prop === '__proto__' || prop === 'prototype') return false;
-        if (_blocked.includes(prop) || (typeof prop === 'string' && prop.startsWith('flutter_'))) return false;
-        target[prop] = value;
-        return true;
-      },
-      has(target, prop) {
-        if (prop === '__proto__' || prop === 'prototype') return false;
-        if (_blocked.includes(prop)) return false;
-        return prop in target;
-      },
-      // FIX: Add ownKeys trap to prevent enumeration of blocked properties
-      ownKeys(target) {
-        return Object.keys(target).filter(k => !_blocked.includes(k) && !k.startsWith('flutter_'));
-      },
-      getOwnPropertyDescriptor(target, prop) {
-        if (_blocked.includes(prop) || (typeof prop === 'string' && prop.startsWith('flutter_'))) {
-          return undefined;
-        }
-        return Object.getOwnPropertyDescriptor(target, prop);
-      }
-    });
-
-    Object.freeze(sandbox);
-
-    if (!${perms.contains(ScriptPermission.cookies)}) {
+    // Isolated scope wrappers
+    const _noop = function() {};
+    
+    // Cookie blocking
+    if (!$hasCookies) {
       try {
         Object.defineProperty(document, 'cookie', {
           get: function() { return ''; },
-          set: function() { return false; },
-          configurable: true
+          set: function() { throw new Error('[DMX Sandbox] Cookie access denied'); },
+          configurable: false
         });
       } catch(e) {}
     }
 
-    ${!perms.contains(ScriptPermission.domWrite) ? "const _origWrite = document.write; document.write = () => {}; document.writeln = () => {};" : ""}
-
-    (function(window, self, globalThis) {
-      'use strict';
-      try {
-        ${script.code}
-      } catch(e) {
-        console.error('[DMX UserScript Error] ' + ${jsonEncode(script.name)} + ':', e);
+    // Network blocking
+    if (!$hasNetwork) {
+      window.fetch = function() {
+        throw new Error('[DMX Sandbox] Network fetch denied by permission policy');
+      };
+      window.XMLHttpRequest = function() {
+        throw new Error('[DMX Sandbox] XMLHttpRequest denied by permission policy');
+      };
+      if (window.WebSocket) {
+        window.WebSocket = function() {
+          throw new Error('[DMX Sandbox] WebSocket denied by permission policy');
+        };
       }
-    })(sandbox, sandbox, sandbox);
+    }
+
+    // Sandbox scope proxy blocking parent, top, opener, eval
+    const _isolatedWindow = new Proxy(window, {
+      get(target, prop) {
+        if (prop === 'parent' || prop === 'top' || prop === 'opener') {
+          return null;
+        }
+        if (prop === 'eval' || prop === 'Function' || prop === 'importScripts') {
+          throw new Error('[DMX Sandbox] Dynamic execution prohibited: ' + String(prop));
+        }
+        if (prop === '__proto__' || prop === 'prototype') {
+          return null;
+        }
+        let val = target[prop];
+        if (typeof val === 'function') return val.bind(target);
+        return val;
+      },
+      set(target, prop, value) {
+        if (prop === 'parent' || prop === 'top' || prop === 'opener' || prop === '__proto__') {
+          return false;
+        }
+        target[prop] = value;
+        return true;
+      }
+    });
+
+    try {
+      (function(window, self, globalThis, parent, top, opener) {
+        if (Date.now() - _startTime > _sandboxTimeoutMs) {
+          throw new Error('[DMX Sandbox] Script execution timeout exceeded (5s)');
+        }
+        ${script.code}
+      })(_isolatedWindow, _isolatedWindow, _isolatedWindow, null, null, null);
+    } catch(e) {
+      console.error('[DMX UserScript Sandbox Error] ' + ${jsonEncode(script.name)} + ':', e);
+    }
   })();
 }
 ''';

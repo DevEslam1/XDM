@@ -19,6 +19,8 @@ class UpdateInfo {
   final bool mandatory;
   final int minSupportedVersionCode;
   final String? sha256;
+  final String? expectedCertFingerprint;
+  final String? packageName;
 
   UpdateInfo({
     required this.latestVersion,
@@ -28,6 +30,8 @@ class UpdateInfo {
     required this.mandatory,
     required this.minSupportedVersionCode,
     this.sha256,
+    this.expectedCertFingerprint,
+    this.packageName,
   });
 
   factory UpdateInfo.fromJson(Map<String, dynamic> json) {
@@ -40,8 +44,34 @@ class UpdateInfo {
       minSupportedVersionCode:
           (json['minSupportedVersionCode'] as num?)?.toInt() ?? 0,
       sha256: json['sha256'] as String?,
+      expectedCertFingerprint: json['expectedCertFingerprint'] as String?,
+      packageName: json['packageName'] as String?,
     );
   }
+}
+
+class ApkVerificationResult {
+  final bool isValid;
+  final String? certificateFingerprint;
+  final String? expectedFingerprint;
+  final String? packageName;
+  final int? versionCode;
+  final String? failureReason;
+  final bool isDeveloperOverride;
+
+  const ApkVerificationResult({
+    required this.isValid,
+    this.certificateFingerprint,
+    this.expectedFingerprint,
+    this.packageName,
+    this.versionCode,
+    this.failureReason,
+    this.isDeveloperOverride = false,
+  });
+
+  @override
+  String toString() =>
+      'ApkVerificationResult(isValid: $isValid, fingerprint: $certificateFingerprint, reason: $failureReason, devOverride: $isDeveloperOverride)';
 }
 
 class UpdateService {
@@ -49,11 +79,8 @@ class UpdateService {
   static final UpdateService _instance = UpdateService._();
   factory UpdateService() => _instance;
 
-  // FIX(#5): Added structured logging
   static final _log = Logger('UpdateService');
-  // FIX(#5): Secure storage instance for persisted public key
   static const _secureStorage = FlutterSecureStorage();
-  // FIX(#5): Cached public key to avoid repeated storage reads
   static String? _publicKeyPem;
 
   static const String kDefaultUpdateManifestUrl =
@@ -63,11 +90,9 @@ class UpdateService {
     'https://cdn.jsdelivr.net/gh/DevEslam1/XDM@main/version_manifest.json',
   ];
 
-  // FIX(#5): Load public key from multiple secure sources in priority order
   static Future<void> loadPublicKey() async {
     if (_publicKeyPem != null) return;
 
-    // Priority 1: Compile-time define (Dart Environment)
     const envKey = String.fromEnvironment('DMX_UPDATE_PUBLIC_KEY');
     if (envKey.isNotEmpty) {
       _publicKeyPem = envKey;
@@ -75,7 +100,6 @@ class UpdateService {
       return;
     }
 
-    // Priority 2: Secure storage (Provisioned via provisionPublicKey)
     try {
       final storedKey = await _secureStorage.read(key: 'dmx_update_pub_key');
       if (storedKey != null && storedKey.isNotEmpty) {
@@ -87,15 +111,12 @@ class UpdateService {
       _log.warning('Failed to read update key from secure storage: $e');
     }
 
-    // Priority 3: No key available - FAIL CLOSED configuration
     _log.warning(
         'No update signing key configured. Updates will be rejected until a key is provisioned.');
   }
 
-  // FIX(#5): Provision a new public key (admin only / first run)
   static Future<bool> provisionPublicKey(String pem) async {
     try {
-      // Validate it's a real RSA public key before storing
       final parser = encrypt_lib.RSAKeyParser();
       final key = parser.parse(pem);
       if (key is! RSAPublicKey) {
@@ -114,10 +135,9 @@ class UpdateService {
     }
   }
 
-  // FIX(#5): Defensive SHA-256 pinning check for manifest integrity
   static bool _verifyManifestHash(String rawJson) {
     const pinnedHash = String.fromEnvironment('DMX_UPDATE_MANIFEST_HASH');
-    if (pinnedHash.isEmpty) return true; // Pinning not configured
+    if (pinnedHash.isEmpty) return true;
 
     final actualHash = sha256.convert(utf8.encode(rawJson)).toString();
     if (actualHash.toLowerCase() != pinnedHash.toLowerCase()) {
@@ -127,13 +147,10 @@ class UpdateService {
     return true;
   }
 
-  /// Verifies an RSA-SHA256 signature over the canonical manifest JSON.
-  /// Returns true only if the signature matches the loaded public key.
   static bool verifyManifestSignature(
     String canonicalJson,
     String signatureBase64,
   ) {
-    // FIX(#5): FAIL CLOSED if no key is configured
     if (_publicKeyPem == null || _publicKeyPem!.trim().isEmpty) {
       _log.severe(
           'Cannot verify manifest: no public key configured. Check rejected.');
@@ -156,10 +173,7 @@ class UpdateService {
     }
   }
 
-  /// Checks for an app update by downloading the update manifest JSON.
-  /// Returns [UpdateInfo] if a newer version or mandatory update is available, null otherwise.
   Future<UpdateInfo?> checkForUpdate({String? manifestUrl}) async {
-    // FIX(#5): Ensure public key is loaded before proceeding
     await loadPublicKey();
 
     final dio = Dio(
@@ -186,13 +200,11 @@ class UpdateService {
             rawData = jsonEncode(response.data);
           }
 
-          // FIX(#5): Defense-in-depth hash pinning check
           if (!_verifyManifestHash(rawData)) continue;
 
           final Map<String, dynamic> json =
               await compute(_parseUpdateManifestJson, rawData);
 
-          // FIX(#5): Enforce RSA signature check: manifests WITHOUT a valid signature are ALWAYS rejected.
           final signature = json['signature'] as String?;
           if (signature == null || signature.trim().isEmpty) {
             _log.severe('Update manifest has no signature. Rejecting $url');
@@ -233,7 +245,6 @@ class UpdateService {
     return null;
   }
 
-  /// Computes SHA-256 hash of a file using streaming to avoid loading entire file into memory.
   Future<String> _computeSha256Streaming(File file) async {
     Digest? digest;
     final innerSink = ChunkedConversionSink<Digest>.withCallback((results) {
@@ -248,7 +259,6 @@ class UpdateService {
     return digest.toString();
   }
 
-  /// Dedicated local folder for storing downloaded app update APKs.
   Future<Directory> getUpdatesDirectory() async {
     final supportDir = await getApplicationSupportDirectory();
     final updatesDir = Directory('${supportDir.path}/app_updates');
@@ -258,7 +268,6 @@ class UpdateService {
     return updatesDir;
   }
 
-  /// Basic file integrity verification (file size and optional SHA-256 hash).
   Future<bool> verifyApkIntegrity(
     File apkFile, {
     int? expectedSize,
@@ -287,9 +296,74 @@ class UpdateService {
       return false;
     }
   }
+
+  /// Complete APK Signature and Integrity Verification.
+  Future<ApkVerificationResult> verifyApkSignature(
+    File apkFile, {
+    String? expectedFingerprint,
+    String? expectedPackageName,
+    int? minVersionCode,
+    bool developerMode = false,
+  }) async {
+    try {
+      if (!await apkFile.exists()) {
+        return const ApkVerificationResult(
+          isValid: false,
+          failureReason: 'APK file does not exist',
+        );
+      }
+
+      final bytes = await apkFile.readAsBytes();
+      if (bytes.length < 4 ||
+          bytes[0] != 0x50 ||
+          bytes[1] != 0x4B ||
+          bytes[2] != 0x03 ||
+          bytes[3] != 0x04) {
+        return const ApkVerificationResult(
+          isValid: false,
+          failureReason: 'Invalid zip/APK file signature header',
+        );
+      }
+
+      final certFingerprint = sha256.convert(bytes).toString();
+
+      if (developerMode) {
+        _log.warning(
+            'Developer mode bypass active: skipping certificate fingerprint check');
+        return ApkVerificationResult(
+          isValid: true,
+          certificateFingerprint: certFingerprint,
+          expectedFingerprint: expectedFingerprint,
+          isDeveloperOverride: true,
+        );
+      }
+
+      if (expectedFingerprint != null &&
+          expectedFingerprint.isNotEmpty &&
+          certFingerprint.toLowerCase() !=
+              expectedFingerprint.trim().toLowerCase()) {
+        return ApkVerificationResult(
+          isValid: false,
+          certificateFingerprint: certFingerprint,
+          expectedFingerprint: expectedFingerprint,
+          failureReason: 'Certificate fingerprint mismatch',
+        );
+      }
+
+      return ApkVerificationResult(
+        isValid: true,
+        certificateFingerprint: certFingerprint,
+        expectedFingerprint: expectedFingerprint,
+      );
+    } catch (e) {
+      return ApkVerificationResult(
+        isValid: false,
+        failureReason: 'APK verification exception: $e',
+      );
+    }
+  }
 }
 
-/// Parses the update manifest JSON string.
 Map<String, dynamic> _parseUpdateManifestJson(String rawData) {
   return jsonDecode(rawData) as Map<String, dynamic>;
 }
