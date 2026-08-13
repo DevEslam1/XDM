@@ -30,13 +30,20 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
   late bool _snifferEnabled;
   final AdBlockerService _adBlocker = AdBlockerService.instance;
 
-  @override
+    @override
   void initState() {
     super.initState();
     _snifferEnabled = widget.isSnifferEnabled;
     _adBlocker.addListener(_onAdBlockerStateChanged);
   }
-
+  @override
+  void didUpdateWidget(covariant BrowserSettingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isSnifferEnabled != widget.isSnifferEnabled &&
+        _snifferEnabled != widget.isSnifferEnabled) {
+      _snifferEnabled = widget.isSnifferEnabled;
+    }
+  }
   @override
   void dispose() {
     _adBlocker.removeListener(_onAdBlockerStateChanged);

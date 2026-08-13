@@ -86,9 +86,12 @@ class Bookmark {
       return DateTime.fromMillisecondsSinceEpoch(value.toInt());
     }
     if (value is String && value.isNotEmpty) {
-      return DateTime.tryParse(value) ?? DateTime.now();
+      final parsed = DateTime.tryParse(value);
+      if (parsed != null) return parsed;
+      final asInt = int.tryParse(value);
+      if (asInt != null) return DateTime.fromMillisecondsSinceEpoch(asInt);
     }
-    return DateTime.now();
+    return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   }
 
   @override

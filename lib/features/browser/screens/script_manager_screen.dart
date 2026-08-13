@@ -65,7 +65,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
     lightPulse(context.read<SettingsProvider>());
     await _manager.add(
       UserScript(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        id: '${DateTime.now().microsecondsSinceEpoch}_${result.name.hashCode.abs()}',
         name: result.name,
         urlPattern: result.urlPattern,
         code: result.code,
@@ -705,6 +705,11 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
             ],
             TextField(
               controller: _nameC,
+              onChanged: (_) {
+                if (_errorMessage != null) {
+                  setState(() => _errorMessage = null);
+                }
+              },
               decoration: InputDecoration(
                 labelText: L10n.of(context, 'browser_script_name'),
                 prefixIcon: Icon(Icons.label_outline, size: 18, color: accent),
@@ -716,6 +721,11 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
             const SizedBox(height: 10),
             TextField(
               controller: _urlC,
+              onChanged: (_) {
+                if (_errorMessage != null) {
+                  setState(() => _errorMessage = null);
+                }
+              },
               decoration: InputDecoration(
                 labelText: L10n.of(context, 'browser_script_url_pattern'),
                 prefixIcon:
@@ -814,6 +824,11 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
             TextField(
               controller: _codeC,
               maxLines: 8,
+              onChanged: (_) {
+                if (_errorMessage != null) {
+                  setState(() => _errorMessage = null);
+                }
+              },
               style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
               decoration: InputDecoration(
                 labelText: L10n.of(context, 'browser_script_code'),

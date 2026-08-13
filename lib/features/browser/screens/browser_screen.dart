@@ -178,14 +178,23 @@ class _BrowserScreenState extends State<BrowserScreen>
           setState(() {
             _userCustomShortcuts.clear();
             for (final item in list) {
+              Map<String, String> entry;
               if (item is Map<String, dynamic>) {
-                _userCustomShortcuts
-                    .add(item.map((k, v) => MapEntry(k, v.toString())));
+                entry = item.map((k, v) => MapEntry(k, v.toString()));
               } else if (item is Map) {
-                _userCustomShortcuts.add(
-                  item.map((k, v) => MapEntry(k.toString(), v.toString())),
-                );
+                entry =
+                    item.map((k, v) => MapEntry(k.toString(), v.toString()));
+              } else {
+                continue;
               }
+              final url = entry['url']?.trim() ?? '';
+              if (url.isEmpty) continue;
+              final title =
+                  (entry['title']?.isNotEmpty ?? false) ? entry['title']! : url;
+              _userCustomShortcuts.add({
+                'title': title,
+                'url': url,
+              });
             }
           });
         }
@@ -773,6 +782,10 @@ class _BrowserScreenState extends State<BrowserScreen>
           if (currentSettings != null) {
             currentSettings.contentBlockers = _adBlocker.contentBlockers;
             currentSettings.incognito = tab.isIncognito;
+            currentSettings.userAgent = _settings.desktopMode
+                ? FingerprintManager.desktopUserAgent
+                : _resolveUserAgent(
+                    isIncognito: tab.isIncognito, settings: _settings);
             await tab.controller!.setSettings(settings: currentSettings);
           } else {
             await tab.controller!.setSettings(
@@ -980,21 +993,38 @@ class _BrowserScreenState extends State<BrowserScreen>
         ? FingerprintManager.desktopUserAgent
         : _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings);
     try {
-      await tab.controller?.setSettings(
-        settings: InAppWebViewSettings(
-          useShouldOverrideUrlLoading: true,
-          useOnDownloadStart: true,
-          userAgent: userAgent,
-          supportZoom: isDesktop || settings.pinchToZoom,
-          incognito: tab.isIncognito,
-          contentBlockers: isAdBlock ? _adBlocker.contentBlockers : [],
-          javaScriptEnabled: true,
-          domStorageEnabled: true,
-          databaseEnabled: true,
-          supportMultipleWindows: true,
-          javaScriptCanOpenWindowsAutomatically: true,
-        ),
-      );
+      final currentSettings = await tab.controller?.getSettings();
+      if (currentSettings != null) {
+        currentSettings.useShouldOverrideUrlLoading = true;
+        currentSettings.useOnDownloadStart = true;
+        currentSettings.userAgent = userAgent;
+        currentSettings.supportZoom = isDesktop || settings.pinchToZoom;
+        currentSettings.incognito = tab.isIncognito;
+        currentSettings.contentBlockers =
+            isAdBlock ? _adBlocker.contentBlockers : <ContentBlocker>[];
+        currentSettings.javaScriptEnabled = true;
+        currentSettings.domStorageEnabled = true;
+        currentSettings.databaseEnabled = true;
+        currentSettings.supportMultipleWindows = true;
+        currentSettings.javaScriptCanOpenWindowsAutomatically = true;
+        await tab.controller?.setSettings(settings: currentSettings);
+      } else {
+        await tab.controller?.setSettings(
+          settings: InAppWebViewSettings(
+            useShouldOverrideUrlLoading: true,
+            useOnDownloadStart: true,
+            userAgent: userAgent,
+            supportZoom: isDesktop || settings.pinchToZoom,
+            incognito: tab.isIncognito,
+            contentBlockers: isAdBlock ? _adBlocker.contentBlockers : [],
+            javaScriptEnabled: true,
+            domStorageEnabled: true,
+            databaseEnabled: true,
+            supportMultipleWindows: true,
+            javaScriptCanOpenWindowsAutomatically: true,
+          ),
+        );
+      }
     } catch (e) {
       _log.warning('[Browser] Failed to apply site settings: $e');
     }
@@ -1228,13 +1258,18 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (url.contains('accounts.google.com') ||
         url.contains('google.com/ServiceLogin') ||
         url.contains('google.com/accounts')) {
-      tab.controller?.setSettings(
-          settings: InAppWebViewSettings(
-        userAgent:
-            'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
-        incognito: tab.isIncognito,
-      ));
-      _hideWebViewFingerprints(tab);
+      try {
+        final currentSettings = await tab.controller?.getSettings();
+        if (currentSettings != null) {
+          currentSettings.userAgent =
+              'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+          currentSettings.incognito = tab.isIncognito;
+          await tab.controller?.setSettings(settings: currentSettings);
+        }
+      } catch (e, st) {
+        _log.warning('[Browser] Failed to apply Google accounts UA: $e', e, st);
+      }
+      unawaited(_hideWebViewFingerprints(tab));
     } else {
       // Fix #20: Restore the correct UA when navigating away from Google login
       // pages. Without this, the Pixel 8 UA set for accounts.google.com
@@ -1493,7 +1528,13 @@ class _BrowserScreenState extends State<BrowserScreen>
       tab.isTimedOut = false;
       tab.isLoading = false;
       tab.controller = null;
+      final ptr = tab.pullToRefreshController;
       tab.pullToRefreshController = null;
+      if (ptr != null) {
+        try {
+          ptr.dispose();
+        } catch (_) {}
+      }
     }
   }
 
@@ -2706,14 +2747,12 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   String _cleanUrl(String url) {
-    if (url == 'about:blank') return '';
+    if (url.isEmpty || url == 'about:blank') return '';
     final uri = Uri.tryParse(url);
     if (uri == null || !uri.hasScheme) return url;
-    var clean = uri.toString();
-    if (clean.endsWith('/') && clean.length > uri.scheme.length + 3) {
-      clean = clean.substring(0, clean.length - 1);
-    }
-    return clean;
+    // Preserve trailing slash — stripping it can change semantics for REST
+    // endpoints where `/foo` and `/foo/` are distinct resources.
+    return uri.toString();
   }
 
   PopupMenuItem<String> _menuItem(
@@ -2877,12 +2916,13 @@ class _BrowserScreenState extends State<BrowserScreen>
             _tabs.map((t) async {
               await _applyUserAgent(t, settings);
               try {
-                await t.controller?.setSettings(
-                  settings: InAppWebViewSettings(
-                    supportZoom: settings.desktopMode || settings.pinchToZoom,
-                    incognito: t.isIncognito,
-                  ),
-                );
+                final currentSettings = await t.controller?.getSettings();
+                if (currentSettings != null) {
+                  currentSettings.supportZoom =
+                      settings.desktopMode || settings.pinchToZoom;
+                  currentSettings.incognito = t.isIncognito;
+                  await t.controller?.setSettings(settings: currentSettings);
+                }
               } catch (e, st) {
                 Logger('browser_screen')
                     .warning('[browser_screen] operation failed', e, st);
@@ -3191,7 +3231,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         settings.forceDarkMode;
   }
 
-  void _applyForceDarkToAll() {
+  Future<void> _applyForceDarkToAll() async {
     final settings = _settings;
     final forceDark = _effectiveForceDark(settings);
     for (final tab in _tabs) {
@@ -3199,12 +3239,13 @@ class _BrowserScreenState extends State<BrowserScreen>
       if (controller == null) continue;
       if (Platform.isAndroid) {
         try {
-          controller.setSettings(
-            settings: InAppWebViewSettings(
-              forceDark: forceDark ? ForceDark.ON : ForceDark.OFF,
-              incognito: tab.isIncognito,
-            ),
-          );
+          final currentSettings = await controller.getSettings();
+          if (currentSettings != null) {
+            currentSettings.forceDark =
+                forceDark ? ForceDark.ON : ForceDark.OFF;
+            currentSettings.incognito = tab.isIncognito;
+            await controller.setSettings(settings: currentSettings);
+          }
         } catch (_) {}
       }
       try {
@@ -3444,15 +3485,16 @@ class _BrowserScreenState extends State<BrowserScreen>
                     activeColor:
                         isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                     label: '${value.round()}%',
-                    onChanged: (v) {
+                    onChanged: (v) async {
                       setDialogState(() => value = v);
                       try {
-                        activeTab.controller?.setSettings(
-                          settings: InAppWebViewSettings(
-                            textZoom: v.round(),
-                            incognito: activeTab.isIncognito,
-                          ),
-                        );
+                        final currentSettings =
+                            await activeTab.controller?.getSettings();
+                        if (currentSettings != null) {
+                          currentSettings.textZoom = v.round();
+                          await activeTab.controller
+                              ?.setSettings(settings: currentSettings);
+                        }
                       } catch (_) {}
                     },
                   ),
@@ -3501,12 +3543,11 @@ class _BrowserScreenState extends State<BrowserScreen>
         siteSettings.copyWith(zoomLevel: value),
       );
       try {
-        await activeTab.controller?.setSettings(
-          settings: InAppWebViewSettings(
-            textZoom: value.round(),
-            incognito: activeTab.isIncognito,
-          ),
-        );
+        final currentSettings = await activeTab.controller?.getSettings();
+        if (currentSettings != null) {
+          currentSettings.textZoom = value.round();
+          await activeTab.controller?.setSettings(settings: currentSettings);
+        }
       } catch (_) {}
     }
   }
@@ -4635,7 +4676,16 @@ class _BrowserScreenState extends State<BrowserScreen>
       final offlineTitle =
           mounted ? L10n.of(context, 'browser_offline_page') : 'Offline Page';
       String title = tab.title.isNotEmpty ? tab.title : offlineTitle;
-      title = title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').trim();
+      // Strip filesystem-illegal chars, control chars, newlines, and trailing
+      // dots/spaces (Windows quirk). Collapse whitespace and cap length to
+      // avoid path-length issues across platforms.
+      title = title
+          .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      title = title.replaceAll(RegExp(r'[. ]+$'), '');
+      if (title.isEmpty) title = offlineTitle;
+      if (title.length > 120) title = title.substring(0, 120);
 
       final path = settings.customDownloadPath?.isNotEmpty == true
           ? settings.customDownloadPath!

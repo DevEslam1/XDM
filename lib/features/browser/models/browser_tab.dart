@@ -36,13 +36,14 @@ class BrowserTab {
   Color? themeColor;
 
   FindInteractionController? _findInteractionController;
-
+  bool _findControllerInitFailed = false;
   FindInteractionController? get findInteractionController {
-    if (_isDisposed) return null;
+    if (_isDisposed || _findControllerInitFailed) return null;
     if (_findInteractionController == null) {
       try {
         _findInteractionController = FindInteractionController();
       } catch (e) {
+        _findControllerInitFailed = true;
         _log.fine('[browser_tab] FindInteractionController skipped: $e');
       }
     }
@@ -108,8 +109,26 @@ class BrowserTab {
     if (_isDisposed) return;
     _isDisposed = true;
     controller = null;
-    pullToRefreshController = null;
+    final fic = _findInteractionController;
     _findInteractionController = null;
+    if (fic != null) {
+      try {
+        fic.dispose();
+      } catch (e, st) {
+        _log.warning(
+            '[browser_tab] findInteractionController dispose failed', e, st);
+      }
+    }
+    final ptr = pullToRefreshController;
+    pullToRefreshController = null;
+    if (ptr != null) {
+      try {
+        ptr.dispose();
+      } catch (e, st) {
+        _log.warning(
+            '[browser_tab] pullToRefreshController dispose failed', e, st);
+      }
+    }
     try {
       progressNotifier.dispose();
     } catch (e, st) {
