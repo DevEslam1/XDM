@@ -768,9 +768,8 @@ class DownloadOrchestrator {
         // FIX-H4: When fileSize is known, the merged output must reach 90% of
         // it; when unknown (0), require a minimum size to avoid treating a
         // truncated/empty output as complete.
-        final expectedMinLen = current.fileSize > 0
-            ? (current.fileSize * 0.9).round()
-            : 1024;
+        final expectedMinLen =
+            current.fileSize > 0 ? (current.fileSize * 0.9).round() : 1024;
         if (mergedLen >= expectedMinLen) {
           debugPrint(
             '[DMX] FIX-S2: Merge output already exists ($mergedLen bytes), skipping FFmpeg execution',
