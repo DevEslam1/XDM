@@ -695,8 +695,9 @@ void main() {
       final task2 = DownloadTask.fromMap(map2);
       expect(task2.threadCount, 2);
       expect(task2.chunks.length, 2);
-      // Total progress 1.0 is preserved by spreading it evenly.
-      expect(task2.chunks, [0.5, 0.5]);
+      // Overall progress (sum / stored chunk count = 1.0 / 4 = 0.25) is
+      // preserved by spreading it evenly across the new thread count.
+      expect(task2.chunks, [0.25, 0.25]);
     });
   });
 

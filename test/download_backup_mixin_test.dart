@@ -131,7 +131,10 @@ void main() {
       expect(result, isTrue);
       expect(importedProvider.providerTasks, hasLength(1));
       expect(importedProvider.providerTasks.single.id, 'new');
-      expect(databaseService.clearCalls, 1);
+      // C5: replace mode saves new tasks first, then prunes stale tasks via
+      // deleteTask (no full clearAllTasks wipe).
+      expect(databaseService.deleteCalls, 1);
+      expect(databaseService.clearCalls, 0);
     });
   });
 }
@@ -191,11 +194,17 @@ class TestBackupProvider with DownloadBackupMixin {
 class FakeDatabaseService extends DatabaseService {
   FakeDatabaseService() : super.forSubclass();
   int clearCalls = 0;
+  int deleteCalls = 0;
   final List<DownloadTask> savedTasks = <DownloadTask>[];
 
   @override
   Future<void> clearAllTasks() async {
     clearCalls++;
+  }
+
+  @override
+  Future<void> deleteTask(String id) async {
+    deleteCalls++;
   }
 
   @override

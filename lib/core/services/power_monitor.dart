@@ -50,16 +50,21 @@ class PowerMonitor {
       _lastSaverMode = BatterySaverMode.off;
       return BatterySaverMode.off;
     }
-    if (_lastSaverMode != null &&
-        _lastSaverMode != BatterySaverMode.off &&
-        _level >= kBatterySaverRestoreThreshold) {
-      _lastSaverMode = BatterySaverMode.off;
-    } else if (_level < kBatterySaverAggressiveThreshold) {
+    if (_level < kBatterySaverAggressiveThreshold) {
       _lastSaverMode = BatterySaverMode.aggressive;
     } else if (_level < kBatterySaverModerateThreshold) {
-      _lastSaverMode = BatterySaverMode.moderate;
+      // Moderate band [20, 40). Once in aggressive mode, hold it until the
+      // battery climbs back above the restore threshold to avoid flapping.
+      if (_lastSaverMode == BatterySaverMode.aggressive &&
+          _level < kBatterySaverRestoreThreshold) {
+        _lastSaverMode = BatterySaverMode.aggressive;
+      } else {
+        _lastSaverMode = BatterySaverMode.moderate;
+      }
+    } else {
+      _lastSaverMode = BatterySaverMode.off;
     }
-    return _lastSaverMode ?? BatterySaverMode.off;
+    return _lastSaverMode!;
   }
 
   /// Thermal and battery-aware thread limiter.
@@ -93,12 +98,14 @@ class PowerMonitor {
   @visibleForTesting
   static void setBatteryLevelForTesting(int level) {
     _level = level;
+    _lastSaverMode = null;
     _notifyThrottleFactor();
   }
 
   @visibleForTesting
   static void setBatteryStateForTesting(BatteryState state) {
     _state = state;
+    _lastSaverMode = null;
     _notifyThrottleFactor();
   }
 

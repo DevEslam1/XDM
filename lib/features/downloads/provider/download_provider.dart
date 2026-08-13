@@ -5025,6 +5025,13 @@ class DownloadProvider extends ChangeNotifier
       if (hasMime && oldMime != newMime) return true;
       if (hasClen && oldClen != newClen) return true;
 
+      // When both URLs carry a matching content length, the stream is the same
+      // even if the CDN host rotated (benign signature refresh).
+      if (hasClen) return false;
+
+      // Without clen we cannot confirm the stream is identical, so a host
+      // change indicates the stream identity may have changed.
+      if (oldUri.host != newUri.host) return true;
       return false;
     } catch (_) {
       return false;

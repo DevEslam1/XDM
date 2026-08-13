@@ -194,7 +194,10 @@ class DownloadIsolatePool {
 
   Future<void> init() async {
     if (_workers.isEmpty) {
-      _workers.add(await _spawnWorker(0));
+      final maxWorkers = effectiveMaxSize;
+      for (var i = 0; i < maxWorkers; i++) {
+        _workers.add(await _spawnWorker(i));
+      }
     }
     _startIdleCheckTimer();
   }
