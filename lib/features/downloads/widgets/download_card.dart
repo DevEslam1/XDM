@@ -930,13 +930,16 @@ class _ControlButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final String tooltip;
   final bool filled;
+  final bool isLoading;
 
   const _ControlButton({
+    super.key,
     required this.icon,
     required this.color,
     required this.onPressed,
     required this.tooltip,
     this.filled = false,
+    this.isLoading = false,
   });
 
   @override
@@ -957,10 +960,14 @@ class _ControlButtonState extends State<_ControlButton> {
           child: Tooltip(
             message: widget.tooltip,
             child: GestureDetector(
-              onTapDown: (_) => setState(() => _pressed = true),
-              onTapUp: (_) => setState(() => _pressed = false),
+              onTapDown: widget.isLoading || widget.onPressed == null
+                  ? null
+                  : (_) => setState(() => _pressed = true),
+              onTapUp: widget.isLoading || widget.onPressed == null
+                  ? null
+                  : (_) => setState(() => _pressed = false),
               onTapCancel: () => setState(() => _pressed = false),
-              onTap: () {
+              onTap: widget.isLoading ? null : () {
                 HapticFeedback.lightImpact();
                 widget.onPressed?.call();
               },
@@ -968,7 +975,8 @@ class _ControlButtonState extends State<_ControlButton> {
                 scale: _pressed ? 0.85 : 1.0,
                 duration: AppTheme.motionFast,
                 curve: AppTheme.motionSpring,
-                child: Container(
+                child: AnimatedContainer(
+                  duration: AppTheme.motionBase,
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
@@ -982,12 +990,37 @@ class _ControlButtonState extends State<_ControlButton> {
                       width: 0.8,
                     ),
                   ),
-                  child: Icon(
-                    widget.icon,
-                    size: 18,
-                    color: widget.filled
-                        ? AppTheme.inkOn(widget.color)
-                        : widget.color,
+                  child: Center(
+                    child: widget.isLoading
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                widget.filled
+                                    ? AppTheme.inkOn(widget.color)
+                                    : widget.color,
+                              ),
+                            ),
+                          )
+                        : AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 250),
+                            switchInCurve: Curves.easeOutBack,
+                            switchOutCurve: Curves.easeIn,
+                            transitionBuilder: (child, anim) => RotationTransition(
+                              turns: Tween<double>(begin: 0.75, end: 1.0).animate(anim),
+                              child: FadeTransition(opacity: anim, child: child),
+                            ),
+                            child: Icon(
+                              widget.icon,
+                              key: ValueKey(widget.icon),
+                              size: 18,
+                              color: widget.filled
+                                  ? AppTheme.inkOn(widget.color)
+                                  : widget.color,
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -1010,117 +1043,139 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final accent = getEffectiveCardAccent(task, provider, isDark);
+    final isPending = provider.isTaskOperationPending(task.id);
+    final isRtl = L10n.isRtl(context);
+
+    Widget actionBtn;
+
+    if (isPending) {
+      actionBtn = _ControlButton(
+        key: ValueKey('pending_${task.id}'),
+        icon: task.status == DownloadStatus.downloading
+            ? Icons.pause_rounded
+            : Icons.play_arrow_rounded,
+        color: accent,
+        filled: true,
+        isLoading: true,
+        tooltip: isRtl ? 'جاري المعالجة...' : 'Processing...',
+        onPressed: null,
+      );
+    } else if (task.status == DownloadStatus.downloading) {
+      actionBtn = _ControlButton(
+        key: ValueKey('pause_${task.id}'),
+        icon: Icons.pause_rounded,
+        color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+        tooltip: L10n.of(context, 'pause_btn'),
+        onPressed: () {
+          triggerHaptic(settings);
+          provider.pauseTask(task.id);
+        },
+      );
+    } else if (task.status == DownloadStatus.paused ||
+        task.status == DownloadStatus.queued) {
+      actionBtn = _ControlButton(
+        key: ValueKey('resume_${task.id}'),
+        icon: Icons.play_arrow_rounded,
+        color: accent,
+        filled: true,
+        tooltip: task.status == DownloadStatus.queued
+            ? L10n.of(context, 'start_btn')
+            : L10n.of(context, 'resume_btn'),
+        onPressed: () {
+          triggerHaptic(settings);
+          provider.resumeTask(task.id);
+        },
+      );
+    } else if (task.status == DownloadStatus.failed) {
+      actionBtn = _ControlButton(
+        key: ValueKey('retry_${task.id}'),
+        icon: Icons.refresh_rounded,
+        color: accent,
+        filled: true,
+        tooltip: L10n.of(context, 'retry_label'),
+        onPressed: () {
+          triggerHaptic(settings);
+          provider.retryTask(task.id);
+        },
+      );
+    } else if (task.status == DownloadStatus.merging) {
+      actionBtn = Row(
+        key: ValueKey('merging_${task.id}'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(accent),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Merging…',
+            style: TextStyle(color: accent, fontSize: 12),
+          ),
+        ],
+      );
+    } else if (task.status == DownloadStatus.completed) {
+      actionBtn = _ControlButton(
+        key: ValueKey('open_${task.id}'),
+        icon: Icons.folder_open_rounded,
+        color: accent,
+        filled: true,
+        tooltip: L10n.of(context, 'open_file_btn'),
+        onPressed: () async {
+          triggerHaptic(settings);
+          final path = task.localFilePath;
+          final fileExists = path.isNotEmpty &&
+              (await File(path).exists() || await Directory(path).exists());
+          if (!fileExists) {
+            await provider.markCompletedFileMissing(task.id);
+            if (context.mounted) {
+              ThemedSnackbar.show(
+                context,
+                message: L10n.of(context, 'file_missing_msg'),
+                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                icon: Icons.error_outline,
+                isDarkMode: isDark,
+              );
+            }
+            return;
+          }
+          if (context.mounted) {
+            openFile(context, task.localFilePath, settings);
+          }
+        },
+      );
+    } else {
+      actionBtn = const SizedBox.shrink();
+    }
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (task.status == DownloadStatus.downloading)
-          _ControlButton(
-            icon: Icons.pause_rounded,
-            color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
-            tooltip: L10n.of(context, 'pause_btn'),
-            onPressed: () {
-              triggerHaptic(settings);
-              provider.pauseTask(task.id);
-            },
-          )
-        else if (task.status == DownloadStatus.paused ||
-            task.status == DownloadStatus.queued)
-          _ControlButton(
-            icon: Icons.play_arrow_rounded,
-            color: accent,
-            filled: true,
-            tooltip: task.status == DownloadStatus.queued
-                ? L10n.of(context, 'start_btn')
-                : L10n.of(context, 'resume_btn'),
-            onPressed: () {
-              triggerHaptic(settings);
-              provider.resumeTask(task.id);
-            },
-          )
-        else if (task.status == DownloadStatus.failed)
-          _ControlButton(
-            icon: Icons.refresh_rounded,
-            color: accent,
-            filled: true,
-            tooltip: L10n.of(context, 'retry_label'),
-            onPressed: () {
-              triggerHaptic(settings);
-              provider.retryTask(task.id);
-            },
-          )
-        else if (task.status == DownloadStatus.merging)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(accent),
-                ),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          switchInCurve: Curves.easeOutBack,
+          switchOutCurve: Curves.easeIn,
+          transitionBuilder: (Widget child, Animation<double> animation) {
+            return ScaleTransition(
+              scale: animation,
+              child: FadeTransition(
+                opacity: animation,
+                child: child,
               ),
-              const SizedBox(width: 8),
-              Text(
-                'Merging…',
-                style: TextStyle(color: accent, fontSize: 12),
-              ),
-            ],
-          )
-        else if (task.status == DownloadStatus.completed)
-          _ControlButton(
-            icon: Icons.folder_open_rounded,
-            color: accent,
-            filled: true,
-            tooltip: L10n.of(context, 'open_file_btn'),
-            onPressed: () async {
-              triggerHaptic(settings);
-              final path = task.localFilePath;
-              final fileExists = path.isNotEmpty &&
-                  (await File(path).exists() || await Directory(path).exists());
-              if (!fileExists) {
-                await provider.markCompletedFileMissing(task.id);
-                if (context.mounted) {
-                  ThemedSnackbar.show(
-                    context,
-                    message: L10n.of(context, 'file_missing_msg'),
-                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                    icon: Icons.error_outline,
-                    isDarkMode: isDark,
-                  );
-                }
-                return;
-              }
-              if (context.mounted) {
-                openFile(context, task.localFilePath, settings);
-              }
-            },
-          ),
+            );
+          },
+          child: actionBtn,
+        ),
         const SizedBox(width: 6),
         _ControlButton(
-          icon: Icons.delete_outline_rounded,
-          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-          tooltip: L10n.of(context, 'delete_btn'),
-          onPressed: () async {
-            triggerHaptic(settings);
-            final deleteFiles = await showDeleteConfirmationDialog(
-              context,
-              task,
-              settings,
-            );
-            if (deleteFiles != null) {
-              unawaited(provider.deleteTask(task.id, deleteFiles: deleteFiles));
-              if (context.mounted) {
-                ThemedSnackbar.show(
-                  context,
-                  message: L10n.of(context, 'delete_success'),
-                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                  icon: Icons.delete_outline,
-                  isDarkMode: isDark,
-                );
-              }
-            }
-          },
+          icon: Icons.more_vert_rounded,
+          color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+          tooltip: L10n.of(context, 'options_btn'),
+          onPressed: () => _showAdvancedControls(context, task, settings),
         ),
       ],
     );

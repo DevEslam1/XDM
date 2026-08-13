@@ -195,6 +195,8 @@ class NotificationCoordinator {
     return RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(id);
   }
 
+  final Map<String, DateTime> _lastNotifActionTime = {};
+
   Future<void> _handleNotificationAction(Map<String, String> event) async {
     await _handlesLoadFuture;
 
@@ -213,6 +215,17 @@ class NotificationCoordinator {
     // If still null, but rawHandle is a valid task ID, proceed anyway.
     if (taskId == null && rawHandle != null && _isValidTaskId(rawHandle)) {
       taskId = rawHandle;
+    }
+
+    if (taskId != null && (action == 'pause' || action == 'resume' || action == 'cancel')) {
+      final key = '$taskId:$action';
+      final lastTime = _lastNotifActionTime[key];
+      final now = DateTime.now();
+      if (lastTime != null && now.difference(lastTime) < const Duration(milliseconds: 500)) {
+        debugPrint('[NotificationCoordinator] Ignored duplicate $action for $taskId');
+        return;
+      }
+      _lastNotifActionTime[key] = now;
     }
 
     try {

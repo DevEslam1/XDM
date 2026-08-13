@@ -762,7 +762,22 @@ class _ActionRail extends StatelessWidget with HapticHelper {
 
     final actions = <_ActionDef>[];
 
-    if (task.status == DownloadStatus.downloading) {
+    final isPending = provider.isTaskOperationPending(task.id);
+
+    if (isPending) {
+      actions.add(
+        _ActionDef(
+          icon: task.status == DownloadStatus.downloading
+              ? Icons.pause_rounded
+              : Icons.play_arrow_rounded,
+          label: isRtl ? 'جاري المعالجة...' : 'PROCESSING...',
+          color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+          filled: true,
+          isLoading: true,
+          onTap: () {},
+        ),
+      );
+    } else if (task.status == DownloadStatus.downloading) {
       actions.add(
         _ActionDef(
           icon: Icons.pause_rounded,
@@ -902,6 +917,8 @@ class _ActionDef {
 
   final bool filled;
 
+  final bool isLoading;
+
   final VoidCallback onTap;
 
   const _ActionDef({
@@ -909,6 +926,7 @@ class _ActionDef {
     required this.label,
     required this.color,
     required this.filled,
+    this.isLoading = false,
     required this.onTap,
   });
 }
@@ -932,10 +950,10 @@ class _ActionButtonState extends State<_ActionButton> {
     final d = widget.def;
 
     return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
+      onTapDown: d.isLoading ? null : (_) => setState(() => _pressed = true),
+      onTapUp: d.isLoading ? null : (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
-      onTap: d.onTap,
+      onTap: d.isLoading ? null : d.onTap,
       child: AnimatedScale(
         scale: _pressed ? 0.95 : 1.0,
         duration: AppTheme.motionFast,
@@ -957,10 +975,32 @@ class _ActionButtonState extends State<_ActionButton> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                d.icon,
-                size: 20,
-                color: d.filled ? AppTheme.inkOn(d.color) : d.color,
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                switchInCurve: Curves.easeOutBack,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (child, anim) => RotationTransition(
+                  turns: Tween<double>(begin: 0.75, end: 1.0).animate(anim),
+                  child: FadeTransition(opacity: anim, child: child),
+                ),
+                child: d.isLoading
+                    ? SizedBox(
+                        key: const ValueKey('action_spinner'),
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            d.filled ? AppTheme.inkOn(d.color) : d.color,
+                          ),
+                        ),
+                      )
+                    : Icon(
+                        d.icon,
+                        key: ValueKey(d.icon),
+                        size: 20,
+                        color: d.filled ? AppTheme.inkOn(d.color) : d.color,
+                      ),
               ),
               const SizedBox(height: 4),
               Text(

@@ -178,6 +178,51 @@ class DownloadProvider extends ChangeNotifier
   bool _isLoadingTasks = true;
   bool get isLoadingTasks => _isLoadingTasks;
 
+  final Map<String, Future<void>> _inFlightTaskOps = {};
+  final Map<String, DateTime> _lastTaskOpTimes = {};
+
+  /// Returns true if a pause, resume, or retry operation is currently executing for [taskId].
+  bool isTaskOperationPending(String taskId) => _inFlightTaskOps.containsKey(taskId);
+
+  Future<void> _runGuardedTaskOperation(
+    String id,
+    String opName,
+    Future<void> Function() body,
+  ) async {
+    if (id.isEmpty) return;
+
+    // Return existing in-flight future if operation is already running for this task
+    final existingFuture = _inFlightTaskOps[id];
+    if (existingFuture != null) {
+      debugPrint('[DMX Guard] $opName for $id ignored — operation already in flight.');
+      return existingFuture;
+    }
+
+    // Debounce rapid calls (350ms window)
+    final lastTime = _lastTaskOpTimes[id];
+    if (lastTime != null &&
+        DateTime.now().difference(lastTime) < const Duration(milliseconds: 350)) {
+      debugPrint('[DMX Guard] $opName for $id ignored — debounced.');
+      return;
+    }
+
+    final completer = Completer<void>();
+    _inFlightTaskOps[id] = completer.future;
+    _lastTaskOpTimes[id] = DateTime.now();
+    notifyListeners();
+
+    try {
+      await body();
+      completer.complete();
+    } catch (e, st) {
+      completer.completeError(e, st);
+      rethrow;
+    } finally {
+      _inFlightTaskOps.remove(id);
+      notifyListeners();
+    }
+  }
+
   int _torrentInitRetries = 0;
   static const int _maxTorrentInitRetries = 15;
 
@@ -1737,6 +1782,23 @@ class DownloadProvider extends ChangeNotifier
 
   @override
   Future<void> pauseTask(String id) async {
+    final task = _findTask(id);
+    if (task == null) return;
+
+    final isSeedingTorrent = task.status == DownloadStatus.completed &&
+        task.isTorrent &&
+        task.seedingEnabled;
+
+    if (!isSeedingTorrent &&
+        (task.status == DownloadStatus.paused ||
+            task.status == DownloadStatus.completed)) {
+      return;
+    }
+
+    return _runGuardedTaskOperation(id, 'pauseTask', () => _pauseTaskInternal(id));
+  }
+
+  Future<void> _pauseTaskInternal(String id) async {
     _orchestrator.clearStartingFlag(id);
     final initialTask = _findTask(id);
     if (initialTask == null) return;
@@ -2282,6 +2344,23 @@ class DownloadProvider extends ChangeNotifier
     final rawTask = _findTask(id);
     if (rawTask == null) return;
 
+    final isStoppedSeedingTorrent = rawTask.status == DownloadStatus.completed &&
+        rawTask.isTorrent &&
+        !rawTask.seedingEnabled;
+
+    if (rawTask.status == DownloadStatus.downloading ||
+        rawTask.status == DownloadStatus.queued ||
+        (rawTask.status == DownloadStatus.completed && !isStoppedSeedingTorrent)) {
+      return;
+    }
+
+    return _runGuardedTaskOperation(id, 'resumeTask', () => _resumeTaskInternal(id));
+  }
+
+  Future<void> _resumeTaskInternal(String id) async {
+    final rawTask = _findTask(id);
+    if (rawTask == null) return;
+
     // FIX T-4: Validate torrent URL before resume
     if (rawTask.isTorrent) {
       final url = rawTask.url.trim();
@@ -2581,11 +2660,17 @@ class DownloadProvider extends ChangeNotifier
   Future<void> retryTask(String id) async {
     final rawTask = _findTask(id);
     if (rawTask == null || rawTask.status == DownloadStatus.completed) return;
-    // H4: Only tasks that are not actively downloading are admissible. A
-    // downloading task already runs an engine future; retrying it would race
-    // the live isolate job with a duplicate _startTaskBody. A queued task has
-    // no running future yet, so retry may proceed (it re-validates progress
-    // from .dmxstate and re-queues).
+    if (rawTask.status == DownloadStatus.downloading ||
+        rawTask.status == DownloadStatus.queued) {
+      return;
+    }
+
+    return _runGuardedTaskOperation(id, 'retryTask', () => _retryTaskInternal(id));
+  }
+
+  Future<void> _retryTaskInternal(String id) async {
+    final rawTask = _findTask(id);
+    if (rawTask == null || rawTask.status == DownloadStatus.completed) return;
     if (rawTask.status == DownloadStatus.downloading) {
       return;
     }
