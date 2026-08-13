@@ -13,7 +13,11 @@ import 'page_intent_classifier.dart';
 
 /// Signature matching the screen's `_createNewTab` factory.
 typedef CreateTabCallback = BrowserTab Function(
-    {String initialUrl, bool isIncognito, String? id, bool autoLoad, TabOrigin origin});
+    {String initialUrl,
+    bool isIncognito,
+    String? id,
+    bool autoLoad,
+    TabOrigin origin});
 
 /// Refactored ChangeNotifier owning open tabs, active index, background tab loading,
 /// atomic state mutations, and tab persistence.
@@ -259,10 +263,17 @@ class TabManager extends ChangeNotifier {
     while (candidates.length >= _maxUnvisitedAdTabs) {
       final oldest = candidates.removeAt(0);
       _log.info('[TabManager] Evicting stale background ad tab: ${oldest.url}');
+      final evictedIndex = _tabs.indexOf(oldest);
+      if (evictedIndex == -1) continue;
       cleanupTabState(oldest.id);
-      _tabs.remove(oldest);
+      _tabs.removeAt(evictedIndex);
       mutated = true;
-      if (_currentIndex >= _tabs.length) {
+      // Bug #6: evicting a tab BEFORE the current index shifts the remaining
+      // tabs left, so the current index must be decremented to keep pointing
+      // at the same tab.
+      if (evictedIndex < _currentIndex) {
+        _currentIndex = (_currentIndex - 1).clamp(0, _tabs.length - 1);
+      } else if (_currentIndex >= _tabs.length) {
         _currentIndex = _tabs.length - 1;
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -347,7 +358,8 @@ class TabManager extends ChangeNotifier {
         }
         await db.saveOpenTabs(dbTabs);
       } else {
-        _log.warning('Database is not initialized. Tabs saved to SharedPreferences only.');
+        _log.warning(
+            'Database is not initialized. Tabs saved to SharedPreferences only.');
       }
     } catch (e) {
       _log.warning('Failed to save tabs: $e');
@@ -362,7 +374,8 @@ class TabManager extends ChangeNotifier {
         await _performRestoreTabs();
         return;
       } catch (e, st) {
-        _log.severe('[TabManager] restoreTabs failed (attempt $attempts)', e, st);
+        _log.severe(
+            '[TabManager] restoreTabs failed (attempt $attempts)', e, st);
         if (attempts < 2) {
           await Future.delayed(const Duration(milliseconds: 500));
         }
@@ -370,12 +383,26 @@ class TabManager extends ChangeNotifier {
     }
 
     if (!isActive()) return;
+    _disposeAllTabs();
     final fallback = createTab();
     _tabs
       ..clear()
       ..add(fallback);
     _currentIndex = 0;
     notifyListeners();
+  }
+
+  void _disposeAllTabs() {
+    for (final tab in _tabs) {
+      if (_disposedTabIds.contains(tab.id)) continue;
+      _recordDisposedTabId(tab.id);
+      cleanupTabState(tab.id);
+      try {
+        tab.dispose();
+      } catch (e, st) {
+        _log.warning('[TabManager] disposeAllTabs failed', e, st);
+      }
+    }
   }
 
   Future<void> _performRestoreTabs() async {
@@ -438,7 +465,8 @@ class TabManager extends ChangeNotifier {
             try {
               oldTab.dispose();
             } catch (e, st) {
-              Logger('tab_manager').warning('[tab_manager] oldTab dispose failed', e, st);
+              Logger('tab_manager')
+                  .warning('[tab_manager] oldTab dispose failed', e, st);
             }
           }
           _tabs
@@ -457,6 +485,7 @@ class TabManager extends ChangeNotifier {
     }
 
     if (!isActive()) return;
+    _disposeAllTabs();
     final fallback = createTab();
     _tabs
       ..clear()

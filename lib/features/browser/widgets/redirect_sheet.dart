@@ -184,14 +184,19 @@ class _RedirectCandidateTile extends StatelessWidget {
                       const SizedBox(width: 6),
                       if (isSecure)
                         Icon(Icons.lock_outline,
-                            size: 12, color: Colors.green[600]),
+                            size: 12,
+                            color: theme.brightness == Brightness.dark
+                                ? Colors.green[300]
+                                : Colors.green[600]),
                       if (isDirectFile) ...[
                         const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.green[100],
+                            color: theme.brightness == Brightness.dark
+                                ? Colors.green[900]!.withValues(alpha: 0.6)
+                                : Colors.green[100],
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -199,7 +204,9 @@ class _RedirectCandidateTile extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.bold,
-                              color: Colors.green[800],
+                              color: theme.brightness == Brightness.dark
+                                  ? Colors.green[300]
+                                  : Colors.green[800],
                             ),
                           ),
                         ),

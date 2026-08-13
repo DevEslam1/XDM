@@ -421,8 +421,9 @@ $customJs
     }
 
     // Force-dark CSS fallback (non-Android); Android uses the native
-    // `forceDark` WebView setting instead.
-    if (settings.forceDarkMode) {
+    // `forceDark` WebView setting instead. Enabled whenever the app UI is
+    // dark/amoled or the dedicated force-dark switch is on.
+    if (settings.isDarkMode || settings.forceDarkMode) {
       scripts.add(buildForceDarkCss());
     }
 

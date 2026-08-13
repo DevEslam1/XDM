@@ -150,7 +150,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       }
       final jsonStr = const JsonEncoder.withIndent('  ').convert(exportData);
       final tempDir = await getTemporaryDirectory();
-      final name = _selectedTab == 0 ? 'xdm_surfing_history.json' : 'xdm_download_history.json';
+      final name = _selectedTab == 0
+          ? 'xdm_surfing_history.json'
+          : 'xdm_download_history.json';
       final file = File(p.join(tempDir.path, name));
       await file.writeAsString(jsonStr);
       await SharePlus.instance.share(
@@ -572,7 +574,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       final visitedAtVal = item['visitedAt'];
       DateTime dt;
       if (visitedAtVal is num) {
-        dt = DateTime.fromMillisecondsSinceEpoch(visitedAtVal.toInt(), isUtc: true).toLocal();
+        dt = DateTime.fromMillisecondsSinceEpoch(visitedAtVal.toInt(),
+                isUtc: true)
+            .toLocal();
       } else if (visitedAtVal is String) {
         dt = (DateTime.tryParse(visitedAtVal) ?? now).toLocal();
       } else {
@@ -758,7 +762,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
               ),
               child: Center(
                 child: Icon(
-                  isSurfing ? Icons.manage_history_rounded : Icons.cloud_off_rounded,
+                  isSurfing
+                      ? Icons.manage_history_rounded
+                      : Icons.cloud_off_rounded,
                   size: 44,
                   color: accent,
                 ),
@@ -789,7 +795,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                 backgroundColor: accent.withValues(alpha: 0.15),
                 foregroundColor: accent,
                 elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                   side: BorderSide(color: accent.withValues(alpha: 0.3)),
@@ -888,6 +895,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     final url = item['url'] as String? ?? '';
     final title = item['title'] as String? ?? url;
     final id = item['id'] as int? ?? 0;
+    final faviconUrl = item['faviconUrl'] as String?;
     final timeStr = _formatTimestamp(item['visitedAt']);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
@@ -933,11 +941,26 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                       color: accent.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(
-                      Icons.language_rounded,
-                      color: accent,
-                      size: 16,
-                    ),
+                    child: faviconUrl != null && faviconUrl.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: Image.network(
+                              faviconUrl,
+                              width: 16,
+                              height: 16,
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stack) => Icon(
+                                Icons.language_rounded,
+                                color: accent,
+                                size: 16,
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            Icons.language_rounded,
+                            color: accent,
+                            size: 16,
+                          ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(

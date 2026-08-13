@@ -435,6 +435,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   static const String _snifferPrefKey = 'browserSnifferEnabled';
   bool _isSnifferEnabled = true;
   bool _lastZoomEnabled = false;
+  bool _lastEffectiveForceDark = false;
   String? _homeReturnUrl;
   String? _lastLongPressSheetUrl;
   DateTime? _lastLongPressSheetAt;
@@ -2213,12 +2214,8 @@ class _BrowserScreenState extends State<BrowserScreen>
     );
   }
 
-  /// Maximum number of never-visited ad/popup/redirect background tabs allowed
-  /// before the oldest one is silently evicted.
-  static const int _maxUnvisitedAdTabs = 3;
-
   /// Silently removes the oldest [TabOrigin.adOrPopup] / [TabOrigin.redirect]
-  /// background tabs when their count is at or above [_maxUnvisitedAdTabs],
+  /// background tabs when their count is at or above the manager's cap,
   /// ensuring ad popups cannot fill all available tab slots.
   ///
   /// [TabOrigin.userDirect] tabs are NEVER touched by this method.
@@ -2226,39 +2223,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   /// Call this inside or just before the [setState] that adds a new
   /// ad/popup/redirect tab.
   void _evictStaleAdTabs() {
-    final activeId = (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length)
-        ? _tabs[_currentTabIndex].id
-        : null;
-
-    // Collect background ad/redirect tabs, sorted oldest-first.
-    final candidates = _tabs
-        .where((t) =>
-            (t.origin == TabOrigin.adOrPopup ||
-                t.origin == TabOrigin.redirect) &&
-            t.id != activeId)
-        .toList()
-      ..sort((a, b) => a.lastVisitedAt.compareTo(b.lastVisitedAt));
-
-    while (candidates.length >= _maxUnvisitedAdTabs) {
-      final oldest = candidates.removeAt(0);
-      _log.info('[Browser] Evicting stale ad/popup tab: ${oldest.url}');
-      _cleanupTabState(oldest.id);
-      // Bug #6 fix: if the evicted tab was BEFORE the current index, the
-      // remaining tabs shift left by one, so we must decrement the index.
-      // The old code only handled the case where currentTabIndex was past
-      // the end of the list (tabs removed after current).
-      final evictedIndex = _tabs.indexOf(oldest);
-      _tabs.remove(oldest);
-      if (evictedIndex >= 0 && evictedIndex < _currentTabIndex) {
-        // Shift current index down to keep pointing at the same tab.
-        _currentTabIndex = _currentTabIndex - 1;
-      } else if (_currentTabIndex >= _tabs.length) {
-        _currentTabIndex = _tabs.length - 1;
-      }
-      // Dispose AFTER the frame so the InAppWebView widget has already
-      // been unmounted — prevents double-dispose of pullToRefreshController.
-      WidgetsBinding.instance.addPostFrameCallback((_) => oldest.dispose());
-    }
+    _tabManager.evictStaleAdTabs();
   }
 
   void _onDashboardScroll() {
@@ -2548,29 +2513,19 @@ class _BrowserScreenState extends State<BrowserScreen>
       final closedUrl = activeTab.url;
       final closedIsIncognito = activeTab.isIncognito;
       final closedOrigin = activeTab.origin;
-      final closedIdx = _currentTabIndex;
 
       final tabToDispose = activeTab;
       setState(() {
         _recordClosedTab(tabToDispose);
-        _cleanupTabState(tabToDispose.id);
-        _tabs.removeAt(closedIdx);
-        if (_currentTabIndex >= _tabs.length) {
-          _tabManager.currentIndex = _tabs.length - 1;
-        }
-        if (_tabs.isEmpty) {
-          _tabManager.addTab(_createNewTab(), switchToTab: true);
-        }
+        // TabManager.closeTab() removes the tab from its internal list,
+        // recalculates _currentIndex (LRU-aware), clears per-tab state, persists,
+        // and disposes the tab post-frame. If this was the last tab it creates a
+        // fresh blank tab. Do NOT mutate _tabs here — it is unmodifiable.
+        _tabManager.closeTab(tabToDispose.id);
+      });
+      if (!_switchToPreviousTab()) {
         final nowActive = _tabs[_currentTabIndex];
         _urlController.text = nowActive.isHome ? '' : nowActive.url;
-      });
-      // Dispose AFTER the frame — widget is now unmounted, no double-dispose.
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => tabToDispose.dispose());
-      if (!_switchToPreviousTab()) {
-        final fallbackIdx = _currentTabIndex.clamp(0, _tabs.length - 1);
-        _tabManager.currentIndex = -1;
-        _switchTab(fallbackIdx);
       } else {
         _saveTabs();
       }
@@ -2821,9 +2776,10 @@ class _BrowserScreenState extends State<BrowserScreen>
       case 'force_dark_mode':
         await settings.setForceDarkMode(!settings.forceDarkMode);
         if (mounted) {
+          final effectiveDark = _effectiveForceDark(settings);
           ThemedSnackbar.show(
             context,
-            message: settings.forceDarkMode
+            message: effectiveDark
                 ? 'Dark mode enabled — reloading page'
                 : 'Dark mode disabled — reloading page',
             color: settings.isDarkMode
@@ -2832,6 +2788,7 @@ class _BrowserScreenState extends State<BrowserScreen>
             icon: Icons.dark_mode_rounded,
             isDarkMode: settings.isDarkMode,
           );
+          _applyForceDarkToAll();
           if (!activeTab.isHome) {
             await _safeReloadTab(activeTab);
           }
@@ -3207,27 +3164,36 @@ class _BrowserScreenState extends State<BrowserScreen>
   Future<void> _toggleForceDark(BrowserTab activeTab) async {
     final settings = context.read<SettingsProvider>();
     await settings.setForceDarkMode(!settings.forceDarkMode);
+    final effectiveDark = _effectiveForceDark(settings);
     _applyForceDarkToAll();
     if (mounted) {
       ThemedSnackbar.show(
         context,
-        message: settings.forceDarkMode
+        message: effectiveDark
             ? 'Force dark enabled — reloading page'
             : 'Force dark disabled',
         color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-        icon: settings.forceDarkMode
-            ? Icons.dark_mode_rounded
-            : Icons.light_mode_rounded,
+        icon:
+            effectiveDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
         isDarkMode: settings.isDarkMode,
       );
-      if (settings.forceDarkMode && !activeTab.isHome) {
+      if (effectiveDark && !activeTab.isHome) {
         await _safeReloadTab(activeTab);
       }
     }
   }
 
+  bool _effectiveForceDark(SettingsProvider settings) {
+    // Forcing dark is implied whenever the app UI is in dark/amoled mode;
+    // the dedicated switch can still force it on even in light mode.
+    return settings.isDarkMode ||
+        settings.isAmoledMode ||
+        settings.forceDarkMode;
+  }
+
   void _applyForceDarkToAll() {
     final settings = _settings;
+    final forceDark = _effectiveForceDark(settings);
     for (final tab in _tabs) {
       final controller = tab.controller;
       if (controller == null) continue;
@@ -3235,19 +3201,18 @@ class _BrowserScreenState extends State<BrowserScreen>
         try {
           controller.setSettings(
             settings: InAppWebViewSettings(
-              forceDark: settings.forceDarkMode ? ForceDark.ON : ForceDark.OFF,
+              forceDark: forceDark ? ForceDark.ON : ForceDark.OFF,
               incognito: tab.isIncognito,
             ),
           );
         } catch (_) {}
       }
       try {
-        final css =
-            settings.forceDarkMode ? ScriptInjector.buildForceDarkCss() : '';
+        final css = forceDark ? ScriptInjector.buildForceDarkCss() : '';
         controller.evaluateJavascript(source: '''
           (function() {
             var s = document.getElementById('xdm-force-dark');
-            if (${settings.forceDarkMode}) {
+            if ($forceDark) {
               if (!s) {
                 s = document.createElement('style');
                 s.id = 'xdm-force-dark';
@@ -3758,19 +3723,13 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final tab = _tabs[_currentTabIndex];
-    final idx = _currentTabIndex;
     setState(() {
       _recordClosedTab(tab);
-      _cleanupTabState(tab.id);
-      _tabs.removeAt(idx);
-      if (_currentTabIndex >= _tabs.length) {
-        _currentTabIndex = _tabs.length - 1;
-      }
-      final active = _tabs[_currentTabIndex];
-      _urlController.text = active.isHome ? '' : active.url;
+      // TabManager handles removal, index recalculation, disposal, and saving.
+      _tabManager.closeTab(tab.id);
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => tab.dispose());
-    _saveTabs();
+    final active = _tabs[_currentTabIndex];
+    _urlController.text = active.isHome ? '' : active.url;
   }
 
   void _focusUrlBar() {
@@ -4831,20 +4790,15 @@ class _BrowserScreenState extends State<BrowserScreen>
                 if (closeIdx != -1) {
                   final oldTab = _tabs[closeIdx];
                   setModalState(() {
-                    _cleanupTabState(oldTab.id);
-                    _tabs.removeAt(closeIdx);
-                    if (_currentTabIndex >= _tabs.length) {
-                      _currentTabIndex = _tabs.length - 1;
-                    }
+                    // TabManager handles removal, index recalculation, disposal,
+                    // and saving. Do NOT mutate _tabs here — it is unmodifiable.
+                    _tabManager.closeTab(oldTab.id);
                     final tab = _createNewTab(isIncognito: isIncognito);
                     _tabManager.addTab(tab, switchToTab: true);
                     _urlController.text = '';
                     _showBarsNotifier.value = true;
                   });
                   setState(() {}); // Rebuild parent screen to sync tabs
-                  WidgetsBinding.instance
-                      .addPostFrameCallback((_) => oldTab.dispose());
-                  _saveTabs();
                   Navigator.pop(switcherContext);
                 }
               },
@@ -4858,8 +4812,9 @@ class _BrowserScreenState extends State<BrowserScreen>
                 setModalState(() {
                   for (final tab in oldTabs) {
                     _recordClosedTab(tab);
-                    _cleanupTabState(tab.id);
-                    _tabs.remove(tab);
+                    // TabManager handles removal, index recalculation, disposal,
+                    // and saving. Do NOT mutate _tabs here — it is unmodifiable.
+                    _tabManager.closeTab(tab.id);
                   }
                   // Active tab is now at index 0 — open one new blank tab
                   _currentTabIndex = 0;
@@ -4869,12 +4824,6 @@ class _BrowserScreenState extends State<BrowserScreen>
                   _showBarsNotifier.value = true;
                 });
                 setState(() {}); // Rebuild parent screen to sync tabs
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  for (final tab in oldTabs) {
-                    tab.dispose();
-                  }
-                });
-                _saveTabs();
                 Navigator.pop(switcherContext);
               },
               child: Text(L10n.of(context, 'close_all_other_tabs')),
@@ -5852,6 +5801,15 @@ class _BrowserScreenState extends State<BrowserScreen>
       });
     }
 
+    // When app dark mode is toggled (and the "force dark" switch does not
+    // exist separately), keep web content in sync without reloading every tab.
+    if (_effectiveForceDark(settings) != _lastEffectiveForceDark) {
+      _lastEffectiveForceDark = _effectiveForceDark(settings);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _applyForceDarkToAll();
+      });
+    }
+
     return Listener(
       onPointerDown: (_) => _resetInactivityTimer(),
       onPointerMove: (_) => _resetInactivityTimer(),
@@ -6585,14 +6543,14 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                 : textClr,
                                           ),
                                           _menuItem(
-                                            settings.forceDarkMode
+                                            _effectiveForceDark(settings)
                                                 ? Icons.dark_mode_rounded
                                                 : Icons.light_mode_outlined,
-                                            settings.forceDarkMode
+                                            _effectiveForceDark(settings)
                                                 ? 'Dark mode: ON'
                                                 : 'Dark mode: OFF',
                                             'force_dark_mode',
-                                            settings.forceDarkMode
+                                            _effectiveForceDark(settings)
                                                 ? (isDark
                                                     ? AppTheme.neonBlue
                                                     : AppTheme.lightNeonBlue)
@@ -7082,7 +7040,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                               true,
                                                                           cacheEnabled:
                                                                               true,
-                                                                          forceDark: settings.forceDarkMode
+                                                                          forceDark: _effectiveForceDark(settings)
                                                                               ? ForceDark.ON
                                                                               : ForceDark.OFF,
                                                                           supportZoom:
@@ -7220,7 +7178,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                           }
                                                                           final res =
                                                                               await _redirectGuard.extractFromPage(
-                                                                            tabId: tab.id,
+                                                                            tabId:
+                                                                                tab.id,
                                                                             controller:
                                                                                 controller,
                                                                           );
