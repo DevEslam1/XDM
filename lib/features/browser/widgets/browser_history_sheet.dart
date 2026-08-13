@@ -223,11 +223,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
-    // Rebuild only when task identity/status changes, not on progress ticks.
-    context.select<DownloadProvider, String>(
-      (p) => p.tasks.map((t) => '${t.id}_${t.status.name}').join(','),
-    );
-    final downloadTasks = context.read<DownloadProvider>().tasks;
+    final downloadTasks = context.watch<DownloadProvider>().tasks;
 
     return DraggableScrollableSheet(
       expand: false,
@@ -901,7 +897,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 260 + index * 30),
+      duration: Duration(milliseconds: (260 + index * 30).clamp(260, 600)),
       curve: Curves.easeOut,
       builder: (_, t, child) => Opacity(opacity: t, child: child),
       child: Container(
@@ -1041,7 +1037,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 260 + index * 30),
+      duration: Duration(milliseconds: (260 + index * 30).clamp(260, 600)),
       curve: Curves.easeOut,
       builder: (_, o, child) => Opacity(opacity: o, child: child),
       child: Container(

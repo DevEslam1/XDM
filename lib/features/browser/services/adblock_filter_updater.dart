@@ -157,7 +157,7 @@ class AdBlockFilterUpdater {
   static const _domainsKey = 'adblock_downloaded_domains';
   static const _enabledKey = 'adblock_auto_update_enabled';
   static const _updateIntervalDays = 7;
-  static const _maxDomains = 50000;
+  static const _maxDomains = 150000;
   static const _maxLineLength = 500;
 
   static const _patternsKey = 'adblock_url_patterns';
@@ -621,15 +621,22 @@ class AdBlockFilterUpdater {
 
       // Parse hosts file line format: "127.0.0.1 domain.com" or "0.0.0.0 domain.com"
       if (trimmed.startsWith('127.0.0.1') || trimmed.startsWith('0.0.0.0')) {
-        final parts = trimmed.split(RegExp(r'\s+'));
-        if (parts.length >= 2) {
-          final domain = parts[1].trim().toLowerCase();
-          if (RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$')
-              .hasMatch(domain)) {
+        var cleanLine = trimmed;
+        final commentIdx = cleanLine.indexOf('#');
+        if (commentIdx != -1) {
+          cleanLine = cleanLine.substring(0, commentIdx).trim();
+        }
+        final parts = cleanLine.split(RegExp(r'\s+'));
+        for (var i = 1; i < parts.length; i++) {
+          var domain = parts[i].trim().toLowerCase();
+          if (domain.endsWith('.')) {
+            domain = domain.substring(0, domain.length - 1);
+          }
+          if (RegExp(r'^[a-z0-9][a-z0-9.-]*\.[a-z0-9]+$').hasMatch(domain)) {
             blocked.add(domain);
-            continue;
           }
         }
+        continue;
       }
 
       // Comments (ABP format uses !, hosts/plain lists use #)
@@ -740,9 +747,18 @@ class AdBlockFilterUpdater {
 
       // Plain domain-per-line format (Peter Lowe list, hosts files, etc.)
       // Accept lines that look like bare hostnames: e.g. "ads.example.com"
-      if (RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$')
-          .hasMatch(trimmed)) {
-        final domain = trimmed.toLowerCase();
+      var plainDomain = trimmed;
+      if (plainDomain.contains('#') &&
+          !plainDomain.startsWith('##') &&
+          !plainDomain.startsWith('#@#')) {
+        plainDomain = plainDomain.substring(0, plainDomain.indexOf('#')).trim();
+      }
+      if (plainDomain.endsWith('.')) {
+        plainDomain = plainDomain.substring(0, plainDomain.length - 1);
+      }
+      if (RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z0-9]+$')
+          .hasMatch(plainDomain)) {
+        final domain = plainDomain.toLowerCase();
         if (!domain.startsWith('.')) {
           blocked.add(domain);
         }

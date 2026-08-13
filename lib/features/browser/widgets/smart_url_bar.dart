@@ -33,6 +33,8 @@ class SmartUrlBar extends StatefulWidget {
   final bool isLoading;
   final VoidCallback? onReload;
   final VoidCallback? onStopLoading;
+  final VoidCallback? onShieldPressed;
+  final bool isHttps;
 
   const SmartUrlBar({
     super.key,
@@ -43,6 +45,8 @@ class SmartUrlBar extends StatefulWidget {
     this.isLoading = false,
     this.onReload,
     this.onStopLoading,
+    this.onShieldPressed,
+    this.isHttps = false,
   });
 
   @override
@@ -135,11 +139,7 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
       final lowerQuery = query.toLowerCase();
 
       // Bookmarks match
-      final bookmarks = await db.loadBookmarks();
-      final matchingBookmarks = bookmarks.where((bm) {
-        return bm.title.toLowerCase().contains(lowerQuery) ||
-            bm.url.toLowerCase().contains(lowerQuery);
-      }).take(3);
+      final matchingBookmarks = await db.searchBookmarks(lowerQuery, limit: 3);
 
       for (final bm in matchingBookmarks) {
         suggestions.add(_Suggestion(
@@ -227,11 +227,6 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
 
     _overlayEntry = OverlayEntry(
       builder: (ctx) {
-        final box = context.findRenderObject() as RenderBox?;
-        final dynamicTopBarOffset = box != null && box.attached
-            ? box.localToGlobal(Offset.zero).dy + box.size.height + 6
-            : MediaQuery.of(ctx).padding.top + 56;
-
         return Stack(
           children: [
             // Barrier behind overlay cards: tapping anywhere outside dismisses options and unfocuses
@@ -246,12 +241,20 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
               ),
             ),
 
-            // Full-width cards container under top bar
+            // suggestion container follower
             Positioned(
-              top: dynamicTopBarOffset,
-              left: 10,
-              right: 10,
-              child: Material(
+              top: 0,
+              left: 0,
+              child: CompositedTransformFollower(
+                link: _layerLink,
+                showWhenUnlinked: false,
+                targetAnchor: Alignment.bottomLeft,
+                followerAnchor: Alignment.topLeft,
+                offset: const Offset(0, 6),
+                child: SizedBox(
+                  width: _layerLink.leaderSize?.width ??
+                      (MediaQuery.of(context).size.width - 32),
+                  child: Material(
                 elevation: 12,
                 shadowColor: Colors.black.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(20),
@@ -377,10 +380,12 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
                 ),
               ),
             ),
-          ],
-        );
-      },
+          ),
+        ),
+      ],
     );
+    },
+  );
 
     overlayState.insert(_overlayEntry!);
   }
@@ -430,6 +435,30 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
               focusedBorder: InputBorder.none,
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              prefixIconConstraints:
+                  const BoxConstraints(minWidth: 28, minHeight: 28),
+              prefixIcon: widget.onShieldPressed != null
+                  ? IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 28, minHeight: 28),
+                      icon: Icon(
+                        widget.isHttps
+                            ? Icons.lock_rounded
+                            : Icons.shield_outlined,
+                        size: 15,
+                        color: widget.isHttps
+                            ? (isDark
+                                ? AppTheme.neonGreen
+                                : AppTheme.lightNeonGreen)
+                            : accent,
+                      ),
+                      tooltip: isRtl
+                          ? 'حماية الموقع والخصوصية'
+                          : 'Site Shield & Security',
+                      onPressed: widget.onShieldPressed,
+                    )
+                  : null,
               suffixIconConstraints:
                   const BoxConstraints(minWidth: 32, minHeight: 32),
               suffixIcon: IconButton(

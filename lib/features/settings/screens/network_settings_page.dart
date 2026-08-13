@@ -312,9 +312,13 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                                       ? L10n.of(context,
                                           'settings_adblock_success_msg')
                                       : L10n.of(context,
-                                          'settings_adblock_success_msg'),
-                                  color: AppTheme.neonGreen,
-                                  icon: Icons.check_circle_outline,
+                                          'settings_adblock_failed_msg'),
+                                  color: updated
+                                      ? AppTheme.neonGreen
+                                      : AppTheme.neonRed,
+                                  icon: updated
+                                      ? Icons.check_circle_outline
+                                      : Icons.error_outline,
                                   isDarkMode: isDark,
                                 );
                               }

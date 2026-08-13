@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/services/youtube_service.dart';
@@ -14,13 +15,13 @@ import 'package:logging/logging.dart';
 /// Owns all per-tab detection state and runs the media-scan JavaScript on the
 /// tab's WebView. It does NOT manage UI: the host screen listens through
 /// [onStateChanged] and renders FABs/sheets from the exposed maps.
-class MediaSniffer {
+class MediaSniffer extends ChangeNotifier {
   static final _log = Logger('MediaSniffer');
   MediaSniffer({
     required this.isActive,
     required this.containsTab,
     required this.isSnifferEnabled,
-    required this.onStateChanged,
+    this.onStateChanged,
   });
 
   /// Whether the host screen is still mounted.
@@ -33,7 +34,7 @@ class MediaSniffer {
   final bool Function() isSnifferEnabled;
 
   /// Notifies the host that detection state changed (triggers setState).
-  final VoidCallback onStateChanged;
+  final VoidCallback? onStateChanged;
 
   /// tabId -> best single downloadable URL for the page.
   final Map<String, String> detectedDownloadUrls = {};
@@ -89,7 +90,8 @@ class MediaSniffer {
   /// `setState(() {...})` calls.
   void _update(VoidCallback fn) {
     fn();
-    onStateChanged();
+    notifyListeners();
+    onStateChanged?.call();
   }
 
   /// Removes all per-tab state when a tab is closed or navigated away.
@@ -127,6 +129,7 @@ class MediaSniffer {
   }
 
   /// Cancels all pending scan timers and clears detection state.
+  @override
   void dispose() {
     for (final timer in mediaScanTimers.values) {
       timer.cancel();
@@ -139,6 +142,7 @@ class MediaSniffer {
     mediaScanFailed.clear();
     lastYoutubeAuthTimes.clear();
     _tabUrls.clear();
+    super.dispose();
   }
 
   Future<void> scanPageMedia(

@@ -768,11 +768,26 @@ class DatabaseService {
     });
   }
 
-  Future<List<Bookmark>> loadBookmarks() async {
-    final rows = await (_db.select(
-      _db.bookmarks,
-    )..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)]))
-        .get();
+  Future<List<Bookmark>> loadBookmarks({String? searchQuery}) async {
+    final query = _db.select(_db.bookmarks);
+    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+      final term = '%${searchQuery.trim().toLowerCase()}%';
+      query.where((t) =>
+          t.title.lower().like(term) |
+          t.url.lower().like(term) |
+          t.folder.lower().like(term));
+    }
+    final rows = await (query..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)])).get();
+    return rows.map(_rowToBookmark).toList();
+  }
+
+  Future<List<Bookmark>> searchBookmarks(String query, {int limit = 3}) async {
+    if (query.trim().isEmpty) return [];
+    final term = '%${query.trim().toLowerCase()}%';
+    final q = _db.select(_db.bookmarks)
+      ..where((t) => t.title.lower().like(term) | t.url.lower().like(term))
+      ..limit(limit);
+    final rows = await q.get();
     return rows.map(_rowToBookmark).toList();
   }
 

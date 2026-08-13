@@ -83,7 +83,7 @@ class ShortcutsGridWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isTablet = MediaQuery.of(context).size.width > 900;
+    final isTablet = MediaQuery.of(context).size.shortestSide > 600;
     return GridView.count(
       crossAxisCount: isTablet ? 3 : 2,
       shrinkWrap: true,

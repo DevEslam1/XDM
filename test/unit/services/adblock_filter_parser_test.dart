@@ -113,6 +113,33 @@ void main() {
       expect(identical(host1Ref1, host1Ref2), isTrue);
     });
   });
+
+  group('AdBlockFilterUpdater host parsing', () {
+    final updater = AdBlockFilterUpdater();
+
+    test('parseFilterFile parses multi-host lines and inline comments', () async {
+      final tempDir = await Directory.systemTemp.createTemp('adblock_hosts_test_');
+      try {
+        final f = File(p.join(tempDir.path, 'hosts.txt'));
+        await f.writeAsString('''
+# Sample hosts file
+0.0.0.0 ad1.com ad2.com ad3.com # inline comment
+127.0.0.1 tracker.org # comment
+plainad.net # inline comment
+||easylist-ad.com^
+''');
+        final result = await updater.parseFilterFile(f, FilterType.ads);
+        expect(result.blocked, contains('ad1.com'));
+        expect(result.blocked, contains('ad2.com'));
+        expect(result.blocked, contains('ad3.com'));
+        expect(result.blocked, contains('tracker.org'));
+        expect(result.blocked, contains('plainad.net'));
+        expect(result.blocked, contains('easylist-ad.com'));
+      } finally {
+        if (await tempDir.exists()) await tempDir.delete(recursive: true);
+      }
+    });
+  });
 }
 
 /// Mirrors the integrity logic from AdblockFilterUpdater._downloadAndParse.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
 import '../../settings/provider/settings_provider.dart';
+import '../../../core/utils/localization.dart';
 import 'smart_url_bar.dart';
 
 /// Extracted toolbar component for the in-app browser screen.
@@ -25,6 +26,8 @@ class BrowserToolbar extends StatelessWidget {
   final PopupMenuItemBuilder<String> menuItemBuilder;
   final PopupMenuItemSelected<String> onMenuSelected;
   final VoidCallback onQuitPressed;
+  final VoidCallback? onShieldPressed;
+  final bool isHttps;
   final Widget? youtubeGrabButton;
 
   const BrowserToolbar({
@@ -50,6 +53,8 @@ class BrowserToolbar extends StatelessWidget {
     required this.onMenuSelected,
     required this.onQuitPressed,
     this.youtubeGrabButton,
+    this.onShieldPressed,
+    this.isHttps = false,
   });
 
   @override
@@ -77,7 +82,7 @@ class BrowserToolbar extends StatelessWidget {
                 size: 20,
                 color: textClr,
               ),
-              tooltip: isRtl ? 'الصفحة الرئيسية' : 'Home',
+              tooltip: L10n.of(context, 'browser_home_tooltip'),
               onPressed: onNavigateHome,
             ),
 
@@ -117,6 +122,8 @@ class BrowserToolbar extends StatelessWidget {
                 onNavigate: onNavigate,
                 onReload: onReload,
                 onStopLoading: onStopLoading,
+                onShieldPressed: onShieldPressed,
+                isHttps: isHttps,
               ),
             ),
 
@@ -164,7 +171,7 @@ class BrowserToolbar extends StatelessWidget {
                 size: 18,
                 color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
               ),
-              tooltip: isRtl ? 'إنهاء المتصفح' : 'Quit browser',
+              tooltip: L10n.of(context, 'browser_quit_tooltip'),
               onPressed: onQuitPressed,
             ),
           ],

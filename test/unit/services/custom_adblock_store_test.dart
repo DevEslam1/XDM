@@ -46,11 +46,19 @@ void main() {
       expect(store.useCustomOnly, isTrue);
     });
 
-    test('removeHost works', () async {
+    test('removeHost works with raw URLs and uppercase strings', () async {
       await store.addHosts('delete.me');
       expect(store.hosts, contains('delete.me'));
-      await store.removeHost('delete.me');
+      await store.removeHost('HTTPS://DELETE.ME/path?q=1');
       expect(store.hosts, isNot(contains('delete.me')));
+    });
+
+    test('addHosts accepts IP addresses and local domain names', () async {
+      await store.addHosts('192.168.1.100, 127.0.0.1, router.local, mydevice.lan');
+      expect(store.hosts, contains('192.168.1.100'));
+      expect(store.hosts, contains('127.0.0.1'));
+      expect(store.hosts, contains('router.local'));
+      expect(store.hosts, contains('mydevice.lan'));
     });
   });
 }

@@ -236,14 +236,16 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
                       isDark: isDark,
                       isRtl: isRtl,
                       onTap: () async {
-                        final rootCtx = Navigator.of(context).context;
+                        final messenger = ScaffoldMessenger.of(context);
+                        final navigator = Navigator.of(context);
+                        final rootCtx = navigator.context;
                         Navigator.pop(context);
                         await Clipboard.setData(ClipboardData(text: url));
-                        if (rootCtx.mounted) {
+                        if (messenger.mounted && rootCtx.mounted) {
                           ThemedSnackbar.show(
                             rootCtx,
                             message: isRtl
-                                ? 'ØªÙ… Ù†Ø³Ø® Ø§Ù„Ø±Ø§Ø¨Ø·'
+                                ? 'تم نسخ الرابط'
                                 : 'Link copied',
                             color: accent,
                             icon: Icons.copy_rounded,

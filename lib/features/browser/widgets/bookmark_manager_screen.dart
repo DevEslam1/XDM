@@ -30,9 +30,11 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
     super.initState();
     _bookmarks = [];
     _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text.trim().toLowerCase();
-      });
+      final query = _searchController.text.trim().toLowerCase();
+      if (_searchQuery != query) {
+        _searchQuery = query;
+        _load();
+      }
     });
     _load();
   }
@@ -46,7 +48,7 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
   Future<void> _load() async {
     try {
       final db = context.read<DatabaseService>();
-      final bms = await db.loadBookmarks();
+      final bms = await db.loadBookmarks(searchQuery: _searchQuery);
       if (!mounted) return;
       setState(() {
         _bookmarks = bms;
@@ -198,17 +200,10 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
   }
 
   Map<String, List<Bookmark>> _groupBookmarks(List<Bookmark> bms) {
-    final filtered = bms.where((bm) {
-      if (_searchQuery.isEmpty) return true;
-      return bm.title.toLowerCase().contains(_searchQuery) ||
-          bm.url.toLowerCase().contains(_searchQuery) ||
-          (bm.folder?.toLowerCase().contains(_searchQuery) ?? false);
-    }).toList();
-
     final Map<String, List<Bookmark>> groups = {};
     const unsortedKey = 'Unsorted';
 
-    for (final bm in filtered) {
+    for (final bm in bms) {
       final folder = (bm.folder != null && bm.folder!.trim().isNotEmpty)
           ? bm.folder!.trim()
           : unsortedKey;

@@ -19,13 +19,18 @@ class RedirectSheet extends StatelessWidget {
     required List<String> candidates,
     required ValueChanged<String> onSelected,
   }) {
+    if (candidates.isEmpty) return Future.value();
+    final navigator = Navigator.of(context);
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => RedirectSheet(
         candidates: candidates,
-        onSelected: onSelected,
+        onSelected: (url) {
+          navigator.pop();
+          onSelected(url);
+        },
       ),
     );
   }
@@ -92,7 +97,6 @@ class RedirectSheet extends StatelessWidget {
                   return _RedirectCandidateTile(
                     url: url,
                     onTap: () {
-                      Navigator.of(context).pop();
                       onSelected(url);
                     },
                   );

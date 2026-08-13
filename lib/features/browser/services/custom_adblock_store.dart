@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logging/logging.dart';
+import 'ad_blocker_service.dart';
 
 /// Manages user-defined ad-block hostnames with persistence.
 class CustomAdBlockStore {
@@ -29,12 +30,15 @@ class CustomAdBlockStore {
   }
 
   Future<void> setUseCustomOnly(bool value) async {
-    _useCustomOnly = value;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_prefKeyUseCustomOnly, value);
-    } catch (e) {
-      _log.warning('[CustomAdBlockStore] Failed to save useCustomOnly: $e');
+    if (_useCustomOnly != value) {
+      _useCustomOnly = value;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_prefKeyUseCustomOnly, value);
+      } catch (e) {
+        _log.warning('[CustomAdBlockStore] Failed to save useCustomOnly: $e');
+      }
+      AdBlockerService.instance.refresh();
     }
   }
 
@@ -56,14 +60,36 @@ class CustomAdBlockStore {
     final slashIdx = host.indexOf('/');
     if (slashIdx != -1) host = host.substring(0, slashIdx);
 
-    // Strip port
-    final colonIdx = host.indexOf(':');
-    if (colonIdx != -1) host = host.substring(0, colonIdx);
+    // Strip port if present (handling IPv6 brackets gracefully)
+    if (host.startsWith('[')) {
+      final closingBracket = host.indexOf(']');
+      if (closingBracket != -1) {
+        host = host.substring(0, closingBracket + 1);
+      }
+    } else {
+      final colonIdx = host.indexOf(':');
+      if (colonIdx != -1) host = host.substring(0, colonIdx);
+    }
 
     host = host.trim();
+    if (host.endsWith('.')) {
+      host = host.substring(0, host.length - 1);
+    }
 
-    // Basic hostname validation
-    if (RegExp(r'^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$').hasMatch(host)) {
+    if (host.isEmpty) return '';
+
+    // IPv4 Address check (e.g. 192.168.1.1, 127.0.0.1, 0.0.0.0)
+    if (RegExp(r'^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$').hasMatch(host)) {
+      return host;
+    }
+
+    // IPv6 Address check (e.g. ::1, fe80::1)
+    if (RegExp(r'^\[?[0-9a-fA-F:]+\]?$').hasMatch(host)) {
+      return host;
+    }
+
+    // Hostname check (supports standard domains, local TLDs like .local/.lan, localhost, etc.)
+    if (RegExp(r'^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$').hasMatch(host)) {
       return host;
     }
     return '';
@@ -83,12 +109,16 @@ class CustomAdBlockStore {
     }
     if (changed) {
       await _save();
+      AdBlockerService.instance.refresh();
     }
   }
 
-  Future<void> removeHost(String host) async {
-    if (_hosts.remove(host)) {
+  Future<void> removeHost(String input) async {
+    final sanitized = _sanitizeHost(input);
+    final target = sanitized.isNotEmpty ? sanitized : input.trim().toLowerCase();
+    if (_hosts.remove(target)) {
       await _save();
+      AdBlockerService.instance.refresh();
     }
   }
 
@@ -117,3 +147,4 @@ class CustomAdBlockStore {
     return false;
   }
 }
+
