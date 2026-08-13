@@ -254,6 +254,20 @@ class MediaSniffer extends ChangeNotifier {
     try {
       final result = await tab.controller?.evaluateJavascript(source: '''
 (function() {
+  var hasMediaTags = document.querySelector('video, audio, iframe, [data-src], [data-video-src]');
+  var hasPerf = false;
+  try {
+    var res = window.performance.getEntriesByType('resource');
+    for (var k = 0; k < res.length; k++) {
+      var n = res[k].name;
+      if (n && (n.indexOf('.m3u8') !== -1 || n.indexOf('.mpd') !== -1 || n.indexOf('.mp4') !== -1)) {
+        hasPerf = true;
+        break;
+      }
+    }
+  } catch(e) {}
+  if (!hasMediaTags && !hasPerf) return '[]';
+
   var sources = [];
   var videos = document.getElementsByTagName('video');
   for (var i = 0; i < videos.length; i++) {

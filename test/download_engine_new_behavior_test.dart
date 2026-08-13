@@ -642,9 +642,9 @@ void main() {
 
       final j = DownloadJournal(path);
       await j.open();
-      await j.writeInit(3, 1000);
-      await j.recordChunkProgress(0, 100);
-      await j.recordChunkProgress(1, 200);
+      await j.writeInit(3, 200000);
+      await j.recordChunkProgress(0, 70000);
+      await j.recordChunkProgress(1, 80000);
 
       // Simulate crash — journal is not closed; just recover what was written
       // close() is called to simulate what would have been flushed to disk
@@ -654,8 +654,8 @@ void main() {
       expect(recovered, isNotNull);
       expect(recovered!.length, 3);
       // The chunk lines are applied in order after the init
-      expect(recovered[0], 100);
-      expect(recovered[1], 200);
+      expect(recovered[0], 70000);
+      expect(recovered[1], 80000);
       expect(recovered[2], 0);
 
       await file.delete();

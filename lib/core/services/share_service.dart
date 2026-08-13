@@ -107,6 +107,9 @@ class ShareService {
     _recentShares.removeWhere(
       (entry) => now.difference(entry.timestamp) > _dedupWindow,
     );
+    while (_recentShares.length >= 50) {
+      _recentShares.removeAt(0);
+    }
     _recentShares.add(
       _ShareEntry(
         url: extractedUrl,

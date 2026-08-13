@@ -1072,7 +1072,9 @@ class DownloadProvider extends ChangeNotifier
               ? task.errorMessage
               : (task.status == DownloadStatus.merging
                   ? 'Merge was interrupted. Tap Resume/Retry to continue.'
-                  : DownloadStatusMessages.pausedOrphaned),
+                  : (task.isTorrent
+                      ? 'App restarted — resume to continue'
+                      : DownloadStatusMessages.pausedOrphaned)),
         );
       }
 
@@ -2735,22 +2737,7 @@ class DownloadProvider extends ChangeNotifier
     // Flush any pending throttled progress and drop tracking state.
     await _flushPendingProgress(id);
 
-    _retryCounts.remove(id);
-    _speedHistories.remove(id);
-    _lastProgressUpdateTimes.remove(id);
-    _lastDbSaveTimes.remove(id);
-    _lastDbSaveBytes.remove(id);
-    _pendingProgressUpdates.remove(id);
-
-    // FIX-R-04: Clear effectiveThreadOverrides entry on resume
-    effectiveThreadOverrides.remove(id);
-
-    _retryTimers[id]?.cancel();
-    _retryTimers.remove(id);
-
-    _ytLowSpeedCounts.remove(id);
-    _ytThrottlingRefreshing.remove(id);
-    _lastTorrentFileDiskSync.remove(id);
+    _cleanupTaskState(id);
 
     // Cancel the token - removing it allows future resumes.
     _cancelTokens[id]?.cancel('cancelled');
@@ -3257,6 +3244,35 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
+  /// Centralized per-task state cleanup to prevent memory leaks.
+  void _cleanupTaskState(String id) {
+    _speedHistories.remove(id);
+    _uploadSpeedHistories.remove(id);
+    _progressNotifiers.remove(id)?.dispose();
+    _speedNotifiers.remove(id)?.dispose();
+    _lastProgressUpdateTimes.remove(id);
+    _lastDbSaveTimes.remove(id);
+    _lastDbSaveBytes.remove(id);
+    _pendingProgressUpdates.remove(id);
+    effectiveThreadOverrides.remove(id);
+    _retryCounts.remove(id);
+    _resumeRejectionRestarts.remove(id);
+    _ytLowSpeedCounts.remove(id);
+    _ytThrottlingRefreshing.remove(id);
+    _retryTimers[id]?.cancel();
+    _retryTimers.remove(id);
+    _lastTorrentFileDiskSync.remove(id);
+    _downloadMetrics.remove(id);
+    _dbRetryCounts.remove(id);
+    _dbRetryTimers[id]?.cancel();
+    _dbRetryTimers.remove(id);
+    _needsForcedPauseOnRegister.remove(id);
+    _flushingIds.remove(id);
+    _activeFutures.remove(id);
+    StateStore.removeTaskState(id);
+    _orchestrator.cleanupTaskState(id);
+  }
+
   Future<void> deleteTask(String id, {bool deleteFiles = false}) async {
     final task = _findTask(id);
     if (task == null) return;
@@ -3316,35 +3332,7 @@ class DownloadProvider extends ChangeNotifier
     _tasks.removeWhere((t) => t.id == id);
     filteredTasksDirty = true;
     _cancelTokens.remove(id);
-    _speedHistories.remove(id);
-    _uploadSpeedHistories.remove(id);
-    _progressNotifiers.remove(id)?.dispose();
-    _speedNotifiers.remove(id)?.dispose();
-    _lastProgressUpdateTimes.remove(id);
-    _lastDbSaveTimes.remove(id);
-    _lastDbSaveBytes.remove(id);
-    _pendingProgressUpdates.remove(id);
-    effectiveThreadOverrides.remove(id);
-    _retryCounts.remove(id);
-    _resumeRejectionRestarts.remove(id);
-    _ytLowSpeedCounts.remove(id);
-
-    _ytThrottlingRefreshing.remove(id);
-
-    // FIX-R-04: Clear effectiveThreadOverrides entry on resume
-    effectiveThreadOverrides.remove(id);
-
-    _retryTimers[id]?.cancel();
-    _retryTimers.remove(id);
-
-    _lastTorrentFileDiskSync.remove(id);
-    _downloadMetrics.remove(id);
-    _dbRetryCounts.remove(id);
-    _dbRetryTimers[id]?.cancel();
-    _dbRetryTimers.remove(id);
-    StateStore.removeTaskState(id);
-    _orchestrator.cleanupTaskState(
-        id); // FIX-12 & FIX-17: Clean up orchestrator state maps
+    _cleanupTaskState(id);
 
     notifyListeners();
 

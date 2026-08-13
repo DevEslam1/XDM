@@ -620,12 +620,31 @@ class _FileChangedOnServerException implements Exception {
 }
 
 class HttpTransferJob {
-  HttpTransferJob(this.cmd, this.out);
+  HttpTransferJob(this.cmd, this.out) {
+    unawaited(_cancelToken.whenCancel.then((_) {
+      _abortAllDelays();
+    }));
+  }
   final DownloadCommand cmd;
   final SendPort out;
   final CancelToken _cancelToken = CancelToken();
   int _seq = 0;
   bool _cancelRequested = false;
+  final List<Completer<void>> _pendingDelayCompleters = [];
+  final List<Timer> _pendingDelayTimers = [];
+
+  void _abortAllDelays() {
+    _cancelRequested = true;
+    for (final t in _pendingDelayTimers) {
+      t.cancel();
+    }
+    _pendingDelayTimers.clear();
+    for (final c in _pendingDelayCompleters) {
+      if (!c.isCompleted) c.complete();
+    }
+    _pendingDelayCompleters.clear();
+  }
+
   TransferState? _state;
   int? _lastEta;
   int _lastStateSaveMs = 0;
@@ -637,7 +656,7 @@ class HttpTransferJob {
   final Stopwatch _stopwatch = Stopwatch();
   final Queue<_SpeedSample> _speedSamples = Queue();
   void requestCancel() {
-    _cancelRequested = true;
+    _abortAllDelays();
     if (!_cancelToken.isCancelled) _cancelToken.cancel('paused');
   }
 
@@ -1623,20 +1642,20 @@ class HttpTransferJob {
   }
 
   Future<void> _cancellableDelay(Duration duration) async {
-    if (_cancelRequested) return;
+    if (_cancelRequested || _cancelToken.isCancelled) return;
     final completer = Completer<void>();
+    _pendingDelayCompleters.add(completer);
     final timer = Timer(duration, () {
       if (!completer.isCompleted) completer.complete();
     });
-    // Interrupt the delay early when the token is cancelled. This is
-    // intentionally fire-and-forget: `whenCancel` only completes when
-    // cancel() is called, so awaiting it here would hang on the normal
-    // timer-expiry path and freeze every throttled write and retry backoff.
-    unawaited(_cancelToken.whenCancel.then((_) {
+    _pendingDelayTimers.add(timer);
+    try {
+      await completer.future;
+    } finally {
       timer.cancel();
-      if (!completer.isCompleted) completer.complete();
-    }));
-    await completer.future;
+      _pendingDelayTimers.remove(timer);
+      _pendingDelayCompleters.remove(completer);
+    }
   }
 
   Future<void> _throttledSaveAndReport(

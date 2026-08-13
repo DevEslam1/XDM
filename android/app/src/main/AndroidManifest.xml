@@ -116,7 +116,7 @@
         </receiver>
         <receiver
             android:name=".widget.WidgetActionReceiver"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="com.example.dmx.PAUSE_ALL" />
                 <action android:name="com.example.dmx.RESUME_ALL" />

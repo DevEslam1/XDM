@@ -743,6 +743,10 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setBypassSSL(bool value) async {
+    if (value && !developerMode) {
+      _log.warning('Attempted to enable bypassSSL without developer mode enabled.');
+      return;
+    }
     bypassSSL = value;
     _pendingBypassSSLConfirmation = false;
     await _prefs.setBool(_bypassSSLKey, value);

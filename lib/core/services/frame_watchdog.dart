@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/scheduler.dart';
 import 'package:logging/logging.dart';
+import 'performance_monitor.dart';
 import 'power_monitor.dart';
 
 class PerformanceBudget {
@@ -63,6 +64,9 @@ class FrameWatchdog {
 
   static void _onTimings(List<FrameTiming> timings) {
     if (PowerMonitor.screenOff) return;
+    if (PerformanceMonitor.instance.isListening) {
+      PerformanceMonitor.instance.ingestFrameTimings(timings);
+    }
     for (final t in timings) {
       _total++;
       if (t.totalSpan.inMilliseconds > _budgetMs) _dropped++;

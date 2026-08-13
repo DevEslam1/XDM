@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:math';
 
 import 'package:synchronized/synchronized.dart';
+import 'power_monitor.dart';
 
 /// A token-bucket bandwidth governor.
 ///
@@ -29,8 +30,9 @@ class BandwidthGovernor {
   BandwidthGovernor([
     this._globalBytesPerSecond = 0,
     double burstFactor = 1.0,
-    this.throttleFactor = 1.0,
-  ]) : _burstFactor = burstFactor.clamp(1.0, 4.0);
+    double? throttleFactor,
+  ])  : _burstFactor = burstFactor.clamp(1.0, 4.0),
+        throttleFactor = throttleFactor ?? PowerMonitor.throttleFactor;
 
   void dispose() {}
 

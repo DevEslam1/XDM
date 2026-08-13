@@ -472,6 +472,7 @@ class StateStore {
 
   static Future<void> remove(String tempFilePath) async {
     final targetPath = pathFor(tempFilePath);
+    _lastWrittenPayloads.remove(targetPath);
     final tmpPath = '$targetPath.tmp';
     try {
       final f = File(targetPath);
@@ -532,17 +533,12 @@ class DownloadJournal {
     });
   }
 
-  int _bytesSinceLastJournal = 0;
-
   Future<void> recordChunkProgress(int index, int bytes) async {
     // Skip journal writes entirely in background
     if (DownloadEngine.isInBackground || PowerMonitor.screenOff) {
       return;
     }
 
-    _bytesSinceLastJournal += bytes;
-    if (_bytesSinceLastJournal < 64 * 1024) return;
-    _bytesSinceLastJournal = 0;
     await _lock.synchronized(() {
       _ensureOpen();
       final line = _withCrc({

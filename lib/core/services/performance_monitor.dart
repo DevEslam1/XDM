@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'frame_watchdog.dart';
 
@@ -70,13 +69,11 @@ class PerformanceMonitor {
   void start() {
     if (_listening) return;
     _listening = true;
-    SchedulerBinding.instance.addTimingsCallback(_onTimings);
+    FrameWatchdog.start();
   }
 
   /// Stops collecting frame timings.
   void stop() {
-    if (!_listening) return;
-    SchedulerBinding.instance.removeTimingsCallback(_onTimings);
     _listening = false;
   }
 
@@ -93,8 +90,7 @@ class PerformanceMonitor {
     _trim();
   }
 
-  /// Test hook: feeds timings exactly like the scheduler callback does.
-  @visibleForTesting
+  /// Feeds timings from [FrameWatchdog] or test suites.
   void ingestFrameTimings(List<FrameTiming> timings) => _onTimings(timings);
 
   void _trim() {

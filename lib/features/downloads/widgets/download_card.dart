@@ -241,6 +241,70 @@ class _CardShell extends StatelessWidget {
 // Status chip — pulses while downloading / seeding
 // ────────────────────────────────────────────────────────────────────────────
 
+class _StatusChipPulseDriver with WidgetsBindingObserver {
+  static final _instance = _StatusChipPulseDriver._();
+  factory _StatusChipPulseDriver() => _instance;
+
+  _StatusChipPulseDriver._() {
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  final ValueNotifier<double> value = ValueNotifier<double>(0.7);
+  Timer? _timer;
+  int _refCount = 0;
+  double _current = 0.4;
+  bool _increasing = true;
+
+  void addRef() {
+    _refCount++;
+    if (_timer == null) {
+      _start();
+    }
+  }
+
+  void removeRef() {
+    _refCount = (_refCount - 1).clamp(0, 999999);
+    if (_refCount == 0) {
+      _stop();
+    }
+  }
+
+  void _start() {
+    _stop();
+    _timer = Timer.periodic(const Duration(milliseconds: 33), (_) {
+      if (_increasing) {
+        _current += 0.02;
+        if (_current >= 1.0) {
+          _current = 1.0;
+          _increasing = false;
+        }
+      } else {
+        _current -= 0.02;
+        if (_current <= 0.4) {
+          _current = 0.4;
+          _increasing = true;
+        }
+      }
+      value.value = _current;
+    });
+  }
+
+  void _stop() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _stop();
+    } else if (state == AppLifecycleState.resumed && _refCount > 0) {
+      _start();
+    }
+  }
+}
+
 class _StatusChip extends StatefulWidget {
   final DownloadTask task;
   final bool isDark;
@@ -256,21 +320,14 @@ class _StatusChip extends StatefulWidget {
   State<_StatusChip> createState() => _StatusChipState();
 }
 
-class _StatusChipState extends State<_StatusChip>
-    with TickerProviderStateMixin {
-  AnimationController? _controller;
-  Animation<double>? _pulseAnimation;
+class _StatusChipState extends State<_StatusChip> {
+  bool _hasActiveRef = false;
 
   bool _shouldPulse(DownloadTask task) {
     return task.status == DownloadStatus.downloading ||
         (task.status == DownloadStatus.completed &&
             task.isTorrent &&
             task.seedingEnabled);
-  }
-
-  @override
-  void initState() {
-    super.initState();
   }
 
   @override
@@ -282,45 +339,30 @@ class _StatusChipState extends State<_StatusChip>
   @override
   void didUpdateWidget(_StatusChip oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Sync pulse state when task status changes
-    if (oldWidget.task.status != widget.task.status) {
+    if (oldWidget.task.status != widget.task.status ||
+        oldWidget.task.seedingEnabled != widget.task.seedingEnabled) {
       _syncPulse();
     }
   }
 
   void _syncPulse() {
-    if (_shouldPulse(widget.task) && modernAnimationsAllowed(context)) {
-      _startPulse();
-    } else {
-      _stopPulse();
+    final needsPulse =
+        _shouldPulse(widget.task) && modernAnimationsAllowed(context);
+    if (needsPulse && !_hasActiveRef) {
+      _StatusChipPulseDriver().addRef();
+      _hasActiveRef = true;
+    } else if (!needsPulse && _hasActiveRef) {
+      _StatusChipPulseDriver().removeRef();
+      _hasActiveRef = false;
     }
-  }
-
-  void _startPulse() {
-    if (_controller == null) {
-      _controller = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 1500),
-      );
-      _pulseAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
-        CurvedAnimation(
-          parent: _controller!,
-          curve: Curves.easeInOut,
-        ),
-      );
-      _controller!.repeat(reverse: true);
-    }
-  }
-
-  void _stopPulse() {
-    _controller?.dispose();
-    _controller = null;
-    _pulseAnimation = null;
   }
 
   @override
   void dispose() {
-    _stopPulse(); // ensure cleanup
+    if (_hasActiveRef) {
+      _StatusChipPulseDriver().removeRef();
+      _hasActiveRef = false;
+    }
     super.dispose();
   }
 
@@ -364,77 +406,53 @@ class _StatusChipState extends State<_StatusChip>
         task.scheduledAt != null &&
         task.scheduledAt!.isAfter(DateTime.now());
 
-    final isPulseActive = _shouldPulse(task) && _pulseAnimation != null;
+    final isPulseActive =
+        _shouldPulse(task) && modernAnimationsAllowed(context);
+
+    Widget buildChipContainer(double pulseVal) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: color.withValues(alpha: 0.45 * pulseVal),
+            width: 0.8,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.08 * pulseVal),
+              blurRadius: 6.0,
+              spreadRadius: 0.5,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(_icon, size: 14, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontSize: responsiveFontSize(context, 12),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     final Widget chipContent = isPulseActive
-        ? AnimatedBuilder(
-            animation: _pulseAnimation!,
-            builder: (context, child) {
-              return Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color:
-                        color.withValues(alpha: 0.45 * _pulseAnimation!.value),
-                    width: 0.8,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withValues(
-                          alpha: 0.08 * _pulseAnimation!.value),
-                      blurRadius: 6.0,
-                      spreadRadius: 0.5,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(_icon, size: 14, color: color),
-                    const SizedBox(width: 4),
-                    Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: responsiveFontSize(context, 12),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+        ? ValueListenableBuilder<double>(
+            valueListenable: _StatusChipPulseDriver().value,
+            builder: (context, pulseVal, _) => buildChipContainer(pulseVal),
           )
-        : Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: AppTheme.chipDecoration(
-              color: color,
-              isDark: isDark,
-              radius: 12,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(_icon, size: 14, color: color),
-                const SizedBox(width: 4),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: responsiveFontSize(context, 12),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          );
+        : buildChipContainer(1.0);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
