@@ -207,6 +207,12 @@ class _DetailsScreenState extends State<DetailsScreen>
 
             final task = provider.tasks[taskIndex];
 
+            if (task.status == DownloadStatus.downloading) {
+              if (!_pulse.isAnimating) _pulse.repeat(reverse: true);
+            } else {
+              if (_pulse.isAnimating) _pulse.stop();
+            }
+
             final isSeeding = task.status == DownloadStatus.completed &&
                 task.isTorrent &&
                 task.seedingEnabled;
@@ -693,7 +699,7 @@ class _RingPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
 
-    final radius = size.width / 2 - 8;
+    final radius = (size.width / 2 - 8).clamp(0.0, double.infinity);
 
     final track = Paint()
       ..color = (isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle)
@@ -1937,8 +1943,25 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
   bool _showTrackers = false;
   bool _showPeers = false;
 
+  late final TrackerManager _trackerManager;
+
   DownloadTask get task => widget.task;
   DownloadProvider get provider => widget.provider;
+
+  @override
+  void initState() {
+    super.initState();
+    // Created once and reused across rebuilds: constructing a fresh
+    // TrackerManager in build() would drop user-added trackers on every
+    // provider notify (the stats panel rebuilds while a download runs).
+    _trackerManager = TrackerManager();
+  }
+
+  @override
+  void dispose() {
+    _trackerManager.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2130,7 +2153,7 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
               const SizedBox(height: 12),
               TrackerPanel(
                 torrentId: torrentId,
-                trackerManager: TrackerManager(),
+                trackerManager: _trackerManager,
               ),
             ],
             if (_showPeers) ...[

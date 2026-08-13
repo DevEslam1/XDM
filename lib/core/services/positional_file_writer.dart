@@ -52,9 +52,15 @@ class PositionalFileWriter {
   final String path;
   final int totalSize;
   final int threadCount;
-  final int _bufferSize;
+  int _bufferSize;
   final Lock _metaLock = Lock();
   final List<int> _highWater;
+
+  void setBufferSize(int newSize) {
+    if (newSize > 0) {
+      _bufferSize = newSize;
+    }
+  }
 
   final Map<int, RandomAccessFile> _handles = {};
   final Map<int, Lock> _handleLocks = {};
@@ -235,6 +241,24 @@ class PositionalFileWriter {
         if (!_closed) {
           await _flushBufferInternal(handle, buffer);
           await handle.flush();
+        }
+      });
+    }
+  }
+
+  /// Flushes buffered writes to the OS without an fsync barrier. Used for
+  /// periodic progress saves where full durability is unnecessary; call
+  /// [flushAll] at pause/stop/completion to force durability.
+  Future<void> flushBuffers() async {
+    _checkOpen();
+    for (final entry in _handles.entries) {
+      final key = entry.key;
+      final handle = entry.value;
+      final lock = _handleLocks[key]!;
+      final buffer = _buffers[key]!;
+      await lock.synchronized(() async {
+        if (!_closed) {
+          await _flushBufferInternal(handle, buffer);
         }
       });
     }

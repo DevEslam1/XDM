@@ -128,7 +128,7 @@ class DmxCardShell extends StatelessWidget {
         child: DmxBackdropFilter(
           sigmaX: 12,
           sigmaY: 12,
-          child: content,
+          child: RepaintBoundary(child: content),
         ),
       );
     }

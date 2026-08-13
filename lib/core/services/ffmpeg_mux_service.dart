@@ -253,6 +253,9 @@ class FFmpegMuxService {
       await outputDir.create(recursive: true);
     }
 
+    final requiredSpace = videoSize + audioSize;
+    _log.info('Starting merge for $videoSize bytes video + $audioSize bytes audio (required storage: $requiredSpace bytes)');
+
     for (final strategy in [
       MergeStrategy.streamCopy,
       MergeStrategy.hwReencode,

@@ -473,15 +473,12 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
           _prefs.getInt(_maxHalfOpenConnectionsKey) ?? maxHalfOpenConnections;
       enableUtp = _prefs.getBool(_enableUtpKey) ?? enableUtp;
       enableLsd = _prefs.getBool(_enableLsdKey) ?? enableLsd;
-      diskCacheSizeMb =
-          _prefs.getInt(_diskCacheSizeMbKey) ?? diskCacheSizeMb;
+      diskCacheSizeMb = _prefs.getInt(_diskCacheSizeMbKey) ?? diskCacheSizeMb;
       useOsCache = _prefs.getBool(_useOsCacheKey) ?? useOsCache;
       seedOnlyWhenCharging =
           _prefs.getBool(_seedOnlyWhenChargingKey) ?? seedOnlyWhenCharging;
-      seedOnlyOnWifi =
-          _prefs.getBool(_seedOnlyOnWifiKey) ?? seedOnlyOnWifi;
-      enableIpFilter =
-          _prefs.getBool(_enableIpFilterKey) ?? enableIpFilter;
+      seedOnlyOnWifi = _prefs.getBool(_seedOnlyOnWifiKey) ?? seedOnlyOnWifi;
+      enableIpFilter = _prefs.getBool(_enableIpFilterKey) ?? enableIpFilter;
       ipFilterPath = _prefs.getString(_ipFilterPathKey) ?? ipFilterPath;
       enableAnonymousMode =
           _prefs.getBool(_enableAnonymousModeKey) ?? enableAnonymousMode;
@@ -846,7 +843,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> setMaxPeerConnectionsPerTorrent(int value) async {
     maxPeerConnectionsPerTorrent = value.clamp(5, 500);
-    await _prefs.setInt(_maxPeerConnectionsPerTorrentKey, maxPeerConnectionsPerTorrent);
+    await _prefs.setInt(
+        _maxPeerConnectionsPerTorrentKey, maxPeerConnectionsPerTorrent);
     notifyListeners();
   }
 
@@ -1188,13 +1186,15 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _formAutofillKey,
     ];
 
+    final removals = <Future<dynamic>>[];
     for (final key in settingsKeys) {
       if (key == _backendTokenKey) {
-        await _secureStorage.delete(key: key);
+        removals.add(_secureStorage.delete(key: key));
       } else {
-        await _prefs.remove(key);
+        removals.add(_prefs.remove(key));
       }
     }
+    await Future.wait(removals);
 
     _isDarkMode = true;
     _classicUi = true;

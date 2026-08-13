@@ -1438,7 +1438,9 @@ class DownloadEngine {
       job.cancel();
       try {
         final f = File(localFilePath);
-        if (f.existsSync()) f.deleteSync();
+        f.exists().then((exists) {
+          if (exists) f.delete();
+        });
       } catch (_) {}
       final ytPauseCid = _ytCounterpartTaskIds[taskId];
       int? ytPauseLiveCp =
@@ -3196,7 +3198,6 @@ class DownloadEngine {
         TorrentService.pauseTorrent(id);
       } catch (_) {}
     }
-    _activeTorrentIds.clear();
     _httpEngine.stopAdaptiveThreadMonitor();
   }
 

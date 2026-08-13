@@ -76,6 +76,7 @@ class InactivityWatchdog {
                     source: 'try { window.stop(); } catch(e){}')
                 .catchError((_) => null);
           } catch (_) {}
+          tab.isSuspended = true;
         }
       }
     }

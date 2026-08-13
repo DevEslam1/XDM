@@ -58,7 +58,18 @@ class AppLockService {
     }
 
     final hashedInput = hashSecret(pin, salt: salt);
-    final matches = timingSafeEqual(storedPin, hashedInput);
+    var matches = timingSafeEqual(storedPin, hashedInput);
+
+    if (!matches) {
+      // Legacy hash fallback check for transparent upgrade
+      final legacyInput = legacyHashSecret(pin, salt: salt);
+      if (timingSafeEqual(storedPin, legacyInput)) {
+        matches = true;
+        // Upgrade stored PIN hash to stretched format
+        await _storage.write(key: _pinKey, value: hashedInput);
+      }
+    }
+
     if (matches) {
       await resetFailedAttempts();
       return true;

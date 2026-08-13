@@ -268,6 +268,21 @@ class AdBlockFilterUpdater {
     return daysSince >= _updateIntervalDays;
   }
 
+  Timer? _autoUpdateTimer;
+
+  void startAutoUpdateScheduler() {
+    _autoUpdateTimer?.cancel();
+    _autoUpdateTimer = Timer.periodic(const Duration(hours: 24), (_) {
+      updateIfNeeded();
+    });
+    unawaited(updateIfNeeded());
+  }
+
+  void stopAutoUpdateScheduler() {
+    _autoUpdateTimer?.cancel();
+    _autoUpdateTimer = null;
+  }
+
   Future<bool> updateIfNeeded({bool force = false}) async {
     if (_inFlightUpdate != null) {
       // If a force-update is requested while one is in flight, wait for the

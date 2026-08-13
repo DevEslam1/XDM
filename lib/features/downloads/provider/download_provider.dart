@@ -503,6 +503,12 @@ class DownloadProvider extends ChangeNotifier
   @override
   void providerStartWidgetTimer() => _startWidgetTimer();
 
+  @override
+  bool get providerIsOnWifi => _networkMonitor.hasWifiOrEthernet;
+
+  @override
+  bool get providerIsCharging => PowerMonitor.isCharging;
+
   // ---------------------------------------------------------------------------
   // DownloadOrchestratorHost contract implementations
   // ---------------------------------------------------------------------------
@@ -2598,6 +2604,9 @@ class DownloadProvider extends ChangeNotifier
   /// process. Triggered from the "Exit App" action on the service notification.
   Future<void> exitApp() async {
     try {
+      for (final task in _tasks) {
+        await _flushPendingProgress(task.id);
+      }
       // Pause every active download so state is saved cleanly.
       await pauseAllTasks();
     } catch (_) {}
@@ -3414,9 +3423,9 @@ class DownloadProvider extends ChangeNotifier
   /// structural update (status change, URL edit, metadata save) carries
   /// stale progress values captured before the update was enqueued.
   DownloadTask _mergeTaskUpdate(DownloadTask live, DownloadTask incoming) {
-    // Terminal states are never overwritten by non-terminal incoming updates.
-    if (live.status == DownloadStatus.completed &&
-        incoming.status != DownloadStatus.completed) {
+    // Terminal states (completed / failed) are never overwritten by non-terminal incoming updates.
+    if ((live.status == DownloadStatus.completed || live.status == DownloadStatus.failed) &&
+        incoming.status != live.status) {
       return live;
     }
     // C3: Reject stale promotion of user-paused tasks by asynchronous updates

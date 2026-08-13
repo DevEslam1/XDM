@@ -201,6 +201,8 @@ class TabManager extends ChangeNotifier {
   }
 
   /// Opens a new tab with optional background loading logic.
+  static const int maxTabs = 20;
+
   void openInNewTab(
     String url, {
     bool switchToTab = false,
@@ -208,6 +210,10 @@ class TabManager extends ChangeNotifier {
     bool isIncognito = false,
   }) {
     if (!isActive() || url.isEmpty) return;
+    if (_tabs.length >= maxTabs) {
+      _log.warning('[TabManager] Max tab cap reached ($maxTabs). Rejecting new tab for: $url');
+      return;
+    }
 
     // 1. Evict stale background ad/popup tabs atomically before adding
     _evictStaleAdTabsInternal();

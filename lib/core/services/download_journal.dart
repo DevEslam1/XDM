@@ -422,7 +422,11 @@ class StateStore {
     return adjusted;
   }
 
-  static Future<void> save(String tempFilePath, TransferState state) async {
+  static Future<void> save(
+    String tempFilePath,
+    TransferState state, {
+    bool durable = false,
+  }) async {
     state.updatedAt = DateTime.now();
     final targetPath = pathFor(tempFilePath);
     final tmpPath = '$targetPath.tmp';
@@ -430,12 +434,19 @@ class StateStore {
       final payload = jsonEncode(state.toJson());
       final tmp = File(tmpPath);
       await tmp.parent.create(recursive: true);
-      await tmp.writeAsString(payload, flush: true);
-      try {
-        final raf = await tmp.open(mode: FileMode.append);
-        await raf.flush();
-        await raf.close();
-      } catch (_) {}
+      // Periodic progress saves are best-effort: write + atomic rename
+      // without an fsync barrier. Full durability (fsync) is reserved for
+      // pause/stop/completion so active downloads don't hammer flash storage.
+      if (durable) {
+        await tmp.writeAsString(payload, flush: true);
+        try {
+          final raf = await tmp.open(mode: FileMode.append);
+          await raf.flush();
+          await raf.close();
+        } catch (_) {}
+      } else {
+        await tmp.writeAsString(payload, flush: false);
+      }
       await tmp.rename(targetPath);
     } catch (e) {
       debugPrint('[DmxState] save failed for $tempFilePath: $e');

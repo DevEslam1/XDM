@@ -35,6 +35,14 @@ mixin DownloadTorrentMixin {
   void providerStartWidgetTimer();
   set filteredTasksDirty(bool value);
 
+  /// Whether the device is currently on Wi-Fi / ethernet (used by the seeding
+  /// ratio policy's "seed only on Wi-Fi" rule).
+  bool get providerIsOnWifi;
+
+  /// Whether the device is currently charging (used by the seeding ratio
+  /// policy's "seed only when charging" rule).
+  bool get providerIsCharging;
+
   // ---------------------------------------------------------------------------
   // Seeding lifecycle
   // ---------------------------------------------------------------------------
@@ -496,8 +504,8 @@ mixin DownloadTorrentMixin {
             currentRatio: currentRatio,
             seedDuration: seedDuration,
             uploadedBytes: stats.totalPayloadUpload,
-            isCharging: true,
-            isOnWifi: true,
+            isCharging: providerIsCharging,
+            isOnWifi: providerIsOnWifi,
           ) ||
           TorrentService.shouldStopSeeding(
             progress: stats.progress,

@@ -213,12 +213,19 @@ class DownloadIsolatePool {
     if (_shuttingDown || _workers.length <= 1) return;
     final now = DateTime.now();
     final toRemove = <_Worker>[];
+    final isPowerConstrained = _powerAware &&
+        (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ||
+            PowerMonitor.screenOff ||
+            _workers.length > effectiveMaxSize);
+    final idleThreshold = isPowerConstrained
+        ? const Duration(seconds: 3)
+        : const Duration(seconds: 30);
 
     for (final w in _workers) {
       if (w.activeJobs == 0 &&
           !w.dead &&
           w.pending.isEmpty &&
-          now.difference(w.lastActiveTime) > const Duration(seconds: 30)) {
+          now.difference(w.lastActiveTime) > idleThreshold) {
         toRemove.add(w);
         if (_workers.length - toRemove.length <= 1) break;
       }
@@ -441,10 +448,14 @@ class DownloadIsolatePool {
 
   void onMemoryPressure() {
     if (_workers.length > 1) {
-      final w = _workers.removeLast();
-      w.inbox.close();
-      w.errorPort.close();
-      w.isolate.kill(priority: Isolate.immediate);
+      final idleIndex =
+          _workers.lastIndexWhere((w) => w.activeJobs == 0 && w.pending.isEmpty);
+      if (idleIndex != -1) {
+        final w = _workers.removeAt(idleIndex);
+        w.inbox.close();
+        w.errorPort.close();
+        w.isolate.kill(priority: Isolate.beforeNextEvent);
+      }
     }
   }
 }
@@ -584,8 +595,8 @@ class HttpTransferJob {
   int _bytesSinceSave = 0;
   final Stopwatch _stopwatch = Stopwatch();
   final Queue<_SpeedSample> _speedSamples = Queue();
-  static const int _stateSaveIntervalMs = 2000;
-  static const int _stateSaveByteThreshold = 256 * 1024;
+  static const int _stateSaveIntervalMs = 5000;
+  static const int _stateSaveByteThreshold = 4 * 1024 * 1024;
   void requestCancel() {
     _cancelRequested = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('paused');
@@ -852,10 +863,17 @@ class HttpTransferJob {
       await _spotCheckResumedBytes(dio, st, writer);
     }
     final failover = MirrorFailover([cmd.punyUrl, ...?cmd.mirrorUrls]);
-    final work = ChunkScheduler.pendingWork(st.chunks);
+    // Preserve each chunk's original index so concurrent chunk executors write
+    // through their own handle + buffer, restoring sequential aggregated
+    // writes instead of funneling every chunk through a single shared buffer.
+    final work = <(int, ChunkState)>[
+      for (var i = 0; i < st.chunks.length; i++)
+        if (!st.chunks[i].isComplete) (i, st.chunks[i]),
+    ];
     try {
       final results = await Future.wait<ChunkResult>(
-        work.map((chunk) async {
+        work.map((entry) async {
+          final (chunkIndex, chunk) = entry;
           var attempts = 0;
           const maxAttempts = 3;
           Object? lastError;
@@ -867,6 +885,7 @@ class HttpTransferJob {
               await _runChunk(
                 dio: dio,
                 chunk: chunk,
+                chunkIndex: chunkIndex,
                 writer: writer,
                 governor: governor,
                 failover: failover,
@@ -948,7 +967,7 @@ class HttpTransferJob {
       }
       try {
         await writer.flushAll();
-        await StateStore.save(cmd.tempFilePath, st);
+        await StateStore.save(cmd.tempFilePath, st, durable: true);
       } catch (_) {}
       rethrow;
     } finally {
@@ -962,6 +981,7 @@ class HttpTransferJob {
   Future<void> _runChunk({
     required Dio dio,
     required ChunkState chunk,
+    required int chunkIndex,
     required PositionalFileWriter writer,
     required BandwidthGovernor governor,
     required MirrorFailover failover,
@@ -1072,7 +1092,7 @@ class HttpTransferJob {
           final toWrite = remainingInChunk < piece.length
               ? Uint8List.sublistView(piece, 0, remainingInChunk)
               : piece;
-          await writer.write(-1, pos, toWrite);
+          await writer.write(chunkIndex, pos, toWrite);
           sessionBytes += toWrite.length;
           chunk.downloaded = resumeFrom + sessionBytes;
           _bytesSinceSave += toWrite.length;
@@ -1463,7 +1483,7 @@ class HttpTransferJob {
           await sink?.close();
         } catch (_) {}
         try {
-          await StateStore.save(cmd.tempFilePath, _state!);
+          await StateStore.save(cmd.tempFilePath, _state!, durable: true);
         } catch (_) {}
       }
     }
@@ -1475,7 +1495,7 @@ class HttpTransferJob {
         await raf.close();
       } else {
         st.status = DmxStateStatus.failed;
-        await StateStore.save(cmd.tempFilePath, st);
+        await StateStore.save(cmd.tempFilePath, st, durable: true);
         _emitProgress(0, statusMessage: 'Failed');
         throw DownloadIntegrityException(
             'expected ${st.totalSize} bytes, got $actualLen');
@@ -1492,7 +1512,7 @@ class HttpTransferJob {
       final tempExists = await File(cmd.tempFilePath).exists();
       if (!tempExists) {
         st.status = DmxStateStatus.failed;
-        await StateStore.save(cmd.tempFilePath, st);
+        await StateStore.save(cmd.tempFilePath, st, durable: true);
         _emitProgress(0, statusMessage: 'Failed');
         throw DownloadIntegrityException(
             'Temporary download file missing: ${cmd.tempFilePath}');
@@ -1517,14 +1537,14 @@ class HttpTransferJob {
       final localExists = await File(cmd.localFilePath).exists();
       if (!localExists) {
         st.status = DmxStateStatus.failed;
-        await StateStore.save(cmd.tempFilePath, st);
+        await StateStore.save(cmd.tempFilePath, st, durable: true);
         _emitProgress(0, statusMessage: 'Failed');
         throw DownloadIntegrityException(
             'Download output file missing: ${cmd.localFilePath}');
       }
     }
     st.status = DmxStateStatus.complete;
-    await StateStore.save(cmd.tempFilePath, st);
+    await StateStore.save(cmd.tempFilePath, st, durable: true);
     _emitProgress(0, statusMessage: 'Completed');
     await StateStore.remove(cmd.tempFilePath);
   }
@@ -1554,12 +1574,15 @@ class HttpTransferJob {
     final timer = Timer(duration, () {
       if (!completer.isCompleted) completer.complete();
     });
-    final sub = _cancelToken.whenCancel.then((_) {
+    // Interrupt the delay early when the token is cancelled. This is
+    // intentionally fire-and-forget: `whenCancel` only completes when
+    // cancel() is called, so awaiting it here would hang on the normal
+    // timer-expiry path and freeze every throttled write and retry backoff.
+    unawaited(_cancelToken.whenCancel.then((_) {
       timer.cancel();
       if (!completer.isCompleted) completer.complete();
-    });
+    }));
     await completer.future;
-    await sub;
   }
 
   Future<void> _throttledSaveAndReport(
@@ -1576,7 +1599,11 @@ class HttpTransferJob {
       _bytesSinceSave = 0;
       try {
         if (preSaveFlush != null) await preSaveFlush();
-        if (writer != null) await writer.flush();
+        // Periodic saves flush buffered data to the OS without an fsync
+        // barrier and persist state best-effort. Full durability is applied
+        // at pause/stop/completion (see _finalize and pause paths), avoiding
+        // an fsync storm on flash storage during active transfers.
+        if (writer != null) await writer.flushBuffers();
         await StateStore.save(cmd.tempFilePath, st);
       } catch (e) {
         debugPrint('[DMX-Job] state save failed: $e');
@@ -1584,11 +1611,11 @@ class HttpTransferJob {
     }
     if (dueReport) {
       _lastReportMs = nowMs;
-      _emitProgress(nowMs);
+      _emitProgress(nowMs, writer: writer);
     }
   }
 
-  void _emitProgress(int nowMs, {String? statusMessage}) {
+  void _emitProgress(int nowMs, {String? statusMessage, PositionalFileWriter? writer}) {
     final st = _state!;
     final downloaded = st.downloadedBytes;
     final total = st.totalSize;
@@ -1604,6 +1631,13 @@ class HttpTransferJob {
       final elapsed =
           (_stopwatch.elapsedMilliseconds - first.timestampMs) / 1000;
       if (elapsed > 0) speed = (downloaded - first.bytes) / elapsed;
+    }
+    if (writer != null) {
+      if (speed > 50 * 1024 * 1024) {
+        writer.setBufferSize(512 * 1024);
+      } else {
+        writer.setBufferSize(256 * 1024);
+      }
     }
     int? eta;
     final remaining = total - downloaded;

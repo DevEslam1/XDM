@@ -462,6 +462,9 @@ class AdBlockerService {
 
   void _recordBlocked(String host) {
     if (host.isNotEmpty) {
+      if (_blockedDomains.length >= 1000) {
+        _blockedDomains.remove(_blockedDomains.first);
+      }
       _blockedDomains.add(host);
     }
     _blockedCountNotifier.value++;
