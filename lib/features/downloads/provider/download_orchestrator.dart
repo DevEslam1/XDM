@@ -2936,6 +2936,46 @@ class DownloadOrchestrator {
       // Validate resume state before starting any torrent or engine calls
       task = await validateResumeState(latestBeforeStart);
 
+      if (task.hasMergedAudio && task.tempFilePath.isNotEmpty) {
+        final audioPath = '${task.tempFilePath}.audio';
+        final audioFile = File(audioPath);
+        if (await audioFile.exists()) {
+          final actualAudioBytes = await actualDownloadedBytes(
+            audioPath,
+            threadCount: max(1, task.audioThreadCount),
+          );
+          final recordedAudioBytes = task.audioSize > 0
+              ? (task.audioProgress * task.audioSize).round()
+              : task.audioDownloadedBytes;
+
+          if (actualAudioBytes < recordedAudioBytes) {
+            debugPrint(
+              '[DMX] Audio desync detected: recorded=$recordedAudioBytes, '
+              'actual=$actualAudioBytes. Resetting audio progress.',
+            );
+            task = task.copyWith(
+              audioProgress: 0.0,
+              audioDownloadedBytes: 0,
+            );
+            for (final path in [
+              audioPath,
+              '$audioPath.dmxstate',
+              '$audioPath.dmxstate.tmp',
+              '$audioPath.journal',
+            ]) {
+              try {
+                final f = File(path);
+                if (await f.exists()) await f.delete();
+              } catch (_) {}
+            }
+            await _host.setTaskState(task);
+          }
+        } else if (task.audioProgress > 0) {
+          task = task.copyWith(audioProgress: 0.0, audioDownloadedBytes: 0);
+          await _host.setTaskState(task);
+        }
+      }
+
       // FIX(04): Skip re-download if both streams complete — jump straight to merge
       if (task.hasMergedAudio && task.tempFilePath.isNotEmpty) {
         final videoFile = File(task.tempFilePath);
@@ -3460,6 +3500,11 @@ class DownloadOrchestrator {
       }).catchError((Object error, StackTrace stackTrace) async {
         final realError = error;
 
+        // ERR-RESILIENCE-1.1: Classify every download-pipeline failure once so
+        // retry decisions, diagnostics and recovery hints stay consistent.
+        final classification = ErrorTaxonomy.classify(realError);
+        final recoveryAction = classification.recoveryAction;
+        _recordDownloadFailure(task.id, realError);
         final errStr = error.toString();
         final isResumeRejection =
             errStr.contains('Server rejected resume: expected HTTP 206.');
@@ -3539,8 +3584,14 @@ class DownloadOrchestrator {
         // Audio sidecar intentionally preserved on failure.
         // Retry / resume can continue from the existing .audio + .audio.dmxstate.
 
-        final isRetryable = isRetryableError(realError) ||
-            (_isYouTubeTask(task) && _isYouTubeStreamError(realError));
+        // ERR-RESILIENCE-1.1: Retry policy derived from the taxonomy.
+        // refreshUrl is transient for YouTube (URL rotation) and permanent
+        // for generic auth failures — gate it on the existing task-aware check.
+        final actionRetryable = recoveryAction == RecoveryAction.retrySame ||
+            recoveryAction == RecoveryAction.retryWithDelay ||
+            (recoveryAction == RecoveryAction.refreshUrl &&
+                (_isYouTubeTask(task) && _isYouTubeStreamError(realError)));
+        final isRetryable = actionRetryable || isRetryableError(realError);
         final maxRetries =
             _host.providerSettingsProvider.autoRetryEnabled && isRetryable
                 ? _host.providerSettingsProvider.maxRetries
@@ -3582,7 +3633,6 @@ class DownloadOrchestrator {
         final wasExhausted =
             isRetryable && currentRetry >= maxRetries && maxRetries > 0;
         _host.retryCounts.remove(task.id);
-        _recordDownloadFailure(task.id, realError);
 
         // FIX-INTEL: Record failure outcome
         SiteIntelligenceService().recordOutcome(task.url, false);
@@ -3614,6 +3664,13 @@ class DownloadOrchestrator {
             speed: 0,
             clearEta: true,
             clearStatusMessage: true,
+            // ERR-RESILIENCE-1.2: Propagate a FailureCategory + recovery hint
+            // on every permanent failure so the UI can offer a context-aware
+            // retry/recovery path.
+            failureCategory: RecoveryHints.fromError(realError),
+            recoveryHint: RecoveryHints.hintFor(
+              RecoveryHints.fromError(realError),
+            ),
             errorMessage: wasExhausted
                 ? 'Download failed after $maxRetries retries. Please check your network and try again.'
                 : errorMessage(realError),
@@ -3670,6 +3727,7 @@ class DownloadOrchestrator {
       // failure) marks the task failed and frees the concurrency slot.
       debugPrint('[DMX] _startTaskBody unexpected error for ${task.id}: $e');
       debugPrint('[DMX] _startTaskBody stack: $st');
+      _recordDownloadFailure(task.id, e);
       // Unregister the placeholder cancel token / active future so a retry of
       // this task is not blocked by stale state after an unexpected failure.
       _host.activeFutures.remove(task.id);

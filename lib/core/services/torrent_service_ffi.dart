@@ -1002,6 +1002,10 @@ class TorrentService {
       return status != null;
     } catch (_) {
       _activeTorrentIds.remove(id);
+      _latestProgress.remove(id);
+      _latestStats.remove(id);
+      _torrentSources.remove(id);
+      _cachedPrioritiesSnapshot.remove(id);
       return false;
     }
   }

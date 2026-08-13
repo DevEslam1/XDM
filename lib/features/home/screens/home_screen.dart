@@ -184,7 +184,8 @@ class _HomeScreenState extends State<HomeScreen>
               child: Center(
                 child: SizedBox(
                   width: contentMaxWidth(context),
-                  child: CustomScrollView(
+                  child: RepaintBoundary(
+                    child: CustomScrollView(
                     slivers: [
                       SliverToBoxAdapter(
                         child: Column(
@@ -307,6 +308,7 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
+          ),
             floatingActionButton: isInSelectionMode
                 ? null
                 : _buildFAB(context, isDark, classicUi),

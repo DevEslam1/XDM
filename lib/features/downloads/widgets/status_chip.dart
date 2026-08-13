@@ -6,18 +6,10 @@ import '../models/download_task.dart';
 import '../../../../core/utils/localization.dart';
 import '../../../shared/mixins/pausable_loop_animation.dart';
 
-class StatusChip extends StatefulWidget {
+class StatusChip extends StatelessWidget {
   final DownloadTask task;
 
   const StatusChip({super.key, required this.task});
-
-  @override
-  State<StatusChip> createState() => _StatusChipState();
-}
-
-class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
-  AnimationController? _controller;
-  Animation<double>? _pulseAnimation;
 
   bool _shouldPulse(DownloadTask task) {
     return task.status == DownloadStatus.downloading ||
@@ -28,68 +20,11 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
   }
 
   @override
-  void initState() {
-    super.initState();
-    // Do not use context in initState directly if respectSystemMotion is true,
-    // but here we can check it in build or post-frame. We'll start pulse in didChangeDependencies or build.
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _syncPulse();
-  }
-
-  @override
-  void didUpdateWidget(StatusChip oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _syncPulse();
-  }
-
-  void _syncPulse() {
-    if (_shouldPulse(widget.task) && modernAnimationsAllowed(context)) {
-      _startPulse();
-    } else {
-      _stopPulse();
-    }
-  }
-
-  void _startPulse() {
-    if (_controller == null) {
-      _controller = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 1500),
-      );
-      _pulseAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
-        CurvedAnimation(
-          parent: _controller!,
-          curve: Curves.easeInOut,
-        ),
-      );
-      _controller!.repeat(reverse: true);
-    }
-  }
-
-  void _stopPulse() {
-    _controller?.dispose();
-    _controller = null;
-    _pulseAnimation = null;
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    _controller = null;
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final isDark = context.watch<SettingsProvider>().isDarkMode;
 
     Color color;
     String label;
-    final task = widget.task;
     final isSeeding = task.status == DownloadStatus.completed &&
         task.isTorrent &&
         task.seedingEnabled;
@@ -137,7 +72,7 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
       }
     }
 
-    final isPulseActive = _shouldPulse(task) && _pulseAnimation != null;
+    final isPulsing = _shouldPulse(task) && modernAnimationsAllowed(context);
     final textWidget = Text(
       label,
       style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -148,40 +83,39 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
           ),
     );
 
-    if (isPulseActive) {
-      return AnimatedBuilder(
-        animation: _pulseAnimation!,
+    if (!isPulsing) {
+      return _buildChipContent(
+        context,
+        color: color,
+        pulseValue: 1.0,
+        isPulsing: false,
         child: textWidget,
-        builder: (context, child) {
-          return _buildChipContent(
-            context,
-            color: color,
-            label: label,
-            pulseValue: _pulseAnimation!.value,
-            isPulsing: true,
-            textWidget: child,
-          );
-        },
       );
     }
 
-    return _buildChipContent(
-      context,
-      color: color,
-      label: label,
-      pulseValue: 1.0,
-      isPulsing: false,
-      textWidget: textWidget,
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.4, end: 1.0),
+      duration: const Duration(milliseconds: 1500),
+      curve: Curves.easeInOut,
+      builder: (context, value, child) {
+        return _buildChipContent(
+          context,
+          color: color,
+          pulseValue: value,
+          isPulsing: true,
+          child: child!,
+        );
+      },
+      child: textWidget,
     );
   }
 
   Widget _buildChipContent(
     BuildContext context, {
     required Color color,
-    required String label,
     required double pulseValue,
     required bool isPulsing,
-    Widget? textWidget,
+    required Widget child,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
@@ -192,26 +126,8 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
           color: color.withValues(alpha: isPulsing ? 0.45 * pulseValue : 0.3),
           width: 0.8,
         ),
-        boxShadow: isPulsing
-            ? [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.08 * pulseValue),
-                  blurRadius: 6.0,
-                  spreadRadius: 0.5,
-                ),
-              ]
-            : null,
       ),
-      child: textWidget ??
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: color,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.0,
-                ),
-          ),
+      child: child,
     );
   }
 }

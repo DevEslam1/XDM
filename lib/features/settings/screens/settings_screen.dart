@@ -25,10 +25,8 @@ Color getSettingsTabColor(int tabIndex, bool isDark) {
     0 => isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
     1 => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
     2 => isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
-    3 => isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
-    4 => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-    5 => isDark ? AppTheme.neonOrange : AppTheme.lightNeonOrange,
-    6 => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+    3 => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+    4 => isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
     _ => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
   };
 }
@@ -115,34 +113,25 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (s.contains('appear') ||
         s.contains('visual') ||
         s.contains('theme') ||
-        s == '07') {
+        s.contains('notif') ||
+        s.contains('gen')) {
       return 0;
     }
     if (s.contains('download') ||
         s.contains('engine') ||
-        s.contains('bandwidth') ||
-        s == '01' ||
-        s == '02') {
+        s.contains('store')) {
       return 1;
     }
     if (s.contains('net') ||
         s.contains('dns') ||
-        s.contains('sec') ||
-        s == '03' ||
-        s == '08') {
+        s.contains('sec')) {
       return 2;
     }
-    if (s.contains('notif') || s.contains('alert') || s == '04') return 3;
-    if (s.contains('torrent') || s == '05') return 4;
-    if (s.contains('power') || s.contains('perf') || s.contains('battery')) {
-      return 5;
-    }
+    if (s.contains('torrent')) return 3;
     if (s.contains('adv') ||
-        s.contains('back') ||
-        s.contains('comm') ||
-        s == '06' ||
-        s == '09') {
-      return 6;
+        s.contains('power') ||
+        s.contains('back')) {
+      return 4;
     }
     return 0;
   }
@@ -509,9 +498,9 @@ class _SettingsScreenState extends State<SettingsScreen>
 
     final categories = [
       _CategoryMeta(
-        id: 'appearance',
-        title: isRtl ? 'المظهر' : 'Appearance',
-        icon: Icons.palette_outlined,
+        id: 'general',
+        title: isRtl ? 'عام والمظهر' : 'General',
+        icon: Icons.tune_outlined,
         color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
       ),
       _CategoryMeta(
@@ -522,15 +511,9 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
       _CategoryMeta(
         id: 'network',
-        title: isRtl ? 'الشبكة والأمان' : 'Network',
+        title: isRtl ? 'الشبكة والأمان' : 'Network & Security',
         icon: Icons.security_rounded,
         color: isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
-      ),
-      _CategoryMeta(
-        id: 'notifications',
-        title: isRtl ? 'الإشعارات' : 'Notifications',
-        icon: Icons.notifications_active_outlined,
-        color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
       ),
       _CategoryMeta(
         id: 'torrent',
@@ -539,16 +522,10 @@ class _SettingsScreenState extends State<SettingsScreen>
         color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
       ),
       _CategoryMeta(
-        id: 'power',
-        title: isRtl ? 'الأداء والطاقة' : 'Power & Perf',
-        icon: Icons.bolt_rounded,
-        color: isDark ? AppTheme.neonOrange : AppTheme.lightNeonOrange,
-      ),
-      _CategoryMeta(
         id: 'advanced',
-        title: isRtl ? 'متقدم' : 'Advanced',
-        icon: Icons.tune_rounded,
-        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+        title: isRtl ? 'متقدم والنظام' : 'Advanced',
+        icon: Icons.settings_applications_outlined,
+        color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
       ),
     ];
 

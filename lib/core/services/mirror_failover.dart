@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'circuit_breaker.dart';
 import 'mirror_health_store.dart';
+import 'retry_engine.dart';
 
 List<String> orderMirrorUrls(List<String> urls, {String? primary}) {
   final list = List<String>.from(
@@ -29,6 +31,10 @@ class MirrorFailover {
   final List<String> _urls;
   int _index = 0;
   int _switches = 0;
+
+  /// ERR-RESILIENCE-2.2: Per-mirror circuit breaker. A mirror whose circuit
+  /// opens is skipped on subsequent runs until its openTimeout (30 min) elapses.
+  final Map<String, CircuitBreaker> _circuits = {};
 
   String get activeUrl => _urls.isEmpty ? '' : _urls[_index];
   bool get hasAlternatives => _urls.length > 1;
@@ -62,13 +68,42 @@ class MirrorFailover {
       if (i > 0) {
         _switches++;
       }
+      // ERR-RESILIENCE-2.2: Skip mirrors with an open circuit (recent
+      // repeated failures). Open circuits expire after 30 minutes.
+      final circuit = _circuits.putIfAbsent(
+        url,
+        () => CircuitBreaker(
+          failureThreshold: 3,
+          openTimeout: const Duration(minutes: 30),
+        ),
+      );
+      if (!circuit.allowRequest()) {
+        debugPrint('[MirrorFailover] circuit open for mirror $url, skipping');
+        continue;
+      }
       try {
-        await action(url);
+        // ERR-RESILIENCE-2.1: Per-mirror transient retry before advancing.
+        // Non-transient HTTP errors (4xx except 408/429) skip retry and move
+        // to the next mirror immediately.
+        await RetryEngine(
+          maxRetries: 2,
+          baseDelay: const Duration(seconds: 2),
+          backoffMultiplier: 2.0,
+          maxDelay: const Duration(seconds: 10),
+        ).execute(
+          () => action(url),
+          onRetry: (error, attempt, delay) {
+            debugPrint(
+                '[MirrorFailover] mirror $url attempt $attempt failed ($error); retrying in ${delay.inMilliseconds}ms');
+          },
+        );
         await MirrorHealthStore.recordSuccess(url);
+        circuit.recordSuccess();
         _index = i;
         return url;
       } catch (e) {
         await MirrorHealthStore.recordFailure(url);
+        circuit.recordFailure();
         if (e is DioException) {
           final status = e.response?.statusCode;
           // Non-retryable HTTP errors

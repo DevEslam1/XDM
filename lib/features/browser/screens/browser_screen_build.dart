@@ -131,6 +131,7 @@ mixin _BuildMixin on _BrowserScreenStateBase {
                         },
                         child: RepaintBoundary(
                           child: DmxBackdropFilter(
+                            forceSolid: true,
                             sigmaX: 12,
                             sigmaY: 12,
                             child: Container(

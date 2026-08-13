@@ -217,9 +217,17 @@ class StateStore {
     TransferState? state;
     String? migratedFrom;
 
-    if (await file.exists()) {
+    // ERR-RESILIENCE-2.3: If a crash left a pending .tmp behind (rename never
+    // completed), prefer it — it is the freshest copy.
+    var effectivePath = path;
+    final tmpStale = File('$path.tmp');
+    if (!await file.exists() && await tmpStale.exists()) {
+      effectivePath = '$path.tmp';
+    }
+
+    if (await File(effectivePath).exists()) {
       try {
-        final decoded = jsonDecode(await file.readAsString());
+        final decoded = jsonDecode(await File(effectivePath).readAsString());
         if (decoded is Map) {
           final json = Map<String, dynamic>.from(decoded);
           state = TransferState.tryParseV3(json);
@@ -229,7 +237,7 @@ class StateStore {
           }
         }
       } catch (e) {
-        debugPrint('[DmxState] unreadable state at $path: $e');
+        debugPrint('[DmxState] unreadable state at $effectivePath: $e');
         state = null;
       }
     }
@@ -431,7 +439,14 @@ class StateStore {
       } else {
         await tmp.writeAsString(payload, flush: false);
       }
-      await tmp.rename(targetPath);
+      try {
+        await tmp.rename(targetPath);
+      } catch (e) {
+        // ERR-RESILIENCE-2.3: If the atomic rename fails (e.g. cross-device or
+        // target locked), keep the .tmp as a dirty state so the next
+        // loadOrCreate can still recover the progress instead of losing it.
+        debugPrint('[DmxState] rename to $targetPath failed, keeping .tmp: $e');
+      }
     } catch (e) {
       debugPrint('[DmxState] save failed for $tempFilePath: $e');
       try {
@@ -492,22 +507,23 @@ class DownloadJournal {
       if (_approxBytes > 0) {
         return;
       }
-      final line = jsonEncode({
+      final payload = _withCrc({
         't': 'init',
+        'v': 2,
         'threads': threadCount,
         'total': totalSize,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
-      _sink!.writeln(line);
+      _sink!.writeln(payload);
       await _sink!.flush();
-      _approxBytes += line.length + 1;
+      _approxBytes += payload.length + 1;
     });
   }
 
   Future<void> recordChunkProgress(int index, int bytes) async {
     await _lock.synchronized(() {
       _ensureOpen();
-      final line = jsonEncode({
+      final line = _withCrc({
         't': 'chunk',
         'i': index,
         'b': bytes,
@@ -521,8 +537,9 @@ class DownloadJournal {
   Future<void> writeCheckpoint(List<int> chunkProgress, int totalSize) async {
     await _lock.synchronized(() async {
       _ensureOpen();
-      final line = jsonEncode({
+      final line = _withCrc({
         't': 'checkpoint',
+        'v': 2,
         'chunks': chunkProgress,
         'total': totalSize,
         'ts': DateTime.now().millisecondsSinceEpoch,
@@ -537,11 +554,23 @@ class DownloadJournal {
     });
   }
 
+  /// Appends a CRC32 checksum field (`c`) computed over the payload *without*
+  /// the checksum field. Dart maps preserve insertion order, so re-encoding
+  /// after removing `c` reproduces the exact bytes the checksum was computed
+  /// over. Legacy lines without `c` remain recoverable (see [recover]).
+  static String _withCrc(Map<String, dynamic> payload) {
+    final withoutCrc = jsonEncode(payload);
+    final crc = crc32(utf8.encode(withoutCrc));
+    payload['c'] = crc;
+    return jsonEncode(payload);
+  }
+
   static Future<List<int>?> recover(String journalPath) async {
     final file = File(journalPath);
     if (!await file.exists()) return null;
     List<int>? lastCheckpoint;
     int? threadCount;
+    var skippedCorrupt = 0;
     try {
       final lines = file
           .openRead()
@@ -550,37 +579,59 @@ class DownloadJournal {
       await for (final line in lines) {
         final trimmed = line.trim();
         if (trimmed.isEmpty) continue;
+        Map<String, dynamic> event;
         try {
-          final event = jsonDecode(trimmed) as Map<String, dynamic>;
-          switch (event['t']) {
-            case 'init':
-              threadCount = event['threads'] as int?;
-              lastCheckpoint = List.filled(threadCount ?? 0, 0);
-              break;
-            case 'checkpoint':
-              final chunks = event['chunks'] as List<dynamic>?;
-              if (chunks != null) {
-                lastCheckpoint = chunks.map((e) => (e as num).toInt()).toList();
-              }
-              break;
-            case 'chunk':
-              if (lastCheckpoint != null) {
-                final i = event['i'] as int?;
-                final b = event['b'] as int?;
-                if (i != null &&
-                    b != null &&
-                    i >= 0 &&
-                    i < lastCheckpoint.length) {
-                  lastCheckpoint[i] = b;
-                }
-              }
-              break;
+          final decoded = jsonDecode(trimmed);
+          if (decoded is! Map) continue;
+          event = Map<String, dynamic>.from(decoded);
+        } catch (_) {
+          skippedCorrupt++;
+          continue;
+        }
+        // ERR-RESILIENCE-2.3: Verify the per-line CRC when present. Lines with
+        // a missing/legacy checksum are trusted as before (backward compat);
+        // lines with a bad checksum are skipped as corrupt.
+        final storedCrc = event['c'] as int?;
+        if (storedCrc != null) {
+          final payload = Map<String, dynamic>.from(event)..remove('c');
+          final recomputed = crc32(utf8.encode(jsonEncode(payload)));
+          if (recomputed != storedCrc) {
+            skippedCorrupt++;
+            continue;
           }
-        } catch (_) {}
+        }
+        switch (event['t']) {
+          case 'init':
+            threadCount = event['threads'] as int?;
+            lastCheckpoint = List.filled(threadCount ?? 0, 0);
+            break;
+          case 'checkpoint':
+            final chunks = event['chunks'] as List<dynamic>?;
+            if (chunks != null) {
+              lastCheckpoint = chunks.map((e) => (e as num).toInt()).toList();
+            }
+            break;
+          case 'chunk':
+            if (lastCheckpoint != null) {
+              final i = event['i'] as int?;
+              final b = event['b'] as int?;
+              if (i != null &&
+                  b != null &&
+                  i >= 0 &&
+                  i < lastCheckpoint.length) {
+                lastCheckpoint[i] = b;
+              }
+            }
+            break;
+        }
       }
     } catch (e) {
       debugPrint('[DownloadJournal] Recovery failed for $journalPath: $e');
       return null;
+    }
+    if (skippedCorrupt > 0) {
+      debugPrint(
+          '[DownloadJournal] Recovery for $journalPath skipped $skippedCorrupt corrupt line(s).');
     }
     if (lastCheckpoint != null && lastCheckpoint.isEmpty) {
       debugPrint(
@@ -630,14 +681,16 @@ class DownloadJournal {
       _sink = null;
 
       final tmp = File('$path.tmp');
-      final initLine = jsonEncode({
+      final initLine = _withCrc({
         't': 'init',
+        'v': 2,
         'threads': chunkProgress.length,
         'total': totalSize,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
-      final checkpointLine = jsonEncode({
+      final checkpointLine = _withCrc({
         't': 'checkpoint',
+        'v': 2,
         'chunks': chunkProgress,
         'total': totalSize,
         'ts': DateTime.now().millisecondsSinceEpoch,

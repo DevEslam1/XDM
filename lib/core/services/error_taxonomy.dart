@@ -3,6 +3,9 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import 'download_engine.dart';
+import 'xdm_backend_exceptions.dart';
+
 /// High-level family of an error, used to decide user messaging, retry policy
 /// and severity.
 enum ErrorFamily {
@@ -15,6 +18,31 @@ enum ErrorFamily {
   timeout,
   parse,
   unknown,
+}
+
+/// The concrete recovery path the app should take for a classified error.
+/// Every user-facing failure must map to exactly one recovery action.
+enum RecoveryAction {
+  /// Retry the same URL/operation once (e.g. a 5xx server hiccup).
+  retrySame,
+
+  /// Retry with exponential backoff (network / timeout).
+  retryWithDelay,
+
+  /// The signed/stream URL expired — a fresh URL must be resolved first.
+  refreshUrl,
+
+  /// Delete temp files and restart the transfer from byte zero.
+  restartDownload,
+
+  /// The user must fix a setting (free disk space, grant permission).
+  showSettings,
+
+  /// Unrecoverable without support/diagnostics.
+  contactSupport,
+
+  /// Non-critical — log only, no user action required.
+  ignore,
 }
 
 /// Classification result for a single error.
@@ -33,16 +61,56 @@ class ErrorClassification {
   /// Whether the failure is severe enough to surface prominently (auth/disk).
   final bool severe;
 
+  /// The concrete recovery path derived from the family and status.
+  final RecoveryAction recoveryAction;
+
   const ErrorClassification({
     required this.family,
     this.httpStatus,
     required this.message,
     this.retryable = false,
     this.severe = false,
+    this.recoveryAction = RecoveryAction.ignore,
   });
 
   bool get isServerError => family == ErrorFamily.server;
   bool get isNetworkError => family == ErrorFamily.network;
+}
+
+/// Maps an [ErrorFamily] (+ optional HTTP status) to a recovery action.
+/// Kept as a standalone function so the taxonomy stays data-driven and easy
+/// to test.
+RecoveryAction recoveryActionFor(
+  ErrorFamily family, {
+  int? httpStatus,
+}) {
+  switch (family) {
+    case ErrorFamily.network:
+      return RecoveryAction.retryWithDelay;
+    case ErrorFamily.timeout:
+      return RecoveryAction.retryWithDelay;
+    case ErrorFamily.auth:
+      // 410 Gone is usually a rotated/expired stream URL → refresh it.
+      if (httpStatus == 410) return RecoveryAction.refreshUrl;
+      return RecoveryAction.showSettings;
+    case ErrorFamily.disk:
+      return RecoveryAction.showSettings;
+    case ErrorFamily.integrity:
+      return RecoveryAction.restartDownload;
+    case ErrorFamily.server:
+      // 429 is a hard rate limit — longer backoff; 5xx is worth a direct retry.
+      if (httpStatus == 429) return RecoveryAction.retryWithDelay;
+      if (httpStatus != null && httpStatus >= 500) {
+        return RecoveryAction.retrySame;
+      }
+      return RecoveryAction.retryWithDelay;
+    case ErrorFamily.cancelled:
+      return RecoveryAction.ignore;
+    case ErrorFamily.parse:
+      return RecoveryAction.restartDownload;
+    case ErrorFamily.unknown:
+      return RecoveryAction.contactSupport;
+  }
 }
 
 /// Maps raw errors (Dio, socket, file-system, timeout, …) onto a stable,
@@ -53,6 +121,7 @@ class ErrorTaxonomy {
   static const ErrorClassification _unknown = ErrorClassification(
     family: ErrorFamily.unknown,
     message: 'Unexpected error',
+    recoveryAction: RecoveryAction.contactSupport,
   );
 
   static ErrorClassification classify(
@@ -67,16 +136,121 @@ class ErrorTaxonomy {
       return const ErrorClassification(
         family: ErrorFamily.cancelled,
         message: 'Download cancelled',
+        recoveryAction: RecoveryAction.ignore,
+      );
+    }
+
+    if (error is InsufficientStorageException) {
+      return const ErrorClassification(
+        family: ErrorFamily.disk,
+        message: 'Not enough storage space',
+        severe: true,
+        recoveryAction: RecoveryAction.showSettings,
+      );
+    }
+
+    if (error is InvalidPathException) {
+      return const ErrorClassification(
+        family: ErrorFamily.disk,
+        message: 'Invalid storage path',
+        severe: true,
+        recoveryAction: RecoveryAction.showSettings,
+      );
+    }
+
+    if (error is DownloadIntegrityException) {
+      return ErrorClassification(
+        family: ErrorFamily.integrity,
+        message: error.message.isEmpty
+            ? 'File integrity check failed'
+            : 'File integrity check failed: ${error.message}',
+        recoveryAction: RecoveryAction.restartDownload,
+      );
+    }
+
+    if (error is IsolateSpawnTimeoutException) {
+      return const ErrorClassification(
+        family: ErrorFamily.timeout,
+        message: 'Download engine failed to initialize',
+        retryable: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
+      );
+    }
+
+    if (error is UrlExpiredException) {
+      return const ErrorClassification(
+        family: ErrorFamily.auth,
+        message: 'Download URL has expired',
+        severe: true,
+        recoveryAction: RecoveryAction.refreshUrl,
+      );
+    }
+
+    if (error is TorrentEnginePauseException) {
+      return const ErrorClassification(
+        family: ErrorFamily.network,
+        message: 'Torrent engine unavailable',
+        retryable: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
+      );
+    }
+
+    if (error is XdmBackendTimeoutException) {
+      return const ErrorClassification(
+        family: ErrorFamily.timeout,
+        message: 'Backend request timed out',
+        retryable: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
+      );
+    }
+
+    if (error is BackendNetworkException) {
+      return const ErrorClassification(
+        family: ErrorFamily.network,
+        message: 'Cannot reach download backend',
+        retryable: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
+      );
+    }
+
+    if (error is BackendRateLimitException) {
+      return const ErrorClassification(
+        family: ErrorFamily.server,
+        message: 'Rate limit reached. Try again later.',
+        retryable: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
+      );
+    }
+
+    if (error is BackendUnauthorizedException) {
+      return const ErrorClassification(
+        family: ErrorFamily.auth,
+        message: 'Backend authentication failed',
+        severe: true,
+        recoveryAction: RecoveryAction.showSettings,
+      );
+    }
+
+    if (error is BackendException) {
+      return const ErrorClassification(
+        family: ErrorFamily.server,
+        message: 'Backend request failed',
+        retryable: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
       );
     }
 
     if (status != null) {
-      if (status == 401 || status == 403) {
+      if (status == 401 || status == 403 || status == 410) {
         return ErrorClassification(
           family: ErrorFamily.auth,
           httpStatus: status,
-          message: 'Authentication failed (HTTP $status)',
+          message: status == 410
+              ? 'Download URL expired (HTTP 410)'
+              : 'Authentication failed (HTTP $status)',
           severe: true,
+          recoveryAction: recoveryActionFor(ErrorFamily.auth,
+              httpStatus: status),
         );
       }
       if (status >= 500) {
@@ -85,20 +259,27 @@ class ErrorTaxonomy {
           httpStatus: status,
           message: 'Server error (HTTP $status)',
           retryable: true,
+          recoveryAction: recoveryActionFor(ErrorFamily.server,
+              httpStatus: status),
         );
       }
       if (status == 408 || status == 429) {
         return ErrorClassification(
           family: ErrorFamily.server,
           httpStatus: status,
-          message: 'Temporary server error (HTTP $status)',
+          message: status == 429
+              ? 'Too many requests (HTTP 429)'
+              : 'Temporary server error (HTTP $status)',
           retryable: true,
+          recoveryAction: recoveryActionFor(ErrorFamily.server,
+              httpStatus: status),
         );
       }
       return ErrorClassification(
         family: ErrorFamily.unknown,
         httpStatus: status,
         message: 'Request failed (HTTP $status)',
+        recoveryAction: RecoveryAction.contactSupport,
       );
     }
 
@@ -107,6 +288,7 @@ class ErrorTaxonomy {
         family: ErrorFamily.timeout,
         message: 'Connection timed out',
         retryable: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
       );
     }
 
@@ -115,6 +297,7 @@ class ErrorTaxonomy {
         family: ErrorFamily.network,
         message: 'Network error',
         retryable: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
       );
     }
 
@@ -127,12 +310,14 @@ class ErrorTaxonomy {
             family: ErrorFamily.timeout,
             message: 'Connection timed out',
             retryable: true,
+            recoveryAction: RecoveryAction.retryWithDelay,
           );
         case DioExceptionType.connectionError:
           return const ErrorClassification(
             family: ErrorFamily.network,
             message: 'Network error',
             retryable: true,
+            recoveryAction: RecoveryAction.retryWithDelay,
           );
         default:
           break;
@@ -145,6 +330,7 @@ class ErrorTaxonomy {
         family: ErrorFamily.disk,
         message: isFull ? 'Storage full' : 'File system error',
         severe: true,
+        recoveryAction: RecoveryAction.showSettings,
       );
     }
 
@@ -155,6 +341,19 @@ class ErrorTaxonomy {
       return const ErrorClassification(
         family: ErrorFamily.integrity,
         message: 'File integrity check failed',
+        recoveryAction: RecoveryAction.restartDownload,
+      );
+    }
+
+    // _FileChangedOnServerException is declared as a private top-level class
+    // in the isolate pool part-file, so match it by runtime type name.
+    if (typeName == '_FileChangedOnServerException' ||
+        stringRep.contains('_FileChangedOnServerException') ||
+        stringRep.toLowerCase().contains('file changed on server')) {
+      return const ErrorClassification(
+        family: ErrorFamily.integrity,
+        message: 'File changed on server',
+        recoveryAction: RecoveryAction.restartDownload,
       );
     }
 

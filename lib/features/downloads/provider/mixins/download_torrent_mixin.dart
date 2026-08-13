@@ -1,12 +1,20 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 
+import '../../../../core/services/retry_engine.dart';
 import '../../../../core/services/torrent_service.dart';
 import '../../../../core/services/database_service.dart';
 import '../../../../core/utils/file_utils.dart';
 import '../../../../features/settings/provider/settings_provider.dart';
 import '../../models/download_task.dart';
 import 'package:logging/logging.dart';
+
+/// Thrown when the native torrent engine rejects an add (returns -1).
+class TorrentAddRejectedException implements Exception {
+  const TorrentAddRejectedException();
+  @override
+  String toString() => 'TorrentAddRejectedException: torrent engine rejected the torrent';
+}
 
 /// Mixin that encapsulates torrent-specific orchestration: seeding lifecycle,
 /// per-file progress distribution, upload limit management, and torrent stats
@@ -46,7 +54,7 @@ mixin DownloadTorrentMixin {
   // ---------------------------------------------------------------------------
   // Seeding lifecycle
   // ---------------------------------------------------------------------------
-  void startSeedingTorrent(DownloadTask task) {
+  Future<void> startSeedingTorrent(DownloadTask task) async {
     // B3: Check whether a live native handle already exists before adding.
     //     If the Dart map has an entry AND the native session still has the
     //     torrent alive, just resume it — no duplicate handle created.
@@ -78,21 +86,39 @@ mixin DownloadTorrentMixin {
     }
     try {
       final saveDir = task.savePath;
-      int torrentId;
-      if (task.url.startsWith('magnet:')) {
-        torrentId = TorrentService.addMagnet(task.url, saveDir);
-      } else {
-        String filePath = task.url;
-        if (task.url.startsWith('file://')) {
-          filePath = Uri.parse(task.url).toFilePath();
-        }
-        torrentId = TorrentService.addTorrentFile(
-          filePath,
-          saveDir,
-          sourceKey: task.url,
-        );
-      }
-      if (torrentId < 0) return;
+      // ERR-RESILIENCE-2.1/5.1: Centralized retry for the native add
+      // operation. A rejected handle (torrentId < 0) or a transient native
+      // error is retried once after a short backoff before the task is failed.
+      final torrentId = await RetryEngine(
+        maxRetries: 1,
+        baseDelay: const Duration(seconds: 2),
+        backoffMultiplier: 2.0,
+        maxDelay: const Duration(seconds: 4),
+      ).execute(
+        () async {
+          if (task.url.startsWith('magnet:')) {
+            final id = TorrentService.addMagnet(task.url, saveDir);
+            if (id < 0) throw const TorrentAddRejectedException();
+            return id;
+          }
+          String filePath = task.url;
+          if (task.url.startsWith('file://')) {
+            filePath = Uri.parse(task.url).toFilePath();
+          }
+          final id = TorrentService.addTorrentFile(
+            filePath,
+            saveDir,
+            sourceKey: task.url,
+          );
+          if (id < 0) throw const TorrentAddRejectedException();
+          return id;
+        },
+        onRetry: (error, attempt, delay) {
+          debugPrint(
+            '[DMX] Torrent add rejected for ${task.id}, retrying in ${delay.inMilliseconds}ms',
+          );
+        },
+      );
       providerTorrentIds[task.id] = torrentId;
       TorrentService.resumeTorrent(torrentId);
 
@@ -365,7 +391,7 @@ mixin DownloadTorrentMixin {
         if (torrentId != null) {
           TorrentService.resumeTorrent(torrentId);
         } else {
-          startSeedingTorrent(providerTasks[index]);
+          unawaited(startSeedingTorrent(providerTasks[index]));
         }
       } else {
         // Only pause/remove the torrent session if the task has already

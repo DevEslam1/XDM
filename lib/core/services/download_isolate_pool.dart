@@ -164,6 +164,12 @@ class DownloadIsolatePool {
   final bool _powerAware;
   final List<_Worker> _workers = [];
   final List<PoolJob> _queue = [];
+
+  /// ERR-RESILIENCE-2.3: Tracks how many times a job's worker crashed so we can
+  /// re-queue (transient) then permanently fail (repeated native crashes).
+  final Map<String, int> _jobCrashCounts = {};
+  static const int _maxJobCrashRetries = 3;
+
   bool _shuttingDown = false;
   int _seq = 0;
   int get maxJobsPerWorker =>
@@ -400,7 +406,28 @@ class DownloadIsolatePool {
     worker.pending.clear();
     worker.activeJobs = 0;
     for (final job in jobs) {
-      job._deliverError('workerDied', 'Worker isolate died: $err', null);
+      // ERR-RESILIENCE-2.3: Re-queue jobs that died with the worker (up to 3
+      // crashes per job). A worker isolate crash is usually a transient native
+      // hiccup — the download's .dmxstate/journal survive on disk, so a fresh
+      // worker can resume cleanly. Permanent failures after 3 crashes are
+      // delivered so the task can be failed with a meaningful message.
+      final crashes = (_jobCrashCounts[job.command.taskId] ?? 0) + 1;
+      _jobCrashCounts[job.command.taskId] = crashes;
+      if (crashes <= _maxJobCrashRetries && !_shuttingDown) {
+        debugPrint(
+          '[DMX-Pool] Worker died for job ${job.command.taskId} '
+          '(crash #$crashes). Re-queuing.',
+        );
+        job._worker = null;
+        _queue.add(job);
+      } else {
+        _jobCrashCounts.remove(job.command.taskId);
+        job._deliverError(
+          'workerDied',
+          'Worker isolate died repeatedly: $err',
+          null,
+        );
+      }
     }
     worker.inbox.close();
     worker.errorPort.close();

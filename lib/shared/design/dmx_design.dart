@@ -933,3 +933,51 @@ Future<String?> showMediaChoiceDialog(
     ),
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pressable Interaction Wrapper
+// ─────────────────────────────────────────────────────────────────────────────
+class DmxPressable extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final double scaleOnPress;
+
+  const DmxPressable({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.onLongPress,
+    this.scaleOnPress = 0.96,
+  });
+
+  @override
+  State<DmxPressable> createState() => _DmxPressableState();
+}
+
+class _DmxPressableState extends State<DmxPressable> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return MouseRegion(
+      cursor: widget.onTap != null
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        child: AnimatedScale(
+          scale: (!reduceMotion && _pressed) ? widget.scaleOnPress : 1.0,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}

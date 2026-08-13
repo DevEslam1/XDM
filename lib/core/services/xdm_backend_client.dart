@@ -10,7 +10,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/constants.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import 'backend_health_service.dart';
+import 'circuit_breaker.dart';
 import 'logging_service.dart';
+import 'retry_engine.dart';
 import 'xdm_backend_exceptions.dart';
 
 final _log = LoggingService.logger('XdmBackendClient');
@@ -25,6 +27,10 @@ class XdmBackendClient {
   late Dio _dio;
   final Map<String, _StreamsCacheEntry> _streamsCache = {};
   final _ApiRateLimiter _rateLimiter = _ApiRateLimiter();
+
+  /// ERR-RESILIENCE-2.2: One circuit breaker per backend URL so a sick backend
+  /// stops receiving requests (and stops failing over to it) until it recovers.
+  final Map<String, CircuitBreaker> _backendCircuits = {};
 
   static final _secureStorage = const FlutterSecureStorage();
   static const _apiKeyStorageKey = 'xdm_backend_api_key';
@@ -230,6 +236,19 @@ class XdmBackendClient {
           baseUrl = baseUrl.substring(0, baseUrl.length - 1);
         }
 
+        // ERR-RESILIENCE-2.2: Skip backends whose circuit is open. A probe is
+        // allowed after openTimeout; a failed probe re-opens the circuit.
+        final circuit = _backendCircuits.putIfAbsent(
+          baseUrl,
+          () => CircuitBreaker(failureThreshold: 3),
+        );
+        if (!circuit.allowRequest()) {
+          _log.warning(
+              'Circuit open for backend $baseUrl, skipping until recovery.');
+          sawNetworkFailure = true;
+          continue;
+        }
+
         // Try multiple endpoint variations for robustness
         final endpoints = ['/api/streams', '/streams'];
 
@@ -263,6 +282,7 @@ class XdmBackendClient {
                 data.containsKey('formats') ||
                 data.containsKey('url')) {
               BackendHealthService.instance.markHealthy(baseUrl);
+              circuit.recordSuccess();
 
               _evictExpiredStreamsCache();
               _streamsCache[url] = _StreamsCacheEntry(
@@ -273,6 +293,7 @@ class XdmBackendClient {
             } else {
               _log.warning(
                   'Backend $baseUrl endpoint $endpoint returned invalid data: $data');
+              circuit.recordFailure();
               lastError = Exception('Invalid response format');
               continue;
             }
@@ -282,6 +303,7 @@ class XdmBackendClient {
           } catch (e) {
             lastError = e;
             _log.warning('Backend $baseUrl endpoint $endpoint failed: $e');
+            circuit.recordFailure();
 
             if (e is DioException) {
               final statusCode = e.response?.statusCode;
@@ -359,6 +381,17 @@ class XdmBackendClient {
           baseUrl = baseUrl.substring(0, baseUrl.length - 1);
         }
 
+        // ERR-RESILIENCE-2.2: Skip backends whose circuit is open.
+        final circuit = _backendCircuits.putIfAbsent(
+          baseUrl,
+          () => CircuitBreaker(failureThreshold: 3),
+        );
+        if (!circuit.allowRequest()) {
+          _log.warning(
+              'Circuit open for backend $baseUrl, skipping until recovery.');
+          continue;
+        }
+
         final endpoints = ['/api/playlist', '/playlist'];
 
         for (final endpoint in endpoints) {
@@ -389,12 +422,14 @@ class XdmBackendClient {
             );
             final data = response.data ?? {};
             BackendHealthService.instance.markHealthy(baseUrl);
+            circuit.recordSuccess();
             return data;
             // C3: close the throwaway Dio's connection pool.
           } catch (e) {
             lastError = e;
             _log.warning(
                 'Backend $baseUrl endpoint $endpoint failed for playlist: $e');
+            circuit.recordFailure();
             if (e is DioException) {
               final statusCode = e.response?.statusCode;
               if (statusCode == 404) continue;
@@ -670,6 +705,24 @@ class _ApiRateLimiter {
     }
 
     _endpoints[key]!.add(now);
-    return await request();
+
+    // ERR-RESILIENCE-2.1: Wrap every backend API request in the centralized
+    // retry engine. The inner request already fails over across backends and
+    // endpoints; the engine adds exponential backoff for transient failures
+    // (network / timeout / 5xx / 429) without duplicating the failover logic.
+    final engine = RetryEngine(
+      maxRetries: 2,
+      baseDelay: const Duration(seconds: 2),
+      backoffMultiplier: 2.0,
+      maxDelay: const Duration(seconds: 15),
+    );
+    return engine.execute(
+      request,
+      onRetry: (error, attempt, delay) {
+        _log.warning(
+          'Backend $endpoint attempt $attempt failed ($error); '
+          'retrying in ${delay.inMilliseconds}ms');
+      },
+    );
   }
 }

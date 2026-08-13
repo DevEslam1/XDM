@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../../models/download_task.dart';
@@ -132,10 +133,11 @@ mixin DownloadQueueMixin {
     bool skipPump = false,
     int? maxConcurrentOverride,
   }) {
-    // QUEUE-FIX-7: Preserve maxConcurrentOverride through coalesced re-pump
-    if (skipPump || _queueProcessing) {
-      if (!skipPump) {
-        _needsRePump = true;
+    if (skipPump) return;
+
+    if (_queueProcessing) {
+      _needsRePump = true;
+      if (maxConcurrentOverride != null) {
         _pendingMaxConcurrentOverride = maxConcurrentOverride;
       }
       return;
@@ -151,13 +153,9 @@ mixin DownloadQueueMixin {
           .where((t) => t.status == DownloadStatus.downloading)
           .length;
 
-      // QUEUE-FIX-1: Count pendingStartCount against concurrency cap
       final effectiveActive = activeCount + pendingStartCount;
-
-      // Use override when provided (batch playlist), otherwise normal setting.
       final maxActive = effectiveOverride ?? settings.maxDownloads;
 
-      // QUEUE-FIX-1: Early exit guard using effectiveActive
       if (effectiveActive >= maxActive) return;
 
       final queued = providerTasks
@@ -175,17 +173,14 @@ mixin DownloadQueueMixin {
         return a.createdAt.compareTo(b.createdAt);
       });
 
-      // Remove overrides for tasks no longer queued
       effectiveThreadOverrides.removeWhere(
         (id, _) => !queued.any((t) => t.id == id),
       );
 
       var startedThisPass = 0;
       for (final task in queued) {
-        // QUEUE-FIX-1: Per-task loop guard using effectiveActive
         if (effectiveActive + startedThisPass >= maxActive) break;
 
-        // QUEUE-FIX-3: Skip if this task already has a pending override, is downloading, or is pending start
         final isRunning = providerTasks.any(
           (t) => t.id == task.id && t.status == DownloadStatus.downloading,
         );
@@ -194,7 +189,6 @@ mixin DownloadQueueMixin {
         final isPendingStart = isTaskPendingStart(task.id);
         if (isRunning || hasPendingOverride || isPendingStart) continue;
 
-        // QUEUE-FIX-2: Unified denominator for slot check and thread budget using effectiveActive
         final totalConcurrent = max(1, effectiveActive + startedThisPass + 1);
         final baseLimit = min(
           settings.maxTotalConnections ~/ totalConcurrent,
@@ -204,7 +198,6 @@ mixin DownloadQueueMixin {
         final clampedThreads = min(task.threadCount, effectiveThreads);
         effectiveThreadOverrides[task.id] = clampedThreads;
 
-        // QUEUE-FIX-5 & QUEUE-FIX-6: Don't count rejected starts and handle exception cleanup
         try {
           final started = startTaskFromQueue(task);
           if (started) {
@@ -223,8 +216,7 @@ mixin DownloadQueueMixin {
         _needsRePump = false;
         final pendingOverride = _pendingMaxConcurrentOverride;
         _pendingMaxConcurrentOverride = null;
-        Future.microtask(
-            () => pumpQueue(maxConcurrentOverride: pendingOverride));
+        pumpQueue(maxConcurrentOverride: pendingOverride);
       }
     }
   }

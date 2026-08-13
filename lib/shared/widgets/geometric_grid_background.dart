@@ -46,8 +46,8 @@ class _AmbientProgress with WidgetsBindingObserver {
       _stopTimer();
       return;
     }
-    final int intervalMs = (PowerMonitor.throttleFactor < 0.8) ? 66 : 33;
-    _timer ??= Timer.periodic(Duration(milliseconds: intervalMs), (_) {
+    const int intervalMs = 100;
+    _timer ??= Timer.periodic(const Duration(milliseconds: intervalMs), (_) {
       final elapsed =
           DateTime.now().difference(_startTime).inMilliseconds / 1000;
       progress.value = (elapsed / 20) % 1.0;
@@ -115,35 +115,38 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground> {
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.of(context).size.width == 0) return widget.child;
+
     final isDark = context.select((SettingsProvider s) => s.isDarkMode);
     final isAmoled = context.select((SettingsProvider s) => s.isAmoledMode);
     final classicUi = context.select((SettingsProvider s) => s.classicUi);
+    final reduceVisuals = context.select((SettingsProvider s) => s.reduceVisuals);
     final gridOpacity = context.select((SettingsProvider s) => s.gridOpacity);
     final bgColor = AppTheme.getBackground(isDark, isAmoled: isAmoled);
 
+    if (classicUi || reduceVisuals || PowerMonitor.screenOff) {
+      return Container(color: bgColor, child: widget.child);
+    }
+
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
 
     return Stack(
       children: [
         Positioned.fill(
-          child: classicUi
-              ? Container(color: bgColor)
-              : RepaintBoundary(
-                  child: CustomPaint(
-                    painter: _AmbientBlobPainter(
-                      progress: _progress,
-                      isDark: isDark,
-                      intensity: gridOpacity / 40.0,
-                      bgColor: bgColor,
-                      violetClr: violetClr,
-                      blueClr: blueClr,
-                      greenClr: greenClr,
-                    ),
-                    size: Size.infinite,
-                  ),
-                ),
+          child: RepaintBoundary(
+            child: CustomPaint(
+              painter: _AmbientBlobPainter(
+                progress: _progress,
+                isDark: isDark,
+                intensity: gridOpacity / 40.0,
+                bgColor: bgColor,
+                violetClr: violetClr,
+                blueClr: blueClr,
+              ),
+              size: Size.infinite,
+            ),
+          ),
         ),
         Positioned.fill(
           child: RepaintBoundary(
@@ -162,7 +165,6 @@ class _AmbientBlobPainter extends CustomPainter {
   final Color bgColor;
   final Color violetClr;
   final Color blueClr;
-  final Color greenClr;
 
   final Paint _blobPaint = Paint();
 
@@ -173,7 +175,6 @@ class _AmbientBlobPainter extends CustomPainter {
     required this.bgColor,
     required this.violetClr,
     required this.blueClr,
-    required this.greenClr,
   });
 
   void _drawSoftBlob(
@@ -191,7 +192,7 @@ class _AmbientBlobPainter extends CustomPainter {
         color.withValues(alpha: alpha * 0.4),
         color.withValues(alpha: 0.0),
       ],
-      stops: const [0.0, 0.3, 1.0], // Very soft falloff
+      stops: const [0.0, 0.3, 1.0],
       radius: 1.0,
     ).createShader(Rect.fromCircle(center: center, radius: radius));
 
@@ -203,10 +204,9 @@ class _AmbientBlobPainter extends CustomPainter {
     // 1. Base Background
     canvas.drawRect(Offset.zero & size, Paint()..color = bgColor);
 
-    if (intensity <= 0) return;
+    if (PowerMonitor.screenOff || intensity <= 0) return;
 
-    // 2. Soft Drifting Blobs (Easy on the eyes)
-    // Using sin/cos for smooth, continuous circular movement
+    // 2. Soft Drifting Blobs (2 blobs for optimal GPU performance)
     final t = progress * 2 * math.pi;
 
     // Violet Blob (Top Left)
@@ -233,19 +233,7 @@ class _AmbientBlobPainter extends CustomPainter {
       size.width * 0.5,
     );
 
-    // Green Blob (Bottom Left)
-    final gX = size.width * 0.3 + math.sin(t * 1.2) * 30;
-    final gY = size.height * 0.85 + math.cos(t * 1.2) * 30;
-    _drawSoftBlob(
-      canvas,
-      size,
-      Offset(gX, gY),
-      greenClr,
-      (isDark ? 0.08 : 0.04) * intensity,
-      size.width * 0.45,
-    );
-
-    // 3. Subtle Vignette for Dark Mode (focuses the eye to the center)
+    // 3. Subtle Vignette for Dark Mode
     if (isDark) {
       final vignettePaint = Paint()
         ..shader = RadialGradient(

@@ -647,8 +647,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setMaxDownloads(int value) async {
-    _maxDownloads = value;
-    await _prefs.setInt(_maxDownloadsKey, value);
+    _maxDownloads = value.clamp(1, 10);
+    await _prefs.setInt(_maxDownloadsKey, _maxDownloads);
     notifyListeners();
   }
 
@@ -909,8 +909,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setDefaultThreadCount(int value) async {
-    _defaultThreadCount = value;
-    await _prefs.setInt(_defaultThreadCountKey, value);
+    _defaultThreadCount = value.clamp(1, 32);
+    await _prefs.setInt(_defaultThreadCountKey, _defaultThreadCount);
     notifyListeners();
   }
 

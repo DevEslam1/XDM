@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
@@ -29,6 +30,106 @@ enum FailureCategory {
   unknown,
 }
 
+/// Human-readable recovery suggestions keyed by [FailureCategory].
+/// Kept centralized so the engine, provider and UI share one source of truth.
+abstract final class RecoveryHints {
+  static String hintFor(FailureCategory category) {
+    return switch (category) {
+      FailureCategory.network =>
+        'Check your internet connection and retry.',
+      FailureCategory.serverError =>
+        'Server is temporarily unavailable. Retry in a few minutes.',
+      FailureCategory.authError =>
+        'URL expired. Tap retry to refresh the link.',
+      FailureCategory.diskFull =>
+        'Free up storage space and retry.',
+      FailureCategory.integrityError =>
+        'File corrupted on server. Restart download.',
+      FailureCategory.fileChanged =>
+        'File changed on server. Restart download.',
+      FailureCategory.mergeFailed =>
+        'Merge failed. Tap retry to re-attempt.',
+      FailureCategory.torrentError =>
+        'Torrent engine error. Tap retry.',
+      FailureCategory.unknown =>
+        'Unexpected error. Check diagnostics and retry.',
+    };
+  }
+
+  /// Maps an [ErrorFamily] (from [ErrorTaxonomy]) onto a [FailureCategory].
+  static FailureCategory fromFamily(String familyName) {
+    return switch (familyName) {
+      'network' => FailureCategory.network,
+      'timeout' => FailureCategory.network,
+      'server' => FailureCategory.serverError,
+      'auth' => FailureCategory.authError,
+      'disk' => FailureCategory.diskFull,
+      'integrity' => FailureCategory.integrityError,
+      'parse' => FailureCategory.integrityError,
+      'cancelled' => FailureCategory.unknown,
+      _ => FailureCategory.unknown,
+    };
+  }
+
+  /// Derives a [FailureCategory] directly from a raw thrown object, covering
+  /// the DMX-specific exceptions plus common Dio/network cases. Falls back to
+  /// [FailureCategory.unknown].
+  static FailureCategory fromError(Object error) {
+    final rep = error.toString();
+    if (error is DioException) {
+      switch (error.type) {
+        case DioExceptionType.connectionTimeout:
+        case DioExceptionType.sendTimeout:
+        case DioExceptionType.receiveTimeout:
+        case DioExceptionType.connectionError:
+          return FailureCategory.network;
+        case DioExceptionType.cancel:
+          return FailureCategory.unknown;
+        case DioExceptionType.badResponse:
+          final status = error.response?.statusCode;
+          if (status == 403 || status == 410) {
+            return FailureCategory.authError;
+          }
+          if (status != null && status >= 500) {
+            return FailureCategory.serverError;
+          }
+          return FailureCategory.serverError;
+        default:
+          return FailureCategory.network;
+      }
+    }
+    if (rep.contains('InsufficientStorageException') ||
+        rep.toLowerCase().contains('no space left')) {
+      return FailureCategory.diskFull;
+    }
+    if (rep.contains('DownloadIntegrityException') ||
+        rep.toLowerCase().contains('file changed on server') ||
+        rep.contains('_FileChangedOnServerException')) {
+      return FailureCategory.integrityError;
+    }
+    if (rep.toLowerCase().contains('merge failed') ||
+        rep.contains('MERGE_FAILED') ||
+        rep.toLowerCase().contains('ffmpeg')) {
+      return FailureCategory.mergeFailed;
+    }
+    if (rep.contains('TorrentEnginePauseException') ||
+        rep.toLowerCase().contains('torrent')) {
+      return FailureCategory.torrentError;
+    }
+    if (rep.contains('UrlExpiredException') ||
+        rep.toLowerCase().contains('expired') ||
+        rep.toLowerCase().contains('forbidden')) {
+      return FailureCategory.authError;
+    }
+    if (rep.toLowerCase().contains('dns') ||
+        rep.toLowerCase().contains('socketexception') ||
+        rep.toLowerCase().contains('handshakeexception')) {
+      return FailureCategory.network;
+    }
+    return FailureCategory.unknown;
+  }
+}
+
 enum DownloadStatus {
   queued,
   downloading,
@@ -56,6 +157,7 @@ class DownloadTask {
   final String? errorMessage;
   final String? statusMessage;
   final FailureCategory? failureCategory;
+  final String? recoveryHint;
   final int threadCount;
   final List<double> chunks;
   final DateTime createdAt;
@@ -111,6 +213,7 @@ class DownloadTask {
     this.errorMessage,
     this.statusMessage,
     this.failureCategory,
+    this.recoveryHint,
     required this.threadCount,
     required this.chunks,
     required this.createdAt,
@@ -418,6 +521,8 @@ class DownloadTask {
     bool clearStatusMessage = false,
     FailureCategory? failureCategory,
     bool clearFailureCategory = false,
+    String? recoveryHint,
+    bool clearRecoveryHint = false,
     int? threadCount,
     List<double>? chunks,
     DateTime? updatedAt,
@@ -481,8 +586,14 @@ class DownloadTask {
       failureCategory: clearFailureCategory
           ? null
           : (failureCategory ?? this.failureCategory),
+      recoveryHint: clearRecoveryHint
+          ? null
+          : (recoveryHint ?? this.recoveryHint),
       threadCount: threadCount ?? this.threadCount,
-      chunks: chunks ?? this.chunks,
+      chunks: (chunks ?? this.chunks).map((c) {
+        if (c.isNaN || c.isInfinite) return 0.0;
+        return c.clamp(0.0, 1.0);
+      }).toList(),
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
@@ -549,6 +660,7 @@ class DownloadTask {
       'errorMessage': errorMessage,
       'statusMessage': statusMessage,
       'failureCategory': failureCategory?.name,
+      'recoveryHint': recoveryHint,
       'threadCount': threadCount,
       'chunks': chunks,
       'createdAt': createdAt.millisecondsSinceEpoch,
@@ -684,6 +796,7 @@ class DownloadTask {
               orElse: () => FailureCategory.unknown,
             )
           : null,
+      recoveryHint: map['recoveryHint'] as String?,
       threadCount: threadCount,
       chunks: chunks,
       createdAt: _parseFlexDate(map['createdAt']),

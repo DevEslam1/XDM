@@ -402,6 +402,12 @@ class DmxApp extends StatelessWidget {
       child: Consumer<SettingsProvider>(
         builder: (context, settings, child) {
           final isDark = settings.isDarkMode;
+          final currentTheme = settings.currentThemeMode == ThemeMode.light
+              ? AppTheme.lightTheme
+              : (settings.isAmoledMode
+                  ? AppTheme.amoledTheme
+                  : AppTheme.darkTheme);
+
           return MaterialApp(
             title: 'XDM - Download Manager X',
             debugShowCheckedModeBanner: false,
@@ -412,19 +418,22 @@ class DmxApp extends StatelessWidget {
                 : AppTheme.darkTheme,
             themeMode: settings.currentThemeMode,
             locale: Locale(settings.languageCode),
-            home: settings.showOnboarding
-                ? const OnboardingScreen()
-                // Android: block app usage until a download folder is chosen,
-                // otherwise downloads silently land in Android/data.
-                : (!kIsWeb &&
-                        Platform.isAndroid &&
-                        (settings.customDownloadPath?.isEmpty ?? true))
-                    ? const PermissionRequestScreen()
-                    : MainNavigationContainer(
-                        initialUrl: initialUrl,
-                        isShareLaunch:
-                            initialUrl != null && initialUrl!.trim().isNotEmpty,
-                      ),
+            home: AnimatedTheme(
+              data: currentTheme,
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeInOut,
+              child: settings.showOnboarding
+                  ? const OnboardingScreen()
+                  : (!kIsWeb &&
+                          Platform.isAndroid &&
+                          (settings.customDownloadPath?.isEmpty ?? true))
+                      ? const PermissionRequestScreen()
+                      : MainNavigationContainer(
+                          initialUrl: initialUrl,
+                          isShareLaunch: initialUrl != null &&
+                              initialUrl!.trim().isNotEmpty,
+                        ),
+            ),
             builder: (context, child) {
               return XdmTextScaler(
                 child: AnnotatedRegion<SystemUiOverlayStyle>(

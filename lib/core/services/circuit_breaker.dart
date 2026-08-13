@@ -1,5 +1,17 @@
 enum CircuitBreakerState { closed, open, halfOpen }
 
+/// Thrown when a [CircuitBreaker] is OPEN (or not yet allowed) and the caller
+/// attempts a guarded operation.
+class CircuitOpenException implements Exception {
+  final String? service;
+  final Duration retryAfter;
+  const CircuitOpenException({this.service, this.retryAfter = Duration.zero});
+  @override
+  String toString() =>
+      'CircuitOpenException: ${service ?? 'service'} is temporarily '
+      'unavailable';
+}
+
 class CircuitBreaker {
   CircuitBreaker({
     this.failureThreshold = 3,
@@ -19,12 +31,21 @@ class CircuitBreaker {
   bool _probeInFlight = false;
   DateTime? _probeStartedAt;
 
+  // Metrics (ERR-RESILIENCE-2.2)
+  int _totalRequests = 0;
+  int _totalFailures = 0;
+  DateTime _lastStateChangeAt = DateTime.fromMillisecondsSinceEpoch(0);
+
   CircuitBreakerState get state => _state;
   int get consecutiveFailures => _consecutiveFailures;
   bool get isClosed => _state == CircuitBreakerState.closed;
   bool get isOpen => _state == CircuitBreakerState.open;
+  int get totalRequests => _totalRequests;
+  int get totalFailures => _totalFailures;
+  DateTime get lastStateChange => _lastStateChangeAt;
 
   bool allowRequest() {
+    _totalRequests++;
     final now = _clock();
     switch (_state) {
       case CircuitBreakerState.closed:
@@ -54,6 +75,33 @@ class CircuitBreaker {
     }
   }
 
+  /// Runs [operation] behind the breaker: rejects immediately with a
+  /// [CircuitOpenException] when the circuit is OPEN, allows a single probe in
+  /// HALF_OPEN, and records success/failure against the breaker.
+  Future<T> guard<T>(
+    Future<T> Function() operation, {
+    String? service,
+  }) async {
+    if (!allowRequest()) {
+      final remaining = isOpen
+          ? openTimeout -
+              _clock().difference(_lastStateChange).abs()
+          : halfOpenTimeout;
+      throw CircuitOpenException(
+        service: service,
+        retryAfter: remaining > Duration.zero ? remaining : Duration.zero,
+      );
+    }
+    try {
+      final result = await operation();
+      recordSuccess();
+      return result;
+    } catch (e) {
+      recordFailure();
+      rethrow;
+    }
+  }
+
   void recordSuccess() {
     _consecutiveFailures = 0;
     _probeInFlight = false;
@@ -66,6 +114,7 @@ class CircuitBreaker {
   DateTime? _lastFailureTimestamp;
   void recordFailure() {
     final now = _clock();
+    _totalFailures++;
     // Debounce rapid concurrent failures
     if (_state != CircuitBreakerState.closed &&
         _lastFailureTimestamp != null &&
@@ -95,5 +144,6 @@ class CircuitBreaker {
   void _transition(CircuitBreakerState next, DateTime now) {
     _state = next;
     _lastStateChange = now;
+    _lastStateChangeAt = now;
   }
 }

@@ -51,8 +51,8 @@ class DownloadCard extends StatelessWidget with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<DownloadProvider>();
-    final isSelectionMode = provider.isSelectionMode;
+    final isSelectionMode = context.select((DownloadProvider p) => p.isSelectionMode);
+    final provider = context.read<DownloadProvider>();
 
     final statusLabel = task.status.name;
     final semanticLabel = '${task.fileName}, status: $statusLabel, '
@@ -340,7 +340,7 @@ class _StatusChipState extends State<_StatusChip>
     final task = widget.task;
     final isDark = widget.isDark;
     final overrideLabel = widget.overrideLabel;
-    final provider = context.watch<DownloadProvider>();
+    final provider = context.read<DownloadProvider>();
 
     final isWifiWaiting = task.status == DownloadStatus.paused &&
         task.errorMessage != null &&
@@ -477,8 +477,7 @@ class _QueuedSubtext extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (task.status != DownloadStatus.queued) return const SizedBox.shrink();
-    final provider = context.watch<DownloadProvider>();
-    final activeCount = provider.downloadingTasksCount;
+    final activeCount = context.select((DownloadProvider p) => p.downloadingTasksCount);
     final maxCount = context.watch<SettingsProvider>().maxDownloads;
 
     return Padding(
@@ -612,7 +611,7 @@ class _TelemetryStrip extends StatelessWidget {
                 const Spacer(),
                 Builder(
                   builder: (context) {
-                    final provider = context.watch<DownloadProvider>();
+                    final provider = context.read<DownloadProvider>();
                     final history = provider.getSpeedHistory(task.id);
                     if (history.length >= 2) {
                       final screenW = MediaQuery.sizeOf(context).width;
@@ -1039,11 +1038,11 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<DownloadProvider>();
+    final provider = context.read<DownloadProvider>();
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final accent = getEffectiveCardAccent(task, provider, isDark);
-    final isPending = provider.isTaskOperationPending(task.id);
+    final isPending = context.select((DownloadProvider p) => p.isTaskOperationPending(task.id));
     final isRtl = L10n.isRtl(context);
 
     Widget actionBtn;
@@ -1254,6 +1253,45 @@ class _NoticeRow extends StatelessWidget {
   }
 }
 
+/// Recovery-suggestion row shown under a failed card's error message.
+class _RecoveryHintRow extends StatelessWidget {
+  final String text;
+  final bool isDark;
+
+  const _RecoveryHintRow({required this.text, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final hintColor = isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Icon(
+            Icons.lightbulb_outline,
+            size: 12,
+            color: hintColor,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTheme.dataStyle(
+                isDark: isDark,
+                size: 10,
+                weight: FontWeight.w500,
+                color: hintColor,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Variant 1 — Single file
 // ────────────────────────────────────────────────────────────────────────────
@@ -1268,7 +1306,7 @@ class _FileCard extends StatelessWidget with HapticHelper {
   Widget build(BuildContext context) {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
-    final provider = context.watch<DownloadProvider>();
+    final provider = context.read<DownloadProvider>();
     final statusColor = getEffectiveCardAccent(task, provider, isDark);
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
@@ -1398,6 +1436,10 @@ class _FileCard extends StatelessWidget with HapticHelper {
                     icon: Icons.error_outline,
                     isDark: isDark,
                   ),
+                if (task.status == DownloadStatus.failed &&
+                    task.recoveryHint != null &&
+                    task.recoveryHint!.isNotEmpty)
+                  _RecoveryHintRow(text: task.recoveryHint!, isDark: isDark),
                 if (task.status == DownloadStatus.downloading)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
@@ -1449,7 +1491,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
   Widget build(BuildContext context) {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
-    final provider = context.watch<DownloadProvider>();
+    final provider = context.read<DownloadProvider>();
     final statusColor = getEffectiveCardAccent(task, provider, isDark);
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final qualityColor = _isAudioOnly
@@ -1642,6 +1684,10 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                     icon: Icons.error_outline,
                     isDark: isDark,
                   ),
+                if (task.status == DownloadStatus.failed &&
+                    task.recoveryHint != null &&
+                    task.recoveryHint!.isNotEmpty)
+                  _RecoveryHintRow(text: task.recoveryHint!, isDark: isDark),
               ],
             ),
           ),
@@ -1671,7 +1717,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
-    final provider = context.watch<DownloadProvider>();
+    final provider = context.read<DownloadProvider>();
     final statusColor = getEffectiveCardAccent(widget.task, provider, isDark);
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
@@ -2034,6 +2080,13 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                         text: widget.task.errorMessage!,
                         color: statusColor,
                         icon: Icons.error_outline,
+                        isDark: isDark,
+                      ),
+                    if (widget.task.status == DownloadStatus.failed &&
+                        widget.task.recoveryHint != null &&
+                        widget.task.recoveryHint!.isNotEmpty)
+                      _RecoveryHintRow(
+                        text: widget.task.recoveryHint!,
                         isDark: isDark,
                       ),
                   ],

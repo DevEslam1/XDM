@@ -18,6 +18,8 @@ import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';
 import '../utils/backup_helper.dart';
 
+import '../widgets/system_monitors_card.dart';
+
 class AdvancedSettingsPage extends StatefulWidget {
   const AdvancedSettingsPage({super.key});
 
@@ -128,6 +130,7 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final accent = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+    final orange = isDark ? AppTheme.neonOrange : AppTheme.lightNeonOrange;
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -140,6 +143,33 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          SystemMonitorsCard(
+            accentColor: orange,
+            isDark: isDark,
+          ),
+          SettingsSectionHeader(
+            title: isRtl ? 'إدارة الطاقة والبطارية' : 'Power Management',
+            accentColor: orange,
+            isDark: isDark,
+          ),
+          SettingsSectionGroup(
+            accentColor: orange,
+            children: [
+              SwitchTile(
+                accentColor: orange,
+                title: isRtl ? 'وضع توفير البطارية' : 'Battery Saver Mode',
+                subtitle: isRtl
+                    ? 'يحدد التحميلات المتزامنة بـ 1، الخيوط بـ 2، ويفعل الواجهة الكلاسيكية'
+                    : 'Limits downloads to 1, threads to 2, and forces Classic UI mode',
+                value: settings.batterySaverMode,
+                onChanged: (val) {
+                  settings.setBatterySaverMode(val);
+                  triggerHaptic(settings);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           SettingsSectionHeader(
             title: isRtl ? 'وضع المطور والأمان' : 'Developer & App Security',
             accentColor: accent,

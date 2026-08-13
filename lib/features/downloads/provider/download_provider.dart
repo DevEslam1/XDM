@@ -418,6 +418,10 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, int> _lastDbSaveBytes = {};
   final Map<String, int> _lastTorrentFileDiskSync = {};
 
+  /// ERR-RESILIENCE-2.3: timestamp (ms) of the last periodic .dmxstate
+  /// integrity sweep, used to throttle it to ~once per minute.
+  int _lastIntegrityCheckMs = 0;
+
   final Set<String> _pendingProgressUpdates = {};
   final Map<String, int> _torrentIds = {};
   final Set<String> _needsForcedPauseOnRegister = {};
@@ -1100,7 +1104,7 @@ class DownloadProvider extends ChangeNotifier
       if (task.isTorrent &&
           task.status == DownloadStatus.completed &&
           task.seedingEnabled) {
-        startSeedingTorrent(task);
+        unawaited(startSeedingTorrent(task));
       }
     }
 
@@ -3108,9 +3112,8 @@ class DownloadProvider extends ChangeNotifier
     _notifications.cancelNotification(notifId);
     _notifications.cancelForTask(id);
 
-    // 1. Cancel the token IMMEDIATELY
+    // 1. Cancel the token IMMEDIATELY and wait for active future safely
     final token = _cancelTokens[id];
-
     if (token != null && !token.isCancelled) {
       try {
         token.cancel('deleted');
@@ -3118,6 +3121,21 @@ class DownloadProvider extends ChangeNotifier
         // Ignore
       }
     }
+
+    final activeFuture = _activeFutures[id];
+    if (activeFuture != null) {
+      try {
+        await activeFuture.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            debugPrint('[DMX] deleteTask: Future timeout for $id, proceeding');
+          },
+        );
+      } catch (_) {
+        // Swallow errors - deleting task anyway
+      }
+    }
+    _activeFutures.remove(id);
 
     // 2. For torrents, pause + remove from session IMMEDIATELY
     if (task.isTorrent) {
@@ -3144,6 +3162,7 @@ class DownloadProvider extends ChangeNotifier
     filteredTasksDirty = true;
     _cancelTokens.remove(id);
     _speedHistories.remove(id);
+    _uploadSpeedHistories.remove(id);
     _progressNotifiers.remove(id)?.dispose();
     _speedNotifiers.remove(id)?.dispose();
     _lastProgressUpdateTimes.remove(id);
@@ -3443,20 +3462,35 @@ class DownloadProvider extends ChangeNotifier
   /// structural update (status change, URL edit, metadata save) carries
   /// stale progress values captured before the update was enqueued.
   DownloadTask _mergeTaskUpdate(DownloadTask live, DownloadTask incoming) {
-    // Terminal states (completed / failed) are never overwritten by non-terminal incoming updates.
-    if ((live.status == DownloadStatus.completed || live.status == DownloadStatus.failed) &&
-        incoming.status != live.status) {
+    // Rule 1: Completed / Failed tasks are immutable unless explicitly enqueued for retry
+    if ((live.status == DownloadStatus.completed ||
+            live.status == DownloadStatus.failed) &&
+        incoming.status != live.status &&
+        incoming.status != DownloadStatus.queued &&
+        incoming.status != DownloadStatus.downloading) {
+      if (incoming.downloadedBytes > live.downloadedBytes &&
+          incoming.status == live.status) {
+        return incoming;
+      }
       return live;
     }
-    // C3: Reject stale promotion of user-paused tasks by asynchronous updates
-    if (live.status == DownloadStatus.paused &&
-        live.pausedByUser == true &&
-        incoming.pausedByUser == true &&
-        (incoming.status == DownloadStatus.queued ||
-            incoming.status == DownloadStatus.downloading)) {
+
+    // Rule 2: Automatic state updates cannot un-pause a task if incoming still has pausedByUser == true
+    if (live.pausedByUser &&
+        incoming.pausedByUser &&
+        live.status == DownloadStatus.paused &&
+        incoming.status != DownloadStatus.paused &&
+        incoming.status != DownloadStatus.downloading) {
+      if (incoming.downloadedBytes > live.downloadedBytes) {
+        return incoming.copyWith(
+          status: DownloadStatus.paused,
+          pausedByUser: true,
+        );
+      }
       return live;
     }
-    // FIX-H5: Protect merging status from stale downloading snapshots
+
+    // Rule 3: Protect merging status from stale downloading snapshots
     if ((live.status == DownloadStatus.paused ||
             live.status == DownloadStatus.failed ||
             live.status == DownloadStatus.merging) &&
@@ -3464,7 +3498,7 @@ class DownloadProvider extends ChangeNotifier
       return live;
     }
 
-    // FIX F7: A reset is any incoming update that explicitly zeroes progress fields
+    // Rule 4: A reset explicitly zeroes progress
     final isReset = incoming.downloadedBytes == 0 &&
         (incoming.status == DownloadStatus.queued ||
             incoming.status == DownloadStatus.failed ||
@@ -3475,8 +3509,7 @@ class DownloadProvider extends ChangeNotifier
 
     if (isReset) return incoming;
 
-    // For progress ticks during active download, accept the larger value
-    // to prevent regression from out-of-order ticks.
+    // Rule 5: For progress ticks during active download, accept larger progress
     final isProgressTick = incoming.status == DownloadStatus.downloading &&
         live.status == DownloadStatus.downloading;
 
@@ -3494,7 +3527,6 @@ class DownloadProvider extends ChangeNotifier
       );
     }
 
-    // All other transitions: trust incoming unconditionally.
     return incoming;
   }
 
@@ -3529,6 +3561,25 @@ class DownloadProvider extends ChangeNotifier
     if (index == -1) return;
 
     final prev = _tasks[index];
+
+    // ERR-RESILIENCE-1.2: When a task transitions to failed, ensure it always
+    // carries a FailureCategory + recovery hint so the UI can present a
+    // consistent, actionable recovery path. Derived from the current fields so
+    // this works even when the failure came from a path that only set an
+    // errorMessage.
+    if (updated.status == DownloadStatus.failed &&
+        updated.failureCategory == null) {
+      updated = updated.copyWith(
+        failureCategory: FailureCategory.unknown,
+        recoveryHint: RecoveryHints.hintFor(FailureCategory.unknown),
+      );
+    } else if (updated.status == DownloadStatus.failed &&
+        updated.recoveryHint == null) {
+      updated = updated.copyWith(
+        recoveryHint: RecoveryHints.hintFor(updated.failureCategory!),
+      );
+    }
+
     final protocol = updated.isTorrent
         ? 'TORRENT'
         : (updated.hasMergedAudio || updated.mergedAudioUrl != null
@@ -3975,6 +4026,16 @@ class DownloadProvider extends ChangeNotifier
           });
         }
 
+        // ERR-RESILIENCE-2.3: Periodic state-file integrity check (~60s).
+        // Verifies every active download's .dmxstate is parseable; unrecoverable
+        // corrupt states are reported and the task paused rather than silently
+        // resumed against a broken state file.
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        if (nowMs - _lastIntegrityCheckMs >= 60000) {
+          _lastIntegrityCheckMs = nowMs;
+          unawaited(_verifyActiveStatesIntegrity());
+        }
+
         // Coalesce notifyListeners() calls from _setTask progress-only updates
         // so widgets rebuild at most once per timer tick instead of on every tick.
         final shouldNotify = _notifyPending || updateSeedingSpeeds();
@@ -3991,6 +4052,50 @@ class DownloadProvider extends ChangeNotifier
     _widgetTimer = null;
     BackgroundService.setDownloadActive(false);
     PowerMonitor.setDownloadActive(false);
+  }
+
+  /// ERR-RESILIENCE-2.3: Periodic .dmxstate integrity sweep. For each active
+  /// (non-torrent) download, confirm the state file is parseable; if it is
+  /// corrupt and the journal cannot recover it, pause the task with a clear
+  /// message instead of silently resuming from broken state.
+  Future<void> _verifyActiveStatesIntegrity() async {
+    if (_disposed) return;
+    for (var i = 0; i < _tasks.length; i++) {
+      final task = _tasks[i];
+      if (task.status != DownloadStatus.downloading || task.isTorrent) continue;
+      if (task.downloadedBytes <= 0) continue;
+      final statePath = '${task.tempFilePath}.dmxstate';
+      final journalPath = '${task.tempFilePath}.journal';
+      try {
+        final stateFile = File(statePath);
+        if (!await stateFile.exists()) continue;
+        final content = await stateFile.readAsString();
+        jsonDecode(content);
+      } catch (e) {
+        // State unparseable. Try journal recovery before declaring it broken.
+        debugPrint(
+          '[DMX] Integrity check: corrupt state for ${task.id}: $e',
+        );
+        try {
+          final recovered =
+              await DownloadJournal.recover(journalPath);
+          if (recovered != null && recovered.isNotEmpty) {
+            debugPrint(
+              '[DMX] Integrity check: journal recovered ${task.id}',
+            );
+            continue;
+          }
+        } catch (_) {}
+        _tasks[i] = task.copyWith(
+          status: DownloadStatus.paused,
+          speed: 0,
+          clearEta: true,
+          errorMessage:
+              'Download state file was corrupted. Tap Resume to re-validate and continue.',
+        );
+        unawaited(_databaseService.saveTask(_tasks[i]).catchError((_) {}));
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------

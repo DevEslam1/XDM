@@ -166,14 +166,21 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     ShareUrlHandler.handle(context, url, isShareLaunch: isShareLaunch);
   }
 
+  bool _isShowingClipboardDialog = false;
+
   Future<void> _checkClipboard() async {
+    if (_isShowingClipboardDialog) return;
     final now = DateTime.now();
     if (now.difference(_lastClipboardCheckTime).inSeconds < 2) return;
     _lastClipboardCheckTime = now;
     final url = await ClipboardService().checkClipboardForUrl();
     if (url != null && mounted && url != _lastClipboardUrl) {
+      _isShowingClipboardDialog = true;
       _lastClipboardUrl = url;
       _showClipboardSnackbar(url);
+      Future.delayed(const Duration(seconds: 3), () {
+        _isShowingClipboardDialog = false;
+      });
     }
   }
 

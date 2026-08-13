@@ -8,12 +8,14 @@ class DmxBackdropFilter extends StatefulWidget {
   final double sigmaX;
   final double sigmaY;
   final Widget child;
+  final bool forceSolid;
 
   const DmxBackdropFilter({
     super.key,
     required this.sigmaX,
     required this.sigmaY,
     required this.child,
+    this.forceSolid = false,
   });
 
   static int _activeCount = 0;
@@ -29,7 +31,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   @override
   void initState() {
     super.initState();
-    if (DmxBackdropFilter._activeCount < DmxBackdropFilter._maxConcurrent) {
+    if (!widget.forceSolid && DmxBackdropFilter._activeCount < DmxBackdropFilter._maxConcurrent) {
       DmxBackdropFilter._activeCount++;
       _allocated = true;
     }
@@ -46,7 +48,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
 
   @override
   Widget build(BuildContext context) {
-    if (PowerMonitor.screenOff || !_allocated) {
+    if (widget.forceSolid || PowerMonitor.screenOff || !_allocated) {
       return widget.child;
     }
     final reduceVisuals = context.select(

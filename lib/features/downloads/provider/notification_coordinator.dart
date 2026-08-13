@@ -146,6 +146,7 @@ class NotificationCoordinator {
   }
 
   void init() {
+    _nextNotificationId = (DateTime.now().millisecondsSinceEpoch % 10000) + 1000;
     _handlesLoadFuture ??= _loadPersistedHandles();
     _actionSubscription?.cancel();
     _actionSubscription = _notificationService.onActionTapped.listen(
@@ -219,6 +220,15 @@ class NotificationCoordinator {
     // If still null, but rawHandle is a valid task ID, proceed anyway.
     if (taskId == null && rawHandle != null && _isValidTaskId(rawHandle)) {
       taskId = rawHandle;
+    }
+
+    if (taskId != null) {
+      final task = _findTask(taskId);
+      if (task == null &&
+          (action == 'pause' || action == 'resume' || action == 'cancel')) {
+        debugPrint('[Notifications] Task $taskId not found, ignoring action $action');
+        return;
+      }
     }
 
     if (taskId != null && (action == 'pause' || action == 'resume' || action == 'cancel')) {
