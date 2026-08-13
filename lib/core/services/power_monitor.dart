@@ -75,9 +75,19 @@ class PowerMonitor {
     return 16;
   }
 
+  static bool _hasActiveDownloads = false;
+
+  static void setDownloadActive(bool active) {
+    if (_hasActiveDownloads != active) {
+      _hasActiveDownloads = active;
+      _startThermalTimer();
+    }
+  }
+
   static void setScreenOn(bool on) {
     _screenOn = on;
     _notifyThrottleFactor();
+    _startThermalTimer();
   }
 
   @visibleForTesting
@@ -113,7 +123,12 @@ class PowerMonitor {
         f *= 0.75;
       }
     }
-    switch (_thermal) {
+    // When screen is off + thermal is moderate or worse, be more conservative
+    final effectiveThermal = (screenOff && _thermal == ThermalStatus.moderate)
+        ? ThermalStatus.severe
+        : _thermal;
+
+    switch (effectiveThermal) {
       case ThermalStatus.critical:
         f *= 0.3;
         break;
@@ -182,9 +197,24 @@ class PowerMonitor {
   }
 
   /// Poll thermal status periodically (native bridge on Android/iOS).
+  /// Adaptive intervals:
+  /// - Active download + thermal stress (throttleFactor < 0.8): 15s
+  /// - Active download normal: 60s
+  /// - No active downloads: 120s
   static void _startThermalTimer() {
     _thermalTimer?.cancel();
-    _thermalTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+    int intervalSeconds = 60;
+    if (_hasActiveDownloads) {
+      if (throttleFactor < 0.8) {
+        intervalSeconds = 15;
+      } else {
+        intervalSeconds = 60;
+      }
+    } else {
+      intervalSeconds = 120;
+    }
+
+    _thermalTimer = Timer.periodic(Duration(seconds: intervalSeconds), (_) {
       _pollThermalOnce();
     });
   }
@@ -194,3 +224,4 @@ class PowerMonitor {
     _thermalTimer?.cancel();
   }
 }
+

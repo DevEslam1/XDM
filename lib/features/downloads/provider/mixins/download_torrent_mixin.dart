@@ -526,9 +526,34 @@ mixin DownloadTorrentMixin {
       final toPause = activeTorrents
           .where((t) => t.status == DownloadStatus.downloading)
           .skip(settings.maxActiveDownloads);
+      var pausedAny = false;
       for (final task in toPause) {
         final id = providerTorrentIds[task.id];
-        if (id != null) TorrentService.pauseTorrent(id);
+        if (id != null) {
+          TorrentService.pauseTorrent(id);
+          // Keep the DownloadTask model in sync with the engine: a queue-cap
+          // pause must transition the task to paused, otherwise the UI keeps
+          // showing "downloading" while nothing is transferring and a future
+          // resume/pump has no consistent state to act on.
+          final idx = providerTasks.indexWhere((t) => t.id == task.id);
+          if (idx != -1) {
+            providerTasks[idx] = providerTasks[idx].copyWith(
+              status: DownloadStatus.paused,
+              speed: 0,
+              clearEta: true,
+            );
+            pausedAny = true;
+            unawaited(
+              providerDatabaseService
+                  .saveTask(providerTasks[idx])
+                  .catchError((_) {}),
+            );
+          }
+        }
+      }
+      if (pausedAny) {
+        filteredTasksDirty = true;
+        providerNotifyListeners();
       }
     }
 

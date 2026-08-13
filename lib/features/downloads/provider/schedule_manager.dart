@@ -180,14 +180,32 @@ class ScheduleManager {
       }
     }
 
-    // SCHED-FIX-6: Revert in-memory state on save failure
+    // SCHED-FIX-6: Persist each promotion, isolating failures per task so only
+    // the tasks whose save actually failed are reverted. Tasks whose save
+    // succeeded must stay queued in both memory and DB — reverting them would
+    // desync the two and spuriously "un-promote" a successfully queued task.
     if (saves.isNotEmpty) {
-      try {
-        await Future.wait(saves, eagerError: true);
-      } catch (e) {
-        debugPrint(
-            '[ScheduleManager] Save failed, state may be inconsistent: $e');
-        for (final idx in promotedIndices) {
+      final results = await Future.wait(
+        saves.asMap().entries.map((entry) async {
+          try {
+            await entry.value;
+            return true; // save at index `entry.key` succeeded
+          } catch (e) {
+            debugPrint(
+                '[ScheduleManager] Save failed for '
+                '${tasks[promotedIndices[entry.key]].id}: $e');
+            return false;
+          }
+        }),
+      );
+
+      final failedIndices = <int>[];
+      for (var s = 0; s < results.length; s++) {
+        if (!results[s]) failedIndices.add(s);
+      }
+      if (failedIndices.isNotEmpty) {
+        for (final s in failedIndices) {
+          final idx = promotedIndices[s];
           if (idx < tasks.length) {
             tasks[idx] = tasks[idx].copyWith(
               status: DownloadStatus.paused,
@@ -196,6 +214,10 @@ class ScheduleManager {
             );
           }
         }
+        // SCHED-FIX-6: After reverting the in-memory state, notify listeners so
+        // the UI reflects the reverted paused/scheduled task instead of the
+        // not-yet-persisted queued promotion.
+        _notifyListeners();
         return; // Don't pump queue with inconsistent state
       }
     }

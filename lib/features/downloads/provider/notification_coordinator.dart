@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/background_service.dart';
 import '../../../core/services/notification_service.dart';
+import '../../../core/services/power_monitor.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
@@ -68,6 +69,7 @@ class NotificationCoordinator {
 
   StreamSubscription<Map<String, String>>? _actionSubscription;
   final Map<String, int> _notificationIds = {};
+  final Map<int, DateTime> _lastProgressPostTimes = {};
   int _nextNotificationId = 1;
 
   // Android notification grouping: all per-task progress notifications share
@@ -294,7 +296,11 @@ class NotificationCoordinator {
   void showScheduledStarted(String taskName, DateTime scheduledAt) {
     if (!_settingsProvider.notificationsEnabled) return;
     final quietHours = _settingsProvider.isInQuietHoursNow();
-    final id = 8000 + (scheduledAt.millisecondsSinceEpoch % 1000);
+    // Allocate from the same monotonic sequence as [idFor] so this ID can
+    // never collide with a task's notification or with another scheduled
+    // download (a time-derived `% 1000` collided for downloads scheduled at
+    // the same instant).
+    final id = _nextNotificationId++;
     final local = scheduledAt.toLocal();
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
@@ -318,6 +324,18 @@ class NotificationCoordinator {
     bool isPaused = false,
   }) {
     if (!_settingsProvider.notificationsEnabled) return;
+
+    final now = DateTime.now();
+    final lastPost = _lastProgressPostTimes[notificationId];
+    final minIntervalMs = PowerMonitor.screenOff ? 5000 : 1000;
+    if (!isPaused &&
+        progressPercent < 100 &&
+        lastPost != null &&
+        now.difference(lastPost).inMilliseconds < minIntervalMs) {
+      return;
+    }
+    _lastProgressPostTimes[notificationId] = now;
+
     final activeCount = _downloadingTasksCount();
     final multiple = activeCount > 1;
     _notificationService.showDownloadProgress(

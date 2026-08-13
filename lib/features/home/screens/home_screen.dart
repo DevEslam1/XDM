@@ -22,6 +22,14 @@ import '../../../shared/widgets/skeleton_loader.dart';
 import '../../../shared/mixins/pausable_loop_animation.dart';
 import '../../../shared/design/dmx_design.dart';
 
+bool _isActiveTask(DownloadTask t) {
+  final isSeeding =
+      t.status == DownloadStatus.completed && t.isTorrent && t.seedingEnabled;
+  return (t.status != DownloadStatus.completed &&
+          t.status != DownloadStatus.failed) ||
+      isSeeding;
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -102,14 +110,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  bool _isActiveTask(DownloadTask t) {
-    final isSeeding =
-        t.status == DownloadStatus.completed && t.isTorrent && t.seedingEnabled;
-    return (t.status != DownloadStatus.completed &&
-            t.status != DownloadStatus.failed) ||
-        isSeeding;
-  }
-
   @override
   void dispose() {
     _searchController.dispose();
@@ -136,8 +136,14 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Selector<SettingsProvider,
-        ({bool isDarkMode, bool classicUi, String languageCode, bool isAmoledMode})>(
+    return Selector<
+        SettingsProvider,
+        ({
+          bool isDarkMode,
+          bool classicUi,
+          String languageCode,
+          bool isAmoledMode
+        })>(
       selector: (_, s) => (
         isDarkMode: s.isDarkMode,
         classicUi: s.classicUi,
@@ -186,7 +192,8 @@ class _HomeScreenState extends State<HomeScreen>
                           children: [
                             const SizedBox(height: 12),
                             // FIX(14): iOS has no persistent background downloads
-                            ..._buildIosBackgroundBanner(isDark, isRtl, downloadProvider),
+                            ..._buildIosBackgroundBanner(
+                                isDark, isRtl, downloadProvider),
                             _stagger(
                                 0.0,
                                 _buildAnimatedSegmentedControl(
@@ -226,12 +233,13 @@ class _HomeScreenState extends State<HomeScreen>
                                               }
                                               return false;
                                             },
-                                            builder: (context, categorySizes, _) =>
-                                                RepaintBoundary(
+                                            builder:
+                                                (context, categorySizes, _) =>
+                                                    RepaintBoundary(
                                               child: _RedesignedAnalyticsPanel(
                                                 categorySizes: categorySizes,
-                                                settings:
-                                                    context.read<SettingsProvider>(),
+                                                settings: context
+                                                    .read<SettingsProvider>(),
                                                 activeFilterClr: accentClr,
                                               ),
                                             ),
@@ -264,7 +272,8 @@ class _HomeScreenState extends State<HomeScreen>
                                 Padding(
                                   padding: EdgeInsets.symmetric(
                                       horizontal: screenPadding(context).left),
-                                  child: FilterChipsBar(isHistory: _selectedTab == 1),
+                                  child: FilterChipsBar(
+                                      isHistory: _selectedTab == 1),
                                 )),
                             const SizedBox(height: 20),
                             // Section Header + Controls
@@ -427,7 +436,8 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   /// FIX(14): persistent iOS-only banner.
-  List<Widget> _buildIosBackgroundBanner(bool isDark, bool isRtl, DownloadProvider provider) {
+  List<Widget> _buildIosBackgroundBanner(
+      bool isDark, bool isRtl, DownloadProvider provider) {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return const [];
     final accent = getActiveFilterColor(provider, isDark);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
@@ -528,6 +538,7 @@ class _HomeScreenState extends State<HomeScreen>
             if (!nextSearching) {
               _searchController.clear();
               context.read<DownloadProvider>().setSearchQuery('');
+              _searchFocusNode.unfocus();
             }
             setState(() {
               _isSearching = nextSearching;
@@ -628,14 +639,7 @@ class _HomeScreenState extends State<HomeScreen>
       selector: (_, p) => p.filteredTasks,
       builder: (context, allTasks, _) {
         final activeCount = allTasks.where(_isActiveTask).length;
-        final historyCount = allTasks.where((DownloadTask t) {
-          final isSeeding = t.status == DownloadStatus.completed &&
-              t.isTorrent &&
-              t.seedingEnabled;
-          return (t.status == DownloadStatus.completed ||
-                  t.status == DownloadStatus.failed) &&
-              !isSeeding;
-        }).length;
+        final historyCount = allTasks.where((t) => !_isActiveTask(t)).length;
         return Padding(
           padding:
               EdgeInsets.symmetric(horizontal: screenPadding(context).left),
@@ -647,9 +651,8 @@ class _HomeScreenState extends State<HomeScreen>
                   : AppTheme.lightSurface.withValues(alpha: 0.7),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: isDark
-                    ? AppTheme.borderSubtle
-                    : AppTheme.lightBorderSubtle,
+                color:
+                    isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
                 width: 1.0,
               ),
               boxShadow: [
@@ -939,14 +942,8 @@ class _HomeScreenState extends State<HomeScreen>
           ),
           const SizedBox(width: 8),
           Selector<DownloadProvider, int>(
-            selector: (_, p) => p.filteredTasks.where((t) {
-              final isSeeding = t.status == DownloadStatus.completed &&
-                  t.isTorrent &&
-                  t.seedingEnabled;
-              return (t.status == DownloadStatus.completed ||
-                      t.status == DownloadStatus.failed) &&
-                  !isSeeding;
-            }).length,
+            selector: (_, p) =>
+                p.filteredTasks.where((t) => !_isActiveTask(t)).length,
             builder: (context, clearableLength, _) {
               if (_selectedTab != 1 || clearableLength == 0) {
                 return const SizedBox.shrink();
@@ -970,9 +967,9 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
                   ),
                   child: Icon(
-                     Icons.delete_sweep_outlined,
-                     color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                     size: 18,
+                    Icons.delete_sweep_outlined,
+                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                    size: 18,
                   ),
                 ),
               );
@@ -1037,7 +1034,7 @@ class _HomeScreenState extends State<HomeScreen>
             isNavbarVisible ? (96.0 + safeAreaBottom) : (16.0 + safeAreaBottom);
         break;
       case ScreenType.desktop:
-        bottomPadding = 0.0;
+        bottomPadding = 16.0 + safeAreaBottom;
         break;
     }
     return AnimatedPadding(
@@ -1094,14 +1091,8 @@ class _HomeScreenState extends State<HomeScreen>
     bool isDark,
     bool isRtl,
   ) async {
-    final tasksToClear = provider.filteredTasks.where((task) {
-      final isSeeding = task.status == DownloadStatus.completed &&
-          task.isTorrent &&
-          task.seedingEnabled;
-      return (task.status == DownloadStatus.completed ||
-              task.status == DownloadStatus.failed) &&
-          !isSeeding;
-    }).toList();
+    final tasksToClear =
+        provider.filteredTasks.where((task) => !_isActiveTask(task)).toList();
 
     final message = isRtl
         ? 'هل أنت متأكد من حذف جميع ${tasksToClear.length} سجل مكتمل؟'
@@ -1118,7 +1109,8 @@ class _HomeScreenState extends State<HomeScreen>
     );
 
     if (confirmed == true && context.mounted) {
-      await provider.deleteMultipleTasks(tasksToClear.map((t) => t.id).toList());
+      await provider
+          .deleteMultipleTasks(tasksToClear.map((t) => t.id).toList());
     }
   }
 }
@@ -1544,11 +1536,45 @@ class _DownloadTaskList extends StatelessWidget {
     return stagger(delay, child);
   }
 
+  Widget _wrapSelectionMode(
+      Widget card, _RenderItem item, DownloadProvider provider) {
+    if (item.isPlaylist) return card;
+
+    final isSelected = provider.selectedTaskIds.contains(item.task?.id);
+    final isInSelectionMode = provider.isSelectionMode;
+    return GestureDetector(
+      onLongPress: () {
+        if (!isInSelectionMode) {
+          provider.toggleTaskSelection(item.task!.id);
+        }
+      },
+      onTap: () {
+        if (isInSelectionMode) {
+          provider.toggleTaskSelection(item.task!.id);
+        }
+      },
+      child: Row(
+        children: [
+          if (isInSelectionMode)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: 8.0),
+              child: Checkbox(
+                value: isSelected,
+                onChanged: (val) => provider.toggleTaskSelection(item.task!.id),
+                activeColor:
+                    isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              ),
+            ),
+          Expanded(child: card),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isLoading = context.watch<DownloadProvider>().isLoadingTasks;
     final provider = context.watch<DownloadProvider>();
-    final isInSelectionMode = provider.isSelectionMode;
+    final isLoading = provider.isLoadingTasks;
 
     Widget child;
     if (isLoading) {
@@ -1562,20 +1588,10 @@ class _DownloadTaskList extends StatelessWidget {
         shouldRebuild: (prev, next) => !listEquals(prev, next),
         selector: (_, p) => p.filteredTasks,
         builder: (context, fullList, _) {
-          final displayTasks = fullList.where((task) {
-            final isSeeding = task.status == DownloadStatus.completed &&
-                task.isTorrent &&
-                task.seedingEnabled;
-            if (selectedTab == 0) {
-              return (task.status != DownloadStatus.completed &&
-                      task.status != DownloadStatus.failed) ||
-                  isSeeding;
-            } else {
-              return (task.status == DownloadStatus.completed ||
-                      task.status == DownloadStatus.failed) &&
-                  !isSeeding;
-            }
-          }).toList();
+          final displayTasks = fullList
+              .where((task) =>
+                  selectedTab == 0 ? _isActiveTask(task) : !_isActiveTask(task))
+              .toList();
 
           final groups = <String, List<DownloadTask>>{};
           final singles = <DownloadTask>[];
@@ -1618,6 +1634,7 @@ class _DownloadTaskList extends StatelessWidget {
 
           final isReorderable = selectedTab == 0 &&
               provider.sortOption == SortOption.manual &&
+              provider.statusFilter == 'All' &&
               provider.searchQuery.isEmpty &&
               provider.categoryFilters.isEmpty;
 
@@ -1649,14 +1666,16 @@ class _DownloadTaskList extends StatelessWidget {
                   if (itemToMove.isPlaylist) return;
 
                   final taskToMove = itemToMove.task!;
-                  final oldTaskIndex = p.filteredTasks.indexWhere((t) => t.id == taskToMove.id);
+                  final oldTaskIndex =
+                      p.filteredTasks.indexWhere((t) => t.id == taskToMove.id);
                   int newTaskIndex;
                   if (newIndex >= renderItems.length) {
                     newTaskIndex = p.filteredTasks.length - 1;
                   } else {
                     final targetItem = renderItems[newIndex];
                     if (targetItem.isPlaylist) return;
-                    newTaskIndex = p.filteredTasks.indexWhere((t) => t.id == targetItem.task!.id);
+                    newTaskIndex = p.filteredTasks
+                        .indexWhere((t) => t.id == targetItem.task!.id);
                   }
                   if (oldTaskIndex != -1 && newTaskIndex != -1) {
                     p.reorderTasks(p.filteredTasks, oldTaskIndex, newTaskIndex);
@@ -1664,8 +1683,6 @@ class _DownloadTaskList extends StatelessWidget {
                 },
                 itemBuilder: (context, index) {
                   final item = renderItems[index];
-                  final isSelected =
-                      provider.selectedTaskIds.contains(item.task?.id);
                   Widget card;
                   if (item.isPlaylist) {
                     card = PlaylistGroupCard(
@@ -1683,41 +1700,7 @@ class _DownloadTaskList extends StatelessWidget {
                       index: index,
                     );
                   }
-
-                  card = Row(
-                    children: [
-                      if (isInSelectionMode && !item.isPlaylist)
-                        Padding(
-                          padding: const EdgeInsetsDirectional.only(end: 8.0),
-                          child: Checkbox(
-                            value: isSelected,
-                            onChanged: (val) =>
-                                provider.toggleTaskSelection(item.task!.id),
-                            activeColor: isDark
-                                ? AppTheme.neonBlue
-                                : AppTheme.lightNeonBlue,
-                          ),
-                        ),
-                      Expanded(child: card),
-                    ],
-                  );
-
-                  if (!item.isPlaylist) {
-                    card = GestureDetector(
-                      onLongPress: () {
-                        if (!isInSelectionMode) {
-                          provider.toggleTaskSelection(item.task!.id);
-                        }
-                      },
-                      onTap: () {
-                        if (isInSelectionMode) {
-                          provider.toggleTaskSelection(item.task!.id);
-                        }
-                      },
-                      child: card,
-                    );
-                  }
-
+                  card = _wrapSelectionMode(card, item, provider);
                   return Padding(
                     key: ValueKey(item.isPlaylist
                         ? 'playlist_${item.playlistId}'
@@ -1755,8 +1738,6 @@ class _DownloadTaskList extends StatelessWidget {
                   itemCount: renderItems.length,
                   itemBuilder: (context, index) {
                     final item = renderItems[index];
-                    final isSelected =
-                        provider.selectedTaskIds.contains(item.task?.id);
                     Widget card;
                     if (item.isPlaylist) {
                       card = PlaylistGroupCard(
@@ -1774,40 +1755,9 @@ class _DownloadTaskList extends StatelessWidget {
                         index: index,
                       );
                     }
-
                     if (!item.isPlaylist) {
-                      card = Row(
-                        children: [
-                          if (isInSelectionMode)
-                            Padding(
-                              padding: const EdgeInsetsDirectional.only(end: 8.0),
-                              child: Checkbox(
-                                value: isSelected,
-                                onChanged: (val) =>
-                                    provider.toggleTaskSelection(item.task!.id),
-                                activeColor: isDark
-                                    ? AppTheme.neonBlue
-                                    : AppTheme.lightNeonBlue,
-                              ),
-                            ),
-                          Expanded(child: card),
-                        ],
-                      );
-                      card = GestureDetector(
-                        onLongPress: () {
-                          if (!isInSelectionMode) {
-                            provider.toggleTaskSelection(item.task!.id);
-                          }
-                        },
-                        onTap: () {
-                          if (isInSelectionMode) {
-                            provider.toggleTaskSelection(item.task!.id);
-                          }
-                        },
-                        child: card,
-                      );
+                      card = _wrapSelectionMode(card, item, provider);
                     }
-
                     return RepaintBoundary(
                       child: _staggeredItem(context, index, card),
                     );
@@ -1831,8 +1781,6 @@ class _DownloadTaskList extends StatelessWidget {
                       const SizedBox(height: 10),
                   itemBuilder: (context, index) {
                     final item = renderItems[index];
-                    final isSelected =
-                        provider.selectedTaskIds.contains(item.task?.id);
                     Widget card;
                     if (item.isPlaylist) {
                       card = PlaylistGroupCard(
@@ -1850,40 +1798,9 @@ class _DownloadTaskList extends StatelessWidget {
                         index: index,
                       );
                     }
-
                     if (!item.isPlaylist) {
-                      card = Row(
-                        children: [
-                          if (isInSelectionMode)
-                            Padding(
-                              padding: const EdgeInsetsDirectional.only(end: 8.0),
-                              child: Checkbox(
-                                value: isSelected,
-                                onChanged: (val) =>
-                                    provider.toggleTaskSelection(item.task!.id),
-                                activeColor: isDark
-                                    ? AppTheme.neonBlue
-                                    : AppTheme.lightNeonBlue,
-                              ),
-                            ),
-                          Expanded(child: card),
-                        ],
-                      );
-                      card = GestureDetector(
-                        onLongPress: () {
-                          if (!isInSelectionMode) {
-                            provider.toggleTaskSelection(item.task!.id);
-                          }
-                        },
-                        onTap: () {
-                          if (isInSelectionMode) {
-                            provider.toggleTaskSelection(item.task!.id);
-                          }
-                        },
-                        child: card,
-                      );
+                      card = _wrapSelectionMode(card, item, provider);
                     }
-
                     return RepaintBoundary(
                       child: _staggeredItem(context, index, card),
                     );
@@ -1943,9 +1860,10 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<DownloadProvider>();
-    final query = provider.searchQuery;
-    final accentClr = getActiveFilterColor(provider, isDark);
+    final query =
+        context.select<DownloadProvider, String>((p) => p.searchQuery);
+    final accentClr =
+        getActiveFilterColor(context.read<DownloadProvider>(), isDark);
     if (query.isNotEmpty) {
       final isLandscape =
           MediaQuery.of(context).orientation == Orientation.landscape;

@@ -1,7 +1,18 @@
+import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/database_service.dart';
+import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/download_metrics.dart';
+import 'package:dmx/core/services/torrent_models.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_orchestrator.dart';
+import 'package:dmx/features/downloads/provider/network_monitor.dart';
+import 'package:dmx/features/downloads/provider/notification_coordinator.dart';
+import 'package:dmx/features/settings/provider/settings_provider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -125,27 +136,84 @@ void main() {
     });
 
     test(
-        'BUG 1: retryMergeOnly restores _video_only file when merge is retried',
-        () async {
-      final tempDir = await Directory.systemTemp.createTemp('video_only_test_');
+        'BUG 1: retryMergeOnly restores _video_only file and completes via '
+        'existing merged output (no re-download)', () async {
+      final tempDir = await Directory.systemTemp.createTemp('bug1_retry_');
       try {
         final localPath = '${tempDir.path}/merged_video.mp4';
         final videoOnlyPath = '${tempDir.path}/merged_video_video_only.mp4';
-        final audioPath = '${tempDir.path}/task1.tmp.audio';
+        final tempPath = '${tempDir.path}/task1.dmxpart';
+        final audioPath = '$tempPath.audio';
+        final mergedPath = '$tempPath.merged.mp4';
 
-        await File(videoOnlyPath).writeAsString('video content');
-        await File(audioPath).writeAsString('audio content');
+        // Simulate a prior merge failure: video preserved as _video_only,
+        // localFilePath absent, audio sidecar present, and a merged output
+        // already on disk (>1024 bytes so _mergeAudioVideo skips FFmpeg).
+        await File(videoOnlyPath).writeAsBytes(List.filled(2048, 7));
+        await File(audioPath).writeAsBytes(List.filled(1024, 5));
+        await File(mergedPath).writeAsBytes(List.filled(4096, 9));
 
-        expect(File(videoOnlyPath).existsSync(), isTrue);
-        expect(File(localPath).existsSync(), isFalse);
+        final host = _MergeRetryTestHost();
+        final orchestrator = DownloadOrchestrator(host);
+        final task = _mergeRetryTask(
+          id: 'bug1_success',
+          fileName: 'merged_video.mp4',
+          localPath: localPath,
+          tempPath: tempPath,
+        );
+        host.taskInstance = task;
 
-        final videoOnlyFile = File(videoOnlyPath);
-        if (videoOnlyFile.existsSync() && !File(localPath).existsSync()) {
-          await videoOnlyFile.rename(localPath);
-        }
+        await orchestrator.retryMergeOnly(task);
 
+        // FIX-B1: _video_only was restored to localFilePath, never re-downloaded.
         expect(File(localPath).existsSync(), isTrue);
         expect(File(videoOnlyPath).existsSync(), isFalse);
+        // Merge succeeded via the pre-existing output; task completed.
+        expect(host.lastSavedTaskState, isNotNull);
+        expect(host.lastSavedTaskState!.status, DownloadStatus.completed);
+      } finally {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      }
+    });
+
+    test(
+        'BUG 1: incomplete video fails merge-only retry without deleting '
+        'the preserved video or audio', () async {
+      final tempDir = await Directory.systemTemp.createTemp('bug1_fail_');
+      try {
+        final localPath = '${tempDir.path}/merged_video.mp4';
+        final tempPath = '${tempDir.path}/task1.dmxpart';
+        final audioPath = '$tempPath.audio';
+
+        // Video smaller than 95% of the expected size trips the pre-FFmpeg
+        // size guard in _mergeAudioVideo, so no native FFmpeg call is made.
+        await File(localPath).writeAsBytes(List.filled(100, 1));
+        await File(audioPath).writeAsBytes(List.filled(200, 2));
+
+        final host = _MergeRetryTestHost();
+        final orchestrator = DownloadOrchestrator(host);
+        final task = _mergeRetryTask(
+          id: 'bug1_failure',
+          fileName: 'merged_video.mp4',
+          localPath: localPath,
+          tempPath: tempPath,
+        ).copyWith(fileSize: 1000, audioSize: 100);
+        host.taskInstance = task;
+
+        await orchestrator.retryMergeOnly(task);
+
+        expect(host.lastSavedTaskState, isNotNull);
+        expect(host.lastSavedTaskState!.status, DownloadStatus.failed);
+        expect(host.lastSavedTaskState!.statusMessage, 'MERGE_FAILED');
+        expect(
+          host.lastSavedTaskState!.errorMessage,
+          contains('Video saved without audio'),
+        );
+        // Cleanup never deletes the preserved video or the audio sidecar.
+        expect(File(localPath).existsSync(), isTrue);
+        expect(File(audioPath).existsSync(), isTrue);
       } finally {
         if (await tempDir.exists()) {
           await tempDir.delete(recursive: true);
@@ -153,4 +221,165 @@ void main() {
       }
     });
   });
+}
+
+/// A task in the post-merge-failure state: `failed` with `MERGE_FAILED`,
+/// video preserved as `_video_only`, and an audio sidecar expected on disk.
+DownloadTask _mergeRetryTask({
+  required String id,
+  required String fileName,
+  required String localPath,
+  required String tempPath,
+}) {
+  return DownloadTask(
+    id: id,
+    fileName: fileName,
+    url: 'https://example.com/$fileName',
+    fileSize: 0,
+    downloadedBytes: 0,
+    category: 'General',
+    status: DownloadStatus.failed,
+    statusMessage: 'MERGE_FAILED',
+    errorMessage:
+        'FFmpeg merge failed Audio preserved — retry to re-attempt merge.',
+    savePath: Directory(localPath).parent.path,
+    localFilePath: localPath,
+    tempFilePath: tempPath,
+    threadCount: 1,
+    audioThreadCount: 1,
+    chunks: const [],
+    createdAt: DateTime.now(),
+    updatedAt: DateTime.now(),
+    mergedAudioUrl: 'https://example.com/audio.m4a',
+  );
+}
+
+class _MergeRetryTestHost implements DownloadOrchestratorHost {
+  DownloadTask? taskInstance;
+  DownloadTask? lastSavedTaskState;
+
+  @override
+  final Map<String, CancelToken> cancelTokens = {};
+  @override
+  final Map<String, Future<void>> activeFutures = {};
+  @override
+  final Map<String, Timer> retryTimers = {};
+  @override
+  final Map<String, int> retryCounts = {};
+  @override
+  final Map<String, Queue<double>> speedHistories = {};
+  @override
+  final Map<String, int> lastProgressUpdateTimes = {};
+  @override
+  final Map<String, int> lastDbSaveTimes = {};
+  @override
+  final Map<String, int> lastTorrentFileDiskSync = {};
+  @override
+  final Set<String> pendingProgressUpdates = {};
+  @override
+  final Map<String, int> ytLowSpeedCounts = {};
+  @override
+  final Map<String, bool> ytThrottlingRefreshing = {};
+  @override
+  final Map<String, int> providerTorrentIds = {};
+  @override
+  final Map<String, int> effectiveThreadOverrides = {};
+  @override
+  final Map<int, TorrentUpdateInfo> providerLatestTorrentStats = {};
+  @override
+  final Map<String, bool> resumeRejectionRestarts = {};
+  @override
+  final Map<String, DownloadMetrics> downloadMetrics = {};
+
+  @override
+  bool get providerDisposed => false;
+  @override
+  bool get enableBackgroundTimers => false;
+  @override
+  int get downloadingTasksCount => 0;
+  @override
+  int get activeOrSeedingCount => 0;
+
+  @override
+  SettingsProvider get providerSettingsProvider => SettingsProvider.instance;
+  @override
+  DatabaseService get providerDatabaseService => DatabaseService.instance;
+  @override
+  DownloadEngine get downloadEngine => DownloadEngine(dio: Dio());
+  @override
+  NetworkMonitor get networkMonitor => _NoopNetworkMonitor();
+  @override
+  NotificationCoordinator get notifications =>
+      _MergeRetryNotificationCoordinator();
+
+  @override
+  List<DownloadTask> get providerTasks =>
+      taskInstance != null ? [taskInstance!] : [];
+
+  @override
+  DownloadTask? findTaskById(String id) => taskInstance;
+
+  @override
+  Future<void> setTaskState(DownloadTask task) async {
+    lastSavedTaskState = task;
+    taskInstance = task;
+  }
+
+  @override
+  void pumpQueue() {}
+  @override
+  Future<void> flushPendingProgress(String id) async {}
+  @override
+  int effectiveSpeedLimit() => 0;
+  @override
+  List<double> buildChunks(int threadCount, int fileSize, int downloadedBytes) =>
+      List<double>.filled(threadCount > 0 ? threadCount : 1, 1.0);
+  @override
+  ({int total, List<Map<String, dynamic>>? files}) scanExistingTorrentData(
+          String rootPath, List<Map<String, dynamic>>? fileList) =>
+      (total: 0, files: fileList);
+  @override
+  Future<void> updateTaskUrlAndResume(String id, String newUrl,
+      {String? newAudioUrl}) async {}
+  @override
+  void updateTelemetryWidget() {}
+  @override
+  void providerStartWidgetTimer() {}
+  @override
+  void providerStopWidgetTimer() {}
+  @override
+  void providerNotifyListeners() {}
+  @override
+  void pushProgressTick(String taskId, double progress, double speed) {}
+  @override
+  List<Map<String, dynamic>> markTorrentFilesCompleted(
+          List<Map<String, dynamic>> files) =>
+      files;
+  @override
+  Future<void> cleanupPartFiles(DownloadTask task,
+      {bool preserveParts = false}) async {}
+  @override
+  Future<void> startOverTask(String id, String newUrl,
+      {String? newAudioUrl,
+      bool clearAudioUrl = false,
+      bool fromError = false,
+      int? newFileSize,
+      int? newAudioSize,
+      bool deleteTempFiles = false}) async {}
+}
+
+class _MergeRetryNotificationCoordinator implements NotificationCoordinator {
+  @override
+  int idFor(String taskId) => 123;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class _NoopNetworkMonitor implements NetworkMonitor {
+  @override
+  bool get hasWifiOrEthernet => true;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
 }

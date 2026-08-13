@@ -3346,6 +3346,14 @@ class DownloadOrchestrator {
                     errorMessage: DownloadStatusMessages.ffmpegMergeFailed,
                   ));
                 }
+                // Early exit before _executeDownload: release the placeholder
+                // cancel token / active future so pause & retry don't hang on
+                // a never-completing future or treat the task as in-flight.
+                if (!earlyReturnCompleter.isCompleted) {
+                  earlyReturnCompleter.complete();
+                }
+                _host.activeFutures.remove(task.id);
+                _host.cancelTokens.remove(task.id);
                 return;
               }
             }
@@ -3359,6 +3367,14 @@ class DownloadOrchestrator {
       if (preStartCheck == null ||
           (preStartCheck.status != DownloadStatus.downloading &&
               preStartCheck.status != DownloadStatus.queued)) {
+        // Release the placeholder so pause/retry never await a future that
+        // can never complete, and a restarted task isn't blocked by a stale
+        // cancel token.
+        if (!earlyReturnCompleter.isCompleted) {
+          earlyReturnCompleter.complete();
+        }
+        _host.activeFutures.remove(task.id);
+        _host.cancelTokens.remove(task.id);
         return;
       }
       // FIX H-3: Zero downloadedBytes in task model immediately when supportsResume is false
@@ -3611,6 +3627,10 @@ class DownloadOrchestrator {
       // failure) marks the task failed and frees the concurrency slot.
       debugPrint('[DMX] _startTaskBody unexpected error for ${task.id}: $e');
       debugPrint('[DMX] _startTaskBody stack: $st');
+      // Unregister the placeholder cancel token / active future so a retry of
+      // this task is not blocked by stale state after an unexpected failure.
+      _host.activeFutures.remove(task.id);
+      _host.cancelTokens.remove(task.id);
       final live = _host.findTaskById(task.id);
       if (live != null && live.status == DownloadStatus.queued) {
         await _host.setTaskState(live.copyWith(

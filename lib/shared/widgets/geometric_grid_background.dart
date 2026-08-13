@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
+import '../../core/services/power_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
 /// Shared ambient animation state — one timer drives all background instances.
@@ -11,6 +12,7 @@ class _AmbientProgress with WidgetsBindingObserver {
   factory _AmbientProgress() => _instance;
   _AmbientProgress._() {
     WidgetsBinding.instance.addObserver(this);
+    PowerMonitor.throttleFactorNotifier.addListener(_onPowerThrottleChanged);
   }
 
   final ValueNotifier<double> progress = ValueNotifier<double>(0);
@@ -19,14 +21,22 @@ class _AmbientProgress with WidgetsBindingObserver {
   final _startTime = DateTime.now();
   bool _isBackgrounded = false;
 
+  void _onPowerThrottleChanged() {
+    if (_timer != null) {
+      _stopTimer();
+      _startTimer();
+    }
+  }
+
   void addRef() {
     _refCount++;
     _startTimer();
   }
 
   void _startTimer() {
-    if (_isBackgrounded) return;
-    _timer ??= Timer.periodic(const Duration(milliseconds: 33), (_) {
+    if (_isBackgrounded || PowerMonitor.screenOff) return;
+    final int intervalMs = (PowerMonitor.throttleFactor < 0.8) ? 66 : 33;
+    _timer ??= Timer.periodic(Duration(milliseconds: intervalMs), (_) {
       final elapsed =
           DateTime.now().difference(_startTime).inMilliseconds / 1000;
       progress.value = (elapsed / 20) % 1.0;

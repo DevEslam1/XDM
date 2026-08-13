@@ -91,7 +91,10 @@ mixin DownloadQueueMixin {
   }
 
   /// Reorders tasks by their new index positions.
-  /// Called from a ReorderableListView's onReorder callback.
+  /// The [newIndex] is expected to already be adjusted for the removed item
+  /// (i.e. the semantics of `onReorderItem`, which pre-adjusts `newIndex`
+  /// for a removal at [oldIndex]). The old `onReorder` API required a manual
+  /// `newIndex -= 1` for downward moves; `onReorderItem` does that internally.
   Future<void> reorderTasks(
       List<DownloadTask> visibleTasks, int oldIndex, int newIndex) async {
     // QUEUE-FIX-4: Guard: only allow reordering when the full unfiltered list is visible
@@ -101,9 +104,7 @@ mixin DownloadQueueMixin {
       debugPrint('[Queue] Reorder blocked: filters active');
       return;
     }
-    // 1. Adjust newIndex if moving downward (Flutter quirk)
-    if (oldIndex < newIndex) newIndex -= 1;
-    // 2. Remove item at oldIndex, insert at newIndex
+    // Remove item at oldIndex, insert at newIndex
     final list = List<DownloadTask>.from(visibleTasks);
     final moved = list.removeAt(oldIndex);
     list.insert(newIndex, moved);

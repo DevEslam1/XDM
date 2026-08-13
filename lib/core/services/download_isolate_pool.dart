@@ -176,11 +176,58 @@ class DownloadIsolatePool {
     }
     return live;
   }
+  bool _isSpawning = false;
+  Timer? _idleCheckTimer;
+
+  int get effectiveMaxSize {
+    if (_powerAware &&
+        PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
+      return 1;
+    }
+    if (PowerMonitor.screenOff) {
+      return max(1, _size ~/ 2);
+    }
+    return _size;
+  }
+
   Future<void> init() async {
-    for (var i = 0; i < _size; i++) {
-      _workers.add(await _spawnWorker(i));
+    if (_workers.isEmpty) {
+      _workers.add(await _spawnWorker(0));
+    }
+    _startIdleCheckTimer();
+  }
+
+  void _startIdleCheckTimer() {
+    _idleCheckTimer?.cancel();
+    _idleCheckTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _checkIdleWorkers();
+    });
+  }
+
+  void _checkIdleWorkers() {
+    if (_shuttingDown || _workers.length <= 1) return;
+    final now = DateTime.now();
+    final toRemove = <_Worker>[];
+
+    for (final w in _workers) {
+      if (w.activeJobs == 0 &&
+          !w.dead &&
+          w.pending.isEmpty &&
+          now.difference(w.lastActiveTime) > const Duration(seconds: 30)) {
+        toRemove.add(w);
+        if (_workers.length - toRemove.length <= 1) break;
+      }
+    }
+
+    for (final w in toRemove) {
+      _workers.remove(w);
+      w.commandPort?.send({'t': 'shutdown'});
+      w.inbox.close();
+      w.errorPort.close();
+      w.isolate.kill(priority: Isolate.beforeNextEvent);
     }
   }
+
   Future<_Worker> _spawnWorker(int index) async {
     final inbox = ReceivePort();
     final errorPort = ReceivePort();
@@ -197,8 +244,32 @@ class DownloadIsolatePool {
     errorPort.listen((dynamic err) => _onWorkerCrash(worker, err));
     return worker;
   }
+
+  Future<void> _maybeExpandWorkers() async {
+    if (_isSpawning || _shuttingDown || _workers.length >= effectiveMaxSize) {
+      return;
+    }
+    _isSpawning = true;
+    try {
+      final newIndex = _workers.length;
+      final worker = await _spawnWorker(newIndex);
+      if (!_shuttingDown) {
+        _workers.add(worker);
+      } else {
+        worker.inbox.close();
+        worker.errorPort.close();
+        worker.isolate.kill(priority: Isolate.immediate);
+      }
+    } catch (e) {
+      // spawn failed
+    } finally {
+      _isSpawning = false;
+      _drain();
+    }
+  }
+
   PoolJob submit(DownloadCommand command, {int priority = 0}) {
-    if (_shuttingDown || _workers.isEmpty) {
+    if (_shuttingDown) {
       throw const IsolateSpawnTimeoutException();
     }
     final job = PoolJob._(this, command, _seq++);
@@ -210,6 +281,7 @@ class DownloadIsolatePool {
     _dispatch(job, priority);
     return job;
   }
+
   void _dispatch(PoolJob job, int priority) {
     job.priority = priority;
     final slots = maxJobsPerWorker;
@@ -222,10 +294,14 @@ class DownloadIsolatePool {
     }
     if (worker == null) {
       _queue.add(job);
+      if (_workers.length < effectiveMaxSize) {
+        _maybeExpandWorkers();
+      }
       return;
     }
     worker.activeJobs++;
     worker.pending.add(job);
+    worker.lastActiveTime = DateTime.now();
     job._worker = worker;
     worker.commandPort?.send({
       't': 'job',
@@ -234,6 +310,7 @@ class DownloadIsolatePool {
       'cmd': job.command.toMap(),
     });
   }
+
   void _onWorkerMessage(_Worker worker, dynamic msg) {
     if (msg is! Map) return;
     switch (msg['t']) {
@@ -242,6 +319,9 @@ class DownloadIsolatePool {
         _drain();
       case 'idle':
         worker.activeJobs = (worker.activeJobs - 1).clamp(0, 1 << 30);
+        if (worker.activeJobs == 0) {
+          worker.lastActiveTime = DateTime.now();
+        }
         final doneId = msg['jobId'];
         worker.pending.removeWhere((j) => j.command.taskId == doneId);
         _drain();
@@ -249,6 +329,7 @@ class DownloadIsolatePool {
         break;
     }
   }
+
   void _drain() {
     while (_queue.isNotEmpty) {
       final slots = maxJobsPerWorker;
@@ -259,11 +340,17 @@ class DownloadIsolatePool {
           break;
         }
       }
-      if (worker == null) return;
+      if (worker == null) {
+        if (_workers.length < effectiveMaxSize) {
+          _maybeExpandWorkers();
+        }
+        return;
+      }
       final job = _removeHighestPriority();
       if (job == null) return;
       worker.activeJobs++;
       worker.pending.add(job);
+      worker.lastActiveTime = DateTime.now();
       job._worker = worker;
       worker.commandPort!.send({
         't': 'job',
@@ -273,6 +360,7 @@ class DownloadIsolatePool {
       });
     }
   }
+
   PoolJob? _removeHighestPriority() {
     if (_queue.isEmpty) return null;
     var best = 0;
@@ -286,6 +374,7 @@ class DownloadIsolatePool {
     }
     return _queue.removeAt(best);
   }
+
   void _onWorkerCrash(_Worker worker, dynamic err) {
     worker.dead = true;
     final jobs = List<PoolJob>.from(worker.pending);
@@ -299,24 +388,33 @@ class DownloadIsolatePool {
     worker.isolate.kill(priority: Isolate.immediate);
     if (!_shuttingDown) {
       _workers.remove(worker);
-      _spawnWorker(_workers.length).then((w) {
-        _workers.add(w);
+      if (_workers.isEmpty) {
+        _spawnWorker(0).then((w) {
+          _workers.add(w);
+          _drain();
+        });
+      } else {
         _drain();
-      });
+      }
     }
   }
+
   void _cancelJob(PoolJob job) {
     job._worker?.commandPort
         ?.send({'t': 'cancel', 'jobId': job.command.taskId});
   }
+
   void updateSpeedLimit(int bytesPerSecond, int activeCount) {
     for (final w in _workers) {
       w.commandPort
           ?.send({'t': 'limits', 'bps': bytesPerSecond, 'active': activeCount});
     }
   }
+
   Future<void> shutdown() async {
     _shuttingDown = true;
+    _idleCheckTimer?.cancel();
+    _idleCheckTimer = null;
     _queue.clear();
     for (final w in _workers) {
       w.commandPort?.send({'t': 'shutdown'});
@@ -327,12 +425,15 @@ class DownloadIsolatePool {
     }
     _workers.clear();
   }
+
   Future<void> dispose() async {
     await shutdown();
   }
+
   Future<void> drain({Duration? timeout}) async {
     await shutdown();
   }
+
   void onMemoryPressure() {
     if (_workers.length > 1) {
       final w = _workers.removeLast();
@@ -342,6 +443,7 @@ class DownloadIsolatePool {
     }
   }
 }
+
 class _Worker {
   _Worker({
     required this.isolate,
@@ -355,6 +457,7 @@ class _Worker {
   final List<PoolJob> pending = [];
   int activeJobs = 0;
   bool dead = false;
+  DateTime lastActiveTime = DateTime.now();
 }
 class PoolJob {
   PoolJob._(this._pool, this.command, this._seq) {

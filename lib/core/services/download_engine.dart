@@ -411,11 +411,16 @@ class DownloadProgress {
 }
 typedef ValueChangedProgress = void Function(DownloadProgress progress);
 class DownloadEngine {
+  static bool appInForeground = true;
   static const int _progressReportIntervalMs = 500;
   static const int _isolatePoolSize = 4;
   static const int _lowSpaceThresholdBytes = 500 * 1024 * 1024;
-  int get effectiveProgressReportIntervalMs =>
-      PowerMonitor.throttleFactor < 1.0 ? 1000 : _progressReportIntervalMs;
+  int get effectiveProgressReportIntervalMs {
+    if (PowerMonitor.screenOff) return 5000;
+    if (!appInForeground) return 2000;
+    if (PowerMonitor.throttleFactor < 1.0) return 1000;
+    return _progressReportIntervalMs;
+  }
   final List<CancelToken> _activeCancelTokens = [];
   DownloadIsolatePool? _pool;
   Future<DownloadIsolatePool>? _poolInit;
@@ -496,18 +501,26 @@ class DownloadEngine {
     bool enableCleanupTimer = true,
   }) : _sharedDio = dio ?? ConnectionManager.createDownloadDio() {
     if (enableCleanupTimer) {
-      _cleanupTimer = Timer.periodic(const Duration(seconds: 120), (_) {
+      _cleanupTimer = Timer.periodic(const Duration(seconds: 60), (_) {
         if (_closed) return;
         final now = DateTime.now();
+        final isAggressiveSaver =
+            PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ||
+                PowerMonitor.screenOff;
+        final reservedMaxAge = isAggressiveSaver
+            ? const Duration(minutes: 2)
+            : const Duration(minutes: 10);
+        final normalMaxAge = isAggressiveSaver
+            ? const Duration(minutes: 1)
+            : const Duration(minutes: 5);
+
         _activeDioClients.removeWhere((client) {
           final hasActiveDownloads =
               _activeDownloadsPerClient[client]?.isNotEmpty ?? false;
           final creationTime = _dioClientCreationTimes[client] ?? now;
           final age = now.difference(creationTime);
           final reserved = _reservedDioClients.contains(client);
-          final stale = (reserved
-                  ? age > const Duration(minutes: 10)
-                  : age > const Duration(minutes: 5)) &&
+          final stale = (reserved ? age > reservedMaxAge : age > normalMaxAge) &&
               !hasActiveDownloads;
           if (stale) {
             try {

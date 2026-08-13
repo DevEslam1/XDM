@@ -387,9 +387,10 @@ class _SettingsScreenState extends State<SettingsScreen>
       _SettingSearchEntry(
         categoryTitle: isRtl ? 'الأداء والطاقة' : 'Power & Performance',
         categoryIndex: 5,
-        settingTitle: 'Battery Saver Mode',
-        subtitle:
-            'Limits downloads to 1, threads to 2, and forces Classic UI mode',
+        settingTitle: isRtl ? 'مراقب النظام المباشر' : 'Live System Monitors',
+        subtitle: isRtl
+            ? 'عرض تفاصيل البطارية والحرارة والأداء والشبكة مباشرة'
+            : 'Live battery, thermal, UI jank/FPS, and network telemetry',
         keywords: const [
           'power',
           'performance',
@@ -398,7 +399,13 @@ class _SettingsScreenState extends State<SettingsScreen>
           'jank',
           'thermal',
           'isolate',
-          'threads'
+          'threads',
+          'monitor',
+          'telemetry',
+          'fps',
+          'live',
+          'cpu',
+          'gpu'
         ],
         accentColor: orange,
         builder: (ctx) => SwitchTile(

@@ -21,6 +21,7 @@ import '../../../core/services/background_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/download_engine.dart';
 import '../../../core/services/download_journal.dart';
+import '../../../core/services/power_monitor.dart';
 import '../../../core/services/error_taxonomy.dart';
 import '../../../core/services/download_metrics.dart';
 import '../../../core/services/logging_service.dart';
@@ -328,6 +329,9 @@ class DownloadProvider extends ChangeNotifier
       _speedNotifiers.putIfAbsent(taskId, () => ValueNotifier(0.0));
 
   void _pushTick(String taskId, double progress, double speed) {
+    if (!DownloadEngine.appInForeground || PowerMonitor.screenOff) {
+      return;
+    }
     final progressNotif = progressNotifier(taskId);
     final speedNotif = speedNotifier(taskId);
     // FIX-AUDIT-E1: Only update if change is visually / numerically significant
@@ -3675,9 +3679,19 @@ class DownloadProvider extends ChangeNotifier
 
   void _startWidgetTimer() {
     _widgetTimer?.cancel();
+    final hasActive = downloadingTasksCount > 0 || seedingTasksCount > 0;
 
-    if (downloadingTasksCount > 0 || seedingTasksCount > 0) {
-      _widgetTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    BackgroundService.setDownloadActive(hasActive);
+    PowerMonitor.setDownloadActive(hasActive);
+
+    if (hasActive) {
+      final int timerIntervalSec = PowerMonitor.screenOff
+          ? 15
+          : (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive
+              ? 10
+              : 5);
+
+      _widgetTimer = Timer.periodic(Duration(seconds: timerIntervalSec), (timer) {
         if (_disposed) {
           timer.cancel();
           return;
@@ -3729,7 +3743,7 @@ class DownloadProvider extends ChangeNotifier
         // so widgets rebuild at most once per timer tick instead of on every tick.
         final shouldNotify = _notifyPending || updateSeedingSpeeds();
         _notifyPending = false;
-        if (shouldNotify) {
+        if (shouldNotify && DownloadEngine.appInForeground) {
           notifyListeners();
         }
       });
@@ -3739,6 +3753,8 @@ class DownloadProvider extends ChangeNotifier
   void _stopWidgetTimer() {
     _widgetTimer?.cancel();
     _widgetTimer = null;
+    BackgroundService.setDownloadActive(false);
+    PowerMonitor.setDownloadActive(false);
   }
 
   // ---------------------------------------------------------------------------
@@ -4579,7 +4595,15 @@ class DownloadProvider extends ChangeNotifier
 
     if (activeFuture != null && !fromError) {
       try {
-        await activeFuture;
+        // FIX: Bound the wait so a stale/leaked active future (e.g. an
+        // early-return placeholder) can never hang the restart indefinitely.
+        await activeFuture.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            debugPrint(
+                '[DMX] startOverTask: activeFuture timed out for $id, proceeding');
+          },
+        );
         // ignore: avoid_catches_without_on_clauses
       } catch (e) {
         debugPrint('[DMX] activeFuture error in cancel: $e');

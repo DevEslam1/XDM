@@ -6,6 +6,7 @@ import '../../../core/utils/haptic_helper.dart';
 import '../provider/settings_provider.dart';
 import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';
+import '../widgets/system_monitors_card.dart';
 
 class PowerSettingsPage extends StatelessWidget with HapticHelper {
   const PowerSettingsPage({super.key});
@@ -28,6 +29,10 @@ class PowerSettingsPage extends StatelessWidget with HapticHelper {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          SystemMonitorsCard(
+            accentColor: accent,
+            isDark: isDark,
+          ),
           SettingsSectionHeader(
             title: isRtl ? 'إدارة الطاقة والبطارية' : 'Power Management',
             accentColor: accent,

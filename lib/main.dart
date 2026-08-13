@@ -32,6 +32,7 @@ import 'features/onboarding/screens/onboarding_screen.dart';
 import 'features/onboarding/screens/permission_request_screen.dart';
 import 'shared/widgets/main_navigation_container.dart';
 import 'shared/accessibility/xdm_text_scaler.dart';
+import 'core/services/download_engine.dart';
 import 'core/services/frame_watchdog.dart';
 import 'core/services/power_monitor.dart';
 import 'core/services/protocol_cache.dart';
@@ -40,7 +41,9 @@ import 'core/services/widget_deep_link.dart';
 class _ScreenObserver with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    PowerMonitor.setScreenOn(state == AppLifecycleState.resumed);
+    final isResumed = state == AppLifecycleState.resumed;
+    DownloadEngine.appInForeground = isResumed;
+    PowerMonitor.setScreenOn(isResumed);
   }
 }
 

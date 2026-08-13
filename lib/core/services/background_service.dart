@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
 import 'logging_service.dart';
+import 'power_monitor.dart';
 
 final _log = LoggingService.logger('BackgroundService');
 
@@ -27,7 +28,18 @@ class BackgroundService {
   static bool _wakeLockHeld = false;
   static Timer? _wakeLockRenewalTimer;
   static Timer? _wakeLockSafetyTimer;
-  static const Duration _maxWakeLockHold = Duration(hours: 4);
+  static const Duration _maxWakeLockHold = Duration(hours: 2);
+  static DateTime? _lastHeartbeatTime;
+  static bool _hasActiveDownloads = false;
+
+  static void setDownloadActive(bool active) {
+    _hasActiveDownloads = active;
+    if (!active) {
+      releaseWakeLock();
+    } else {
+      acquireWakeLock();
+    }
+  }
 
   /// Returns true only on Android. On iOS, background Dart execution is not
   /// supported without a native BGTaskScheduler plugin.
@@ -166,7 +178,13 @@ class BackgroundService {
   }
 
   static Future<void> sendHeartbeat() async {
-    if (!isSupported) return;
+    if (!isSupported || !_hasActiveDownloads) return;
+    final now = DateTime.now();
+    if (_lastHeartbeatTime != null &&
+        now.difference(_lastHeartbeatTime!) < const Duration(seconds: 60)) {
+      return;
+    }
+    _lastHeartbeatTime = now;
     final service = FlutterBackgroundService();
     service.invoke('heartbeat');
   }
@@ -177,6 +195,14 @@ class BackgroundService {
   /// to prevent the native 30-minute timeout from expiring.
   static Future<void> acquireWakeLock() async {
     if (!isSupported || _wakeLockHeld) return;
+    // Battery gate: if battery is <20% and not charging, do not hold wake lock to avoid rapid battery drain
+    try {
+      if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
+        _log.fine('Wake lock skipped due to aggressive battery saver mode');
+        return;
+      }
+    } catch (_) {}
+
     try {
       await _wakeLockChannel.invokeMethod<void>('acquire');
       _wakeLockHeld = true;
@@ -199,13 +225,14 @@ class BackgroundService {
       ) async {
         if (!isSupported) return;
         try {
+          if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
+            _log.fine('Releasing wake lock during renewal due to low battery');
+            await releaseWakeLock();
+            return;
+          }
           await _wakeLockChannel.invokeMethod<void>('acquire');
           _log.fine('Wake lock renewed');
         } catch (e) {
-          // FIX: If renewal fails, reset _wakeLockHeld so the next
-          // acquireWakeLock() call can attempt re-acquisition. Previously
-          // the flag stayed true, causing the app to think the wake lock
-          // was active when it may have expired natively.
           _log.warning('Failed to renew wake lock, resetting state', e);
           _wakeLockHeld = false;
           _wakeLockRenewalTimer?.cancel();

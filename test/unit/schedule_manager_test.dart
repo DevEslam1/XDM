@@ -14,6 +14,33 @@ class _FakeDatabaseService extends DatabaseService {
   }
 }
 
+/// [DatabaseService] whose saves always fail, to exercise the SCHED-FIX-6
+/// revert path in [ScheduleManager.checkScheduledDownloads].
+class _FailingDatabaseService extends DatabaseService {
+  _FailingDatabaseService() : super.forSubclass();
+
+  @override
+  Future<void> saveTask(DownloadTask task) async {
+    throw Exception('simulated DB write failure');
+  }
+}
+
+/// [DatabaseService] that only fails saves for the given task ids, to exercise
+/// the SCHED-FIX-6 partial-failure path (some promotions persist, some don't).
+class _SelectiveFailDatabaseService extends DatabaseService {
+  _SelectiveFailDatabaseService(this._failTaskIds) : super.forSubclass();
+  final Set<String> _failTaskIds;
+  final List<DownloadTask> savedTasks = [];
+
+  @override
+  Future<void> saveTask(DownloadTask task) async {
+    if (_failTaskIds.contains(task.id)) {
+      throw Exception('simulated DB write failure for ${task.id}');
+    }
+    savedTasks.add(task);
+  }
+}
+
 /// Helper to build a minimal [DownloadTask].
 DownloadTask _task(
   String id,
@@ -234,6 +261,87 @@ void main() {
 
         await manager.checkScheduledDownloads();
         expect(tasks.first.status, DownloadStatus.paused);
+      });
+
+      test(
+          'SCHED-FIX-6: reverts in-memory state AND notifies listeners when '
+          'persisting the promotion fails', () async {
+        final failingDb = _FailingDatabaseService();
+        final failingManager = ScheduleManager(
+          tasks: () => tasks,
+          databaseService: failingDb,
+          isDisposed: () => disposed,
+          downloadingTasksCount: () => downloadingCount,
+          updateTorrentUploadLimit: () => torrentUploadLimitCalls++,
+          notifyListeners: () => notifyCalls++,
+          pumpQueue: () => pumpQueueCalls++,
+        );
+        failingManager.markReady();
+
+        final pastTime = DateTime.now().toUtc().subtract(
+              const Duration(minutes: 5),
+            );
+        final task = _task(
+          's11',
+          DownloadStatus.paused,
+          scheduledAt: pastTime,
+        );
+        tasks.add(task);
+
+        await failingManager.checkScheduledDownloads();
+
+        // Reverted: back to paused with the original schedule restored.
+        expect(tasks.first.status, DownloadStatus.paused);
+        expect(tasks.first.scheduledAt, pastTime);
+        expect(tasks.first.wasScheduledAt, isNull);
+        // BUG 3: listeners must be notified so the UI reflects the revert.
+        expect(notifyCalls, greaterThanOrEqualTo(1));
+        // No inconsistent queue pump.
+        expect(pumpQueueCalls, 0);
+        failingManager.dispose();
+      });
+
+      test(
+          'SCHED-FIX-6: partial save failure only reverts the failed task, '
+          'keeping successfully persisted promotions queued', () async {
+        final selectiveDb =
+            _SelectiveFailDatabaseService({'s11'}); // only 's11' fails
+        final selectiveManager = ScheduleManager(
+          tasks: () => tasks,
+          databaseService: selectiveDb,
+          isDisposed: () => disposed,
+          downloadingTasksCount: () => downloadingCount,
+          updateTorrentUploadLimit: () => torrentUploadLimitCalls++,
+          notifyListeners: () => notifyCalls++,
+          pumpQueue: () => pumpQueueCalls++,
+        );
+        selectiveManager.markReady();
+
+        final pastTime = DateTime.now().toUtc().subtract(
+              const Duration(minutes: 5),
+            );
+        tasks.add(_task('s12', DownloadStatus.paused, scheduledAt: pastTime));
+        tasks.add(_task('s11', DownloadStatus.paused, scheduledAt: pastTime));
+        tasks.add(_task('s13', DownloadStatus.paused, scheduledAt: pastTime));
+
+        await selectiveManager.checkScheduledDownloads();
+
+        // Only the task whose save failed is reverted to paused + scheduled.
+        expect(
+            tasks[0].status, DownloadStatus.queued); // s12: save succeeded
+        expect(
+          tasks[1].status,
+          DownloadStatus.paused,
+        ); // s11: save failed -> reverted
+        expect(tasks[1].scheduledAt, pastTime);
+        expect(tasks[1].wasScheduledAt, isNull);
+        expect(
+            tasks[2].status, DownloadStatus.queued); // s13: save succeeded
+        // The successful saves were persisted.
+        expect(selectiveDb.savedTasks.map((t) => t.id), containsAll(['s12', 's13']));
+        // Listeners told about the partial revert.
+        expect(notifyCalls, greaterThanOrEqualTo(1));
+        selectiveManager.dispose();
       });
     });
 
