@@ -599,13 +599,29 @@ class DownloadProvider extends ChangeNotifier
 
   DownloadMetrics? getMetrics(String taskId) => _downloadMetrics[taskId];
 
+  Future<List<Map<String, dynamic>>?> loadTorrentFiles(String taskId) async {
+    final task = findTaskById(taskId);
+    if (task != null && task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+      return task.torrentFiles;
+    }
+    final dbTask = await _databaseService.getTask(taskId);
+    return dbTask?.torrentFiles;
+  }
+
+  DateTime _lastNotifyTime = DateTime.fromMillisecondsSinceEpoch(0);
+  static const _minNotifyInterval = Duration(milliseconds: 250);
+
   @override
   void notifyListeners() {
     if (isBatchMode) {
       markBatchDirty();
-    } else {
-      super.notifyListeners();
+      return;
     }
+    if (PowerMonitor.screenOff) return;
+    final now = DateTime.now();
+    if (now.difference(_lastNotifyTime) < _minNotifyInterval) return;
+    _lastNotifyTime = now;
+    super.notifyListeners();
   }
 
   // ---------------------------------------------------------------------------
@@ -3128,6 +3144,8 @@ class DownloadProvider extends ChangeNotifier
     filteredTasksDirty = true;
     _cancelTokens.remove(id);
     _speedHistories.remove(id);
+    _progressNotifiers.remove(id)?.dispose();
+    _speedNotifiers.remove(id)?.dispose();
     _lastProgressUpdateTimes.remove(id);
     _lastDbSaveTimes.remove(id);
     _lastDbSaveBytes.remove(id);
@@ -3290,6 +3308,8 @@ class DownloadProvider extends ChangeNotifier
     for (final id in ids) {
       _cancelTokens.remove(id);
       _speedHistories.remove(id);
+      _progressNotifiers.remove(id)?.dispose();
+      _speedNotifiers.remove(id)?.dispose();
       _lastProgressUpdateTimes.remove(id);
       _lastDbSaveTimes.remove(id);
       _lastDbSaveBytes.remove(id);

@@ -102,12 +102,6 @@ class TorrentResumeStore {
 
       final digest = sha256.convert(blob).toString();
 
-      await blobTmp.writeAsBytes(blob, flush: true);
-      final raf = await blobTmp.open(mode: FileMode.append);
-      await raf.flush();
-      await raf.close();
-      await blobTmp.rename(blobFile.path);
-
       final meta = jsonEncode({
         'sourceUrl': sourceUrl,
         'torrentId': torrentId,
@@ -116,11 +110,19 @@ class TorrentResumeStore {
         'bytes': blob.length,
         if (files != null) 'files': files,
       });
+
       await metaTmp.writeAsString(meta, flush: true);
       final mraf = await metaTmp.open(mode: FileMode.append);
       await mraf.flush();
       await mraf.close();
+
+      await blobTmp.writeAsBytes(blob, flush: true);
+      final raf = await blobTmp.open(mode: FileMode.append);
+      await raf.flush();
+      await raf.close();
+
       await metaTmp.rename(metaFile.path);
+      await blobTmp.rename(blobFile.path);
 
       registerSource(torrentId, sourceUrl);
       return true;

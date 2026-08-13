@@ -284,6 +284,7 @@ class SiteIntelligenceService {
   }
 
   UrlAnalysisResult analyzeUrl(String url) {
+    if (_disposed) return _fallbackResult();
     final cleanUrl = url.trim();
     if (cleanUrl.isEmpty) return _fallbackResult();
     if (cleanUrl.startsWith('magnet:')) {

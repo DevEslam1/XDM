@@ -2496,7 +2496,16 @@ class DownloadOrchestrator {
           }
 
           try {
-            await Future.wait([runVideo(), runAudio()]);
+            await Future.wait([
+              runVideo().catchError((e) {
+                audioCancelToken.cancel();
+                throw e;
+              }),
+              runAudio().catchError((e) {
+                videoCancelToken.cancel();
+                throw e;
+              }),
+            ]);
           } on DioException catch (e) {
             // FIX-3: Sync the last known audio byte count into the task model
             // so a pause / cancel doesn't lose audio progress.

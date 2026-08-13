@@ -36,6 +36,10 @@ class PowerMonitor {
   static bool thermalThreadLimitingEnabled = true;
   static bool powerBandwidthThrottlingEnabled = true;
 
+  static final StreamController<bool> _screenStateController =
+      StreamController<bool>.broadcast();
+  static Stream<bool> get screenStateStream => _screenStateController.stream;
+
   static BatteryState get batteryState => _state;
   static int get batteryLevel => _level;
   static ThermalStatus get thermal => _thermal;
@@ -90,9 +94,12 @@ class PowerMonitor {
   }
 
   static void setScreenOn(bool on) {
-    _screenOn = on;
-    _notifyThrottleFactor();
-    _startThermalTimer();
+    if (_screenOn != on) {
+      _screenOn = on;
+      _screenStateController.add(on);
+      _notifyThrottleFactor();
+      _startThermalTimer();
+    }
   }
 
   @visibleForTesting

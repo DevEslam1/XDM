@@ -32,12 +32,12 @@ class BackgroundService {
   static DateTime? _lastHeartbeatTime;
   static bool _hasActiveDownloads = false;
 
-  static void setDownloadActive(bool active) {
+  static Future<void> setDownloadActive(bool active) async {
     _hasActiveDownloads = active;
     if (!active) {
-      releaseWakeLock();
+      await releaseWakeLock();
     } else {
-      acquireWakeLock();
+      await acquireWakeLock();
     }
   }
 

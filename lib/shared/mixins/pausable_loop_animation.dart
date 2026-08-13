@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/services/power_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
 /// Whether "modern" looping/decorative animations should run, given the user's
@@ -97,7 +98,7 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
     try {
       batterySaver = SettingsProvider.instance.batterySaverMode;
     } catch (_) {}
-    final shouldRun = _foreground && loopWanted && !batterySaver;
+    final shouldRun = _foreground && loopWanted && !batterySaver && !PowerMonitor.screenOff;
     if (shouldRun) {
       if (!loopController.isAnimating) loopController.repeat();
     } else {

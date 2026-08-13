@@ -186,6 +186,9 @@ class DownloadIsolatePool {
         PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
       return 1;
     }
+    if (PowerMonitor.batteryLevel < 20 && !PowerMonitor.isCharging) {
+      return 2;
+    }
     if (PowerMonitor.screenOff) {
       return max(1, _size ~/ 2);
     }
@@ -218,7 +221,7 @@ class DownloadIsolatePool {
             PowerMonitor.screenOff ||
             _workers.length > effectiveMaxSize);
     final idleThreshold = isPowerConstrained
-        ? const Duration(seconds: 3)
+        ? const Duration(seconds: 5)
         : const Duration(seconds: 30);
 
     for (final w in _workers) {
@@ -258,7 +261,11 @@ class DownloadIsolatePool {
   }
 
   Future<void> _maybeExpandWorkers() async {
-    if (_isSpawning || _shuttingDown || _workers.length >= effectiveMaxSize) {
+    if (_isSpawning ||
+        _shuttingDown ||
+        PowerMonitor.screenOff ||
+        PowerMonitor.batterySaverMode != BatterySaverMode.off ||
+        _workers.length >= effectiveMaxSize) {
       return;
     }
     _isSpawning = true;
@@ -595,8 +602,6 @@ class HttpTransferJob {
   int _bytesSinceSave = 0;
   final Stopwatch _stopwatch = Stopwatch();
   final Queue<_SpeedSample> _speedSamples = Queue();
-  static const int _stateSaveIntervalMs = 5000;
-  static const int _stateSaveByteThreshold = 4 * 1024 * 1024;
   void requestCancel() {
     _cancelRequested = true;
     if (!_cancelToken.isCancelled) _cancelToken.cancel('paused');
@@ -1017,6 +1022,7 @@ class HttpTransferJob {
         if (response.statusCode == 200) {
           await response.data?.stream.listen((_) {}).cancel();
           if (resumeFrom > 0) {
+            chunk.downloaded = 0;
             throw DioException(
               requestOptions: response.requestOptions,
               type: DioExceptionType.badResponse,
@@ -1239,6 +1245,8 @@ class HttpTransferJob {
         chunk.downloaded = 0;
         await tempFile.delete();
       }
+    } else if (!cmd.supportsResume) {
+      chunk.downloaded = 0;
     }
     final governor = BandwidthGovernor(_effectiveGlobalLimit());
     governor.registerConsumer();
@@ -1591,25 +1599,24 @@ class HttpTransferJob {
   }) async {
     final nowMs = _stopwatch.elapsedMilliseconds;
     final st = _state!;
-    final dueSave = nowMs - _lastStateSaveMs >= _stateSaveIntervalMs ||
-        _bytesSinceSave >= _stateSaveByteThreshold;
+    final saveInterval = PowerMonitor.screenOff ? 15000 : 10000;
+    final saveByteThreshold =
+        PowerMonitor.screenOff ? 16 * 1024 * 1024 : 8 * 1024 * 1024;
+    final dueSave = nowMs - _lastStateSaveMs >= saveInterval ||
+        _bytesSinceSave >= saveByteThreshold;
     final dueReport = nowMs - _lastReportMs >= 500;
     if (dueSave) {
       _lastStateSaveMs = nowMs;
       _bytesSinceSave = 0;
       try {
         if (preSaveFlush != null) await preSaveFlush();
-        // Periodic saves flush buffered data to the OS without an fsync
-        // barrier and persist state best-effort. Full durability is applied
-        // at pause/stop/completion (see _finalize and pause paths), avoiding
-        // an fsync storm on flash storage during active transfers.
         if (writer != null) await writer.flushBuffers();
-        await StateStore.save(cmd.tempFilePath, st);
+        await StateStore.save(cmd.tempFilePath, st, screenOff: PowerMonitor.screenOff);
       } catch (e) {
         debugPrint('[DMX-Job] state save failed: $e');
       }
     }
-    if (dueReport) {
+    if (dueReport && !PowerMonitor.screenOff) {
       _lastReportMs = nowMs;
       _emitProgress(nowMs, writer: writer);
     }

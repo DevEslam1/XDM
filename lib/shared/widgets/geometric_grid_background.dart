@@ -10,9 +10,17 @@ import '../../features/settings/provider/settings_provider.dart';
 class _AmbientProgress with WidgetsBindingObserver {
   static final _instance = _AmbientProgress._();
   factory _AmbientProgress() => _instance;
+
   _AmbientProgress._() {
     WidgetsBinding.instance.addObserver(this);
     PowerMonitor.throttleFactorNotifier.addListener(_onPowerThrottleChanged);
+    PowerMonitor.screenStateStream.listen((screenOn) {
+      if (!screenOn) {
+        _stopTimer();
+      } else if (_refCount > 0 && !_isBackgrounded) {
+        _startTimer();
+      }
+    });
   }
 
   final ValueNotifier<double> progress = ValueNotifier<double>(0);
@@ -34,7 +42,10 @@ class _AmbientProgress with WidgetsBindingObserver {
   }
 
   void _startTimer() {
-    if (_isBackgrounded || PowerMonitor.screenOff) return;
+    if (_isBackgrounded || PowerMonitor.screenOff) {
+      _stopTimer();
+      return;
+    }
     final int intervalMs = (PowerMonitor.throttleFactor < 0.8) ? 66 : 33;
     _timer ??= Timer.periodic(Duration(milliseconds: intervalMs), (_) {
       final elapsed =

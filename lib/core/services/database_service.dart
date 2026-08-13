@@ -699,7 +699,29 @@ class DatabaseService {
     return row != null ? _rowToTask(row) : null;
   }
 
+  final Map<String, DownloadTask> _pendingProgressSaves = {};
+  Timer? _dbBatchTimer;
+
+  Future<void> saveTaskDebounced(DownloadTask task) async {
+    _pendingProgressSaves[task.id] = task;
+    _dbBatchTimer ??= Timer(const Duration(seconds: 5), flushPendingSaves);
+  }
+
+  Future<void> flushImmediately() => flushPendingSaves();
+
+  Future<void> flushPendingSaves() async {
+    _dbBatchTimer?.cancel();
+    _dbBatchTimer = null;
+    if (_pendingProgressSaves.isEmpty) return;
+    final toSave = List<DownloadTask>.from(_pendingProgressSaves.values);
+    _pendingProgressSaves.clear();
+    await _db.transaction(() async {
+      await saveTasks(toSave);
+    });
+  }
+
   Future<void> saveTask(DownloadTask task) async {
+    _pendingProgressSaves.remove(task.id);
     int retries = 3;
     int attempt = 0;
     while (true) {
@@ -713,9 +735,6 @@ class DatabaseService {
         if (retries <= 0) {
           rethrow;
         }
-        // FIX: Use exponential backoff (100ms, 200ms, 400ms) instead of
-        // a fixed 100ms delay to better handle transient SQLITE_BUSY
-        // contention from concurrent writes.
         final delayMs = 100 * (1 << (attempt - 1));
         _log.warning('saveTask failed, retrying in ${delayMs}ms... Error: $e');
         await Future.delayed(Duration(milliseconds: delayMs));

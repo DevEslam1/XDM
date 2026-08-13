@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/services/download_journal.dart';
+import '../../../core/services/power_monitor.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -69,35 +70,35 @@ class HttpDownloadEngine {
   final Map<String, _AdaptiveTracker> _trackers = {};
   Timer? _monitorTimer;
 
+  void _ensureTimerRunning() {
+    if (_trackers.isEmpty) {
+      _monitorTimer?.cancel();
+      _monitorTimer = null;
+      return;
+    }
+    _monitorTimer?.cancel();
+    final intervalSec = PowerMonitor.screenOff ? 30 : 5;
+    _monitorTimer = Timer.periodic(
+      Duration(seconds: intervalSec),
+      (_) => _evaluate(),
+    );
+  }
+
   void startAdaptiveMonitorIfEnabled(DownloadTask task, bool enabled) {
     if (!enabled) return;
     _trackers.putIfAbsent(task.id, () => _AdaptiveTracker(task.threadCount));
-    _monitorTimer ??= Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => _evaluate(),
-    );
+    _ensureTimerRunning();
   }
 
-  /// Starts the adaptive monitor for a task identified by [taskId] with the
-  /// given initial [threadCount]. Use this when a full [DownloadTask] is not
-  /// available (e.g. from inside [DownloadEngine.download]).
   void startAdaptiveMonitorForTask(String taskId, int threadCount) {
     _trackers.putIfAbsent(taskId, () => _AdaptiveTracker(threadCount));
-    _monitorTimer ??= Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => _evaluate(),
-    );
+    _ensureTimerRunning();
   }
 
-  /// Called by transfer jobs with each progress sample.
   void recordSample(String taskId, double bytesPerSec, int threads) {
     _trackers[taskId]?.add(bytesPerSec, threads);
   }
 
-  // FIX: Updates the tracker's current thread count when a task restarts
-  // with a different (e.g. recommended) thread count. Previously
-  // currentThreads was final and never updated, causing stale plateau
-  // detection against the original thread count.
   void updateTrackerThreadCount(String taskId, int newThreadCount) {
     final tracker = _trackers[taskId];
     if (tracker != null) {
@@ -105,17 +106,32 @@ class HttpDownloadEngine {
     }
   }
 
-  /// Thread count to use the next time this task starts.
   int recommendedThreads(String taskId, int fallback) {
     final t = _trackers[taskId];
     if (t == null) return fallback;
     return t.recommendation.clamp(1, fallback);
   }
 
-  /// Number of tasks currently being tracked by the adaptive monitor.
   int get activeTrackerCount => _trackers.length;
 
-  void stopFor(String taskId) => _trackers.remove(taskId);
+  void stopFor(String taskId) {
+    _trackers.remove(taskId);
+    if (_trackers.isEmpty) {
+      _monitorTimer?.cancel();
+      _monitorTimer = null;
+    }
+  }
+
+  void pauseAll() {
+    _monitorTimer?.cancel();
+    _monitorTimer = null;
+  }
+
+  void resumeAll() {
+    if (_trackers.isNotEmpty) {
+      _ensureTimerRunning();
+    }
+  }
 
   void stopAdaptiveThreadMonitor() {
     _monitorTimer?.cancel();
@@ -124,6 +140,7 @@ class HttpDownloadEngine {
   }
 
   void _evaluate() {
+    if (PowerMonitor.screenOff) return;
     for (final tracker in _trackers.values) {
       tracker.evaluate();
     }

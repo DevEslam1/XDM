@@ -193,7 +193,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  bool bypassSSL = true;
+  bool bypassSSL = false;
   bool developerMode = false;
   bool httpsOnly = false;
   bool reduceVisuals = false;
@@ -416,7 +416,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       batterySaverMode =
           _prefs.getBool(_batterySaverModeKey) ?? batterySaverMode;
       developerMode = _prefs.getBool(_developerModeKey) ?? false;
-      bypassSSL = _prefs.getBool(_bypassSSLKey) ?? true;
+      bypassSSL = _prefs.getBool(_bypassSSLKey) ?? false;
       httpsOnly = _prefs.getBool(_httpsOnlyKey) ?? httpsOnly;
       reduceVisuals = _prefs.getBool(_reduceVisualsKey) ?? reduceVisuals;
       textScaleFactor =

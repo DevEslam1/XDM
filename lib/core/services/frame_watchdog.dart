@@ -53,7 +53,7 @@ class FrameWatchdog {
   }
 
   static void start() {
-    if (_isRunning) return;
+    if (_isRunning || PowerMonitor.screenOff) return;
     _isRunning = true;
     _windowStart = DateTime.now();
     _dropped = 0;
@@ -62,6 +62,7 @@ class FrameWatchdog {
   }
 
   static void _onTimings(List<FrameTiming> timings) {
+    if (PowerMonitor.screenOff) return;
     for (final t in timings) {
       _total++;
       if (t.totalSpan.inMilliseconds > _budgetMs) _dropped++;

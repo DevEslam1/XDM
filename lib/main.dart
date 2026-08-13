@@ -44,6 +44,13 @@ class _ScreenObserver with WidgetsBindingObserver {
     final isResumed = state == AppLifecycleState.resumed;
     DownloadEngine.appInForeground = isResumed;
     PowerMonitor.setScreenOn(isResumed);
+    if (isResumed) {
+      PerformanceMonitor.instance.start();
+      FrameWatchdog.start();
+    } else if (state == AppLifecycleState.paused) {
+      PerformanceMonitor.instance.stop();
+      FrameWatchdog.stop();
+    }
   }
 }
 

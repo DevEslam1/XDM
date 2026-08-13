@@ -90,6 +90,7 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+  final Map<int, DateTime> _lastProgressPostTimes = {};
 
   static bool get isSupported =>
       !kIsWeb &&
@@ -486,6 +487,12 @@ class NotificationService {
     String? groupKey,
   }) async {
     if (!_initialized) return;
+    final now = DateTime.now();
+    final lastPost = _lastProgressPostTimes[notificationId];
+    if (!isPaused && lastPost != null && now.difference(lastPost).inMilliseconds < 1000) {
+      return;
+    }
+    _lastProgressPostTimes[notificationId] = now;
     final actions = <AndroidNotificationAction>[
       AndroidNotificationAction(
         isPaused ? 'resume:$payload' : 'pause:$payload',
@@ -670,11 +677,13 @@ class NotificationService {
   }
 
   Future<void> cancelNotification(int notificationId) async {
+    _lastProgressPostTimes.remove(notificationId);
     if (!_initialized) return;
     await _plugin.cancel(id: notificationId);
   }
 
   Future<void> cancelAll() async {
+    _lastProgressPostTimes.clear();
     if (!_initialized) return;
     await _plugin.cancelAll();
   }

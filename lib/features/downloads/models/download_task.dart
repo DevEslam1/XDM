@@ -200,6 +200,8 @@ class DownloadTask {
   bool get isTotalSizePartial =>
       hasMergedAudio && fileSize <= 0 && audioSize > 0;
 
+  bool get hasTorrentFiles => torrentFiles != null && torrentFiles!.isNotEmpty;
+
   // FIX-AUDIT-09: Unambiguous total size calculation
   int get combinedTotalSize {
     if (hasMergedAudio && audioSize > 0) {

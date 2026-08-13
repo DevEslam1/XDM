@@ -102,6 +102,10 @@ class NotificationCoordinator {
             _taskToHandle[taskId] = handle;
           }
         });
+        while (_opaqueHandles.length > 50) {
+          final firstKey = _opaqueHandles.keys.first;
+          _opaqueHandles.remove(firstKey);
+        }
       }
     } catch (e) {
       debugPrint('[NotificationCoordinator] Failed to load handle map: $e');
@@ -340,7 +344,9 @@ class NotificationCoordinator {
 
     final now = DateTime.now();
     final lastPost = _lastProgressPostTimes[notificationId];
-    final minIntervalMs = PowerMonitor.screenOff ? 5000 : 1000;
+    final minIntervalMs = PowerMonitor.screenOff
+        ? 10000
+        : (_settingsProvider.batterySaverMode ? 5000 : 1000);
     if (!isPaused &&
         progressPercent < 100 &&
         lastPost != null &&
@@ -371,10 +377,11 @@ class NotificationCoordinator {
     }
   }
 
-  /// Refreshes the collapsed group summary at most once every 3 seconds.
+  /// Refreshes the collapsed group summary at most once every 3 seconds (30s when screen OFF).
   void _postGroupSummary(int activeCount) {
     final now = DateTime.now();
-    if (now.difference(_lastSummaryPost) < const Duration(seconds: 3)) return;
+    final summaryInterval = PowerMonitor.screenOff ? 30 : 3;
+    if (now.difference(_lastSummaryPost) < Duration(seconds: summaryInterval)) return;
     _lastSummaryPost = now;
     unawaited(
       _notificationService

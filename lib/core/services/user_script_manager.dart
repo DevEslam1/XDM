@@ -271,6 +271,13 @@ if (!window['$marker']) {
     });
 
     try {
+      if (typeof Object.freeze === 'function') {
+        try { Object.freeze(Object.prototype); } catch(e) {}
+        try { Object.freeze(Array.prototype); } catch(e) {}
+      }
+    } catch(e) {}
+
+    try {
       (function(window, self, globalThis, parent, top, opener) {
         if (Date.now() - _startTime > _sandboxTimeoutMs) {
           throw new Error('[DMX Sandbox] Script execution timeout exceeded (5s)');

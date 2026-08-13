@@ -31,6 +31,14 @@ class PerformanceMonitor {
 
   double get jankRatio => _totalFrames == 0 ? 0.0 : _jankyFrames / _totalFrames;
 
+  double get currentFps {
+    final buildMs = averageBuildMillis ?? 0.0;
+    final rasterMs = averageRasterMillis ?? 0.0;
+    final totalMs = buildMs + rasterMs;
+    if (totalMs <= 0) return 60.0;
+    return (1000.0 / totalMs).clamp(0.0, 120.0);
+  }
+
   /// Average build duration over the sample window (ms), or null when empty.
   double? get averageBuildMillis {
     if (_buildSamples.isEmpty) return null;

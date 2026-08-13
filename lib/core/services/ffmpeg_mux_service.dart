@@ -33,12 +33,14 @@ class FFmpegMuxService {
     Duration? expectedDuration,
   }) async {
     await _mergeSemaphore.acquire();
+    var wakelockAcquired = false;
     try {
-      await WakelockPlus.enable();
-    } catch (e) {
-      _log.info('[FFmpegMuxService] wakelock enable skipped: $e');
-    }
-    try {
+      try {
+        await WakelockPlus.enable();
+        wakelockAcquired = true;
+      } catch (e) {
+        _log.info('[FFmpegMuxService] wakelock enable skipped: $e');
+      }
       return await _mergeLocked(
         videoPath,
         audioPath,
@@ -49,10 +51,12 @@ class FFmpegMuxService {
         expectedDuration: expectedDuration,
       );
     } finally {
-      try {
-        await WakelockPlus.disable();
-      } catch (e) {
-        _log.info('[FFmpegMuxService] wakelock disable skipped: $e');
+      if (wakelockAcquired) {
+        try {
+          await WakelockPlus.disable();
+        } catch (e) {
+          _log.info('[FFmpegMuxService] wakelock disable skipped: $e');
+        }
       }
       _mergeSemaphore.release();
     }

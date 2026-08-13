@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
+import 'power_monitor.dart';
 
 /// Data model for a single download task consumed by the launcher widgets.
 ///
@@ -197,6 +198,7 @@ class WidgetDashboard {
 /// Native counterparts:
 ///  - Android: `MainActivity` handler → SharedPreferences + widget broadcast
 ///  - iOS:     `AppDelegate` handler → App Group container + WidgetKit reload
+
 class WidgetDataBridge {
   static final _log = Logger('WidgetDataBridge');
 
@@ -207,6 +209,7 @@ class WidgetDataBridge {
       MethodChannel('com.dmx.app/widget_bridge');
 
   static const Duration minPushInterval = Duration(seconds: 5);
+  static const Duration screenOffMinPushInterval = Duration(seconds: 60);
 
   /// Injectable sink used by unit tests to capture pushes without a platform.
   @visibleForTesting
@@ -223,14 +226,18 @@ class WidgetDataBridge {
   Future<void> pushDashboard(WidgetDashboard dashboard,
       {bool force = false}) async {
     if (kIsWeb) return;
+    if (PowerMonitor.screenOff && dashboard.totalActiveCount == 0) return;
     _pendingTimer?.cancel();
     _pendingTimer = null;
 
+    final effectiveInterval = PowerMonitor.screenOff
+        ? screenOffMinPushInterval
+        : minPushInterval;
     final now = DateTime.now();
     if (!force &&
         _lastPush != null &&
-        now.difference(_lastPush!) < minPushInterval) {
-      final wait = minPushInterval - now.difference(_lastPush!);
+        now.difference(_lastPush!) < effectiveInterval) {
+      final wait = effectiveInterval - now.difference(_lastPush!);
       _pendingTimer = Timer(wait, () {
         _pendingTimer = null;
         unawaited(_doPush(dashboard));
