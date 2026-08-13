@@ -26,7 +26,7 @@ mixin _TabsMixin on _BrowserScreenStateBase {
 
   @override
   void _ensureTabsExist() {
-    if (_tabs.isEmpty && !_isRestoring) {
+    if ((_tabs.isEmpty || (_tabs.length == 1 && _tabs.first.url.isEmpty && !_tabs.first.isIncognito)) && !_isRestoring) {
       _restoreTabs();
     }
   }
@@ -115,9 +115,9 @@ mixin _TabsMixin on _BrowserScreenStateBase {
 
 
   void _scrollToActiveTabStrip() {
-    if (!_tabStripScrollController.hasClients) return;
+    if (!_tabStripScrollController.hasClients || _tabStripScrollController.positions.isEmpty) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_tabStripScrollController.hasClients) return;
+      if (!mounted || !_tabStripScrollController.hasClients || _tabStripScrollController.positions.isEmpty) return;
       final maxExtent = _tabStripScrollController.position.maxScrollExtent;
       final targetOffset = (_currentTabIndex * 100.0).clamp(0.0, maxExtent);
       _tabStripScrollController.animateTo(
@@ -490,7 +490,9 @@ mixin _TabsMixin on _BrowserScreenStateBase {
                               trailing: const Icon(Icons.restore_rounded,
                                   size: 18, color: AppTheme.neonBlue),
                               onTap: () {
-                                _recentlyClosedTabs.removeAt(index);
+                                setSheetState(() {
+                                  _recentlyClosedTabs.removeAt(index);
+                                });
                                 Navigator.pop(sheetContext);
                                 _openInNewTab(
                                   closed.url,

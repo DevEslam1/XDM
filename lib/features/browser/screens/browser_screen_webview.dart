@@ -12,6 +12,7 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     if (tab.hasCrashed) {
       setState(() {
         tab.hasCrashed = false;
+        tab.hasError = false;
         tab.isTimedOut = false;
         tab.isLoading = true;
         tab.controller = null;
@@ -20,6 +21,7 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     }
 
     setState(() {
+      tab.hasError = false;
       tab.isTimedOut = false;
       tab.isLoading = true;
     });
@@ -56,8 +58,13 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
   Future<void> _refreshTabForPull(BrowserTab tab) async {
     await _safeReloadTab(tab);
 
-    // Keep the native indicator visible for a bounded three seconds.
-    await Future<void>.delayed(const Duration(seconds: 3));
+    // Keep the native indicator visible until loading completes or at most 3 seconds.
+    int elapsed = 0;
+    while (tab.isLoading && elapsed < 3000) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      elapsed += 200;
+    }
+
     final pullToRefresh = tab.pullToRefreshController;
     if (pullToRefresh != null) {
       try {
@@ -379,7 +386,7 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
         tab.isLoading = true;
         tab.progress = 0.0;
         tab.lastRenderedProgress = 0;
-        tab.url = _cleanUrl(url);
+        tab.updateUrl(_cleanUrl(url));
         if (_currentTabIndex >= 0 &&
             _currentTabIndex < _tabs.length &&
             _tabs[_currentTabIndex].id == tab.id) {
@@ -445,8 +452,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       setState(() {
         tab.isLoading = false;
         tab.isTimedOut = false;
-        _detectedDownloadUrls.remove(tab.id);
-        _detectedMediaSources.remove(tab.id);
       });
       tab.controller?.getTitle().then((t) {
         if (t != null && t.isNotEmpty && mounted) {
@@ -510,9 +515,10 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       }
     }
 
-    _updateNavState();
-    _delayed(const Duration(milliseconds: 500), _updateNavState);
-    _delayed(const Duration(milliseconds: 1200), _updateNavState);
+    _navDebounce?.cancel();
+    _navDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) _updateNavState();
+    });
 
     if (!_isYoutubeHost(tab.url)) {
       _scheduleMediaScan(tab);
@@ -532,7 +538,7 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       // old one — a minor memory leak that accumulates stale entries.
       final previousUrl = tab.url;
       setState(() {
-        tab.url = cleanUrl;
+        tab.updateUrl(cleanUrl);
         if (cleanUrl.isNotEmpty) {
           tab.isHome = false;
         }
@@ -542,6 +548,7 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
           _urlController.text = tab.url;
         }
       });
+      _saveTabs();
       _detectedDownloadUrls.remove(tab.id);
       _detectedPlaylistUrls.remove(tab.id);
       _detectedMediaSources.remove(tab.id);
@@ -559,6 +566,7 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
               setState(() {
                 tab.title = t;
               });
+              _saveTabs();
             }
           });
         }
@@ -622,13 +630,7 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       tab.isTimedOut = false;
       tab.isLoading = false;
       tab.controller = null;
-      final ptr = tab.pullToRefreshController;
       tab.pullToRefreshController = null;
-      if (ptr != null) {
-        try {
-          ptr.dispose();
-        } catch (_) {}
-      }
     }
   }
 
@@ -714,10 +716,8 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     }
     if (faviconUrl == null || faviconUrl.isEmpty) return;
     tab.faviconUrl = faviconUrl;
-    HttpClient? httpClient;
     try {
-      httpClient = HttpClient()..connectionTimeout = const Duration(seconds: 4);
-      final req = await httpClient.getUrl(Uri.parse(faviconUrl));
+      final req = await _faviconHttpClient.getUrl(Uri.parse(faviconUrl));
       final resp = await req.close().timeout(const Duration(seconds: 5));
       if (resp.statusCode == 200) {
         final chunks = await resp
@@ -731,10 +731,6 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       }
     } catch (_) {
       // Favicon download is best-effort; the tab falls back to the globe icon.
-    } finally {
-      // Always close the HttpClient — even if an exception was thrown —
-      // to prevent socket/connection leaks across many page loads.
-      httpClient?.close(force: false);
     }
   }
 

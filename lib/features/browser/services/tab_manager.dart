@@ -297,6 +297,7 @@ class TabManager extends ChangeNotifier {
 
   @override
   void dispose() {
+    _saveTabsDebounce?.cancel();
     for (final timer in pendingTimers) {
       timer.cancel();
     }
@@ -305,7 +306,25 @@ class TabManager extends ChangeNotifier {
     super.dispose();
   }
 
+
+
+  Timer? _saveTabsDebounce;
+
+  /// Debounced save: batches frequent tab state changes (e.g. scrolling, switching)
   Future<void> saveTabs() async {
+    _saveTabsDebounce?.cancel();
+    _saveTabsDebounce = Timer(const Duration(milliseconds: 300), () {
+      saveTabsImmediately();
+    });
+  }
+
+  /// Saves tabs to database and SharedPreferences immediately without debounce.
+  Future<void> saveTabsImmediately() async {
+    _saveTabsDebounce?.cancel();
+    await _performSaveTabs();
+  }
+
+  Future<void> _performSaveTabs() async {
     try {
       final normalTabs = _tabs.where((t) => !t.isIncognito).toList();
       final tabsData = normalTabs
@@ -350,7 +369,7 @@ class TabManager extends ChangeNotifier {
               title: tab.title,
               isActive: tab.id == activeTabId,
               position: i,
-              createdAt: DateTime.now().millisecondsSinceEpoch,
+              createdAt: tab.createdAtMs,
               lastVisitedAt: tab.lastVisitedAt,
               faviconUrl: tab.faviconUrl,
             ),
@@ -506,6 +525,9 @@ class TabManager extends ChangeNotifier {
       }
     }
     var activeIdx = 0;
+    for (var i = 0; i < saved.length; i++) {
+      if (saved[i].isActive) activeIdx = i;
+    }
     final newTabs = <BrowserTab>[];
     for (var i = 0; i < saved.length; i++) {
       final row = saved[i];
@@ -513,8 +535,10 @@ class TabManager extends ChangeNotifier {
       final tab = createTab(
           initialUrl: isBlank ? 'about:blank' : row.url, autoLoad: false);
       if (row.title.isNotEmpty) tab.title = row.title;
+      if (i != activeIdx) {
+        tab.isSuspended = true;
+      }
       newTabs.add(tab);
-      if (row.isActive) activeIdx = i;
     }
     if (!isActive()) return;
     _tabs

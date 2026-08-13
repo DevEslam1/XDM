@@ -33,6 +33,10 @@ class AdBlockerDelegate {
 
   String get dynamicDomainsJson => _adBlocker.dynamicDomainsJson;
 
+  String get antiDetectJs => _adBlocker.antiDetectJs;
+
+  String get earlyJs => _adBlocker.earlyJs;
+
   void addListener(VoidCallback listener) => _adBlocker.addListener(listener);
   void removeListener(VoidCallback listener) =>
       _adBlocker.removeListener(listener);

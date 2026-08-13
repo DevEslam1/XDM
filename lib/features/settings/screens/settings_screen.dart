@@ -77,6 +77,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   late final FocusNode _searchFocusNode;
   String _searchQuery = '';
   late final PageController _pageController;
+  late final ScrollController _chipScrollController;
 
   @override
   void initState() {
@@ -85,6 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     _searchController = TextEditingController();
     _searchFocusNode = FocusNode();
     _pageController = PageController(initialPage: _selectedCategoryIndex);
+    _chipScrollController = ScrollController();
 
     _searchController.addListener(() {
       if (mounted) {
@@ -149,7 +151,22 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (index == _selectedCategoryIndex) return;
     setState(() => _selectedCategoryIndex = index);
     if (_pageController.hasClients) {
-      _pageController.jumpToPage(index);
+      _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    if (_chipScrollController.hasClients) {
+      final targetOffset = (index * 110.0).clamp(
+        0.0,
+        _chipScrollController.position.maxScrollExtent,
+      );
+      _chipScrollController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
     }
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     settings.setActiveSettingsTabIndex(index);
@@ -161,6 +178,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     _searchController.dispose();
     _searchFocusNode.dispose();
     _pageController.dispose();
+    _chipScrollController.dispose();
     super.dispose();
   }
 
@@ -487,19 +505,6 @@ class _SettingsScreenState extends State<SettingsScreen>
     final screenType = getScreenType(context);
     final isDesktop = screenType == ScreenType.desktop;
 
-    if (_pageController.hasClients &&
-        _pageController.page != null &&
-        _pageController.page!.round() != _selectedCategoryIndex) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted &&
-            _pageController.hasClients &&
-            _pageController.page != null &&
-            _pageController.page!.round() != _selectedCategoryIndex) {
-          _pageController.jumpToPage(_selectedCategoryIndex);
-        }
-      });
-    }
-
     final categories = [
       _CategoryMeta(
         id: 'appearance',
@@ -515,7 +520,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
       _CategoryMeta(
         id: 'network',
-        title: isRtl ? 'الشبكة الأمان' : 'Network',
+        title: isRtl ? 'الشبكة والأمان' : 'Network',
         icon: Icons.security_rounded,
         color: isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
       ),
@@ -801,6 +806,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                             children: [
                               // Phone/Tablet Horizontal Chip Strip
                               SingleChildScrollView(
+                                controller: _chipScrollController,
                                 scrollDirection: Axis.horizontal,
                                 physics: const BouncingScrollPhysics(),
                                 padding: const EdgeInsets.symmetric(

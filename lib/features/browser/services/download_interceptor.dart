@@ -211,7 +211,7 @@ class DownloadInterceptor {
               (response.headers.value('content-disposition') ?? '')
                   .toLowerCase();
 
-          response.data?.stream.listen((_) {}).cancel();
+          await response.data?.stream.drain<void>().catchError((_) {});
         } catch (_) {}
       }
 

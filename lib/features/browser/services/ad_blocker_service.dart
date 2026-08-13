@@ -198,16 +198,22 @@ class AdBlockerService {
 })();
 ''';
 
+  String? _cachedDynamicDomainsJson;
+  int _lastDomainsGen = -1;
+
   /// JSON-encoded list of ad domains for dynamic blocking setup.
-  /// FIX #4: Now includes a capped sample of downloaded filter-list domains so
-  /// the in-browser JS fetch/XHR interceptor blocks as many domains as the
-  /// Dart-level shouldInterceptRequest does.
+  /// Cached per generation to avoid expensive JSON encoding on widget rebuilds.
   String get dynamicDomainsJson {
+    if (_cachedDynamicDomainsJson != null && _lastDomainsGen == _contentBlockerGen) {
+      return _cachedDynamicDomainsJson!;
+    }
     final custom = CustomAdBlockStore.instance.hosts;
     // Cap at 2000 downloaded domains to keep the injected JS payload manageable.
     final filterDomains = AdBlockFilterUpdater().allBlockedDomains.take(2000);
     final all = <String>{...custom, ...filterDomains}.toList();
-    return jsonEncode(all);
+    _cachedDynamicDomainsJson = jsonEncode(all);
+    _lastDomainsGen = _contentBlockerGen;
+    return _cachedDynamicDomainsJson!;
   }
 
   // ── Listener support (ChangeNotifier-style) ──────────────────────────────

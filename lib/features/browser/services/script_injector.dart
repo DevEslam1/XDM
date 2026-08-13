@@ -62,13 +62,15 @@ class ScriptInjector {
     :root {
       color-scheme: dark !important;
     }
-    html {
-      filter: invert(0.92) hue-rotate(180deg) !important;
-      background-color: #121212 !important;
-    }
-    /* Preserve natural appearance of multimedia, embedded objects, canvases and photos */
-    img, video, iframe, canvas, svg, picture, [style*="background-image"] {
-      filter: invert(1.08) hue-rotate(180deg) !important;
+    @media (prefers-color-scheme: light) {
+      html {
+        filter: invert(0.92) hue-rotate(180deg) !important;
+        background-color: #121212 !important;
+      }
+      /* Preserve natural appearance of multimedia, embedded objects, canvases and photos */
+      img, video, iframe, canvas, svg, picture, [style*="background-image"] {
+        filter: invert(1.08) hue-rotate(180deg) !important;
+      }
     }
     /* Darken scrollbars */
     ::-webkit-scrollbar {
@@ -424,12 +426,30 @@ $customJs
     // `forceDark` WebView setting instead. Enabled whenever the app UI is
     // dark/amoled or the dedicated force-dark switch is on.
     if (settings.isDarkMode || settings.forceDarkMode) {
-      scripts.add(buildForceDarkCss());
+      final css = buildForceDarkCss();
+      scripts.add(
+        '(function() {'
+        '  var s = document.getElementById("xdm-force-dark");'
+        '  if (!s) {'
+        '    s = document.createElement("style");'
+        '    s.id = "xdm-force-dark";'
+        '    document.head.appendChild(s);'
+        '  }'
+        '  s.textContent = ${jsonEncode(css)};'
+        '})();'
+      );
     }
 
     // Image blocking
     if (settings.blockImages) {
-      scripts.add(buildBlockImagesCss());
+      final css = buildBlockImagesCss();
+      scripts.add(
+        '(function() {'
+        '  var s = document.createElement("style");'
+        '  s.textContent = ${jsonEncode(css)};'
+        '  document.head.appendChild(s);'
+        '})();'
+      );
     }
 
     // Form autofill capture (always safe; gated by the app-side handler)

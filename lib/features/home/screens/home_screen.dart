@@ -44,11 +44,10 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isSearching = false;
   bool _showAnalytics = false;
   int _selectedTab = 0;
-  int selectedSegment = 0;
   late final AnimationController _reveal;
 
-  final Map<double, Animation<double>> _fadeAnimations = {};
-  final Map<double, Animation<Offset>> _slideAnimations = {};
+  final Map<int, Animation<double>> _fadeAnimations = {};
+  final Map<int, Animation<Offset>> _slideAnimations = {};
 
   @override
   void initState() {
@@ -73,8 +72,10 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _stagger(double start, Widget child) {
     if (!modernAnimationsAllowed(context)) return child;
 
+    final key = (start * 1000).round();
+
     final fadeAnim = _fadeAnimations.putIfAbsent(
-      start,
+      key,
       () => _reveal.drive(
         CurveTween(
           curve: Interval(
@@ -87,7 +88,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
 
     final slideAnim = _slideAnimations.putIfAbsent(
-      start,
+      key,
       () => _reveal.drive(
         Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero).chain(
           CurveTween(
@@ -128,7 +129,6 @@ class _HomeScreenState extends State<HomeScreen>
     provider.setSearchQuery('');
     setState(() {
       _selectedTab = index;
-      selectedSegment = index;
       _isSearching = false;
       _searchController.clear();
     });
@@ -295,11 +295,9 @@ class _HomeScreenState extends State<HomeScreen>
                           selectedTab: _selectedTab,
                           isDark: isDark,
                           isRtl: isRtl,
-                          settings: context.read<SettingsProvider>(),
                           onClearSearch: () {
                             _searchController.clear();
                             context.read<DownloadProvider>().setSearchQuery('');
-                            setState(() {});
                           },
                           stagger: _stagger,
                         ),
@@ -365,10 +363,10 @@ class _HomeScreenState extends State<HomeScreen>
 
   Widget _buildBatchActionBar(
       BuildContext context, bool isDark, Color textClr, Color accentClr) {
-    final provider = context.watch<DownloadProvider>();
-    final settings = context.watch<SettingsProvider>();
-    final isAmoled = settings.isAmoledMode;
-    final selectedIds = provider.selectedTaskIds;
+    final selectedIds =
+        context.select<DownloadProvider, Set<String>>((p) => p.selectedTaskIds);
+    final isAmoled =
+        context.select<SettingsProvider, bool>((s) => s.isAmoledMode);
 
     return SafeArea(
       top: false,
@@ -596,7 +594,6 @@ class _HomeScreenState extends State<HomeScreen>
             fontFamily: 'Inter',
           ),
           onChanged: (val) {
-            setState(() {});
             context.read<DownloadProvider>().setSearchQuery(val);
           },
           decoration: InputDecoration(
@@ -606,16 +603,19 @@ class _HomeScreenState extends State<HomeScreen>
               size: 20,
               color: accentClr,
             ),
-            suffixIcon: _searchController.text.isNotEmpty
-                ? IconButton(
-                    icon: Icon(Icons.clear_rounded, size: 18, color: accentClr),
-                    onPressed: () {
-                      _searchController.clear();
-                      context.read<DownloadProvider>().setSearchQuery('');
-                      setState(() {});
-                    },
-                  )
-                : null,
+            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _searchController,
+              builder: (context, value, _) {
+                if (value.text.isEmpty) return const SizedBox.shrink();
+                return IconButton(
+                  icon: Icon(Icons.clear_rounded, size: 18, color: accentClr),
+                  onPressed: () {
+                    _searchController.clear();
+                    context.read<DownloadProvider>().setSearchQuery('');
+                  },
+                );
+              },
+            ),
             hintText: L10n.of(context, 'search_placeholder'),
             hintStyle: TextStyle(
               color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
@@ -698,7 +698,7 @@ class _HomeScreenState extends State<HomeScreen>
     bool isDark,
     DownloadProvider downloadProvider,
   ) {
-    final selected = selectedSegment == index;
+    final selected = _selectedTab == index;
     final color = getActiveFilterColor(downloadProvider, isDark);
 
     return Expanded(
@@ -778,11 +778,12 @@ class _HomeScreenState extends State<HomeScreen>
     required bool isDark,
     required bool isRtl,
   }) {
-    final provider = context.read<DownloadProvider>();
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final secClr =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final activeColor =
+        getActiveFilterColor(context.watch<DownloadProvider>(), isDark);
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
       child: Row(
@@ -875,10 +876,11 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
                 offset: const Offset(0, 40),
                 onSelected: (option) {
-                  if (provider.sortOption == option) {
-                    provider.toggleSortDirection();
+                  final p = context.read<DownloadProvider>();
+                  if (p.sortOption == option) {
+                    p.toggleSortDirection();
                   } else {
-                    provider.setSortOption(option);
+                    p.setSortOption(option);
                   }
                 },
                 itemBuilder: (context) => [
@@ -887,24 +889,28 @@ class _HomeScreenState extends State<HomeScreen>
                     L10n.of(context, 'sort_date'),
                     sortState,
                     isDark,
+                    activeColor,
                   ),
                   _sortMenuItem(
                     SortOption.fileSize,
                     L10n.of(context, 'details_size'),
                     sortState,
                     isDark,
+                    activeColor,
                   ),
                   _sortMenuItem(
                     SortOption.fileName,
                     L10n.of(context, 'details_filename'),
                     sortState,
                     isDark,
+                    activeColor,
                   ),
                   _sortMenuItem(
                     SortOption.status,
                     L10n.of(context, 'sort_status'),
                     sortState,
                     isDark,
+                    activeColor,
                   ),
                 ],
                 child: Container(
@@ -949,8 +955,8 @@ class _HomeScreenState extends State<HomeScreen>
                 return const SizedBox.shrink();
               }
               return GestureDetector(
-                onTap: () =>
-                    _showClearHistoryDialog(context, provider, isDark, isRtl),
+                onTap: () => _showClearHistoryDialog(
+                    context, context.read<DownloadProvider>(), isDark, isRtl),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -985,10 +991,9 @@ class _HomeScreenState extends State<HomeScreen>
     String label,
     ({SortOption option, bool ascending}) sortState,
     bool isDark,
+    Color activeColor,
   ) {
     final isSelected = sortState.option == option;
-    final activeColor =
-        getActiveFilterColor(context.read<DownloadProvider>(), isDark);
     final textColor = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     return PopupMenuItem<SortOption>(
       value: option,
@@ -1060,7 +1065,7 @@ class _HomeScreenState extends State<HomeScreen>
           label: 'Add new download',
           hint: 'Double tap to create a new download',
           child: FloatingActionButton(
-            heroTag: null,
+            heroTag: 'home_fab',
             backgroundColor: accentClr,
             foregroundColor: Colors.white,
             elevation: classicUi ? 4 : 0,
@@ -1390,7 +1395,6 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
                       : Column(
                           children: categoryCards
                               .where((card) => (sizes[card['name']] ?? 0.0) > 0)
-                              .take(4)
                               .map((card) {
                             final name = card['name'] as String;
                             final sizeMb = sizes[name] ?? 0.0;
@@ -1518,7 +1522,6 @@ class _DownloadTaskList extends StatelessWidget {
   final int selectedTab;
   final bool isDark;
   final bool isRtl;
-  final SettingsProvider settings;
   final VoidCallback? onClearSearch;
   final Widget Function(double, Widget) stagger;
 
@@ -1526,7 +1529,6 @@ class _DownloadTaskList extends StatelessWidget {
     required this.selectedTab,
     required this.isDark,
     required this.isRtl,
-    required this.settings,
     this.onClearSearch,
     required this.stagger,
   });
@@ -1573,6 +1575,7 @@ class _DownloadTaskList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
     final provider = context.watch<DownloadProvider>();
     final isLoading = provider.isLoadingTasks;
 
@@ -1863,7 +1866,7 @@ class _EmptyState extends StatelessWidget {
     final query =
         context.select<DownloadProvider, String>((p) => p.searchQuery);
     final accentClr =
-        getActiveFilterColor(context.read<DownloadProvider>(), isDark);
+        getActiveFilterColor(context.watch<DownloadProvider>(), isDark);
     if (query.isNotEmpty) {
       final isLandscape =
           MediaQuery.of(context).orientation == Orientation.landscape;

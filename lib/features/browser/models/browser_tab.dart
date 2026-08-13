@@ -67,8 +67,10 @@ class BrowserTab {
     this.canGoBack = false,
     this.canGoForward = false,
     this.origin = TabOrigin.userDirect,
+    int? createdAtMs,
     FindInteractionController? findController,
-  })  : progressNotifier = ValueNotifier<double>(progress),
+  })  : createdAtMs = createdAtMs ?? DateTime.now().millisecondsSinceEpoch,
+        progressNotifier = ValueNotifier<double>(progress),
         _findInteractionController = findController;
 
   bool _isDisposed = false;
@@ -83,11 +85,32 @@ class BrowserTab {
 
   bool get isSecure => url.toLowerCase().startsWith('https://');
 
+  String? _cachedHost;
+  final int createdAtMs;
+
+  /// Cached host calculation for performance in interceptors
+  String get host {
+    if (_cachedHost != null) return _cachedHost!;
+    try {
+      _cachedHost = Uri.parse(url).host.toLowerCase();
+    } catch (_) {
+      _cachedHost = '';
+    }
+    return _cachedHost!;
+  }
+
+  void updateUrl(String newUrl) {
+    if (url != newUrl) {
+      url = newUrl;
+      _cachedHost = null;
+    }
+  }
+
   String get domain {
     try {
-      var host = Uri.parse(url).host;
-      if (host.startsWith('www.')) host = host.substring(4);
-      return host;
+      var h = host;
+      if (h.startsWith('www.')) h = h.substring(4);
+      return h;
     } catch (e, st) {
       _log.warning('[browser_tab] domain parse failed', e, st);
       return '';
@@ -109,26 +132,8 @@ class BrowserTab {
     if (_isDisposed) return;
     _isDisposed = true;
     controller = null;
-    final fic = _findInteractionController;
     _findInteractionController = null;
-    if (fic != null) {
-      try {
-        fic.dispose();
-      } catch (e, st) {
-        _log.warning(
-            '[browser_tab] findInteractionController dispose failed', e, st);
-      }
-    }
-    final ptr = pullToRefreshController;
     pullToRefreshController = null;
-    if (ptr != null) {
-      try {
-        ptr.dispose();
-      } catch (e, st) {
-        _log.warning(
-            '[browser_tab] pullToRefreshController dispose failed', e, st);
-      }
-    }
     try {
       progressNotifier.dispose();
     } catch (e, st) {

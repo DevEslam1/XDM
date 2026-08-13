@@ -55,7 +55,7 @@ mixin _MediaDownloadsMixin on _BrowserScreenStateBase {
     if (_lastLongPressSheetUrl == cleanUrl &&
         _lastLongPressSheetAt != null &&
         now.difference(_lastLongPressSheetAt!) <
-            const Duration(milliseconds: 300)) {
+            const Duration(milliseconds: 600)) {
       return;
     }
     _lastLongPressSheetUrl = cleanUrl;

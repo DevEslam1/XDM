@@ -161,6 +161,16 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                             injectionTime:
                                 UserScriptInjectionTime.AT_DOCUMENT_START,
                           ),
+                          UserScript(
+                            source: widget.state._adBlocker.antiDetectJs,
+                            injectionTime:
+                                UserScriptInjectionTime.AT_DOCUMENT_START,
+                          ),
+                          UserScript(
+                            source: 'window.__xdmDynamicAdDomains = ${widget.state._adBlocker.dynamicDomainsJson};\n${widget.state._adBlocker.earlyJs}',
+                            injectionTime:
+                                UserScriptInjectionTime.AT_DOCUMENT_START,
+                          ),
                         ]),
                         initialSettings: InAppWebViewSettings(
                           useShouldOverrideUrlLoading: true,
@@ -453,17 +463,13 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                           }
 
                           // Never block same-origin requests (requests to the current site's own domain or subdomains)
-                          final pageUrl = tab.url;
-                          if (pageUrl.isNotEmpty) {
-                            final pageHost =
-                                Uri.tryParse(pageUrl)?.host.toLowerCase() ?? '';
-                            if (pageHost.isNotEmpty &&
-                                (requestHost == pageHost ||
-                                    requestHost.endsWith('.$pageHost') ||
-                                    (requestHost.contains('.') &&
-                                        pageHost.endsWith('.$requestHost')))) {
-                              return null;
-                            }
+                          final pageHost = tab.host;
+                          if (pageHost.isNotEmpty &&
+                              (requestHost == pageHost ||
+                                  requestHost.endsWith('.$pageHost') ||
+                                  (requestHost.contains('.') &&
+                                      pageHost.endsWith('.$requestHost')))) {
+                            return null;
                           }
 
                           final url = request.url.toString();
@@ -698,7 +704,7 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                     // E5: Media Sniffer Detection Feedback
                     ListenableBuilder(
                       listenable: widget.state._sniffer,
-                      builder: (context, _) {
+                      builder: (context, child) {
                         final detectedSources = widget.state._sniffer.detectedMediaSources[tab.id];
                         if (detectedSources == null || detectedSources.isEmpty) {
                           return const SizedBox.shrink();

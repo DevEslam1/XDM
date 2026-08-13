@@ -27,16 +27,19 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
   final Set<String> _recentDownloadUrls = {};
   final Map<String, Timer> _downloadUrlTimers = {};
 
+  HttpClient? _sharedHttpClient;
+
+  HttpClient get _faviconHttpClient {
+    return _sharedHttpClient ??= HttpClient()
+      ..connectionTimeout = const Duration(seconds: 4);
+  }
+
   void _markUrlAsDownloaded(String url) {
     _recentDownloadUrls.add(url);
     _downloadUrlTimers[url]?.cancel();
     _downloadUrlTimers[url] = Timer(const Duration(seconds: 4), () {
-      if (mounted) {
-        setState(() {
-          _recentDownloadUrls.remove(url);
-          _downloadUrlTimers.remove(url);
-        });
-      }
+      _recentDownloadUrls.remove(url);
+      _downloadUrlTimers.remove(url);
     });
   }
 
@@ -45,6 +48,8 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
       t.cancel();
     }
     _downloadUrlTimers.clear();
+    _sharedHttpClient?.close(force: true);
+    _sharedHttpClient = null;
   }
 
 

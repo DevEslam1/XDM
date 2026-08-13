@@ -26,7 +26,7 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
             final isBlank = clean == 'about:blank' || clean.isEmpty;
 
             if (!activeTab.isHome || isBlank) {
-              activeTab.url = clean;
+              activeTab.updateUrl(clean);
               activeTab.isHome = isBlank;
               if (_tabs[_currentTabIndex].id == activeTab.id) {
                 _urlController.text = isBlank ? '' : clean;
@@ -77,22 +77,7 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     final activeTab = _tabs[_currentTabIndex];
 
     // (a) WebView can go back.
-    if (activeTab.canGoBack && activeTab.controller != null) {
-      _homeReturnUrl = null;
-      final currentTabId = activeTab.id;
-      _navigatingBackForwardTabIds[currentTabId] = true;
-      unawaited(activeTab.controller?.goBack() ?? Future.value());
-      Future.delayed(const Duration(seconds: 5), () {
-        if (mounted) {
-          _navigatingBackForwardTabIds[currentTabId] = false;
-        }
-      });
-      _updateNavState();
-      return true;
-    }
-
-    // Also async-check with the controller in case the cached flag is stale.
-    final webCanGoBack = await activeTab.controller?.canGoBack() ?? false;
+    final webCanGoBack = activeTab.canGoBack || (await activeTab.controller?.canGoBack() ?? false);
     if (webCanGoBack && activeTab.controller != null) {
       _homeReturnUrl = null;
       final currentTabId = activeTab.id;
@@ -261,8 +246,12 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
 
     setState(() {
       activeTab.isHome = false;
-      activeTab.url = targetUrl;
+      activeTab.updateUrl(targetUrl);
       _urlController.text = targetUrl;
+      activeTab.hasCrashed = false;
+      activeTab.hasError = false;
+      activeTab.isTimedOut = false;
+      activeTab.isLoading = true;
     });
 
     if (activeTab.controller != null) {
@@ -720,13 +709,13 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
         context,
         message: effectiveDark
             ? 'Force dark enabled — reloading page'
-            : 'Force dark disabled',
+            : 'Force dark disabled — reloading page',
         color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
         icon:
             effectiveDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
         isDarkMode: settings.isDarkMode,
       );
-      if (effectiveDark && !activeTab.isHome) {
+      if (!activeTab.isHome) {
         await _safeReloadTab(activeTab);
       }
     }

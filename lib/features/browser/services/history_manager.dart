@@ -62,6 +62,12 @@ class BrowserHistoryManager {
     // Clean up old entries in _recentVisits to prevent leaks
     _recentVisits.removeWhere((key, value) =>
         now.difference(value.visitedAt) > _dedupWindow);
+    if (_recentVisits.length > 500) {
+      final keysToRemove = _recentVisits.keys.take(_recentVisits.length - 400).toList();
+      for (final k in keysToRemove) {
+        _recentVisits.remove(k);
+      }
+    }
 
     // Check if the URL was visited in the dedup window
     final recent = _recentVisits[clean];

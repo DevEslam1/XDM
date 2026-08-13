@@ -145,7 +145,7 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
 
     if (!_quitPersisted && _tabs.isNotEmpty) {
       try {
-        _tabManager.saveTabs();
+        unawaited(_tabManager.saveTabsImmediately());
       } catch (e, st) {
         Logger('browser_screen')
             .warning('[browser_screen] operation failed', e, st);
@@ -455,19 +455,25 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     final settings = _settings;
     triggerHaptic(settings);
     try {
+      final normalTabs = _tabs.where((t) => !t.isIncognito).toList();
+      final activeTab = (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length)
+          ? _tabs[_currentTabIndex]
+          : null;
+      final String? activeTabId = (activeTab != null && !activeTab.isIncognito)
+          ? activeTab.id
+          : (normalTabs.isNotEmpty ? normalTabs.last.id : null);
+
       final persistable = <SavedBrowserTab>[];
-      var position = 0;
-      for (var i = 0; i < _tabs.length; i++) {
-        final t = _tabs[i];
-        if (t.isIncognito) continue;
+      for (var i = 0; i < normalTabs.length; i++) {
+        final t = normalTabs[i];
         persistable.add(
           SavedBrowserTab(
             id: t.id,
             url: t.url.isNotEmpty ? t.url : 'about:blank',
             title: t.title,
-            isActive: i == _currentTabIndex,
-            position: position++,
-            createdAt: DateTime.now().millisecondsSinceEpoch,
+            isActive: t.id == activeTabId,
+            position: i,
+            createdAt: t.createdAtMs,
             lastVisitedAt: t.lastVisitedAt,
             faviconUrl: t.faviconUrl,
           ),

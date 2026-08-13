@@ -232,14 +232,13 @@ class MediaSniffer extends ChangeNotifier {
       }
       if (isActive() && tab.url == scannedUrl) {
         _update(() {
-          ytDetectionFailed.remove(scannedUrl);
-          if (ytDetectionFailed.length >= 200) {
+          ytDetectionFailed[scannedUrl] = DateTime.now();
+          if (ytDetectionFailed.length > 200) {
             final oldestKey = ytDetectionFailed.entries
                 .reduce((a, b) => a.value.isBefore(b.value) ? a : b)
                 .key;
             ytDetectionFailed.remove(oldestKey);
           }
-          ytDetectionFailed[scannedUrl] = DateTime.now();
         });
       }
     }
