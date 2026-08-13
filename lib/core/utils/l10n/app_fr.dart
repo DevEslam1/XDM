@@ -51,7 +51,8 @@ const Map<String, String> frTranslations = {
   'browser_clear': 'Effacer',
   'browser_clear_btn': 'Effacer',
   'browser_clear_history_btn': 'Effacer l\'historique',
-  'browser_clear_history_content': 'Voulez-vous vraiment effacer tout l\'historique de navigation ?',
+  'browser_clear_history_content':
+      'Voulez-vous vraiment effacer tout l\'historique de navigation ?',
   'browser_clear_history_desc': 'Voulez-vous vraiment effacer l\'historique ?',
   'browser_clear_history_title': 'EFFACER L\'HISTORIQUE ?',
   'browser_clear_search': 'EFFACER LA RECHERCHE',
@@ -89,7 +90,8 @@ const Map<String, String> frTranslations = {
   'browser_intercepted_signal': 'SIGNAL DE TÉLÉCHARGEMENT INTERCEPTÉ',
   'browser_javascript': 'JavaScript',
   'browser_js_css_injector': 'INJECTEUR JS / CSS',
-  'browser_js_css_warning': 'AVERTISSEMENT : Le code s\'exécute sur les pages web.',
+  'browser_js_css_warning':
+      'AVERTISSEMENT : Le code s\'exécute sur les pages web.',
   'browser_lazy_video': 'Vidéo à chargement différé',
   'browser_max_tabs': 'Limite maximale de 10 onglets atteinte.',
   'browser_media_detector_off': 'Détecteur de médias désactivé',
@@ -115,14 +117,16 @@ const Map<String, String> frTranslations = {
   'browser_new_tab': 'Nouvel onglet',
   'browser_no_alternative_streams': 'Aucun flux alternatif détecté',
   'browser_no_bookmarks': 'Pas encore de favoris',
-  'browser_no_bookmarks_desc': 'Appuyez sur + pour enregistrer vos sites préférés',
+  'browser_no_bookmarks_desc':
+      'Appuyez sur + pour enregistrer vos sites préférés',
   'browser_no_downloads_desc': 'Les fichiers téléchargés apparaîtront ici.',
   'browser_no_downloads_yet': 'Pas encore de téléchargements',
   'browser_no_history_desc': 'Les sites web que vous visitez apparaîtront ici.',
   'browser_no_history_found': 'Aucun historique trouvé',
   'browser_no_results_for': 'Aucun résultat pour',
   'browser_no_scripts': 'Pas encore de scripts',
-  'browser_no_scripts_desc': 'Ajouter du JS ou CSS qui s\'exécute sur les pages',
+  'browser_no_scripts_desc':
+      'Ajouter du JS ou CSS qui s\'exécute sur les pages',
   'browser_offline_page': 'Page_Hors_Ligne',
   'browser_page_save_error': 'Échec de l\'enregistrement de la page',
   'browser_page_saved': 'Page enregistrée avec succès',
@@ -146,9 +150,11 @@ const Map<String, String> frTranslations = {
   'browser_search_or_enter_url': 'Rechercher ou saisir l\'URL...',
   'browser_search_web': 'Rechercher sur le web...',
   'browser_select_video_quality': 'SÉLECTIONNER LA QUALITÉ VIDÉO',
-  'browser_single_and_playlist': 'Ce lien contient une vidéo individuelle et une liste de lecture.',
+  'browser_single_and_playlist':
+      'Ce lien contient une vidéo individuelle et une liste de lecture.',
   'browser_single_video': 'Vidéo unique',
-  'browser_sniff_description': 'Détecte dynamiquement les fichiers médias et documents',
+  'browser_sniff_description':
+      'Détecte dynamiquement les fichiers médias et documents',
   'browser_status_active': 'ACTIF',
   'browser_status_done': 'TERMINÉ',
   'browser_status_failed': 'ÉCHOUÉ',
@@ -165,11 +171,13 @@ const Map<String, String> frTranslations = {
   'browser_url_label': 'URL',
   'browser_video_poster': 'Affiche de la vidéo',
   'browser_video_stream_default': 'Flux vidéo (Par défaut)',
-  'browser_xdm_scanner': 'Le scanner XDM a intercepté un signal de téléchargement :',
+  'browser_xdm_scanner':
+      'Le scanner XDM a intercepté un signal de téléchargement :',
   'browser_youtube_video': 'Vidéo YouTube',
   'btn_install_now': 'Installer maintenant',
   'btn_later': 'Plus tard',
-  'bypass_ssl_dialog_body': 'Cela expose tous les téléchargements à des attaques ',
+  'bypass_ssl_dialog_body':
+      'Cela expose tous les téléchargements à des attaques ',
   'bypass_ssl_dialog_confirm': 'Je comprends le risque',
   'bypass_ssl_dialog_title': 'Désactiver la vérification SSL ?',
   'cancel': 'Annuler',
@@ -185,7 +193,8 @@ const Map<String, String> frTranslations = {
   'clear_history': 'Effacer l\'historique',
   'clear_history_logs': 'EFFACER LES JOURNAUX D\'HISTORIQUE',
   'clear_search': 'Effacer la recherche',
-  'clipboard_desc': 'XDM a détecté un lien de téléchargement dans le presse-papiers :',
+  'clipboard_desc':
+      'XDM a détecté un lien de téléchargement dans le presse-papiers :',
   'clipboard_detected': 'Lien détecté dans le presse-papiers',
   'clipboard_establish': 'Télécharger',
   'clipboard_ignore': 'Ignorer',
@@ -197,7 +206,8 @@ const Map<String, String> frTranslations = {
   'completed_transmissions_header': 'HISTORIQUE / TERMINÉS',
   'config_header': 'Configuration',
   'confirm': 'Confirmer',
-  'confirm_close_tab_desc': 'Cet onglet a un téléchargement actif. Fermer quand même ?',
+  'confirm_close_tab_desc':
+      'Cet onglet a un téléchargement actif. Fermer quand même ?',
   'confirm_close_tab_title': 'Confirmer la fermeture de l\'onglet',
   'connect_btn': 'Connecter',
   'copied': 'Copié dans le presse-papiers !',
@@ -205,7 +215,8 @@ const Map<String, String> frTranslations = {
   'cpu_load_est': 'Charge CPU (est.)',
   'decrypt_btn': 'DÉCHIFFRER',
   'delete_btn': 'Supprimer',
-  'delete_desc': 'Voulez-vous vraiment supprimer ce téléchargement de la liste ?',
+  'delete_desc':
+      'Voulez-vous vraiment supprimer ce téléchargement de la liste ?',
   'delete_download_single': 'Supprimer 1 téléchargement ?',
   'delete_downloads_count': 'Supprimer {count} téléchargements ?',
   'delete_files_disk': 'Supprimer les fichiers téléchargés du disque',
@@ -226,7 +237,8 @@ const Map<String, String> frTranslations = {
   'details_path': 'Chemin d\'enregistrement',
   'details_size': 'Taille du fichier',
   'details_status': 'Statut',
-  'details_threads_warning_desc': 'Changer les threads réinitialisera la progression.',
+  'details_threads_warning_desc':
+      'Changer les threads réinitialisera la progression.',
   'details_threads_warning_title': 'Restructurer les threads de connexion ?',
   'details_title': 'Détails du téléchargement',
   'details_transferred': 'Transféré',
@@ -250,7 +262,8 @@ const Map<String, String> frTranslations = {
   'enter_new_url': 'Saisir la nouvelle URL',
   'export_btn': 'EXPORTER',
   'fetching_streams': 'Récupération des flux disponibles...',
-  'file_missing_msg': 'Fichier manquant sur le disque, déplacé vers l\'onglet Échecs',
+  'file_missing_msg':
+      'Fichier manquant sur le disque, déplacé vers l\'onglet Échecs',
   'file_name_label': 'Nom du fichier :',
   'filename_empty_error': 'Le nom du fichier ne peut pas être vide',
   'filter_all': 'TOUT',
@@ -271,7 +284,8 @@ const Map<String, String> frTranslations = {
   'link_label': 'Lien :',
   'link_updated_success': 'Lien mis à jour avec succès.',
   'loading_playlist': 'Chargement de la liste de lecture...',
-  'media_choice_message': 'Voulez-vous télécharger "{title}" comme vidéo unique ou toute la liste de lecture ?',
+  'media_choice_message':
+      'Voulez-vous télécharger "{title}" comme vidéo unique ou toute la liste de lecture ?',
   'media_choice_playlist': 'Liste de lecture',
   'media_choice_single': 'Vidéo unique',
   'media_choice_title': 'Option de téléchargement',
@@ -291,10 +305,14 @@ const Map<String, String> frTranslations = {
   'onboarding_setup_theme': 'THÈME',
   'onboarding_skip': 'Passer',
   'onboarding_start': 'Démarrer',
-  'onboarding_sub_0': 'Choisissez la langue, le thème et le style d\'interface.',
-  'onboarding_sub_1': 'Téléchargements multi-threads avec reprise intelligente.',
-  'onboarding_sub_2': 'Téléchargez depuis YouTube, Facebook, Twitter, TikTok et plus.',
-  'onboarding_sub_3': 'Prise en charge complète du torrent avec DHT et chiffrement.',
+  'onboarding_sub_0':
+      'Choisissez la langue, le thème et le style d\'interface.',
+  'onboarding_sub_1':
+      'Téléchargements multi-threads avec reprise intelligente.',
+  'onboarding_sub_2':
+      'Téléchargez depuis YouTube, Facebook, Twitter, TikTok et plus.',
+  'onboarding_sub_3':
+      'Prise en charge complète du torrent avec DHT et chiffrement.',
   'onboarding_sub_4': 'Catégorisation automatique et planification.',
   'onboarding_theme_amoled': 'AMOLED',
   'onboarding_theme_dark': 'Sombre',
@@ -316,22 +334,28 @@ const Map<String, String> frTranslations = {
   'pause_selected': 'Mettre en pause les éléments sélectionnés',
   'peers': 'Pairs',
   'permission_allow': 'Autoriser',
-  'permission_battery_desc': 'Autoriser les téléchargements ininterrompus en arrière-plan',
+  'permission_battery_desc':
+      'Autoriser les téléchargements ininterrompus en arrière-plan',
   'permission_battery_opening': 'Ouverture des paramètres système…',
   'permission_battery_title': 'Optimisation de la batterie',
   'permission_continue': 'Continuer',
   'permission_download_location_button': 'Choisir un dossier',
   'permission_download_location_change': 'Changer',
   'permission_download_location_desc': 'Choisissez où enregistrer vos fichiers',
-  'permission_download_location_required': 'Choisissez un dossier de téléchargement pour continuer',
+  'permission_download_location_required':
+      'Choisissez un dossier de téléchargement pour continuer',
   'permission_download_location_title': 'Emplacement de téléchargement',
-  'permission_notifications_desc': 'Recevez une notification une fois les téléchargements terminés',
+  'permission_notifications_desc':
+      'Recevez une notification une fois les téléchargements terminés',
   'permission_notifications_title': 'Notifications',
   'permission_open_settings': 'Ouvrir les paramètres',
-  'permission_permanently_denied': 'Autorisation refusée de manière permanente. Veuillez l\\\\\\\'activer dans les paramètres système.',
-  'permission_storage_desc': 'Enregistrer les fichiers téléchargés sur votre appareil',
+  'permission_permanently_denied':
+      'Autorisation refusée de manière permanente. Veuillez l\\\\\\\'activer dans les paramètres système.',
+  'permission_storage_desc':
+      'Enregistrer les fichiers téléchargés sur votre appareil',
   'permission_storage_title': 'Stockage',
-  'permission_subtitle': 'Autorisez les permissions suivantes pour une meilleure expérience',
+  'permission_subtitle':
+      'Autorisez les permissions suivantes pour une meilleure expérience',
   'permission_title': 'Autorisations de l\'application',
   'popup_blocked': 'Fenêtre intempestive bloquée',
   'private_torrent': 'Torrent privé',
@@ -375,26 +399,33 @@ const Map<String, String> frTranslations = {
   'settings_about_desc': 'Gestionnaire de téléchargements haute performance.',
   'settings_accessibility_title': 'CONTRÔLES D\'ACCESSIBILITÉ',
   'settings_adaptive_threads': 'Nombre de threads adaptatif',
-  'settings_adaptive_threads_sub': 'Ajuster automatiquement le nombre de threads selon la vitesse de téléchargement',
-  'settings_adblock_failed_msg': 'Échec de la mise à jour AdBlock. Vérifiez votre connexion.',
+  'settings_adaptive_threads_sub':
+      'Ajuster automatiquement le nombre de threads selon la vitesse de téléchargement',
+  'settings_adblock_failed_msg':
+      'Échec de la mise à jour AdBlock. Vérifiez votre connexion.',
   'settings_adblock_rules': 'Règles de filtrage chargées',
   'settings_adblock_success_msg': 'Filtres AdBlock mis à jour avec succès !',
   'settings_adblock_title': 'BLOQUEUR DE PUBLICITÉS & FILTRES',
-  'settings_adblock_updating_msg': 'Téléchargement et mise à jour des filtres AdBlock (EasyList)...',
+  'settings_adblock_updating_msg':
+      'Téléchargement et mise à jour des filtres AdBlock (EasyList)...',
   'settings_adv_console': 'Paramètres avancés',
   'settings_alerters': 'Son et alertes',
   'settings_auto_resume': 'Reprise automatique',
   'settings_auto_resume_sub': 'Reprendre les téléchargements au démarrage',
-  'settings_auto_retry': 'Réessayer automatiquement les téléchargements échoués',
+  'settings_auto_retry':
+      'Réessayer automatiquement les téléchargements échoués',
   'settings_auto_retry_sub': 'Réessayer automatiquement en cas d\'échec',
-  'settings_auto_verify_checksum': 'Vérifier automatiquement l\'intégrité du fichier',
-  'settings_auto_verify_checksum_sub': 'Calculer le hachage SHA-256 après chaque téléchargement',
+  'settings_auto_verify_checksum':
+      'Vérifier automatiquement l\'intégrité du fichier',
+  'settings_auto_verify_checksum_sub':
+      'Calculer le hachage SHA-256 après chaque téléchargement',
   'settings_backend_url': 'URL du serveur d\'extraction',
   'settings_backup_sub': 'Archiver et récupérer les journaux de téléchargement',
   'settings_backup_title': 'Sauvegardes du système',
   'settings_bandwidth': 'Réseau et limites de vitesse',
   'settings_bypass_ssl': 'Faire confiance à tous les certificats SSL',
-  'settings_bypass_ssl_sub': 'Contourner la validation SSL (AVERTISSEMENT : Risque MITM)',
+  'settings_bypass_ssl_sub':
+      'Contourner la validation SSL (AVERTISSEMENT : Risque MITM)',
   'settings_chime': 'Sonnerie de fin de téléchargement',
   'settings_chime_sub': 'Jouer un son à la fin d’un téléchargement',
   'settings_classic_ui': 'Mode d\'interface classique',
@@ -408,7 +439,8 @@ const Map<String, String> frTranslations = {
   'settings_default_threads_sub': 'Nombre de connexions parallèles par fichier',
   'settings_developer': 'Développeur',
   'settings_enable_adblock': 'ACTIVER LE BLOQUEUR DE PUB',
-  'settings_enable_adblock_sub': 'Bloquer les publicités, fenêtres surgissantes et scripts de suivi',
+  'settings_enable_adblock_sub':
+      'Bloquer les publicités, fenêtres surgissantes et scripts de suivi',
   'settings_engine_status': 'État du moteur',
   'settings_export': 'Exporter la sauvegarde',
   'settings_firmware': 'Version',
@@ -421,19 +453,23 @@ const Map<String, String> frTranslations = {
   'settings_haptics': 'Retour haptique',
   'settings_haptics_sub': 'Vibrer lors des interactions',
   'settings_https_only': 'Mode HTTPS uniquement',
-  'settings_https_only_sub': 'Mettre à niveau toute navigation http:// vers https:// si possible',
+  'settings_https_only_sub':
+      'Mettre à niveau toute navigation http:// vers https:// si possible',
   'settings_import': 'Importer la sauvegarde',
   'settings_lang': 'Langue',
   'settings_lang_sub': 'Sélectionner la langue de l’application',
   'settings_language': 'Langue',
-  'settings_language_sub': 'Sélectionner la langue d\'affichage de l\'application',
+  'settings_language_sub':
+      'Sélectionner la langue d\'affichage de l\'application',
   'settings_limit_to': 'Mo/s Max',
   'settings_max_channels': 'Téléchargements simultanés max',
   'settings_max_channels_sub': 'Limiter les téléchargements parallèles',
   'settings_network_sec': 'Réseau et sécurité',
   'settings_reduce_visuals': 'Réduire les effets visuels',
-  'settings_reduce_visuals_sub': 'Désactiver le flou et le rayonnement pour de meilleures performances',
-  'settings_reset_confirm_body': 'Êtes-vous sûr de vouloir réinitialiser tous les paramètres aux valeurs par défaut ?',
+  'settings_reduce_visuals_sub':
+      'Désactiver le flou et le rayonnement pour de meilleures performances',
+  'settings_reset_confirm_body':
+      'Êtes-vous sûr de vouloir réinitialiser tous les paramètres aux valeurs par défaut ?',
   'settings_reset_confirm_btn': 'Réinitialiser',
   'settings_reset_confirm_title': 'Réinitialiser les paramètres',
   'settings_reset_done': 'Paramètres réinitialisés avec succès',
@@ -446,11 +482,14 @@ const Map<String, String> frTranslations = {
   'settings_retry_max': 'Tentatives de réessai max',
   'settings_retry_max_sub': 'Nombre de tentatives de réessai automatiques',
   'settings_speed_limit': 'Limite globale de vitesse',
-  'settings_speed_limit_sub': 'Définir la limite globale de vitesse de téléchargement',
+  'settings_speed_limit_sub':
+      'Définir la limite globale de vitesse de téléchargement',
   'settings_subfolders': 'Dossiers catégorisés',
-  'settings_subfolders_sub': 'Enregistrer les fichiers classés dans des sous-dossiers',
+  'settings_subfolders_sub':
+      'Enregistrer les fichiers classés dans des sous-dossiers',
   'settings_text_scaling': 'MISE À L\'ÉCHELLE DU TEXTE',
-  'settings_text_scaling_sub': 'Ajuster dynamiquement la taille de la police dans l\'application',
+  'settings_text_scaling_sub':
+      'Ajuster dynamiquement la taille de la police dans l\'application',
   'settings_theme': 'Mode de thème',
   'settings_theme_sub': 'Choisir le thème d’apparence',
   'settings_ua': 'User-Agent personnalisé',
@@ -459,9 +498,11 @@ const Map<String, String> frTranslations = {
   'settings_update_adblock_hosts': 'METTRE À JOUR ADBLOCK',
   'settings_updating_adblock_hosts': 'MISE À JOUR...',
   'settings_use_local_yt_fallback': 'Activer l\'extracteur local de secours',
-  'settings_use_local_yt_fallback_sub': 'Utiliser la logique de téléchargement interne si le service d\'extraction distant est hors ligne',
+  'settings_use_local_yt_fallback_sub':
+      'Utiliser la logique de téléchargement interne si le service d\'extraction distant est hors ligne',
   'settings_use_remote_backend': 'Utiliser le serveur d\'extraction distant',
-  'settings_use_remote_backend_sub': 'Résoudre les sources de téléchargement média via un service API web personnalisé',
+  'settings_use_remote_backend_sub':
+      'Résoudre les sources de téléchargement média via un service API web personnalisé',
   'settings_visuals': 'Effets visuels',
   'settings_wifi_only': 'Mode Wi-Fi uniquement',
   'settings_wifi_only_sub': 'Mettre en pause sur réseau mobile',
@@ -522,7 +563,8 @@ const Map<String, String> frTranslations = {
   'use_advance_download_label': 'Utiliser la méthode de téléchargement avancée',
   'video_label': 'VIDÉO',
   'wifi_only_label': 'Wi-Fi uniquement',
-  'yt_legal_warning': 'Avis : Téléchargez du contenu uniquement si vous en avez le droit.',
+  'yt_legal_warning':
+      'Avis : Téléchargez du contenu uniquement si vous en avez le droit.',
   'yt_playlist': 'LISTE DE LECTURE YOUTUBE',
   'yt_video_quality': 'QUALITÉ VIDÉO YOUTUBE',
 };

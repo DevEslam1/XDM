@@ -1,7 +1,9 @@
+import 'dart:math' show max;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'circuit_breaker.dart';
 import 'mirror_health_store.dart';
+import 'protocol_cache.dart';
 import 'retry_engine.dart';
 
 List<String> orderMirrorUrls(List<String> urls, {String? primary}) {
@@ -31,6 +33,7 @@ class MirrorFailover {
   final List<String> _urls;
   int _index = 0;
   int _switches = 0;
+  ProtocolSupport? _protocolHint;
 
   /// ERR-RESILIENCE-2.2: Per-mirror circuit breaker. A mirror whose circuit
   /// opens is skipped on subsequent runs until its openTimeout (30 min) elapses.
@@ -40,36 +43,119 @@ class MirrorFailover {
   bool get hasAlternatives => _urls.length > 1;
   int get remainingAlternatives => _urls.length - 1 - _index;
   int get mirrorSwitches => _switches;
+  ProtocolSupport? get protocolHint => _protocolHint;
 
-  /// Records a successful download for the currently active mirror URL.
-  Future<void> reportSuccess() async {
-    if (_urls.isEmpty) return;
-    await MirrorHealthStore.recordSuccess(_urls[_index]);
+  int _compareCandidates(String urlA, String urlB) {
+    final speedA = MirrorHealthStore.getPersistedSpeed(urlA);
+    final speedB = MirrorHealthStore.getPersistedSpeed(urlB);
+
+    final protoA = ProtocolCache.get(urlA);
+    final protoB = ProtocolCache.get(urlB);
+
+    final maxSpeed = max(speedA, speedB);
+    if (maxSpeed > 0) {
+      final diffRatio = (speedA - speedB).abs() / maxSpeed;
+      if (diffRatio <= 0.15) {
+        final isH2A =
+            protoA == ProtocolSupport.http2 || protoA == ProtocolSupport.http3;
+        final isH2B =
+            protoB == ProtocolSupport.http2 || protoB == ProtocolSupport.http3;
+        if (isH2A != isH2B) {
+          return isH2A ? -1 : 1;
+        }
+      }
+    }
+
+    return speedB.compareTo(speedA);
   }
 
-  /// Advances to the next available mirror URL.
-  ///
-  /// Returns the new active URL, or `null` if all mirrors have been exhausted.
+  /// Records a successful download for the currently active mirror URL.
+  Future<void> reportSuccess({double speedBps = 0.0}) async {
+    if (_urls.isEmpty) return;
+    await MirrorHealthStore.recordSuccess(_urls[_index], speedBps: speedBps);
+  }
+
+  /// Advances to the next available mirror URL, respecting circuit state and speed/protocol ranking.
   String? advance() {
+    if (_urls.isEmpty) return null;
+
+    final validUrls =
+        _urls.where((u) => !MirrorHealthStore.isBlacklisted(u)).toList();
+    final candidates =
+        validUrls.isNotEmpty ? validUrls : List<String>.from(_urls);
+
+    var available = candidates.where((u) {
+      final cb = _circuits.putIfAbsent(
+        u,
+        () => CircuitBreaker(
+          failureThreshold: 3,
+          openTimeout: const Duration(minutes: 30),
+        ),
+      );
+      return cb.allowRequest();
+    }).toList();
+
+    if (available.isEmpty) {
+      debugPrint(
+        '[MirrorFailover] Warning: All mirror circuits open! Falling back to round-robin.',
+      );
+      available = candidates;
+    }
+
+    available.sort(_compareCandidates);
+
+    for (final candidate in available) {
+      if (candidate != activeUrl) {
+        _index = _urls.indexOf(candidate);
+        if (_index == -1) _index = 0;
+        _switches++;
+        _protocolHint = ProtocolCache.get(candidate);
+        debugPrint(
+          '[MirrorFailover] advanced to mirror $_index: ${_urls[_index]} (proto: $_protocolHint)',
+        );
+        return candidate;
+      }
+    }
+
     if (_index + 1 >= _urls.length) return null;
     _index++;
     _switches++;
-    debugPrint('[MirrorFailover] advanced to mirror $_index: ${_urls[_index]}');
+    _protocolHint = ProtocolCache.get(_urls[_index]);
     return _urls[_index];
   }
 
-  Future<String?> run(Future<void> Function(String url) action) async {
+  void reportSlowMirror(String slowUrl, String fastUrl) {
+    debugPrint(
+      '[MirrorFailover] Slow mirror reported: $slowUrl -> Fast mirror: $fastUrl',
+    );
+    MirrorHealthStore.recordFailure(slowUrl);
+    final slowIdx = _urls.indexOf(slowUrl);
+    final fastIdx = _urls.indexOf(fastUrl);
+    if (fastIdx != -1 && _index == slowIdx) {
+      _index = fastIdx;
+      _switches++;
+      _protocolHint = ProtocolCache.get(fastUrl);
+    }
+  }
+
+  Future<String?> run(
+    Future<void> Function(String url) action, {
+    double measuredBytesPerSec = 0.0,
+  }) async {
     final validUrls =
         _urls.where((u) => !MirrorHealthStore.isBlacklisted(u)).toList();
-    final candidateUrls = validUrls.isNotEmpty ? validUrls : _urls;
+    final candidateUrls = validUrls.isNotEmpty
+        ? List<String>.from(validUrls)
+        : List<String>.from(_urls);
+
+    candidateUrls.sort(_compareCandidates);
 
     for (var i = 0; i < candidateUrls.length; i++) {
       final url = candidateUrls[i];
       if (i > 0) {
         _switches++;
       }
-      // ERR-RESILIENCE-2.2: Skip mirrors with an open circuit (recent
-      // repeated failures). Open circuits expire after 30 minutes.
+
       final circuit = _circuits.putIfAbsent(
         url,
         () => CircuitBreaker(
@@ -82,9 +168,6 @@ class MirrorFailover {
         continue;
       }
       try {
-        // ERR-RESILIENCE-2.1: Per-mirror transient retry before advancing.
-        // Non-transient HTTP errors (4xx except 408/429) skip retry and move
-        // to the next mirror immediately.
         await RetryEngine(
           maxRetries: 2,
           baseDelay: const Duration(seconds: 2),
@@ -94,19 +177,23 @@ class MirrorFailover {
           () => action(url),
           onRetry: (error, attempt, delay) {
             debugPrint(
-                '[MirrorFailover] mirror $url attempt $attempt failed ($error); retrying in ${delay.inMilliseconds}ms');
+              '[MirrorFailover] mirror $url attempt $attempt failed ($error); retrying in ${delay.inMilliseconds}ms',
+            );
           },
         );
-        await MirrorHealthStore.recordSuccess(url);
+        await MirrorHealthStore.recordSuccess(url,
+            speedBps: measuredBytesPerSec);
+        await MirrorHealthStore.recordSpeed(url, measuredBytesPerSec);
         circuit.recordSuccess();
-        _index = i;
+        _index = _urls.indexOf(url);
+        if (_index == -1) _index = 0;
+        _protocolHint = ProtocolCache.get(url);
         return url;
       } catch (e) {
         await MirrorHealthStore.recordFailure(url);
         circuit.recordFailure();
         if (e is DioException) {
           final status = e.response?.statusCode;
-          // Non-retryable HTTP errors
           if (status != null &&
               status >= 400 &&
               status < 500 &&

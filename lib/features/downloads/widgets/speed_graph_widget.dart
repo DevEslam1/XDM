@@ -60,136 +60,138 @@ class SpeedGraphWidget extends StatelessWidget {
       (i) => FlSpot(i.toDouble(), displayHistory[i].toDouble()),
     );
 
-    return DmxCardShell(
-      accent: color,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.speed_rounded, color: color, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Download Speed (60s)',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black87,
+    return RepaintBoundary(
+      child: DmxCardShell(
+        accent: color,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.speed_rounded, color: color, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Download Speed (60s)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                Text(
-                  '${formatBytes(currentSpeed)}/s',
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                    ],
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatItem(
-                    'Current', '${formatBytes(currentSpeed)}/s', color, isDark),
-                _buildStatItem('Average', '${formatBytes(avgSpeed)}/s',
-                    Colors.grey, isDark),
-                _buildStatItem('Peak', '${formatBytes(peakSpeed)}/s',
-                    Colors.amber, isDark),
-              ],
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: height,
-              child: LineChart(
-                LineChartData(
-                  minX: 0,
-                  maxX: 59,
-                  minY: 0,
-                  maxY: maxY.toDouble(),
-                  gridData: FlGridData(
-                    show: true,
-                    drawVerticalLine: false,
-                    getDrawingHorizontalLine: (value) => FlLine(
-                      color: isDark ? Colors.white10 : Colors.black12,
-                      strokeWidth: 1,
-                    ),
-                  ),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    topTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 20,
-                        interval: 15,
-                        getTitlesWidget: (value, meta) {
-                          final secs = 60 - value.toInt();
-                          if (secs == 60) {
-                            return const Text('60s',
-                                style: TextStyle(fontSize: 10));
-                          }
-                          if (secs == 30) {
-                            return const Text('30s',
-                                style: TextStyle(fontSize: 10));
-                          }
-                          if (secs == 0) {
-                            return const Text('now',
-                                style: TextStyle(fontSize: 10));
-                          }
-                          return const Text('');
-                        },
-                      ),
-                    ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 50,
-                        getTitlesWidget: (value, meta) {
-                          if (value == 0) {
-                            return const Text('0',
-                                style: TextStyle(fontSize: 9));
-                          }
-                          if (value == maxY) {
-                            return Text(
-                              formatBytes(value.toInt()),
-                              style: const TextStyle(fontSize: 9),
-                            );
-                          }
-                          return const Text('');
-                        },
-                      ),
-                    ),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: spots,
-                      isCurved: true,
+                  Text(
+                    '${formatBytes(currentSpeed)}/s',
+                    style: TextStyle(
                       color: color,
-                      barWidth: 2.5,
-                      isStrokeCapRound: true,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        color: color.withValues(alpha: 0.15),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStatItem('Current', '${formatBytes(currentSpeed)}/s',
+                      color, isDark),
+                  _buildStatItem('Average', '${formatBytes(avgSpeed)}/s',
+                      Colors.grey, isDark),
+                  _buildStatItem('Peak', '${formatBytes(peakSpeed)}/s',
+                      Colors.amber, isDark),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: height,
+                child: LineChart(
+                  LineChartData(
+                    minX: 0,
+                    maxX: 59,
+                    minY: 0,
+                    maxY: maxY.toDouble(),
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      getDrawingHorizontalLine: (value) => FlLine(
+                        color: isDark ? Colors.white10 : Colors.black12,
+                        strokeWidth: 1,
                       ),
                     ),
-                  ],
+                    titlesData: FlTitlesData(
+                      show: true,
+                      topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false)),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 20,
+                          interval: 15,
+                          getTitlesWidget: (value, meta) {
+                            final secs = 60 - value.toInt();
+                            if (secs == 60) {
+                              return const Text('60s',
+                                  style: TextStyle(fontSize: 10));
+                            }
+                            if (secs == 30) {
+                              return const Text('30s',
+                                  style: TextStyle(fontSize: 10));
+                            }
+                            if (secs == 0) {
+                              return const Text('now',
+                                  style: TextStyle(fontSize: 10));
+                            }
+                            return const Text('');
+                          },
+                        ),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 50,
+                          getTitlesWidget: (value, meta) {
+                            if (value == 0) {
+                              return const Text('0',
+                                  style: TextStyle(fontSize: 9));
+                            }
+                            if (value == maxY) {
+                              return Text(
+                                formatBytes(value.toInt()),
+                                style: const TextStyle(fontSize: 9),
+                              );
+                            }
+                            return const Text('');
+                          },
+                        ),
+                      ),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    lineBarsData: [
+                      LineChartBarData(
+                        spots: spots,
+                        isCurved: true,
+                        color: color,
+                        barWidth: 2.5,
+                        isStrokeCapRound: true,
+                        dotData: const FlDotData(show: false),
+                        belowBarData: BarAreaData(
+                          show: true,
+                          color: color.withValues(alpha: 0.15),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

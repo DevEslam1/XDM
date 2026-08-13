@@ -27,6 +27,11 @@ import 'core/services/youtube_service.dart';
 import 'core/services/remote_api_service.dart';
 import 'features/browser/services/page_intent_classifier.dart';
 import 'features/downloads/provider/download_provider.dart';
+import 'features/downloads/provider/download_list_provider.dart';
+import 'features/downloads/provider/download_queue_provider.dart';
+import 'features/downloads/provider/download_filter_provider.dart';
+import 'features/downloads/provider/torrent_provider.dart';
+import 'features/downloads/provider/download_coordinator.dart';
 import 'features/settings/provider/settings_provider.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
 import 'features/onboarding/screens/permission_request_screen.dart';
@@ -36,13 +41,16 @@ import 'core/services/download_engine.dart';
 import 'core/services/frame_watchdog.dart';
 import 'core/services/power_monitor.dart';
 import 'core/services/protocol_cache.dart';
+import 'core/services/network/cookie_cache.dart';
 import 'core/services/widget_deep_link.dart';
+import 'core/di/injection.dart';
 
 class _ScreenObserver with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final isResumed = state == AppLifecycleState.resumed;
     DownloadEngine.appInForeground = isResumed;
+    DownloadEngine.isInBackground = !isResumed;
     PowerMonitor.setScreenOn(isResumed);
     if (isResumed) {
       PerformanceMonitor.instance.start();
@@ -51,6 +59,12 @@ class _ScreenObserver with WidgetsBindingObserver {
       PerformanceMonitor.instance.stop();
       FrameWatchdog.stop();
     }
+  }
+
+  @override
+  void didHaveMemoryPressure() {
+    CookieCache().clear();
+    debugPrint('[MemoryPressure] Cleared non-essential caches');
   }
 }
 
@@ -159,14 +173,17 @@ Future<void> main(List<String> args) async {
       // ── Crash reporting: initializes Sentry when SENTRY_DSN is set ──
       // No-op otherwise; errors before this point go to the console logger.
       await CrashReportingService.init();
+      await configureDependencies();
 
       // ── PHASE 4: Build providers (no blocking I/O) and show UI immediately ──
       final databaseService = DatabaseService();
       final notificationService = NotificationService();
+      final downloadEngine = getIt<DownloadEngine>();
       final downloadProvider = DownloadProvider(
         databaseService: databaseService,
         settingsProvider: settingsProvider,
         notificationService: notificationService,
+        downloadEngine: downloadEngine,
       );
 
       // Fast share-intent detection (bounded by 150ms timeout)
@@ -398,13 +415,40 @@ class DmxApp extends StatelessWidget {
         Provider<DatabaseService>.value(value: databaseService),
         ChangeNotifierProvider<SettingsProvider>.value(value: settingsProvider),
         ChangeNotifierProvider<DownloadProvider>.value(value: downloadProvider),
+        ChangeNotifierProvider<DownloadListProvider>(
+            create: (_) => getIt<DownloadListProvider>()),
+        ChangeNotifierProvider<DownloadQueueProvider>(
+            create: (_) => getIt<DownloadQueueProvider>()),
+        ChangeNotifierProvider<DownloadFilterProvider>(
+            create: (_) => getIt<DownloadFilterProvider>()),
+        ChangeNotifierProvider<TorrentProvider>(
+            create: (_) => getIt<TorrentProvider>()),
+        ChangeNotifierProvider<DownloadCoordinator>(
+            create: (_) => getIt<DownloadCoordinator>()),
       ],
-      child: Consumer<SettingsProvider>(
-        builder: (context, settings, child) {
-          final isDark = settings.isDarkMode;
-          final currentTheme = settings.currentThemeMode == ThemeMode.light
+      child: Selector<
+          SettingsProvider,
+          ({
+            ThemeMode mode,
+            bool isAmoled,
+            String lang,
+            bool showOnboarding,
+            String? customDownloadPath,
+            bool isDark,
+          })>(
+        selector: (_, s) => (
+          mode: s.currentThemeMode,
+          isAmoled: s.isAmoledMode,
+          lang: s.languageCode,
+          showOnboarding: s.showOnboarding,
+          customDownloadPath: s.customDownloadPath,
+          isDark: s.isDarkMode,
+        ),
+        builder: (context, themeData, child) {
+          final isDark = themeData.isDark;
+          final currentTheme = themeData.mode == ThemeMode.light
               ? AppTheme.lightTheme
-              : (settings.isAmoledMode
+              : (themeData.isAmoled
                   ? AppTheme.amoledTheme
                   : AppTheme.darkTheme);
 
@@ -413,20 +457,19 @@ class DmxApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             navigatorKey: DmxApp.navigatorKey,
             theme: AppTheme.lightTheme,
-            darkTheme: settings.isAmoledMode
-                ? AppTheme.amoledTheme
-                : AppTheme.darkTheme,
-            themeMode: settings.currentThemeMode,
-            locale: Locale(settings.languageCode),
+            darkTheme:
+                themeData.isAmoled ? AppTheme.amoledTheme : AppTheme.darkTheme,
+            themeMode: themeData.mode,
+            locale: Locale(themeData.lang),
             home: AnimatedTheme(
               data: currentTheme,
               duration: const Duration(milliseconds: 400),
               curve: Curves.easeInOut,
-              child: settings.showOnboarding
+              child: themeData.showOnboarding
                   ? const OnboardingScreen()
                   : (!kIsWeb &&
                           Platform.isAndroid &&
-                          (settings.customDownloadPath?.isEmpty ?? true))
+                          (themeData.customDownloadPath?.isEmpty ?? true))
                       ? const PermissionRequestScreen()
                       : MainNavigationContainer(
                           initialUrl: initialUrl,
@@ -439,7 +482,7 @@ class DmxApp extends StatelessWidget {
                 child: AnnotatedRegion<SystemUiOverlayStyle>(
                   value: AppTheme.statusBar(
                     isDark,
-                    isAmoled: settings.isAmoledMode,
+                    isAmoled: themeData.isAmoled,
                   ),
                   child: child!,
                 ),
@@ -515,6 +558,12 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
           } catch (_) {
             return null;
           }
+        },
+      ).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          debugPrint(
+              '[TorrentResumeStore] background saveAll timed out after 5s');
         },
       );
     } catch (e) {
@@ -736,7 +785,9 @@ class _FpsOverlayState extends State<_FpsOverlay> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPersistentFrameCallback((_) {
-      _frameCount++;
+      if (mounted) {
+        _frameCount++;
+      }
     });
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:synchronized/synchronized.dart';
+import 'download_engine.dart';
 
 /// I/O failure inside the writer. The engine maps message heuristics
 /// (ENOSPC / "space") onto [InsufficientStorageException].
@@ -46,7 +47,7 @@ class PositionalFileWriter {
     required this.totalSize,
     required this.threadCount,
     int? bufferSize,
-  })  : _bufferSize = bufferSize ?? 256 * 1024,
+  })  : _bufferSize = bufferSize ?? 128 * 1024,
         _highWater = List<int>.filled(threadCount < 1 ? 1 : threadCount, 0);
 
   final String path;
@@ -206,6 +207,18 @@ class PositionalFileWriter {
     try {
       await raf.setPosition(pos);
       await raf.writeFrom(bytes);
+    } on FileSystemException catch (e) {
+      // Detect disk-full specifically
+      final osError = e.osError;
+      if (osError != null &&
+          (osError.errorCode == 28 || osError.errorCode == 112)) {
+        throw const InsufficientStorageException();
+      }
+      if (e.message.toLowerCase().contains('no space left') ||
+          e.message.toLowerCase().contains('not enough space')) {
+        throw const InsufficientStorageException();
+      }
+      throw PositionalFileWriterException('write failed: $e');
     } catch (e) {
       throw PositionalFileWriterException('write failed: $e');
     }

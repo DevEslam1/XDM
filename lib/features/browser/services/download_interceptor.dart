@@ -294,7 +294,8 @@ class DownloadInterceptor {
   }) async {
     // Debounce rapid interceptions for identical URLs
     if (_pendingInterceptions.contains(url)) {
-      return const InterceptDownloadResult(InterceptDownloadStatus.alreadyInProgress);
+      return const InterceptDownloadResult(
+          InterceptDownloadStatus.alreadyInProgress);
     }
     _pendingInterceptions.add(url);
     Timer(const Duration(seconds: 2), () {
@@ -428,7 +429,8 @@ class DownloadInterceptor {
   }
 
   /// Queues a single download with priority integration.
-  Future<void> queueDownload(String url, {int priority = 0, String? name}) async {
+  Future<void> queueDownload(String url,
+      {int priority = 0, String? name}) async {
     final downloadProvider = resolveDownloadProvider();
     final fileName = name ?? fileNameFromUrl(url);
     final category = resolveCategorySmart(url: url, fileName: fileName);

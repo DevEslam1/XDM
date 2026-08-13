@@ -105,6 +105,7 @@ class ReaderModeService {
     try {
       final result = await controller
           .evaluateJavascript(source: _extractJs)
+          .timeout(const Duration(seconds: 10))
           .catchError((_) => null);
       if (result == null || result == 'null') return null;
       final data = jsonDecode(result.toString()) as Map<String, dynamic>;

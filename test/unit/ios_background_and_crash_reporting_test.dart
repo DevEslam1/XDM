@@ -1,5 +1,9 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/ios_background_service.dart';
+import 'package:dmx/core/services/ios_background_capability.dart';
+import 'package:dmx/core/services/background_service.dart';
 import 'package:dmx/core/services/crash_reporting_service.dart';
 
 void main() {
@@ -30,6 +34,23 @@ void main() {
         () async {
       expect(await IosBackgroundService.pauseNativeDownload('t1'), isFalse);
       expect(await IosBackgroundService.cancelNativeDownload('t1'), isFalse);
+    });
+  });
+
+  group('IosBackgroundCapability & BackgroundService Integration', () {
+    test('IosBackgroundCapability isSupported returns false on non-iOS',
+        () async {
+      final supported = await IosBackgroundCapability.instance.isSupported();
+      expect(supported, isFalse);
+    });
+
+    test('BackgroundService start and stop run safely', () async {
+      await BackgroundService.start();
+      await BackgroundService.stop();
+      expect(
+        BackgroundService.isSupported,
+        !kIsWeb && (Platform.isAndroid || Platform.isIOS),
+      );
     });
   });
 

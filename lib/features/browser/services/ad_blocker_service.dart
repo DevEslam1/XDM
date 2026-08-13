@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -106,6 +107,8 @@ class AdBlockerService {
     return false;
   }
 
+  static const _lastUpdateKey = 'last_adblock_update';
+
   Future<void> init() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -119,11 +122,39 @@ class AdBlockerService {
       // domains from disk. Without this, the adblocker relies only on
       // hardcoded hosts until the next scheduled filter update.
       await AdBlockFilterUpdater().init();
+      await autoUpdateFilters();
     } catch (e) {
       _log.warning('AdBlocker init error: $e');
       _enabled = false;
     }
     _rebuildContentBlockers();
+  }
+
+  Future<void> autoUpdateFilters() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastUpdateMs = prefs.getInt(_lastUpdateKey) ?? 0;
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+      if (nowMs - lastUpdateMs > sevenDaysMs) {
+        _log.info(
+            'AdBlock filters older than 7 days, running background update...');
+        unawaited(
+          updateFilters(force: true).then((success) async {
+            if (success) {
+              await prefs.setInt(
+                  _lastUpdateKey, DateTime.now().millisecondsSinceEpoch);
+            }
+          }).catchError((e) {
+            _log.warning(
+                'Background filter update failed (keeping existing filters): $e');
+          }),
+        );
+      }
+    } catch (e) {
+      _log.warning('Error checking autoUpdateFilters: $e');
+    }
   }
 
   Future<void> setEnabled(bool value) async {

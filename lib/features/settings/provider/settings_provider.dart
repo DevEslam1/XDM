@@ -203,7 +203,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool categoryFolders = false;
   bool antiFingerprinting = true;
 
-  int _maxTabs = 15;
+  int _maxTabs = 10;
   int get maxTabs => _maxTabs;
   set maxTabs(int value) {
     _maxTabs = value;
@@ -492,7 +492,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
           _prefs.getBool(_incognitoEnabledKey) ?? incognitoEnabled;
       desktopMode = _prefs.getBool(_desktopModeKey) ?? desktopMode;
       pinchToZoom = _prefs.getBool(_pinchToZoomKey) ?? pinchToZoom;
-      _maxTabs = _prefs.getInt(_maxTabsKey) ?? 15;
+      _maxTabs = _prefs.getInt(_maxTabsKey) ?? 10;
       _historyMaxEntries = _prefs.getInt(_historyMaxEntriesKey) ?? 500;
       saveBrowserHistory =
           _prefs.getBool(_saveBrowserHistoryKey) ?? saveBrowserHistory;
@@ -1262,7 +1262,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     useRemoteBackend = true;
     useLocalYtFallback = false;
     resumeIntegrityCheck = true;
-    _maxTabs = 15;
+    _maxTabs = 10;
     _historyMaxEntries = 500;
     developerMode = false;
     antiFingerprinting = true;

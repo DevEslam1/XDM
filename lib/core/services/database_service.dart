@@ -5,7 +5,9 @@ import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
 
 import 'database/app_database.dart';
+import 'download_engine.dart';
 import 'logging_service.dart';
+import 'power_monitor.dart';
 import '../../features/downloads/models/download_task.dart';
 import '../../features/browser/models/bookmark.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -87,6 +89,7 @@ class DatabaseService {
       final swCheckpoint = Stopwatch()..start();
       try {
         await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
+        await _db.customStatement('PRAGMA optimize');
         swCheckpoint.stop();
         if (swCheckpoint.elapsedMilliseconds > 500) {
           _log.info(
@@ -704,7 +707,20 @@ class DatabaseService {
 
   Future<void> saveTaskDebounced(DownloadTask task) async {
     _pendingProgressSaves[task.id] = task;
-    _dbBatchTimer ??= Timer(const Duration(seconds: 5), flushPendingSaves);
+
+    // Higher threshold = fewer flushes
+    if (_pendingProgressSaves.length >= 20) {
+      await flushPendingSaves();
+      return;
+    }
+
+    final isBackground =
+        DownloadEngine.isInBackground || PowerMonitor.screenOff;
+    final interval = isBackground
+        ? const Duration(seconds: 30)
+        : const Duration(seconds: 12);
+
+    _dbBatchTimer ??= Timer(interval, flushPendingSaves);
   }
 
   Future<void> flushImmediately() => flushPendingSaves();
@@ -855,7 +871,13 @@ class DatabaseService {
     // this defaulted to 200 while the cap could be set higher by the user,
     // causing entries to be invisible in the UI even though they existed
     // in the database.
-    final effectiveMax = max ?? SettingsProvider.instance.historyMaxEntries;
+    int effectiveMax;
+    try {
+      await SettingsProvider.instance.ensureLoaded();
+      effectiveMax = max ?? SettingsProvider.instance.historyMaxEntries;
+    } catch (_) {
+      effectiveMax = max ?? 500; // safe default
+    }
     final query = _db.select(_db.browserHistory)
       ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
       ..limit(effectiveMax);
@@ -943,7 +965,13 @@ class DatabaseService {
       }
     });
 
-    final maxHistory = SettingsProvider.instance.historyMaxEntries;
+    int maxHistory;
+    try {
+      await SettingsProvider.instance.ensureLoaded();
+      maxHistory = SettingsProvider.instance.historyMaxEntries;
+    } catch (_) {
+      maxHistory = 500;
+    }
     final countResult = await _db
         .customSelect(
           'SELECT COUNT(*) as cnt FROM browser_history',

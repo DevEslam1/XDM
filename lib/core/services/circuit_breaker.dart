@@ -84,8 +84,7 @@ class CircuitBreaker {
   }) async {
     if (!allowRequest()) {
       final remaining = isOpen
-          ? openTimeout -
-              _clock().difference(_lastStateChange).abs()
+          ? openTimeout - _clock().difference(_lastStateChange).abs()
           : halfOpenTimeout;
       throw CircuitOpenException(
         service: service,

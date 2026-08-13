@@ -51,7 +51,8 @@ const Map<String, String> deTranslations = {
   'browser_clear': 'Löschen',
   'browser_clear_btn': 'Löschen',
   'browser_clear_history_btn': 'Verlauf löschen',
-  'browser_clear_history_content': 'Möchten Sie wirklich den gesamten Browserverlauf löschen?',
+  'browser_clear_history_content':
+      'Möchten Sie wirklich den gesamten Browserverlauf löschen?',
   'browser_clear_history_desc': 'Möchten Sie den Verlauf wirklich löschen?',
   'browser_clear_history_title': 'VERLAUF LÖSCHEN?',
   'browser_clear_search': 'SUCHE LÖSCHEN',
@@ -116,13 +117,15 @@ const Map<String, String> deTranslations = {
   'browser_no_alternative_streams': 'Keine alternativen Streams erkannt',
   'browser_no_bookmarks': 'Noch keine Lesezeichen',
   'browser_no_bookmarks_desc': 'Tippen Sie auf +, um Favoriten zu speichern',
-  'browser_no_downloads_desc': 'Heruntergeladene Dateien werden hier angezeigt.',
+  'browser_no_downloads_desc':
+      'Heruntergeladene Dateien werden hier angezeigt.',
   'browser_no_downloads_yet': 'Noch keine Downloads',
   'browser_no_history_desc': 'Besuchte Webseiten werden hier aufgelistet.',
   'browser_no_history_found': 'Kein Verlauf gefunden',
   'browser_no_results_for': 'Keine Ergebnisse für',
   'browser_no_scripts': 'Noch keine Skripte',
-  'browser_no_scripts_desc': 'Skripte hinzufügen, die auf Seiten ausgeführt werden',
+  'browser_no_scripts_desc':
+      'Skripte hinzufügen, die auf Seiten ausgeführt werden',
   'browser_offline_page': 'Offline_Seite',
   'browser_page_save_error': 'Fehler beim Speichern der Seite',
   'browser_page_saved': 'Seite erfolgreich gespeichert',
@@ -146,7 +149,8 @@ const Map<String, String> deTranslations = {
   'browser_search_or_enter_url': 'Suchen oder URL eingeben...',
   'browser_search_web': 'Im Web suchen...',
   'browser_select_video_quality': 'VIDEOQUALITÄT AUSWÄHLEN',
-  'browser_single_and_playlist': 'Dieser Link enthält sowohl ein Einzelvideo als auch eine Wiedergabeliste.',
+  'browser_single_and_playlist':
+      'Dieser Link enthält sowohl ein Einzelvideo als auch eine Wiedergabeliste.',
   'browser_single_video': 'Einzelnes Video',
   'browser_sniff_description': 'Erkennt Mediendateien und Dokumente dynamisch',
   'browser_status_active': 'AKTIV',
@@ -169,7 +173,8 @@ const Map<String, String> deTranslations = {
   'browser_youtube_video': 'YouTube Video',
   'btn_install_now': 'Jetzt installieren',
   'btn_later': 'Später',
-  'bypass_ssl_dialog_body': 'Dadurch sind alle Downloads Man-in-the-Middle-Angriffen ',
+  'bypass_ssl_dialog_body':
+      'Dadurch sind alle Downloads Man-in-the-Middle-Angriffen ',
   'bypass_ssl_dialog_confirm': 'Ich verstehe das Risiko',
   'bypass_ssl_dialog_title': 'SSL-Prüfung deaktivieren?',
   'cancel': 'Abbrechen',
@@ -185,7 +190,8 @@ const Map<String, String> deTranslations = {
   'clear_history': 'Verlauf löschen',
   'clear_history_logs': 'VERLAUFSPROTOKOLLE LÖSCHEN',
   'clear_search': 'Suche löschen',
-  'clipboard_desc': 'XDM hat einen Download-Link in Ihrer Zwischenablage erkannt:',
+  'clipboard_desc':
+      'XDM hat einen Download-Link in Ihrer Zwischenablage erkannt:',
   'clipboard_detected': 'Link in Zwischenablage erkannt',
   'clipboard_establish': 'Herunterladen',
   'clipboard_ignore': 'Ignorieren',
@@ -197,7 +203,8 @@ const Map<String, String> deTranslations = {
   'completed_transmissions_header': 'VERLAUF / ABGESCHLOSSEN',
   'config_header': 'Konfiguration',
   'confirm': 'Bestätigen',
-  'confirm_close_tab_desc': 'Dieser Tab hat einen aktiven Download. Trotzdem schließen?',
+  'confirm_close_tab_desc':
+      'Dieser Tab hat einen aktiven Download. Trotzdem schließen?',
   'confirm_close_tab_title': 'Tab-Schließung bestätigen',
   'connect_btn': 'Verbinden',
   'copied': 'In die Zwischenablage kopiert!',
@@ -205,11 +212,13 @@ const Map<String, String> deTranslations = {
   'cpu_load_est': 'CPU-Auslastung (geschätzt)',
   'decrypt_btn': 'ENTSCHLÜSSELN',
   'delete_btn': 'Löschen',
-  'delete_desc': 'Möchten Sie diesen Download wirklich aus der Liste entfernen?',
+  'delete_desc':
+      'Möchten Sie diesen Download wirklich aus der Liste entfernen?',
   'delete_download_single': '1 Download löschen?',
   'delete_downloads_count': '{count} Downloads löschen?',
   'delete_files_disk': 'Heruntergeladene Dateien von der Festplatte löschen',
-  'delete_files_label': 'Heruntergeladene Dateien/Teile von der Festplatte löschen',
+  'delete_files_label':
+      'Heruntergeladene Dateien/Teile von der Festplatte löschen',
   'delete_success': 'Download erfolgreich gelöscht',
   'delete_title': 'Download löschen',
   'deselect_all': 'AUSWAHL AUFHEBEN',
@@ -226,7 +235,8 @@ const Map<String, String> deTranslations = {
   'details_path': 'Speicherpfad',
   'details_size': 'Dateigröße',
   'details_status': 'Status',
-  'details_threads_warning_desc': 'Das Ändern der Verbindungs-Threads setzt den Fortschritt zurück.',
+  'details_threads_warning_desc':
+      'Das Ändern der Verbindungs-Threads setzt den Fortschritt zurück.',
   'details_threads_warning_title': 'Verbindungs-Threads ändern?',
   'details_title': 'Download-Details',
   'details_transferred': 'Übertragen',
@@ -250,12 +260,14 @@ const Map<String, String> deTranslations = {
   'enter_new_url': 'Neue URL eingeben',
   'export_btn': 'EXPORTIEREN',
   'fetching_streams': 'Verfügbare Streams werden abgerufen...',
-  'file_missing_msg': 'Datei fehlt auf dem Datenträger, in die Registerkarte "Fehlgeschlagen" verschoben',
+  'file_missing_msg':
+      'Datei fehlt auf dem Datenträger, in die Registerkarte "Fehlgeschlagen" verschoben',
   'file_name_label': 'Dateiname:',
   'filename_empty_error': 'Dateiname darf nicht leer sein',
   'filter_all': 'ALLE',
   'filter_torrents': 'TORRENTS',
-  'finished_logs_cataloged': 'Abgeschlossene Protokolle werden hier katalogisiert.',
+  'finished_logs_cataloged':
+      'Abgeschlossene Protokolle werden hier katalogisiert.',
   'free_label': 'frei',
   'hidden_file_label': 'Versteckte Datei',
   'history_desc': 'Index der übertragenen Dateien ist derzeit leer.',
@@ -271,7 +283,8 @@ const Map<String, String> deTranslations = {
   'link_label': 'Link:',
   'link_updated_success': 'Link erfolgreich aktualisiert.',
   'loading_playlist': 'Wiedergabeliste wird geladen...',
-  'media_choice_message': 'Möchten Sie "{title}" als einzelnes Video oder die gesamte Wiedergabeliste herunterladen?',
+  'media_choice_message':
+      'Möchten Sie "{title}" als einzelnes Video oder die gesamte Wiedergabeliste herunterladen?',
   'media_choice_playlist': 'Gesamte Wiedergabeliste',
   'media_choice_single': 'Einzelnes Video',
   'media_choice_title': 'Download-Option wählen',
@@ -293,8 +306,10 @@ const Map<String, String> deTranslations = {
   'onboarding_start': 'Loslegen',
   'onboarding_sub_0': 'Wählen Sie Sprache, Design und Schnittstellenstil.',
   'onboarding_sub_1': 'Multi-Thread-Downloads mit smartem Fortsetzen.',
-  'onboarding_sub_2': 'Herunterladen von YouTube, Facebook, Twitter, TikTok uvm.',
-  'onboarding_sub_3': 'Volle Torrent-Unterstützung mit DHT und Verschlüsselung.',
+  'onboarding_sub_2':
+      'Herunterladen von YouTube, Facebook, Twitter, TikTok uvm.',
+  'onboarding_sub_3':
+      'Volle Torrent-Unterstützung mit DHT und Verschlüsselung.',
   'onboarding_sub_4': 'Automatische Kategorisierung und Zeitplanung.',
   'onboarding_theme_amoled': 'AMOLED',
   'onboarding_theme_dark': 'Dunkel',
@@ -316,22 +331,28 @@ const Map<String, String> deTranslations = {
   'pause_selected': 'Ausgewählte pausieren',
   'peers': 'Peers',
   'permission_allow': 'Zulassen',
-  'permission_battery_desc': 'Unterbrechungsfreie Downloads im Hintergrund erlauben',
+  'permission_battery_desc':
+      'Unterbrechungsfreie Downloads im Hintergrund erlauben',
   'permission_battery_opening': 'Systemeinstellungen werden geöffnet…',
   'permission_battery_title': 'Akku-Optimierung',
   'permission_continue': 'Weiter',
   'permission_download_location_button': 'Ordner wählen',
   'permission_download_location_change': 'Ändern',
-  'permission_download_location_desc': 'Wählen Sie den Speicherort für Ihre Dateien',
-  'permission_download_location_required': 'Download-Ordner zum Fortfahren wählen',
+  'permission_download_location_desc':
+      'Wählen Sie den Speicherort für Ihre Dateien',
+  'permission_download_location_required':
+      'Download-Ordner zum Fortfahren wählen',
   'permission_download_location_title': 'Download-Speicherort',
-  'permission_notifications_desc': 'Benachrichtigung bei Fertigstellung von Downloads',
+  'permission_notifications_desc':
+      'Benachrichtigung bei Fertigstellung von Downloads',
   'permission_notifications_title': 'Benachrichtigungen',
   'permission_open_settings': 'Einstellungen öffnen',
-  'permission_permanently_denied': 'Berechtigung dauerhaft verweigert. Bitte in den Systemeinstellungen aktivieren.',
+  'permission_permanently_denied':
+      'Berechtigung dauerhaft verweigert. Bitte in den Systemeinstellungen aktivieren.',
   'permission_storage_desc': 'Dateien auf Ihrem Gerät speichern',
   'permission_storage_title': 'Speicher',
-  'permission_subtitle': 'Erlauben Sie die folgenden Berechtigungen für das beste Erlebnis',
+  'permission_subtitle':
+      'Erlauben Sie die folgenden Berechtigungen für das beste Erlebnis',
   'permission_title': 'App-Berechtigungen',
   'popup_blocked': 'Popup blockiert',
   'private_torrent': 'Privater Torrent',
@@ -375,12 +396,15 @@ const Map<String, String> deTranslations = {
   'settings_about_desc': 'Leistungsstarker Multi-Thread Download Manager.',
   'settings_accessibility_title': 'BARRIEREFREIHEIT',
   'settings_adaptive_threads': 'Adaptive Thread-Anzahl',
-  'settings_adaptive_threads_sub': 'Thread-Anzahl automatisch an Download-Geschwindigkeit anpassen',
-  'settings_adblock_failed_msg': 'Aktualisierung fehlgeschlagen. Netzwerkverbindung prüfen.',
+  'settings_adaptive_threads_sub':
+      'Thread-Anzahl automatisch an Download-Geschwindigkeit anpassen',
+  'settings_adblock_failed_msg':
+      'Aktualisierung fehlgeschlagen. Netzwerkverbindung prüfen.',
   'settings_adblock_rules': 'Geladene Filterregeln',
   'settings_adblock_success_msg': 'AdBlock-Filter erfolgreich aktualisiert!',
   'settings_adblock_title': 'ADBLOCKER & HOST-FILTER',
-  'settings_adblock_updating_msg': 'Herunterladen und Aktualisieren der AdBlock-Filter (EasyList)...',
+  'settings_adblock_updating_msg':
+      'Herunterladen und Aktualisieren der AdBlock-Filter (EasyList)...',
   'settings_adv_console': 'Erweiterte Einstellungen',
   'settings_alerters': 'Ton & Benachrichtigungen',
   'settings_auto_resume': 'Downloads automatisch fortsetzen',
@@ -388,7 +412,8 @@ const Map<String, String> deTranslations = {
   'settings_auto_retry': 'Fehlgeschlagene Downloads automatisch wiederholen',
   'settings_auto_retry_sub': 'Bei Fehler automatisch erneut versuchen',
   'settings_auto_verify_checksum': 'Dateiintegrität automatisch prüfen',
-  'settings_auto_verify_checksum_sub': 'SHA-256-Hash nach jedem abgeschlossenen Download berechnen',
+  'settings_auto_verify_checksum_sub':
+      'SHA-256-Hash nach jedem abgeschlossenen Download berechnen',
   'settings_backend_url': 'Extraktions-Backend-URL',
   'settings_backup_sub': 'Download-Protokolle archivieren und wiederherstellen',
   'settings_backup_title': 'System-Sicherungen',
@@ -408,7 +433,8 @@ const Map<String, String> deTranslations = {
   'settings_default_threads_sub': 'Anzahl paralleler Verbindungen pro Download',
   'settings_developer': 'Entwickler',
   'settings_enable_adblock': 'ADBLOCKER AKTIVIEREN',
-  'settings_enable_adblock_sub': 'Werbung, Popups und Tracking-Skripte im Browser blockieren',
+  'settings_enable_adblock_sub':
+      'Werbung, Popups und Tracking-Skripte im Browser blockieren',
   'settings_engine_status': 'Engine-Status',
   'settings_export': 'Sicherung exportieren',
   'settings_firmware': 'Version',
@@ -421,7 +447,8 @@ const Map<String, String> deTranslations = {
   'settings_haptics': 'Haptisches Feedback',
   'settings_haptics_sub': 'Bei Interaktion vibrieren',
   'settings_https_only': 'Nur-HTTPS-Modus',
-  'settings_https_only_sub': 'http://-Navigation wo möglich auf https:// aktualisieren',
+  'settings_https_only_sub':
+      'http://-Navigation wo möglich auf https:// aktualisieren',
   'settings_import': 'Sicherung importieren',
   'settings_lang': 'Sprache',
   'settings_lang_sub': 'App-Anzeigesprache auswählen',
@@ -432,8 +459,10 @@ const Map<String, String> deTranslations = {
   'settings_max_channels_sub': 'Aktive parallele Downloads begrenzen',
   'settings_network_sec': 'Netzwerk & Sicherheit',
   'settings_reduce_visuals': 'Visuelle Effekte reduzieren',
-  'settings_reduce_visuals_sub': 'Unschärfe und Leuchteffekte für bessere Leistung deaktivieren',
-  'settings_reset_confirm_body': 'Sind Sie sicher, dass Sie alle Einstellungen auf die Standardwerte zurücksetzen möchten?',
+  'settings_reduce_visuals_sub':
+      'Unschärfe und Leuchteffekte für bessere Leistung deaktivieren',
+  'settings_reset_confirm_body':
+      'Sind Sie sicher, dass Sie alle Einstellungen auf die Standardwerte zurücksetzen möchten?',
   'settings_reset_confirm_btn': 'Zurücksetzen',
   'settings_reset_confirm_title': 'Einstellungen zurücksetzen',
   'settings_reset_done': 'Einstellungen erfolgreich zurückgesetzt',
@@ -450,7 +479,8 @@ const Map<String, String> deTranslations = {
   'settings_subfolders': 'Kategorisierte Verzeichnisse',
   'settings_subfolders_sub': 'Dateien in Unterordnern speichern',
   'settings_text_scaling': 'TEXT-SKALIERUNGSFAKTOR',
-  'settings_text_scaling_sub': 'Schriftgröße in der Anwendung dynamisch anpassen',
+  'settings_text_scaling_sub':
+      'Schriftgröße in der Anwendung dynamisch anpassen',
   'settings_theme': 'Design-Modus',
   'settings_theme_sub': 'Erscheinungsbild wählen',
   'settings_ua': 'Benutzerdefinierter User-Agent',
@@ -459,9 +489,11 @@ const Map<String, String> deTranslations = {
   'settings_update_adblock_hosts': 'ADBLOCK-FILTER AKTUALISIEREN',
   'settings_updating_adblock_hosts': 'AKTUALISIERUNG...',
   'settings_use_local_yt_fallback': 'Lokalen Extraktor-Fallback aktivieren',
-  'settings_use_local_yt_fallback_sub': 'Interne Download-Logik verwenden, wenn der remote Extraktionsdienst offline ist',
+  'settings_use_local_yt_fallback_sub':
+      'Interne Download-Logik verwenden, wenn der remote Extraktionsdienst offline ist',
   'settings_use_remote_backend': 'Remotes Extraktions-Backend verwenden',
-  'settings_use_remote_backend_sub': 'Medien-Download-Quellen über einen benutzerdefinierten Web-API-Dienst auflösen',
+  'settings_use_remote_backend_sub':
+      'Medien-Download-Quellen über einen benutzerdefinierten Web-API-Dienst auflösen',
   'settings_visuals': 'Visuelle Effekte',
   'settings_wifi_only': 'Nur WLAN-Modus',
   'settings_wifi_only_sub': 'Downloads bei mobilen Daten pausieren',
@@ -489,7 +521,8 @@ const Map<String, String> deTranslations = {
   'storage_analytics': 'SPEICHERANALYSE',
   'storage_label': 'Speicher: ',
   'tab_limit_reached': 'Tab-Limit erreicht (Max. 10)',
-  'tap_element_block': 'Tippen Sie auf ein Element der Seite, um es zu blockieren',
+  'tap_element_block':
+      'Tippen Sie auf ein Element der Seite, um es zu blockieren',
   'tap_to_copy': 'Tippen zum Kopieren',
   'tap_to_open': 'Tippen zum Öffnen',
   'task_not_found': 'Download-Aufgabe nicht gefunden',
@@ -511,7 +544,8 @@ const Map<String, String> deTranslations = {
   'update_btn': 'Aktualisieren',
   'update_changelog': 'Änderungsprotokoll:',
   'update_download_link': 'Download-Link aktualisieren',
-  'update_general_fixes': 'Allgemeine Leistungsverbesserungen und Fehlerbehebungen.',
+  'update_general_fixes':
+      'Allgemeine Leistungsverbesserungen und Fehlerbehebungen.',
   'update_link': 'Link aktualisieren',
   'update_mandatory_title': 'Zwingendes Update erforderlich',
   'update_now_btn': 'Jetzt aktualisieren',
@@ -522,7 +556,8 @@ const Map<String, String> deTranslations = {
   'use_advance_download_label': 'Erweiterte Download-Methode verwenden',
   'video_label': 'VIDEO',
   'wifi_only_label': 'Nur WLAN',
-  'yt_legal_warning': 'Hinweis: Inhalte nur herunterladen, wenn Sie das Recht dazu haben.',
+  'yt_legal_warning':
+      'Hinweis: Inhalte nur herunterladen, wenn Sie das Recht dazu haben.',
   'yt_playlist': 'YOUTUBE WIEDERGABELISTE',
   'yt_video_quality': 'YOUTUBE VIDEOQUALITÄT',
 };

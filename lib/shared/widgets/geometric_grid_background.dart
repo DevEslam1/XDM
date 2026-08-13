@@ -3,7 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
+import '../../core/services/background_gate.dart';
 import '../../core/services/power_monitor.dart';
+import '../../features/downloads/provider/download_provider.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
 /// Shared ambient animation state — one timer drives all background instances.
@@ -42,21 +44,30 @@ class _AmbientProgress with WidgetsBindingObserver {
   }
 
   void _startTimer() {
-    if (_isBackgrounded || PowerMonitor.screenOff) {
+    if (!BackgroundGate.allowHeavyOps || _isBackgrounded) {
       _stopTimer();
       return;
     }
-    const int intervalMs = 100;
+    const int intervalMs = 1000;
     _timer ??= Timer.periodic(const Duration(milliseconds: intervalMs), (_) {
+      if (!BackgroundGate.allowHeavyOps || _isBackgrounded) {
+        _stopTimer();
+        return;
+      }
       final elapsed =
           DateTime.now().difference(_startTime).inMilliseconds / 1000;
-      progress.value = (elapsed / 20) % 1.0;
+      final newVal = (elapsed / 20) % 1.0;
+      if ((newVal - progress.value).abs() >= 0.004) {
+        progress.value = newVal;
+      }
     });
   }
 
   void removeRef() {
+    if (_refCount <= 0) return;
     _refCount--;
     if (_refCount <= 0) {
+      _refCount = 0;
       _stopTimer();
     }
   }
@@ -91,26 +102,29 @@ class GeometricGridBackground extends StatefulWidget {
       _GeometricGridBackgroundState();
 }
 
-class _GeometricGridBackgroundState extends State<GeometricGridBackground> {
-  double _progress = 0;
+class _GeometricGridBackgroundState extends State<GeometricGridBackground>
+    with WidgetsBindingObserver {
+  bool _isVisible = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _AmbientProgress().addRef();
-    _AmbientProgress().progress.addListener(_onProgress);
-    _progress = _AmbientProgress().progress.value;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    setState(() {
+      _isVisible = state == AppLifecycleState.resumed;
+    });
   }
 
   @override
   void dispose() {
-    _AmbientProgress().progress.removeListener(_onProgress);
+    WidgetsBinding.instance.removeObserver(this);
     _AmbientProgress().removeRef();
     super.dispose();
-  }
-
-  void _onProgress() {
-    if (mounted) setState(() => _progress = _AmbientProgress().progress.value);
   }
 
   @override
@@ -120,11 +134,21 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground> {
     final isDark = context.select((SettingsProvider s) => s.isDarkMode);
     final isAmoled = context.select((SettingsProvider s) => s.isAmoledMode);
     final classicUi = context.select((SettingsProvider s) => s.classicUi);
-    final reduceVisuals = context.select((SettingsProvider s) => s.reduceVisuals);
+    final reduceVisuals =
+        context.select((SettingsProvider s) => s.reduceVisuals);
     final gridOpacity = context.select((SettingsProvider s) => s.gridOpacity);
     final bgColor = AppTheme.getBackground(isDark, isAmoled: isAmoled);
 
-    if (classicUi || reduceVisuals || PowerMonitor.screenOff) {
+    // Skip ambient animation during active downloads
+    final hasActiveDownloads = context.select(
+      (DownloadProvider p) => p.downloadingTasksCount > 0,
+    );
+
+    if (classicUi ||
+        reduceVisuals ||
+        !_isVisible ||
+        !BackgroundGate.allowHeavyOps ||
+        hasActiveDownloads) {
       return Container(color: bgColor, child: widget.child);
     }
 
@@ -135,16 +159,21 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground> {
       children: [
         Positioned.fill(
           child: RepaintBoundary(
-            child: CustomPaint(
-              painter: _AmbientBlobPainter(
-                progress: _progress,
-                isDark: isDark,
-                intensity: gridOpacity / 40.0,
-                bgColor: bgColor,
-                violetClr: violetClr,
-                blueClr: blueClr,
-              ),
-              size: Size.infinite,
+            child: ValueListenableBuilder<double>(
+              valueListenable: _AmbientProgress().progress,
+              builder: (context, progress, _) {
+                return CustomPaint(
+                  painter: _AmbientBlobPainter(
+                    progress: progress,
+                    isDark: isDark,
+                    intensity: gridOpacity / 40.0,
+                    bgColor: bgColor,
+                    violetClr: violetClr,
+                    blueClr: blueClr,
+                  ),
+                  size: Size.infinite,
+                );
+              },
             ),
           ),
         ),

@@ -13,7 +13,8 @@ class PrivacyDashboard extends ChangeNotifier {
       _blockedAds.values.fold<int>(0, (a, b) => a + b) +
       _blockedPopups.values.fold<int>(0, (a, b) => a + b);
 
-  int get totalTrackers => _blockedTrackers.values.fold<int>(0, (a, b) => a + b);
+  int get totalTrackers =>
+      _blockedTrackers.values.fold<int>(0, (a, b) => a + b);
   int get totalAds => _blockedAds.values.fold<int>(0, (a, b) => a + b);
   int get totalPopups => _blockedPopups.values.fold<int>(0, (a, b) => a + b);
 
@@ -23,7 +24,8 @@ class PrivacyDashboard extends ChangeNotifier {
 
     switch (type) {
       case 'tracker':
-        _blockedTrackers[cleanDomain] = (_blockedTrackers[cleanDomain] ?? 0) + 1;
+        _blockedTrackers[cleanDomain] =
+            (_blockedTrackers[cleanDomain] ?? 0) + 1;
         break;
       case 'ad':
         _blockedAds[cleanDomain] = (_blockedAds[cleanDomain] ?? 0) + 1;

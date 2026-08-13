@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
+import 'ios_background_service.dart';
 import 'logging_service.dart';
 import 'power_monitor.dart';
 
@@ -32,6 +33,9 @@ class BackgroundService {
   static DateTime? _lastHeartbeatTime;
   static bool _hasActiveDownloads = false;
 
+  /// Callback invoked when background execution is requested on iOS where it is unsupported.
+  static VoidCallback? onIosBackgroundUnavailable;
+
   static Future<void> setDownloadActive(bool active) async {
     _hasActiveDownloads = active;
     if (!active) {
@@ -41,12 +45,16 @@ class BackgroundService {
     }
   }
 
-  /// Returns true only on Android. On iOS, background Dart execution is not
-  /// supported without a native BGTaskScheduler plugin.
-  static bool get isSupported => !kIsWeb && Platform.isAndroid;
+  /// Returns true on Android and iOS (non-web). On Android, uses
+  /// flutter_background_service; on iOS, uses native BGTaskScheduler & URLSession.
+  static bool get isSupported =>
+      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   static Future<void> initialize() async {
     if (!isSupported) return;
+    if (Platform.isIOS) {
+      return; // Native BGTaskScheduler registered in AppDelegate
+    }
     final service = FlutterBackgroundService();
     await service.configure(
       androidConfiguration: AndroidConfiguration(
@@ -129,8 +137,7 @@ class BackgroundService {
   @pragma('vm:entry-point')
   static bool _onIosBackground(ServiceInstance service) {
     _log.warning(
-      'iOS background callback invoked but background Dart execution is '
-      'not supported. See BackgroundService docs.',
+      'iOS background callback invoked. Using native BGTaskScheduler / URLSession implementation.',
     );
     return false;
   }
@@ -138,20 +145,19 @@ class BackgroundService {
   static Future<void> start() async {
     if (!isSupported) {
       final platformName = kIsWeb ? 'web' : Platform.operatingSystem;
-      if (!kIsWeb && Platform.isIOS) {
-        _log.warning(
-          'iOS does not support background Dart execution. '
-          'Downloads will pause when the app is backgrounded. '
-          'A native BGTaskScheduler implementation is required.',
-        );
-      } else {
-        _log.fine(
-          'BackgroundService.start() skipped '
-          '(unsupported platform: $platformName)',
-        );
-      }
+      _log.fine(
+        'BackgroundService.start() skipped '
+        '(unsupported platform: $platformName)',
+      );
       return;
     }
+
+    if (!kIsWeb && Platform.isIOS) {
+      _log.info('Scheduling native iOS BGTaskScheduler background task');
+      await IosBackgroundService.scheduleBackgroundDownload();
+      return;
+    }
+
     final service = FlutterBackgroundService();
     final isRunning = await service.isRunning();
     if (!isRunning) {
@@ -164,6 +170,13 @@ class BackgroundService {
       _log.fine('BackgroundService.stop() skipped (unsupported platform)');
       return;
     }
+
+    if (!kIsWeb && Platform.isIOS) {
+      _log.info('Cancelling native iOS BGTaskScheduler background task');
+      await IosBackgroundService.cancelBackgroundDownload();
+      return;
+    }
+
     final service = FlutterBackgroundService();
     service.invoke('stopService');
   }
@@ -267,5 +280,30 @@ class BackgroundService {
     _wakeLockSafetyTimer?.cancel();
     _wakeLockSafetyTimer = null;
     await releaseWakeLock();
+  }
+}
+
+/// RAII guard for wake lock management ensuring auto-release on dispose or error
+class WakeLockGuard {
+  bool _released = false;
+
+  static Future<WakeLockGuard> acquire() async {
+    final guard = WakeLockGuard._();
+    await BackgroundService.acquireWakeLock();
+    return guard;
+  }
+
+  WakeLockGuard._();
+
+  Future<void> release() async {
+    if (_released) return;
+    _released = true;
+    await BackgroundService.releaseWakeLock();
+  }
+
+  void dispose() {
+    if (!_released) {
+      release();
+    }
   }
 }

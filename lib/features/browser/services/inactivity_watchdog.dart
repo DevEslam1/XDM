@@ -32,18 +32,37 @@ class InactivityWatchdog {
     });
   }
 
+  final Set<String> _pausedByInactivityTabIds = {};
+
   /// Pauses video/audio elements on [tab].
   void pauseTabMedia(BrowserTab tab) {
     if (!tab.isHome) {
       try {
+        _pausedByInactivityTabIds.add(tab.id);
         tab.controller
             ?.evaluateJavascript(
               source:
-                  "try { document.querySelectorAll('video,audio').forEach(function(m){m.pause();}); } catch(e){}",
+                  "try { document.querySelectorAll('video,audio').forEach(function(m){ if(!m.paused) { m.__pausedByXdm = true; m.pause(); } }); } catch(e){}",
             )
             .catchError((_) => null);
       } catch (e) {
         _log.warning('[Browser] Pause media error: $e');
+      }
+    }
+  }
+
+  /// Resumes media elements on [tab] if they were paused by inactivity.
+  void resumeTabMedia(BrowserTab tab) {
+    if (!tab.isHome && _pausedByInactivityTabIds.remove(tab.id)) {
+      try {
+        tab.controller
+            ?.evaluateJavascript(
+              source:
+                  "try { document.querySelectorAll('video,audio').forEach(function(m){ if(m.__pausedByXdm) { delete m.__pausedByXdm; m.play(); } }); } catch(e){}",
+            )
+            .catchError((_) => null);
+      } catch (e) {
+        _log.warning('[Browser] Resume media error: $e');
       }
     }
   }

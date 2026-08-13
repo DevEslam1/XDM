@@ -98,7 +98,8 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
     try {
       batterySaver = SettingsProvider.instance.batterySaverMode;
     } catch (_) {}
-    final shouldRun = _foreground && loopWanted && !batterySaver && !PowerMonitor.screenOff;
+    final shouldRun =
+        _foreground && loopWanted && !batterySaver && !PowerMonitor.screenOff;
     if (shouldRun) {
       if (!loopController.isAnimating) loopController.repeat();
     } else {

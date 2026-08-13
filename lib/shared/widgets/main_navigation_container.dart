@@ -23,6 +23,7 @@ import '../../features/settings/screens/settings_screen.dart';
 import '../../features/settings/widgets/update_dialogs.dart';
 import '../../features/settings/widgets/app_lock_screen.dart';
 import '../../core/services/app_lock_service.dart';
+import '../../core/services/background_service.dart';
 import '../../features/downloads/widgets/filter_chips_bar.dart';
 import 'themed_snackbar.dart';
 import 'package:dmx/core/services/logging_service.dart';
@@ -78,6 +79,18 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       });
     }
     _checkClipboard();
+    BackgroundService.onIosBackgroundUnavailable = () {
+      if (!mounted) return;
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      ThemedSnackbar.show(
+        context,
+        message:
+            'iOS background execution is limited. Keep app open while downloading.',
+        color: AppTheme.neonAmber,
+        icon: Icons.info_outline,
+        isDarkMode: isDark,
+      );
+    };
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _showAppLockIfNeeded();
       if (mounted) _checkAppUpdates();

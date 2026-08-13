@@ -36,7 +36,11 @@ class RetryEngine {
     Set<ErrorFamily>? retryableFamilies,
     Random? random,
   })  : retryableFamilies = retryableFamilies ??
-            const {ErrorFamily.network, ErrorFamily.timeout, ErrorFamily.server},
+            const {
+              ErrorFamily.network,
+              ErrorFamily.timeout,
+              ErrorFamily.server
+            },
         _random = random ?? Random();
 
   final int maxRetries;
@@ -52,7 +56,8 @@ class RetryEngine {
     final exponent = max(0, attempt);
     final rawMs = baseDelay.inMilliseconds * pow(backoffMultiplier, exponent);
     final jitterMs = _random.nextInt(501);
-    final totalMs = (rawMs + jitterMs).round().clamp(0, maxDelay.inMilliseconds);
+    final totalMs =
+        (rawMs + jitterMs).round().clamp(0, maxDelay.inMilliseconds);
     return Duration(milliseconds: totalMs);
   }
 

@@ -112,12 +112,21 @@ class MediaSniffer extends ChangeNotifier {
       }
     }
 
-    // Evict expired entries older than 10 minutes
+    // Evict expired entries older than 10 minutes or if exceeding 200 entries
     final now = DateTime.now();
     ytDetectionFailed.removeWhere(
       (url, timestamp) =>
           now.difference(timestamp) > const Duration(minutes: 10),
     );
+    if (ytDetectionFailed.length > 200) {
+      final sortedKeys = ytDetectionFailed.keys.toList()
+        ..sort(
+            (a, b) => ytDetectionFailed[a]!.compareTo(ytDetectionFailed[b]!));
+      final toRemoveCount = ytDetectionFailed.length - 200;
+      for (int i = 0; i < toRemoveCount; i++) {
+        ytDetectionFailed.remove(sortedKeys[i]);
+      }
+    }
   }
 
   /// Cancels all scheduled media scan timers.

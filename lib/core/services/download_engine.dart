@@ -328,9 +328,7 @@ class DownloadProgress {
     final selfDownloaded = ytDownloadedBytes ?? downloadedBytes;
     if (counterpartSize > 0 && counterpartDownloaded == 0) {
       if (fileSize <= 0) {
-        final totalSize = counterpartSize;
-        if (totalSize == 0) return null;
-        return (selfDownloaded / totalSize).clamp(0.0, 1.0);
+        return null;
       }
       final totalSize = fileSize + counterpartSize;
       if (totalSize == 0) return null;
@@ -510,7 +508,8 @@ class DownloadEngine {
     List<String>? allowedStorageRoots,
   }) async {
     if (savePath.contains('..')) {
-      throw const InvalidPathException('Path traversal attempt detected in save path');
+      throw const InvalidPathException(
+          'Path traversal attempt detected in save path');
     }
 
     final normalized = p.normalize(savePath);
@@ -565,6 +564,8 @@ class DownloadEngine {
   }
 
   static bool appInForeground = true;
+  static bool get isInBackground => !appInForeground;
+  static set isInBackground(bool val) => appInForeground = !val;
   static const int _progressReportIntervalMs = 500;
   static const int _isolatePoolSize = 4;
   static const int _lowSpaceThresholdBytes = 500 * 1024 * 1024;
@@ -633,33 +634,10 @@ class DownloadEngine {
   final Map<Dio, Set<String>> _activeDownloadsPerClient = {};
   Timer? _cleanupTimer;
   bool _closed = false;
+  bool _closing = false;
 
   void dispose() {
-    _closed = true;
-    _cleanupTimer?.cancel();
-    _cleanupTimer = null;
-    _ytPeriodicTimer?.cancel();
-    _ytPeriodicTimer = null;
-    for (final t in _ytCleanupTimers) {
-      t.cancel();
-    }
-    _ytCleanupTimers.clear();
-    _httpEngine.stopAdaptiveThreadMonitor();
-    _pool?.dispose();
-    _sharedDio.close(force: true);
-    for (final client in [..._activeDioClients, ..._reservedDioClients]) {
-      try {
-        client.close(force: true);
-      } catch (_) {}
-    }
-    _activeDioClients.clear();
-    _reservedDioClients.clear();
-    _dioClientCreationTimes.clear();
-    _activeDownloadsPerClient.clear();
-    _activeCancelTokens.clear();
-    _ytCounterpartTaskIds.clear();
-    DownloadEngine._ytLiveBytes.clear();
-    _ytFinishedStreams.clear();
+    close();
   }
 
   DownloadEngine({
@@ -671,7 +649,8 @@ class DownloadEngine {
         if (_closed) return;
         _ytCounterpartTaskIds.removeStale(const Duration(minutes: 10));
         DownloadEngine._ytLiveBytes.removeStale(const Duration(minutes: 10));
-        DownloadEngine._ytFinishedStreams.removeStale(const Duration(minutes: 10));
+        DownloadEngine._ytFinishedStreams
+            .removeStale(const Duration(minutes: 10));
       });
       _cleanupTimer = Timer.periodic(const Duration(seconds: 60), (_) {
         if (_closed) return;
@@ -1342,6 +1321,7 @@ class DownloadEngine {
       ytCounterpartSize: ytCounterpartSize,
       ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
       ytCounterpartTaskId: _ytCounterpartTaskIds[taskId],
+      throttleFactor: PowerMonitor.throttleFactor,
     );
     if (adaptiveThreads) {
       _httpEngine.startAdaptiveMonitorForTask(taskId, effectiveThreadCount);
@@ -2866,7 +2846,7 @@ class DownloadEngine {
 
   static final Map<int, DateTime> _lastConcurrentLimitApply = {};
   static final Map<int, Set<int>> _lastIncompleteSnapshot = {};
-  static const Duration _concurrentLimitThrottle = Duration(seconds: 2);
+  static const Duration _concurrentLimitThrottle = Duration(seconds: 5);
   static void _applyMaxConcurrentFilesLimit(
     int torrentId,
     List<Map<String, dynamic>> files,
@@ -3168,9 +3148,17 @@ class DownloadEngine {
   }
 
   void close() {
+    if (_closing) return;
+    _closing = true;
     _closed = true;
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
+    _ytPeriodicTimer?.cancel();
+    _ytPeriodicTimer = null;
+    for (final timer in _ytCleanupTimers) {
+      timer.cancel();
+    }
+    _ytCleanupTimers.clear();
     for (final token in List<CancelToken>.from(_activeCancelTokens)) {
       try {
         token.cancel('Engine closing');
@@ -3300,11 +3288,12 @@ Future<int> actualDownloadedBytes(
   try {
     final stateFile = File('$path.dmxstate');
     if (!await stateFile.exists()) {
-      if (threadCount > 1) {
-        return 0;
-      }
       final f = File(path);
-      return await f.exists() ? await f.length() : 0;
+      if (await f.exists()) {
+        final len = await f.length();
+        if (len > 0) return len;
+      }
+      return 0;
     }
     final content = await stateFile.readAsString();
     final decoded = jsonDecode(content);
@@ -3326,11 +3315,8 @@ Future<int> actualDownloadedBytes(
     return 0;
   } catch (e) {
     debugPrint('[DMX] actualDownloadedBytes failed for $path: $e');
-    if (threadCount > 1) {
-      return 0;
-    }
     final f = File(path);
-    if (await f.exists()) return f.length();
+    if (await f.exists()) return await f.length();
     return 0;
   }
 }

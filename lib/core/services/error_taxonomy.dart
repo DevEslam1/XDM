@@ -249,8 +249,8 @@ class ErrorTaxonomy {
               ? 'Download URL expired (HTTP 410)'
               : 'Authentication failed (HTTP $status)',
           severe: true,
-          recoveryAction: recoveryActionFor(ErrorFamily.auth,
-              httpStatus: status),
+          recoveryAction:
+              recoveryActionFor(ErrorFamily.auth, httpStatus: status),
         );
       }
       if (status >= 500) {
@@ -259,8 +259,8 @@ class ErrorTaxonomy {
           httpStatus: status,
           message: 'Server error (HTTP $status)',
           retryable: true,
-          recoveryAction: recoveryActionFor(ErrorFamily.server,
-              httpStatus: status),
+          recoveryAction:
+              recoveryActionFor(ErrorFamily.server, httpStatus: status),
         );
       }
       if (status == 408 || status == 429) {
@@ -271,8 +271,8 @@ class ErrorTaxonomy {
               ? 'Too many requests (HTTP 429)'
               : 'Temporary server error (HTTP $status)',
           retryable: true,
-          recoveryAction: recoveryActionFor(ErrorFamily.server,
-              httpStatus: status),
+          recoveryAction:
+              recoveryActionFor(ErrorFamily.server, httpStatus: status),
         );
       }
       return ErrorClassification(

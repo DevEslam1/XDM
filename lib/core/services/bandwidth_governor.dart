@@ -1,9 +1,7 @@
 import 'dart:collection';
-import 'dart:ui';
 import 'dart:math';
 
 import 'package:synchronized/synchronized.dart';
-import 'power_monitor.dart';
 
 /// A token-bucket bandwidth governor.
 ///
@@ -26,27 +24,18 @@ class BandwidthGovernor {
   DateTime _lastRefill = DateTime.now().subtract(const Duration(seconds: 1));
 
   final Lock _lock = Lock();
-  VoidCallback? _powerListener;
+  double throttleFactor;
 
-  BandwidthGovernor([this._globalBytesPerSecond = 0, double burstFactor = 1.0])
-      : _burstFactor = burstFactor.clamp(1.0, 4.0) {
-    _powerListener = () {
-      _lock.synchronized(() {
-        _refill();
-      });
-    };
-    PowerMonitor.throttleFactorNotifier.addListener(_powerListener!);
-  }
+  BandwidthGovernor([
+    this._globalBytesPerSecond = 0,
+    double burstFactor = 1.0,
+    this.throttleFactor = 1.0,
+  ]) : _burstFactor = burstFactor.clamp(1.0, 4.0);
 
-  void dispose() {
-    if (_powerListener != null) {
-      PowerMonitor.throttleFactorNotifier.removeListener(_powerListener!);
-      _powerListener = null;
-    }
-  }
+  void dispose() {}
 
   /// True when power monitoring is active and throttling bandwidth.
-  bool get powerThrottleActive => PowerMonitor.throttleFactor < 1.0;
+  bool get powerThrottleActive => throttleFactor < 1.0;
 
   int get globalBytesPerSecond => _globalBytesPerSecond;
 
@@ -68,7 +57,7 @@ class BandwidthGovernor {
     // where _activeConsumers is decremented to 0 between isUnlimited and here.
     final consumers = max(1, _activeConsumers);
     final baseShare = _globalBytesPerSecond ~/ consumers;
-    return (baseShare * PowerMonitor.throttleFactor).round();
+    return (baseShare * throttleFactor).round();
   }
 
   /// Updates the global limit at runtime.

@@ -1,7 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'xdm_backend_client.dart';
@@ -608,9 +609,25 @@ class YoutubeService {
     return null;
   }
 
-  /// Resolves streams for [url] using the remote backend **only**.
-  /// Local fallback (on-device NewPipe extractor) is intentionally NOT used —
-  /// all stream resolution goes through the XDM backend for consistency.
+  static Future<List<Map<String, dynamic>>?> _tryLocalExtractorFallback(
+      String url) async {
+    if (!Platform.isAndroid) return null;
+    try {
+      const channel = MethodChannel('com.example.dmx/youtube_extractor');
+      final res =
+          await channel.invokeMethod<List<dynamic>>('getStreams', {'url': url});
+      if (res != null && res.isNotEmpty) {
+        return res
+            .map((m) => Map<String, dynamic>.from(m as Map<dynamic, dynamic>))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('[YoutubeService] Local NewPipe fallback failed: $e');
+    }
+    return null;
+  }
+
+  /// Resolves streams for [url] using the remote backend, with optional local fallback.
   static Future<List<Map<String, dynamic>>?> _resolveStreamsWithFallback(
     String url, {
     String? cookies,
@@ -623,14 +640,18 @@ class YoutubeService {
       );
       final results = _parseStreams(backendRes);
       return results.isNotEmpty ? results : null;
-    } on XdmBackendTimeoutException {
-      // Rethrow — no local fallback; retry logic in _resolveWithRetry handles this.
-      rethrow;
-    } on BackendException {
-      // Rethrow — caller (_resolveWithRetry) will retry or surface the error.
-      rethrow;
-    } on DioException {
-      // Rethrow — network errors propagate up to the retry loop.
+    } catch (e) {
+      final settings = SettingsProvider.instance;
+      final isTimeoutOr503 =
+          e is XdmBackendTimeoutException || (e.toString().contains('503'));
+      if (isTimeoutOr503 && settings.useLocalYtFallback) {
+        debugPrint(
+            '[YoutubeService] Backend 503/timeout: triggering local NewPipe fallback');
+        final localStreams = await _tryLocalExtractorFallback(url);
+        if (localStreams != null && localStreams.isNotEmpty) {
+          return localStreams;
+        }
+      }
       rethrow;
     }
   }
@@ -672,7 +693,14 @@ class YoutubeService {
     String? qualityPreset,
   ]) async {
     try {
-      final streams = await getStreams(videoId);
+      List<Map<String, dynamic>> streams;
+      try {
+        streams = await getStreams(videoId);
+      } on TimeoutException {
+        debugPrint(
+            '[YoutubeService] getStreamForVideo timed out (35s), retrying once...');
+        streams = await getStreams(videoId);
+      }
       if (streams.isEmpty) return null;
 
       final preset = (qualityPreset ?? 'best_combined').toLowerCase().trim();

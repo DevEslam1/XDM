@@ -55,6 +55,10 @@ class NetworkMonitor {
       _currentConnectivity.contains(ConnectivityResult.wifi) ||
       _currentConnectivity.contains(ConnectivityResult.ethernet);
 
+  /// Whether the device is currently on mobile / cellular connection.
+  bool get isCellular =>
+      _currentConnectivity.contains(ConnectivityResult.mobile);
+
   void markWifiWaiting(String taskId) {
     _tasksPausedDueToWifiOnly.add(taskId);
   }

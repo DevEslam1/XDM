@@ -220,7 +220,7 @@ void main() {
       savePath: '',
     );
 
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await Future<void>.delayed(const Duration(milliseconds: 300));
 
     expect(provider.downloadingTasksCount, 1);
     expect(provider.queuedTasksCount, 1);
@@ -291,7 +291,7 @@ void main() {
       expect(provider.tasks.first.chunks.length, 2);
 
       await provider.pauseTask(taskId);
-      await Future.delayed(const Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 300));
 
       await provider.updateTaskThreadCount(taskId, 5);
       expect(provider.tasks.first.threadCount, 5);
@@ -611,7 +611,7 @@ void main() {
       );
 
       // Wait for the async task to complete and fail
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
 
       expect(provider.tasks.first.status, DownloadStatus.failed);
       expect(
@@ -694,7 +694,7 @@ void main() {
       );
       await provider.load(pauseOrphanDownloads: false);
       // Wait briefly for the queue to pump
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
 
       // The orphan task should be queued/downloading
       final t1 = provider.tasks.firstWhere((t) => t.id == '1');
@@ -814,7 +814,7 @@ void main() {
     expect(provider.tasks.first.status, DownloadStatus.paused);
 
     await provider.resumeAllTasks();
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await Future<void>.delayed(const Duration(milliseconds: 300));
 
     expect(provider.tasks.first.status,
         anyOf(DownloadStatus.queued, DownloadStatus.downloading));

@@ -78,13 +78,15 @@ void main() {
 
       expect(await resumeWriter.length(), equals(1000));
       final readPart = await resumeWriter.readRange(0, 250);
-      expect(readPart, equals(Uint8List.fromList(List.generate(250, (i) => 42))));
+      expect(
+          readPart, equals(Uint8List.fromList(List.generate(250, (i) => 42))));
 
       await resumeWriter.write(
           1, 500, Uint8List.fromList(List.generate(250, (i) => 99)));
       await resumeWriter.flushAll();
       final readSecond = await resumeWriter.readRange(500, 250);
-      expect(readSecond, equals(Uint8List.fromList(List.generate(250, (i) => 99))));
+      expect(readSecond,
+          equals(Uint8List.fromList(List.generate(250, (i) => 99))));
 
       await resumeWriter.close();
     });

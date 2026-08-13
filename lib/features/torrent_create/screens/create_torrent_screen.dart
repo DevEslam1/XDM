@@ -263,7 +263,6 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
               ],
             ),
             const SizedBox(height: 16),
-
             _SectionLabel(
               text: isRtl
                   ? 'مسار ملف .torrent الناتج'
@@ -310,7 +309,6 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
               ],
             ),
             const SizedBox(height: 16),
-
             _SectionLabel(
               text: isRtl ? 'حجم القطعة (Piece Size)' : 'Piece Size',
               color: textClr,
@@ -340,7 +338,6 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
               onChanged: (val) => setState(() => _pieceSize = val ?? 0),
             ),
             const SizedBox(height: 16),
-
             _SectionLabel(
               text: isRtl ? 'المتتبعات' : 'Trackers',
               color: textClr,
@@ -403,7 +400,6 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
               }).toList(),
             ),
             const SizedBox(height: 16),
-
             _SectionLabel(
               text: isRtl ? 'روابط Web Seeds' : 'Web Seeds (HTTP/FTP)',
               color: textClr,
@@ -454,7 +450,6 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
               }).toList(),
             ),
             const SizedBox(height: 16),
-
             _SectionLabel(
               text: isRtl ? 'مصدر العلامة (Source Tag)' : 'Source Tag',
               color: textClr,
@@ -475,7 +470,6 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
               ),
             ),
             const SizedBox(height: 16),
-
             _SectionLabel(
               text: isRtl ? 'تعليق' : 'Comment',
               color: textClr,
@@ -496,7 +490,6 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
               ),
             ),
             const SizedBox(height: 16),
-
             SwitchListTile(
               title: Text(
                 L10n.of(context, 'private_torrent'),
@@ -512,7 +505,6 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
               onChanged: (val) => setState(() => _isPrivate = val),
             ),
             const SizedBox(height: 16),
-
             if (_isCreating) ...[
               const LinearProgressIndicator(),
               const SizedBox(height: 8),
@@ -524,7 +516,6 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
               ),
               const SizedBox(height: 16),
             ],
-
             NeonGlowButton(
               text: isRtl ? 'إنشاء ملف .torrent' : 'Create .torrent File',
               onPressed: _isCreating ? null : _handleCreate,

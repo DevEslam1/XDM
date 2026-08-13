@@ -2,6 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 import 'package:synchronized/synchronized.dart';
 import '../../../features/downloads/models/download_task.dart';
+import '../power_monitor.dart';
+import '../protocol_cache.dart';
 
 class ConnectionWarmer {
   static final _log = Logger('ConnectionWarmer');
@@ -31,10 +33,6 @@ class ConnectionWarmer {
               .reduce((a, b) => a.value.isBefore(b.value) ? a : b);
           _warmedHosts.remove(oldest.key);
         }
-        // FIX: Set timestamp optimistically INSIDE the lock so concurrent
-        // calls for the same host see it as already warmed and skip the
-        // network probe. If the probe fails, the TTL still prevents
-        // retry storms for 5 minutes.
         _warmedHosts[host] = DateTime.now();
         return true;
       });
@@ -58,12 +56,27 @@ class ConnectionWarmer {
       _log.fine('[ConnectionWarmer] Pre-warmed TLS connection to $host');
     } catch (e) {
       _log.info('[ConnectionWarmer] pre-warm skipped: $e');
-      // Best effort pre-warming
     }
   }
 
   static Future<void> warmQueuedTasks(List<DownloadTask> queuedTasks) async {
-    final toWarm = queuedTasks.take(3);
+    final sortedTasks = List<DownloadTask>.from(queuedTasks);
+    sortedTasks.sort((a, b) {
+      final protoA = ProtocolCache.get(a.url);
+      final protoB = ProtocolCache.get(b.url);
+      final isH2A =
+          protoA == ProtocolSupport.http2 || protoA == ProtocolSupport.http3;
+      final isH2B =
+          protoB == ProtocolSupport.http2 || protoB == ProtocolSupport.http3;
+      if (isH2A != isH2B) {
+        return isH2A ? -1 : 1;
+      }
+      return 0;
+    });
+
+    final maxWarmCount =
+        (PowerMonitor.batteryLevel > 50 || PowerMonitor.isCharging) ? 5 : 3;
+    final toWarm = sortedTasks.take(maxWarmCount);
     await Future.wait(
       toWarm.map((t) => warmConnection(t.url)),
       eagerError: false,

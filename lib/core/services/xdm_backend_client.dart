@@ -5,9 +5,9 @@ import 'dart:math' show max;
 
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import '../utils/constants.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import 'backend_health_service.dart';
 import 'circuit_breaker.dart';
@@ -35,7 +35,7 @@ class XdmBackendClient {
   static final _secureStorage = const FlutterSecureStorage();
   static const _apiKeyStorageKey = 'xdm_backend_api_key';
 
-  /// // P0-1: Reads the API key from secure storage or compile-time env var.
+  /// Reads the API key from secure storage or compile-time env var.
   static Future<void> loadApiKey() async {
     try {
       final stored = await _secureStorage.read(key: _apiKeyStorageKey);
@@ -54,11 +54,11 @@ class XdmBackendClient {
         return;
       }
 
-      _apiKey = kDefaultApiKey;
-      _log.info('P0-1: Using default API key');
+      _apiKey = null;
+      _log.warning('P0-1: No API key configured');
     } catch (e) {
       _log.severe('P0-1: Failed to load API key', e);
-      _apiKey = kDefaultApiKey;
+      _apiKey = null;
     }
   }
 
@@ -67,7 +67,7 @@ class XdmBackendClient {
     final key = _apiKey;
 
     if (key == null || key.isEmpty) {
-      return kDefaultApiKey;
+      throw const BackendUnauthorizedException('No API key configured');
     }
 
     return key;
@@ -186,6 +186,9 @@ class XdmBackendClient {
   ///
   /// [cookies] — Netscape-format or key=value cookie string forwarded as
   ///   `X-YouTube-Cookies`. The backend may also pick from its own cookie pool
+  static int cacheHits = 0;
+  static int cacheMisses = 0;
+
   ///   if none are supplied.
   Future<Map<String, dynamic>> getStreams(
     String url, {
@@ -195,11 +198,48 @@ class XdmBackendClient {
     final cached = _streamsCache[url];
     if (cached != null) {
       if (!cached.isExpired) {
-        return cached.data;
+        cached.lastAccessed = DateTime.now();
+        // Validate stream reachability with HEAD request (5s timeout)
+        String? testStreamUrl;
+        try {
+          final streams = cached.data['streams'] as List<dynamic>?;
+          if (streams != null && streams.isNotEmpty) {
+            // ignore: avoid_dynamic_calls
+            testStreamUrl = streams.first['url'] as String?;
+          }
+        } catch (_) {}
+
+        bool valid = true;
+        if (testStreamUrl != null && testStreamUrl.isNotEmpty) {
+          try {
+            final headRes = await Dio().head(
+              testStreamUrl,
+              options: Options(
+                connectTimeout: const Duration(seconds: 5),
+                receiveTimeout: const Duration(seconds: 5),
+                validateStatus: (s) => true,
+              ),
+            );
+            if (headRes.statusCode == 403 || headRes.statusCode == 410) {
+              _log.info(
+                  'Cached stream URL returned ${headRes.statusCode}, evicting cache for $url');
+              _streamsCache.remove(url);
+              valid = false;
+            }
+          } catch (_) {
+            // Best effort validation
+          }
+        }
+
+        if (valid) {
+          cacheHits++;
+          return cached.data;
+        }
       } else {
         _streamsCache.remove(url);
       }
     }
+    cacheMisses++;
 
     return _rateLimiter.call('streams', () async {
       final encodedCookies = cookies != null && cookies.isNotEmpty
@@ -641,7 +681,10 @@ class XdmBackendClient {
   void _configureDioSSL(Dio client) {
     try {
       final bypassSSL = SettingsProvider.instance.bypassSSL;
-      if (bypassSSL && client.httpClientAdapter is IOHttpClientAdapter) {
+      if (kDebugMode &&
+          bypassSSL &&
+          client.httpClientAdapter is IOHttpClientAdapter) {
+        assert(kDebugMode, 'SSL bypass cannot activate in release builds');
         final adapter = client.httpClientAdapter as IOHttpClientAdapter;
         adapter.createHttpClient = () {
           final httpClient = HttpClient();
@@ -656,8 +699,11 @@ class XdmBackendClient {
 
   void _evictExpiredStreamsCache() {
     _streamsCache.removeWhere((_, entry) => entry.isExpired);
-    while (_streamsCache.length >= 100) {
-      _streamsCache.remove(_streamsCache.keys.first);
+    while (_streamsCache.length >= 50) {
+      final lru = _streamsCache.entries.reduce(
+        (a, b) => a.value.lastAccessed.isBefore(b.value.lastAccessed) ? a : b,
+      );
+      _streamsCache.remove(lru.key);
     }
   }
 }
@@ -665,8 +711,12 @@ class XdmBackendClient {
 class _StreamsCacheEntry {
   final Map<String, dynamic> data;
   final DateTime expiry;
+  DateTime lastAccessed;
 
-  _StreamsCacheEntry({required this.data, required this.expiry});
+  _StreamsCacheEntry({
+    required this.data,
+    required this.expiry,
+  }) : lastAccessed = DateTime.now();
 
   bool get isExpired => DateTime.now().isAfter(expiry);
 }
@@ -719,9 +769,8 @@ class _ApiRateLimiter {
     return engine.execute(
       request,
       onRetry: (error, attempt, delay) {
-        _log.warning(
-          'Backend $endpoint attempt $attempt failed ($error); '
-          'retrying in ${delay.inMilliseconds}ms');
+        _log.warning('Backend $endpoint attempt $attempt failed ($error); '
+            'retrying in ${delay.inMilliseconds}ms');
       },
     );
   }

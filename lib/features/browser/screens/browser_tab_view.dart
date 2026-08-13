@@ -135,6 +135,7 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
               : Stack(
                   children: [
                     RepaintBoundary(
+                      key: ValueKey('webview_${tab.id}'),
                       child: InAppWebView(
                         findInteractionController:
                             tab.findInteractionController,

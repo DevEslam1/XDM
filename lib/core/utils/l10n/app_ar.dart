@@ -51,7 +51,8 @@ const Map<String, String> arTranslations = {
   'browser_clear': 'مسح',
   'browser_clear_btn': 'مسح',
   'browser_clear_history_btn': 'مسح السجل',
-  'browser_clear_history_content': 'هل أنت متأكد من أنك تريد مسح سجل التصفح بالكامل؟',
+  'browser_clear_history_content':
+      'هل أنت متأكد من أنك تريد مسح سجل التصفح بالكامل؟',
   'browser_clear_history_desc': 'هل أنت متأكد من أنك تريد مسح السجل بأكمله؟',
   'browser_clear_history_title': 'مسح السجل؟',
   'browser_clear_search': 'مسح البحث',
@@ -89,7 +90,8 @@ const Map<String, String> arTranslations = {
   'browser_intercepted_signal': 'تم التقاط إشارة تنزيل',
   'browser_javascript': 'JavaScript',
   'browser_js_css_injector': 'محقن JS / CSS',
-  'browser_js_css_warning': 'تنبيه: هذا الكود يُنفذ على صفحات الويب. لا تُدخل بيانات حساسة.',
+  'browser_js_css_warning':
+      'تنبيه: هذا الكود يُنفذ على صفحات الويب. لا تُدخل بيانات حساسة.',
   'browser_lazy_video': 'فيديو محمل ببطء',
   'browser_max_tabs': 'تم الوصول إلى الحد الأقصى للمبوبات (10 مبوبات).',
   'browser_media_detector_off': 'تم تعطيل كاشف الوسائط',
@@ -169,7 +171,8 @@ const Map<String, String> arTranslations = {
   'browser_youtube_video': 'فيديو يوتيوب',
   'btn_install_now': 'تثبيت الآن',
   'btn_later': 'لاحقاً',
-  'bypass_ssl_dialog_body': 'سيؤدي هذا إلى تعريض جميع التنزيلات لهجمات الوسيط (MITM). ',
+  'bypass_ssl_dialog_body':
+      'سيؤدي هذا إلى تعريض جميع التنزيلات لهجمات الوسيط (MITM). ',
   'bypass_ssl_dialog_confirm': 'أتفهم المخاطر',
   'bypass_ssl_dialog_title': 'تعطيل التحقق من SSL؟',
   'cancel': 'إلغاء',
@@ -226,7 +229,8 @@ const Map<String, String> arTranslations = {
   'details_path': 'مسار الحفظ',
   'details_size': 'حجم الملف',
   'details_status': 'الحالة',
-  'details_threads_warning_desc': 'تغيير خيوط الاتصال على تنزيل نشط أو مؤقت سيؤدي إلى إعادة تعيين تقدمك. هل تريد الاستمرار؟',
+  'details_threads_warning_desc':
+      'تغيير خيوط الاتصال على تنزيل نشط أو مؤقت سيؤدي إلى إعادة تعيين تقدمك. هل تريد الاستمرار؟',
   'details_threads_warning_title': 'إعادة تعيين خيوط الاتصال؟',
   'details_title': 'تفاصيل التنزيل',
   'details_transferred': 'تم نقله',
@@ -271,7 +275,8 @@ const Map<String, String> arTranslations = {
   'link_label': 'الرابط:',
   'link_updated_success': 'تم تحديث الرابط بنجاح. يمكنك استئناف التنزيل الآن.',
   'loading_playlist': 'جاري تحميل قائمة التشغيل...',
-  'media_choice_message': 'هل تريد تنزيل "{title}" كفيديو منفرد أم قائمة التشغيل بالكامل؟',
+  'media_choice_message':
+      'هل تريد تنزيل "{title}" كفيديو منفرد أم قائمة التشغيل بالكامل؟',
   'media_choice_playlist': 'قائمة التشغيل',
   'media_choice_single': 'فيديو منفرد',
   'media_choice_title': 'اختر خيار التنزيل',
@@ -291,11 +296,14 @@ const Map<String, String> arTranslations = {
   'onboarding_setup_theme': 'المظهر',
   'onboarding_skip': 'تخطي',
   'onboarding_start': 'بدء الاستخدام',
-  'onboarding_sub_0': 'اختر اللغة والمظهر ونمط الواجهة. يمكنك تغيير ذلك في أي وقت من الإعدادات.',
+  'onboarding_sub_0':
+      'اختر اللغة والمظهر ونمط الواجهة. يمكنك تغيير ذلك في أي وقت من الإعدادات.',
   'onboarding_sub_1': 'تنزيل متعدد الخيوط مع استئناف ذكي لأقصى سرعة.',
-  'onboarding_sub_2': 'تنزيل من يوتيوب، فيسبوك، تويتر، تيك توك، إنستغرام، ومئات المواقع الأخرى.',
+  'onboarding_sub_2':
+      'تنزيل من يوتيوب، فيسبوك، تويتر، تيك توك، إنستغرام، ومئات المواقع الأخرى.',
   'onboarding_sub_3': 'دعم كامل للتورنت مع DHT، تشفير، اختيار الملفات، والبذر.',
-  'onboarding_sub_4': 'تصنيف تلقائي، جدولة، حماية الواي فاي، وثيمات مظلمة/فاتحة.',
+  'onboarding_sub_4':
+      'تصنيف تلقائي، جدولة، حماية الواي فاي، وثيمات مظلمة/فاتحة.',
   'onboarding_theme_amoled': 'أسود (AMOLED)',
   'onboarding_theme_dark': 'داكن',
   'onboarding_theme_light': 'فاتح',
@@ -328,7 +336,8 @@ const Map<String, String> arTranslations = {
   'permission_notifications_desc': 'احصل على إشعار عند اكتمال التحميل',
   'permission_notifications_title': 'الإشعارات',
   'permission_open_settings': 'فتح الإعدادات',
-  'permission_permanently_denied': 'تم رفض الإذن بشكل دائم. يرجى تفعيله من إعدادات النظام.',
+  'permission_permanently_denied':
+      'تم رفض الإذن بشكل دائم. يرجى تفعيله من إعدادات النظام.',
   'permission_storage_desc': 'حفظ الملفات التي تم تحميلها على جهازك',
   'permission_storage_title': 'التخزين',
   'permission_subtitle': 'اسمح بالأذونات التالية للحصول على أفضل تجربة',
@@ -375,12 +384,14 @@ const Map<String, String> arTranslations = {
   'settings_about_desc': 'مدير تنزيلات سريع متعدد الأجزاء ومتصفح ويب متكامل.',
   'settings_accessibility_title': 'خيارات سهولة الوصول (إمكانية الوصول)',
   'settings_adaptive_threads': 'العدد التكيفي للخيوط',
-  'settings_adaptive_threads_sub': 'تعديل عدد الخيوط تلقائياً بناءً على سرعة التنزيل',
+  'settings_adaptive_threads_sub':
+      'تعديل عدد الخيوط تلقائياً بناءً على سرعة التنزيل',
   'settings_adblock_failed_msg': 'فشل تحديث قائمة المضيفين. تحقق من الاتصال.',
   'settings_adblock_rules': 'قواعد وقوائم التصفية المحملة',
   'settings_adblock_success_msg': 'تم تحديث قائمة المضيفين بنجاح!',
   'settings_adblock_title': 'حظر الإعلانات وقواعد المضيفين',
-  'settings_adblock_updating_msg': 'جاري تنزيل وتحديث قائمة مضيفي حظر الإعلانات (EasyList)...',
+  'settings_adblock_updating_msg':
+      'جاري تنزيل وتحديث قائمة مضيفي حظر الإعلانات (EasyList)...',
   'settings_adv_console': 'إعدادات متقدمة',
   'settings_alerters': 'الصوت والتنبيهات',
   'settings_auto_resume': 'الاستئناف التلقائي للتنزيلات',
@@ -388,7 +399,8 @@ const Map<String, String> arTranslations = {
   'settings_auto_retry': 'إعادة المحاولة التلقائية للتنزيلات الفاشلة',
   'settings_auto_retry_sub': 'إعادة محاولة التنزيل تلقائياً عند الفشل',
   'settings_auto_verify_checksum': 'التحقق التلقائي من سلامة الملف',
-  'settings_auto_verify_checksum_sub': 'حساب التجزئة SHA-256 بعد اكتمال كل تنزيل',
+  'settings_auto_verify_checksum_sub':
+      'حساب التجزئة SHA-256 بعد اكتمال كل تنزيل',
   'settings_backend_url': 'رابط خادم الاستخراج',
   'settings_backup_sub': 'أرشفة واسترجاع سجلات التنزيل',
   'settings_backup_title': 'النسخ الاحتياطي للنظام',
@@ -433,7 +445,8 @@ const Map<String, String> arTranslations = {
   'settings_network_sec': 'الشبكة والأمان',
   'settings_reduce_visuals': 'تقليل التأثيرات البصرية',
   'settings_reduce_visuals_sub': 'تعطيل تأثيرات التمويه والتوهج لتحسين الأداء',
-  'settings_reset_confirm_body': 'هل أنت متأكد من رغبتك في إعادة ضبط جميع الإعدادات إلى القيم الافتراضية؟',
+  'settings_reset_confirm_body':
+      'هل أنت متأكد من رغبتك في إعادة ضبط جميع الإعدادات إلى القيم الافتراضية؟',
   'settings_reset_confirm_btn': 'إعادة ضبط',
   'settings_reset_confirm_title': 'إعادة ضبط الإعدادات',
   'settings_reset_done': 'تم إعادة ضبط الإعدادات بنجاح',
@@ -459,9 +472,11 @@ const Map<String, String> arTranslations = {
   'settings_update_adblock_hosts': 'تحديث قائمة المضيفين (UPDATE HOSTS)',
   'settings_updating_adblock_hosts': 'جاري التحديث...',
   'settings_use_local_yt_fallback': 'تفعيل بديل الاستخراج المحلي',
-  'settings_use_local_yt_fallback_sub': 'استخدام منطق التحميل الداخلي إذا كان خادم الاستخراج الخارجي غير متصل',
+  'settings_use_local_yt_fallback_sub':
+      'استخدام منطق التحميل الداخلي إذا كان خادم الاستخراج الخارجي غير متصل',
   'settings_use_remote_backend': 'استخدام خادم استخراج خارجي',
-  'settings_use_remote_backend_sub': 'تحليل مصادر تحميل الوسائط عبر خدمة واجهة برمجية مخصصة',
+  'settings_use_remote_backend_sub':
+      'تحليل مصادر تحميل الوسائط عبر خدمة واجهة برمجية مخصصة',
   'settings_visuals': 'التأثيرات البصرية',
   'settings_wifi_only': 'الواي فاي فقط',
   'settings_wifi_only_sub': 'إيقاف التنزيلات مؤقتاً عند استخدام بيانات الهاتف',
@@ -522,7 +537,8 @@ const Map<String, String> arTranslations = {
   'use_advance_download_label': 'استخدام طريقة التنزيل المتقدمة',
   'video_label': 'فيديو',
   'wifi_only_label': 'واي فاي فقط',
-  'yt_legal_warning': 'تنبيه: قم بتحميل المحتوى فقط إذا كنت تملكه أو لديك إذن صريح من صاحب حقوق النشر.',
+  'yt_legal_warning':
+      'تنبيه: قم بتحميل المحتوى فقط إذا كنت تملكه أو لديك إذن صريح من صاحب حقوق النشر.',
   'yt_playlist': 'قائمة تشغيل يوتيوب',
   'yt_video_quality': 'جودة فيديو يوتيوب',
 };

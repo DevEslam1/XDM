@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:dmx/features/downloads/data/task_repository.dart';
 import 'package:dmx/features/downloads/provider/download_list_provider.dart';
 import 'package:dmx/features/downloads/provider/download_queue_provider.dart';
 import 'package:dmx/features/downloads/provider/download_filter_provider.dart';
+import 'package:dmx/features/downloads/provider/torrent_provider.dart';
 import 'package:dmx/features/downloads/provider/download_coordinator.dart';
 
 void main() {
@@ -35,7 +37,7 @@ void main() {
 
   group('DownloadListProvider', () {
     test('Adds and removes task correctly', () {
-      final provider = DownloadListProvider();
+      final provider = DownloadListProvider(InMemoryTaskRepository());
       final task = createTestTask(
         id: 'task_1',
         fileName: 'file.zip',
@@ -65,14 +67,19 @@ void main() {
 
   group('DownloadFilterProvider', () {
     test('Filters tasks by search query', () {
-      final filter = DownloadFilterProvider();
+      final list = DownloadListProvider(InMemoryTaskRepository());
+      final filter = DownloadFilterProvider(list);
       final tasks = [
         createTestTask(id: '1', fileName: 'alpha.mp4', url: 'http://a.com'),
         createTestTask(id: '2', fileName: 'beta.zip', url: 'http://b.com'),
       ];
 
+      for (final t in tasks) {
+        list.addTask(t);
+      }
+
       filter.setSearchQuery('alpha');
-      final result = filter.applyFilter(tasks);
+      final result = filter.filteredTasks;
       expect(result.length, equals(1));
       expect(result.first.fileName, equals('alpha.mp4'));
     });
@@ -80,14 +87,19 @@ void main() {
 
   group('DownloadCoordinator', () {
     test('Coordinating updates exposes filtered tasks', () {
-      final list = DownloadListProvider();
-      final filter = DownloadFilterProvider();
+      final list = DownloadListProvider(InMemoryTaskRepository());
+      final filter = DownloadFilterProvider(list);
+      final queue = DownloadQueueProvider(listProvider: list);
+      final torrent = TorrentProvider();
       final coordinator = DownloadCoordinator(
         listProvider: list,
         filterProvider: filter,
+        queueProvider: queue,
+        torrentProvider: torrent,
       );
 
-      final task = createTestTask(id: '1', fileName: 'doc.pdf', url: 'http://a.com');
+      final task =
+          createTestTask(id: '1', fileName: 'doc.pdf', url: 'http://a.com');
 
       list.addTask(task);
       expect(coordinator.filteredTasks.length, equals(1));

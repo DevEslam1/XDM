@@ -1445,9 +1445,7 @@ class _SpeedGraphPanel extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  L10n.isRtl(context)
-                      ? 'مخطط السرعة'
-                      : 'TRANSFER SPEED CHART',
+                  L10n.isRtl(context) ? 'مخطط السرعة' : 'TRANSFER SPEED CHART',
                   style: AppTheme.microLabel(isDark: isDark, size: 10),
                 ),
                 Row(
@@ -2104,7 +2102,8 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => setState(() => _showTrackers = !_showTrackers),
+                    onPressed: () =>
+                        setState(() => _showTrackers = !_showTrackers),
                     icon: Icon(
                       _showTrackers ? Icons.expand_less : Icons.add_link,
                       size: 14,
@@ -2129,7 +2128,9 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
                   child: OutlinedButton.icon(
                     onPressed: () => setState(() => _showPeers = !_showPeers),
                     icon: Icon(
-                      _showPeers ? Icons.expand_less : Icons.people_alt_outlined,
+                      _showPeers
+                          ? Icons.expand_less
+                          : Icons.people_alt_outlined,
                       size: 14,
                       color: blueClr,
                     ),

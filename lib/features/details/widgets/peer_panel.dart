@@ -112,15 +112,19 @@ class PeerPanel extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      peer.isEncrypted ? Icons.lock_outline : Icons.link_rounded,
+                      peer.isEncrypted
+                          ? Icons.lock_outline
+                          : Icons.link_rounded,
                       size: 16,
-                      color: peer.isSeed ? AppTheme.neonGreen : AppTheme.neonBlue,
+                      color:
+                          peer.isSeed ? AppTheme.neonGreen : AppTheme.neonBlue,
                     ),
                     const SizedBox(width: 4),
                     Icon(
                       peer.isOutgoing ? Icons.north_east : Icons.south_west,
                       size: 12,
-                      color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                     ),
                   ],
                 ),

@@ -7,6 +7,7 @@ class ServerProfile {
   DateTime lastAccess = DateTime.now();
   Duration? lastRetryAfter;
   bool wasRateLimited = false;
+  bool supportsRange = true;
   int successCount = 0;
   int failureCount = 0;
   final Queue<int> _responseTimes = Queue<int>();
@@ -28,6 +29,13 @@ class ServerProfile {
   double get successRate => (successCount + failureCount) > 0
       ? successCount / (successCount + failureCount)
       : 1.0;
+
+  int get avgResponseTimeMs => _responseTimes.isEmpty
+      ? 0
+      : (_responseTimes.reduce((a, b) => a + b) / _responseTimes.length)
+          .round();
+
+  double get reliabilityScore => successRate * 100.0 - failureCount;
 
   void recordSuccess(int responseTimeMs) {
     lastAccess = DateTime.now();
@@ -70,6 +78,16 @@ class ServerProfileManager {
     return _profiles.putIfAbsent(host, () => ServerProfile(host: host));
   }
 
+  static ({double successRate, int avgResponseTimeMs, bool supportsRange})
+      getProfileForMirrorSelection(String url) {
+    final profile = getProfile(url);
+    return (
+      successRate: profile.successRate,
+      avgResponseTimeMs: profile.avgResponseTimeMs,
+      supportsRange: profile.supportsRange,
+    );
+  }
+
   static void recordSuccess(String url, {required int responseTimeMs}) {
     final profile = getProfile(url);
     profile.recordSuccess(responseTimeMs);
@@ -107,9 +125,14 @@ class ServerProfileManager {
 
   static void _evictIfNeeded() {
     while (_profiles.length > _maxProfiles) {
-      final oldest = _profiles.entries.reduce(
-          (a, b) => a.value.lastAccess.isBefore(b.value.lastAccess) ? a : b);
-      _profiles.remove(oldest.key);
+      final toEvict = _profiles.entries.reduce((a, b) {
+        final scoreA = a.value.lastAccess.millisecondsSinceEpoch +
+            (a.value.reliabilityScore * 1000).round();
+        final scoreB = b.value.lastAccess.millisecondsSinceEpoch +
+            (b.value.reliabilityScore * 1000).round();
+        return scoreA < scoreB ? a : b;
+      });
+      _profiles.remove(toEvict.key);
     }
   }
 

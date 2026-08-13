@@ -68,7 +68,9 @@ class DownloadCommand {
     this.ytCounterpartSize,
     this.ytCounterpartDownloadedBytes,
     this.ytCounterpartTaskId,
+    this.throttleFactor = 1.0,
   });
+  final double throttleFactor;
   final String taskId;
   final String url;
   final String punyUrl;
@@ -121,6 +123,7 @@ class DownloadCommand {
           'ytCounterpartDownloadedBytes': ytCounterpartDownloadedBytes,
         if (ytCounterpartTaskId != null)
           'ytCounterpartTaskId': ytCounterpartTaskId,
+        'throttleFactor': throttleFactor,
       };
   static DownloadCommand fromMap(Map<String, dynamic> m) => DownloadCommand(
         taskId: m['taskId'] as String,
@@ -143,6 +146,7 @@ class DownloadCommand {
         mirrorUrls: (m['mirrorUrls'] as List?)?.cast<String>(),
         adaptiveThreads: m['adaptiveThreads'] as bool? ?? false,
         resolvedFileName: m['resolvedFileName'] as String?,
+        throttleFactor: (m['throttleFactor'] as num?)?.toDouble() ?? 1.0,
         ytStreamKind: m['ytStreamKind'] != null
             ? YtStreamKind.values.firstWhere(
                 (k) => k.name == m['ytStreamKind'],
@@ -482,8 +486,8 @@ class DownloadIsolatePool {
 
   void onMemoryPressure() {
     if (_workers.length > 1) {
-      final idleIndex =
-          _workers.lastIndexWhere((w) => w.activeJobs == 0 && w.pending.isEmpty);
+      final idleIndex = _workers
+          .lastIndexWhere((w) => w.activeJobs == 0 && w.pending.isEmpty);
       if (idleIndex != -1) {
         final w = _workers.removeAt(idleIndex);
         w.inbox.close();
@@ -625,8 +629,11 @@ class HttpTransferJob {
   TransferState? _state;
   int? _lastEta;
   int _lastStateSaveMs = 0;
+  bool _stateSavePending = false;
   int _lastReportMs = 0;
   int _bytesSinceSave = 0;
+  int _lastChunkDetailsHash = 0;
+  List<Map<String, dynamic>>? _cachedChunkDetails;
   final Stopwatch _stopwatch = Stopwatch();
   final Queue<_SpeedSample> _speedSamples = Queue();
   void requestCancel() {
@@ -886,7 +893,11 @@ class HttpTransferJob {
         c.downloaded = 0;
       }
     }
-    final governor = BandwidthGovernor(_effectiveGlobalLimit());
+    final governor = BandwidthGovernor(
+      _effectiveGlobalLimit(),
+      1.0,
+      cmd.throttleFactor,
+    );
     governor.registerConsumer();
     if (cmd.speedLimitKbps > 0) {
       governor.setTaskLimit(cmd.taskId, cmd.speedLimitKbps * 125);
@@ -970,7 +981,8 @@ class HttpTransferJob {
       final failed = results.where((r) => !r.success).toList();
       if (failed.isNotEmpty) {
         final firstError = failed.first.error ??
-            const DownloadIntegrityException('Chunk download failed permanently');
+            const DownloadIntegrityException(
+                'Chunk download failed permanently');
         throw firstError;
       }
 
@@ -1050,6 +1062,9 @@ class HttpTransferJob {
           await response.data?.stream.listen((_) {}).cancel();
           if (resumeFrom > 0) {
             chunk.downloaded = 0;
+            try {
+              await StateStore.remove(cmd.tempFilePath);
+            } catch (_) {}
             throw DioException(
               requestOptions: response.requestOptions,
               type: DioExceptionType.badResponse,
@@ -1275,7 +1290,11 @@ class HttpTransferJob {
     } else if (!cmd.supportsResume) {
       chunk.downloaded = 0;
     }
-    final governor = BandwidthGovernor(_effectiveGlobalLimit());
+    final governor = BandwidthGovernor(
+      _effectiveGlobalLimit(),
+      1.0,
+      cmd.throttleFactor,
+    );
     governor.registerConsumer();
     if (cmd.speedLimitKbps > 0) {
       governor.setTaskLimit(cmd.taskId, cmd.speedLimitKbps * 125);
@@ -1626,30 +1645,76 @@ class HttpTransferJob {
   }) async {
     final nowMs = _stopwatch.elapsedMilliseconds;
     final st = _state!;
-    final saveInterval = PowerMonitor.screenOff ? 15000 : 10000;
-    final saveByteThreshold =
-        PowerMonitor.screenOff ? 16 * 1024 * 1024 : 8 * 1024 * 1024;
+
+    // Background-aware intervals
+    final isBackground =
+        DownloadEngine.isInBackground || PowerMonitor.screenOff;
+    final saveInterval = isBackground
+        ? const Duration(seconds: 45).inMilliseconds
+        : const Duration(seconds: 15).inMilliseconds;
+    final saveByteThreshold = isBackground
+        ? 256 * 1024 * 1024 // 256MB in background
+        : 32 * 1024 * 1024; // 32MB foreground
+
     final dueSave = nowMs - _lastStateSaveMs >= saveInterval ||
         _bytesSinceSave >= saveByteThreshold;
-    final dueReport = nowMs - _lastReportMs >= 500;
-    if (dueSave) {
+
+    final reportInterval = isBackground
+        ? 10000 // 10s in background
+        : 750; // 750ms foreground
+
+    final dueReport = nowMs - _lastReportMs >= reportInterval;
+
+    if (dueSave && !_stateSavePending) {
+      _stateSavePending = true;
       _lastStateSaveMs = nowMs;
       _bytesSinceSave = 0;
       try {
         if (preSaveFlush != null) await preSaveFlush();
         if (writer != null) await writer.flushBuffers();
-        await StateStore.save(cmd.tempFilePath, st, screenOff: PowerMonitor.screenOff);
+        await StateStore.save(cmd.tempFilePath, st,
+            screenOff: PowerMonitor.screenOff);
       } catch (e) {
         debugPrint('[DMX-Job] state save failed: $e');
+      } finally {
+        _stateSavePending = false;
       }
     }
+
     if (dueReport && !PowerMonitor.screenOff) {
       _lastReportMs = nowMs;
       _emitProgress(nowMs, writer: writer);
     }
   }
 
-  void _emitProgress(int nowMs, {String? statusMessage, PositionalFileWriter? writer}) {
+  List<Map<String, dynamic>>? _getChunkDetails(TransferState st) {
+    if (st.chunks.isEmpty) return null;
+    final chunkHash =
+        st.chunks.fold<int>(0, (h, c) => h ^ c.downloaded.hashCode);
+    if (_cachedChunkDetails != null && chunkHash == _lastChunkDetailsHash) {
+      return _cachedChunkDetails;
+    }
+    _lastChunkDetailsHash = chunkHash;
+    _cachedChunkDetails = st.chunks.asMap().entries.map((e) {
+      final c = e.value;
+      final rawRatio = c.ratio;
+      final safeRatio = rawRatio < 0.0 ? 0.0 : rawRatio.clamp(0.0, 1.0);
+      return <String, dynamic>{
+        'index': e.key,
+        'start': c.start,
+        'end': c.end,
+        'downloaded': c.downloaded,
+        'size': c.size,
+        'ratio': safeRatio,
+        'isComplete': c.isComplete,
+        'isIndeterminate': c.size < 0,
+      };
+    }).toList();
+    return _cachedChunkDetails;
+  }
+
+  void _emitProgress(int nowMs,
+      {String? statusMessage, PositionalFileWriter? writer}) {
     final st = _state!;
     final downloaded = st.downloadedBytes;
     final total = st.totalSize;
@@ -1682,23 +1747,7 @@ class HttpTransferJob {
     } else {
       _lastEta = null;
     }
-    final chunkDetails = st.chunks.isNotEmpty
-        ? st.chunks.asMap().entries.map((e) {
-            final c = e.value;
-            final rawRatio = c.ratio;
-            final safeRatio = rawRatio < 0.0 ? 0.0 : rawRatio.clamp(0.0, 1.0);
-            return <String, dynamic>{
-              'index': e.key,
-              'start': c.start,
-              'end': c.end,
-              'downloaded': c.downloaded,
-              'size': c.size,
-              'ratio': safeRatio,
-              'isComplete': c.isComplete,
-              'isIndeterminate': c.size < 0,
-            };
-          }).toList()
-        : null;
+    final chunkDetails = _getChunkDetails(st);
     final totalChunks = st.chunks.isNotEmpty ? st.chunks.length : null;
     final completedChunks = st.chunks.isNotEmpty
         ? st.chunks.where((c) => c.isComplete).length

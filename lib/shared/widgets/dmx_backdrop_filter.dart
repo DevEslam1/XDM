@@ -31,7 +31,8 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   @override
   void initState() {
     super.initState();
-    if (!widget.forceSolid && DmxBackdropFilter._activeCount < DmxBackdropFilter._maxConcurrent) {
+    if (!widget.forceSolid &&
+        DmxBackdropFilter._activeCount < DmxBackdropFilter._maxConcurrent) {
       DmxBackdropFilter._activeCount++;
       _allocated = true;
     }
@@ -58,8 +59,11 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
     if (reduceVisuals || classicUi) {
       return widget.child;
     }
+    final effectiveSigmaX = widget.sigmaX.clamp(0.0, 12.0);
+    final effectiveSigmaY = widget.sigmaY.clamp(0.0, 12.0);
     return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: widget.sigmaX, sigmaY: widget.sigmaY),
+      filter:
+          ImageFilter.blur(sigmaX: effectiveSigmaX, sigmaY: effectiveSigmaY),
       child: widget.child,
     );
   }

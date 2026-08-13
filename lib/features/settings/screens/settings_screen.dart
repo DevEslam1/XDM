@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
@@ -74,6 +75,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   late final TextEditingController _searchController;
   late final FocusNode _searchFocusNode;
   String _searchQuery = '';
+  Timer? _searchDebounce;
   late final PageController _pageController;
   late final ScrollController _chipScrollController;
 
@@ -87,11 +89,14 @@ class _SettingsScreenState extends State<SettingsScreen>
     _chipScrollController = ScrollController();
 
     _searchController.addListener(() {
-      if (mounted) {
-        setState(() {
-          _searchQuery = _searchController.text.trim().toLowerCase();
-        });
-      }
+      _searchDebounce?.cancel();
+      _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          setState(() {
+            _searchQuery = _searchController.text.trim().toLowerCase();
+          });
+        }
+      });
     });
 
     _searchFocusNode.addListener(() {
@@ -117,20 +122,14 @@ class _SettingsScreenState extends State<SettingsScreen>
         s.contains('gen')) {
       return 0;
     }
-    if (s.contains('download') ||
-        s.contains('engine') ||
-        s.contains('store')) {
+    if (s.contains('download') || s.contains('engine') || s.contains('store')) {
       return 1;
     }
-    if (s.contains('net') ||
-        s.contains('dns') ||
-        s.contains('sec')) {
+    if (s.contains('net') || s.contains('dns') || s.contains('sec')) {
       return 2;
     }
     if (s.contains('torrent')) return 3;
-    if (s.contains('adv') ||
-        s.contains('power') ||
-        s.contains('back')) {
+    if (s.contains('adv') || s.contains('power') || s.contains('back')) {
       return 4;
     }
     return 0;
@@ -164,6 +163,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
     _pageController.dispose();

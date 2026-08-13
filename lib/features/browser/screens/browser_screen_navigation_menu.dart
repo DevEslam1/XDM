@@ -81,7 +81,7 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
       final currentTabId = activeTab.id;
       _navigatingBackForwardTabIds[currentTabId] = true;
       unawaited(activeTab.controller?.goBack() ?? Future.value());
-      Future.delayed(const Duration(seconds: 5), () {
+      Future.delayed(const Duration(seconds: 30), () {
         if (mounted) {
           _navigatingBackForwardTabIds[currentTabId] = false;
         }
@@ -191,7 +191,7 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     final currentTabId = activeTab.id;
     _navigatingBackForwardTabIds[currentTabId] = true;
     unawaited(activeTab.controller?.goForward() ?? Future.value());
-    Future.delayed(const Duration(seconds: 5), () {
+    Future.delayed(const Duration(seconds: 30), () {
       if (mounted) {
         _navigatingBackForwardTabIds[currentTabId] = false;
       }

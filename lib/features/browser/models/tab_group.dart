@@ -25,7 +25,10 @@ class TabGroup {
       id: json['id'] as String,
       name: json['name'] as String,
       color: Color(json['color'] as int? ?? Colors.blue.toARGB32()),
-      tabIds: (json['tabIds'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      tabIds: (json['tabIds'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
     );
   }
 

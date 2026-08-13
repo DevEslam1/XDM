@@ -21,10 +21,9 @@ class WidgetUpdateWorker(context: Context, params: WorkerParameters) :
     companion object {
         private const val UNIQUE_NAME = "dmx_widget_refresh"
 
-        /// Adaptive scheduling: faster when actively downloading,
-        /// slower when idle to save battery.
+        /// Android WorkManager enforces a minimum periodic interval of 15 minutes.
         fun schedule(context: Context, activeDownloads: Boolean) {
-            val intervalMinutes = if (activeDownloads) 5L else 30L
+            val intervalMinutes = if (activeDownloads) 15L else 30L
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
                 .build()

@@ -1,24 +1,52 @@
 import 'package:flutter/foundation.dart';
 import 'package:dmx/core/services/torrent_models.dart';
 
+/// Single-responsibility provider for torrent session management and stats tracking.
 class TorrentProvider extends ChangeNotifier {
-  final Map<int, TorrentUpdateInfo> _activeTorrents = {};
+  final Map<String, int> _torrentIds = {};
+  final Map<int, TorrentUpdateInfo> _latestStats = {};
 
-  List<TorrentUpdateInfo> get activeTorrents => _activeTorrents.values.toList();
+  Map<String, int> get torrentIds => Map.unmodifiable(_torrentIds);
+  Map<int, TorrentUpdateInfo> get latestStats => Map.unmodifiable(_latestStats);
 
-  void registerTorrent(int torrentId, TorrentUpdateInfo info) {
-    _activeTorrents[torrentId] = info;
+  void registerTorrentId(String taskId, int torrentId) {
+    _torrentIds[taskId] = torrentId;
     notifyListeners();
   }
 
-  void updateTorrentProgress(int torrentId, TorrentUpdateInfo info) {
-    _activeTorrents[torrentId] = info;
-    notifyListeners();
-  }
-
-  void removeTorrent(int torrentId) {
-    if (_activeTorrents.remove(torrentId) != null) {
-      notifyListeners();
+  void unregisterTorrentId(String taskId) {
+    final torrentId = _torrentIds.remove(taskId);
+    if (torrentId != null) {
+      _latestStats.remove(torrentId);
     }
+    notifyListeners();
+  }
+
+  void updateStats(TorrentUpdateInfo info) {
+    _latestStats[info.id] = info;
+    notifyListeners();
+  }
+
+  TorrentUpdateInfo? getStatsForTask(String taskId) {
+    final torrentId = _torrentIds[taskId];
+    if (torrentId == null) return null;
+    return _latestStats[torrentId];
+  }
+
+  Iterable<TorrentUpdateInfo> get activeTorrents => _latestStats.values;
+
+  void registerTorrent(int id, TorrentUpdateInfo info) {
+    _latestStats[id] = info;
+    notifyListeners();
+  }
+
+  void updateTorrentProgress(int id, TorrentUpdateInfo info) {
+    _latestStats[id] = info;
+    notifyListeners();
+  }
+
+  void removeTorrent(int id) {
+    _latestStats.remove(id);
+    notifyListeners();
   }
 }

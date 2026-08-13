@@ -50,8 +50,9 @@ class DmxCard extends StatelessWidget {
       DmxCardVariant.elevated => isDark
           ? (isAmoled ? AppTheme.amoledSurfaceRaised : AppTheme.surfaceRaised)
           : AppTheme.lightSurfaceRaised,
-      DmxCardVariant.glass => (isDark ? AppTheme.surface : AppTheme.lightSurface)
-          .withValues(alpha: classicUi ? 1.0 : 0.4),
+      DmxCardVariant.glass =>
+        (isDark ? AppTheme.surface : AppTheme.lightSurface)
+            .withValues(alpha: classicUi ? 1.0 : 0.4),
       DmxCardVariant.accent => isDark
           ? (isAmoled ? AppTheme.amoledCardBg : AppTheme.cardBg)
           : AppTheme.lightCardBg,
@@ -64,7 +65,8 @@ class DmxCard extends StatelessWidget {
             : AppTheme.lightBorderSubtle);
 
     Widget content = Container(
-      constraints: maxWidth != null ? BoxConstraints(maxWidth: maxWidth!) : null,
+      constraints:
+          maxWidth != null ? BoxConstraints(maxWidth: maxWidth!) : null,
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(radius),

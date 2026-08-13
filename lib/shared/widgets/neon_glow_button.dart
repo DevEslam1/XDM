@@ -54,6 +54,15 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
   }
 
   @override
+  void didUpdateWidget(NeonGlowButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final enabled = widget.onPressed != null && !widget.isLoading;
+    if (!enabled && _shimmer.isAnimating) {
+      _shimmer.stop();
+    }
+  }
+
+  @override
   void dispose() {
     stopPausableLoop();
     _shimmer.dispose();
@@ -106,7 +115,10 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
     if (widget.isExpanded) content = Center(child: content);
 
     // Shimmer sweep across filled buttons
-    final label = effectiveGlow && widget.isFilled && enabled
+    final label = (effectiveGlow &&
+            widget.isFilled &&
+            enabled &&
+            !_shimmer.isDismissed)
         ? ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: Stack(

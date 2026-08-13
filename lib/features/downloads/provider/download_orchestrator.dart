@@ -24,6 +24,7 @@ import '../../../core/services/error_taxonomy.dart';
 import '../../../core/services/ffmpeg_mux_service.dart';
 import 'package:ffmpeg_kit_flutter_new_min/ffprobe_kit.dart';
 import '../../../core/services/permission_service.dart';
+import '../../../core/services/power_monitor.dart';
 import '../../../core/services/torrent_resume_store.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/services/youtube_service.dart';
@@ -202,6 +203,10 @@ class DownloadOrchestrator {
     _startingTaskIds.remove(taskId);
     _ytRefreshAttempts.remove(taskId);
     _pushScheduled.remove(taskId);
+    StateStore.removeCachedPayload(taskId);
+    _host.speedHistories.remove(taskId);
+    _host.lastProgressUpdateTimes.remove(taskId);
+    _host.lastDbSaveTimes.remove(taskId);
   }
 
   void clearPushScheduled(String taskId) {
@@ -318,17 +323,36 @@ class DownloadOrchestrator {
         }
       }
 
+      // FIX-H5: Independently check main video/payload file existence on disk
+      if (task.tempFilePath.isNotEmpty &&
+          !await File(task.tempFilePath).exists()) {
+        if (task.downloadedBytes > 0 ||
+            (task.statusMessage != null && task.statusMessage!.isNotEmpty)) {
+          task = task.copyWith(
+            downloadedBytes: 0,
+            chunks:
+                List.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0),
+            clearStatusMessage: true,
+          );
+          await _host.setTaskState(task);
+        }
+      }
+
       if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
         final audioPath = '${task.tempFilePath}.audio';
         if (!await File(audioPath).exists()) {
-          if (task.audioProgress > 0) {
-            task = task.copyWith(audioProgress: 0.0);
-            await _host.setTaskState(task);
-          }
+          task = task.copyWith(
+            audioProgress: 0.0,
+            audioDownloadedBytes: 0,
+          );
+          await _host.setTaskState(task);
+          await _host.providerDatabaseService.saveTask(task);
         } else {
           final validated = await DownloadProvider.validateAudioProgress(task);
-          if (validated.audioProgress != task.audioProgress) {
+          if (validated.audioProgress != task.audioProgress ||
+              validated.audioDownloadedBytes != task.audioDownloadedBytes) {
             await _host.setTaskState(validated);
+            await _host.providerDatabaseService.saveTask(validated);
             task = validated;
           }
         }
@@ -347,8 +371,7 @@ class DownloadOrchestrator {
 
   bool startTask(DownloadTask task) {
     if (_host.cancelTokens.containsKey(task.id)) return false;
-    if (_startingTaskIds.contains(task.id)) return false;
-    _startingTaskIds.add(task.id);
+    if (!_startingTaskIds.add(task.id)) return false; // atomic
     try {
       unawaited(_runStartTaskBody(task));
     } catch (_) {
@@ -360,7 +383,11 @@ class DownloadOrchestrator {
 
   Future<void> _runStartTaskBody(DownloadTask task) async {
     try {
-      await _startTaskBody(task);
+      final liveTask = _host.findTaskById(task.id);
+      if (liveTask == null || liveTask.status != DownloadStatus.queued) {
+        return; // Task was modified or removed between check and execution
+      }
+      await _startTaskBody(liveTask);
     } finally {
       _startingTaskIds.remove(task.id);
       // M6: _startTaskBody may return early without consuming a slot (task no
@@ -442,8 +469,12 @@ class DownloadOrchestrator {
       if (cookieString.isNotEmpty) {
         YoutubeService.signIn(cookieString);
       }
-      // Acquire semaphore before hitting the backend
-      await _streamResolveSemaphore.acquire();
+      // Acquire semaphore before hitting the backend (10s timeout)
+      await _streamResolveSemaphore.acquire().timeout(
+            const Duration(seconds: 10),
+            onTimeout: () =>
+                throw TimeoutException('Stream resolution timeout'),
+          );
       try {
         final videoId = YoutubeService.extractVideoId(youtubeUrl);
         if (videoId != null) {
@@ -1641,11 +1672,7 @@ class DownloadOrchestrator {
         // Use the live audioBytesSoFar first (updated on every audio tick),
         // then fall back to the persisted audioDownloadedBytes, then 0.
         final audioContribution = hasAudio
-            ? (base.audioSize > 0
-                ? base.audioSize
-                : (audioBytesSoFar > 0
-                    ? audioBytesSoFar
-                    : base.audioDownloadedBytes))
+            ? (base.audioSize > 0 ? base.audioSize : base.audioDownloadedBytes)
             : 0;
         var calculatedTotal = effectiveVideoSize + audioContribution;
         if (base.fileSize > 0 && calculatedTotal > base.fileSize) {
@@ -1732,7 +1759,10 @@ class DownloadOrchestrator {
 
         final now = DateTime.now().millisecondsSinceEpoch;
         final lastUpdate = _host.lastProgressUpdateTimes[task.id] ?? 0;
-        if (now - lastUpdate >= 250) {
+        final throttleMs = PowerMonitor.screenOff
+            ? 30000
+            : (DownloadEngine.isInBackground ? 5000 : 250);
+        if (now - lastUpdate >= throttleMs) {
           _host.lastProgressUpdateTimes[task.id] = now;
           _host.providerTasks[index] = updated;
           _host.pushProgressTick(task.id, updated.progress, updated.speed);
@@ -1846,7 +1876,8 @@ class DownloadOrchestrator {
                 liveAudioTask.mergedAudioUrl != null &&
                 liveAudioTask.mergedAudioUrl!.isNotEmpty;
             if (!liveHasAudio) return;
-            final liveAudioTempPath = effectiveAudioPath;
+            final liveAudioTempPath =
+                audioTempPath ?? '${liveAudioTask.tempFilePath}.audio';
             final liveAudioSize = liveAudioTask.audioSize;
 
             final audioFile = File(liveAudioTempPath);
@@ -2225,22 +2256,28 @@ class DownloadOrchestrator {
                       _host.providerTasks[idx] =
                           _host.providerTasks[idx].copyWith(
                         videoStreamSize: progress.fileSize,
-                      ); // FIX-B4
+                      );
                     }
                   }
+
+                  final isCellularOrSlow = _host.networkMonitor.isCellular;
+                  final speedThresholdBytes =
+                      isCellularOrSlow ? 40 * 1024 : 80 * 1024;
+                  final isLargeFile = task.fileSize > 50 * 1024 * 1024;
 
                   if (isYoutube &&
                       progress.downloadedBytes > 1024 * 1024 &&
                       progress.speed > 0 &&
-                      progress.speed < 120 * 1024) {
+                      progress.speed < speedThresholdBytes &&
+                      isLargeFile) {
                     final lowSpeedCount =
                         (_host.ytLowSpeedCounts[task.id] ?? 0) + 1;
                     _host.ytLowSpeedCounts[task.id] = lowSpeedCount;
                     Logger.root.warning(
-                      'Suspiciously low YouTube download speed (${(progress.speed / 1024).toStringAsFixed(1)} KB/s) for video ${task.id} (sample $lowSpeedCount). '
+                      'Suspiciously low YouTube download speed (${(progress.speed / 1024).toStringAsFixed(1)} KB/s) for video ${task.id} (sample $lowSpeedCount/15). '
                       'The stream URL may be throttled due to n-parameter descrambling.',
                     );
-                    if (lowSpeedCount >= 10 &&
+                    if (lowSpeedCount >= 15 &&
                         !(_host.ytThrottlingRefreshing[task.id] ?? false)) {
                       _host.ytThrottlingRefreshing[task.id] = true;
                       _host.ytLowSpeedCounts[task.id] = 0;
@@ -2296,7 +2333,8 @@ class DownloadOrchestrator {
                         }
                       });
                     }
-                  } else if (isYoutube && progress.speed >= 120 * 1024) {
+                  } else if (isYoutube &&
+                      progress.speed >= speedThresholdBytes) {
                     _host.ytLowSpeedCounts[task.id] = 0;
                   }
 
@@ -4158,6 +4196,12 @@ class DownloadOrchestrator {
 
   Future<void> _persistAudioState(
       String audioPath, int downloaded, int totalSize) async {
+    // Throttle: write at most every 5 seconds
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final lastWrite = _lastAudioStateSaveMs[audioPath] ?? 0;
+    if (now - lastWrite < 5000) return;
+    _lastAudioStateSaveMs[audioPath] = now;
+
     try {
       final statePath = '$audioPath.dmxstate';
       final state = {
@@ -4167,7 +4211,7 @@ class DownloadOrchestrator {
         'threadCount': 1,
         'progress': [downloaded],
         'status': 'active',
-        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+        'updatedAt': now,
         'chunks': [
           {
             'start': 0,

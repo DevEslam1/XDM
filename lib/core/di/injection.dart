@@ -1,7 +1,16 @@
 import 'package:get_it/get_it.dart';
 import '../services/database_service.dart';
+import '../../features/downloads/data/task_repository.dart';
+import '../../features/downloads/data/drift_task_repository.dart';
+import '../../features/downloads/provider/download_list_provider.dart';
+import '../../features/downloads/provider/download_queue_provider.dart';
+import '../../features/downloads/provider/download_filter_provider.dart';
+import '../../features/downloads/provider/torrent_provider.dart';
+import '../../features/downloads/provider/download_coordinator.dart';
+import '../../features/settings/provider/settings_provider.dart';
 import '../services/download_engine.dart';
 import '../services/permission_service.dart';
+import '../services/power_monitor.dart';
 import '../services/connection_manager.dart';
 import '../services/bandwidth_governor.dart';
 import '../services/checksum_service.dart';
@@ -25,7 +34,35 @@ Future<void> configureDependencies() async {
   if (getIt.isRegistered<DatabaseService>()) return;
 
   getIt.registerLazySingleton<DatabaseService>(() => DatabaseService());
+  getIt.registerLazySingleton<TaskRepository>(
+    () => DriftTaskRepository(getIt<DatabaseService>()),
+  );
+  getIt.registerLazySingleton<DownloadListProvider>(
+    () => DownloadListProvider(getIt<TaskRepository>()),
+  );
+  getIt.registerLazySingleton<DownloadQueueProvider>(
+    () => DownloadQueueProvider(
+      listProvider: getIt<DownloadListProvider>(),
+      settings: getIt<SettingsProvider>(),
+    ),
+  );
+  getIt.registerLazySingleton<DownloadFilterProvider>(
+    () => DownloadFilterProvider(getIt<DownloadListProvider>()),
+  );
+  getIt.registerLazySingleton<TorrentProvider>(
+    () => TorrentProvider(),
+  );
+  getIt.registerLazySingleton<DownloadCoordinator>(
+    () => DownloadCoordinator(
+      listProvider: getIt<DownloadListProvider>(),
+      queueProvider: getIt<DownloadQueueProvider>(),
+      filterProvider: getIt<DownloadFilterProvider>(),
+      torrentProvider: getIt<TorrentProvider>(),
+    ),
+  );
+
   getIt.registerLazySingleton<DownloadEngine>(() => DownloadEngine());
+  getIt.registerLazySingleton<PowerMonitor>(() => PowerMonitor());
   getIt.registerLazySingleton<PermissionService>(() => PermissionService());
   getIt.registerLazySingleton<ConnectionManager>(() => ConnectionManager());
   getIt.registerLazySingleton<BandwidthGovernor>(() => BandwidthGovernor(0),

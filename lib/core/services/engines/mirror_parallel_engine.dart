@@ -1,5 +1,6 @@
 import 'dart:collection';
 import 'package:logging/logging.dart';
+import '../mirror_failover.dart';
 
 class _MirrorState {
   final Queue<double> _speeds = Queue<double>();
@@ -16,8 +17,9 @@ class MirrorParallelEngine {
   static final _log = Logger('MirrorParallelEngine');
   final List<String> _mirrorUrls;
   final Map<String, _MirrorState> _mirrorStates = {};
+  MirrorFailover? failover;
 
-  MirrorParallelEngine(this._mirrorUrls);
+  MirrorParallelEngine(this._mirrorUrls, {this.failover});
 
   List<String> get mirrorUrls => List.unmodifiable(_mirrorUrls);
 
@@ -36,8 +38,45 @@ class MirrorParallelEngine {
       if (remainder > 0) remainder--;
       distribution[mirror] = List.generate(count, (_) => threadIndex++);
     }
-    // FIX: Mirrors with 0 assigned threads are intentionally excluded from
-    // the map so downstream code never iterates over empty thread lists.
+
+    // Check if any mirror is slow (< 33% of average speed) and reallocate its threads to the fastest mirror
+    if (_mirrorStates.length > 1) {
+      final avgSpeed = _mirrorStates.values
+              .map((s) => s.averageSpeed)
+              .reduce((a, b) => a + b) /
+          _mirrorStates.length;
+
+      if (avgSpeed > 0) {
+        final slowMirrors = distribution.keys.where((m) {
+          final s = _mirrorStates[m];
+          return s != null &&
+              s.averageSpeed > 0 &&
+              s.averageSpeed < avgSpeed * 0.33;
+        }).toList();
+
+        if (slowMirrors.isNotEmpty) {
+          final fastestEntry = _mirrorStates.entries.reduce(
+              (a, b) => a.value.averageSpeed > b.value.averageSpeed ? a : b);
+          final fastestMirror = fastestEntry.key;
+
+          for (final slowMirror in slowMirrors) {
+            if (slowMirror != fastestMirror &&
+                distribution.containsKey(slowMirror)) {
+              final threadsToReallocate = distribution.remove(slowMirror) ?? [];
+              if (threadsToReallocate.isNotEmpty) {
+                distribution.putIfAbsent(fastestMirror, () => []);
+                distribution[fastestMirror]!.addAll(threadsToReallocate);
+                _log.info(
+                  '[MirrorParallel] Reallocated ${threadsToReallocate.length} threads from slow mirror $slowMirror to fastest $fastestMirror',
+                );
+                failover?.reportSlowMirror(slowMirror, fastestMirror);
+              }
+            }
+          }
+        }
+      }
+    }
+
     return distribution;
   }
 
@@ -61,15 +100,12 @@ class MirrorParallelEngine {
     final slowState = _mirrorStates[slowMirror];
     final fastest = _mirrorStates.entries
         .reduce((a, b) => a.value.averageSpeed > b.value.averageSpeed ? a : b);
-    // FIX: Previously logged "Redistributing threads" but never actually
-    // redistributed — this class is a pure planner with no thread ownership.
-    // Actual failover is handled by MirrorFailover in the download engine.
     _log.info(
       '[MirrorParallel] Slow mirror detected: $slowMirror '
       '(avg ${((slowState?.averageSpeed ?? 0) / 1024).toStringAsFixed(0)} KB/s). '
-      'Fastest mirror: ${fastest.key} '
-      '(avg ${(fastest.value.averageSpeed / 1024).toStringAsFixed(0)} KB/s). '
-      'Failover is handled by the download engine via MirrorFailover.',
+      'Reallocating threads to fastest mirror: ${fastest.key} '
+      '(avg ${(fastest.value.averageSpeed / 1024).toStringAsFixed(0)} KB/s).',
     );
+    failover?.reportSlowMirror(slowMirror, fastest.key);
   }
 }

@@ -35,22 +35,18 @@ enum FailureCategory {
 abstract final class RecoveryHints {
   static String hintFor(FailureCategory category) {
     return switch (category) {
-      FailureCategory.network =>
-        'Check your internet connection and retry.',
+      FailureCategory.network => 'Check your internet connection and retry.',
       FailureCategory.serverError =>
         'Server is temporarily unavailable. Retry in a few minutes.',
       FailureCategory.authError =>
         'URL expired. Tap retry to refresh the link.',
-      FailureCategory.diskFull =>
-        'Free up storage space and retry.',
+      FailureCategory.diskFull => 'Free up storage space and retry.',
       FailureCategory.integrityError =>
         'File corrupted on server. Restart download.',
       FailureCategory.fileChanged =>
         'File changed on server. Restart download.',
-      FailureCategory.mergeFailed =>
-        'Merge failed. Tap retry to re-attempt.',
-      FailureCategory.torrentError =>
-        'Torrent engine error. Tap retry.',
+      FailureCategory.mergeFailed => 'Merge failed. Tap retry to re-attempt.',
+      FailureCategory.torrentError => 'Torrent engine error. Tap retry.',
       FailureCategory.unknown =>
         'Unexpected error. Check diagnostics and retry.',
     };
@@ -571,8 +567,14 @@ class DownloadTask {
       id: id,
       fileName: fileName ?? this.fileName,
       url: url ?? this.url,
-      fileSize: max(0, fileSize ?? this.fileSize), // FIX-L1
-      downloadedBytes: downloadedBytes ?? this.downloadedBytes,
+      fileSize: max(0, fileSize ?? this.fileSize),
+      downloadedBytes: max(
+        0,
+        max(0, fileSize ?? this.fileSize) > 0
+            ? (downloadedBytes ?? this.downloadedBytes)
+                .clamp(0, max(0, fileSize ?? this.fileSize))
+            : max(0, downloadedBytes ?? this.downloadedBytes),
+      ),
       speed: speed ?? this.speed,
       eta: clearEta ? null : (eta ?? this.eta),
       category: category ?? this.category,
@@ -586,9 +588,8 @@ class DownloadTask {
       failureCategory: clearFailureCategory
           ? null
           : (failureCategory ?? this.failureCategory),
-      recoveryHint: clearRecoveryHint
-          ? null
-          : (recoveryHint ?? this.recoveryHint),
+      recoveryHint:
+          clearRecoveryHint ? null : (recoveryHint ?? this.recoveryHint),
       threadCount: threadCount ?? this.threadCount,
       chunks: (chunks ?? this.chunks).map((c) {
         if (c.isNaN || c.isInfinite) return 0.0;

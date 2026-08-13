@@ -303,8 +303,6 @@ class NotificationService {
 
       await _ensureNoncePersisted();
 
-
-
       const androidSettings = AndroidInitializationSettings(
         '@mipmap/ic_launcher',
       );
@@ -489,7 +487,9 @@ class NotificationService {
     if (!_initialized) return;
     final now = DateTime.now();
     final lastPost = _lastProgressPostTimes[notificationId];
-    if (!isPaused && lastPost != null && now.difference(lastPost).inMilliseconds < 1000) {
+    if (!isPaused &&
+        lastPost != null &&
+        now.difference(lastPost).inMilliseconds < 1000) {
       return;
     }
     _lastProgressPostTimes[notificationId] = now;
@@ -696,6 +696,9 @@ class NotificationService {
     _receivePort?.close();
     _receivePort = null;
     IsolateNameServer.removePortNameMapping('dmx_notification_port');
+    if (!_actionStreamController.isClosed) {
+      _actionStreamController.close();
+    }
     await _actionQueueLock.synchronized(() {
       _actionQueue.clear();
     });

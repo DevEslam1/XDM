@@ -13,7 +13,8 @@ import 'package:logging/logging.dart';
 class TorrentAddRejectedException implements Exception {
   const TorrentAddRejectedException();
   @override
-  String toString() => 'TorrentAddRejectedException: torrent engine rejected the torrent';
+  String toString() =>
+      'TorrentAddRejectedException: torrent engine rejected the torrent';
 }
 
 /// Mixin that encapsulates torrent-specific orchestration: seeding lifecycle,
@@ -305,13 +306,13 @@ mixin DownloadTorrentMixin {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Seeding speed sync
-  // ---------------------------------------------------------------------------
+  final Map<String, DateTime> _lastSeedingCheck = {};
+
   /// Updates the in-memory `speed` field on all seeding tasks from live
   /// torrent stats. Returns `true` if any task was modified.
   bool updateSeedingSpeeds() {
     var changed = false;
+    final now = DateTime.now();
     for (var i = 0; i < providerTasks.length; i++) {
       final task = providerTasks[i];
       if (task.status == DownloadStatus.completed &&
@@ -328,28 +329,27 @@ mixin DownloadTorrentMixin {
         providerTasks[i] = task.copyWith(speed: speed);
         changed = true;
 
-        if (task.seedingEnabled && task.completedAt != null) {
-          final maxMinutes = TorrentService.maxSeedingTimeMinutes;
-          bool shouldStopSeeding = false;
+        final lastCheck = _lastSeedingCheck[task.id];
+        if (lastCheck == null || now.difference(lastCheck).inSeconds >= 30) {
+          _lastSeedingCheck[task.id] = now;
+          if (task.seedingEnabled && task.completedAt != null) {
+            final maxMinutes = TorrentService.maxSeedingTimeMinutes;
+            bool shouldStopSeeding = false;
 
-          if (maxMinutes > 0) {
-            final seedingDuration = DateTime.now().difference(
-              task.completedAt!,
-            );
-            if (seedingDuration.inMinutes >= maxMinutes) {
-              shouldStopSeeding = true;
+            if (maxMinutes > 0) {
+              final seedingDuration = now.difference(
+                task.completedAt!,
+              );
+              if (seedingDuration.inMinutes >= maxMinutes) {
+                shouldStopSeeding = true;
+              }
             }
-          }
 
-          if (shouldStopSeeding) {
-            // B5: Delegate to updateTaskSeeding so the native torrent handle is
-            //     removed, the Dart map is cleaned up, and the change is persisted
-            //     to the DB — all via the same code path used everywhere else.
-            //     Using unawaited is safe here: updateSeedingSpeeds is a sync
-            //     hot-path; the async teardown can finish independently.
-            unawaited(updateTaskSeeding(task.id, enabled: false));
-            filteredTasksDirty = true;
-            changed = true;
+            if (shouldStopSeeding) {
+              unawaited(updateTaskSeeding(task.id, enabled: false));
+              filteredTasksDirty = true;
+              changed = true;
+            }
           }
         }
       } else if (task.speed > 0 && task.status == DownloadStatus.completed) {

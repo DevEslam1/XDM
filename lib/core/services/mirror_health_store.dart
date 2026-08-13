@@ -71,6 +71,62 @@ class MirrorHealthStore {
     await _persist();
   }
 
+  /// Record speed for a mirror URL using a rolling average of the last 10 samples.
+  static Future<void> recordSpeed(String url, double bytesPerSec) async {
+    _cache ??= {};
+    final state = _cache!.putIfAbsent(url, () => _PersistedMirrorState());
+    state.speedSamples.add(bytesPerSec);
+    if (state.speedSamples.length > 10) {
+      state.speedSamples.removeAt(0);
+    }
+    state.averageSpeedBps =
+        state.speedSamples.reduce((a, b) => a + b) / state.speedSamples.length;
+    await _persist();
+  }
+
+  /// Get active mirror URLs ranked by average speed descending, excluding blacklisted mirrors.
+  static List<String> getMirrorRanking() {
+    if (_cache == null) return [];
+    final valid = _cache!.entries.where((e) => !isBlacklisted(e.key)).toList();
+    valid.sort(
+        (a, b) => b.value.averageSpeedBps.compareTo(a.value.averageSpeedBps));
+    return valid.map((e) => e.key).toList();
+  }
+
+  static const _rankingCacheKey = 'mirror_ranking_cache';
+  static const _rankingTtlKey = 'mirror_ranking_cache_ttl';
+
+  /// Persists the ranked mirror list to SharedPreferences with 1-hour TTL.
+  static Future<void> persistMirrorRanking(List<String> rankedUrls) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_rankingCacheKey, jsonEncode(rankedUrls));
+      await prefs.setInt(
+        _rankingTtlKey,
+        DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+      );
+    } catch (e) {
+      _log.warning('Failed to persist mirror ranking: $e');
+    }
+  }
+
+  /// Retrieves the cached mirror ranking if valid (within 1h TTL).
+  static Future<List<String>?> getPersistedMirrorRanking() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ttl = prefs.getInt(_rankingTtlKey) ?? 0;
+      if (DateTime.now().millisecondsSinceEpoch > ttl) {
+        return null;
+      }
+      final raw = prefs.getString(_rankingCacheKey);
+      if (raw == null) return null;
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list.cast<String>();
+    } catch (e) {
+      return null;
+    }
+  }
+
   /// Check if a mirror is currently blacklisted.
   static bool isBlacklisted(String url) {
     final state = _cache?[url];
@@ -127,6 +183,8 @@ class MirrorHealthStore {
     _cache = {};
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_storeKey);
+    await prefs.remove(_rankingCacheKey);
+    await prefs.remove(_rankingTtlKey);
   }
 }
 
@@ -139,6 +197,7 @@ class _PersistedMirrorState {
   int lastStatusCode = 0;
   int blacklistedUntil = 0;
   double averageSpeedBps = 0;
+  List<double> speedSamples = [];
 
   bool get isExpired =>
       blacklistedUntil > 0 &&
@@ -151,6 +210,7 @@ class _PersistedMirrorState {
         'lastStatusCode': lastStatusCode,
         'blacklistedUntil': blacklistedUntil,
         'averageSpeedBps': averageSpeedBps,
+        'speedSamples': speedSamples,
       };
 
   factory _PersistedMirrorState.fromJson(Map<String, dynamic> json) {
@@ -161,6 +221,11 @@ class _PersistedMirrorState {
     s.lastStatusCode = json['lastStatusCode'] as int? ?? 0;
     s.blacklistedUntil = json['blacklistedUntil'] as int? ?? 0;
     s.averageSpeedBps = (json['averageSpeedBps'] as num?)?.toDouble() ?? 0;
+    if (json['speedSamples'] != null) {
+      s.speedSamples = (json['speedSamples'] as List<dynamic>)
+          .map((e) => (e as num).toDouble())
+          .toList();
+    }
     return s;
   }
 }

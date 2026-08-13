@@ -35,7 +35,8 @@ void main() {
       expect(await Directory(newSubDir).exists(), isTrue);
     });
 
-    test('Path traversal attempt is blocked with InvalidPathException', () async {
+    test('Path traversal attempt is blocked with InvalidPathException',
+        () async {
       final traversalPath = p.join(tempDir.path, '..', 'outside');
       expect(
         () => DownloadEngine.validateSavePath(traversalPath),

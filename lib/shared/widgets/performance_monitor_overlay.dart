@@ -14,8 +14,7 @@ class PerformanceMonitorOverlay extends StatefulWidget {
       _PerformanceMonitorOverlayState();
 }
 
-class _PerformanceMonitorOverlayState
-    extends State<PerformanceMonitorOverlay> {
+class _PerformanceMonitorOverlayState extends State<PerformanceMonitorOverlay> {
   Timer? _timer;
   double _fps = 60.0;
   bool _screenOff = false;
@@ -73,7 +72,9 @@ class _PerformanceMonitorOverlayState
                   Text(
                     'Screen: ${_screenOff ? "OFF" : "ON"}',
                     style: TextStyle(
-                        color: _screenOff ? Colors.orangeAccent : Colors.greenAccent,
+                        color: _screenOff
+                            ? Colors.orangeAccent
+                            : Colors.greenAccent,
                         fontSize: 11,
                         fontFamily: 'monospace'),
                   ),

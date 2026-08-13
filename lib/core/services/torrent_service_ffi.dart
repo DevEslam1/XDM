@@ -4,7 +4,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show ValueNotifier, listEquals;
-import 'package:libtorrent_flutter/libtorrent_flutter.dart' hide formatBytes, TrackerManager;
+import 'package:libtorrent_flutter/libtorrent_flutter.dart'
+    hide formatBytes, TrackerManager;
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -51,34 +52,44 @@ class _CapabilityGate {
       (target as dynamic).getFileProgress(-1);
     } on NoSuchMethodError {
       fileProgressSupported = false;
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('probe getFileProgress error: $e');
+    }
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).getFilePriorities(-1);
     } on NoSuchMethodError {
       filePrioritiesSupported = false;
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('probe getFilePriorities error: $e');
+    }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).saveResumeData(-1);
     } on NoSuchMethodError {
       resumeDataSupported = false;
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('probe saveResumeData error: $e');
+    }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).forceReCheck(-1);
     } on NoSuchMethodError {
       forceRecheckSupported = false;
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('probe forceReCheck error: $e');
+    }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).getTrackers(-1);
     } on NoSuchMethodError {
       trackersSupported = false;
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('probe getTrackers error: $e');
+    }
 
     try {
       // ignore: avoid_dynamic_calls
@@ -89,35 +100,45 @@ class _CapabilityGate {
       );
     } on NoSuchMethodError {
       createTorrentSupported = false;
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('probe createTorrent error: $e');
+    }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).loadIpFilter('');
     } on NoSuchMethodError {
       ipFilterSupported = false;
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('probe loadIpFilter error: $e');
+    }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).setSequentialDownload(-1, false);
     } on NoSuchMethodError {
       sequentialDownloadSupported = false;
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('probe setSequentialDownload error: $e');
+    }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).setSuperSeeding(-1, false);
     } on NoSuchMethodError {
       superSeedingSupported = false;
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('probe setSuperSeeding error: $e');
+    }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).setPieceDeadline(-1, 0, 0);
     } on NoSuchMethodError {
       pieceDeadlineSupported = false;
-    } catch (_) {}
+    } catch (e) {
+      _log.fine('probe setPieceDeadline error: $e');
+    }
 
     _log.fine(
       'Capability probe complete: fileProgress=$fileProgressSupported, '
@@ -415,12 +436,17 @@ class TorrentService {
     _initCompleter = Completer<void>();
     try {
       try {
-        await LibtorrentFlutter.init();
+        await LibtorrentFlutter.init().timeout(const Duration(seconds: 10));
         _CapabilityGate.instance.probeCapabilities();
         _configureSessionFromSettings();
         _startTrackingUpdates();
         _state = TorrentSessionState.ready;
         isAvailable.value = true;
+      } on TimeoutException {
+        _log.severe('libtorrent init timed out');
+        _state = TorrentSessionState.uninitialized;
+        isAvailable.value = false;
+        return;
       } catch (nativeErr) {
         _log.warning(
           'Native libtorrent init failed (unsupported platform or native library missing): $nativeErr',
@@ -463,7 +489,8 @@ class TorrentService {
       for (final node in _dhtBootstrapNodes) {
         final parts = node.split(':');
         // ignore: avoid_dynamic_calls
-        (LibtorrentFlutter.instance as dynamic).addDhtNode(parts[0], int.parse(parts[1]));
+        (LibtorrentFlutter.instance as dynamic)
+            .addDhtNode(parts[0], int.parse(parts[1]));
       }
     } catch (e) {
       _log.fine('DHT bootstrap node injection skipped/failed: $e');
@@ -829,8 +856,11 @@ class TorrentService {
         }
 
         removeTorrent(id, deleteFiles: true);
-        onStatusUpdate?.call('Metadata fetch failed. Try adding trackers manually.');
-        throw TimeoutException('Magnet metadata fetch timed out after $maxRetries retries', timeout);
+        onStatusUpdate
+            ?.call('Metadata fetch failed. Try adding trackers manually.');
+        throw TimeoutException(
+            'Magnet metadata fetch timed out after $maxRetries retries',
+            timeout);
       }
     }
     return -1;
@@ -998,7 +1028,8 @@ class TorrentService {
     if (!_activeTorrentIds.contains(id)) return false;
     try {
       // ignore: avoid_dynamic_calls
-      final status = (LibtorrentFlutter.instance as dynamic).getTorrentStatus(id);
+      final status =
+          (LibtorrentFlutter.instance as dynamic).getTorrentStatus(id);
       return status != null;
     } catch (_) {
       _activeTorrentIds.remove(id);
@@ -1017,8 +1048,12 @@ class TorrentService {
     }
   }
 
+  static final Map<int, ({List<TorrentFileItem> files, DateTime fetched})>
+      _filesCache = {};
+
   static void setFilePriorities(int id, List<int> priorities) {
     if (!isInitialized || id < 0) return;
+    _filesCache.remove(id);
     final fileCount = getFileCount(id);
     if (fileCount > 0 && priorities.length != fileCount) {
       _log.warning(
@@ -1097,41 +1132,27 @@ class TorrentService {
     return [];
   }
 
-  static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates {
-    if (!isInitialized) return const Stream.empty();
-    _startTrackingUpdates();
-    final existing = _updateController;
-    if (existing != null) return existing.stream;
+  static List<TorrentFileItem> getFilesCached(int id) {
+    final cached = _filesCache[id];
+    if (cached != null &&
+        DateTime.now().difference(cached.fetched).inSeconds < 5) {
+      return cached.files;
+    }
+    final fresh = getFiles(id);
+    _filesCache[id] = (files: fresh, fetched: DateTime.now());
+    return fresh;
+  }
 
-    late StreamController<Map<int, TorrentUpdateInfo>> bridging;
-    Timer? poller;
-    StreamSubscription? innerSub;
-    bridging = StreamController<Map<int, TorrentUpdateInfo>>(
-      onListen: () {
-        poller = Timer.periodic(const Duration(milliseconds: 200), (_) {
-          if (_state == TorrentSessionState.disposed ||
-              _state == TorrentSessionState.uninitialized) {
-            poller?.cancel();
-            bridging.close();
-            return;
-          }
-          final c = _updateController;
-          if (c != null) {
-            poller?.cancel();
-            innerSub = c.stream.listen(
-              bridging.add,
-              onError: bridging.addError,
-              onDone: bridging.close,
-            );
-          }
-        });
-      },
-      onCancel: () {
-        poller?.cancel();
-        innerSub?.cancel();
-      },
-    );
-    return bridging.stream;
+  static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates {
+    if (_state == TorrentSessionState.uninitialized ||
+        _state == TorrentSessionState.initializing) {
+      return Stream.fromFuture(ready).asyncExpand((_) {
+        _startTrackingUpdates();
+        return _updateController?.stream ?? const Stream.empty();
+      });
+    }
+    _startTrackingUpdates();
+    return _updateController?.stream ?? const Stream.empty();
   }
 
   // ---------------------------------------------------------------------------
@@ -1212,7 +1233,8 @@ class TorrentService {
 
   static void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) {
     if (!isInitialized || torrentId < 0) return;
-    _CapabilityGate.instance.setPieceDeadline(torrentId, pieceIndex, deadlineMs);
+    _CapabilityGate.instance
+        .setPieceDeadline(torrentId, pieceIndex, deadlineMs);
   }
 
   static void enableSuperSeeding(int torrentId, bool enabled) {
@@ -1253,7 +1275,8 @@ class TorrentService {
           name: native.name,
           size: native.size,
           downloadedBytes: diskBytes,
-          progress: native.size > 0 ? (diskBytes / native.size).clamp(0.0, 1.0) : 1.0,
+          progress:
+              native.size > 0 ? (diskBytes / native.size).clamp(0.0, 1.0) : 1.0,
           exists: exists,
           isComplete: diskBytes >= native.size,
         ));
@@ -1285,6 +1308,79 @@ class TorrentService {
       if (minutesSeeding >= maxSeedingMinutes) return true;
     }
     return false;
+  }
+
+  static const List<String> _fallbackDhtNodes = [
+    'router.bittorrent.com:6881',
+    'dht.transmissionbt.com:6881',
+    'router.utorrent.com:6881',
+    'dht.aelitis.com:6881',
+    'router.silotis.us:6881',
+    'dht.libtorrent.org:25401',
+    'bootstrap.bittorrent.com:6881',
+    'dht.anacrolix.link:42069',
+    'router.bitcomet.com:6881',
+  ];
+
+  static void refreshDhtBootstrapNodes() {
+    try {
+      for (final node in _fallbackDhtNodes) {
+        final parts = node.split(':');
+        // ignore: avoid_dynamic_calls
+        (LibtorrentFlutter.instance as dynamic)
+            .addDhtNode(parts[0], int.parse(parts[1]));
+      }
+    } catch (e) {
+      _log.fine('refreshDhtBootstrapNodes failed: $e');
+    }
+  }
+
+  static Future<void> saveDhtState() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final path = p.join(dir.path, 'dht.state');
+      final target = LibtorrentFlutter.instance as dynamic;
+      // ignore: avoid_dynamic_calls
+      final bytes = await target.saveDhtState() as Uint8List?;
+      if (bytes != null && bytes.isNotEmpty) {
+        final tmp = File('$path.tmp');
+        await tmp.writeAsBytes(bytes, flush: true);
+        await tmp.rename(path);
+      }
+    } catch (e) {
+      _log.warning('saveDhtState failed: $e');
+    }
+  }
+
+  static Future<void> loadDhtState() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final path = p.join(dir.path, 'dht.state');
+      final file = File(path);
+      if (await file.exists()) {
+        final bytes = await file.readAsBytes();
+        final target = LibtorrentFlutter.instance as dynamic;
+        // ignore: avoid_dynamic_calls
+        await target.loadDhtState(bytes);
+      }
+    } catch (e) {
+      _log.warning('loadDhtState failed: $e');
+    }
+  }
+
+  static Future<bool> reattachTorrent(String sourceUrl, String savePath) async {
+    try {
+      if (sourceUrl.startsWith('magnet:')) {
+        final id = addMagnet(sourceUrl, savePath);
+        return id >= 0;
+      } else {
+        final id = addTorrentFile(sourceUrl, savePath);
+        return id >= 0;
+      }
+    } catch (e) {
+      _log.warning('reattachTorrent failed for $sourceUrl: $e');
+      return false;
+    }
   }
 }
 

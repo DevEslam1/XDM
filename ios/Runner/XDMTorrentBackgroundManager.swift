@@ -133,26 +133,44 @@ public class XDMTorrentBackgroundManager: NSObject {
         task.setTaskCompleted(success: true)
     }
 
-    /// Save fast-resume data for a specific torrent.
-    public func saveTorrentResumeData(torrentId: Int, data: Data) {
-        UserDefaults.standard.set(
-            data,
-            forKey: "\(resumeDataKeyPrefix)\(torrentId)"
-        )
+    private var resumeDir: URL {
+        let fileManager = FileManager.default
+        let container = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.com.dmx.app") 
+            ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = container.appendingPathComponent("torrent_resume", isDirectory: true)
+        if !fileManager.fileExists(atPath: dir.path) {
+            try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
+        }
+        return dir
     }
 
-    /// Load fast-resume data for a specific torrent.
+    /// Save fast-resume data for a specific torrent using atomic file write.
+    public func saveTorrentResumeData(torrentId: Int, data: Data) {
+        guard data.count <= 1024 * 1024 else { return }
+        let target = resumeDir.appendingPathComponent("\(torrentId).resume")
+        let tmp = resumeDir.appendingPathComponent("\(torrentId).resume.tmp")
+        do {
+            try data.write(to: tmp, options: .atomic)
+            if FileManager.default.fileExists(atPath: target.path) {
+                try FileManager.default.removeItem(at: target)
+            }
+            try FileManager.default.moveItem(at: tmp, to: target)
+        } catch {
+            print("XDM Torrent BG: Save resume data failed for \(torrentId): \(error)")
+        }
+    }
+
+    /// Load fast-resume data for a specific torrent from file storage.
     public func loadTorrentResumeData(torrentId: Int) -> Data? {
-        return UserDefaults.standard.data(
-            forKey: "\(resumeDataKeyPrefix)\(torrentId)"
-        )
+        let file = resumeDir.appendingPathComponent("\(torrentId).resume")
+        guard let data = try? Data(contentsOf: file), data.count <= 1024 * 1024 else { return nil }
+        return data
     }
 
     /// Clear resume data for a torrent.
     public func clearTorrentResumeData(torrentId: Int) {
-        UserDefaults.standard.removeObject(
-            forKey: "\(resumeDataKeyPrefix)\(torrentId)"
-        )
+        let file = resumeDir.appendingPathComponent("\(torrentId).resume")
+        try? FileManager.default.removeItem(at: file)
     }
 
     /// Get all active torrent IDs.

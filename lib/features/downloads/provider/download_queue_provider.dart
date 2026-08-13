@@ -1,44 +1,82 @@
 import 'package:flutter/foundation.dart';
+import '../../settings/provider/settings_provider.dart';
+import '../models/download_task.dart';
+import 'download_list_provider.dart';
 
+/// Single-responsibility provider managing execution queue and concurrency.
 class DownloadQueueProvider extends ChangeNotifier {
-  DownloadQueueProvider({int maxConcurrentDownloads = 3})
-      : _maxConcurrentDownloads = maxConcurrentDownloads;
+  final DownloadListProvider? _listProvider;
+  final SettingsProvider? _settings;
+  final int? _maxConcurrentOverride;
 
-  int _maxConcurrentDownloads;
-  int get maxConcurrentDownloads => _maxConcurrentDownloads;
+  final List<String> _queuedIds = [];
 
-  final List<String> _queueTaskIds = [];
-  List<String> get queueTaskIds => List.unmodifiable(_queueTaskIds);
+  DownloadQueueProvider({
+    DownloadListProvider? listProvider,
+    SettingsProvider? settings,
+    int? maxConcurrentDownloads,
+  })  : _listProvider = listProvider,
+        _settings = settings,
+        _maxConcurrentOverride = maxConcurrentDownloads;
 
-  void setMaxConcurrent(int max) {
-    _maxConcurrentDownloads = max;
-    notifyListeners();
-  }
+  int get maxConcurrentDownloads =>
+      _maxConcurrentOverride ?? _settings?.maxDownloads ?? 3;
+  List<String> get queueTaskIds => List.unmodifiable(_queuedIds);
 
   void addToQueue(String taskId) {
-    if (!_queueTaskIds.contains(taskId)) {
-      _queueTaskIds.add(taskId);
+    if (!_queuedIds.contains(taskId)) {
+      _queuedIds.add(taskId);
       notifyListeners();
     }
   }
 
-  void removeFromQueue(String taskId) {
-    if (_queueTaskIds.remove(taskId)) {
-      notifyListeners();
+  void pumpQueue() {
+    final list = _listProvider;
+    if (list == null) return;
+    final activeCount =
+        list.tasks.where((t) => t.status == DownloadStatus.downloading).length;
+    final maxConcurrent = maxConcurrentDownloads;
+
+    if (activeCount >= maxConcurrent) return;
+
+    final queued =
+        list.tasks.where((t) => t.status == DownloadStatus.queued).toList();
+
+    for (final task in queued) {
+      if (activeCount >= maxConcurrent) break;
+      list.updateTask(task.copyWith(status: DownloadStatus.downloading));
+    }
+  }
+
+  Future<void> pauseTask(String id) async {
+    final list = _listProvider;
+    if (list == null) return;
+    final task = list.findTask(id);
+    if (task != null && task.status == DownloadStatus.downloading) {
+      await list.updateTask(
+        task.copyWith(status: DownloadStatus.paused, pausedByUser: true),
+      );
+      pumpQueue();
+    }
+  }
+
+  Future<void> resumeTask(String id) async {
+    final list = _listProvider;
+    if (list == null) return;
+    final task = list.findTask(id);
+    if (task != null && task.status == DownloadStatus.paused) {
+      await list.updateTask(
+        task.copyWith(status: DownloadStatus.queued, pausedByUser: false),
+      );
+      pumpQueue();
     }
   }
 
   void reorderQueue(int oldIndex, int newIndex) {
-    if (oldIndex < 0 || oldIndex >= _queueTaskIds.length) return;
-    if (newIndex < 0 || newIndex >= _queueTaskIds.length) return;
-
-    final id = _queueTaskIds.removeAt(oldIndex);
-    _queueTaskIds.insert(newIndex, id);
-    notifyListeners();
-  }
-
-  void clearQueue() {
-    _queueTaskIds.clear();
+    if (oldIndex < 0 || oldIndex >= _queuedIds.length) return;
+    if (newIndex < 0 || newIndex > _queuedIds.length) return;
+    final item = _queuedIds.removeAt(oldIndex);
+    _queuedIds.insert(newIndex, item);
     notifyListeners();
   }
 }

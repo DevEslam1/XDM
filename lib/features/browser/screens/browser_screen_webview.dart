@@ -420,11 +420,7 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       if (mounted) _updateNavState();
     });
     _loadingTimeoutTimers[tab.id]?.cancel();
-    // Do NOT reset _navigatingBackForwardTabIds here. onLoadStop fires BEFORE
-    // client-side redirects (meta-refresh, JS redirects). Resetting the flag
-    // here causes shouldOverrideUrlLoading to intercept those redirects and
-    // dismiss the page the user is navigating back/forward to.
-    // The flag is managed solely by the timed reset in _goBack/_goForward.
+    _navigatingBackForwardTabIds[tab.id] = false;
     final settings = _settings;
     unawaited(_injectAllScripts(tab, url));
     // UX 3.6: Tab favicons — fetch after page load.

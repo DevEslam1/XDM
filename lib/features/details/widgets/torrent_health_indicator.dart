@@ -2,11 +2,16 @@ import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
 
 enum HealthLevel {
-  dead(Color(0xFFEF4444), Icons.signal_cellular_off_rounded, 'No seeds, no peers'),
-  poor(Color(0xFFF97316), Icons.signal_cellular_alt_1_bar_rounded, 'Few peers, slow'),
-  fair(Color(0xFFF59E0B), Icons.signal_cellular_alt_2_bar_rounded, 'Moderate availability'),
-  good(Color(0xFF22C55E), Icons.signal_cellular_alt_rounded, 'Good availability'),
-  excellent(Color(0xFF10B981), Icons.signal_cellular_alt_rounded, 'Excellent, fast');
+  dead(Color(0xFFEF4444), Icons.signal_cellular_off_rounded,
+      'No seeds, no peers'),
+  poor(Color(0xFFF97316), Icons.signal_cellular_alt_1_bar_rounded,
+      'Few peers, slow'),
+  fair(Color(0xFFF59E0B), Icons.signal_cellular_alt_2_bar_rounded,
+      'Moderate availability'),
+  good(Color(0xFF22C55E), Icons.signal_cellular_alt_rounded,
+      'Good availability'),
+  excellent(
+      Color(0xFF10B981), Icons.signal_cellular_alt_rounded, 'Excellent, fast');
 
   final Color color;
   final IconData icon;

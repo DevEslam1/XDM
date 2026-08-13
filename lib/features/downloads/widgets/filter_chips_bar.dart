@@ -299,15 +299,20 @@ class _StatusFilterButtons extends StatelessWidget {
       );
     }
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          if (vibration) HapticFeedback.selectionClick();
-          context.read<DownloadProvider>().setStatusFilter(filter);
-        },
-        borderRadius: BorderRadius.circular(10),
-        child: buttonContent,
+    return Semantics(
+      button: true,
+      label: 'Filter: $label',
+      selected: selected,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            if (vibration) HapticFeedback.selectionClick();
+            context.read<DownloadProvider>().setStatusFilter(filter);
+          },
+          borderRadius: BorderRadius.circular(10),
+          child: buttonContent,
+        ),
       ),
     );
   }
@@ -401,7 +406,11 @@ class _CategoryChip extends StatelessWidget {
       );
     }
 
-    return chip;
+    return Semantics(
+      button: true,
+      label: 'Remove filter: $label',
+      child: chip,
+    );
   }
 }
 

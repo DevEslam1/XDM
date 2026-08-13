@@ -10,6 +10,7 @@ import 'package:open_filex/open_filex.dart' as open_filex;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/background_service.dart';
+import '../../../core/services/download_engine.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/power_monitor.dart';
 import '../../../core/utils/file_utils.dart';
@@ -146,7 +147,8 @@ class NotificationCoordinator {
   }
 
   void init() {
-    _nextNotificationId = (DateTime.now().millisecondsSinceEpoch % 10000) + 1000;
+    _nextNotificationId =
+        (DateTime.now().millisecondsSinceEpoch % 10000) + 1000;
     _handlesLoadFuture ??= _loadPersistedHandles();
     _actionSubscription?.cancel();
     _actionSubscription = _notificationService.onActionTapped.listen(
@@ -226,17 +228,21 @@ class NotificationCoordinator {
       final task = _findTask(taskId);
       if (task == null &&
           (action == 'pause' || action == 'resume' || action == 'cancel')) {
-        debugPrint('[Notifications] Task $taskId not found, ignoring action $action');
+        debugPrint(
+            '[Notifications] Task $taskId not found, ignoring action $action');
         return;
       }
     }
 
-    if (taskId != null && (action == 'pause' || action == 'resume' || action == 'cancel')) {
+    if (taskId != null &&
+        (action == 'pause' || action == 'resume' || action == 'cancel')) {
       final key = '$taskId:$action';
       final lastTime = _lastNotifActionTime[key];
       final now = DateTime.now();
-      if (lastTime != null && now.difference(lastTime) < const Duration(milliseconds: 500)) {
-        debugPrint('[NotificationCoordinator] Ignored duplicate $action for $taskId');
+      if (lastTime != null &&
+          now.difference(lastTime) < const Duration(milliseconds: 500)) {
+        debugPrint(
+            '[NotificationCoordinator] Ignored duplicate $action for $taskId');
         return;
       }
       _lastNotifActionTime[key] = now;
@@ -355,8 +361,10 @@ class NotificationCoordinator {
     final now = DateTime.now();
     final lastPost = _lastProgressPostTimes[notificationId];
     final minIntervalMs = PowerMonitor.screenOff
-        ? 10000
-        : (_settingsProvider.batterySaverMode ? 5000 : 1000);
+        ? 30000
+        : (DownloadEngine.isInBackground
+            ? 10000
+            : (_settingsProvider.batterySaverMode ? 5000 : 1000));
     if (!isPaused &&
         progressPercent < 100 &&
         lastPost != null &&
@@ -391,7 +399,9 @@ class NotificationCoordinator {
   void _postGroupSummary(int activeCount) {
     final now = DateTime.now();
     final summaryInterval = PowerMonitor.screenOff ? 30 : 3;
-    if (now.difference(_lastSummaryPost) < Duration(seconds: summaryInterval)) return;
+    if (now.difference(_lastSummaryPost) < Duration(seconds: summaryInterval)) {
+      return;
+    }
     _lastSummaryPost = now;
     unawaited(
       _notificationService
@@ -447,9 +457,27 @@ class NotificationCoordinator {
     );
   }
 
+  void cleanupTask(String taskId) {
+    final notifId = _notificationIds.remove(taskId);
+    if (notifId != null) {
+      _lastProgressPostTimes.remove(notifId);
+      unawaited(
+          _notificationService.cancelNotification(notifId).catchError((_) {}));
+    }
+    final handle = _taskToHandle.remove(taskId);
+    if (handle != null) {
+      _opaqueHandles.remove(handle);
+      unawaited(_persistHandles());
+    }
+  }
+
   void dispose() {
     _actionSubscription?.cancel();
+    _actionSubscription = null;
     _notificationIds.clear();
+    _lastProgressPostTimes.clear();
+    _opaqueHandles.clear();
+    _taskToHandle.clear();
     _notificationService.stopPollingPendingActions();
   }
 }

@@ -51,7 +51,8 @@ class DownloadCard extends StatelessWidget with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final isSelectionMode = context.select((DownloadProvider p) => p.isSelectionMode);
+    final isSelectionMode =
+        context.select((DownloadProvider p) => p.isSelectionMode);
     final provider = context.read<DownloadProvider>();
 
     final statusLabel = task.status.name;
@@ -59,20 +60,22 @@ class DownloadCard extends StatelessWidget with HapticHelper {
         '${(task.progress * 100).toStringAsFixed(0)}% downloaded, '
         '${task.speedFormatted}';
 
-    final Widget cardWidget = task.isTorrent
-        ? _TorrentCard(
-            task: task,
-            compact: compact,
-          )
-        : (task.youtubeQualityPreset != null || task.mergedAudioUrl != null)
-            ? _MediaCard(
-                task: task,
-                compact: compact,
-              )
-            : _FileCard(
-                task: task,
-                compact: compact,
-              );
+    final Widget cardWidget = RepaintBoundary(
+      child: task.isTorrent
+          ? _TorrentCard(
+              task: task,
+              compact: compact,
+            )
+          : (task.youtubeQualityPreset != null || task.mergedAudioUrl != null)
+              ? _MediaCard(
+                  task: task,
+                  compact: compact,
+                )
+              : _FileCard(
+                  task: task,
+                  compact: compact,
+                ),
+    );
 
     final Widget interactiveCard = isSelectionMode
         ? cardWidget
@@ -217,16 +220,18 @@ class _CardShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      container: true,
-      hint: 'Double tap to view details',
-      child: DmxCardShell(
-        accent: accent,
-        radius: 16,
-        showRail: true,
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: child,
+    return RepaintBoundary(
+      child: Semantics(
+        container: true,
+        hint: 'Double tap to view details',
+        child: DmxCardShell(
+          accent: accent,
+          radius: 16,
+          showRail: true,
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: child,
+        ),
       ),
     );
   }
@@ -277,7 +282,10 @@ class _StatusChipState extends State<_StatusChip>
   @override
   void didUpdateWidget(_StatusChip oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _syncPulse();
+    // Sync pulse state when task status changes
+    if (oldWidget.task.status != widget.task.status) {
+      _syncPulse();
+    }
   }
 
   void _syncPulse() {
@@ -312,8 +320,7 @@ class _StatusChipState extends State<_StatusChip>
 
   @override
   void dispose() {
-    _controller?.dispose();
-    _controller = null;
+    _stopPulse(); // ensure cleanup
     super.dispose();
   }
 
@@ -477,7 +484,8 @@ class _QueuedSubtext extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (task.status != DownloadStatus.queued) return const SizedBox.shrink();
-    final activeCount = context.select((DownloadProvider p) => p.downloadingTasksCount);
+    final activeCount =
+        context.select((DownloadProvider p) => p.downloadingTasksCount);
     final maxCount = context.watch<SettingsProvider>().maxDownloads;
 
     return Padding(
@@ -725,11 +733,13 @@ class _ChunkedProgressBar extends StatelessWidget {
     final Widget bar;
     if (task.isTorrent || chunks.length <= 1 || task.hasMergedAudio) {
       final provider = context.read<DownloadProvider>();
-      bar = IsolatedProgressBar(
-        progress: provider.progressNotifier(task.id),
-        isDark: isDark,
-        isTorrent: task.isTorrent,
-        height: 8,
+      bar = RepaintBoundary(
+        child: IsolatedProgressBar(
+          progress: provider.progressNotifier(task.id),
+          isDark: isDark,
+          isTorrent: task.isTorrent,
+          height: 8,
+        ),
       );
     } else {
       // FIX(UI4): Isolate multi-chunk bar repaints
@@ -966,10 +976,12 @@ class _ControlButtonState extends State<_ControlButton> {
                   ? null
                   : (_) => setState(() => _pressed = false),
               onTapCancel: () => setState(() => _pressed = false),
-              onTap: widget.isLoading ? null : () {
-                HapticFeedback.lightImpact();
-                widget.onPressed?.call();
-              },
+              onTap: widget.isLoading
+                  ? null
+                  : () {
+                      HapticFeedback.lightImpact();
+                      widget.onPressed?.call();
+                    },
               child: AnimatedScale(
                 scale: _pressed ? 0.85 : 1.0,
                 duration: AppTheme.motionFast,
@@ -1007,9 +1019,12 @@ class _ControlButtonState extends State<_ControlButton> {
                             duration: const Duration(milliseconds: 250),
                             switchInCurve: Curves.easeOutBack,
                             switchOutCurve: Curves.easeIn,
-                            transitionBuilder: (child, anim) => RotationTransition(
-                              turns: Tween<double>(begin: 0.75, end: 1.0).animate(anim),
-                              child: FadeTransition(opacity: anim, child: child),
+                            transitionBuilder: (child, anim) =>
+                                RotationTransition(
+                              turns: Tween<double>(begin: 0.75, end: 1.0)
+                                  .animate(anim),
+                              child:
+                                  FadeTransition(opacity: anim, child: child),
                             ),
                             child: Icon(
                               widget.icon,
@@ -1042,7 +1057,8 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final accent = getEffectiveCardAccent(task, provider, isDark);
-    final isPending = context.select((DownloadProvider p) => p.isTaskOperationPending(task.id));
+    final isPending = context
+        .select((DownloadProvider p) => p.isTaskOperationPending(task.id));
     final isRtl = L10n.isRtl(context);
 
     Widget actionBtn;
@@ -1892,11 +1908,13 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                         final length = (f['length'] as num?)?.toInt() ?? 0;
                         final rawDownloaded =
                             (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-                        // FIX-SENTINEL: -1 means "engine has no data yet" → treat as 0
+                        // -1 = engine has no data; keep 0 but mark as estimated
                         final downloaded =
                             rawDownloaded < 0 ? 0 : rawDownloaded;
+                        final isEstimated =
+                            (f['progressEstimated'] as bool?) ?? false;
                         final effectiveDownloaded = isChecking
-                            ? downloaded // FIX-B7: keep last known value to avoid flicker
+                            ? downloaded
                             : (widget.task.status == DownloadStatus.completed &&
                                     selected
                                 ? length
@@ -1904,7 +1922,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                         return {
                           ...f,
                           'downloadedBytes': effectiveDownloaded,
-                          '_hadNoData': rawDownloaded < 0,
+                          'progressEstimated': isEstimated,
                         };
                       }).toList();
                       final selectedFiles = displayFiles
@@ -1928,9 +1946,12 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                       // FIX-CLAMP: guard against totalDl > totalLen (stale per-file data)
                       // Fall back to the provider's known totalFileBytes when the local
                       // file list is empty (e.g. first tick after a session restore).
+                      final hasTorrentFiles =
+                          widget.task.torrentFiles != null &&
+                              widget.task.torrentFiles!.isNotEmpty;
                       final effectiveTotalLen = totalLen > 0
                           ? totalLen
-                          : (widget.task.fileSize > 0
+                          : (!hasTorrentFiles && widget.task.fileSize > 0
                               ? widget.task.fileSize
                               : 0);
                       final overallProgress = effectiveTotalLen > 0
@@ -2136,7 +2157,9 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
         // During a recheck the engine may report 0 temporarily;
         // keep the last known value so the bar doesn't flicker to 0.
         final downloaded = isChecking
-            ? (length > 0 ? rawBytes.clamp(0, length) : rawBytes)
+            ? (length > 0
+                ? rawBytes.clamp(0, length)
+                : (rawBytes < 0 ? 0 : rawBytes))
             : (length > 0 ? rawBytes.clamp(0, length) : 0);
         final resolvedBytes =
             (widget.task.status == DownloadStatus.completed && selected)
@@ -2295,7 +2318,12 @@ class _TorrentFileRow extends StatelessWidget {
     final length = (file['length'] as num?)?.toInt() ?? 0;
     final safeLength = length < 0 ? 0 : length;
     final rawBytes = (file['downloadedBytes'] as num?)?.toInt() ?? 0;
-    final downloaded = safeLength > 0 ? rawBytes.clamp(0, safeLength) : 0;
+    // -1 means "engine has no progress data" — fall back to 0 but keep
+    // the estimated flag so the UI can show a hint instead of a hard 0.
+    final hasEngineData = rawBytes >= 0;
+    final downloaded = hasEngineData
+        ? (safeLength > 0 ? rawBytes.clamp(0, safeLength) : 0)
+        : 0;
     final p = safeLength > 0 ? (downloaded / safeLength).clamp(0.0, 1.0) : 0.0;
     final done = selected && p >= 1.0;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
@@ -2310,9 +2338,11 @@ class _TorrentFileRow extends StatelessWidget {
         (downloaded == 0 || hadNoData) && isEstimated && selected && !done;
     final progressText = showIndeterminate
         ? '…'
-        : (isEstimated
-            ? '~${(p * 100).toStringAsFixed(0)}%'
-            : '${(p * 100).toStringAsFixed(0)}%');
+        : (!hasEngineData && !isEstimated
+            ? '…'
+            : (isEstimated
+                ? '~${(p * 100).toStringAsFixed(0)}%'
+                : '${(p * 100).toStringAsFixed(0)}%'));
 
     // FIX(M-4): Render unselected torrent files with reduced opacity
     return Opacity(

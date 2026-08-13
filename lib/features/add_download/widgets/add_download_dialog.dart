@@ -17,6 +17,7 @@ import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/services/download_engine.dart';
+import '../../../core/di/injection.dart';
 import '../../../core/services/site_intelligence/site_intelligence_service.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../downloads/models/download_task.dart';
@@ -617,22 +618,17 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           }
         }
       }
-      final engine = DownloadEngine();
+      final engine = getIt<DownloadEngine>();
       final nameForReq = _nameController.text.trim().isNotEmpty
           ? _composeFullName(
               _nameController.text.trim(), _extController.text.trim())
           : null;
-      DownloadMetadata meta;
-      try {
-        meta = await engine.resolveMetadata(
-          url: url,
-          requestedFileName: nameForReq,
-          customUserAgent: settings.customUserAgent,
-          bypassSSL: settings.bypassSSL,
-        );
-      } finally {
-        engine.close();
-      }
+      final DownloadMetadata meta = await engine.resolveMetadata(
+        url: url,
+        requestedFileName: nameForReq,
+        customUserAgent: settings.customUserAgent,
+        bypassSSL: settings.bypassSSL,
+      );
       if (!mounted) return;
       setState(() {
         _resolvedFileName = meta.fileName;

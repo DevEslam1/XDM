@@ -186,129 +186,136 @@ class _HomeScreenState extends State<HomeScreen>
                   width: contentMaxWidth(context),
                   child: RepaintBoundary(
                     child: CustomScrollView(
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 12),
-                            // FIX(14): iOS has no persistent background downloads
-                            ..._buildIosBackgroundBanner(
-                                isDark, isRtl, downloadProvider),
-                            _stagger(
-                                0.0,
-                                _buildAnimatedSegmentedControl(
-                                  context,
-                                  isDark: isDark,
-                                  isRtl: isRtl,
-                                  downloadProvider: downloadProvider,
-                                )),
-                            const SizedBox(height: 12),
-                            // Analytics Panel
-                            _stagger(
-                                0.08,
-                                AnimatedSize(
-                                  duration: const Duration(milliseconds: 350),
-                                  curve: Curves.easeOutCubic,
-                                  alignment: Alignment.topCenter,
-                                  child: _showAnalytics
-                                      ? Padding(
-                                          padding: EdgeInsets.only(
-                                            left: screenPadding(context).left,
-                                            right: screenPadding(context).left,
-                                            top: 4.0,
-                                            bottom: 20.0,
-                                          ),
-                                          child: Selector<DownloadProvider,
-                                              Map<String, double>>(
-                                            selector: (_, provider) =>
-                                                provider.categorySizes,
-                                            shouldRebuild: (prev, next) {
-                                              if (prev.length != next.length) {
-                                                return true;
-                                              }
-                                              for (final key in prev.keys) {
-                                                if (prev[key] != next[key]) {
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 12),
+                              // FIX(14): iOS has no persistent background downloads
+                              ..._buildIosBackgroundBanner(
+                                  isDark, isRtl, downloadProvider),
+                              _stagger(
+                                  0.0,
+                                  _buildAnimatedSegmentedControl(
+                                    context,
+                                    isDark: isDark,
+                                    isRtl: isRtl,
+                                    downloadProvider: downloadProvider,
+                                  )),
+                              const SizedBox(height: 12),
+                              // Analytics Panel
+                              _stagger(
+                                  0.08,
+                                  AnimatedSize(
+                                    duration: const Duration(milliseconds: 350),
+                                    curve: Curves.easeOutCubic,
+                                    alignment: Alignment.topCenter,
+                                    child: _showAnalytics
+                                        ? Padding(
+                                            padding: EdgeInsets.only(
+                                              left: screenPadding(context).left,
+                                              right:
+                                                  screenPadding(context).left,
+                                              top: 4.0,
+                                              bottom: 20.0,
+                                            ),
+                                            child: Selector<DownloadProvider,
+                                                Map<String, double>>(
+                                              selector: (_, provider) =>
+                                                  provider.categorySizes,
+                                              shouldRebuild: (prev, next) {
+                                                if (prev.length !=
+                                                    next.length) {
                                                   return true;
                                                 }
-                                              }
-                                              return false;
-                                            },
-                                            builder:
-                                                (context, categorySizes, _) =>
-                                                    RepaintBoundary(
-                                              child: _RedesignedAnalyticsPanel(
-                                                categorySizes: categorySizes,
-                                                settings: context
-                                                    .read<SettingsProvider>(),
-                                                activeFilterClr: accentClr,
+                                                for (final key in prev.keys) {
+                                                  if (prev[key] != next[key]) {
+                                                    return true;
+                                                  }
+                                                }
+                                                return false;
+                                              },
+                                              builder:
+                                                  (context, categorySizes, _) =>
+                                                      RepaintBoundary(
+                                                child:
+                                                    _RedesignedAnalyticsPanel(
+                                                  categorySizes: categorySizes,
+                                                  settings: context
+                                                      .read<SettingsProvider>(),
+                                                  activeFilterClr: accentClr,
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                        )
-                                      : const SizedBox.shrink(),
-                                )),
-                            // Stats Panel (Active tab only)
-                            _stagger(
-                                0.12,
-                                AnimatedSize(
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeOutCubic,
-                                  child: _selectedTab == 0
-                                      ? Padding(
-                                          padding: EdgeInsets.only(
-                                            left: screenPadding(context).left,
-                                            right: screenPadding(context).left,
-                                            top: 4.0,
-                                            bottom: 20.0,
-                                          ),
-                                          child: const DownloadStatsPanel(),
-                                        )
-                                      : const SizedBox.shrink(),
-                                )),
+                                          )
+                                        : const SizedBox.shrink(),
+                                  )),
+                              // Stats Panel (Active tab only)
+                              _stagger(
+                                  0.12,
+                                  AnimatedSize(
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeOutCubic,
+                                    child: _selectedTab == 0
+                                        ? Padding(
+                                            padding: EdgeInsets.only(
+                                              left: screenPadding(context).left,
+                                              right:
+                                                  screenPadding(context).left,
+                                              top: 4.0,
+                                              bottom: 20.0,
+                                            ),
+                                            child: const DownloadStatsPanel(),
+                                          )
+                                        : const SizedBox.shrink(),
+                                  )),
 
-                            // Filter Chips
-                            _stagger(
-                                0.16,
-                                Padding(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: screenPadding(context).left),
-                                  child: FilterChipsBar(
-                                      isHistory: _selectedTab == 1),
-                                )),
-                            const SizedBox(height: 20),
-                            // Section Header + Controls
-                            _stagger(
-                                0.20,
-                                _buildSectionHeader(
-                                  context,
-                                  isDark: isDark,
-                                  isRtl: isRtl,
-                                )),
-                            const SizedBox(height: 12),
-                          ],
+                              // Filter Chips
+                              _stagger(
+                                  0.16,
+                                  Padding(
+                                    padding: EdgeInsets.symmetric(
+                                        horizontal:
+                                            screenPadding(context).left),
+                                    child: FilterChipsBar(
+                                        isHistory: _selectedTab == 1),
+                                  )),
+                              const SizedBox(height: 20),
+                              // Section Header + Controls
+                              _stagger(
+                                  0.20,
+                                  _buildSectionHeader(
+                                    context,
+                                    isDark: isDark,
+                                    isRtl: isRtl,
+                                  )),
+                              const SizedBox(height: 12),
+                            ],
+                          ),
                         ),
-                      ),
-                      // Task List Fill
-                      SliverFillRemaining(
-                        hasScrollBody: true,
-                        child: _DownloadTaskList(
-                          selectedTab: _selectedTab,
-                          isDark: isDark,
-                          isRtl: isRtl,
-                          onClearSearch: () {
-                            _searchController.clear();
-                            context.read<DownloadProvider>().setSearchQuery('');
-                          },
-                          stagger: _stagger,
+                        // Task List Fill
+                        SliverFillRemaining(
+                          hasScrollBody: true,
+                          child: _DownloadTaskList(
+                            selectedTab: _selectedTab,
+                            isDark: isDark,
+                            isRtl: isRtl,
+                            onClearSearch: () {
+                              _searchController.clear();
+                              context
+                                  .read<DownloadProvider>()
+                                  .setSearchQuery('');
+                            },
+                            stagger: _stagger,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
             floatingActionButton: isInSelectionMode
                 ? null
                 : _buildFAB(context, isDark, classicUi),
@@ -1590,9 +1597,8 @@ class _DownloadTaskList extends StatelessWidget {
       );
     } else {
       child = Selector<DownloadProvider, List<DownloadTask>>(
-        shouldRebuild: (prev, next) => !listEquals(prev, next),
         selector: (_, p) => p.filteredTasks,
-        builder: (context, fullList, _) {
+        builder: (context, fullList, __) {
           final displayTasks = fullList
               .where((task) =>
                   selectedTab == 0 ? _isActiveTask(task) : !_isActiveTask(task))
@@ -1697,12 +1703,29 @@ class _DownloadTaskList extends StatelessWidget {
                       items: item.items!,
                     );
                   } else {
-                    card = DownloadCard(
+                    card = Selector<DownloadProvider, DownloadTask?>(
                       key: ValueKey(item.task!.id),
-                      task: item.task!,
-                      compact: false,
-                      showDragHandle: true,
-                      index: index,
+                      selector: (_, p) => p.taskById(item.task!.id),
+                      shouldRebuild: (prev, next) {
+                        if (prev == null || next == null) return prev != next;
+                        return prev.status != next.status ||
+                            prev.progress != next.progress ||
+                            prev.speed != next.speed ||
+                            prev.errorMessage != next.errorMessage ||
+                            prev.statusMessage != next.statusMessage ||
+                            prev.fileSize != next.fileSize ||
+                            prev.downloadedBytes != next.downloadedBytes;
+                      },
+                      builder: (_, liveTask, __) {
+                        final effectiveTask = liveTask ?? item.task!;
+                        return DownloadCard(
+                          key: ValueKey(effectiveTask.id),
+                          task: effectiveTask,
+                          compact: false,
+                          showDragHandle: true,
+                          index: index,
+                        );
+                      },
                     );
                   }
                   card = _wrapSelectionMode(card, item, provider);
@@ -1752,12 +1775,29 @@ class _DownloadTaskList extends StatelessWidget {
                         items: item.items!,
                       );
                     } else {
-                      card = DownloadCard(
+                      card = Selector<DownloadProvider, DownloadTask?>(
                         key: ValueKey(item.task!.id),
-                        task: item.task!,
-                        compact: true,
-                        showDragHandle: false,
-                        index: index,
+                        selector: (_, p) => p.taskById(item.task!.id),
+                        shouldRebuild: (prev, next) {
+                          if (prev == null || next == null) return prev != next;
+                          return prev.status != next.status ||
+                              prev.progress != next.progress ||
+                              prev.speed != next.speed ||
+                              prev.errorMessage != next.errorMessage ||
+                              prev.statusMessage != next.statusMessage ||
+                              prev.fileSize != next.fileSize ||
+                              prev.downloadedBytes != next.downloadedBytes;
+                        },
+                        builder: (_, liveTask, __) {
+                          final effectiveTask = liveTask ?? item.task!;
+                          return DownloadCard(
+                            key: ValueKey(effectiveTask.id),
+                            task: effectiveTask,
+                            compact: true,
+                            showDragHandle: false,
+                            index: index,
+                          );
+                        },
                       );
                     }
                     if (!item.isPlaylist) {
@@ -1795,12 +1835,29 @@ class _DownloadTaskList extends StatelessWidget {
                         items: item.items!,
                       );
                     } else {
-                      card = DownloadCard(
+                      card = Selector<DownloadProvider, DownloadTask?>(
                         key: ValueKey(item.task!.id),
-                        task: item.task!,
-                        compact: true,
-                        showDragHandle: false,
-                        index: index,
+                        selector: (_, p) => p.taskById(item.task!.id),
+                        shouldRebuild: (prev, next) {
+                          if (prev == null || next == null) return prev != next;
+                          return prev.status != next.status ||
+                              prev.progress != next.progress ||
+                              prev.speed != next.speed ||
+                              prev.errorMessage != next.errorMessage ||
+                              prev.statusMessage != next.statusMessage ||
+                              prev.fileSize != next.fileSize ||
+                              prev.downloadedBytes != next.downloadedBytes;
+                        },
+                        builder: (_, liveTask, __) {
+                          final effectiveTask = liveTask ?? item.task!;
+                          return DownloadCard(
+                            key: ValueKey(effectiveTask.id),
+                            task: effectiveTask,
+                            compact: true,
+                            showDragHandle: false,
+                            index: index,
+                          );
+                        },
                       );
                     }
                     if (!item.isPlaylist) {

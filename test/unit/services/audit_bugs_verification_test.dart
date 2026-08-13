@@ -22,7 +22,8 @@ void main() {
     });
 
     test('TorrentResumeStore register and unregister source stability', () {
-      TorrentResumeStore.registerSource(101, 'https://example.com/test.torrent');
+      TorrentResumeStore.registerSource(
+          101, 'https://example.com/test.torrent');
       TorrentResumeStore.unregisterTorrent(101);
       // Ensures no exception thrown and registration is cleaned up safely
     });

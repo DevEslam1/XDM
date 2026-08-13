@@ -35,7 +35,10 @@ class ProfessionalRetryInterceptor extends Interceptor {
     final hasRangeHeader =
         opts.headers.containsKey('Range') || opts.headers.containsKey('range');
 
-    if (!isMethodSafe || !isTransient || attempt >= maxRetries || hasRangeHeader) {
+    if (!isMethodSafe ||
+        !isTransient ||
+        attempt >= maxRetries ||
+        hasRangeHeader) {
       handler.next(err);
       return;
     }

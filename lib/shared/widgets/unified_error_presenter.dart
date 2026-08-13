@@ -30,7 +30,8 @@ class UnifiedErrorPresenter {
   static void _logError(Object error, String presenterType) {
     _logger.warning('Presenter [$presenterType] displayed error: $error');
     try {
-      DiagnosticService.instance.record(presenterType, error.toString(), error: error);
+      DiagnosticService.instance
+          .record(presenterType, error.toString(), error: error);
     } catch (_) {}
   }
 

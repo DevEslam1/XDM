@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
+import 'download_engine.dart';
+import 'power_monitor.dart';
 
 enum DmxStateStatus { active, paused, complete, failed }
 
@@ -413,6 +415,15 @@ class StateStore {
     return adjusted;
   }
 
+  static final Map<String, String> _lastWrittenPayloads = {};
+  static const int _maxCachedPayloads = 16;
+
+  static void removeCachedPayload(String taskId) {
+    _lastWrittenPayloads.removeWhere((key, _) => key.contains(taskId));
+  }
+
+  static void removeTaskState(String taskId) => removeCachedPayload(taskId);
+
   static Future<void> save(
     String tempFilePath,
     TransferState state, {
@@ -424,11 +435,20 @@ class StateStore {
     final tmpPath = '$targetPath.tmp';
     try {
       final payload = jsonEncode(state.toJson());
+      if (!durable && _lastWrittenPayloads[targetPath] == payload) {
+        return; // Skip redundant state write
+      }
+      _lastWrittenPayloads[targetPath] = payload;
+      if (_lastWrittenPayloads.length > _maxCachedPayloads) {
+        final keysToRemove = _lastWrittenPayloads.keys
+            .take(_lastWrittenPayloads.length - _maxCachedPayloads)
+            .toList();
+        for (final key in keysToRemove) {
+          _lastWrittenPayloads.remove(key);
+        }
+      }
       final tmp = File(tmpPath);
       await tmp.parent.create(recursive: true);
-      // Periodic progress saves are best-effort: write + atomic rename
-      // without an fsync barrier. Full durability (fsync) is reserved for
-      // pause/stop/completion so active downloads don't hammer flash storage.
       if (durable) {
         await tmp.writeAsString(payload, flush: true);
         try {
@@ -442,19 +462,11 @@ class StateStore {
       try {
         await tmp.rename(targetPath);
       } catch (e) {
-        // ERR-RESILIENCE-2.3: If the atomic rename fails (e.g. cross-device or
-        // target locked), keep the .tmp as a dirty state so the next
-        // loadOrCreate can still recover the progress instead of losing it.
-        debugPrint('[DmxState] rename to $targetPath failed, keeping .tmp: $e');
+        // Fallback to direct write if rename fails (e.g. file lock on Windows)
+        await File(targetPath).writeAsString(payload, flush: true);
       }
     } catch (e) {
       debugPrint('[DmxState] save failed for $tempFilePath: $e');
-      try {
-        final tmp = File(tmpPath);
-        if (await tmp.exists()) {
-          await tmp.delete();
-        }
-      } catch (_) {}
     }
   }
 
@@ -520,7 +532,17 @@ class DownloadJournal {
     });
   }
 
+  int _bytesSinceLastJournal = 0;
+
   Future<void> recordChunkProgress(int index, int bytes) async {
+    // Skip journal writes entirely in background
+    if (DownloadEngine.isInBackground || PowerMonitor.screenOff) {
+      return;
+    }
+
+    _bytesSinceLastJournal += bytes;
+    if (_bytesSinceLastJournal < 64 * 1024) return;
+    _bytesSinceLastJournal = 0;
     await _lock.synchronized(() {
       _ensureOpen();
       final line = _withCrc({

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
+import 'download_engine.dart';
 import 'power_monitor.dart';
 
 /// Data model for a single download task consumed by the launcher widgets.
@@ -208,8 +209,9 @@ class WidgetDataBridge {
   static const MethodChannel channel =
       MethodChannel('com.dmx.app/widget_bridge');
 
-  static const Duration minPushInterval = Duration(seconds: 5);
-  static const Duration screenOffMinPushInterval = Duration(seconds: 60);
+  static const Duration minPushInterval = Duration(seconds: 10);
+  static const Duration backgroundMinPushInterval = Duration(seconds: 60);
+  static const Duration screenOffMinPushInterval = Duration(seconds: 120);
 
   /// Injectable sink used by unit tests to capture pushes without a platform.
   @visibleForTesting
@@ -232,7 +234,9 @@ class WidgetDataBridge {
 
     final effectiveInterval = PowerMonitor.screenOff
         ? screenOffMinPushInterval
-        : minPushInterval;
+        : (DownloadEngine.isInBackground
+            ? backgroundMinPushInterval
+            : minPushInterval);
     final now = DateTime.now();
     if (!force &&
         _lastPush != null &&

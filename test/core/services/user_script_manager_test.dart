@@ -58,11 +58,13 @@ void main() {
 
     test('Glob pattern matching works accurately', () {
       expect(
-        UserScriptManager.matchesPattern('https://example.com/*', 'https://example.com/page'),
+        UserScriptManager.matchesPattern(
+            'https://example.com/*', 'https://example.com/page'),
         isTrue,
       );
       expect(
-        UserScriptManager.matchesPattern('https://other.com/*', 'https://example.com/page'),
+        UserScriptManager.matchesPattern(
+            'https://other.com/*', 'https://example.com/page'),
         isFalse,
       );
     });

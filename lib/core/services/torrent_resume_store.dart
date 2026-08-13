@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/bencode_decoder.dart';
 
 /// Crash-safe persistence for libtorrent fast-resume blobs.
@@ -80,6 +81,31 @@ class TorrentResumeStore {
     _sourceByTorrentId.removeWhere((_, url) => url == sourceUrl);
   }
 
+  static const String _indexKey = 'torrent_resume_index';
+
+  static Future<void> _updateIndex(int torrentId, String fileName) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_indexKey);
+      final index = raw != null
+          ? Map<String, String>.from(jsonDecode(raw))
+          : <String, String>{};
+      index['$torrentId'] = fileName;
+      await prefs.setString(_indexKey, jsonEncode(index));
+    } catch (_) {}
+  }
+
+  static Future<void> _removeFromIndex(int torrentId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_indexKey);
+      if (raw == null) return;
+      final index = Map<String, String>.from(jsonDecode(raw));
+      index.remove('$torrentId');
+      await prefs.setString(_indexKey, jsonEncode(index));
+    } catch (_) {}
+  }
+
   /// Durable save. Returns true only when the blob was written AND re-read
   /// hash-verified. Never throws.
   static Future<bool> saveAndWait({
@@ -93,11 +119,19 @@ class TorrentResumeStore {
       final blob = await fetchResumeData();
       if (blob == null || blob.isEmpty) return false;
 
+      // Reject file > 1MB
+      if (blob.length > 1024 * 1024) {
+        debugPrint(
+            '[TorrentResumeStore] blob size > 1MB, rejecting as corrupt');
+        return false;
+      }
+
       final dir = await _dir();
       final key = _stableKey(sourceUrl);
-      final blobFile = File('${dir.path}/$key.bin');
+      final fileName = '$key.resume';
+      final blobFile = File('${dir.path}/$fileName');
       final metaFile = File('${dir.path}/$key.meta.json');
-      final blobTmp = File('${dir.path}/$key.bin.tmp');
+      final blobTmp = File('${dir.path}/$fileName.tmp');
       final metaTmp = File('${dir.path}/$key.meta.json.tmp');
 
       final digest = sha256.convert(blob).toString();
@@ -125,6 +159,7 @@ class TorrentResumeStore {
       await blobTmp.rename(blobFile.path);
 
       registerSource(torrentId, sourceUrl);
+      await _updateIndex(torrentId, fileName);
       return true;
     } catch (e) {
       debugPrint('[TorrentResumeStore] saveAndWait failed: $e');
@@ -132,8 +167,42 @@ class TorrentResumeStore {
     }
   }
 
+  static final Map<int, Timer> _saveDebounceTimers = {};
+
+  /// Debounced batch save: saves at most every 30 seconds per torrent
+  static Future<void> saveAllDebounced(
+    Iterable<int> torrentIds,
+    FutureOr<Uint8List?> Function(int) progressFor, [
+    List<Map<String, dynamic>>? Function(int)? filesFor,
+  ]) async {
+    for (final id in torrentIds) {
+      _saveDebounceTimers[id]?.cancel();
+      _saveDebounceTimers[id] = Timer(
+        const Duration(seconds: 30),
+        () {
+          final source = _sourceByTorrentId[id];
+          if (source != null) {
+            saveAndWait(
+              torrentId: id,
+              sourceUrl: source,
+              fetchResumeData: () => progressFor(id),
+              files: filesFor?.call(id),
+            );
+          }
+        },
+      );
+    }
+  }
+
+  static void cancelPendingSaves() {
+    for (final timer in _saveDebounceTimers.values) {
+      timer.cancel();
+    }
+    _saveDebounceTimers.clear();
+  }
+
   /// Batch save used by provider pause-all / periodic persistence.
-  /// Awa every per-id save so the caller's `await saveAll(...)` is a true
+  /// Awaits every per-id save so the caller's `await saveAll(...)` is a true
   /// barrier. Ids without a registered source URL are skipped (their blobs
   /// could not be re-found after a restart anyway).
   static Future<void> saveAll(
@@ -162,7 +231,10 @@ class TorrentResumeStore {
     try {
       final dir = await _dir();
       final key = _stableKey(sourceUrl);
-      final blobFile = File('${dir.path}/$key.bin');
+      var blobFile = File('${dir.path}/$key.resume');
+      if (!await blobFile.exists()) {
+        blobFile = File('${dir.path}/$key.bin');
+      }
       final metaFile = File('${dir.path}/$key.meta.json');
       if (!await blobFile.exists() || !await metaFile.exists()) return null;
 
@@ -171,6 +243,13 @@ class TorrentResumeStore {
       final expectedSha = meta['sha256'] as String?;
 
       final blob = await blobFile.readAsBytes();
+      if (blob.isEmpty || blob.length > 1024 * 1024) {
+        debugPrint(
+            '[TorrentResumeStore] invalid blob size (${blob.length} bytes), rejecting as corrupt');
+        await deleteResumeDataForSource(sourceUrl);
+        return null;
+      }
+
       if (expectedSha != null) {
         final actual = sha256.convert(blob).toString();
         if (actual != expectedSha) {
@@ -219,6 +298,7 @@ class TorrentResumeStore {
 
   /// Delete by torrent id (resolves via the registry).
   static Future<void> delete(int torrentId) async {
+    await _removeFromIndex(torrentId);
     final source = _sourceByTorrentId.remove(torrentId);
     if (source != null) await deleteResumeDataForSource(source);
   }

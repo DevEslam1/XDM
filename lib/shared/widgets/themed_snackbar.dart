@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../core/utils/localization.dart';
+import '../../features/settings/provider/settings_provider.dart';
 
 /// A crafted, animated snackbar: colored signal rail, popping status icon,
 /// a one-shot shimmer sweep, optional action, and a dismiss control.
@@ -9,6 +11,8 @@ import '../../core/utils/localization.dart';
 /// call site; new optional parameters are additive.
 class ThemedSnackbar {
   ThemedSnackbar._();
+
+  static DateTime _lastShown = DateTime.fromMillisecondsSinceEpoch(0);
 
   static void show(
     BuildContext context, {
@@ -22,6 +26,9 @@ class ThemedSnackbar {
     VoidCallback? onAction,
   }) {
     if (!context.mounted) return;
+    final now = DateTime.now();
+    if (now.difference(_lastShown).inMilliseconds < 300) return; // debounce
+    _lastShown = now;
     final isDark =
         isDarkMode ?? Theme.of(context).brightness == Brightness.dark;
     final messenger = ScaffoldMessenger.maybeOf(context);
@@ -162,6 +169,8 @@ class _SnackbarBodyState extends State<_SnackbarBody>
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final mutedClr =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final reduceVisuals =
+        context.select((SettingsProvider s) => s.reduceVisuals);
 
     return Material(
       color: Colors.transparent,
@@ -189,43 +198,44 @@ class _SnackbarBodyState extends State<_SnackbarBody>
         ),
         child: Stack(
           children: [
-            // One-shot shimmer sweep across the surface
-            Positioned.fill(
-              child: AnimatedBuilder(
-                animation: _shimmer,
-                builder: (context, child) {
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      final w = constraints.maxWidth;
-                      final x = (w + 140) * _shimmer.value - 140;
-                      return Stack(
-                        children: [
-                          Positioned(
-                            left: x,
-                            top: 0,
-                            bottom: 0,
-                            child: Container(
-                              width: 90,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    color.withValues(alpha: 0),
-                                    color.withValues(
-                                      alpha: isDark ? 0.07 : 0.05,
-                                    ),
-                                    color.withValues(alpha: 0),
-                                  ],
+            // One-shot shimmer sweep across the surface (gated by reduceVisuals)
+            if (!reduceVisuals)
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: _shimmer,
+                  builder: (context, child) {
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        final w = constraints.maxWidth;
+                        final x = (w + 140) * _shimmer.value - 140;
+                        return Stack(
+                          children: [
+                            Positioned(
+                              left: x,
+                              top: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 90,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      color.withValues(alpha: 0),
+                                      color.withValues(
+                                        alpha: isDark ? 0.07 : 0.05,
+                                      ),
+                                      color.withValues(alpha: 0),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                },
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
-            ),
             IntrinsicHeight(
               child: Row(
                 children: [

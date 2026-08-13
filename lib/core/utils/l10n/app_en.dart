@@ -51,7 +51,8 @@ const Map<String, String> enTranslations = {
   'browser_clear': 'Clear',
   'browser_clear_btn': 'Clear',
   'browser_clear_history_btn': 'Clear history',
-  'browser_clear_history_content': 'Are you sure you want to clear all browsing history?',
+  'browser_clear_history_content':
+      'Are you sure you want to clear all browsing history?',
   'browser_clear_history_desc': 'Are you sure you want to clear all history?',
   'browser_clear_history_title': 'CLEAR HISTORY?',
   'browser_clear_search': 'CLEAR SEARCH',
@@ -89,7 +90,8 @@ const Map<String, String> enTranslations = {
   'browser_intercepted_signal': 'INTERCEPTED DOWNLOAD SIGNAL',
   'browser_javascript': 'JavaScript',
   'browser_js_css_injector': 'JS / CSS INJECTOR',
-  'browser_js_css_warning': 'WARNING: Code runs on web pages. Do not enter sensitive data.',
+  'browser_js_css_warning':
+      'WARNING: Code runs on web pages. Do not enter sensitive data.',
   'browser_lazy_video': 'Lazy-Loaded Video',
   'browser_max_tabs': 'Maximum tab limit of 10 reached.',
   'browser_media_detector_off': 'Media detector disabled',
@@ -116,7 +118,8 @@ const Map<String, String> enTranslations = {
   'browser_no_alternative_streams': 'No alternative streams detected',
   'browser_no_bookmarks': 'No bookmarks yet',
   'browser_no_bookmarks_desc': 'Tap + to save your favorite sites',
-  'browser_no_downloads_desc': 'Files you download from the browser will appear here.',
+  'browser_no_downloads_desc':
+      'Files you download from the browser will appear here.',
   'browser_no_downloads_yet': 'No downloads yet',
   'browser_no_history_desc': 'Websites you visit will be listed here.',
   'browser_no_history_found': 'No history found',
@@ -146,7 +149,8 @@ const Map<String, String> enTranslations = {
   'browser_search_or_enter_url': 'Search or enter URL...',
   'browser_search_web': 'Search the web...',
   'browser_select_video_quality': 'SELECT VIDEO QUALITY',
-  'browser_single_and_playlist': 'This link contains both a single video and a playlist.',
+  'browser_single_and_playlist':
+      'This link contains both a single video and a playlist.',
   'browser_single_video': 'Single Video',
   'browser_sniff_description': 'Sniffs media files and documents dynamically',
   'browser_status_active': 'ACTIVE',
@@ -160,16 +164,19 @@ const Map<String, String> enTranslations = {
   'browser_tabs_restored': 'Previous tabs restored',
   'browser_title_label': 'Title',
   'browser_torrent_download': 'Torrent Download',
-  'browser_transmission_established': 'TRANSMISSION ESTABLISHED. CHANNELS CONNECTED.',
+  'browser_transmission_established':
+      'TRANSMISSION ESTABLISHED. CHANNELS CONNECTED.',
   'browser_url_copied': 'URL copied',
   'browser_url_label': 'URL',
   'browser_video_poster': 'Video Poster Image',
   'browser_video_stream_default': 'Video Stream (Default)',
-  'browser_xdm_scanner': 'XDM Scanner intercepted a downloadable stream signal:',
+  'browser_xdm_scanner':
+      'XDM Scanner intercepted a downloadable stream signal:',
   'browser_youtube_video': 'YouTube Video',
   'btn_install_now': 'Install Now',
   'btn_later': 'Later',
-  'bypass_ssl_dialog_body': 'This exposes all downloads to man-in-the-middle attacks. ',
+  'bypass_ssl_dialog_body':
+      'This exposes all downloads to man-in-the-middle attacks. ',
   'bypass_ssl_dialog_confirm': 'I Understand the Risk',
   'bypass_ssl_dialog_title': 'Disable SSL Verification?',
   'cancel': 'Cancel',
@@ -226,7 +233,8 @@ const Map<String, String> enTranslations = {
   'details_path': 'Save path',
   'details_size': 'File size',
   'details_status': 'Status',
-  'details_threads_warning_desc': 'Changing connection threads on an active or paused download will reset progress. Do you want to proceed?',
+  'details_threads_warning_desc':
+      'Changing connection threads on an active or paused download will reset progress. Do you want to proceed?',
   'details_threads_warning_title': 'Restructure connection threads?',
   'details_title': 'Download details',
   'details_transferred': 'Transferred',
@@ -269,9 +277,11 @@ const Map<String, String> enTranslations = {
   'limit_upload_speed': 'Limit upload speed',
   'link_copied': 'Link copied',
   'link_label': 'Link:',
-  'link_updated_success': 'Link updated successfully. You can resume download now.',
+  'link_updated_success':
+      'Link updated successfully. You can resume download now.',
   'loading_playlist': 'Loading playlist...',
-  'media_choice_message': 'Do you want to download "{title}" as a single video or the entire playlist?',
+  'media_choice_message':
+      'Do you want to download "{title}" as a single video or the entire playlist?',
   'media_choice_playlist': 'Full Playlist',
   'media_choice_single': 'Single Video',
   'media_choice_title': 'Select Download Option',
@@ -291,11 +301,16 @@ const Map<String, String> enTranslations = {
   'onboarding_setup_theme': 'THEME',
   'onboarding_skip': 'Skip',
   'onboarding_start': 'Get started',
-  'onboarding_sub_0': 'Pick your language, theme, and interface style. You can change these anytime in Settings.',
-  'onboarding_sub_1': 'Multi-threaded downloads with smart resume for maximum speed.',
-  'onboarding_sub_2': 'Download from YouTube, Facebook, Twitter, TikTok, Instagram, and hundreds more.',
-  'onboarding_sub_3': 'Full torrent support with DHT, encryption, per-file selection, and seeding.',
-  'onboarding_sub_4': 'Auto-categorization, scheduling, Wi-Fi guard, and dark/light themes.',
+  'onboarding_sub_0':
+      'Pick your language, theme, and interface style. You can change these anytime in Settings.',
+  'onboarding_sub_1':
+      'Multi-threaded downloads with smart resume for maximum speed.',
+  'onboarding_sub_2':
+      'Download from YouTube, Facebook, Twitter, TikTok, Instagram, and hundreds more.',
+  'onboarding_sub_3':
+      'Full torrent support with DHT, encryption, per-file selection, and seeding.',
+  'onboarding_sub_4':
+      'Auto-categorization, scheduling, Wi-Fi guard, and dark/light themes.',
   'onboarding_theme_amoled': 'AMOLED',
   'onboarding_theme_dark': 'Dark',
   'onboarding_theme_light': 'Light',
@@ -323,15 +338,18 @@ const Map<String, String> enTranslations = {
   'permission_download_location_button': 'Choose Folder',
   'permission_download_location_change': 'Change',
   'permission_download_location_desc': 'Choose where to save your files',
-  'permission_download_location_required': 'Choose a download folder to continue',
+  'permission_download_location_required':
+      'Choose a download folder to continue',
   'permission_download_location_title': 'Download Location',
   'permission_notifications_desc': 'Get notified when downloads complete',
   'permission_notifications_title': 'Notifications',
   'permission_open_settings': 'Open Settings',
-  'permission_permanently_denied': 'Permission permanently denied. Please enable it in system settings.',
+  'permission_permanently_denied':
+      'Permission permanently denied. Please enable it in system settings.',
   'permission_storage_desc': 'Save downloaded files to your device',
   'permission_storage_title': 'Storage',
-  'permission_subtitle': 'Allow the following permissions for the best experience',
+  'permission_subtitle':
+      'Allow the following permissions for the best experience',
   'permission_title': 'App Permissions',
   'popup_blocked': 'Popup blocked',
   'private_torrent': 'Private Torrent',
@@ -372,15 +390,19 @@ const Map<String, String> enTranslations = {
   'selected_count': '{count} selected',
   'selected_count_singular': '1 selected',
   'settings_about': 'About XDM',
-  'settings_about_desc': 'High-performance multi-threaded download manager and web browser.',
+  'settings_about_desc':
+      'High-performance multi-threaded download manager and web browser.',
   'settings_accessibility_title': 'ACCESSIBILITY CONTROLS',
   'settings_adaptive_threads': 'Adaptive Thread Count',
-  'settings_adaptive_threads_sub': 'Automatically adjust thread count based on download speed trends',
-  'settings_adblock_failed_msg': 'Failed to update AdBlock hosts. Check network.',
+  'settings_adaptive_threads_sub':
+      'Automatically adjust thread count based on download speed trends',
+  'settings_adblock_failed_msg':
+      'Failed to update AdBlock hosts. Check network.',
   'settings_adblock_rules': 'Loaded Blocklist Rules',
   'settings_adblock_success_msg': 'AdBlock hosts updated successfully!',
   'settings_adblock_title': 'ADBLOCKER & HOST FILTERS',
-  'settings_adblock_updating_msg': 'Downloading and updating AdBlock hosts (EasyList)...',
+  'settings_adblock_updating_msg':
+      'Downloading and updating AdBlock hosts (EasyList)...',
   'settings_adv_console': 'Advanced settings',
   'settings_alerters': 'Sound & Alerts',
   'settings_auto_resume': 'Auto-resume Downloads',
@@ -388,13 +410,15 @@ const Map<String, String> enTranslations = {
   'settings_auto_retry': 'Auto-retry failed downloads',
   'settings_auto_retry_sub': 'Automatically retry on failure',
   'settings_auto_verify_checksum': 'Auto-verify file integrity',
-  'settings_auto_verify_checksum_sub': 'Compute SHA-256 hash after each download completes',
+  'settings_auto_verify_checksum_sub':
+      'Compute SHA-256 hash after each download completes',
   'settings_backend_url': 'Extraction Backend URL',
   'settings_backup_sub': 'Archive and retrieve download logs',
   'settings_backup_title': 'System backups',
   'settings_bandwidth': 'Network & Speed Limits',
   'settings_bypass_ssl': 'Trust all ssl certificates',
-  'settings_bypass_ssl_sub': 'Bypass SSL validation (WARNING: MITM vulnerability)',
+  'settings_bypass_ssl_sub':
+      'Bypass SSL validation (WARNING: MITM vulnerability)',
   'settings_chime': 'Completion Notification Chime',
   'settings_chime_sub': 'Play a sound when a download completes',
   'settings_classic_ui': 'Classic ui mode',
@@ -405,10 +429,12 @@ const Map<String, String> enTranslations = {
   'settings_dark_mode': 'Dark Mode',
   'settings_dark_mode_sub': 'Enable dark theme styling',
   'settings_default_threads': 'Default Connection Threads',
-  'settings_default_threads_sub': 'Number of parallel connection threads for new downloads',
+  'settings_default_threads_sub':
+      'Number of parallel connection threads for new downloads',
   'settings_developer': 'Developer',
   'settings_enable_adblock': 'ENABLE ADBLOCKER',
-  'settings_enable_adblock_sub': 'Block ads, popups, and tracking scripts in browser',
+  'settings_enable_adblock_sub':
+      'Block ads, popups, and tracking scripts in browser',
   'settings_engine_status': 'Engine Status',
   'settings_export': 'Export backup',
   'settings_firmware': 'Version',
@@ -421,7 +447,8 @@ const Map<String, String> enTranslations = {
   'settings_haptics': 'Haptic Feedback',
   'settings_haptics_sub': 'Vibrate device on button taps and tab switches',
   'settings_https_only': 'HTTPS-only mode',
-  'settings_https_only_sub': 'Upgrade all http:// navigation to https:// where possible',
+  'settings_https_only_sub':
+      'Upgrade all http:// navigation to https:// where possible',
   'settings_import': 'Import backup',
   'settings_lang': 'Language',
   'settings_lang_sub': 'Select app display language',
@@ -432,8 +459,10 @@ const Map<String, String> enTranslations = {
   'settings_max_channels_sub': 'Limit active parallel downloads',
   'settings_network_sec': 'Network & Security',
   'settings_reduce_visuals': 'Reduce visual effects',
-  'settings_reduce_visuals_sub': 'Disable blur and glow effects for better performance',
-  'settings_reset_confirm_body': 'Are you sure you want to reset all settings to default values?',
+  'settings_reduce_visuals_sub':
+      'Disable blur and glow effects for better performance',
+  'settings_reset_confirm_body':
+      'Are you sure you want to reset all settings to default values?',
   'settings_reset_confirm_btn': 'Reset',
   'settings_reset_confirm_title': 'Reset Settings',
   'settings_reset_done': 'Settings reset successfully',
@@ -450,7 +479,8 @@ const Map<String, String> enTranslations = {
   'settings_subfolders': 'Categorized directories',
   'settings_subfolders_sub': 'Save classified files into subfolders',
   'settings_text_scaling': 'TEXT SCALING FACTOR',
-  'settings_text_scaling_sub': 'Adjust font sizing dynamically across the application',
+  'settings_text_scaling_sub':
+      'Adjust font sizing dynamically across the application',
   'settings_theme': 'Theme Mode',
   'settings_theme_sub': 'Choose appearance theme',
   'settings_ua': 'Custom user-agent',
@@ -459,9 +489,11 @@ const Map<String, String> enTranslations = {
   'settings_update_adblock_hosts': 'UPDATE ADBLOCK HOSTS',
   'settings_updating_adblock_hosts': 'UPDATING...',
   'settings_use_local_yt_fallback': 'Enable Local Extractor Fallback',
-  'settings_use_local_yt_fallback_sub': 'Use internal download logic if the remote extraction service is offline',
+  'settings_use_local_yt_fallback_sub':
+      'Use internal download logic if the remote extraction service is offline',
   'settings_use_remote_backend': 'Use Remote Extraction Backend',
-  'settings_use_remote_backend_sub': 'Resolve media download sources through a custom web API service',
+  'settings_use_remote_backend_sub':
+      'Resolve media download sources through a custom web API service',
   'settings_visuals': 'Visual Effects',
   'settings_wifi_only': 'Wi-Fi Only Mode',
   'settings_wifi_only_sub': 'Pause downloads when on cellular data',
@@ -522,7 +554,8 @@ const Map<String, String> enTranslations = {
   'use_advance_download_label': 'Use advance download method',
   'video_label': 'VIDEO',
   'wifi_only_label': 'Wifi only',
-  'yt_legal_warning': 'Notice: Download content only if you own it or have explicit authorization from the copyright holder.',
+  'yt_legal_warning':
+      'Notice: Download content only if you own it or have explicit authorization from the copyright holder.',
   'yt_playlist': 'YOUTUBE PLAYLIST',
   'yt_video_quality': 'YOUTUBE VIDEO QUALITY',
 };

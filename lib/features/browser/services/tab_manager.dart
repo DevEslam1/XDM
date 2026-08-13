@@ -139,7 +139,8 @@ class TabManager extends ChangeNotifier {
         final decoded = jsonDecode(jsonStr) as List<dynamic>;
         _tabGroups
           ..clear()
-          ..addAll(decoded.map((e) => TabGroup.fromJson(e as Map<String, dynamic>)));
+          ..addAll(
+              decoded.map((e) => TabGroup.fromJson(e as Map<String, dynamic>)));
       }
     } catch (e) {
       _log.warning('Failed to restore tab groups: $e');
@@ -187,9 +188,29 @@ class TabManager extends ChangeNotifier {
       }
     }
     _currentIndex = index;
+    evictInactiveTabs();
     notifyListeners();
     syncUrlController();
     updateNavState();
+  }
+
+  /// Evicts inactive tab controllers to keep memory footprint bounded.
+  void evictInactiveTabs({int keepRecentCount = 3}) {
+    final activeId = activeTab?.id;
+    final recentIds = _tabIdHistory.reversed.take(keepRecentCount).toSet();
+    if (activeId != null) recentIds.add(activeId);
+
+    for (final tab in _tabs) {
+      if (recentIds.contains(tab.id) || tab.isHome) continue;
+      if (!tab.isSuspended && tab.controller != null) {
+        try {
+          tab.controller?.dispose();
+        } catch (_) {}
+        tab.controller = null;
+        tab.isSuspended = true;
+        _log.info('Evicted background WebView controller for tab ${tab.id}');
+      }
+    }
   }
 
   /// Switches active tab relative to current index (e.g. +1, -1).
@@ -211,7 +232,8 @@ class TabManager extends ChangeNotifier {
   }) {
     if (!isActive() || url.isEmpty) return;
     if (_tabs.length >= maxTabs) {
-      _log.warning('[TabManager] Max tab cap reached ($maxTabs). Rejecting new tab for: $url');
+      _log.warning(
+          '[TabManager] Max tab cap reached ($maxTabs). Rejecting new tab for: $url');
       return;
     }
 

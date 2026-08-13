@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:battery_plus/battery_plus.dart';
+import 'package:dmx/core/services/background_gate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
@@ -70,6 +71,8 @@ class PowerMonitor {
     }
     return _lastSaverMode!;
   }
+
+  static bool get isLowPowerMode => batterySaverMode != BatterySaverMode.off;
 
   /// Thermal and battery-aware thread limiter.
   static int get maxAllowedThreads {
@@ -216,18 +219,16 @@ class PowerMonitor {
   /// - No active downloads: 120s
   static void _startThermalTimer() {
     _thermalTimer?.cancel();
-    int intervalSeconds = 60;
-    if (_hasActiveDownloads) {
-      if (throttleFactor < 0.8) {
-        intervalSeconds = 15;
-      } else {
-        intervalSeconds = 60;
-      }
-    } else {
-      intervalSeconds = 120;
-    }
+
+    // Stop if no active downloads
+    if (!_hasActiveDownloads) return;
+
+    final int intervalSeconds = BackgroundGate.adaptInterval(
+      const Duration(seconds: 60),
+    ).inSeconds;
 
     _thermalTimer = Timer.periodic(Duration(seconds: intervalSeconds), (_) {
+      if (PowerMonitor.screenOff) return;
       _pollThermalOnce();
     });
   }
