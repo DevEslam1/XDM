@@ -56,8 +56,8 @@ class LoggingService {
     _releaseLogBuffer.add(entry);
     if (_releaseLogBuffer.length >= _maxReleaseBufferSize) {
       flushLogBuffer();
-    } else if (_releaseFlushTimer == null) {
-      _releaseFlushTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    } else {
+      _releaseFlushTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
         flushLogBuffer();
       });
     }

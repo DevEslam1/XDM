@@ -378,8 +378,9 @@ class TorrentService {
 
   /// Future getter that callers can await to ensure TorrentService is ready.
   static Future<void> get ready {
-    if (_state == TorrentSessionState.ready && isPluginAvailable)
+    if (_state == TorrentSessionState.ready && isPluginAvailable) {
       return Future.value();
+    }
     if (_state == TorrentSessionState.initializing && _initCompleter != null) {
       return _initCompleter!.future;
     }

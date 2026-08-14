@@ -1834,7 +1834,7 @@ class _DownloadTaskList extends StatelessWidget {
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: BouncingScrollPhysics(),
                   ),
-                  findChildIndexCallback: (Key key) {
+                  findItemIndexCallback: (Key key) {
                     if (key is ValueKey<String>) {
                       final keyVal = key.value;
                       final idx = renderItems.indexWhere((it) => it.isPlaylist
