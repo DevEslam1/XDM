@@ -148,7 +148,10 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   String scheduleStartTime = '23:00';
   String scheduleEndTime = '07:00';
   double scheduleSpeedLimitMb = 0.0;
-  bool enableGlow = true;
+  // FIX-S7: Effective getters for batterySaverMode
+  bool _enableGlow = true;
+  bool get enableGlow => batterySaverMode ? false : _enableGlow;
+  set enableGlow(bool value) => _enableGlow = value;
   double gridOpacity = 40.0;
   bool soundNotification = true;
   bool vibration = false;
@@ -196,7 +199,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool bypassSSL = false;
   bool developerMode = false;
   bool httpsOnly = false;
-  bool reduceVisuals = false;
+  bool _reduceVisuals = false;
+  bool get reduceVisuals => batterySaverMode ? true : _reduceVisuals;
+  set reduceVisuals(bool value) => _reduceVisuals = value;
   double textScaleFactor = 1.0;
   String customUserAgent = '';
   int cleanupDays = 0;

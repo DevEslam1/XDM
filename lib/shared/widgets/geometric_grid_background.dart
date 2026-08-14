@@ -1,3 +1,4 @@
+// FIX-P1: GeometricGridBackground — Pause animation when backgrounded and guard ref counting
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -105,25 +106,46 @@ class GeometricGridBackground extends StatefulWidget {
 class _GeometricGridBackgroundState extends State<GeometricGridBackground>
     with WidgetsBindingObserver {
   bool _isVisible = true;
+  // FIX-P1: Guard flag against double-add/double-remove
+  bool _refAdded = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _AmbientProgress().addRef();
+    if (!_refAdded) {
+      _AmbientProgress().addRef();
+      _refAdded = true;
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    setState(() {
-      _isVisible = state == AppLifecycleState.resumed;
-    });
+    // FIX-P1: Stop animation when paused/inactive, restart on resumed
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      if (_isVisible) {
+        setState(() {
+          _isVisible = false;
+        });
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      if (!_isVisible) {
+        setState(() {
+          _isVisible = true;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _AmbientProgress().removeRef();
+    // FIX-P1: Guard against double-remove
+    if (_refAdded) {
+      _AmbientProgress().removeRef();
+      _refAdded = false;
+    }
     super.dispose();
   }
 
@@ -230,10 +252,14 @@ class _AmbientBlobPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // FIX-P1: Early return if screenOff or intensity <= 0
+    if (PowerMonitor.screenOff || intensity <= 0) {
+      canvas.drawRect(Offset.zero & size, Paint()..color = bgColor);
+      return;
+    }
+
     // 1. Base Background
     canvas.drawRect(Offset.zero & size, Paint()..color = bgColor);
-
-    if (PowerMonitor.screenOff || intensity <= 0) return;
 
     // 2. Soft Drifting Blobs (2 blobs for optimal GPU performance)
     final t = progress * 2 * math.pi;

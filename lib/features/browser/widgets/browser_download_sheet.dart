@@ -248,7 +248,13 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
             child: SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.all(20),
+                // FIX-M10: Include keyboard padding to prevent layout overflow
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  20,
+                  20,
+                  20 + MediaQuery.of(context).viewInsets.bottom,
+                ),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,

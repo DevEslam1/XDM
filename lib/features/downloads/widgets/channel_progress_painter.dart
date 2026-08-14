@@ -1,3 +1,4 @@
+// FIX-H7: Numeric comparison in shouldRepaint and RepaintBoundary
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:dmx/core/app_theme.dart';
@@ -65,10 +66,12 @@ class ChannelProgressPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant ChannelProgressPainter old) =>
-      old.progress != progress ||
-      old.isDark != isDark ||
-      old.isTorrent != isTorrent;
+  bool shouldRepaint(covariant ChannelProgressPainter old) {
+    // FIX-H7: Compare progress.value numerically with epsilon = 0.001
+    return (old.progress.value - progress.value).abs() > 0.001 ||
+        old.isDark != isDark ||
+        old.isTorrent != isTorrent;
+  }
 }
 
 /// Usage wrapper — parent builds ONCE; painter repaints on ticks.
@@ -88,24 +91,27 @@ class IsolatedProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<double>(
-      valueListenable: progress,
-      builder: (context, val, child) {
-        final pct = (val.clamp(0.0, 1.0) * 100).round();
-        return Semantics(
-          label: 'Download progress',
-          value: '$pct%',
-          child: child,
-        );
-      },
-      child: RepaintBoundary(
-        child: SizedBox(
-          height: height,
-          child: CustomPaint(
-            painter: ChannelProgressPainter(
-              progress: progress,
-              isDark: isDark,
-              isTorrent: isTorrent,
+    // FIX-H7: Wrap IsolatedProgressBar in a RepaintBoundary widget
+    return RepaintBoundary(
+      child: ValueListenableBuilder<double>(
+        valueListenable: progress,
+        builder: (context, val, child) {
+          final pct = (val.clamp(0.0, 1.0) * 100).round();
+          return Semantics(
+            label: 'Download progress',
+            value: '$pct%',
+            child: child,
+          );
+        },
+        child: RepaintBoundary(
+          child: SizedBox(
+            height: height,
+            child: CustomPaint(
+              painter: ChannelProgressPainter(
+                progress: progress,
+                isDark: isDark,
+                isTorrent: isTorrent,
+              ),
             ),
           ),
         ),

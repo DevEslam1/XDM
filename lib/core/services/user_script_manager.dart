@@ -207,6 +207,7 @@ class UserScriptManager extends ChangeNotifier {
 
     final hasNetwork = perms.contains(ScriptPermission.network);
     final hasCookies = perms.contains(ScriptPermission.cookies);
+    final hasDomWrite = perms.contains(ScriptPermission.domWrite);
 
     return '''
 if (!window['$marker']) {
@@ -218,6 +219,18 @@ if (!window['$marker']) {
 
     // Isolated scope wrappers
     const _noop = function() {};
+
+    // DOM Write blocking
+    if (!$hasDomWrite) {
+      try {
+        document.write = function() {
+          throw new Error('[DMX Sandbox] document.write denied by permission policy');
+        };
+        document.writeln = function() {
+          throw new Error('[DMX Sandbox] document.writeln denied by permission policy');
+        };
+      } catch(e) {}
+    }
     
     // Cookie blocking
     if (!$hasCookies) {
@@ -232,27 +245,38 @@ if (!window['$marker']) {
 
     // Network blocking
     if (!$hasNetwork) {
-      window.fetch = function() {
+      window['fetch'] = function() {
         throw new Error('[DMX Sandbox] Network fetch denied by permission policy');
       };
-      window.XMLHttpRequest = function() {
+      window['XMLHttpRequest'] = function() {
         throw new Error('[DMX Sandbox] XMLHttpRequest denied by permission policy');
       };
-      if (window.WebSocket) {
-        window.WebSocket = function() {
+      if (window['WebSocket']) {
+        window['WebSocket'] = function() {
           throw new Error('[DMX Sandbox] WebSocket denied by permission policy');
         };
       }
     }
 
-    // Sandbox scope proxy blocking parent, top, opener, eval
+    // FIX-S1: Sandbox scope proxy blocking parent, top, opener, eval, window.open/close/postMessage, and rate limiting timers
     const _isolatedWindow = new Proxy(window, {
       get(target, prop) {
         if (prop === 'parent' || prop === 'top' || prop === 'opener') {
           return null;
         }
+        if (prop === 'open' || prop === 'close' || prop === 'postMessage') {
+          return function() {
+            throw new Error('[DMX Sandbox] Access to ' + String(prop) + ' is prohibited');
+          };
+        }
         if (prop === 'eval' || prop === 'Function' || prop === 'importScripts') {
           throw new Error('[DMX Sandbox] Dynamic execution prohibited: ' + String(prop));
+        }
+        if (prop === 'setTimeout' || prop === 'setInterval') {
+          return function(fn, delay, ...args) {
+            const safeDelay = Math.max(50, Number(delay) || 0);
+            return target[prop](fn, safeDelay, ...args);
+          };
         }
         if (prop === '__proto__' || prop === 'prototype') {
           return null;
@@ -262,7 +286,8 @@ if (!window['$marker']) {
         return val;
       },
       set(target, prop, value) {
-        if (prop === 'parent' || prop === 'top' || prop === 'opener' || prop === '__proto__') {
+        if (prop === 'parent' || prop === 'top' || prop === 'opener' || prop === '__proto__' ||
+            prop === 'open' || prop === 'close' || prop === 'postMessage') {
           return false;
         }
         target[prop] = value;

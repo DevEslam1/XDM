@@ -30,7 +30,18 @@ class BrowserTab {
   int lastVisitedAtMs = DateTime.now().millisecondsSinceEpoch;
 
   String? faviconUrl;
-  Uint8List? faviconBytes;
+  // FIX-M8: Cap favicon bytes at 10KB (10240 bytes)
+  Uint8List? _faviconBytes;
+  Uint8List? get faviconBytes => _faviconBytes;
+  set faviconBytes(Uint8List? bytes) {
+    if (bytes != null && bytes.length > 10240) {
+      _faviconBytes = Uint8List.sublistView(bytes, 0, 10240);
+    } else {
+      _faviconBytes = bytes;
+    }
+  }
+
+  int get faviconBytesSize => _faviconBytes?.length ?? 0;
   String? findQuery;
   TabOrigin origin;
   Color? themeColor;

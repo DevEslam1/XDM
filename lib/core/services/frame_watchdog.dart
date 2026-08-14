@@ -1,3 +1,4 @@
+// FIX-H9: FrameWatchdog — Screen-off lifecycle
 import 'dart:ui';
 import 'package:flutter/scheduler.dart';
 import 'package:logging/logging.dart';
@@ -48,18 +49,35 @@ class FrameWatchdog {
         final rate = displays.first.refreshRate;
         if (rate > 0) return rate;
       }
-    } catch (_) {}
+    } catch (e, st) {
+      // FIX-S6: Log caught exceptions
+      _log.fine('[FrameWatchdog] getDisplayRefreshRate error: $e', st);
+    }
     // FIX: Safe fallback
     return 60.0;
   }
 
   static void start() {
+    // FIX-H9: Guard start() with screen-off check
     if (_isRunning || PowerMonitor.screenOff) return;
     _isRunning = true;
     _windowStart = DateTime.now();
     _dropped = 0;
     _total = 0;
     SchedulerBinding.instance.addTimingsCallback(_onTimings);
+  }
+
+  // FIX-H9: Pause when backgrounded/screen-off
+  static void pause() {
+    if (!_isRunning) return;
+    _isRunning = false;
+    SchedulerBinding.instance.removeTimingsCallback(_onTimings);
+  }
+
+  // FIX-H9: Resume when active and screen is on
+  static void resume() {
+    if (_isRunning || PowerMonitor.screenOff) return;
+    start();
   }
 
   static void _onTimings(List<FrameTiming> timings) {

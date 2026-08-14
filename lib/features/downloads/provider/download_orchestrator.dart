@@ -399,6 +399,7 @@ class DownloadOrchestrator {
     }
   }
 
+  // FIX-S10: Detect YouTube web page URLs that require stream resolution
   static bool isYouTubePageUrl(String url) {
     if (url.isEmpty) return false;
     final uri = Uri.tryParse(url.trim());
@@ -1142,21 +1143,22 @@ class DownloadOrchestrator {
       ));
       return;
     }
-    // FIX YT-RT1: Verify the audio file has actual content before
-    // attempting the merge. An empty or zero-byte file will produce
-    // a corrupt output.
+    // FIX YT-RT1 / YT-5: Verify the audio file has actual content and is not truncated before
+    // attempting the merge.
     final audioFileForCheck = File(audioTempPath);
     final audioLen = await audioFileForCheck.length();
-    if (audioLen == 0) {
+    final isAudioTruncated = audioLen == 0 ||
+        (task.audioSize > 0 && audioLen < (task.audioSize * 0.95).toInt());
+    if (isAudioTruncated) {
       debugPrint(
-        '[DMX] FIX YT-RT1: Audio file is empty for ${task.id}, '
+        '[DMX] FIX YT-RT1 / YT-5: Audio file is incomplete ($audioLen / ${task.audioSize} bytes) for ${task.id}, '
         'cannot merge.',
       );
       await _host.setTaskState(task.copyWith(
         status: DownloadStatus.failed,
         statusMessage: 'MERGE_FAILED',
         errorMessage:
-            'Audio file is empty (0 bytes). Please re-download the audio.',
+            'Audio file is incomplete ($audioLen / ${task.audioSize} bytes). Please re-download the audio.',
       ));
       return;
     }
@@ -2182,7 +2184,9 @@ class DownloadOrchestrator {
                 liveVideoTask.mergedAudioUrl != null &&
                 liveVideoTask.mergedAudioUrl!.isNotEmpty;
             final int liveVideoTransferSize;
-            if (liveHasAudio &&
+            if (liveHasAudio && liveVideoTask.videoStreamSize > 0) {
+              liveVideoTransferSize = liveVideoTask.videoStreamSize;
+            } else if (liveHasAudio &&
                 liveVideoTask.audioSize > 0 &&
                 liveVideoTask.fileSize > liveVideoTask.audioSize) {
               liveVideoTransferSize =
@@ -2190,10 +2194,9 @@ class DownloadOrchestrator {
             } else if (liveHasAudio &&
                 liveVideoTask.audioSize <= 0 &&
                 liveVideoTask.fileSize > 0) {
-              // FIX-Y3: Audio size unknown — use full fileSize as video size
-              liveVideoTransferSize = liveVideoTask.fileSize;
-              debugPrint(
-                  '[FIX-Y3] Audio size unknown, using full fileSize=$liveVideoTransferSize for video');
+              liveVideoTransferSize = liveVideoTask.videoStreamSize > 0
+                  ? liveVideoTask.videoStreamSize
+                  : liveVideoTask.fileSize;
             } else {
               liveVideoTransferSize =
                   liveVideoTask?.fileSize ?? videoTransferSize;
@@ -3817,7 +3820,6 @@ class DownloadOrchestrator {
     return normalized == 'video_only' || normalized == 'video';
   }
 
-  @visibleForTesting
   bool shouldRejectResolvedYoutubeUrl(String? resolvedUrl) {
     if (resolvedUrl == null || resolvedUrl.trim().isEmpty) return true;
 

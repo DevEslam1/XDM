@@ -78,11 +78,37 @@ class _SettingsScreenState extends State<SettingsScreen>
   Timer? _searchDebounce;
   late final PageController _pageController;
   late final ScrollController _chipScrollController;
+  // FIX-H8: Set of loaded tab indices for lazy loading
+  final Set<int> _loadedTabs = {};
+
+  Widget _buildLazyTab(int index) {
+    if (!_loadedTabs.contains(index)) {
+      return const SizedBox.shrink();
+    }
+    return switch (index) {
+      0 => const AppearanceSettingsPage(),
+      1 => const DownloadsSettingsPage(),
+      2 => const NetworkSettingsPage(),
+      3 => const NotificationsSettingsPage(),
+      4 => const TorrentSettingsPage(),
+      5 => const PowerSettingsPage(),
+      6 => const AdvancedSettingsPage(),
+      _ => const SizedBox.shrink(),
+    };
+  }
+
+  Widget _buildLazyTabStack() {
+    return IndexedStack(
+      index: _selectedCategoryIndex,
+      children: List.generate(7, (i) => _buildLazyTab(i)),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     _selectedCategoryIndex = _mapSectionToIndex(widget.initialSection);
+    _loadedTabs.add(_selectedCategoryIndex);
     _searchController = TextEditingController();
     _searchFocusNode = FocusNode();
     _pageController = PageController(initialPage: _selectedCategoryIndex);
@@ -136,6 +162,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   void _onCategorySelected(int index) {
+    _loadedTabs.add(index);
     if (index == _selectedCategoryIndex) return;
     setState(() => _selectedCategoryIndex = index);
     if (_pageController.hasClients) {
@@ -769,19 +796,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                               ),
                               const VerticalDivider(width: 1, thickness: 1),
                               Expanded(
-                                child: PageView(
-                                  controller: _pageController,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  children: const [
-                                    AppearanceSettingsPage(),
-                                    DownloadsSettingsPage(),
-                                    NetworkSettingsPage(),
-                                    NotificationsSettingsPage(),
-                                    TorrentSettingsPage(),
-                                    PowerSettingsPage(),
-                                    AdvancedSettingsPage(),
-                                  ],
-                                ),
+                                child: _buildLazyTabStack(),
                               ),
                             ],
                           )
@@ -875,26 +890,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                               ),
                               const Divider(height: 1, thickness: 1),
                               Expanded(
-                                child: PageView(
-                                  controller: _pageController,
-                                  physics: const BouncingScrollPhysics(),
-                                  onPageChanged: (idx) {
-                                    setState(
-                                        () => _selectedCategoryIndex = idx);
-                                    context
-                                        .read<SettingsProvider>()
-                                        .setActiveSettingsTabIndex(idx);
-                                  },
-                                  children: const [
-                                    AppearanceSettingsPage(),
-                                    DownloadsSettingsPage(),
-                                    NetworkSettingsPage(),
-                                    NotificationsSettingsPage(),
-                                    TorrentSettingsPage(),
-                                    PowerSettingsPage(),
-                                    AdvancedSettingsPage(),
-                                  ],
-                                ),
+                                child: _buildLazyTabStack(),
                               ),
                             ],
                           ),

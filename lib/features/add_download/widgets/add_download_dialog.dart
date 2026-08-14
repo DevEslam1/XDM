@@ -2360,6 +2360,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                 ),
                               ),
                               const SizedBox(width: 8),
+                              // FIX-M11: Show progress indicator during link resolution
                               if (_isResolvingLink)
                                 Padding(
                                   padding: const EdgeInsets.symmetric(

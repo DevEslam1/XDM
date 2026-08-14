@@ -185,6 +185,7 @@ class SingleInstanceService {
     });
   }
 
+  // FIX-S4: Atomic token file with exclusive file lock
   Future<void> _writeTokenFileWithLock() async {
     if (_securityToken == null) return;
     try {

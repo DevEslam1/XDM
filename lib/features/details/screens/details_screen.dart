@@ -2650,16 +2650,18 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                   final diskVerified =
                       _diskBytes.length > index && _diskBytes[index] > 0;
 
-                  final fileProgress = length > 0
-                      ? (resolvedBytes / length).clamp(0.0, 1.0)
-                      : 0.0;
+                  final fileProgress = length == 0
+                      ? 1.0
+                      : (length > 0
+                          ? (resolvedBytes / length).clamp(0.0, 1.0)
+                          : 0.0);
 
                   final fileComplete = fileProgress >= 1.0;
 
                   final isEstimated = f['progressEstimated'] == true;
 
                   final progressText = isEstimated
-                      ? '~${(fileProgress * 100).toStringAsFixed(0)}%'
+                      ? '~${(fileProgress * 100).toStringAsFixed(0)}% (est)'
                       : '${(fileProgress * 100).toStringAsFixed(1)}%';
 
                   final textClr =

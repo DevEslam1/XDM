@@ -116,6 +116,9 @@ class _HomeScreenState extends State<HomeScreen>
     _searchController.dispose();
     _searchFocusNode.dispose();
     _reveal.dispose();
+    // FIX-M9: Clear animation controller caches on dispose
+    _fadeAnimations.clear();
+    _slideAnimations.clear();
     super.dispose();
   }
 

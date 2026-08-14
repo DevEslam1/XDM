@@ -15,6 +15,10 @@ class YoutubeService {
   static const _secureStorage = FlutterSecureStorage();
   static const _cookiesStorageKey = 'youtube_cookies_persisted';
 
+  // FIX-H4: Circuit breaker state
+  static int _consecutiveTimeouts = 0;
+  static DateTime? _circuitBreakerUntil;
+
   static Future<void> init() async {
     try {
       final savedCookies = await _secureStorage.read(key: _cookiesStorageKey);
@@ -532,10 +536,13 @@ class YoutubeService {
     }
 
     try {
+      // FIX-H4: Wrap backend call with 35s timeout
       final results = await _resolveWithRetry(
         targetUrl,
         cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,
-      );
+      ).timeout(const Duration(seconds: 35), onTimeout: () {
+        throw TimeoutException('getStreams request timed out after 35 seconds');
+      });
 
       if (results != null && results.isNotEmpty) {
         if (kDebugMode) {
@@ -551,6 +558,8 @@ class YoutubeService {
         }
         return results;
       }
+    } on TimeoutException catch (e) {
+      throw Exception(e.message ?? 'Stream resolution timed out after 35 seconds');
     } on BackendException catch (e) {
       throw Exception(e.toUserMessage());
     } catch (e) {
@@ -632,18 +641,46 @@ class YoutubeService {
     String url, {
     String? cookies,
   }) async {
+    // FIX-H4: Circuit breaker check: if 3 consecutive timeouts occurred, skip backend for 30s
+    if (_circuitBreakerUntil != null &&
+        DateTime.now().isBefore(_circuitBreakerUntil!)) {
+      final settings = SettingsProvider.instance;
+      if (settings.useLocalYtFallback) {
+        final localStreams = await _tryLocalExtractorFallback(url);
+        if (localStreams != null && localStreams.isNotEmpty) {
+          return localStreams;
+        }
+      }
+      throw Exception('YouTube backend circuit breaker active (30s cooldown due to consecutive timeouts).');
+    }
+
     try {
-      final backendRes = await XdmBackendClient().getStreams(
-        url,
-        cookies: cookies,
-        oauthToken: YoutubeService.oauthToken,
-      );
+      final backendRes = await XdmBackendClient()
+          .getStreams(
+            url,
+            cookies: cookies,
+            oauthToken: YoutubeService.oauthToken,
+          )
+          .timeout(const Duration(seconds: 35));
+      _consecutiveTimeouts = 0;
+      _circuitBreakerUntil = null;
       final results = _parseStreams(backendRes);
       return results.isNotEmpty ? results : null;
     } catch (e) {
+      final isTimeout = e is TimeoutException ||
+          e is XdmBackendTimeoutException ||
+          e.toString().contains('timed out');
+      if (isTimeout) {
+        _consecutiveTimeouts++;
+        if (_consecutiveTimeouts >= 3) {
+          _circuitBreakerUntil =
+              DateTime.now().add(const Duration(seconds: 30));
+          debugPrint(
+              '[YoutubeService] Circuit breaker tripped (3 timeouts): skipping backend for 30s');
+        }
+      }
       final settings = SettingsProvider.instance;
-      final isTimeoutOr503 =
-          e is XdmBackendTimeoutException || (e.toString().contains('503'));
+      final isTimeoutOr503 = isTimeout || (e.toString().contains('503'));
       if (isTimeoutOr503 && settings.useLocalYtFallback) {
         debugPrint(
             '[YoutubeService] Backend 503/timeout: triggering local NewPipe fallback');
@@ -651,6 +688,9 @@ class YoutubeService {
         if (localStreams != null && localStreams.isNotEmpty) {
           return localStreams;
         }
+      }
+      if (e is TimeoutException) {
+        throw Exception('Stream resolution timed out after 35 seconds');
       }
       rethrow;
     }
@@ -662,21 +702,29 @@ class YoutubeService {
     String? cookies,
     int maxRetries = 3,
   }) async {
-    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+    int effectiveRetries = maxRetries;
+    for (int attempt = 0; attempt <= effectiveRetries; attempt++) {
       try {
         final result = await _resolveStreamsWithFallback(url, cookies: cookies);
         if (result != null && result.isNotEmpty) return result;
 
         // result is null or empty — apply backoff before next attempt
-        if (attempt < maxRetries) {
+        if (attempt < effectiveRetries) {
           final delay = Duration(seconds: 2 * (attempt + 1));
           await Future.delayed(delay);
         }
         continue;
       } catch (e) {
+        final isTimeout = e is TimeoutException ||
+            e is XdmBackendTimeoutException ||
+            e.toString().contains('timed out');
+        // FIX-H4: In _resolveWithRetry, reduce max retries from 3 to 2 when timeout occurs
+        if (isTimeout && effectiveRetries > 2) {
+          effectiveRetries = 2;
+        }
         final isPermanent = e is BackendUnauthorizedException;
-        if (attempt == maxRetries || isPermanent) rethrow;
-        // Backoff: 2s, 4s, 6s (Cloud Run cold start needs time to spin up)
+        if (attempt >= effectiveRetries || isPermanent) rethrow;
+        // Backoff: 2s, 4s (Cloud Run cold start needs time to spin up)
         final delay = Duration(seconds: 2 * (attempt + 1));
         debugPrint(
           '[YoutubeService] Backend attempt ${attempt + 1} failed, '

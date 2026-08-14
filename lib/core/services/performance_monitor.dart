@@ -1,5 +1,7 @@
+// FIX-H10: PerformanceMonitor — Screen-off lifecycle
 import 'package:flutter/scheduler.dart';
 import 'frame_watchdog.dart';
+import 'power_monitor.dart';
 
 /// Collects lightweight UI-frame statistics (build/raster durations, jank
 /// ratio) via [SchedulerBinding.addTimingsCallback]. Used for the performance
@@ -20,7 +22,7 @@ class PerformanceMonitor {
   final List<Duration> _rasterSamples = [];
   int _totalFrames = 0;
   int _jankyFrames = 0;
-  bool _listening = false;
+  bool _listening = true;
 
   bool get isListening => _listening;
 
@@ -77,6 +79,16 @@ class PerformanceMonitor {
     _listening = false;
   }
 
+  // FIX-H10: Pause & resume lifecycle methods
+  void pause() {
+    _listening = false;
+  }
+
+  void resume() {
+    if (PowerMonitor.screenOff) return;
+    _listening = true;
+  }
+
   void _onTimings(List<FrameTiming> timings) {
     for (final timing in timings) {
       _totalFrames++;
@@ -91,7 +103,11 @@ class PerformanceMonitor {
   }
 
   /// Feeds timings from [FrameWatchdog] or test suites.
-  void ingestFrameTimings(List<FrameTiming> timings) => _onTimings(timings);
+  // FIX-H10: Guard ingestFrameTimings with _listening and screenOff
+  void ingestFrameTimings(List<FrameTiming> timings) {
+    if (!_listening || PowerMonitor.screenOff) return;
+    _onTimings(timings);
+  }
 
   void _trim() {
     if (_buildSamples.length > maxSamples) {

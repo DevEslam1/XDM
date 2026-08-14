@@ -48,47 +48,44 @@ class _CapabilityGate {
 
     final target = LibtorrentFlutter.instance;
 
+    // FIX-H1: Wrap every dynamic call in try-catch and set flag to false on any error
     try {
       (target as dynamic).getFileProgress(-1);
-    } on NoSuchMethodError {
-      fileProgressSupported = false;
     } catch (e) {
-      _log.fine('probe getFileProgress error: $e');
+      fileProgressSupported = false;
+      _log.fine('probe getFileProgress disabled: $e');
     }
+
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).getFilePriorities(-1);
-    } on NoSuchMethodError {
-      filePrioritiesSupported = false;
     } catch (e) {
-      _log.fine('probe getFilePriorities error: $e');
+      filePrioritiesSupported = false;
+      _log.fine('probe getFilePriorities disabled: $e');
     }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).saveResumeData(-1);
-    } on NoSuchMethodError {
-      resumeDataSupported = false;
     } catch (e) {
-      _log.fine('probe saveResumeData error: $e');
+      resumeDataSupported = false;
+      _log.fine('probe saveResumeData disabled: $e');
     }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).forceReCheck(-1);
-    } on NoSuchMethodError {
-      forceRecheckSupported = false;
     } catch (e) {
-      _log.fine('probe forceReCheck error: $e');
+      forceRecheckSupported = false;
+      _log.fine('probe forceReCheck disabled: $e');
     }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).getTrackers(-1);
-    } on NoSuchMethodError {
-      trackersSupported = false;
     } catch (e) {
-      _log.fine('probe getTrackers error: $e');
+      trackersSupported = false;
+      _log.fine('probe getTrackers disabled: $e');
     }
 
     try {
@@ -98,46 +95,41 @@ class _CapabilityGate {
         outputPath: '',
         trackers: <String>[],
       );
-    } on NoSuchMethodError {
-      createTorrentSupported = false;
     } catch (e) {
-      _log.fine('probe createTorrent error: $e');
+      createTorrentSupported = false;
+      _log.fine('probe createTorrent disabled: $e');
     }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).loadIpFilter('');
-    } on NoSuchMethodError {
-      ipFilterSupported = false;
     } catch (e) {
-      _log.fine('probe loadIpFilter error: $e');
+      ipFilterSupported = false;
+      _log.fine('probe loadIpFilter disabled: $e');
     }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).setSequentialDownload(-1, false);
-    } on NoSuchMethodError {
-      sequentialDownloadSupported = false;
     } catch (e) {
-      _log.fine('probe setSequentialDownload error: $e');
+      sequentialDownloadSupported = false;
+      _log.fine('probe setSequentialDownload disabled: $e');
     }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).setSuperSeeding(-1, false);
-    } on NoSuchMethodError {
-      superSeedingSupported = false;
     } catch (e) {
-      _log.fine('probe setSuperSeeding error: $e');
+      superSeedingSupported = false;
+      _log.fine('probe setSuperSeeding disabled: $e');
     }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).setPieceDeadline(-1, 0, 0);
-    } on NoSuchMethodError {
-      pieceDeadlineSupported = false;
     } catch (e) {
-      _log.fine('probe setPieceDeadline error: $e');
+      pieceDeadlineSupported = false;
+      _log.fine('probe setPieceDeadline disabled: $e');
     }
 
     _log.fine(
@@ -368,17 +360,24 @@ class TorrentService {
   // after pausing so resume data is captured only once truly paused/flushed.
   static final Map<int, TorrentUpdateInfo> _latestStats = {};
 
+  // FIX-H2: Throttling fields
+  static DateTime? _lastEmitTime;
+  static Map<int, TorrentUpdateInfo>? _pendingUpdate;
+  static Timer? _throttleTimer;
+
+  // FIX-H1: Top-level isPluginAvailable flag
+  static bool isPluginAvailable = false;
   static final ValueNotifier<bool> isAvailable = ValueNotifier(false);
 
   static bool get isSupported => true;
-  static bool get isInitialized => _state == TorrentSessionState.ready;
+  static bool get isInitialized => _state == TorrentSessionState.ready && isPluginAvailable;
   static Set<int> get activeTorrentIds => Set.unmodifiable(_activeTorrentIds);
   static Map<int, TorrentUpdateInfo> get latestStats =>
       Map.unmodifiable(_latestStats);
 
   /// Future getter that callers can await to ensure TorrentService is ready.
   static Future<void> get ready {
-    if (_state == TorrentSessionState.ready) return Future.value();
+    if (_state == TorrentSessionState.ready && isPluginAvailable) return Future.value();
     if (_state == TorrentSessionState.initializing && _initCompleter != null) {
       return _initCompleter!.future;
     }
@@ -390,6 +389,7 @@ class TorrentService {
 
   /// Checks if fast-resume binary data exists for [source].
   static Future<bool> hasResumeData(String source) async {
+    if (!isPluginAvailable) return false;
     await _readyOrThrow();
     final bytes = await TorrentResumeStore.loadResumeDataForSource(source);
     return bytes != null && bytes.isNotEmpty;
@@ -400,7 +400,8 @@ class TorrentService {
 
   /// Returns the native fast-resume blob for [id], or null when unavailable.
   static Uint8List? resumeBlobFor(int id) {
-    if (_state == TorrentSessionState.uninitialized ||
+    if (!isPluginAvailable ||
+        _state == TorrentSessionState.uninitialized ||
         _state == TorrentSessionState.initializing) {
       return null;
     }
@@ -412,7 +413,7 @@ class TorrentService {
   }
 
   static Future<void> _readyOrThrow() async {
-    if (_state == TorrentSessionState.ready) return;
+    if (_state == TorrentSessionState.ready && isPluginAvailable) return;
     await ready;
   }
 
@@ -437,6 +438,7 @@ class TorrentService {
     try {
       try {
         await LibtorrentFlutter.init().timeout(const Duration(seconds: 10));
+        isPluginAvailable = true;
         _CapabilityGate.instance.probeCapabilities();
         _configureSessionFromSettings();
         _startTrackingUpdates();
@@ -445,6 +447,7 @@ class TorrentService {
       } on TimeoutException {
         _log.severe('libtorrent init timed out');
         _state = TorrentSessionState.uninitialized;
+        isPluginAvailable = false;
         isAvailable.value = false;
         return;
       } catch (nativeErr) {
@@ -452,11 +455,13 @@ class TorrentService {
           'Native libtorrent init failed (unsupported platform or native library missing): $nativeErr',
         );
         _state = TorrentSessionState.uninitialized;
+        isPluginAvailable = false;
         isAvailable.value = false;
       }
       _initCompleter?.complete();
     } catch (e) {
       _state = TorrentSessionState.uninitialized;
+      isPluginAvailable = false;
       isAvailable.value = false;
       _initCompleter?.completeError(e);
       rethrow;
@@ -593,7 +598,30 @@ class TorrentService {
               _latestStats[value.id] = info; // FIX-22
               return MapEntry(key, info);
             });
-            if (!controller!.isClosed) controller.add(mapped);
+            // FIX-H2: Add backpressure: only emit updates if 500ms have passed since last emission
+            _pendingUpdate = mapped;
+            final now = DateTime.now();
+            if (_lastEmitTime == null ||
+                now.difference(_lastEmitTime!) >=
+                    const Duration(milliseconds: 500)) {
+              _lastEmitTime = now;
+              _throttleTimer?.cancel();
+              _throttleTimer = null;
+              if (!controller!.isClosed) controller.add(mapped);
+            } else {
+              _throttleTimer ??= Timer(
+                const Duration(milliseconds: 500),
+                () {
+                  if (_pendingUpdate != null &&
+                      controller != null &&
+                      !controller.isClosed) {
+                    _lastEmitTime = DateTime.now();
+                    controller.add(_pendingUpdate!);
+                  }
+                  _throttleTimer = null;
+                },
+              );
+            }
           } catch (e) {
             _log.warning('Error processing torrent update: $e');
           }
@@ -603,6 +631,8 @@ class TorrentService {
           _log.warning('Torrent updates stream error: $e');
         },
         onDone: () {
+          _throttleTimer?.cancel();
+          _throttleTimer = null;
           if (identical(_updatesSub, sub)) {
             _updatesSub = null;
             _updateController?.close();
@@ -944,26 +974,21 @@ class TorrentService {
   }
 
   static Future<void> pauseTorrent(int id) async {
-    if (!isInitialized || !isTorrentAlive(id)) return;
+    if (!isPluginAvailable || !isInitialized || !isTorrentAlive(id)) return;
     if (id >= 0) {
       try {
         LibtorrentFlutter.instance.pauseTorrent(id);
-        // FIX-22: Poll until the engine reports paused/stopped (max 2s) so the
-        // fast-resume bytes captured below reflect a fully flushed state rather
-        // than a mid-flush snapshot.
-        final deadline = DateTime.now().add(const Duration(seconds: 2));
-        bool isPaused = false;
-        while (!isPaused && DateTime.now().isBefore(deadline)) {
-          await Future.delayed(const Duration(milliseconds: 100));
-          try {
-            final stats = _latestStats[id];
-            isPaused = stats == null ||
-                stats.stateLabel.toLowerCase().contains('paused') ||
-                stats.stateLabel.toLowerCase().contains('stopped');
-          } catch (_) {
-            isPaused = true;
-          }
-        }
+        // FIX-H3: Replace polling loop with Completer / stream listener with 2s timeout
+        try {
+          await torrentUpdates
+              .firstWhere((updateMap) {
+                final stats = updateMap[id];
+                return stats == null ||
+                    stats.stateLabel.toLowerCase().contains('paused') ||
+                    stats.stateLabel.toLowerCase().contains('stopped');
+              })
+              .timeout(const Duration(seconds: 2));
+        } catch (_) {}
 
         // FIX T-9: Snapshot files AFTER pause-poll, not before
         List<Map<String, dynamic>>? torrentFiles;

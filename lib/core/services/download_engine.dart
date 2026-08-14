@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:dmx/core/services/connection_manager.dart';
+import 'package:synchronized/synchronized.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -501,6 +502,237 @@ class TimestampedLruMap<K, V> {
   List<K> get keys => _map.keys.toList();
 }
 
+// FIX-P3: DownloadProgressHandler encapsulates all progress state with synchronized lock
+class DownloadProgressHandler {
+  final String taskId;
+  final ValueChangedProgress onProgress;
+  final CancelToken cancelToken;
+  final String? resolvedFileName;
+  final bool resolvedSupportsResume;
+  final YtStreamKind? ytStreamKind;
+  final int? ytCounterpartSize;
+  final int? ytCounterpartDownloadedBytes;
+  final bool isTorrent;
+  final List<Map<String, dynamic>>? Function()? getTorrentFiles;
+  final int? torrentId;
+  final int Function() getEffectiveIntervalMs;
+  final Lock _lock = Lock();
+
+  int lastDownloadedBytes;
+  int lastFileSize;
+  List<ChunkDetail>? lastChunkDetails;
+  int? lastTotalChunks;
+  int? lastCompletedChunks;
+  List<Map<String, dynamic>>? lastTorrentFiles;
+  int? lastTotalFiles;
+  int? lastCompletedFiles;
+  int? lastTotalFileBytes;
+  int? lastDownloadedFileBytes;
+  DateTime? lastProgressEmitTime;
+
+  DownloadProgressHandler({
+    required this.taskId,
+    required this.onProgress,
+    required this.cancelToken,
+    required this.resolvedFileName,
+    required this.resolvedSupportsResume,
+    required this.ytStreamKind,
+    required this.ytCounterpartSize,
+    required this.ytCounterpartDownloadedBytes,
+    required this.isTorrent,
+    required this.getTorrentFiles,
+    required this.torrentId,
+    required this.getEffectiveIntervalMs,
+    required this.lastDownloadedBytes,
+    required this.lastFileSize,
+    this.lastChunkDetails,
+    this.lastTotalChunks,
+    this.lastCompletedChunks,
+  }) {
+    if (isTorrent) {
+      lastTorrentFiles = getTorrentFiles?.call();
+    }
+  }
+
+  void emit(DownloadProgress progress) {
+    if (cancelToken.isCancelled) return;
+    onProgress(progress);
+  }
+
+  Future<void> handleProgress(
+    Map<String, dynamic> p, {
+    required TimestampedLruMap<String, String> ytCounterpartTaskIds,
+    bool adaptiveThreads = false,
+    int effectiveThreadCount = 1,
+    HttpDownloadEngine? httpEngine,
+  }) async {
+    // FIX-P3: Check cancelToken.isCancelled at TOP before processing
+    if (cancelToken.isCancelled) return;
+
+    await _lock.synchronized(() {
+      if (cancelToken.isCancelled) return;
+
+      if (adaptiveThreads && httpEngine != null) {
+        final speed = (p['speed'] as num?)?.toDouble() ?? 0.0;
+        if (speed > 0) {
+          httpEngine.recordSample(taskId, speed, effectiveThreadCount);
+        }
+      }
+      List<ChunkDetail>? chunkDetails;
+      if (p['chunkDetails'] is List) {
+        chunkDetails = (p['chunkDetails'] as List)
+            .whereType<Map<String, dynamic>>()
+            .map((c) {
+          final rawSize = (c['size'] as num?)?.toInt() ?? -1;
+          final rawRatio = (c['ratio'] as num?)?.toDouble() ?? 0.0;
+          final safeRatio =
+              (rawRatio.isNaN || rawRatio.isInfinite || rawRatio < 0.0)
+                  ? 0.0
+                  : rawRatio.clamp(0.0, 1.0);
+          return ChunkDetail(
+            index: (c['index'] as num?)?.toInt() ?? 0,
+            start: (c['start'] as num?)?.toInt() ?? 0,
+            end: (c['end'] as num?)?.toInt() ?? -1,
+            downloaded: (c['downloaded'] as num?)?.toInt() ?? 0,
+            size: rawSize,
+            ratio: safeRatio,
+          );
+        }).toList();
+      }
+      final ytLive = (p['ytDownloadedBytes'] as num?)?.toInt();
+      final ytEffectiveLive = ytLive ??
+          (ytStreamKind != null
+              ? (p['downloadedBytes'] as num?)?.toInt()
+              : null);
+      if (ytEffectiveLive != null) {
+        DownloadEngine._ytLiveBytes[taskId] = ytEffectiveLive;
+      }
+      final counterpartId = ytCounterpartTaskIds[taskId];
+      int? liveCounterpart = counterpartId != null
+          ? DownloadEngine._ytLiveBytes[counterpartId]
+          : null;
+      if (liveCounterpart == null && counterpartId != null) {
+        liveCounterpart = ytCounterpartDownloadedBytes ?? 0;
+      }
+      lastDownloadedBytes =
+          (p['downloadedBytes'] as num?)?.toInt() ?? lastDownloadedBytes;
+      lastFileSize = (p['fileSize'] as num?)?.toInt() ?? lastFileSize;
+      final pTorrentFiles = p['torrentFiles'];
+      if (pTorrentFiles is List && pTorrentFiles.isNotEmpty) {
+        lastTorrentFiles = pTorrentFiles.whereType<Map>().map((m) {
+          final map = Map<String, dynamic>.from(m);
+          final length = (map['length'] as num?)?.toInt() ?? 0;
+          final dlRaw = (map['downloadedBytes'] as num?)?.toInt() ?? 0;
+          final dl = length > 0 ? dlRaw.clamp(0, length) : 0;
+          final progress = length > 0 ? (dl / length).clamp(0.0, 1.0) : 1.0;
+          map['downloadedBytes'] = dl;
+          map['progress'] = progress;
+          map['percent'] = progress;
+          map['isComplete'] = length == 0 || dl >= length;
+          return map;
+        }).toList();
+        final selected = lastTorrentFiles!
+            .where((f) => (f['selected'] as bool?) ?? true)
+            .toList();
+        lastTotalFiles = selected.length;
+        lastTotalFileBytes = selected.fold<int>(
+          0,
+          (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0),
+        );
+        lastDownloadedFileBytes = selected.fold<int>(
+          0,
+          (sum, f) {
+            final len = (f['length'] as num?)?.toInt() ?? 0;
+            final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+            return sum + (len > 0 ? dl.clamp(0, len) : 0);
+          },
+        );
+        lastCompletedFiles = selected.where((f) {
+          final length = (f['length'] as num?)?.toInt() ?? 0;
+          final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+          return length == 0 || dl >= length;
+        }).length;
+      }
+      final sm = p['statusMessage'] as String?;
+      var cycle = DownloadEngine._deriveCycleState(
+        sm,
+        cancelToken.isCancelled,
+        isTorrent,
+      );
+      if (cycle == 'completed' &&
+          ytStreamKind != null &&
+          ytStreamKind != YtStreamKind.combined) {
+        final cpId = ytCounterpartTaskIds[taskId];
+        final cpLive =
+            cpId != null ? DownloadEngine._ytLiveBytes[cpId] : null;
+        final cpSize = ytCounterpartSize;
+        if (cpSize == null || cpSize <= 0) {
+          cycle = 'downloading';
+        } else if (cpLive == null || cpLive < cpSize) {
+          cycle = 'downloading';
+        }
+      }
+      final chunkList = chunkDetails;
+      final totalParts = chunkList?.length ?? 0;
+      final isDone = cycle == 'completed';
+      final doneParts = chunkList == null
+          ? 0
+          : (isDone
+              ? totalParts
+              : chunkList.where((c) => c.isComplete).length);
+      lastChunkDetails = chunkDetails ?? lastChunkDetails;
+      lastTotalChunks = (isTorrent || chunkDetails == null)
+          ? lastTotalChunks
+          : totalParts;
+      lastCompletedChunks = (isTorrent || chunkDetails == null)
+          ? lastCompletedChunks
+          : doneParts;
+      final nowEmit = DateTime.now();
+      final shouldEmit = lastProgressEmitTime == null ||
+          nowEmit.difference(lastProgressEmitTime!) >=
+              Duration(milliseconds: getEffectiveIntervalMs());
+      if (shouldEmit) {
+        lastProgressEmitTime = nowEmit;
+        if (!cancelToken.isCancelled) {
+          onProgress(DownloadProgress(
+            downloadedBytes: lastDownloadedBytes,
+            fileSize: lastFileSize,
+            speed: (p['speed'] as num?)?.toDouble() ?? 0.0,
+            eta: (p['eta'] as num?)?.toInt(),
+            chunks: p['chunks'] != null
+                ? List<double>.from(p['chunks'] as List)
+                : null,
+            fileName: p['fileName'] as String?,
+            supportsResume: p['supportsResume'] as bool?,
+            statusMessage: sm,
+            ytStreamKind: p['ytStreamKind'] != null
+                ? YtStreamKind.values.firstWhere(
+                    (k) => k.name == p['ytStreamKind'],
+                    orElse: () => YtStreamKind.combined,
+                  )
+                : null,
+            ytCounterpartSize: (p['ytCounterpartSize'] as num?)?.toInt(),
+            ytDownloadedBytes: ytEffectiveLive,
+            ytCounterpartDownloadedBytes: liveCounterpart ??
+                (p['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
+            chunkDetails: chunkDetails,
+            cycleState: cycle,
+            totalChunks:
+                (isTorrent || chunkDetails == null) ? null : totalParts,
+            completedChunks:
+                (isTorrent || chunkDetails == null) ? null : doneParts,
+            torrentFiles: lastTorrentFiles,
+            totalFiles: lastTotalFiles,
+            completedFiles: lastCompletedFiles,
+            totalFileBytes: lastTotalFileBytes,
+            downloadedFileBytes: lastDownloadedFileBytes,
+          ));
+        }
+      }
+    });
+  }
+}
+
 class DownloadEngine {
   static Future<void> validateSavePath(
     String savePath, {
@@ -516,6 +748,23 @@ class DownloadEngine {
 
     if (RegExp(r'[\*\?<>\|"\x00]').hasMatch(savePath)) {
       throw const InvalidPathException('Save path contains invalid characters');
+    }
+
+    final isWindows = Platform.isWindows;
+    if (isWindows) {
+      if (normalized.startsWith(r'\\')) {
+        throw const InvalidPathException(
+            'UNC network paths are not permitted as save directories');
+      }
+      final winReserved = RegExp(
+          r'^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$',
+          caseSensitive: false);
+      for (final segment in p.split(normalized)) {
+        if (winReserved.hasMatch(segment)) {
+          throw InvalidPathException(
+              'Save path contains a reserved Windows device name: $segment');
+        }
+      }
     }
 
     final dir = Directory(normalized);
@@ -539,11 +788,11 @@ class DownloadEngine {
     }
 
     if (allowedStorageRoots != null && allowedStorageRoots.isNotEmpty) {
-      final isAllowed = allowedStorageRoots.any(
-        (root) =>
-            p.isWithin(p.normalize(root), normalized) ||
-            p.equals(p.normalize(root), normalized),
-      );
+      final isAllowed = allowedStorageRoots.any((root) {
+        final normRoot = p.normalize(root);
+        return p.equals(normalized, normRoot) ||
+            p.isWithin(normRoot, normalized);
+      });
       if (!isAllowed) {
         throw const InvalidPathException(
             'Save path is outside allowed storage locations');
@@ -576,7 +825,8 @@ class DownloadEngine {
     return _progressReportIntervalMs;
   }
 
-  final List<CancelToken> _activeCancelTokens = [];
+  // FIX-P3: Map<String, CancelToken> instead of List<CancelToken>
+  final Map<String, CancelToken> _activeCancelTokens = {};
   DownloadIsolatePool? _pool;
   Future<DownloadIsolatePool>? _poolInit;
   final _httpEngine = HttpDownloadEngine();
@@ -714,6 +964,24 @@ class DownloadEngine {
     String? cookies,
     String? oauthToken,
   }) {
+    // FIX-M6: Cap _activeDioClients at 20 entries, force-closing the oldest client if exceeded
+    while (_activeDioClients.length >= 20) {
+      Dio? oldestClient;
+      DateTime? oldestTime;
+      for (final client in _activeDioClients) {
+        final created = _dioClientCreationTimes[client] ?? DateTime.now();
+        if (oldestTime == null || created.isBefore(oldestTime)) {
+          oldestTime = created;
+          oldestClient = client;
+        }
+      }
+      if (oldestClient != null) {
+        _releaseClient(oldestClient);
+      } else {
+        break;
+      }
+    }
+
     final client = buildTransferDio(
       url: url,
       customUserAgent: customUserAgent,
@@ -1179,7 +1447,7 @@ class DownloadEngine {
     int? ytCounterpartDownloadedBytes,
     bool isRetry = false,
   }) async {
-    _activeCancelTokens.add(cancelToken);
+    _activeCancelTokens[taskId] = cancelToken;
     final int defaultCount =
         SettingsProvider.instance.effectiveDefaultThreadCount;
     final int effectiveThreadCount = (() {
@@ -1268,7 +1536,7 @@ class DownloadEngine {
       final remaining =
           (resolvedFileSize - alreadyOnDisk).clamp(0, resolvedFileSize);
       if (!await hasEnoughDiskSpace(saveDir, remaining)) {
-        _activeCancelTokens.remove(cancelToken);
+        _activeCancelTokens.remove(taskId);
         throw const InsufficientStorageException();
       }
       await checkLowStorageWarning(saveDir);
@@ -1287,7 +1555,7 @@ class DownloadEngine {
           isRetry: isRetry,
         );
       } finally {
-        _activeCancelTokens.remove(cancelToken);
+        _activeCancelTokens.remove(taskId);
       }
       return;
     }
@@ -1367,12 +1635,34 @@ class DownloadEngine {
         completedChunks: startingCompletedChunks,
       ));
     }
+
+    // FIX-P3: Use DownloadProgressHandler
+    final progressHandler = DownloadProgressHandler(
+      taskId: taskId,
+      onProgress: onProgress,
+      cancelToken: cancelToken,
+      resolvedFileName: resolvedFileName,
+      resolvedSupportsResume: resolvedSupportsResume,
+      ytStreamKind: ytStreamKind,
+      ytCounterpartSize: ytCounterpartSize,
+      ytCounterpartDownloadedBytes: ytStartingCounterpartBytes,
+      isTorrent: isTorrent,
+      getTorrentFiles: getTorrentFiles,
+      torrentId: torrentId,
+      getEffectiveIntervalMs: () => effectiveProgressReportIntervalMs,
+      lastDownloadedBytes: alreadyOnDisk,
+      lastFileSize: resolvedFileSize,
+      lastChunkDetails: startingChunkDetails,
+      lastTotalChunks: startingTotalChunks,
+      lastCompletedChunks: startingCompletedChunks,
+    );
+
     final pool = await _ensurePool();
     final PoolJob job;
     try {
       job = pool.submit(command);
     } catch (e) {
-      _activeCancelTokens.remove(cancelToken);
+      _activeCancelTokens.remove(taskId);
       rethrow;
     }
     final completer = Completer<void>();
@@ -1380,18 +1670,6 @@ class DownloadEngine {
     bool cancelRequested = false;
     Timer? watchdog;
     Timer? inactivityTimer;
-    DateTime? lastProgressEmitTime;
-    int lastDownloadedBytes = alreadyOnDisk;
-    int lastFileSize = resolvedFileSize;
-    List<ChunkDetail>? lastChunkDetails = startingChunkDetails;
-    int? lastTotalChunks = startingTotalChunks;
-    int? lastCompletedChunks = startingCompletedChunks;
-    List<Map<String, dynamic>>? lastTorrentFiles =
-        isTorrent ? getTorrentFiles?.call() : null;
-    int? lastTotalFiles;
-    int? lastCompletedFiles;
-    int? lastTotalFileBytes;
-    int? lastDownloadedFileBytes;
     void resetInactivityTimer() {
       inactivityTimer?.cancel();
       inactivityTimer = Timer(const Duration(minutes: 30), () {
@@ -1429,8 +1707,8 @@ class DownloadEngine {
         ytPauseLiveCp = ytCounterpartDownloadedBytes ?? 0;
       }
       onProgress(DownloadProgress(
-        downloadedBytes: lastDownloadedBytes,
-        fileSize: lastFileSize,
+        downloadedBytes: progressHandler.lastDownloadedBytes,
+        fileSize: progressHandler.lastFileSize,
         speed: 0.0,
         eta: null,
         fileName: resolvedFileName,
@@ -1442,21 +1720,21 @@ class DownloadEngine {
         ytCounterpartDownloadedBytes:
             ytPauseLiveCp ?? ytCounterpartDownloadedBytes,
         ytDownloadedBytes: DownloadEngine._ytLiveBytes[taskId],
-        chunkDetails: lastChunkDetails,
-        totalChunks: lastTotalChunks,
-        completedChunks: lastCompletedChunks,
-        torrentFiles: lastTorrentFiles,
-        totalFiles: lastTotalFiles,
-        completedFiles: lastCompletedFiles,
-        totalFileBytes: lastTotalFileBytes,
-        downloadedFileBytes: lastDownloadedFileBytes,
+        chunkDetails: progressHandler.lastChunkDetails,
+        totalChunks: progressHandler.lastTotalChunks,
+        completedChunks: progressHandler.lastCompletedChunks,
+        torrentFiles: progressHandler.lastTorrentFiles,
+        totalFiles: progressHandler.lastTotalFiles,
+        completedFiles: progressHandler.lastCompletedFiles,
+        totalFileBytes: progressHandler.lastTotalFileBytes,
+        downloadedFileBytes: progressHandler.lastDownloadedFileBytes,
         torrentId: torrentId,
       ));
     }
 
     final cancelFuture = cancelToken.whenCancel.then((_) => requestCancel());
     if (cancelToken.isCancelled) requestCancel();
-    final sub = job.messages.listen((message) {
+    final sub = job.messages.listen((message) async {
       switch (message.type) {
         case 'ack':
           acked = true;
@@ -1464,6 +1742,8 @@ class DownloadEngine {
           if (cancelRequested) job.cancel();
           break;
         case 'error':
+          // FIX-P3: Check cancelToken.isCancelled
+          if (cancelToken.isCancelled) break;
           resetInactivityTimer();
           final errData = message.data;
           final errorType = errData['errorType'] as String? ?? 'uncaught';
@@ -1488,8 +1768,8 @@ class DownloadEngine {
             }
             final ytUlcLiveSelf = DownloadEngine._ytLiveBytes[taskId];
             onProgress(DownloadProgress(
-              downloadedBytes: ytUlcLiveSelf ?? lastDownloadedBytes,
-              fileSize: lastFileSize,
+              downloadedBytes: ytUlcLiveSelf ?? progressHandler.lastDownloadedBytes,
+              fileSize: progressHandler.lastFileSize,
               speed: 0.0,
               eta: null,
               fileName: resolvedFileName,
@@ -1501,14 +1781,14 @@ class DownloadEngine {
               ytCounterpartDownloadedBytes:
                   ytUlcLiveCp ?? ytCounterpartDownloadedBytes,
               ytDownloadedBytes: ytUlcLiveSelf,
-              chunkDetails: lastChunkDetails,
-              totalChunks: lastTotalChunks,
-              completedChunks: lastCompletedChunks,
-              torrentFiles: lastTorrentFiles,
-              totalFiles: lastTotalFiles,
-              completedFiles: lastCompletedFiles,
-              totalFileBytes: lastTotalFileBytes,
-              downloadedFileBytes: lastDownloadedFileBytes,
+              chunkDetails: progressHandler.lastChunkDetails,
+              totalChunks: progressHandler.lastTotalChunks,
+              completedChunks: progressHandler.lastCompletedChunks,
+              torrentFiles: progressHandler.lastTorrentFiles,
+              totalFiles: progressHandler.lastTotalFiles,
+              completedFiles: progressHandler.lastCompletedFiles,
+              totalFileBytes: progressHandler.lastTotalFileBytes,
+              downloadedFileBytes: progressHandler.lastDownloadedFileBytes,
             ));
             if (!completer.isCompleted) {
               completer.completeError(_mapWorkerError(message, punyUrl));
@@ -1526,8 +1806,8 @@ class DownloadEngine {
             ytFailLiveCp = ytCounterpartDownloadedBytes ?? 0;
           }
           onProgress(DownloadProgress(
-            downloadedBytes: lastDownloadedBytes,
-            fileSize: lastFileSize,
+            downloadedBytes: progressHandler.lastDownloadedBytes,
+            fileSize: progressHandler.lastFileSize,
             speed: 0.0,
             eta: null,
             fileName: resolvedFileName,
@@ -1539,14 +1819,14 @@ class DownloadEngine {
             ytCounterpartDownloadedBytes:
                 ytFailLiveCp ?? ytCounterpartDownloadedBytes,
             ytDownloadedBytes: DownloadEngine._ytLiveBytes[taskId],
-            chunkDetails: lastChunkDetails,
-            totalChunks: lastTotalChunks,
-            completedChunks: lastCompletedChunks,
-            torrentFiles: lastTorrentFiles,
-            totalFiles: lastTotalFiles,
-            completedFiles: lastCompletedFiles,
-            totalFileBytes: lastTotalFileBytes,
-            downloadedFileBytes: lastDownloadedFileBytes,
+            chunkDetails: progressHandler.lastChunkDetails,
+            totalChunks: progressHandler.lastTotalChunks,
+            completedChunks: progressHandler.lastCompletedChunks,
+            torrentFiles: progressHandler.lastTorrentFiles,
+            totalFiles: progressHandler.lastTotalFiles,
+            completedFiles: progressHandler.lastCompletedFiles,
+            totalFileBytes: progressHandler.lastTotalFileBytes,
+            downloadedFileBytes: progressHandler.lastDownloadedFileBytes,
           ));
           if (!completer.isCompleted) {
             if (errorType == 'diskFull') {
@@ -1594,167 +1874,20 @@ class DownloadEngine {
           }
           break;
         case 'progress':
+          // FIX-P3: Check cancelToken.isCancelled and process via progressHandler
+          if (cancelToken.isCancelled) break;
           resetInactivityTimer();
-          final p = message.data;
-          if (adaptiveThreads) {
-            final speed = (p['speed'] as num?)?.toDouble() ?? 0.0;
-            if (speed > 0) {
-              _httpEngine.recordSample(taskId, speed, effectiveThreadCount);
-            }
-          }
-          List<ChunkDetail>? chunkDetails;
-          if (p['chunkDetails'] is List) {
-            chunkDetails = (p['chunkDetails'] as List)
-                .whereType<Map<String, dynamic>>()
-                .map((c) {
-              final rawSize = (c['size'] as num?)?.toInt() ?? -1;
-              final rawRatio = (c['ratio'] as num?)?.toDouble() ?? 0.0;
-              final safeRatio =
-                  (rawRatio.isNaN || rawRatio.isInfinite || rawRatio < 0.0)
-                      ? 0.0
-                      : rawRatio.clamp(0.0, 1.0);
-              return ChunkDetail(
-                index: (c['index'] as num?)?.toInt() ?? 0,
-                start: (c['start'] as num?)?.toInt() ?? 0,
-                end: (c['end'] as num?)?.toInt() ?? -1,
-                downloaded: (c['downloaded'] as num?)?.toInt() ?? 0,
-                size: rawSize,
-                ratio: safeRatio,
-              );
-            }).toList();
-          }
-          final ytLive = (p['ytDownloadedBytes'] as num?)?.toInt();
-          final ytEffectiveLive = ytLive ??
-              (ytStreamKind != null
-                  ? (p['downloadedBytes'] as num?)?.toInt()
-                  : null);
-          if (ytEffectiveLive != null) {
-            DownloadEngine._ytLiveBytes[taskId] = ytEffectiveLive;
-          }
-          final counterpartId = _ytCounterpartTaskIds[taskId];
-          int? liveCounterpart = counterpartId != null
-              ? DownloadEngine._ytLiveBytes[counterpartId]
-              : null;
-          if (liveCounterpart == null && counterpartId != null) {
-            liveCounterpart = ytCounterpartDownloadedBytes ?? 0;
-          }
-          lastDownloadedBytes =
-              (p['downloadedBytes'] as num?)?.toInt() ?? lastDownloadedBytes;
-          lastFileSize = (p['fileSize'] as num?)?.toInt() ?? lastFileSize;
-          final pTorrentFiles = p['torrentFiles'];
-          if (pTorrentFiles is List && pTorrentFiles.isNotEmpty) {
-            lastTorrentFiles = pTorrentFiles.whereType<Map>().map((m) {
-              final map = Map<String, dynamic>.from(m);
-              final length = (map['length'] as num?)?.toInt() ?? 0;
-              final dlRaw = (map['downloadedBytes'] as num?)?.toInt() ?? 0;
-              final dl = length > 0 ? dlRaw.clamp(0, length) : 0;
-              final progress = length > 0 ? (dl / length).clamp(0.0, 1.0) : 1.0;
-              map['downloadedBytes'] = dl;
-              map['progress'] = progress;
-              map['percent'] = progress;
-              map['isComplete'] = length == 0 || dl >= length;
-              return map;
-            }).toList();
-            final selected = lastTorrentFiles!
-                .where((f) => (f['selected'] as bool?) ?? true)
-                .toList();
-            lastTotalFiles = selected.length;
-            lastTotalFileBytes = selected.fold<int>(
-              0,
-              (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0),
-            );
-            lastDownloadedFileBytes = selected.fold<int>(
-              0,
-              (sum, f) {
-                final len = (f['length'] as num?)?.toInt() ?? 0;
-                final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-                return sum + (len > 0 ? dl.clamp(0, len) : 0);
-              },
-            );
-            lastCompletedFiles = selected.where((f) {
-              final length = (f['length'] as num?)?.toInt() ?? 0;
-              final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-              return length == 0 || dl >= length;
-            }).length;
-          }
-          final sm = p['statusMessage'] as String?;
-          var cycle = _deriveCycleState(
-            sm,
-            cancelToken.isCancelled,
-            isTorrent,
+          await progressHandler.handleProgress(
+            message.data,
+            ytCounterpartTaskIds: _ytCounterpartTaskIds,
+            adaptiveThreads: adaptiveThreads,
+            effectiveThreadCount: effectiveThreadCount,
+            httpEngine: _httpEngine,
           );
-          if (cycle == 'completed' &&
-              ytStreamKind != null &&
-              ytStreamKind != YtStreamKind.combined) {
-            final cpId = _ytCounterpartTaskIds[taskId];
-            final cpLive =
-                cpId != null ? DownloadEngine._ytLiveBytes[cpId] : null;
-            final cpSize = ytCounterpartSize;
-            if (cpSize == null || cpSize <= 0) {
-              cycle = 'downloading';
-            } else if (cpLive == null || cpLive < cpSize) {
-              cycle = 'downloading';
-            }
-          }
-          final chunkList = chunkDetails;
-          final totalParts = chunkList?.length ?? 0;
-          final isDone = cycle == 'completed';
-          final doneParts = chunkList == null
-              ? 0
-              : (isDone
-                  ? totalParts
-                  : chunkList.where((c) => c.isComplete).length);
-          lastChunkDetails = chunkDetails ?? lastChunkDetails;
-          lastTotalChunks = (isTorrent || chunkDetails == null)
-              ? lastTotalChunks
-              : totalParts;
-          lastCompletedChunks = (isTorrent || chunkDetails == null)
-              ? lastCompletedChunks
-              : doneParts;
-          final nowEmit = DateTime.now();
-          final shouldEmit = lastProgressEmitTime == null ||
-              nowEmit.difference(lastProgressEmitTime!) >=
-                  Duration(milliseconds: effectiveProgressReportIntervalMs);
-          if (shouldEmit) {
-            lastProgressEmitTime = nowEmit;
-            onProgress(DownloadProgress(
-              downloadedBytes: lastDownloadedBytes,
-              fileSize: lastFileSize,
-              speed: (p['speed'] as num?)?.toDouble() ?? 0.0,
-              eta: (p['eta'] as num?)?.toInt(),
-              chunks: p['chunks'] != null
-                  ? List<double>.from(p['chunks'] as List)
-                  : null,
-              fileName: p['fileName'] as String?,
-              supportsResume: p['supportsResume'] as bool?,
-              statusMessage: sm,
-              ytStreamKind: p['ytStreamKind'] != null
-                  ? YtStreamKind.values.firstWhere(
-                      (k) => k.name == p['ytStreamKind'],
-                      orElse: () => YtStreamKind.combined,
-                    )
-                  : null,
-              ytCounterpartSize: (p['ytCounterpartSize'] as num?)?.toInt(),
-              ytDownloadedBytes: ytEffectiveLive,
-              ytCounterpartDownloadedBytes: liveCounterpart ??
-                  (p['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
-              chunkDetails: chunkDetails,
-              cycleState: cycle,
-              totalChunks:
-                  (isTorrent || chunkDetails == null) ? null : totalParts,
-              completedChunks:
-                  (isTorrent || chunkDetails == null) ? null : doneParts,
-              torrentFiles: lastTorrentFiles,
-              totalFiles: lastTotalFiles,
-              completedFiles: lastCompletedFiles,
-              totalFileBytes: lastTotalFileBytes,
-              downloadedFileBytes: lastDownloadedFileBytes,
-            ));
-          }
           break;
         case 'done':
-          if (ytStreamKind != null && lastFileSize > 0) {
-            DownloadEngine._ytLiveBytes[taskId] = lastFileSize;
+          if (ytStreamKind != null && progressHandler.lastFileSize > 0) {
+            DownloadEngine._ytLiveBytes[taskId] = progressHandler.lastFileSize;
           }
           watchdog?.cancel();
           inactivityTimer?.cancel();
@@ -1778,17 +1911,17 @@ class DownloadEngine {
             if (ytDoneLiveCp == null && ytDoneCid != null) {
               ytDoneLiveCp = ytCounterpartDownloadedBytes ?? 0;
             }
-            if (lastFileSize > 0) {
-              lastDownloadedBytes = lastFileSize;
+            if (progressHandler.lastFileSize > 0) {
+              progressHandler.lastDownloadedBytes = progressHandler.lastFileSize;
             }
-            if (lastChunkDetails != null && lastTotalChunks != null) {
-              lastCompletedChunks = lastTotalChunks;
+            if (progressHandler.lastChunkDetails != null && progressHandler.lastTotalChunks != null) {
+              progressHandler.lastCompletedChunks = progressHandler.lastTotalChunks;
             }
-            if (lastTotalFiles != null) {
-              lastCompletedFiles = lastTotalFiles;
+            if (progressHandler.lastTotalFiles != null) {
+              progressHandler.lastCompletedFiles = progressHandler.lastTotalFiles;
             }
-            if (lastTotalFileBytes != null) {
-              lastDownloadedFileBytes = lastTotalFileBytes;
+            if (progressHandler.lastTotalFileBytes != null) {
+              progressHandler.lastDownloadedFileBytes = progressHandler.lastTotalFileBytes;
             }
             var doneCycle = 'completed';
             if (ytStreamKind != null && ytStreamKind != YtStreamKind.combined) {
@@ -1807,8 +1940,8 @@ class DownloadEngine {
               }
             }
             onProgress(DownloadProgress(
-              downloadedBytes: lastDownloadedBytes,
-              fileSize: lastFileSize,
+              downloadedBytes: progressHandler.lastDownloadedBytes,
+              fileSize: progressHandler.lastFileSize,
               speed: 0.0,
               eta: null,
               fileName: resolvedFileName,
@@ -1824,16 +1957,16 @@ class DownloadEngine {
               ytCounterpartDownloadedBytes:
                   ytDoneLiveCp ?? ytCounterpartDownloadedBytes,
               ytDownloadedBytes:
-                  DownloadEngine._ytLiveBytes[taskId] ?? lastDownloadedBytes,
-              chunkDetails: lastChunkDetails,
-              totalChunks: lastTotalChunks,
-              completedChunks: lastCompletedChunks,
-              torrentFiles: lastTorrentFiles,
-              totalFiles: lastTotalFiles,
-              completedFiles: lastCompletedFiles ?? lastTotalFiles,
-              totalFileBytes: lastTotalFileBytes,
+                  DownloadEngine._ytLiveBytes[taskId] ?? progressHandler.lastDownloadedBytes,
+              chunkDetails: progressHandler.lastChunkDetails,
+              totalChunks: progressHandler.lastTotalChunks,
+              completedChunks: progressHandler.lastCompletedChunks,
+              torrentFiles: progressHandler.lastTorrentFiles,
+              totalFiles: progressHandler.lastTotalFiles,
+              completedFiles: progressHandler.lastCompletedFiles ?? progressHandler.lastTotalFiles,
+              totalFileBytes: progressHandler.lastTotalFileBytes,
               downloadedFileBytes:
-                  lastDownloadedFileBytes ?? lastTotalFileBytes,
+                  progressHandler.lastDownloadedFileBytes ?? progressHandler.lastTotalFileBytes,
             ));
             if (!completer.isCompleted) {
               completer.complete();
@@ -1850,7 +1983,7 @@ class DownloadEngine {
       inactivityTimer?.cancel();
       await sub.cancel();
       job.dispose();
-      _activeCancelTokens.remove(cancelToken);
+      _activeCancelTokens.remove(taskId);
       if (ytStreamKind != null) {
         unregisterYtCounterpart(taskId);
       }
@@ -3159,7 +3292,7 @@ class DownloadEngine {
       timer.cancel();
     }
     _ytCleanupTimers.clear();
-    for (final token in List<CancelToken>.from(_activeCancelTokens)) {
+    for (final token in List<CancelToken>.from(_activeCancelTokens.values)) {
       try {
         token.cancel('Engine closing');
       } catch (_) {}

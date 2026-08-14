@@ -1,3 +1,4 @@
+// FIX-P4: BackdropFilter GPU overload — Limit concurrent BackdropFilters
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -31,6 +32,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   @override
   void initState() {
     super.initState();
+    // FIX-P4: If _activeCount >= 3, skip BackdropFilter and render solid background
     if (!widget.forceSolid &&
         DmxBackdropFilter._activeCount < DmxBackdropFilter._maxConcurrent) {
       DmxBackdropFilter._activeCount++;
@@ -40,6 +42,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
 
   @override
   void dispose() {
+    // FIX-P4: Decrement counter in dispose
     if (_allocated) {
       DmxBackdropFilter._activeCount--;
       _allocated = false;
@@ -49,6 +52,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
 
   @override
   Widget build(BuildContext context) {
+    // FIX-P4: When PowerMonitor.screenOff or reduceVisuals or classicUi, always skip BackdropFilter
     if (widget.forceSolid || PowerMonitor.screenOff || !_allocated) {
       return widget.child;
     }

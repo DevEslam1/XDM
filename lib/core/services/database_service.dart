@@ -708,7 +708,7 @@ class DatabaseService {
   Future<void> saveTaskDebounced(DownloadTask task) async {
     _pendingProgressSaves[task.id] = task;
 
-    // Higher threshold = fewer flushes
+    // FIX-M2: Higher threshold = fewer flushes (flush immediately if pending >= 20)
     if (_pendingProgressSaves.length >= 20) {
       await flushPendingSaves();
       return;
@@ -717,8 +717,8 @@ class DatabaseService {
     final isBackground =
         DownloadEngine.isInBackground || PowerMonitor.screenOff;
     final interval = isBackground
-        ? const Duration(seconds: 30)
-        : const Duration(seconds: 12);
+        ? const Duration(seconds: 45) // 45s in background
+        : const Duration(seconds: 8); // 8s in foreground
 
     _dbBatchTimer ??= Timer(interval, flushPendingSaves);
   }
@@ -1047,6 +1047,8 @@ class DatabaseService {
   Future<void> clearOpenTabs() => _db.delete(_db.browserTabs).go();
 
   Future<void> dispose() async {
+    // FIX-M2: Force flush on dispose
+    await flushPendingSaves();
     _maintenanceTimer?.cancel();
     _maintenanceTimer = null;
     await _db.close();

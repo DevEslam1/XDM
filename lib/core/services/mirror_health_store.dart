@@ -153,12 +153,22 @@ class MirrorHealthStore {
 
   static Timer? _persistTimer;
   static bool _persistPending = false;
+  // FIX-M3: Dirty counter for debouncing
+  static int _dirtyCount = 0;
 
   static Future<void> _persist() async {
-    if (_cache == null || _persistPending) return;
+    if (_cache == null) return;
+    _dirtyCount++;
+    // FIX-M3: Flush immediately at 5+ dirty changes
+    if (_dirtyCount >= 5) {
+      await flushPending();
+      return;
+    }
+    if (_persistPending) return;
     _persistPending = true;
     _persistTimer?.cancel();
-    _persistTimer = Timer(const Duration(seconds: 5), () async {
+    // FIX-M3: 15s debounce interval
+    _persistTimer = Timer(const Duration(seconds: 15), () async {
       _persistPending = false;
       await flushPending();
     });
@@ -169,6 +179,7 @@ class MirrorHealthStore {
     _persistTimer?.cancel();
     _persistTimer = null;
     _persistPending = false;
+    _dirtyCount = 0;
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = jsonEncode(_cache!.map((k, v) => MapEntry(k, v.toJson())));

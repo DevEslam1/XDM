@@ -287,7 +287,9 @@ class DownloadTask {
 
   String get audioProgressString =>
       '${(audioProgressPercent * 100).toStringAsFixed(1)}%';
-  bool get isAudioComplete => audioProgress >= 1.0;
+  bool get isAudioComplete =>
+      audioProgress >= 0.999 ||
+      (audioSize > 0 && audioDownloadedBytes >= audioSize);
 
   // FIX(07): Seeding ratio computed getter
   double get seedingRatio {
@@ -298,6 +300,15 @@ class DownloadTask {
   // FIX(17): Helper flag when video size is unknown but audio size is known
   bool get isTotalSizePartial =>
       hasMergedAudio && fileSize <= 0 && audioSize > 0;
+
+  // FIX-H6: Network status getters
+  bool get waitingWifi =>
+      errorMessage == DownloadStatusMessages.waitingWifi ||
+      statusMessage == DownloadStatusMessages.waitingWifi;
+
+  bool get waitingNetwork =>
+      errorMessage == DownloadStatusMessages.waitingNetwork ||
+      statusMessage == DownloadStatusMessages.waitingNetwork;
 
   bool get hasTorrentFiles => torrentFiles != null && torrentFiles!.isNotEmpty;
 
@@ -325,9 +336,9 @@ class DownloadTask {
           : (fileSize > audioSize ? fileSize - audioSize : 0);
       // FIX-1: Always fold audio bytes in, even when videoOnly is still 0
       // (audio size may be known before video size resolves).
-      final audioBytes = audioSize > 0
-          ? (audioProgress * audioSize).round()
-          : audioDownloadedBytes;
+      final audioBytes = audioDownloadedBytes > 0
+          ? audioDownloadedBytes
+          : (audioSize > 0 ? (audioProgress * audioSize).round() : 0);
       if (videoOnly > 0) {
         if (raw < videoOnly) {
           raw += audioBytes;
@@ -344,10 +355,11 @@ class DownloadTask {
     return raw;
   }
 
-  /// Sanitized chunk progress ratios matching current threadCount.
+  // FIX-S8: Sanitized chunk progress ratios matching current threadCount with NaN/Inf guards
   List<double> get sanitizedChunks {
     final count = threadCount > 0 ? threadCount : 1;
-    double safe(double c) => c.isNaN ? 0.0 : c.clamp(0.0, 1.0);
+    double safe(double c) =>
+        (c.isNaN || c.isInfinite) ? 0.0 : c.clamp(0.0, 1.0);
 
     if (chunks.length == count) {
       return chunks.map(safe).toList();
@@ -366,7 +378,10 @@ class DownloadTask {
       final avg = existing.isEmpty
           ? 0.0
           : existing.reduce((a, b) => a + b) / existing.length;
-      return [...existing, ...List.filled(count - existing.length, avg)];
+      return [
+        ...existing,
+        ...List.filled(count - existing.length, avg.clamp(0.0, 1.0))
+      ];
     }
     // Thread count decreased: keep the first `count` chunks.
     return chunks.sublist(0, count).map(safe).toList();

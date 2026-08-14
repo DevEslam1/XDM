@@ -12,6 +12,8 @@ import 'package:synchronized/synchronized.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/localization.dart';
 import 'package:dmx/core/services/logging_service.dart';
+import 'download_engine.dart';
+import 'power_monitor.dart';
 
 const String _nonceKey = 'dmx_notification_nonce';
 const String _pendingActionsKey = 'dmx_pending_notification_actions';
@@ -487,12 +489,24 @@ class NotificationService {
     if (!_initialized) return;
     final now = DateTime.now();
     final lastPost = _lastProgressPostTimes[notificationId];
+    // FIX-M5: 2000ms background throttle, 1000ms foreground
+    final isBg = DownloadEngine.isInBackground || PowerMonitor.screenOff;
+    final throttleMs = isBg ? 2000 : 1000;
     if (!isPaused &&
         lastPost != null &&
-        now.difference(lastPost).inMilliseconds < 1000) {
+        now.difference(lastPost).inMilliseconds < throttleMs) {
       return;
     }
     _lastProgressPostTimes[notificationId] = now;
+    // FIX-M5: Cap _lastProgressPostTimes at 100 entries
+    if (_lastProgressPostTimes.length > 100) {
+      final keysToRemove = _lastProgressPostTimes.keys
+          .take(_lastProgressPostTimes.length - 100)
+          .toList();
+      for (final k in keysToRemove) {
+        _lastProgressPostTimes.remove(k);
+      }
+    }
     final actions = <AndroidNotificationAction>[
       AndroidNotificationAction(
         isPaused ? 'resume:$payload' : 'pause:$payload',

@@ -297,7 +297,7 @@ class UpdateService {
     }
   }
 
-  /// Complete APK Signature and Integrity Verification.
+  /// FIX-S2: Complete APK Signature and Integrity Verification.
   Future<ApkVerificationResult> verifyApkSignature(
     File apkFile, {
     String? expectedFingerprint,

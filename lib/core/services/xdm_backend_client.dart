@@ -25,6 +25,54 @@ class XdmBackendClient {
   static String? _apiKey;
 
   late Dio _dio;
+  // FIX-H5: Dio instance pool (max 3)
+  static const int _maxPoolSize = 3;
+  final List<Dio> _availablePool = [];
+  final Set<Dio> _allPoolInstances = {};
+
+  Dio _acquireDio(String baseUrl) {
+    Dio dio;
+    if (_availablePool.isNotEmpty) {
+      dio = _availablePool.removeLast();
+      dio.options.baseUrl = baseUrl;
+    } else if (_allPoolInstances.length < _maxPoolSize) {
+      dio = Dio(BaseOptions(
+        baseUrl: baseUrl,
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 60),
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      ));
+      _configureDioSSL(dio);
+      _allPoolInstances.add(dio);
+    } else {
+      dio = _allPoolInstances.first;
+      dio.options.baseUrl = baseUrl;
+    }
+    return dio;
+  }
+
+  void _releaseDio(Dio? dio) {
+    if (dio != null &&
+        _allPoolInstances.contains(dio) &&
+        !_availablePool.contains(dio)) {
+      _availablePool.add(dio);
+    }
+  }
+
+  /// Closes all pooled Dio instances and the main instance
+  void dispose() {
+    for (final dio in _allPoolInstances) {
+      dio.close(force: true);
+    }
+    _allPoolInstances.clear();
+    _availablePool.clear();
+    _dio.close(force: true);
+  }
+
   final Map<String, _StreamsCacheEntry> _streamsCache = {};
   final _ApiRateLimiter _rateLimiter = _ApiRateLimiter();
 
@@ -211,8 +259,9 @@ class XdmBackendClient {
 
         bool valid = true;
         if (testStreamUrl != null && testStreamUrl.isNotEmpty) {
+          final checkDio = _acquireDio(testStreamUrl);
           try {
-            final headRes = await Dio().head(
+            final headRes = await checkDio.head(
               testStreamUrl,
               options: Options(
                 connectTimeout: const Duration(seconds: 5),
@@ -228,6 +277,8 @@ class XdmBackendClient {
             }
           } catch (_) {
             // Best effort validation
+          } finally {
+            _releaseDio(checkDio);
           }
         }
 
@@ -265,10 +316,6 @@ class XdmBackendClient {
       final uniqueBackends = backendUrls.toSet().toList();
 
       Object? lastError;
-      // When ANY backend failed with a network/server error (timeout, refused,
-      // 5xx), surface that instead of the last 404 the failover chain saw. A
-      // 404 from a fallback backend must not mask the real "backend
-      // unreachable" condition that should trigger retry + local fallback.
       var sawNetworkFailure = false;
 
       for (var baseUrl in uniqueBackends) {
@@ -276,8 +323,7 @@ class XdmBackendClient {
           baseUrl = baseUrl.substring(0, baseUrl.length - 1);
         }
 
-        // ERR-RESILIENCE-2.2: Skip backends whose circuit is open. A probe is
-        // allowed after openTimeout; a failed probe re-opens the circuit.
+        // ERR-RESILIENCE-2.2: Skip backends whose circuit is open.
         final circuit = _backendCircuits.putIfAbsent(
           baseUrl,
           () => CircuitBreaker(failureThreshold: 3),
@@ -293,20 +339,10 @@ class XdmBackendClient {
         final endpoints = ['/api/streams', '/streams'];
 
         for (final endpoint in endpoints) {
-          // C3: hoisted so the finally clause can close the throwaway client.
           Dio? dio;
           try {
-            dio = Dio(BaseOptions(
-              baseUrl: baseUrl,
-              connectTimeout: const Duration(seconds: 30),
-              receiveTimeout: const Duration(seconds: 60),
-              headers: {
-                'Accept': 'application/json',
-                'User-Agent':
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              },
-            ));
-            _configureDioSSL(dio);
+            // FIX-H5: Acquire from Dio pool
+            dio = _acquireDio(baseUrl);
 
             final response = await _withTimeout(
               dio.get<Map<String, dynamic>>(
@@ -337,9 +373,6 @@ class XdmBackendClient {
               lastError = Exception('Invalid response format');
               continue;
             }
-            // C3: this throwaway-per-backend/endpoint Dio must be closed so
-            // its connection pool doesn't leak sockets during playlist batch
-            // enqueues (50+ videos).
           } catch (e) {
             lastError = e;
             _log.warning('Backend $baseUrl endpoint $endpoint failed: $e');
@@ -371,8 +404,8 @@ class XdmBackendClient {
             }
             // Move to next endpoint or backend
           } finally {
-            dio?.close(
-                force: true); // C3: close the throwaway Dio's connection pool
+            // FIX-H5: Release to Dio pool
+            _releaseDio(dio);
           }
         }
       }
@@ -435,20 +468,10 @@ class XdmBackendClient {
         final endpoints = ['/api/playlist', '/playlist'];
 
         for (final endpoint in endpoints) {
-          // C3: hoisted so the finally clause can close the throwaway client.
           Dio? dio;
           try {
-            dio = Dio(BaseOptions(
-              baseUrl: baseUrl,
-              connectTimeout: const Duration(seconds: 30),
-              receiveTimeout: const Duration(seconds: 60),
-              headers: {
-                'Accept': 'application/json',
-                'User-Agent':
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              },
-            ));
-            _configureDioSSL(dio);
+            // FIX-H5: Acquire from Dio pool
+            dio = _acquireDio(baseUrl);
             final response = await _withTimeout(
               dio.get<Map<String, dynamic>>(
                 endpoint,
@@ -464,7 +487,6 @@ class XdmBackendClient {
             BackendHealthService.instance.markHealthy(baseUrl);
             circuit.recordSuccess();
             return data;
-            // C3: close the throwaway Dio's connection pool.
           } catch (e) {
             lastError = e;
             _log.warning(
@@ -484,8 +506,8 @@ class XdmBackendClient {
               BackendHealthService.instance.markUnhealthy(baseUrl);
             }
           } finally {
-            dio?.close(
-                force: true); // C3: close the throwaway Dio's connection pool
+            // FIX-H5: Release to Dio pool
+            _releaseDio(dio);
           }
         }
       }
@@ -518,20 +540,10 @@ class XdmBackendClient {
         final endpoints = ['/api/search', '/search'];
 
         for (final endpoint in endpoints) {
-          // C3: hoisted so the finally clause can close the throwaway client.
           Dio? dio;
           try {
-            dio = Dio(BaseOptions(
-              baseUrl: baseUrl,
-              connectTimeout: const Duration(seconds: 30),
-              receiveTimeout: const Duration(seconds: 60),
-              headers: {
-                'Accept': 'application/json',
-                'User-Agent':
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              },
-            ));
-            _configureDioSSL(dio);
+            // FIX-H5: Acquire from Dio pool
+            dio = _acquireDio(baseUrl);
             final response = await _withTimeout(
               dio.get<Map<String, dynamic>>(
                 endpoint,
@@ -546,7 +558,6 @@ class XdmBackendClient {
             return results
                 .map((e) => Map<String, dynamic>.from(e as Map))
                 .toList();
-            // C3: close the throwaway Dio's connection pool.
           } catch (e) {
             lastError = e;
             _log.warning(
@@ -561,8 +572,8 @@ class XdmBackendClient {
               BackendHealthService.instance.markUnhealthy(baseUrl);
             }
           } finally {
-            dio?.close(
-                force: true); // C3: close the throwaway Dio's connection pool
+            // FIX-H5: Release to Dio pool
+            _releaseDio(dio);
           }
         }
       }
@@ -678,6 +689,7 @@ class XdmBackendClient {
     return BackendUnknownException(error.toString());
   }
 
+  // FIX-S5: Per-domain SSL bypass only (debug mode)
   void _configureDioSSL(Dio client) {
     try {
       final bypassSSL = SettingsProvider.instance.bypassSSL;
@@ -685,10 +697,18 @@ class XdmBackendClient {
           bypassSSL &&
           client.httpClientAdapter is IOHttpClientAdapter) {
         assert(kDebugMode, 'SSL bypass cannot activate in release builds');
+        final targetHost =
+            Uri.tryParse(client.options.baseUrl)?.host.toLowerCase();
         final adapter = client.httpClientAdapter as IOHttpClientAdapter;
         adapter.createHttpClient = () {
           final httpClient = HttpClient();
-          httpClient.badCertificateCallback = (cert, host, port) => true;
+          httpClient.badCertificateCallback = (cert, host, port) {
+            if (targetHost != null && targetHost.isNotEmpty) {
+              final h = host.toLowerCase();
+              return h == targetHost || h.endsWith('.$targetHost');
+            }
+            return false;
+          };
           return httpClient;
         };
       }

@@ -44,6 +44,12 @@ import 'mixins/download_filter_mixin.dart';
 import 'mixins/download_queue_mixin.dart';
 import 'mixins/download_torrent_mixin.dart';
 import 'mixins/download_backup_mixin.dart';
+import '../services/download_task_repository.dart';
+import '../services/download_execution_service.dart';
+import '../services/download_queue_service.dart';
+import '../services/torrent_session_manager.dart';
+import '../services/download_notification_bridge.dart';
+import '../services/download_widget_sync.dart';
 
 /// A compact description for a single download item that can be added in bulk.
 class DownloadAddSpec {
@@ -107,7 +113,10 @@ class DownloadProvider extends ChangeNotifier
         DownloadQueueMixin,
         DownloadTorrentMixin,
         DownloadBackupMixin
-    implements DownloadOrchestratorHost {
+    implements
+        DownloadOrchestratorHost,
+        DownloadQueueHost,
+        DownloadExecutionHost {
   DownloadProvider({
     required DatabaseService databaseService,
     required SettingsProvider settingsProvider,
@@ -170,11 +179,66 @@ class DownloadProvider extends ChangeNotifier
 
     _orchestrator = DownloadOrchestrator(this);
 
+    // Initialize modular split services
+    _taskRepository = DownloadTaskRepository(databaseService: _databaseService);
+    _torrentSessionManager = TorrentSessionManager();
+    _notificationBridge = DownloadNotificationBridge(coordinator: _notifications);
+    _downloadWidgetSync = DownloadWidgetSync();
+    _queueService = DownloadQueueService(host: this);
+    _executionService = DownloadExecutionService(host: this);
+
     // Subscribe lazily — torrent engine may not be initialized yet.
     if (enableBackgroundTimers) {
       _initTorrentSubscription();
     }
   }
+
+  late final DownloadTaskRepository _taskRepository;
+  late final TorrentSessionManager _torrentSessionManager;
+  late final DownloadNotificationBridge _notificationBridge;
+  late final DownloadWidgetSync _downloadWidgetSync;
+  late final DownloadQueueService _queueService;
+  late final DownloadExecutionService _executionService;
+
+  DownloadTaskRepository get taskRepository => _taskRepository;
+  TorrentSessionManager get torrentSessionManager => _torrentSessionManager;
+  DownloadNotificationBridge get notificationBridge => _notificationBridge;
+  DownloadWidgetSync get downloadWidgetSync => _downloadWidgetSync;
+  DownloadQueueService get queueService => _queueService;
+  DownloadExecutionService get executionService => _executionService;
+
+  @override
+  int get maxConcurrentDownloads => _settingsProvider.maxDownloads;
+
+  @override
+  bool isTaskStarting(String taskId) => _orchestrator.isTaskPendingStart(taskId);
+
+  @override
+  Future<void> executeTask(String taskId) => resumeTask(taskId);
+
+  @override
+  Future<void> updateTaskOrder(List<DownloadTask> orderedTasks) async {
+    _tasks.clear();
+    _tasks.addAll(orderedTasks);
+    await _databaseService.saveTasks(orderedTasks);
+    notifyListeners();
+  }
+
+  @override
+  Future<void> executeDownload(String taskId, {bool isAutoRetry = false}) =>
+      resumeTask(taskId);
+
+  @override
+  Future<void> pauseDownload(String taskId) => pauseTask(taskId);
+
+  @override
+  Future<void> resumeDownload(String taskId) => resumeTask(taskId);
+
+  @override
+  Future<void> retryDownload(String taskId) => retryTask(taskId);
+
+  @override
+  Future<void> cancelDownload(String taskId) => cancelTask(taskId);
 
   Timer? _torrentInitTimer;
 
@@ -379,7 +443,22 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, bool> _resumeRejectionRestarts = {};
   final Map<String, Queue<double>> _speedHistories = {};
   final Map<String, Queue<double>> _uploadSpeedHistories = {};
+  // FIX-M7: Periodic timer for cleaning up inactive speed histories
+  Timer? _speedHistoryCleanupTimer;
   final Map<String, Future<void>> _dbSaveQueues = {};
+
+  void _cleanupInactiveSpeedHistories() {
+    final activeIds = _tasks
+        .where((t) =>
+            t.status == DownloadStatus.downloading ||
+            (t.status == DownloadStatus.completed &&
+                t.isTorrent &&
+                t.seedingEnabled))
+        .map((t) => t.id)
+        .toSet();
+    _speedHistories.removeWhere((id, _) => !activeIds.contains(id));
+    _uploadSpeedHistories.removeWhere((id, _) => !activeIds.contains(id));
+  }
 
   /// Per-task progress and speed ValueNotifiers for isolated repainting.
   final Map<String, ValueNotifier<double>> _progressNotifiers = {};
@@ -622,6 +701,7 @@ class DownloadProvider extends ChangeNotifier
   // Public getters (delegated to [DownloadFilterMixin])
   // ---------------------------------------------------------------------------
 
+  @override
   List<DownloadTask> get tasks => List.unmodifiable(_tasks);
 
   DownloadMetrics? getMetrics(String taskId) => _downloadMetrics[taskId];
@@ -1964,31 +2044,8 @@ class DownloadProvider extends ChangeNotifier
       if (task.status == DownloadStatus.downloading) {
         // Flush progress BEFORE cancelling so no in-flight write is lost
         await _flushPendingProgress(id);
-        await Future.delayed(const Duration(milliseconds: 300));
-        try {
-          if (torrentId == null) {
-            debugPrint('[FIX-P3] Relying on engine cancel to flush writer');
-          }
-        } catch (e) {
-          debugPrint('[FIX-P3] Pre-flush error: $e');
-        }
 
-        // FIX-H-02: Ensure engine state file is flushed before cancel
-        try {
-          final latest = _findTask(id) ?? task;
-          final stateFile = File('${latest.tempFilePath}.dmxstate');
-          if (await stateFile.exists()) {
-            final content = await stateFile.readAsString();
-            jsonDecode(content); // throws on corrupt
-          }
-        } catch (_) {
-          try {
-            final latest = _findTask(id) ?? task;
-            await File('${latest.tempFilePath}.dmxstate').delete();
-          } catch (_) {}
-        }
-
-        // FIX(H-2): cancel token first so the future can actually complete
+        // FIX H-3: Cancel token and await engine future directly instead of arbitrary 300ms sleep
         if (_cancelTokens.containsKey(id)) {
           try {
             _cancelTokens[id]?.cancel('paused');
@@ -2010,6 +2067,21 @@ class DownloadProvider extends ChangeNotifier
 
           _cancelTokens.remove(id);
           _activeFutures.remove(id);
+        }
+
+        // Validate engine state file after cancel completes
+        try {
+          final latest = _findTask(id) ?? task;
+          final stateFile = File('${latest.tempFilePath}.dmxstate');
+          if (await stateFile.exists()) {
+            final content = await stateFile.readAsString();
+            jsonDecode(content); // throws on corrupt
+          }
+        } catch (_) {
+          try {
+            final latest = _findTask(id) ?? task;
+            await File('${latest.tempFilePath}.dmxstate').delete();
+          } catch (_) {}
         }
       }
 
@@ -2762,6 +2834,7 @@ class DownloadProvider extends ChangeNotifier
         speed: 0,
         clearEta: true,
         errorMessage: 'Transfer cancelled.',
+        // FIX-S11: Set pausedByUser: true so auto-resume skips cancelled tasks
         pausedByUser: true,
       ),
     );
@@ -2875,13 +2948,22 @@ class DownloadProvider extends ChangeNotifier
             task.copyWith(isMergeInProgress: false)); // FIX-05: unstick flag
         await _orchestrator.retryMergeOnly(task);
         return;
-      } else {
-        debugPrint(
-            '[DMX] Merge-only retry missing temp leg file. Restarting both streams.');
-        task = task.copyWith(
-          statusMessage: 'Restarting both streams...',
-        );
       }
+    }
+
+    // FIX YT-4: If video exists and is complete but audio is missing/failed,
+    // re-download audio only without wiping the video stream.
+    if (videoExists && !audioExists && task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
+      debugPrint('[DMX] FIX YT-4: Video leg intact; retrying audio stream only for task ${task.id}');
+      task = task.copyWith(
+        audioProgress: 0.0,
+        audioDownloadedBytes: 0,
+        statusMessage: 'Re-downloading audio stream...',
+        clearError: true,
+      );
+      await _setTask(task);
+      await resumeTask(id);
+      return;
     }
 
     // FIX(D1): If the failure was "file changed on server", the saved
@@ -4122,6 +4204,11 @@ class DownloadProvider extends ChangeNotifier
 
   void _startWidgetTimer() {
     _widgetTimer?.cancel();
+    // FIX-M7: Periodic cleanup of inactive speed histories every 5 minutes
+    _speedHistoryCleanupTimer ??= Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => _cleanupInactiveSpeedHistories(),
+    );
     final hasActive = downloadingTasksCount > 0 || seedingTasksCount > 0;
 
     BackgroundService.setDownloadActive(hasActive);
@@ -4814,10 +4901,12 @@ class DownloadProvider extends ChangeNotifier
       } else if (cleanUrl != task.url &&
           !isSameResource &&
           !sameTorrent(task.url, cleanUrl)) {
-        // Only delete .dmxstate on manual URL change when not same resource
+        // Delete .dmxstate and temp file on manual URL change when not same resource (FIX H-4 / L-1)
         for (final p in [
+          task.tempFilePath,
           '${task.tempFilePath}.dmxstate',
           '${task.tempFilePath}.dmxstate.tmp',
+          '${task.tempFilePath}.journal',
         ]) {
           try {
             final f = File(p);
@@ -5018,6 +5107,11 @@ class DownloadProvider extends ChangeNotifier
     final isYoutube = task.downloadPageUrl != null &&
         (task.downloadPageUrl!.contains('youtube.com/') ||
             task.downloadPageUrl!.contains('youtu.be/'));
+
+    // FIX YT-2: Reject webpage URLs when refreshing YouTube streams
+    if (isYoutube && _orchestrator.shouldRejectResolvedYoutubeUrl(newUrl)) {
+      throw Exception('Backend returned page URL, not stream URL: $newUrl');
+    }
 
     if (!isYoutube) {
       try {
@@ -5281,6 +5375,9 @@ class DownloadProvider extends ChangeNotifier
     _torrentInitTimer?.cancel();
     _scheduleManager.dispose();
     _widgetTimer?.cancel();
+    // FIX-M7: Cancel speed history cleanup timer
+    _speedHistoryCleanupTimer?.cancel();
+    _speedHistoryCleanupTimer = null;
 
     // Cancel all active download tokens
     for (final token in _cancelTokens.values) {
@@ -5365,13 +5462,26 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> _autoResumeIncomplete() async {
+    final now = DateTime.now();
     final candidates = _tasks.where((t) {
+      // FIX-H6: Skip tasks where pausedByUser, waitingWifi, waitingNetwork, or scheduled in future
       final isPaused = t.status == DownloadStatus.paused;
-      final isNotUserPausedOrScheduled = !t.pausedByUser &&
-          t.errorMessage != DownloadStatusMessages.waitingWifi &&
-          t.errorMessage != DownloadStatusMessages.waitingNetwork &&
-          (t.scheduledAt == null || t.scheduledAt!.isBefore(DateTime.now()));
-      return isPaused && isNotUserPausedOrScheduled;
+      if (!isPaused) return false;
+      if (t.pausedByUser) return false;
+      if (t.waitingWifi ||
+          t.errorMessage == DownloadStatusMessages.waitingWifi ||
+          t.statusMessage == DownloadStatusMessages.waitingWifi) {
+        return false;
+      }
+      if (t.waitingNetwork ||
+          t.errorMessage == DownloadStatusMessages.waitingNetwork ||
+          t.statusMessage == DownloadStatusMessages.waitingNetwork) {
+        return false;
+      }
+      if (t.scheduledAt != null && t.scheduledAt!.isAfter(now)) {
+        return false;
+      }
+      return true;
     }).toList();
 
     var updatedAny = false;
@@ -5430,6 +5540,7 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
+  // FIX-S9: Compare itag, mime, and clen only to prevent spurious restarts on benign host/token rotations
   static bool youtubeStreamIdentityChanged(String oldUrl, String newUrl) {
     try {
       final oldUri = Uri.tryParse(oldUrl);

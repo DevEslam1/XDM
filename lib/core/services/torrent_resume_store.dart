@@ -145,6 +145,7 @@ class TorrentResumeStore {
         if (files != null) 'files': files,
       });
 
+      // FIX-M12: Write metadata JSON first, then binary resume blob
       await metaTmp.writeAsString(meta, flush: true);
       final mraf = await metaTmp.open(mode: FileMode.append);
       await mraf.flush();
@@ -262,6 +263,8 @@ class TorrentResumeStore {
       return Uint8List.fromList(blob);
     } catch (e) {
       debugPrint('[TorrentResumeStore] load failed: $e');
+      // FIX-M12: Delete corrupt resume data on load error
+      await deleteResumeDataForSource(sourceUrl);
       return null;
     }
   }
@@ -289,7 +292,15 @@ class TorrentResumeStore {
     try {
       final dir = await _dir();
       final key = _stableKey(sourceUrl);
-      for (final suffix in ['.bin', '.meta.json', '.bin.tmp']) {
+      // FIX-M12: Delete all resume and metadata artifacts including temp files
+      for (final suffix in [
+        '.bin',
+        '.meta.json',
+        '.bin.tmp',
+        '.resume',
+        '.resume.tmp',
+        '.meta.json.tmp'
+      ]) {
         final f = File('${dir.path}/$key$suffix');
         if (await f.exists()) await f.delete();
       }

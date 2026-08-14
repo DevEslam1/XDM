@@ -432,6 +432,7 @@ class StateStore {
   }) async {
     state.updatedAt = DateTime.now();
     final targetPath = pathFor(tempFilePath);
+    final isScreenOff = screenOff || PowerMonitor.screenOff;
     final tmpPath = '$targetPath.tmp';
     try {
       final payload = jsonEncode(state.toJson());
@@ -447,6 +448,13 @@ class StateStore {
           _lastWrittenPayloads.remove(key);
         }
       }
+
+      // FIX-P6: In save(), when screenOff is true, use direct writeAsString without tmp+rename
+      if (isScreenOff && !durable) {
+        await File(targetPath).writeAsString(payload, flush: false);
+        return;
+      }
+
       final tmp = File(tmpPath);
       await tmp.parent.create(recursive: true);
       if (durable) {
@@ -490,7 +498,10 @@ class DownloadJournal {
   IOSink? _sink;
   bool _isOpen = false;
   int _approxBytes = 0;
-  // FIX: Reduced from 2MB to 512KB for mobile-friendly compaction
+  // FIX-P5: Flush counter and tracking
+  int _flushCounter = 0;
+  int _lastFlushRecordCount = 0;
+  // Compaction threshold bytes
   final int compactionThresholdBytes;
   final Lock _lock = Lock();
 
@@ -533,13 +544,20 @@ class DownloadJournal {
     });
   }
 
+  final Map<int, int> _lastBgRecordedBytes = {};
+
   Future<void> recordChunkProgress(int index, int bytes) async {
-    // Skip journal writes entirely in background
-    if (DownloadEngine.isInBackground || PowerMonitor.screenOff) {
-      return;
+    final isBg = DownloadEngine.isInBackground || PowerMonitor.screenOff;
+    // FIX-P5: When in background/screen off, increase byte threshold from 512KB to 2MB
+    if (isBg) {
+      final last = _lastBgRecordedBytes[index] ?? 0;
+      if ((bytes - last).abs() < 2 * 1024 * 1024) {
+        return;
+      }
+      _lastBgRecordedBytes[index] = bytes;
     }
 
-    await _lock.synchronized(() {
+    await _lock.synchronized(() async {
       _ensureOpen();
       final line = _withCrc({
         't': 'chunk',
@@ -549,6 +567,14 @@ class DownloadJournal {
       });
       _sink!.writeln(line);
       _approxBytes += line.length + 1;
+      _flushCounter++;
+
+      // FIX-P5: Flush every 50 records (foreground) or 200 records (background/screen off)
+      final flushInterval = isBg ? 200 : 50;
+      if (_flushCounter - _lastFlushRecordCount >= flushInterval) {
+        await _sink!.flush();
+        _lastFlushRecordCount = _flushCounter;
+      }
     });
   }
 

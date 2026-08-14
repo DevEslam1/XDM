@@ -207,6 +207,8 @@ class SiteIntelligenceService {
   bool _disposed = false;
   Timer? _persistTimer;
   bool _persistPending = false;
+  // FIX-M4: Dirty counter for debouncing
+  int _dirtyCount = 0;
 
   // FIX: Regex to detect any valid URL scheme (e.g. http, https, ftp, file).
   // Previously only http:// and https:// were checked, causing URLs with
@@ -246,20 +248,21 @@ class SiteIntelligenceService {
   }
 
   Future<void> _persist() async {
-    if (_persistPending || _disposed) return;
+    if (_disposed) return;
+    _dirtyCount++;
+    // FIX-M4: Flush immediately if dirty count >= 5
+    if (_dirtyCount >= 5) {
+      await flushPending();
+      return;
+    }
+    if (_persistPending) return;
     _persistPending = true;
     _persistTimer?.cancel();
-    _persistTimer = Timer(const Duration(seconds: 5), () async {
+    // FIX-M4: 30s debounce delay
+    _persistTimer = Timer(const Duration(seconds: 30), () async {
       _persistPending = false;
       if (_disposed) return;
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final raw =
-            jsonEncode(_reliability.map((k, v) => MapEntry(k, v.toJson())));
-        await prefs.setString(_reliabilityKey, raw);
-      } catch (e) {
-        _log.warning('Failed to persist reliability data: $e');
-      }
+      await flushPending();
     });
   }
 
@@ -273,6 +276,7 @@ class SiteIntelligenceService {
   Future<void> flushPending() async {
     _persistTimer?.cancel();
     _persistPending = false;
+    _dirtyCount = 0;
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw =

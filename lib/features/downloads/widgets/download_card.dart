@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/services/power_monitor.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/intl_formatters.dart';
@@ -135,15 +136,18 @@ class DownloadCard extends StatelessWidget with HapticHelper {
             child: cardWidget,
           );
 
-    return Semantics(
-      container: true,
-      explicitChildNodes: true,
-      label: semanticLabel,
-      hint: L10n.of(context, 'double_tap_details_hint'),
-      child: Hero(
-        tag: 'download_card_${task.id}',
-        createRectTween: (begin, end) => RectTween(begin: begin, end: end),
-        child: interactiveCard,
+    // FIX-H7: Wrap the entire DownloadCard build return in a RepaintBoundary
+    return RepaintBoundary(
+      child: Semantics(
+        container: true,
+        explicitChildNodes: true,
+        label: semanticLabel,
+        hint: L10n.of(context, 'double_tap_details_hint'),
+        child: Hero(
+          tag: 'download_card_${task.id}',
+          createRectTween: (begin, end) => RectTween(begin: begin, end: end),
+          child: interactiveCard,
+        ),
       ),
     );
   }
@@ -241,12 +245,20 @@ class _CardShell extends StatelessWidget {
 // Status chip — pulses while downloading / seeding
 // ────────────────────────────────────────────────────────────────────────────
 
+// FIX-P2: _StatusChipPulseDriver — Stop timer when app backgrounded
 class _StatusChipPulseDriver with WidgetsBindingObserver {
   static final _instance = _StatusChipPulseDriver._();
   factory _StatusChipPulseDriver() => _instance;
 
   _StatusChipPulseDriver._() {
     WidgetsBinding.instance.addObserver(this);
+    PowerMonitor.screenStateStream.listen((screenOn) {
+      if (!screenOn) {
+        _stop();
+      } else if (_refCount > 0) {
+        _start();
+      }
+    });
   }
 
   final ValueNotifier<double> value = ValueNotifier<double>(0.7);
@@ -270,8 +282,13 @@ class _StatusChipPulseDriver with WidgetsBindingObserver {
   }
 
   void _start() {
+    if (PowerMonitor.screenOff) return;
     _stop();
     _timer = Timer.periodic(const Duration(milliseconds: 33), (_) {
+      if (PowerMonitor.screenOff) {
+        _stop();
+        return;
+      }
       if (_increasing) {
         _current += 0.02;
         if (_current >= 1.0) {
@@ -300,7 +317,9 @@ class _StatusChipPulseDriver with WidgetsBindingObserver {
         state == AppLifecycleState.inactive) {
       _stop();
     } else if (state == AppLifecycleState.resumed && _refCount > 0) {
-      _start();
+      if (!PowerMonitor.screenOff) {
+        _start();
+      }
     }
   }
 }

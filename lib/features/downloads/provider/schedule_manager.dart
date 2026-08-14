@@ -60,9 +60,10 @@ class ScheduleManager {
 
   Timer? _schedulingTimer;
   DateTime? _lastUpdateCheckTime;
+  // FIX-S12: Guard ready state until provider completes initial load
   bool _ready = false;
 
-  // SCHED-FIX-7: Mark schedule manager ready after initial load completes
+  // FIX-S12: Mark schedule manager ready after initial load completes
   void markReady() {
     _ready = true;
     reschedule();
@@ -181,10 +182,8 @@ class ScheduleManager {
       }
     }
 
-    // SCHED-FIX-6: Persist each promotion, isolating failures per task so only
-    // the tasks whose save actually failed are reverted. Tasks whose save
-    // succeeded must stay queued in both memory and DB — reverting them would
-    // desync the two and spuriously "un-promote" a successfully queued task.
+    // FIX-S13: Persist each promotion atomically, isolating failures per task with rollback
+    // Tasks whose save succeeded stay queued; failed tasks are reverted in-memory.
     if (saves.isNotEmpty) {
       final results = await Future.wait(
         saves.asMap().entries.map((entry) async {

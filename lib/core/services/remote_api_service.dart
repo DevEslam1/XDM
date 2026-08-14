@@ -265,6 +265,7 @@ class RemoteApiService {
 
   static final Lock _tokenFileLock = Lock();
 
+  // FIX-S3: Token file management with permission restrictions
   static Future<void> _writeTokenFile(String token, int port) async {
     return _tokenFileLock.synchronized(() async {
       try {

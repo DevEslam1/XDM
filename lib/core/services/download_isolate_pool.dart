@@ -745,23 +745,29 @@ class HttpTransferJob {
           _state!.downloadedBytes > 0) {
         final savedBytes = _state!.downloadedBytes;
         final total = _state!.totalSize;
+        final oldChunks = List<ChunkState>.from(_state!.chunks);
         final newChunks = ChunkScheduler.plan(
           totalSize: total,
           threadCount: cmd.threadCount,
         );
-        var remaining = savedBytes;
-        for (var i = 0; i < newChunks.length; i++) {
-          final capacity =
-              newChunks[i].size >= 0 ? newChunks[i].size : remaining;
-          final take = remaining.clamp(0, capacity);
-          newChunks[i].downloaded = take;
-          remaining -= take;
+        for (var ni = 0; ni < newChunks.length; ni++) {
+          final nc = newChunks[ni];
+          int overlap = 0;
+          for (final oc in oldChunks) {
+            final oStart = oc.start;
+            final oEnd = oc.start + oc.downloaded;
+            final nStart = nc.start;
+            final nEnd = nc.end >= 0 ? nc.end : nc.start + nc.size - 1;
+            final lo = max(oStart, nStart);
+            final hi = min(oEnd, nEnd);
+            if (hi > lo) overlap += (hi - lo);
+          }
+          nc.downloaded = overlap;
         }
         _state!.chunks = newChunks;
         debugPrint(
           '[FIX-4/H-R1] Redistributed $savedBytes bytes from '
-          '${load.state.chunks.length} → ${cmd.threadCount} chunks '
-          '(leftover=$remaining)',
+          '${load.state.chunks.length} → ${cmd.threadCount} chunks with range-overlap mapping',
         );
       }
       if (_state!.totalSize <= 0 && cmd.knownFileSize > 0) {
@@ -1176,6 +1182,9 @@ class HttpTransferJob {
             await StateStore.save(cmd.tempFilePath, _state!);
           } catch (e) {
             debugPrint('[DMX] H-2: chunk-boundary save failed: $e');
+            try {
+              await StateStore.save(cmd.tempFilePath, _state!);
+            } catch (_) {}
           }
         }
       } on DioException catch (e) {
@@ -1665,21 +1674,21 @@ class HttpTransferJob {
     final nowMs = _stopwatch.elapsedMilliseconds;
     final st = _state!;
 
-    // Background-aware intervals
+    // FIX-P6: Background-aware intervals: 60s save interval, 15000ms report interval
     final isBackground =
         DownloadEngine.isInBackground || PowerMonitor.screenOff;
     final saveInterval = isBackground
-        ? const Duration(seconds: 45).inMilliseconds
+        ? const Duration(seconds: 60).inMilliseconds
         : const Duration(seconds: 15).inMilliseconds;
     final saveByteThreshold = isBackground
-        ? 256 * 1024 * 1024 // 256MB in background
+        ? 64 * 1024 * 1024 // 64MB in background (FIX H-2)
         : 32 * 1024 * 1024; // 32MB foreground
 
     final dueSave = nowMs - _lastStateSaveMs >= saveInterval ||
         _bytesSinceSave >= saveByteThreshold;
 
     final reportInterval = isBackground
-        ? 10000 // 10s in background
+        ? 15000 // 15s in background
         : 750; // 750ms foreground
 
     final dueReport = nowMs - _lastReportMs >= reportInterval;
