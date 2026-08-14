@@ -56,12 +56,12 @@ class _SpeedGraphWidgetState extends State<SpeedGraphWidget> {
     final color = _getStatusColor(widget.status, isDark);
     _lastColor = color;
 
-    final displayHistory = widget.speedHistory.length < 60
+    final displayHistory = widget.speedHistory.length < 30
         ? [
-            ...List.filled(60 - widget.speedHistory.length, 0),
+            ...List.filled(30 - widget.speedHistory.length, 0),
             ...widget.speedHistory
           ]
-        : widget.speedHistory.sublist(widget.speedHistory.length - 60);
+        : widget.speedHistory.sublist(widget.speedHistory.length - 30);
 
     _lastCurrentSpeed = displayHistory.isNotEmpty ? displayHistory.last : 0;
     _lastPeakSpeed = displayHistory.isNotEmpty
@@ -81,7 +81,7 @@ class _SpeedGraphWidgetState extends State<SpeedGraphWidget> {
 
     _cachedChartData = LineChartData(
       minX: 0,
-      maxX: 59,
+      maxX: 29,
       minY: 0,
       maxY: maxY.toDouble(),
       gridData: FlGridData(
@@ -101,14 +101,14 @@ class _SpeedGraphWidgetState extends State<SpeedGraphWidget> {
           sideTitles: SideTitles(
             showTitles: true,
             reservedSize: 20,
-            interval: 15,
+            interval: 10,
             getTitlesWidget: (value, meta) {
-              final secs = 60 - value.toInt();
-              if (secs == 60) {
-                return const Text('60s', style: TextStyle(fontSize: 10));
-              }
+              final secs = 30 - value.toInt();
               if (secs == 30) {
                 return const Text('30s', style: TextStyle(fontSize: 10));
+              }
+              if (secs == 15) {
+                return const Text('15s', style: TextStyle(fontSize: 10));
               }
               if (secs == 0) {
                 return const Text('now', style: TextStyle(fontSize: 10));

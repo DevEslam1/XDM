@@ -46,6 +46,7 @@ class DatabaseService {
   /// database file small and recovery fast.
   Timer? _maintenanceTimer;
   int _maintenanceRuns = 0;
+  int _historyInsertCount = 0;
 
   // Hive constants for migration
   static const String downloadsBoxName = 'downloads';
@@ -91,15 +92,17 @@ class DatabaseService {
     _maintenanceTimer = Timer.periodic(interval, (_) async {
       final swCheckpoint = Stopwatch()..start();
       try {
-        await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
-        await _db.customStatement('PRAGMA optimize');
+        await _db.customStatement('PRAGMA wal_checkpoint(PASSIVE)');
+        if (_maintenanceRuns % 12 == 0) {
+          await _db.customStatement('PRAGMA optimize');
+        }
         swCheckpoint.stop();
         if (swCheckpoint.elapsedMilliseconds > 500) {
           _log.info(
-              'wal_checkpoint(TRUNCATE) took ${swCheckpoint.elapsedMilliseconds}ms');
+              'wal_checkpoint(PASSIVE) took ${swCheckpoint.elapsedMilliseconds}ms');
         }
       } catch (e) {
-        _log.warning('wal_checkpoint(TRUNCATE) failed', e);
+        _log.warning('wal_checkpoint(PASSIVE) failed', e);
       }
 
       _maintenanceRuns++;
@@ -794,13 +797,22 @@ class DatabaseService {
             mode: drift.InsertMode.insertOrReplace);
         return;
       } catch (e) {
+        final errStr = e.toString().toLowerCase();
+        final isBusyOrLocked = errStr.contains('busy') ||
+            errStr.contains('locked') ||
+            errStr.contains('sqlite_busy') ||
+            errStr.contains('sqlite_locked');
+        if (!isBusyOrLocked) {
+          // Task 2.3: Fail fast on schema or non-locking errors
+          rethrow;
+        }
         retries--;
         attempt++;
         if (retries <= 0) {
           rethrow;
         }
         final delayMs = 100 * (1 << (attempt - 1));
-        _log.warning('saveTask failed, retrying in ${delayMs}ms... Error: $e');
+        _log.warning('saveTask failed due to lock/busy, retrying in ${delayMs}ms... Error: $e');
         await Future.delayed(Duration(milliseconds: delayMs));
       }
     }
@@ -992,6 +1004,16 @@ class DatabaseService {
     _pendingHistoryEntries[url] = entry;
     _historyDebounceTimers[url]?.cancel();
 
+    // Cap debounce timers to 50 entries; flush the oldest pending entry on overflow
+    if (_historyDebounceTimers.length >= 50) {
+      final oldestUrl = _historyDebounceTimers.keys.first;
+      _historyDebounceTimers.remove(oldestUrl)?.cancel();
+      final flushedEntry = _pendingHistoryEntries.remove(oldestUrl);
+      if (flushedEntry != null) {
+        _writeBrowserHistoryDirect(flushedEntry);
+      }
+    }
+
     _historyDebounceTimers[url] = Timer(const Duration(seconds: 5), () async {
       _historyDebounceTimers.remove(url);
       final latestEntry = _pendingHistoryEntries.remove(url);
@@ -1044,28 +1066,31 @@ class DatabaseService {
       }
     });
 
-    int maxHistory;
-    try {
-      await SettingsProvider.instance.ensureLoaded();
-      maxHistory = SettingsProvider.instance.historyMaxEntries;
-    } catch (_) {
-      maxHistory = 500;
-    }
-    final countResult = await _db
-        .customSelect(
-          'SELECT COUNT(*) as cnt FROM browser_history',
-        )
-        .get();
-    final count = countResult.first.read<int>('cnt');
-    if (count > maxHistory) {
-      await _db.customStatement(
-        'DELETE FROM browser_history WHERE id NOT IN ('
-        '  SELECT id FROM browser_history '
-        '  ORDER BY visited_at DESC '
-        '  LIMIT ?'
-        ')',
-        [maxHistory],
-      );
+    _historyInsertCount++;
+    if (_historyInsertCount % 100 == 0) {
+      int maxHistory;
+      try {
+        await SettingsProvider.instance.ensureLoaded();
+        maxHistory = SettingsProvider.instance.historyMaxEntries;
+      } catch (_) {
+        maxHistory = 500;
+      }
+      final countResult = await _db
+          .customSelect(
+            'SELECT COUNT(*) as cnt FROM browser_history',
+          )
+          .get();
+      final count = countResult.first.read<int>('cnt');
+      if (count > maxHistory) {
+        await _db.customStatement(
+          'DELETE FROM browser_history WHERE id NOT IN ('
+          '  SELECT id FROM browser_history '
+          '  ORDER BY visited_at DESC '
+          '  LIMIT ?'
+          ')',
+          [maxHistory],
+        );
+      }
     }
 
     return id;

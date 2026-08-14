@@ -30,6 +30,7 @@ class BackgroundService {
   static bool _wakeLockHeld = false;
   static Timer? _wakeLockRenewalTimer;
   static Timer? _wakeLockSafetyTimer;
+  static Timer? _heartbeatTimer;
   static const Duration _maxWakeLockHold = Duration(hours: 2);
   static DateTime? _lastHeartbeatTime;
   static bool _hasActiveDownloads = false;
@@ -53,8 +54,16 @@ class BackgroundService {
   static Future<void> setDownloadActive(bool active) async {
     _hasActiveDownloads = active;
     if (!active) {
-      await releaseWakeLock();
+      final activeCount = await _checkActiveDownloadCount();
+      if (activeCount <= 0) {
+        _heartbeatTimer?.cancel();
+        _heartbeatTimer = null;
+        await releaseWakeLock();
+      }
     } else {
+      _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+        sendHeartbeat();
+      });
       await acquireWakeLock();
     }
   }
@@ -187,7 +196,7 @@ class BackgroundService {
 
     // FIX: P0-04 — never stop while downloads are running
     final activeCount = await _checkActiveDownloadCount();
-    if (_hasActiveDownloads || activeCount > 0) {
+    if (activeCount > 0) {
       _log.info('Not stopping: downloads still active ($activeCount running)');
       return;
     }
@@ -212,7 +221,9 @@ class BackgroundService {
   }
 
   static Future<void> sendHeartbeat() async {
-    if (!isSupported || !_hasActiveDownloads) return;
+    if (!isSupported) return;
+    final activeCount = await _checkActiveDownloadCount();
+    if (activeCount <= 0) return;
     final now = DateTime.now();
     if (_lastHeartbeatTime != null &&
         now.difference(_lastHeartbeatTime!) < const Duration(seconds: 60)) {

@@ -9,6 +9,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
+import 'package:synchronized/synchronized.dart';
 
 import '../../../core/services/torrent_resume_store.dart';
 import '../../../core/services/torrent_service.dart';
@@ -270,6 +271,21 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, Future<void>> _inFlightTaskOps = {};
   final Map<String, DateTime> _lastTaskOpTimes = {};
   final Map<String, bool> _taskOpInProgress = {};
+
+  // FIX-P0-01: Synchronization locks for task state mutations
+  final Map<String, Lock> _taskLocks = {};
+  Lock _lockFor(String id) => _taskLocks.putIfAbsent(id, () => Lock());
+
+  // FIX-PERF-03: Frame-batched listener notification
+  bool _notifyScheduled = false;
+  void scheduleNotify() {
+    if (_notifyScheduled) return;
+    _notifyScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _notifyScheduled = false;
+      if (!_disposed) notifyListeners();
+    });
+  }
 
   /// Returns true if a pause, resume, or retry operation is currently executing for [taskId].
   bool isTaskOperationPending(String taskId) =>
@@ -2014,27 +2030,30 @@ class DownloadProvider extends ChangeNotifier
 
   @override
   Future<void> pauseTask(String id) async {
-    if (_taskOpInProgress[id] == true) return; // guard
-    _taskOpInProgress[id] = true;
-    try {
-      final task = _findTask(id);
-      if (task == null) return;
+    // FIX-P0-01: Guard task state mutations with synchronized lock
+    return _lockFor(id).synchronized(() async {
+      if (_taskOpInProgress[id] == true) return; // guard
+      _taskOpInProgress[id] = true;
+      try {
+        final task = _findTask(id);
+        if (task == null) return;
 
-      final isSeedingTorrent = task.status == DownloadStatus.completed &&
-          task.isTorrent &&
-          task.seedingEnabled;
+        final isSeedingTorrent = task.status == DownloadStatus.completed &&
+            task.isTorrent &&
+            task.seedingEnabled;
 
-      if (!isSeedingTorrent &&
-          (task.status == DownloadStatus.paused ||
-              task.status == DownloadStatus.completed)) {
-        return;
+        if (!isSeedingTorrent &&
+            (task.status == DownloadStatus.paused ||
+                task.status == DownloadStatus.completed)) {
+          return;
+        }
+
+        return await _runGuardedTaskOperation(
+            id, 'pauseTask', () => _pauseTaskInternal(id));
+      } finally {
+        _taskOpInProgress[id] = false;
       }
-
-      return await _runGuardedTaskOperation(
-          id, 'pauseTask', () => _pauseTaskInternal(id));
-    } finally {
-      _taskOpInProgress[id] = false;
-    }
+    });
   }
 
   Future<void> _pauseTaskInternal(String id) async {
@@ -2602,57 +2621,60 @@ class DownloadProvider extends ChangeNotifier
 
   @override
   Future<void> resumeTask(String id) async {
-    if (_taskOpInProgress[id] == true) return;
-    _taskOpInProgress[id] = true;
-    try {
-      final rawTask = _findTask(id);
-      if (rawTask == null) return;
-      final isStoppedSeedingTorrent =
-          rawTask.status == DownloadStatus.completed &&
-              rawTask.isTorrent &&
-              !rawTask.seedingEnabled;
-      if (rawTask.status == DownloadStatus.downloading ||
-          rawTask.status == DownloadStatus.queued ||
-          (rawTask.status == DownloadStatus.completed &&
-              !isStoppedSeedingTorrent)) {
-        return;
-      }
-      return await _runGuardedTaskOperation(id, 'resumeTask', () async {
-        // Pre-flight: refresh YT stream URL if it may have expired
-        final task = _findTask(id);
-        if (task != null &&
-            task.youtubeQualityPreset != null &&
-            task.downloadPageUrl != null &&
-            task.downloadPageUrl!.isNotEmpty) {
-          try {
-            final fresh = await YoutubeService.getFreshStreams(
-              task.downloadPageUrl!,
-              preferredType: task.youtubePreferredType,
-            );
-            if (fresh != null && fresh['url'] != null) {
-              final newUrl = fresh['url'] as String;
-              final identityChanged =
-                  DownloadProvider.youtubeStreamIdentityChanged(
-                      task.url, newUrl);
-              final updated = task.copyWith(
-                url: newUrl,
-                mergedAudioUrl: fresh['audioUrl'] ?? task.mergedAudioUrl,
-                audioProgress: identityChanged ? 0.0 : task.audioProgress,
-                audioDownloadedBytes:
-                    identityChanged ? 0 : task.audioDownloadedBytes,
-              );
-              await _setTask(updated);
-              await _databaseService.saveTask(updated);
-            }
-          } catch (e) {
-            debugPrint('[DMX] YT pre-flight refresh on resume failed: $e');
-          }
+    // FIX-P0-01: Guard task state mutations with synchronized lock
+    return _lockFor(id).synchronized(() async {
+      if (_taskOpInProgress[id] == true) return;
+      _taskOpInProgress[id] = true;
+      try {
+        final rawTask = _findTask(id);
+        if (rawTask == null) return;
+        final isStoppedSeedingTorrent =
+            rawTask.status == DownloadStatus.completed &&
+                rawTask.isTorrent &&
+                !rawTask.seedingEnabled;
+        if (rawTask.status == DownloadStatus.downloading ||
+            rawTask.status == DownloadStatus.queued ||
+            (rawTask.status == DownloadStatus.completed &&
+                !isStoppedSeedingTorrent)) {
+          return;
         }
-        await _resumeTaskInternal(id);
-      });
-    } finally {
-      _taskOpInProgress[id] = false;
-    }
+        return await _runGuardedTaskOperation(id, 'resumeTask', () async {
+          // Pre-flight: refresh YT stream URL if it may have expired
+          final task = _findTask(id);
+          if (task != null &&
+              task.youtubeQualityPreset != null &&
+              task.downloadPageUrl != null &&
+              task.downloadPageUrl!.isNotEmpty) {
+            try {
+              final fresh = await YoutubeService.getFreshStreams(
+                task.downloadPageUrl!,
+                preferredType: task.youtubePreferredType,
+              );
+              if (fresh != null && fresh['url'] != null) {
+                final newUrl = fresh['url'] as String;
+                final identityChanged =
+                    DownloadProvider.youtubeStreamIdentityChanged(
+                        task.url, newUrl);
+                final updated = task.copyWith(
+                  url: newUrl,
+                  mergedAudioUrl: fresh['audioUrl'] ?? task.mergedAudioUrl,
+                  audioProgress: identityChanged ? 0.0 : task.audioProgress,
+                  audioDownloadedBytes:
+                      identityChanged ? 0 : task.audioDownloadedBytes,
+                );
+                await _setTask(updated);
+                await _databaseService.saveTask(updated);
+              }
+            } catch (e) {
+              debugPrint('[DMX] YT pre-flight refresh on resume failed: $e');
+            }
+          }
+          await _resumeTaskInternal(id);
+        });
+      } finally {
+        _taskOpInProgress[id] = false;
+      }
+    });
   }
 
   Future<void> _resumeTaskInternal(String id) async {
@@ -2904,67 +2926,73 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> cancelTask(String id) async {
-    final task = _findTask(id);
-    if (task == null) return;
+    // FIX-P0-01: Guard task state mutations with synchronized lock
+    return _lockFor(id).synchronized(() async {
+      final task = _findTask(id);
+      if (task == null) return;
 
-    // Flush any pending throttled progress and drop tracking state.
-    await _flushPendingProgress(id);
+      // Flush any pending throttled progress and drop tracking state.
+      await _flushPendingProgress(id);
 
-    _cleanupTaskState(id);
+      _cleanupTaskState(id);
 
-    // Cancel both leg tokens - removing them allows future resumes.
-    for (final suffix in ['::video', '::audio', '']) {
-      final k = suffix.isEmpty ? id : '$id$suffix';
-      try {
-        _cancelTokens[k]?.cancel('cancelled');
-      } catch (_) {}
-      _cancelTokens.remove(k);
-    }
+      // Cancel both leg tokens - removing them allows future resumes.
+      for (final suffix in ['::video', '::audio', '']) {
+        final k = suffix.isEmpty ? id : '$id$suffix';
+        try {
+          _cancelTokens[k]?.cancel('cancelled');
+        } catch (_) {}
+        _cancelTokens.remove(k);
+      }
 
-    // Cancel any lingering progress notification (M2).
-    _notifications.cancelForTask(id);
+      // Cancel any lingering progress notification (M2).
+      _notifications.cancelForTask(id);
 
-    final torrentId = _torrentIds[id];
-    if (torrentId != null) {
-      TorrentService.removeTorrent(torrentId, deleteFiles: false);
-      _torrentIds.remove(id);
-    }
+      final torrentId = _torrentIds[id];
+      if (torrentId != null) {
+        TorrentService.removeTorrent(torrentId, deleteFiles: false);
+        _torrentIds.remove(id);
+      }
 
-    // Remove temporary state files safely while preserving downloaded parts
-    // so user can retry/resume later.
-    await cleanupPartFiles(task, preserveParts: true);
+      // Remove temporary state files safely while preserving downloaded parts
+      // so user can retry/resume later.
+      await cleanupPartFiles(task, preserveParts: true);
 
-    await _setTask(
-      task.copyWith(
-        status: DownloadStatus.failed,
-        speed: 0,
-        clearEta: true,
-        errorMessage: 'Transfer cancelled.',
-        // FIX-2: Set isCancelled: true so auto-resume skips cancelled tasks
-        isCancelled: true,
-        pausedByUser: true,
-      ),
-    );
+      await _setTask(
+        task.copyWith(
+          status: DownloadStatus.failed,
+          speed: 0,
+          clearEta: true,
+          errorMessage: 'Transfer cancelled.',
+          // FIX-2: Set isCancelled: true so auto-resume skips cancelled tasks
+          isCancelled: true,
+          pausedByUser: true,
+        ),
+      );
 
-    pumpQueue();
+      pumpQueue();
 
-    if (activeOrSeedingCount == 0) {
-      _stopWidgetTimer();
-    }
+      if (activeOrSeedingCount == 0) {
+        _stopWidgetTimer();
+      }
 
-    _updateTelemetryWidget(force: true);
+      _updateTelemetryWidget(force: true);
+    });
   }
 
   Future<void> retryTask(String id) async {
-    final rawTask = _findTask(id);
-    if (rawTask == null || rawTask.status == DownloadStatus.completed) return;
-    if (rawTask.status == DownloadStatus.downloading ||
-        rawTask.status == DownloadStatus.queued) {
-      return;
-    }
+    // FIX-P0-01: Guard task state mutations with synchronized lock
+    return _lockFor(id).synchronized(() async {
+      final rawTask = _findTask(id);
+      if (rawTask == null || rawTask.status == DownloadStatus.completed) return;
+      if (rawTask.status == DownloadStatus.downloading ||
+          rawTask.status == DownloadStatus.queued) {
+        return;
+      }
 
-    return _runGuardedTaskOperation(
-        id, 'retryTask', () => _retryTaskInternal(id));
+      return _runGuardedTaskOperation(
+          id, 'retryTask', () => _retryTaskInternal(id));
+    });
   }
 
   Future<void> _retryTaskInternal(String id) async {
@@ -3500,124 +3528,126 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> deleteTask(String id, {bool deleteFiles = false}) async {
-    final task = _findTask(id);
-    if (task == null) return;
+    // FIX-P0-01: Guard task state mutations with synchronized lock
+    return _lockFor(id).synchronized(() async {
+      final task = _findTask(id);
+      if (task == null) return;
 
-    // FIX-X-05: Cancel notification immediately on delete
-    final notifId = _notifications.idFor(id);
-    _notifications.cancelNotification(notifId);
-    _notifications.cancelForTask(id);
+      // FIX-X-05: Cancel notification immediately on delete
+      final notifId = _notifications.idFor(id);
+      _notifications.cancelNotification(notifId);
+      _notifications.cancelForTask(id);
 
-    // 1. Cancel the token IMMEDIATELY and wait for active future safely
-    final token = _cancelTokens[id];
-    if (token != null && !token.isCancelled) {
-      try {
-        token.cancel('deleted');
-      } catch (e) {
-        // Ignore
-      }
-    }
-
-    final activeFuture = _activeFutures[id];
-    if (activeFuture != null) {
-      try {
-        await activeFuture.timeout(
-          const Duration(seconds: 5),
-          onTimeout: () {
-            debugPrint('[DMX] deleteTask: Future timeout for $id, proceeding');
-          },
-        );
-      } catch (_) {
-        // Swallow errors - deleting task anyway
-      }
-    }
-    _activeFutures.remove(id);
-
-    // 2. For torrents, pause + remove from session IMMEDIATELY
-    if (task.isTorrent) {
-      final torrentId = _torrentIds[id];
-      if (torrentId != null && TorrentService.isTorrentAlive(torrentId)) {
-        // FIX-B10: Guard with alive check
+      // 1. Cancel the token IMMEDIATELY and wait for active future safely
+      final token = _cancelTokens[id];
+      if (token != null && !token.isCancelled) {
         try {
-          TorrentService.pauseTorrent(torrentId);
-          // User-initiated delete: wipe resume data so re-added torrent is clean.
-          TorrentService.removeTorrent(torrentId,
-              deleteFiles: false, deleteResumeData: true);
+          token.cancel('deleted');
         } catch (e) {
-          _log.warning('[deleteTask] Torrent cleanup failed: $e');
-        }
-        _torrentIds.remove(id);
-        providerTorrentIds.remove(id);
-      } else {
-        _torrentIds.remove(id);
-        providerTorrentIds.remove(id);
-      }
-    }
-
-    // 3. Remove from UI IMMEDIATELY (optimistic update)
-    _tasks.removeWhere((t) => t.id == id);
-    filteredTasksDirty = true;
-    _cancelTokens.remove(id);
-    _cleanupTaskState(id);
-
-    notifyListeners();
-
-    // 4. Remove notification IMMEDIATELY
-    _notifications.cleanupTask(id);
-
-    // 5. Delete from DB (with retries)
-    bool dbDeleteSucceeded = false;
-    for (var attempt = 0; attempt < 3; attempt++) {
-      try {
-        await _databaseService.deleteTask(id);
-        dbDeleteSucceeded = true;
-        break;
-      } catch (e) {
-        debugPrint('[DMX] deleteTask DB attempt ${attempt + 1} failed: $e');
-        if (attempt < 2) {
-          await Future.delayed(Duration(milliseconds: 200 * (attempt + 1)));
+          // Ignore
         }
       }
-    }
 
-    if (!dbDeleteSucceeded) {
-      debugPrint(
-          '[DMX] M3: All DB delete attempts failed for $id. Re-adding task with delete error.');
-      final failedTask = task.copyWith(
-        status: DownloadStatus.failed,
-        errorMessage: 'Database deletion failed. Tap delete to retry.',
-        speed: 0,
-        clearEta: true,
-      );
-      try {
-        await _databaseService.saveTask(failedTask);
-      } catch (e) {
-        _log.warning('Failed to save failedTask ${failedTask.id}', e);
-        DiagnosticService.instance.record(
-          'db_save',
-          'Failed to save task ${failedTask.id}',
-          error: e,
+      final activeFuture = _activeFutures[id];
+      if (activeFuture != null) {
+        try {
+          await activeFuture.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              debugPrint('[DMX] deleteTask: Future timeout for $id, proceeding');
+            },
+          );
+        } catch (_) {
+          // Swallow errors - deleting task anyway
+        }
+      }
+      _activeFutures.remove(id);
+
+      // 2. For torrents, pause + remove from session IMMEDIATELY
+      if (task.isTorrent) {
+        final torrentId = _torrentIds[id];
+        if (torrentId != null && TorrentService.isTorrentAlive(torrentId)) {
+          // FIX-B10: Guard with alive check
+          try {
+            TorrentService.pauseTorrent(torrentId);
+            TorrentService.removeTorrent(torrentId,
+                deleteFiles: false, deleteResumeData: true);
+          } catch (e) {
+            _log.warning('[deleteTask] Torrent cleanup failed: $e');
+          }
+          _torrentIds.remove(id);
+          providerTorrentIds.remove(id);
+        } else {
+          _torrentIds.remove(id);
+          providerTorrentIds.remove(id);
+        }
+      }
+
+      // 3. Remove from UI IMMEDIATELY (optimistic update)
+      _tasks.removeWhere((t) => t.id == id);
+      filteredTasksDirty = true;
+      _cancelTokens.remove(id);
+      _cleanupTaskState(id);
+
+      notifyListeners();
+
+      // 4. Remove notification IMMEDIATELY
+      _notifications.cleanupTask(id);
+
+      // 5. Delete from DB (with retries)
+      bool dbDeleteSucceeded = false;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        try {
+          await _databaseService.deleteTask(id);
+          dbDeleteSucceeded = true;
+          break;
+        } catch (e) {
+          debugPrint('[DMX] deleteTask DB attempt ${attempt + 1} failed: $e');
+          if (attempt < 2) {
+            await Future.delayed(Duration(milliseconds: 200 * (attempt + 1)));
+          }
+        }
+      }
+
+      if (!dbDeleteSucceeded) {
+        debugPrint(
+            '[DMX] M3: All DB delete attempts failed for $id. Re-adding task with delete error.');
+        final failedTask = task.copyWith(
+          status: DownloadStatus.failed,
+          errorMessage: 'Database deletion failed. Tap delete to retry.',
+          speed: 0,
+          clearEta: true,
         );
+        try {
+          await _databaseService.saveTask(failedTask);
+        } catch (e) {
+          _log.warning('Failed to save failedTask ${failedTask.id}', e);
+          DiagnosticService.instance.record(
+            'db_save',
+            'Failed to save task ${failedTask.id}',
+            error: e,
+          );
+        }
+        if (!_tasks.any((t) => t.id == id)) {
+          _tasks.add(failedTask);
+          filteredTasksDirty = true;
+          notifyListeners();
+        }
       }
-      if (!_tasks.any((t) => t.id == id)) {
-        _tasks.add(failedTask);
-        filteredTasksDirty = true;
-        notifyListeners();
+
+      // 6. Heavy cleanup in BACKGROUND
+      unawaited(_backgroundDeleteCleanup(task, deleteFiles));
+
+      updateActualTorrentUploadLimit();
+      pumpQueue();
+
+      if (activeOrSeedingCount == 0) {
+        BackgroundService.stop();
+        _stopWidgetTimer();
       }
-    }
 
-    // 6. Heavy cleanup in BACKGROUND
-    unawaited(_backgroundDeleteCleanup(task, deleteFiles));
-
-    updateActualTorrentUploadLimit();
-    pumpQueue();
-
-    if (activeOrSeedingCount == 0) {
-      BackgroundService.stop();
-      _stopWidgetTimer();
-    }
-
-    _updateTelemetryWidget(force: true);
+      _updateTelemetryWidget(force: true);
+    });
   }
 
   /// Runs file cleanup without blocking the UI thread.
@@ -5577,7 +5607,8 @@ class DownloadProvider extends ChangeNotifier
     _lastDbSaveTimes.clear();
     _lastDbSaveBytes.clear();
     _pendingProgressUpdates.clear();
-    _ytLowSpeedCounts.clear();
+    // FIX-P0-01: Clear task locks on disposal
+    _taskLocks.clear();
     _ytThrottlingRefreshing.clear();
     _lastTorrentFileDiskSync.clear();
     _torrentIds.clear();

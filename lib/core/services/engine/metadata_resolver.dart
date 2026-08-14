@@ -272,7 +272,7 @@ class MetadataResolver {
                   })
               .toList();
           final totalSize = resolvedFiles.fold<int>(
-              0, (sum, f) => sum + (f['length'] as int));
+              0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
           completer.complete(DownloadMetadata(
             fileName: torrent.name,
             category: categoryFromFileName(torrent.name),
@@ -314,10 +314,10 @@ class MetadataResolver {
         final meta = await compute(BencodeDecoder.parseTorrentBytes, bytes);
         if (meta != null) {
           fileName = meta['name'] ?? fileName;
-          fileSize = meta['length'] ?? fileSize;
+          fileSize = (meta['length'] as num?)?.toInt() ?? fileSize;
           torrentFiles = (meta['files'] as List? ?? []).map((f) {
             final fileMap = f as Map;
-            final length = fileMap['length'] ?? 0;
+            final length = (fileMap['length'] as num?)?.toInt() ?? 0;
             return {
               'name': fileMap['name'] ?? 'file',
               'length': length,

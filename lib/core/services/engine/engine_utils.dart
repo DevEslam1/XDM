@@ -1,8 +1,10 @@
 import 'dart:collection';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:dmx/core/services/retry_interceptor.dart';
+import 'package:dmx/core/services/download_journal.dart';
 
 /// Utility classes and functions for the Download Engine.
 /// Task 1.2: Decoupled utilities.
@@ -84,7 +86,8 @@ Dio buildTransferDio({
   if (oauthToken != null && oauthToken.isNotEmpty) client.options.headers['Authorization'] = 'Bearer $oauthToken';
 
   if (client.httpClientAdapter is IOHttpClientAdapter) {
-    (client.httpClientAdapter as IOHttpClientAdapter).onHttpClientCreate = (client) {
+    (client.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
+      final client = HttpClient();
       client.badCertificateCallback = (cert, host, port) => true;
       return client;
     };
@@ -97,4 +100,39 @@ String? firstNonEmpty(String? a, String? b) {
   if (a != null && a.trim().isNotEmpty) return a;
   if (b != null && b.trim().isNotEmpty) return b;
   return null;
+}
+
+Future<int> actualDownloadedBytes(String tempFilePath, {int threadCount = 1}) async {
+  final file = File(tempFilePath);
+  if (!await file.exists()) return 0;
+  final fileLen = await file.length();
+  final state = await StateStore.load(tempFilePath);
+  if (state != null) {
+    final stateBytes = state.downloadedBytes;
+    if (state.totalSize > 0) {
+      return math.min(stateBytes, fileLen).clamp(0, state.totalSize);
+    }
+    return math.min(stateBytes, fileLen);
+  }
+  return fileLen;
+}
+
+bool isLikelyHtmlResponse(Headers headers, {List<int>? firstChunk}) {
+  final contentType = headers.value('content-type')?.toLowerCase() ?? '';
+  if (contentType.contains('text/html') ||
+      contentType.contains('application/xhtml')) {
+    return true;
+  }
+  if (firstChunk != null && firstChunk.isNotEmpty) {
+    try {
+      final sample = String.fromCharCodes(firstChunk.take(512)).toLowerCase();
+      if (sample.contains('<!doctype html') ||
+          sample.contains('<html') ||
+          sample.contains('<head') ||
+          sample.contains('<body')) {
+        return true;
+      }
+    } catch (_) {}
+  }
+  return false;
 }

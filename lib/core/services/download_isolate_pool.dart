@@ -191,18 +191,25 @@ class DownloadIsolatePool {
 
   bool _isSpawning = false;
   Timer? _idleCheckTimer;
+  Timer? _sweepCrashCountsTimer;
 
   int get effectiveMaxSize {
-    if (_powerAware &&
-        PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
-      return 1;
-    }
-    if (PowerMonitor.batteryLevel < 20 && !PowerMonitor.isCharging) {
-      return 2;
-    }
-    if (PowerMonitor.screenOff) {
-      final base = max(1, _size ~/ 2);
-      return _maxPoolSize != null ? min(base, _maxPoolSize!) : base;
+    if (_powerAware) {
+      if (PowerMonitor.isCharging) {
+        return _maxPoolSize != null ? min(_size, _maxPoolSize!) : _size;
+      }
+      if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ||
+          PowerMonitor.thermal == ThermalStatus.severe ||
+          PowerMonitor.thermal == ThermalStatus.critical) {
+        return 1;
+      }
+      if (PowerMonitor.batteryLevel < 20) {
+        return 1;
+      }
+      if (PowerMonitor.screenOff) {
+        final base = max(1, _size ~/ 2);
+        return _maxPoolSize != null ? min(base, _maxPoolSize!) : base;
+      }
     }
     return _maxPoolSize != null ? min(_size, _maxPoolSize!) : _size;
   }
@@ -215,6 +222,14 @@ class DownloadIsolatePool {
       }
     }
     _startIdleCheckTimer();
+    _startCrashCountSweepTimer();
+  }
+
+  void _startCrashCountSweepTimer() {
+    _sweepCrashCountsTimer?.cancel();
+    _sweepCrashCountsTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      _jobCrashCounts.removeWhere((taskId, _) => !_isJobActiveOrQueued(taskId));
+    });
   }
 
   void _startIdleCheckTimer() {
@@ -357,6 +372,9 @@ class DownloadIsolatePool {
           worker.lastActiveTime = DateTime.now();
         }
         final doneId = msg['jobId'];
+        if (doneId != null && doneId is String) {
+          _jobCrashCounts.remove(doneId);
+        }
         worker.pending.removeWhere((j) => j.command.taskId == doneId);
         _drain();
       case 'limits':
@@ -470,6 +488,8 @@ class DownloadIsolatePool {
     _shuttingDown = true;
     _idleCheckTimer?.cancel();
     _idleCheckTimer = null;
+    _sweepCrashCountsTimer?.cancel();
+    _sweepCrashCountsTimer = null;
     _queue.clear();
     for (final w in _workers) {
       w.commandPort?.send({'t': 'shutdown'});
@@ -875,8 +895,8 @@ class HttpTransferJob {
             throw _FileChangedOnServerException();
           }
         }
-        final oldIdentity = _firstNonEmpty(_state!.etag, _state!.lastModified);
-        final newIdentity = _firstNonEmpty(newEtag, newLm);
+        final oldIdentity = firstNonEmpty(_state!.etag, _state!.lastModified);
+        final newIdentity = firstNonEmpty(newEtag, newLm);
         if (oldIdentity != null &&
             newIdentity != null &&
             oldIdentity != newIdentity) {
@@ -1102,11 +1122,20 @@ class HttpTransferJob {
     required MirrorFailover failover,
   }) async {
     var attempts = 0;
+    var totalMirrorAttempts = 0;
     const maxAttempts = 3;
+    final maxTotalAttempts = (failover.hasAlternatives ? failover.remainingAlternatives + 1 : 1) * maxAttempts;
+    
     var activeUrl = failover.activeUrl;
     while (!chunk.isComplete) {
       _throwIfCancelled();
       attempts++;
+      totalMirrorAttempts++;
+
+      if (totalMirrorAttempts > maxTotalAttempts) {
+        throw DownloadIntegrityException('Max total mirror attempts ($maxTotalAttempts) exceeded for chunk $chunkIndex');
+      }
+
       try {
         final resumeFrom = chunk.downloaded;
         final absStart = chunk.start + resumeFrom;
@@ -1116,7 +1145,7 @@ class HttpTransferJob {
               : 'bytes=$absStart-${chunk.end}',
         };
         if (resumeFrom > 0) {
-          final ifRange = _firstNonEmpty(_state!.etag, _state!.lastModified);
+          final ifRange = firstNonEmpty(_state!.etag, _state!.lastModified);
           if (ifRange != null) headers['If-Range'] = ifRange;
         }
         final response = await dio.get<ResponseBody>(
@@ -1183,6 +1212,7 @@ class HttpTransferJob {
           expectedStart: absStart,
           expectedEnd: chunk.end,
           expectedTotal: _state!.totalSize,
+          allowUnknown: chunk.downloaded == 0 && absStart == 0,
         );
         _state!.etag ??= response.headers.value('etag');
         _state!.lastModified ??= response.headers.value('last-modified');
@@ -1289,6 +1319,7 @@ class HttpTransferJob {
       }
     }
   }
+
 
   Future<void> _spotCheckResumedBytes(
       Dio dio, TransferState st, PositionalFileWriter writer) async {
@@ -1420,20 +1451,29 @@ class HttpTransferJob {
         debugPrint('[DMX-Job] FIX-2: spot-check probe failed (continuing): $e');
       }
     }
-    var attempts = 0;
-    const maxAttempts = 3;
     final failover = MirrorFailover([cmd.punyUrl, ...?cmd.mirrorUrls]);
+    var attempts = 0;
+    var totalMirrorAttempts = 0;
+    const maxAttempts = 3;
+    final maxTotalAttempts = (failover.hasAlternatives ? failover.remainingAlternatives + 1 : 1) * maxAttempts;
+
     var activeUrl = failover.activeUrl;
     while (!st.isComplete || st.totalSize <= 0) {
       _throwIfCancelled();
       attempts++;
+      totalMirrorAttempts++;
+
+      if (totalMirrorAttempts > maxTotalAttempts) {
+        throw DownloadIntegrityException('Max total mirror attempts ($maxTotalAttempts) exceeded for single-stream job');
+      }
+
       IOSink? sink;
       try {
         final resumeFrom = chunk.downloaded;
         final headers = <String, dynamic>{};
         if (resumeFrom > 0 && cmd.supportsResume) {
           headers['Range'] = 'bytes=$resumeFrom-';
-          final ifRange = _firstNonEmpty(st.etag, st.lastModified);
+          final ifRange = firstNonEmpty(st.etag, st.lastModified);
           if (ifRange != null) headers['If-Range'] = ifRange;
         }
         final response = await dio.get<ResponseBody>(
@@ -1616,6 +1656,7 @@ class HttpTransferJob {
         } catch (_) {}
       }
     }
+
     final actualLen = await tempFile.length();
     if (st.totalSize > 0 && actualLen != st.totalSize) {
       if (actualLen > st.totalSize) {

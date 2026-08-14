@@ -56,6 +56,9 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
   bool _isLoading = true;
   String? _errorMessage;
   int _selectedTabIndex = 0;
+  int _displayedVideoCount = 20;
+  int _displayedAudioCount = 20;
+
   @override
   void initState() {
     super.initState();
@@ -623,10 +626,31 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                                 isDark,
                                 trailing: _recommendBadge(isDark),
                               ),
-                              ...videoList.map(
-                                (s) =>
-                                    _streamTile(context, s, isDark, settings),
-                              ),
+                              // FIX-P2-06: Paginate video streams (first 20, load more)
+                              ...videoList
+                                  .take(_displayedVideoCount)
+                                  .map(
+                                    (s) => _streamTile(
+                                        context, s, isDark, settings),
+                                  ),
+                              if (videoList.length > _displayedVideoCount)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  child: Center(
+                                    child: OutlinedButton.icon(
+                                      onPressed: () {
+                                        setState(() {
+                                          _displayedVideoCount += 20;
+                                        });
+                                      },
+                                      icon: const Icon(Icons.expand_more_rounded, size: 18),
+                                      label: Text(
+                                        'Load more (${videoList.length - _displayedVideoCount} remaining)',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               const SizedBox(height: 12),
                             ],
                             if (videoList.isEmpty)
@@ -651,10 +675,31 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                                 green,
                                 isDark,
                               ),
-                              ...audio.map(
-                                (s) =>
-                                    _streamTile(context, s, isDark, settings),
-                              ),
+                              // FIX-P2-06: Paginate audio streams (first 20, load more)
+                              ...audio
+                                  .take(_displayedAudioCount)
+                                  .map(
+                                    (s) => _streamTile(
+                                        context, s, isDark, settings),
+                                  ),
+                              if (audio.length > _displayedAudioCount)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  child: Center(
+                                    child: OutlinedButton.icon(
+                                      onPressed: () {
+                                        setState(() {
+                                          _displayedAudioCount += 20;
+                                        });
+                                      },
+                                      icon: const Icon(Icons.expand_more_rounded, size: 18),
+                                      label: Text(
+                                        'Load more (${audio.length - _displayedAudioCount} remaining)',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               const SizedBox(height: 12),
                             ],
                             if (audio.isEmpty)

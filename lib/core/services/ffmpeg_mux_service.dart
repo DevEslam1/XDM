@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_session.dart';
 import 'package:ffmpeg_kit_flutter_new_min/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
 import 'package:logging/logging.dart';
@@ -11,6 +12,10 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../utils/semaphore.dart';
 
 enum MergeStrategy { streamCopy, hwReencode, swFallback }
+
+class _SessionHolder {
+  FFmpegSession? activeSession;
+}
 
 class FFmpegMuxService {
   static final _log = Logger('FFmpegMuxService');
@@ -44,6 +49,7 @@ class FFmpegMuxService {
     }
     await _mergeSemaphore.acquire();
     var wakelockAcquired = false;
+    final sessionHolder = _SessionHolder();
     try {
       try {
         await WakelockPlus.enable();
@@ -59,6 +65,7 @@ class FFmpegMuxService {
         onProgress: onProgress,
         totalDuration: totalDuration,
         expectedDuration: expectedDuration,
+        sessionHolder: sessionHolder,
       ).timeout(
         const Duration(minutes: 5),
         onTimeout: () {
@@ -66,7 +73,10 @@ class FFmpegMuxService {
             '[FFmpegMuxService] Merge job timed out after 5 minutes; cancelling session',
           );
           try {
-            FFmpegKit.cancel();
+            // FIX-P0-06 / FIX-P1-05: Cancel only this specific session
+            if (sessionHolder.activeSession != null) {
+              FFmpegKit.cancel(sessionHolder.activeSession!.getSessionId());
+            }
           } catch (_) {}
           return false;
         },
@@ -231,6 +241,7 @@ class FFmpegMuxService {
     ValueChanged<double>? onProgress,
     Duration? totalDuration,
     Duration? expectedDuration,
+    _SessionHolder? sessionHolder,
   }) async {
     bool isTempFile(String path) {
       final name = p.basename(path).toLowerCase();
@@ -295,6 +306,7 @@ class FFmpegMuxService {
       );
       _log.info('Running merge strategy $strategy with args: $args');
       final session = await FFmpegKit.executeWithArguments(args);
+      sessionHolder?.activeSession = session;
 
       final pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
         if (onProgress == null ||

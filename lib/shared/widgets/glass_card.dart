@@ -138,28 +138,30 @@ class _GlassCardState extends State<GlassCard> {
           )
         : withRail;
 
-    if (widget.onTap == null) return withBorder;
+    if (widget.onTap == null) return RepaintBoundary(child: withBorder);
 
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
 
-    return Semantics(
-      button: true,
-      enabled: true,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _pressed = false),
-          child: GestureDetector(
-            onTapDown: (_) => setState(() => _pressed = true),
-            onTapUp: (_) => setState(() => _pressed = false),
-            onTapCancel: () => setState(() => _pressed = false),
-            onTap: widget.onTap,
-            child: AnimatedScale(
-              scale: (!reduceMotion && _pressed) ? 0.98 : 1.0,
-              duration: AppTheme.motionFast,
-              curve: AppTheme.motionSpring,
-              child: withBorder,
+    return RepaintBoundary(
+      child: Semantics(
+        button: true,
+        enabled: true,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => setState(() => _pressed = false),
+            child: GestureDetector(
+              onTapDown: (_) => setState(() => _pressed = true),
+              onTapUp: (_) => setState(() => _pressed = false),
+              onTapCancel: () => setState(() => _pressed = false),
+              onTap: widget.onTap,
+              child: AnimatedScale(
+                scale: (!reduceMotion && _pressed) ? 0.98 : 1.0,
+                duration: AppTheme.motionFast,
+                curve: AppTheme.motionSpring,
+                child: withBorder,
+              ),
             ),
           ),
         ),

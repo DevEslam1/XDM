@@ -460,8 +460,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
               borderRadius: BorderRadius.circular(24),
               side: BorderSide(color: glassBorder, width: 0.8),
             ),
+            // FIX-P1-06: Show count in confirmation title
             title: Text(
-              L10n.of(context, 'clear_history_logs'),
+              L10n.isRtl(context)
+                  ? 'مسح سجل التنزيلات (${tasksToClear.length})'
+                  : 'Clear Download History (${tasksToClear.length} items)',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: redClr,
                     fontWeight: FontWeight.bold,

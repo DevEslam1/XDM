@@ -208,6 +208,32 @@ class StateStore {
 
   static String pathFor(String tempFilePath) => '$tempFilePath.dmxstate';
 
+  static Future<TransferState?> load(String tempFilePath) async {
+    final path = pathFor(tempFilePath);
+    final file = File(path);
+    if (!await file.exists()) {
+      final tmpFile = File('$path.tmp');
+      if (await tmpFile.exists()) {
+        try {
+          final decoded = jsonDecode(await tmpFile.readAsString());
+          if (decoded is Map) {
+            final json = Map<String, dynamic>.from(decoded);
+            return TransferState.tryParseV3(json) ?? TransferState.tryParseV2(json);
+          }
+        } catch (_) {}
+      }
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is Map) {
+        final json = Map<String, dynamic>.from(decoded);
+        return TransferState.tryParseV3(json) ?? TransferState.tryParseV2(json);
+      }
+    } catch (_) {}
+    return null;
+  }
+
   static Future<StateLoadResult> loadOrCreate(
     String tempFilePath, {
     required String url,
@@ -822,7 +848,7 @@ class DownloadJournal {
         'total': totalSize,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
-      await tmp.writeAsString('$initLine\n$checkpointLine\n');
+      await tmp.writeAsString('$initLine\n$checkpointLine\n', flush: true);
       await tmp.rename(path);
       _sink = File(path).openWrite(mode: FileMode.append);
       _isOpen = true;

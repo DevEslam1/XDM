@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:dmx/core/services/connection_manager.dart';
 import 'package:dmx/core/services/power_monitor.dart';
+import 'package:dmx/core/services/engine/engine_utils.dart';
 
 /// Manages a bounded pool of Dio clients with LRU eviction and background-aware cleanup.
 /// Task 1.2: Specialized Service for Dio instance management.
@@ -19,7 +19,7 @@ class DioClientPool {
 
   void _startCleanupTimer() {
     _cleanupTimer?.cancel();
-    _cleanupTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+    _cleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       _performCleanup();
     });
   }

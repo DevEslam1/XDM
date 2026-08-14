@@ -67,8 +67,21 @@ class MirrorParallelEngine {
 
   List<String> get mirrorUrls => List.unmodifiable(_mirrorUrls);
 
+  int? _cachedTotalThreads;
+  Map<String, List<int>>? _cachedDistribution;
+
+  void _invalidateThreadDistributionCache() {
+    _cachedDistribution = null;
+    _cachedTotalThreads = null;
+  }
+
   Map<String, List<int>> distributeThreads(int totalThreads) {
     if (_mirrorUrls.isEmpty || totalThreads <= 0) return {};
+    if (_cachedTotalThreads == totalThreads && _cachedDistribution != null) {
+      return Map<String, List<int>>.from(
+        _cachedDistribution!.map((k, v) => MapEntry(k, List<int>.from(v))),
+      );
+    }
 
     final distribution = <String, List<int>>{};
     final activeMirrorCount = _mirrorUrls.length.clamp(0, totalThreads);
@@ -121,12 +134,24 @@ class MirrorParallelEngine {
       }
     }
 
-    return distribution;
+    _cachedTotalThreads = totalThreads;
+    _cachedDistribution = distribution;
+    return Map<String, List<int>>.from(
+      distribution.map((k, v) => MapEntry(k, List<int>.from(v))),
+    );
   }
+
+  Timer? _cacheInvalidateDebounce;
 
   void reportMirrorSpeed(String mirrorUrl, double bytesPerSecond) {
     final state = _mirrorStates.putIfAbsent(mirrorUrl, () => _MirrorState());
     state.updateSpeed(bytesPerSecond);
+
+    // FIX-P2-05: Debounce cache invalidation to 2 seconds
+    _cacheInvalidateDebounce?.cancel();
+    _cacheInvalidateDebounce = Timer(const Duration(seconds: 2), () {
+      _invalidateThreadDistributionCache();
+    });
 
     if (_mirrorStates.length > 1) {
       final avgSpeed = _mirrorStates.values

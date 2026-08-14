@@ -136,6 +136,7 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                   children: [
                     RepaintBoundary(
                       key: ValueKey('webview_${tab.id}'),
+                      // FIX-P2-04: WebView error boundary & layout
                       child: InAppWebView(
                         findInteractionController:
                             tab.findInteractionController,

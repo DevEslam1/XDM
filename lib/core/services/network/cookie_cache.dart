@@ -7,6 +7,7 @@ class _CookieCacheEntry {
 }
 
 /// Thread-safe bounded cache for HTTP cookies per origin with TTL.
+/// Task 2.1: Injectable singleton service with clear/dispose on background.
 class CookieCache {
   static final CookieCache _instance = CookieCache._();
   factory CookieCache() => _instance;
@@ -44,6 +45,10 @@ class CookieCache {
   }
 
   void clear() {
+    _cache.clear();
+  }
+
+  void dispose() {
     _cache.clear();
   }
 }

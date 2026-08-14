@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:collection';
-import 'package:dmx/core/services/download_engine.dart';
-import 'package:dmx/core/services/power_monitor.dart';
+import 'package:dmx/core/services/engine/engine_utils.dart';
 
 /// Coordinates YouTube audio/video stream pairs for synchronization.
 /// Task 1.2: Specialized Service for YT sync logic.
@@ -58,12 +56,13 @@ class YtCounterpartCoordinator {
         _cleanupTimers.remove(timer);
         if (_ytFinishedStreams.containsKey(taskId) &&
             _ytCounterpartTaskIds.containsKey(taskId)) {
+          final cId = _ytCounterpartTaskIds.get(taskId);
           _ytCounterpartTaskIds.remove(taskId);
-          _ytCounterpartTaskIds.remove(counterpartId);
+          if (cId != null) _ytCounterpartTaskIds.remove(cId);
           _ytLiveBytes.remove(taskId);
-          _ytLiveBytes.remove(counterpartId);
+          if (cId != null) _ytLiveBytes.remove(cId);
           _ytFinishedStreams.remove(taskId);
-          _ytFinishedStreams.remove(counterpartId);
+          if (cId != null) _ytFinishedStreams.remove(cId);
         }
       });
       _cleanupTimers.add(timer);

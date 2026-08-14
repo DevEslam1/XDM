@@ -572,6 +572,8 @@ class SiteIntelligenceService {
     return 'Other';
   }
 
+  static const int maxReliabilityEntries = 200;
+
   void recordOutcome(
     String url,
     bool success, [
@@ -604,6 +606,26 @@ class SiteIntelligenceService {
         stat.lastError = errorMessage;
       }
     }
+
+    // LRU / bounded map cap: evict oldest entry if size exceeds limit
+    if (_reliability.length > maxReliabilityEntries) {
+      String? oldestKey;
+      DateTime? oldestTime;
+      for (final entry in _reliability.entries) {
+        if (entry.key == host) continue;
+        final t = entry.value.lastSuccess ??
+            entry.value.lastFailure ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        if (oldestTime == null || t.isBefore(oldestTime)) {
+          oldestTime = t;
+          oldestKey = entry.key;
+        }
+      }
+      if (oldestKey != null) {
+        _reliability.remove(oldestKey);
+      }
+    }
+
     _persist();
   }
 

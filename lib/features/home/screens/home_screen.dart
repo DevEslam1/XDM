@@ -1119,7 +1119,10 @@ class _HomeScreenState extends State<HomeScreen>
 
     final confirmed = await DmxConfirmDialog.show(
       context,
-      title: L10n.of(context, 'clear_history'),
+      // FIX-P1-06: Show count in confirmation title
+      title: isRtl
+          ? 'مسح سجل التنزيلات (${tasksToClear.length})'
+          : 'Clear Download History (${tasksToClear.length} items)',
       message: message,
       confirmLabel: L10n.of(context, 'clear_all'),
       cancelLabel: L10n.of(context, 'cancel_btn'),

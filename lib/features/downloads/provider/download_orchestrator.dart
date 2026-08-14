@@ -1703,6 +1703,10 @@ class DownloadOrchestrator {
       String? categoryOverride,
       String? statusMessageOverride,
     }) {
+      // FIX-BG-01: Skip UI updates when in background
+      if (!DownloadEngine.appInForeground || PowerMonitor.screenOff) {
+        return;
+      }
       // FIX-AUDIT-10: Microtask coalescing guard to prevent interleaved reads
       if (_pushScheduled[task.id] == true) return;
       _pushScheduled[task.id] = true;
@@ -2624,69 +2628,81 @@ class DownloadOrchestrator {
                 throw e;
               }),
             ]);
-          } on DioException catch (e) {
-            // FIX-3: Sync the last known audio byte count into the task model
-            // so a pause / cancel doesn't lose audio progress.
-            if (hasAudio && audioBytesSoFar > 0) {
-              final syncIdx =
-                  _host.providerTasks.indexWhere((x) => x.id == task.id);
-              if (syncIdx != -1) {
-                final syncTask = _host.providerTasks[syncIdx];
-                final syncSize =
-                    syncTask.audioSize > 0 ? syncTask.audioSize : 0;
-                _host.providerTasks[syncIdx] = syncTask.copyWith(
-                  audioDownloadedBytes: audioBytesSoFar,
-                  audioProgress: syncSize > 0
-                      ? (audioBytesSoFar / syncSize).clamp(0.0, 1.0)
-                      : syncTask.audioProgress,
-                );
-                await _host.setTaskState(_host.providerTasks[syncIdx]);
+          } catch (e) {
+            // FIX-P0-02: Clean up whichever stream completed successfully or handle partial failure
+            if (e is! DioException || e.type != DioExceptionType.cancel) {
+              final videoFile = File(task.tempFilePath);
+              final audioFile = File('${task.tempFilePath}.audio');
+              final videoExists = await videoFile.exists();
+              final audioExists = await audioFile.exists();
+              if (!videoExists && !audioExists) {
+                // Both failed — nothing to clean
               }
+              // Do NOT delete partial files here; merge-retry logic handles them
             }
-            if (e.type == DioExceptionType.cancel) {
-              return;
-            }
-            // FIX F-3: If video completed but audio failed, mark for merge retry
-            final videoFile = File(task.tempFilePath);
-            final audioFile = File('${task.tempFilePath}.audio');
-            final videoExists = await videoFile.exists();
-            final audioExists = await audioFile.exists();
-            if (videoExists && audioExists) {
-              final vLen = await actualDownloadedBytes(task.tempFilePath,
-                  threadCount: streamThreadCount);
-              final aLen = await actualDownloadedBytes(
-                  '${task.tempFilePath}.audio',
-                  threadCount: max(1, task.audioThreadCount));
-              if (vLen > 0 && aLen > 0) {
-                final current = _host.findTaskById(task.id);
-                if (current != null) {
-                  await _host.setTaskState(current.copyWith(
-                    statusMessage: 'MERGE_FAILED',
-                    errorMessage: 'Audio download failed but both files exist. '
-                        'Tap retry to attempt merge.',
-                  ));
+
+            if (e is DioException) {
+              // FIX-3: Sync the last known audio byte count into the task model
+              // so a pause / cancel doesn't lose audio progress.
+              if (hasAudio && audioBytesSoFar > 0) {
+                final syncIdx =
+                    _host.providerTasks.indexWhere((x) => x.id == task.id);
+                if (syncIdx != -1) {
+                  final syncTask = _host.providerTasks[syncIdx];
+                  final syncSize =
+                      syncTask.audioSize > 0 ? syncTask.audioSize : 0;
+                  _host.providerTasks[syncIdx] = syncTask.copyWith(
+                    audioDownloadedBytes: audioBytesSoFar,
+                    audioProgress: syncSize > 0
+                        ? (audioBytesSoFar / syncSize).clamp(0.0, 1.0)
+                        : syncTask.audioProgress,
+                  );
+                  await _host.setTaskState(_host.providerTasks[syncIdx]);
                 }
-                return; // Don't rethrow – let retry handle merge
               }
-            }
-            // FIX-AUDIO-ONLY: video done, audio missing → keep video, retry audio only
-            if (videoExists && !audioExists && hasAudio) {
-              final vLen = await actualDownloadedBytes(task.tempFilePath,
-                  threadCount: streamThreadCount);
-              if (vLen > 0) {
-                final current = _host.findTaskById(task.id);
-                if (current != null) {
-                  await _host.setTaskState(current.copyWith(
-                    statusMessage: 'AUDIO_RETRY',
-                    errorMessage:
-                        'Video complete. Audio stream failed — retry will fetch audio only.',
-                    // Reset audio state so the combined bar doesn't show a
-                    // phantom audio contribution from the deleted sidecar.
-                    audioProgress: 0.0,
-                    audioDownloadedBytes: 0,
-                  ));
+              if (e.type == DioExceptionType.cancel) {
+                return;
+              }
+              // FIX F-3: If video completed but audio failed, mark for merge retry
+              final videoFile = File(task.tempFilePath);
+              final audioFile = File('${task.tempFilePath}.audio');
+              final videoExists = await videoFile.exists();
+              final audioExists = await audioFile.exists();
+              if (videoExists && audioExists) {
+                final vLen = await actualDownloadedBytes(task.tempFilePath,
+                    threadCount: streamThreadCount);
+                final aLen = await actualDownloadedBytes(
+                    '${task.tempFilePath}.audio',
+                    threadCount: max(1, task.audioThreadCount));
+                if (vLen > 0 && aLen > 0) {
+                  final current = _host.findTaskById(task.id);
+                  if (current != null) {
+                    await _host.setTaskState(current.copyWith(
+                      statusMessage: 'MERGE_FAILED',
+                      errorMessage: 'Audio download failed but both files exist. '
+                          'Tap retry to attempt merge.',
+                    ));
+                  }
+                  return; // Don't rethrow – let retry handle merge
                 }
-                return; // preserve video .dmxstate; retry re-downloads audio
+              }
+              // FIX-AUDIO-ONLY: video done, audio missing → keep video, retry audio only
+              if (videoExists && !audioExists && hasAudio) {
+                final vLen = await actualDownloadedBytes(task.tempFilePath,
+                    threadCount: streamThreadCount);
+                if (vLen > 0) {
+                  final current = _host.findTaskById(task.id);
+                  if (current != null) {
+                    await _host.setTaskState(current.copyWith(
+                      statusMessage: 'AUDIO_RETRY',
+                      errorMessage:
+                          'Video complete. Audio stream failed — retry will fetch audio only.',
+                      audioProgress: 0.0,
+                      audioDownloadedBytes: 0,
+                    ));
+                  }
+                  return; // preserve video .dmxstate; retry re-downloads audio
+                }
               }
             }
             rethrow;

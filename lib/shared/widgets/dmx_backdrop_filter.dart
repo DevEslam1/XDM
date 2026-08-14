@@ -84,8 +84,10 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   @override
   void dispose() {
     if (_allocated) {
-      DmxBackdropFilter._activeCount = max(0, DmxBackdropFilter._activeCount - 1);
+      // FIX-P1-04: Prevent double-decrement
       _allocated = false;
+      DmxBackdropFilter._activeCount =
+          (DmxBackdropFilter._activeCount - 1).clamp(0, 999);
     }
     super.dispose();
   }

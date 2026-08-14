@@ -47,9 +47,9 @@ void main() {
       // ignore: invalid_use_of_protected_member
       map.put('recent_1', 'new_val');
 
-      final removedCount = map.removeStale(const Duration(minutes: 10));
+      map.removeStale(const Duration(minutes: 10));
       // None removed if recently created
-      expect(removedCount, equals(0));
+      expect(map.length, equals(2));
     });
 
     test('1000 operations do not cause unbounded growth beyond 100 items', () {

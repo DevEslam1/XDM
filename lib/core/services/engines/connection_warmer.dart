@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 import 'package:synchronized/synchronized.dart';
@@ -5,23 +6,26 @@ import '../../../features/downloads/models/download_task.dart';
 import '../power_monitor.dart';
 import '../protocol_cache.dart';
 
+/// Service managing TLS pre-warming and connection caching.
+/// Task 2.1: Converted from static mutable state to injectable singleton.
 class ConnectionWarmer {
   static final _log = Logger('ConnectionWarmer');
-  static final Map<String, DateTime> _warmedHosts = {};
+  static ConnectionWarmer? _instance;
+  static ConnectionWarmer get instance => _instance ??= ConnectionWarmer();
+
+  final Map<String, DateTime> _warmedHosts = {};
   static const _warmTtl = Duration(minutes: 5);
   static const _maxWarmedHosts = 10;
-  // FIX: Guard concurrent access to _warmedHosts since warmConnection can
-  // be called from multiple download tasks simultaneously.
-  static final _lock = Lock();
+  final Lock _lock = Lock();
 
-  static Future<void> warmConnection(String url) async {
+  ConnectionWarmer();
+
+  Future<void> warmConnection(String url) async {
     try {
       final uri = Uri.tryParse(url);
       if (uri == null || !uri.hasAuthority) return;
 
       final host = uri.host;
-      // Check-and-update under a lock to prevent concurrent warm calls
-      // for the same host from racing.
       final shouldWarm = await _lock.synchronized(() {
         final lastWarm = _warmedHosts[host];
         if (lastWarm != null &&
@@ -59,7 +63,7 @@ class ConnectionWarmer {
     }
   }
 
-  static Future<void> warmQueuedTasks(List<DownloadTask> queuedTasks) async {
+  Future<void> warmQueuedTasks(List<DownloadTask> queuedTasks) async {
     final sortedTasks = List<DownloadTask>.from(queuedTasks);
     sortedTasks.sort((a, b) {
       final protoA = ProtocolCache.get(a.url);
@@ -83,8 +87,7 @@ class ConnectionWarmer {
     );
   }
 
-  // FIX-P0-4: Guard concurrent access to _warmedHosts in isWarmed and clear
-  static Future<bool> isWarmed(String url) async {
+  Future<bool> isWarmed(String url) async {
     return _lock.synchronized(() {
       try {
         final host = Uri.parse(url).host;
@@ -99,9 +102,13 @@ class ConnectionWarmer {
     });
   }
 
-  static Future<void> clear() async {
+  Future<void> clear() async {
     await _lock.synchronized(() {
       _warmedHosts.clear();
     });
+  }
+
+  void dispose() {
+    _warmedHosts.clear();
   }
 }

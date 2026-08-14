@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/widgets.dart';
+import 'database_service.dart';
 import 'download_engine.dart';
 import 'frame_watchdog.dart';
 import 'performance_monitor.dart';
@@ -107,5 +108,10 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     AmbientProgress.instance.stopAll();
     StatusChipPulseDriver.instance.stop();
     StatusChipPulseDriver.stopAll();
+
+    // Task 4.3: Flush database saves on backgrounding/detaching
+    try {
+      DatabaseService.instance.flushPendingSaves();
+    } catch (_) {}
   }
 }

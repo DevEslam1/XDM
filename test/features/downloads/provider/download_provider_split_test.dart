@@ -6,6 +6,9 @@ import 'package:dmx/features/downloads/provider/download_queue_provider.dart';
 import 'package:dmx/features/downloads/provider/download_filter_provider.dart';
 import 'package:dmx/features/downloads/provider/torrent_provider.dart';
 import 'package:dmx/features/downloads/provider/download_coordinator.dart';
+import 'package:dmx/features/downloads/usecases/pause_download_usecase.dart';
+import 'package:dmx/features/downloads/usecases/resume_download_usecase.dart';
+import 'package:dmx/features/downloads/usecases/delete_download_usecase.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -91,11 +94,17 @@ void main() {
       final filter = DownloadFilterProvider(list);
       final queue = DownloadQueueProvider(listProvider: list);
       final torrent = TorrentProvider();
+      final pauseUseCase = PauseDownloadUseCase(queue);
+      final resumeUseCase = ResumeDownloadUseCase(queue);
+      final deleteUseCase = DeleteDownloadUseCase(list);
       final coordinator = DownloadCoordinator(
         listProvider: list,
         filterProvider: filter,
         queueProvider: queue,
         torrentProvider: torrent,
+        pauseUseCase: pauseUseCase,
+        resumeUseCase: resumeUseCase,
+        deleteUseCase: deleteUseCase,
       );
 
       final task =

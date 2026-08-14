@@ -3,10 +3,10 @@ import 'dart:io';
 import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
+import '../download_engine.dart';
 import '../logging_service.dart';
 import '../torrent_resume_store.dart';
 import '../torrent_service.dart';
-import 'engine_models.dart';
 
 // FIX: P0-01 — TorrentDownloadHandler manages BitTorrent lifecycle & progress
 
@@ -273,6 +273,10 @@ class TorrentDownloadHandler {
     final completer = Completer<void>();
     StreamSubscription? sub;
     final saveDir = File(localFilePath).parent.path;
+    DateTime lastProgressTick = DateTime.fromMillisecondsSinceEpoch(0);
+    DateTime lastAccurateSync = DateTime.fromMillisecondsSinceEpoch(0);
+    List<Map<String, dynamic>>? cachedAccurateFiles;
+    String lastStateLabel = '';
 
     sub = TorrentService.torrentUpdates.listen((torrents) async {
       final torrent = torrents[id];
@@ -292,6 +296,20 @@ class TorrentDownloadHandler {
       }
 
       final stateLabel = torrent.stateLabel.toLowerCase();
+      final isStateChange = stateLabel != lastStateLabel;
+      final isTerminal = stateLabel == 'seeding' ||
+          stateLabel == 'paused' ||
+          stateLabel == 'stopped' ||
+          stateLabel == 'error';
+      final now = DateTime.now();
+      if (!isTerminal &&
+          !isStateChange &&
+          now.difference(lastProgressTick) < const Duration(milliseconds: 750)) {
+        return;
+      }
+      lastProgressTick = now;
+      lastStateLabel = stateLabel;
+
       final isCheckingOrMetadata = stateLabel == 'checking' ||
           stateLabel == 'downloading_metadata' ||
           stateLabel == 'queued_for_checking' ||
@@ -299,25 +317,36 @@ class TorrentDownloadHandler {
 
       List<Map<String, dynamic>>? resolvedFiles = getTorrentFiles?.call();
       if (!isCheckingOrMetadata && torrent.hasMetadata) {
-        try {
-          final accurate =
-              await TorrentService.getAccurateFileProgress(id, saveDir);
-          if (accurate.isNotEmpty) {
-            resolvedFiles = accurate
-                .map((f) => {
-                      'name': f.name,
-                      'length': f.size,
-                      'downloadedBytes': f.downloadedBytes,
-                      'selected': true,
-                      'priority': 4,
-                      'progress': f.progress,
-                      'percent': f.progress,
-                      'isComplete': f.isComplete,
-                      'progressEstimated': false,
-                    })
-                .toList();
-          }
-        } catch (_) {}
+        // FIX-P1-02 / FIX-BG-04: Throttle accurate file progress (4s foreground, 10s background)
+        final syncInterval = DownloadEngine.isInBackground
+            ? const Duration(seconds: 10)
+            : const Duration(seconds: 4);
+
+        if (now.difference(lastAccurateSync) >= syncInterval || cachedAccurateFiles == null) {
+          lastAccurateSync = now;
+          try {
+            final accurate =
+                await TorrentService.getAccurateFileProgress(id, saveDir);
+            if (accurate.isNotEmpty) {
+              cachedAccurateFiles = accurate
+                  .map((f) => {
+                        'name': f.name,
+                        'length': f.size,
+                        'downloadedBytes': f.downloadedBytes,
+                        'selected': true,
+                        'priority': 4,
+                        'progress': f.progress,
+                        'percent': f.progress,
+                        'isComplete': f.isComplete,
+                        'progressEstimated': false,
+                      })
+                  .toList();
+            }
+          } catch (_) {}
+        }
+        if (cachedAccurateFiles != null) {
+          resolvedFiles = cachedAccurateFiles;
+        }
       }
 
       final totalWanted = torrent.totalWanted;

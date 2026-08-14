@@ -252,7 +252,7 @@ void main() {
 
   group('DownloadProgress', () {
     test('constructs with all fields', () {
-      final progress = DownloadProgress(
+      const progress = DownloadProgress(
         downloadedBytes: 100,
         fileSize: 1000,
         speed: 50000.0,

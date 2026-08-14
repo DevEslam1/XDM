@@ -15,6 +15,8 @@ import '../../features/downloads/usecases/retry_download_usecase.dart';
 import '../../features/downloads/usecases/delete_download_usecase.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../services/download_engine.dart';
+import '../services/engines/connection_warmer.dart';
+import '../services/network/cookie_cache.dart';
 import '../services/permission_service.dart';
 import '../services/power_monitor.dart';
 import '../services/connection_manager.dart';
@@ -64,6 +66,9 @@ Future<void> configureDependencies() async {
       queueProvider: getIt<DownloadQueueProvider>(),
       filterProvider: getIt<DownloadFilterProvider>(),
       torrentProvider: getIt<TorrentProvider>(),
+      pauseUseCase: getIt<PauseDownloadUseCase>(),
+      resumeUseCase: getIt<ResumeDownloadUseCase>(),
+      deleteUseCase: getIt<DeleteDownloadUseCase>(),
     ),
   );
 
@@ -93,7 +98,32 @@ Future<void> configureDependencies() async {
     () => DeleteDownloadUseCase(getIt<DownloadListProvider>()),
   );
 
-  getIt.registerLazySingleton<DownloadEngine>(() => DownloadEngine());
+  // Download Engine & Decoupled Services
+  getIt.registerLazySingleton<DioClientPool>(() => DioClientPool());
+  getIt.registerLazySingleton<YtCounterpartCoordinator>(() => YtCounterpartCoordinator());
+  getIt.registerLazySingleton<MetadataProbeService>(
+    () => MetadataProbeService(getIt<DioClientPool>()),
+  );
+  getIt.registerLazySingleton<HttpDownloadOrchestrator>(
+    () => HttpDownloadOrchestrator(
+      getIt<MetadataProbeService>(),
+      getIt<YtCounterpartCoordinator>(),
+      getIt<SettingsProvider>(),
+    ),
+  );
+  getIt.registerLazySingleton<TorrentDownloadOrchestrator>(
+    () => TorrentDownloadOrchestrator(getIt<DioClientPool>()),
+  );
+
+  getIt.registerLazySingleton<DownloadEngine>(
+    () => DownloadEngine(
+      httpOrchestrator: getIt<HttpDownloadOrchestrator>(),
+      torrentOrchestrator: getIt<TorrentDownloadOrchestrator>(),
+      metadataService: getIt<MetadataProbeService>(),
+      ytCoordinator: getIt<YtCounterpartCoordinator>(),
+      dioPool: getIt<DioClientPool>(),
+    ),
+  );
   getIt.registerLazySingleton<PowerMonitor>(() => PowerMonitor());
   getIt.registerLazySingleton<PermissionService>(() => PermissionService());
   getIt.registerLazySingleton<ConnectionManager>(() => ConnectionManager());
@@ -113,11 +143,15 @@ Future<void> configureDependencies() async {
       () => SingleInstanceService());
   getIt.registerLazySingleton<TrackerManager>(() => TrackerManager());
 
-  // Fix: Ensure init() is called immediately when instantiated
   getIt.registerLazySingleton<SiteIntelligenceService>(
     () => SiteIntelligenceService()..init(),
     dispose: (service) => service.dispose(),
   );
+
+  getIt.registerLazySingleton<ConnectionWarmer>(() => ConnectionWarmer(),
+      dispose: (warmer) => warmer.dispose());
+  getIt.registerLazySingleton<CookieCache>(() => CookieCache(),
+      dispose: (cache) => cache.dispose());
 
   getIt
       .registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);

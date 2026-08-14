@@ -83,7 +83,7 @@ void main() {
 
     test('FIX-2: ytCombinedProgress returns null when counterpart unknown', () {
       // When ytCounterpartSize is null, it should return null rather than 1.0 (false 100%)
-      final progressUnknownCp = DownloadProgress(
+      const progressUnknownCp = DownloadProgress(
         downloadedBytes: 1000,
         fileSize: 1000,
         speed: 100,
@@ -95,7 +95,7 @@ void main() {
       expect(progressUnknownCp.ytCombinedProgress, isNull);
 
       // When ytCounterpartSize is known, correctly computes combined progress
-      final progressWithCp = DownloadProgress(
+      const progressWithCp = DownloadProgress(
         downloadedBytes: 500,
         fileSize: 1000,
         speed: 100,

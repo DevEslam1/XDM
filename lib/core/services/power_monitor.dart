@@ -52,6 +52,10 @@ class PowerMonitor {
   static BatterySaverMode? _lastSaverMode;
 
   static BatterySaverMode get batterySaverMode {
+    if (_thermal == ThermalStatus.severe || _thermal == ThermalStatus.critical) {
+      _lastSaverMode = BatterySaverMode.aggressive;
+      return BatterySaverMode.aggressive;
+    }
     if (isCharging) {
       _lastSaverMode = BatterySaverMode.off;
       return BatterySaverMode.off;

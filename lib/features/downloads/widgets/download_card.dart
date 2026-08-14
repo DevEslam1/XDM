@@ -390,6 +390,8 @@ class _StatusChipState extends State<_StatusChip> {
             task.seedingEnabled);
   }
 
+  Timer? _syncDebounce;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -406,20 +408,25 @@ class _StatusChipState extends State<_StatusChip> {
   }
 
   void _syncPulse() {
-    if (!mounted) return;
-    final needsPulse =
-        _shouldPulse(widget.task) && modernAnimationsAllowed(context);
-    if (needsPulse && !_hasActiveRef) {
-      _StatusChipPulseDriver().addRef();
-      _hasActiveRef = true;
-    } else if (!needsPulse && _hasActiveRef) {
-      _StatusChipPulseDriver().removeRef();
-      _hasActiveRef = false;
-    }
+    // FIX-P1-03: Debounce pulse driver reference updates during rapid scrolling/updates
+    _syncDebounce?.cancel();
+    _syncDebounce = Timer(const Duration(milliseconds: 100), () {
+      if (!mounted) return;
+      final needsPulse =
+          _shouldPulse(widget.task) && modernAnimationsAllowed(context);
+      if (needsPulse && !_hasActiveRef) {
+        _StatusChipPulseDriver().addRef();
+        _hasActiveRef = true;
+      } else if (!needsPulse && _hasActiveRef) {
+        _StatusChipPulseDriver().removeRef();
+        _hasActiveRef = false;
+      }
+    });
   }
 
   @override
   void dispose() {
+    _syncDebounce?.cancel();
     if (_hasActiveRef) {
       _StatusChipPulseDriver().removeRef();
       _hasActiveRef = false;

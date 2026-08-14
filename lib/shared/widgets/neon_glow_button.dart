@@ -204,8 +204,8 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: glow.withValues(alpha: 0.4),
-                                blurRadius: 16,
+                                color: glow.withValues(alpha: 0.3),
+                                blurRadius: 8.0,
                                 spreadRadius: -2,
                               ),
                             ],
@@ -240,8 +240,8 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: glow.withValues(alpha: 0.4),
-                                blurRadius: 16,
+                                color: glow.withValues(alpha: 0.3),
+                                blurRadius: 8.0,
                                 spreadRadius: -2,
                               ),
                             ],

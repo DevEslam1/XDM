@@ -382,9 +382,25 @@ class _FadeIndexedStackState extends State<_FadeIndexedStack>
 
   @override
   Widget build(BuildContext context) {
+    // FIX-P0-04: Only render the active screen + adjacent screens.
+    // Wrap distant ones in Offstage and disable TickerMode to release rendering resources.
     return FadeTransition(
       opacity: _c,
-      child: IndexedStack(index: widget.index, children: widget.children),
+      child: IndexedStack(
+        index: widget.index,
+        children: List.generate(widget.children.length, (i) {
+          if (i == widget.index || (i - widget.index).abs() == 1) {
+            return widget.children[i];
+          }
+          return Offstage(
+            offstage: true,
+            child: TickerMode(
+              enabled: false,
+              child: widget.children[i],
+            ),
+          );
+        }),
+      ),
     );
   }
 }

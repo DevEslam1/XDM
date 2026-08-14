@@ -3,14 +3,12 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:dmx/core/services/download_engine.dart';
-import 'package:dmx/core/services/dio_client_pool.dart';
 import 'package:dmx/core/services/torrent_service.dart';
 import 'package:dmx/core/services/torrent_resume_store.dart';
 import 'package:dmx/core/utils/url_utils.dart';
 import 'package:dmx/core/utils/file_utils.dart';
 import 'package:dmx/core/utils/bencode_decoder.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 
 /// Handles metadata resolution for HTTP and Torrent sources.
 /// Task 1.2: Specialized Service for metadata probing.
