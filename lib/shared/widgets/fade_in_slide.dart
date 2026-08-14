@@ -3,6 +3,70 @@ import '../../core/app_theme.dart';
 
 enum SlideFrom { up, down, left, right }
 
+/// Provides a shared [AnimationController] for multiple child [FadeInSlide] widgets (FIX 21: U-08).
+class FadeInSlideScope extends StatefulWidget {
+  final Widget child;
+  final Duration duration;
+  final Curve curve;
+
+  const FadeInSlideScope({
+    super.key,
+    required this.child,
+    this.duration = AppTheme.motionReveal,
+    this.curve = AppTheme.motionCurve,
+  });
+
+  static _FadeInSlideScopeInherited? maybeOf(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<_FadeInSlideScopeInherited>();
+  }
+
+  @override
+  State<FadeInSlideScope> createState() => FadeInSlideScopeState();
+}
+
+class FadeInSlideScopeState extends State<FadeInSlideScope>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = AnimationController(vsync: this, duration: widget.duration);
+    controller.forward();
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _FadeInSlideScopeInherited(
+      controller: controller,
+      curve: widget.curve,
+      child: widget.child,
+    );
+  }
+}
+
+class _FadeInSlideScopeInherited extends InheritedWidget {
+  final AnimationController controller;
+  final Curve curve;
+
+  const _FadeInSlideScopeInherited({
+    required this.controller,
+    required this.curve,
+    required super.child,
+  });
+
+  @override
+  bool updateShouldNotify(_FadeInSlideScopeInherited oldWidget) =>
+      controller != oldWidget.controller || curve != oldWidget.curve;
+}
+
 class FadeInSlide extends StatefulWidget {
   final Widget child;
   final Duration duration;
@@ -22,14 +86,16 @@ class FadeInSlide extends StatefulWidget {
   });
 
   @override
-  State<FadeInSlide> createState() => _FadeInSlideState();
+  State<FadeInSlide> createState() => FadeInSlideState();
 }
 
-class _FadeInSlideState extends State<FadeInSlide>
+class FadeInSlideState extends State<FadeInSlide>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fade;
-  late Animation<Offset> _slide;
+  AnimationController? _localController;
+  Animation<double>? _fade;
+  Animation<Offset>? _slide;
+
+  AnimationController? get activeLocalController => _localController;
 
   Offset get _begin {
     switch (widget.from) {
@@ -45,29 +111,48 @@ class _FadeInSlideState extends State<FadeInSlide>
   }
 
   @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: widget.duration);
-    _fade = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: widget.curve));
-    _slide = Tween<Offset>(
-      begin: _begin,
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: widget.curve));
-    if (widget.delay == Duration.zero) {
-      _controller.forward();
-    } else {
-      Future.delayed(widget.delay, () {
-        if (mounted) _controller.forward();
-      });
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scope = FadeInSlideScope.maybeOf(context);
+    if (scope != null) {
+      _localController?.dispose();
+      _localController = null;
+      _fade = Tween<double>(
+        begin: 0.0,
+        end: 1.0,
+      ).animate(CurvedAnimation(parent: scope.controller, curve: scope.curve));
+      _slide = Tween<Offset>(
+        begin: _begin,
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: scope.controller, curve: scope.curve));
+    } else if (_localController == null) {
+      _localController = AnimationController(
+        vsync: this,
+        duration: widget.duration,
+      );
+      _fade = Tween<double>(
+        begin: 0.0,
+        end: 1.0,
+      ).animate(
+          CurvedAnimation(parent: _localController!, curve: widget.curve));
+      _slide = Tween<Offset>(
+        begin: _begin,
+        end: Offset.zero,
+      ).animate(
+          CurvedAnimation(parent: _localController!, curve: widget.curve));
+      if (widget.delay == Duration.zero) {
+        _localController!.forward();
+      } else {
+        Future.delayed(widget.delay, () {
+          if (mounted && _localController != null) _localController!.forward();
+        });
+      }
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _localController?.dispose();
     super.dispose();
   }
 
@@ -76,9 +161,12 @@ class _FadeInSlideState extends State<FadeInSlide>
     if (MediaQuery.disableAnimationsOf(context)) {
       return widget.child;
     }
+    if (_fade == null || _slide == null) {
+      return widget.child;
+    }
     return FadeTransition(
-      opacity: _fade,
-      child: SlideTransition(position: _slide, child: widget.child),
+      opacity: _fade!,
+      child: SlideTransition(position: _slide!, child: widget.child),
     );
   }
 }
