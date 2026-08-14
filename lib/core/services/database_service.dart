@@ -128,32 +128,31 @@ class DatabaseService {
     });
   }
 
-  /// Migrates each Hive box independently, tracking success per-box via
-  /// individual SharedPreferences keys so that a partial failure + retry
-  /// does not re-migrate already-migrated boxes (which would cause
-  /// duplicates via insertOrReplace).
+  /// Migrates Hive boxes using a single global completion flag (DB-03).
   Future<void> _migrateFromHivePerBox(SharedPreferences prefs) async {
-    const boxKeys = {
-      downloadsBoxName: 'hive_migrated_downloads',
-      bookmarksBoxName: 'hive_migrated_bookmarks',
-      browserTabsBoxName: 'hive_migrated_tabs',
-      browserHistoryBoxName: 'hive_migrated_history',
-    };
+    const String migrationKey = 'hive_migration_complete';
+    if (prefs.getBool(migrationKey) == true) return;
 
-    for (final entry in boxKeys.entries) {
-      final boxName = entry.key;
-      final prefKey = entry.value;
-      if (prefs.getBool(prefKey) == true) continue;
+    const boxes = [
+      downloadsBoxName,
+      bookmarksBoxName,
+      browserTabsBoxName,
+      browserHistoryBoxName,
+    ];
 
+    bool allSuccessful = true;
+    for (final boxName in boxes) {
       final success = await _migrateSingleHiveBox(boxName);
-      if (success) {
-        // Mark as migrated to prevent re-migrating deleted SQLite entries on future launches
-        await prefs.setBool(prefKey, true);
-      } else {
+      if (!success) {
+        allSuccessful = false;
         _log.warning(
-          'Migration had errors for box $boxName; will retry on next launch. Corrupted items exported to JSON.',
+          'Migration had errors for box $boxName; will retry on next launch.',
         );
       }
+    }
+
+    if (allSuccessful) {
+      await prefs.setBool(migrationKey, true);
     }
   }
 
@@ -696,6 +695,18 @@ class DatabaseService {
     return rows.map(_rowToTask).toList();
   }
 
+  /// Paginated load of download tasks (DB-02).
+  Future<List<DownloadTask>> loadTasksPage({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final query = _db.select(_db.downloadTasks)
+      ..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)])
+      ..limit(limit, offset: offset);
+    final rows = await query.get();
+    return rows.map(_rowToTask).toList();
+  }
+
   Future<DownloadTask?> getTask(String id) async {
     final query = _db.select(_db.downloadTasks)..where((t) => t.id.equals(id));
     final row = await query.getSingleOrNull();
@@ -934,7 +945,36 @@ class DatabaseService {
     return rows.fold<int>(0, (sum, r) => sum + r.visitCount);
   }
 
-  Future<int> addBrowserHistory(Map<String, dynamic> entry) async {
+  final Map<String, Timer> _historyDebounceTimers = {};
+  final Map<String, Map<String, dynamic>> _pendingHistoryEntries = {};
+
+  /// Adds browser history with a 5-second per-URL write debounce (DB-04).
+  Future<int> addBrowserHistory(
+    Map<String, dynamic> entry, {
+    bool immediate = false,
+  }) async {
+    final url = entry['url'] as String? ?? '';
+    if (url.isEmpty || url == 'about:blank') return 0;
+
+    if (immediate) {
+      return _writeBrowserHistoryDirect(entry);
+    }
+
+    _pendingHistoryEntries[url] = entry;
+    _historyDebounceTimers[url]?.cancel();
+
+    _historyDebounceTimers[url] = Timer(const Duration(seconds: 5), () async {
+      _historyDebounceTimers.remove(url);
+      final latestEntry = _pendingHistoryEntries.remove(url);
+      if (latestEntry != null) {
+        await _writeBrowserHistoryDirect(latestEntry);
+      }
+    });
+
+    return 1;
+  }
+
+  Future<int> _writeBrowserHistoryDirect(Map<String, dynamic> entry) async {
     final url = entry['url'] as String? ?? '';
     if (url.isEmpty || url == 'about:blank') return 0;
     final visitedAt = (entry['visitedAt'] as num?)?.toInt() ??
