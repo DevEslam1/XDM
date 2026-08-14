@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -60,7 +61,10 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   @override
   void initState() {
     super.initState();
-    // FIX-P4 / P0-GPU: If _activeCount >= 3 or not allowed by BackgroundGate, skip BackdropFilter
+    _tryAllocate();
+  }
+
+  void _tryAllocate() {
     if (!widget.forceSolid &&
         !_isLowEndDevice &&
         BackgroundGate.allowHeavyOps &&
@@ -73,12 +77,22 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
 
   @override
   void dispose() {
-    // FIX-P4: Decrement counter in dispose
     if (_allocated) {
-      DmxBackdropFilter._activeCount--;
+      DmxBackdropFilter._activeCount = max(0, DmxBackdropFilter._activeCount - 1);
       _allocated = false;
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_allocated && (!BackgroundGate.allowHeavyOps || PowerMonitor.screenOff)) {
+      DmxBackdropFilter._activeCount = max(0, DmxBackdropFilter._activeCount - 1);
+      _allocated = false;
+    } else if (!_allocated && BackgroundGate.allowHeavyOps && !PowerMonitor.screenOff) {
+      _tryAllocate();
+    }
   }
 
   @override

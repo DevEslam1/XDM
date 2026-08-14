@@ -167,18 +167,37 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
   Widget build(BuildContext context) {
     if (MediaQuery.of(context).size.width == 0) return widget.child;
 
-    final isDark = context.select((SettingsProvider s) => s.isDarkMode);
-    final isAmoled = context.select((SettingsProvider s) => s.isAmoledMode);
-    final classicUi = context.select((SettingsProvider s) => s.classicUi);
-    final reduceVisuals =
-        context.select((SettingsProvider s) => s.reduceVisuals);
-    final gridOpacity = context.select((SettingsProvider s) => s.gridOpacity);
-    final bgColor = AppTheme.getBackground(isDark, isAmoled: isAmoled);
+    bool isDark = true;
+    bool isAmoled = false;
+    bool classicUi = false;
+    bool reduceVisuals = false;
+    double gridOpacity = 20.0;
+    bool hasActiveDownloads = false;
 
-    // Skip ambient animation during active downloads
-    final hasActiveDownloads = context.select(
-      (DownloadProvider p) => p.downloadingTasksCount > 0,
-    );
+    try {
+      isDark = context.select((SettingsProvider s) => s.isDarkMode);
+      isAmoled = context.select((SettingsProvider s) => s.isAmoledMode);
+      classicUi = context.select((SettingsProvider s) => s.classicUi);
+      reduceVisuals = context.select((SettingsProvider s) => s.reduceVisuals);
+      gridOpacity = context.select((SettingsProvider s) => s.gridOpacity);
+    } catch (_) {
+      try {
+        final s = SettingsProvider.instance;
+        isDark = s.isDarkMode;
+        isAmoled = s.isAmoledMode;
+        classicUi = s.classicUi;
+        reduceVisuals = s.reduceVisuals;
+        gridOpacity = s.gridOpacity;
+      } catch (_) {}
+    }
+
+    try {
+      hasActiveDownloads = context.select(
+        (DownloadProvider p) => p.downloadingTasksCount > 0,
+      );
+    } catch (_) {}
+
+    final bgColor = AppTheme.getBackground(isDark, isAmoled: isAmoled);
 
     if (classicUi ||
         reduceVisuals ||

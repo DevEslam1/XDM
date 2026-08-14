@@ -103,6 +103,25 @@ class DatabaseService {
       }
 
       _maintenanceRuns++;
+      if (_maintenanceRuns % 6 == 0) {
+        try {
+          final walRows = await _db.customSelect(
+            'PRAGMA wal_checkpoint(PASSIVE)',
+          ).get();
+          if (walRows.isNotEmpty) {
+            final row = walRows.first.data;
+            final busy = row['busy'] ?? 0;
+            final log = row['log'] ?? 0;
+            final checkpointed = row['checkpointed'] ?? 0;
+            if (log is num && log > 2500) {
+              // 2500 pages * 4096 bytes/page ≈ 10MB
+              _log.warning(
+                '[DatabaseService] WAL size > 10MB (log: $log pages, checkpointed: $checkpointed, busy: $busy)',
+              );
+            }
+          }
+        } catch (_) {}
+      }
       if (_maintenanceRuns % 12 == 0) {
         try {
           final activeCountResult = await _db
@@ -736,7 +755,7 @@ class DatabaseService {
         DownloadEngine.isInBackground ||
         PowerMonitor.screenOff;
     final interval = isBackground
-        ? const Duration(seconds: 120) // BG-05: 120s in background
+        ? const Duration(seconds: 300) // BG-05 / FIX-P0-5: 300s in background
         : const Duration(seconds: 15); // FIX PERF-4: 15s in foreground (was 8s)
 
     _dbBatchTimer ??= Timer(interval, flushPendingSaves);

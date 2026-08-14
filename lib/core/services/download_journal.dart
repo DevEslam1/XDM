@@ -507,12 +507,12 @@ class StateStore {
           }
         }
 
-        // FIX-M1: Reduce screen-off threshold to 1MB; always write when status changed
+        // FIX-P0-4: Screen-off threshold increased to 5MB; always write when status changed
         if (isScreenOff &&
             !durable &&
             !statusChanged &&
-            bytesSinceLastWrite < 1 * 1024 * 1024) {
-          return; // skip only small deltas when screen off
+            bytesSinceLastWrite < 5 * 1024 * 1024) {
+          return; // skip small deltas when screen off
         }
         _lastWrittenBytes[targetPath] = state.downloadedBytes;
 
@@ -611,23 +611,15 @@ class DownloadJournal {
         DownloadEngine.isInBackground ||
         PowerMonitor.screenOff;
 
-    if (isBg) {
-      final threshold =
-          PowerMonitor.screenOff ? 8 * 1024 * 1024 : 4 * 1024 * 1024;
-      final last = _lastBgRecordedBytes[index] ?? 0;
-      if ((bytes - last).abs() < threshold) {
-        return;
-      }
-      _lastBgRecordedBytes[index] = bytes;
-    } else {
-      // NEW: foreground throttle — 1MB minimum delta
-      const fgThreshold = 1024 * 1024;
-      final last = _lastBgRecordedBytes[index] ?? 0;
-      if ((bytes - last).abs() < fgThreshold) {
-        return;
-      }
-      _lastBgRecordedBytes[index] = bytes;
-    }
+    final threshold = PowerMonitor.screenOff
+        ? 16 * 1024 * 1024 // 16MB when screen off (was 8MB)
+        : isBg
+            ? 8 * 1024 * 1024 // 8MB when backgrounded (was 4MB)
+            : 2 * 1024 * 1024; // 2MB foreground (was 1MB)
+
+    final last = _lastBgRecordedBytes[index] ?? 0;
+    if ((bytes - last).abs() < threshold) return;
+    _lastBgRecordedBytes[index] = bytes;
 
     await _lock.synchronized(() async {
       _ensureOpen();
@@ -641,8 +633,7 @@ class DownloadJournal {
       _approxBytes += line.length + 1;
       _flushCounter++;
 
-      // BG-04: Flush every 50 records (foreground) or 500 records (background/screen off)
-      final flushInterval = isBg ? 500 : 50;
+      final flushInterval = PowerMonitor.screenOff ? 1000 : (isBg ? 500 : 50);
       if (_flushCounter - _lastFlushRecordCount >= flushInterval) {
         await _sink!.flush();
         _lastFlushRecordCount = _flushCounter;

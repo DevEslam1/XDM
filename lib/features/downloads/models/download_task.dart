@@ -843,11 +843,19 @@ class DownloadTask {
     List<double> chunks;
     if (rawChunks.length == threadCount) {
       chunks = rawChunks;
+    } else if (rawChunks.length < threadCount) {
+      chunks = [
+        ...rawChunks,
+        ...List<double>.filled(threadCount - rawChunks.length, 0.0),
+      ];
     } else {
       final safeThreadCount = threadCount > 0 ? threadCount : 1;
-      final overallProgress = downloadedBytes > 0 && fileSize > 0
-          ? (downloadedBytes / fileSize).clamp(0.0, 1.0)
-          : 0.0;
+      final sum = rawChunks.fold<double>(0.0, (s, c) => s + c);
+      final overallProgress = rawChunks.isNotEmpty
+          ? (sum / rawChunks.length).clamp(0.0, 1.0)
+          : (downloadedBytes > 0 && fileSize > 0
+              ? (downloadedBytes / fileSize).clamp(0.0, 1.0)
+              : 0.0);
       chunks = List<double>.filled(safeThreadCount, overallProgress);
     }
     chunks = chunks

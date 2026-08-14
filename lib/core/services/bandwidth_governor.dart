@@ -94,10 +94,13 @@ class BandwidthGovernor {
     _taskLimits[taskId] = limit;
   }
 
+  final Map<String, Lock> _taskLocks = {};
+
   void removeTaskLimit(String taskId) {
     _taskLimits.remove(taskId);
     _taskLastRefill.remove(taskId);
     _taskTokens.remove(taskId);
+    _taskLocks.remove(taskId);
   }
 
   int? getTaskLimit(String taskId) {
@@ -113,50 +116,50 @@ class BandwidthGovernor {
   Future<int> acquire(int bytes, {String? taskId}) async {
     if (bytes <= 0) return 0;
 
-    // Task-specific limits (lock-free read, lock only for mutation)
     if (taskId != null && _taskLimits.containsKey(taskId)) {
-      final taskLimit = _taskLimits[taskId]!;
-      if (taskLimit <= 0) return 1000;
-      return _lock.synchronized(() {
-        _refill();
-        final now = DateTime.now();
-        final last = _taskLastRefill[taskId] ?? now;
-        final elapsedMs = now.difference(last).inMilliseconds;
-        final tokens = _taskTokens[taskId] ?? 0.0;
-        if (elapsedMs > 0) {
-          final newTokens = taskLimit * elapsedMs / 1000.0;
-          _taskTokens[taskId] =
-              min(tokens + newTokens, taskLimit * _burstFactor);
-          _taskLastRefill[taskId] = now;
-        }
-        final currentTokens = (_taskTokens[taskId] ?? 0) - bytes;
-        _taskTokens[taskId] = currentTokens;
-        if (currentTokens < 0) {
-          final deficit = -currentTokens;
-          final waitMs = (deficit / taskLimit * 1000.0).ceil();
-          _taskTokens[taskId] = 0;
-          return waitMs.clamp(0, 1000);
-        }
-        return 0;
-      });
+      final taskLock = _taskLocks.putIfAbsent(taskId, () => Lock());
+      return taskLock.synchronized(() => _acquireTaskLimited(bytes, taskId));
     }
 
     if (isUnlimited) return 0;
+    return _lock.synchronized(() => _acquireGlobal(bytes));
+  }
 
-    // Global limit — lock-free fast path
-    return _lock.synchronized(() {
-      _refill();
-      final share = perConsumerBytesPerSecond;
-      if (share <= 0) return 1000;
-      _availableTokens -= bytes;
-      if (_availableTokens < 0) {
-        final deficit = -_availableTokens;
-        final waitMs = (deficit / share * 1000.0).ceil();
-        _availableTokens = 0;
-        return waitMs.clamp(0, 1000);
-      }
-      return 0;
-    });
+  int _acquireTaskLimited(int bytes, String taskId) {
+    final taskLimit = _taskLimits[taskId]!;
+    if (taskLimit <= 0) return 1000;
+    final now = DateTime.now();
+    final last = _taskLastRefill[taskId] ?? now;
+    final elapsedMs = now.difference(last).inMilliseconds;
+    final tokens = _taskTokens[taskId] ?? 0.0;
+    if (elapsedMs > 0) {
+      final newTokens = taskLimit * elapsedMs / 1000.0;
+      _taskTokens[taskId] = min(tokens + newTokens, taskLimit * _burstFactor);
+      _taskLastRefill[taskId] = now;
+    }
+    final currentTokens = (_taskTokens[taskId] ?? 0) - bytes;
+    _taskTokens[taskId] = currentTokens;
+    if (currentTokens < 0) {
+      final deficit = -currentTokens;
+      final waitMs = (deficit / taskLimit * 1000.0).ceil();
+      _taskTokens[taskId] = 0;
+      return waitMs.clamp(0, 1000);
+    }
+    return 0;
+  }
+
+  int _acquireGlobal(int bytes) {
+    _refill();
+    final share = perConsumerBytesPerSecond;
+    if (share <= 0) return 1000;
+    _availableTokens -= bytes;
+    if (_availableTokens < 0) {
+      final deficit = -_availableTokens;
+      final waitMs = (deficit / share * 1000.0).ceil();
+      _availableTokens = 0;
+      return waitMs.clamp(0, 1000);
+    }
+    return 0;
   }
 
   void _refill() {

@@ -3452,53 +3452,64 @@ class DownloadEngine {
     }
   }
 
+  final Lock _closeLock = Lock();
+
   Future<void> close() async {
-    if (_closing) return;
-    _closing = true;
-    _closed = true;
-    _cleanupTimer?.cancel();
-    _cleanupTimer = null;
-    _ytPeriodicTimer?.cancel();
-    _ytPeriodicTimer = null;
-    for (final timer in _ytCleanupTimers) {
-      timer.cancel();
-    }
-    _ytCleanupTimers.clear();
-    for (final token in List<CancelToken>.from(_activeCancelTokens.values)) {
-      try {
-        token.cancel('Engine closing');
-      } catch (_) {}
-    }
-    _activeCancelTokens.clear();
-    try {
-      _sharedDio.close(force: true);
-    } catch (_) {}
-    for (final client in List<Dio>.from(_activeDioClients)) {
-      try {
-        client.close(force: true);
-      } catch (_) {}
-    }
-    _activeDioClients.clear();
-    _reservedDioClients.clear();
-    _dioClientCreationTimes.clear();
-    _activeDownloadsPerClient.clear();
-    final poolToClose = _pool;
-    _pool = null;
-    _poolInit = null;
-    if (poolToClose != null) {
-      try {
-        await poolToClose.shutdown().timeout(const Duration(seconds: 10));
-      } catch (e) {
-        debugPrint(
-            '[DownloadEngine] Isolate pool shutdown timed out or failed: $e');
+    await _closeLock.synchronized(() async {
+      if (_closing) return;
+      _closing = true;
+      _closed = true;
+
+      _cleanupTimer?.cancel();
+      _cleanupTimer = null;
+      _ytPeriodicTimer?.cancel();
+      _ytPeriodicTimer = null;
+
+      for (final timer in _ytCleanupTimers) {
+        timer.cancel();
       }
-    }
-    for (final id in List<int>.from(_activeTorrentIds)) {
+      _ytCleanupTimers.clear();
+
+      for (final token in List<CancelToken>.from(_activeCancelTokens.values)) {
+        try {
+          token.cancel('Engine closing');
+        } catch (_) {}
+      }
+      _activeCancelTokens.clear();
+
       try {
-        TorrentService.pauseTorrent(id);
+        _sharedDio.close(force: true);
       } catch (_) {}
-    }
-    _httpEngine.stopAdaptiveThreadMonitor();
+
+      for (final client in List<Dio>.from(_activeDioClients)) {
+        try {
+          client.close(force: true);
+        } catch (_) {}
+      }
+      _activeDioClients.clear();
+      _reservedDioClients.clear();
+      _dioClientCreationTimes.clear();
+      _activeDownloadsPerClient.clear();
+
+      final poolToClose = _pool;
+      _pool = null;
+      _poolInit = null;
+      if (poolToClose != null) {
+        try {
+          await poolToClose.shutdown().timeout(const Duration(seconds: 10));
+        } catch (e) {
+          debugPrint('[DownloadEngine] Pool shutdown timeout: $e');
+        }
+      }
+
+      for (final id in List<int>.from(_activeTorrentIds)) {
+        try {
+          TorrentService.pauseTorrent(id);
+        } catch (_) {}
+      }
+
+      _httpEngine.stopAdaptiveThreadMonitor();
+    });
   }
 
   static String _deriveCycleState(
@@ -3583,18 +3594,19 @@ Dio buildTransferDio({
     final adapter = client.httpClientAdapter as IOHttpClientAdapter;
     adapter.createHttpClient = () {
       final httpClient = HttpClient();
-      // FIX-0.1: badCertificateCallback must ALWAYS return false in release builds.
-      // In debug builds, it may ONLY allow the backend URL host.
-      httpClient.badCertificateCallback = (cert, h, p) {
-        // PRODUCTION: reject ALL self-signed certificates unconditionally.
-        return false;
+      // In RELEASE: Reject all invalid certs (strict)
+      httpClient.badCertificateCallback = (cert, host, port) {
+        return false; // Strict: reject all invalid certs
       };
+
+      // In DEBUG: Allow backend hosts for development
       assert(() {
-        // DEBUG ONLY: allow self-signed for local dev backend.
-        httpClient.badCertificateCallback = (cert, h, p) {
-          final isBackendHost =
-              url != null && Uri.tryParse(url)?.host.contains('run.app') == true;
-          return isBackendHost;
+        httpClient.badCertificateCallback = (cert, host, port) {
+          final targetHost = url != null ? Uri.tryParse(url)?.host : null;
+          if (targetHost != null && host.contains(targetHost)) {
+            return true;
+          }
+          return false;
         };
         return true;
       }());

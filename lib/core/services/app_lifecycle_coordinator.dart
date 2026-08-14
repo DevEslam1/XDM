@@ -85,5 +85,6 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     PerformanceMonitor.instance.stop();
     AmbientProgress.instance.stopAll();
     StatusChipPulseDriver.instance.stop();
+    StatusChipPulseDriver.stopAll();
   }
 }

@@ -171,20 +171,20 @@ class MirrorHealthStore {
   static Future<void> _persist() async {
     if (_cache == null) return;
     _dirtyCount++;
-    // FIX-M3: Flush immediately at 5+ dirty changes
-    if (_dirtyCount >= 5) {
+    if (_dirtyCount >= 10) { // WAS: 5
       await flushPending();
       return;
     }
     if (_persistPending) return;
     _persistPending = true;
     _persistTimer?.cancel();
-    // FIX-2.1: Route persist debounce interval through BackgroundGate
     _persistTimer = Timer(
-        BackgroundGate.adaptInterval(const Duration(seconds: 15)), () async {
-      _persistPending = false;
-      await flushPending();
-    });
+      BackgroundGate.adaptInterval(const Duration(seconds: 30)), // WAS: 15
+      () async {
+        _persistPending = false;
+        await flushPending();
+      },
+    );
   }
 
   static Future<void> flushPending() async {

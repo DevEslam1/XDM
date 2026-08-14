@@ -68,9 +68,9 @@ void main() {
       await repo.saveAll([reorderedT1, reorderedT2]);
 
       final all = await repo.loadAll();
-      all.sort((a, b) => a.queueOrder.compareTo(b.queueOrder));
-      expect(all.first.id, equals('q2'));
-      expect(all.last.id, equals('q1'));
+      final sorted = List.of(all)..sort((a, b) => a.queueOrder.compareTo(b.queueOrder));
+      expect(sorted.first.id, equals('q2'));
+      expect(sorted.last.id, equals('q1'));
     });
 
     test('4. Priority boost moves task forward', () async {
