@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
@@ -97,8 +98,46 @@ class RetryEngine {
         attempt++;
         final delay = getDelayForAttempt(attempt);
         onRetry?.call(e, attempt, delay);
-        await Future<void>.delayed(delay);
+        await _delayWithCancellation(delay, cancelToken);
       }
+    }
+  }
+
+  Future<void> _delayWithCancellation(
+    Duration delay,
+    CancelToken? cancelToken,
+  ) async {
+    if (cancelToken == null) {
+      await Future<void>.delayed(delay);
+      return;
+    }
+    if (cancelToken.isCancelled) {
+      throw const RetryCancelledException();
+    }
+    final completer = Completer<void>();
+    final timer = Timer(delay, () {
+      if (!completer.isCompleted) completer.complete();
+    });
+
+    void onCancel(dynamic _) {
+      timer.cancel();
+      if (!completer.isCompleted) {
+        completer.completeError(
+          DioException(
+            requestOptions: RequestOptions(path: ''),
+            type: DioExceptionType.cancel,
+            error: const RetryCancelledException(),
+          ),
+        );
+      }
+    }
+
+    cancelToken.whenCancel.then(onCancel).catchError((_) {});
+
+    try {
+      await completer.future;
+    } finally {
+      timer.cancel();
     }
   }
 }
