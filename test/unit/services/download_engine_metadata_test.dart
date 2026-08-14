@@ -3,7 +3,7 @@ import 'package:dmx/core/services/download_engine.dart';
 
 void main() {
   group('DownloadEngine Metadata Parallel Probe Tests (E-03)', () {
-    test('DownloadMetadata.isValid reflects fileSize > 0', () {
+    test('DownloadMetadata.isValid reflects non-empty fileName', () {
       const valid = DownloadMetadata(
         fileName: 'test.zip',
         category: 'Archive',
@@ -12,8 +12,16 @@ void main() {
       );
       expect(valid.isValid, isTrue);
 
+      const validZeroSize = DownloadMetadata(
+        fileName: 'stream.mp4',
+        category: 'video',
+        fileSize: 0,
+        supportsResume: false,
+      );
+      expect(validZeroSize.isValid, isTrue);
+
       const invalid = DownloadMetadata(
-        fileName: 'unknown',
+        fileName: '',
         category: 'Other',
         fileSize: 0,
         supportsResume: false,

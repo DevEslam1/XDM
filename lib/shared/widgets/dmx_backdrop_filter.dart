@@ -1,7 +1,7 @@
-// FIX-P4: BackdropFilter GPU overload — Limit concurrent BackdropFilters
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/services/background_gate.dart';
 import '../../core/services/power_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
@@ -38,8 +38,10 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   @override
   void initState() {
     super.initState();
-    // FIX-P4: If _activeCount >= 3, skip BackdropFilter and render solid background
+    // FIX-P4 / P0-GPU: If _activeCount >= 3 or not allowed by BackgroundGate, skip BackdropFilter
     if (!widget.forceSolid &&
+        BackgroundGate.allowHeavyOps &&
+        !PowerMonitor.screenOff &&
         DmxBackdropFilter._activeCount < DmxBackdropFilter._maxConcurrent) {
       DmxBackdropFilter._activeCount++;
       _allocated = true;
@@ -58,17 +60,29 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
 
   @override
   Widget build(BuildContext context) {
-    // FIX-P4 / U-04: When PowerMonitor.screenOff or reduceVisuals or classicUi or not allocated, render solid fallback
-    if (widget.forceSolid || PowerMonitor.screenOff || !_allocated) {
+    // FIX-P4 / U-04 / P0-GPU: When PowerMonitor.screenOff, !BackgroundGate.allowHeavyOps, reduceVisuals, classicUi, or not allocated, render solid fallback
+    if (widget.forceSolid ||
+        PowerMonitor.screenOff ||
+        !BackgroundGate.allowHeavyOps ||
+        !_allocated) {
       return Container(
         color: Colors.black.withValues(alpha: 0.35),
         child: widget.child,
       );
     }
-    final reduceVisuals = context.select(
-      (SettingsProvider s) => s.reduceVisuals,
-    );
-    final classicUi = context.select((SettingsProvider s) => s.classicUi);
+    bool reduceVisuals = false;
+    bool classicUi = false;
+    try {
+      reduceVisuals = context.select(
+        (SettingsProvider s) => s.reduceVisuals,
+      );
+      classicUi = context.select((SettingsProvider s) => s.classicUi);
+    } catch (_) {
+      try {
+        reduceVisuals = SettingsProvider.instance.reduceVisuals;
+        classicUi = SettingsProvider.instance.classicUi;
+      } catch (_) {}
+    }
     if (reduceVisuals || classicUi) {
       return Container(
         color: Colors.black.withValues(alpha: 0.35),

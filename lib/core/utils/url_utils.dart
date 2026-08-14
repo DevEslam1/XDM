@@ -82,6 +82,10 @@ bool isTorrentUrl(String url, {String? fileName}) {
 
 bool isValidTransmissionUrl(String value) {
   final trimmed = value.trim();
+  final uri = Uri.tryParse(trimmed);
+  if (uri != null && (uri.scheme == 'ftp' || uri.scheme == 'ftps')) {
+    return uri.host.isNotEmpty;
+  }
   return isHttpUrl(trimmed) ||
       isMagnetUrl(trimmed) ||
       isTorrentFileUrl(trimmed) ||

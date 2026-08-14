@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/services/background_gate.dart';
 import '../../core/services/power_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
@@ -27,7 +28,9 @@ bool modernAnimationsAllowed(
       (MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
     return false;
   }
-  return !settings.effectiveClassicUi && !settings.reduceVisuals;
+  return !settings.effectiveClassicUi &&
+      !settings.reduceVisuals &&
+      BackgroundGate.allowHeavyOps;
 }
 
 /// Mixin for [State] classes that drive a continuously looping
@@ -98,8 +101,11 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
     try {
       batterySaver = SettingsProvider.instance.batterySaverMode;
     } catch (_) {}
-    final shouldRun =
-        _foreground && loopWanted && !batterySaver && !PowerMonitor.screenOff;
+    final shouldRun = _foreground &&
+        loopWanted &&
+        !batterySaver &&
+        !PowerMonitor.screenOff &&
+        BackgroundGate.allowHeavyOps;
     if (shouldRun) {
       if (!loopController.isAnimating) loopController.repeat();
     } else {

@@ -53,7 +53,12 @@ class DmxCardShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
+    SettingsProvider settings;
+    try {
+      settings = context.watch<SettingsProvider>();
+    } catch (_) {
+      settings = SettingsProvider.instance;
+    }
     final classicUi = settings.classicUi;
     final isDark = settings.isDarkMode;
     final glow = settings.enableGlow;

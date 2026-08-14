@@ -241,6 +241,7 @@ class DownloadIsolatePool {
           !w.dead &&
           w.pending.isEmpty &&
           now.difference(w.lastActiveTime) > idleThreshold) {
+        w.dead = true;
         toRemove.add(w);
         if (_workers.length - toRemove.length <= 1) break;
       }
@@ -248,7 +249,9 @@ class DownloadIsolatePool {
 
     for (final w in toRemove) {
       _workers.remove(w);
-      w.commandPort?.send({'t': 'shutdown'});
+      try {
+        w.commandPort?.send({'t': 'shutdown'});
+      } catch (_) {}
       w.inbox.close();
       w.errorPort.close();
       w.isolate.kill(priority: Isolate.beforeNextEvent);

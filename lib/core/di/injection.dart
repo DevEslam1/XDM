@@ -7,6 +7,12 @@ import '../../features/downloads/provider/download_queue_provider.dart';
 import '../../features/downloads/provider/download_filter_provider.dart';
 import '../../features/downloads/provider/torrent_provider.dart';
 import '../../features/downloads/provider/download_coordinator.dart';
+import '../../features/downloads/usecases/start_download_usecase.dart';
+import '../../features/downloads/usecases/pause_download_usecase.dart';
+import '../../features/downloads/usecases/resume_download_usecase.dart';
+import '../../features/downloads/usecases/cancel_download_usecase.dart';
+import '../../features/downloads/usecases/retry_download_usecase.dart';
+import '../../features/downloads/usecases/delete_download_usecase.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../services/download_engine.dart';
 import '../services/permission_service.dart';
@@ -59,6 +65,32 @@ Future<void> configureDependencies() async {
       filterProvider: getIt<DownloadFilterProvider>(),
       torrentProvider: getIt<TorrentProvider>(),
     ),
+  );
+
+  // Clean Architecture Use Cases
+  getIt.registerLazySingleton<StartDownloadUseCase>(
+    () => StartDownloadUseCase(
+      getIt<DownloadListProvider>(),
+      getIt<DownloadQueueProvider>(),
+    ),
+  );
+  getIt.registerLazySingleton<PauseDownloadUseCase>(
+    () => PauseDownloadUseCase(getIt<DownloadQueueProvider>()),
+  );
+  getIt.registerLazySingleton<ResumeDownloadUseCase>(
+    () => ResumeDownloadUseCase(getIt<DownloadQueueProvider>()),
+  );
+  getIt.registerLazySingleton<CancelDownloadUseCase>(
+    () => CancelDownloadUseCase(getIt<DownloadListProvider>()),
+  );
+  getIt.registerLazySingleton<RetryDownloadUseCase>(
+    () => RetryDownloadUseCase(
+      getIt<DownloadListProvider>(),
+      getIt<DownloadQueueProvider>(),
+    ),
+  );
+  getIt.registerLazySingleton<DeleteDownloadUseCase>(
+    () => DeleteDownloadUseCase(getIt<DownloadListProvider>()),
   );
 
   getIt.registerLazySingleton<DownloadEngine>(() => DownloadEngine());
