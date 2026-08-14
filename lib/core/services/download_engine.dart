@@ -663,8 +663,7 @@ class DownloadProgressHandler {
           ytStreamKind != null &&
           ytStreamKind != YtStreamKind.combined) {
         final cpId = ytCounterpartTaskIds[taskId];
-        final cpLive =
-            cpId != null ? DownloadEngine._ytLiveBytes[cpId] : null;
+        final cpLive = cpId != null ? DownloadEngine._ytLiveBytes[cpId] : null;
         final cpSize = ytCounterpartSize;
         if (cpSize == null || cpSize <= 0) {
           cycle = 'downloading';
@@ -677,16 +676,12 @@ class DownloadProgressHandler {
       final isDone = cycle == 'completed';
       final doneParts = chunkList == null
           ? 0
-          : (isDone
-              ? totalParts
-              : chunkList.where((c) => c.isComplete).length);
+          : (isDone ? totalParts : chunkList.where((c) => c.isComplete).length);
       lastChunkDetails = chunkDetails ?? lastChunkDetails;
-      lastTotalChunks = (isTorrent || chunkDetails == null)
-          ? lastTotalChunks
-          : totalParts;
-      lastCompletedChunks = (isTorrent || chunkDetails == null)
-          ? lastCompletedChunks
-          : doneParts;
+      lastTotalChunks =
+          (isTorrent || chunkDetails == null) ? lastTotalChunks : totalParts;
+      lastCompletedChunks =
+          (isTorrent || chunkDetails == null) ? lastCompletedChunks : doneParts;
       final nowEmit = DateTime.now();
       final shouldEmit = lastProgressEmitTime == null ||
           nowEmit.difference(lastProgressEmitTime!) >=
@@ -1768,7 +1763,8 @@ class DownloadEngine {
             }
             final ytUlcLiveSelf = DownloadEngine._ytLiveBytes[taskId];
             onProgress(DownloadProgress(
-              downloadedBytes: ytUlcLiveSelf ?? progressHandler.lastDownloadedBytes,
+              downloadedBytes:
+                  ytUlcLiveSelf ?? progressHandler.lastDownloadedBytes,
               fileSize: progressHandler.lastFileSize,
               speed: 0.0,
               eta: null,
@@ -1912,16 +1908,21 @@ class DownloadEngine {
               ytDoneLiveCp = ytCounterpartDownloadedBytes ?? 0;
             }
             if (progressHandler.lastFileSize > 0) {
-              progressHandler.lastDownloadedBytes = progressHandler.lastFileSize;
+              progressHandler.lastDownloadedBytes =
+                  progressHandler.lastFileSize;
             }
-            if (progressHandler.lastChunkDetails != null && progressHandler.lastTotalChunks != null) {
-              progressHandler.lastCompletedChunks = progressHandler.lastTotalChunks;
+            if (progressHandler.lastChunkDetails != null &&
+                progressHandler.lastTotalChunks != null) {
+              progressHandler.lastCompletedChunks =
+                  progressHandler.lastTotalChunks;
             }
             if (progressHandler.lastTotalFiles != null) {
-              progressHandler.lastCompletedFiles = progressHandler.lastTotalFiles;
+              progressHandler.lastCompletedFiles =
+                  progressHandler.lastTotalFiles;
             }
             if (progressHandler.lastTotalFileBytes != null) {
-              progressHandler.lastDownloadedFileBytes = progressHandler.lastTotalFileBytes;
+              progressHandler.lastDownloadedFileBytes =
+                  progressHandler.lastTotalFileBytes;
             }
             var doneCycle = 'completed';
             if (ytStreamKind != null && ytStreamKind != YtStreamKind.combined) {
@@ -1956,17 +1957,18 @@ class DownloadEngine {
               ytCounterpartSize: ytCounterpartSize,
               ytCounterpartDownloadedBytes:
                   ytDoneLiveCp ?? ytCounterpartDownloadedBytes,
-              ytDownloadedBytes:
-                  DownloadEngine._ytLiveBytes[taskId] ?? progressHandler.lastDownloadedBytes,
+              ytDownloadedBytes: DownloadEngine._ytLiveBytes[taskId] ??
+                  progressHandler.lastDownloadedBytes,
               chunkDetails: progressHandler.lastChunkDetails,
               totalChunks: progressHandler.lastTotalChunks,
               completedChunks: progressHandler.lastCompletedChunks,
               torrentFiles: progressHandler.lastTorrentFiles,
               totalFiles: progressHandler.lastTotalFiles,
-              completedFiles: progressHandler.lastCompletedFiles ?? progressHandler.lastTotalFiles,
+              completedFiles: progressHandler.lastCompletedFiles ??
+                  progressHandler.lastTotalFiles,
               totalFileBytes: progressHandler.lastTotalFileBytes,
-              downloadedFileBytes:
-                  progressHandler.lastDownloadedFileBytes ?? progressHandler.lastTotalFileBytes,
+              downloadedFileBytes: progressHandler.lastDownloadedFileBytes ??
+                  progressHandler.lastTotalFileBytes,
             ));
             if (!completer.isCompleted) {
               completer.complete();
@@ -3280,7 +3282,7 @@ class DownloadEngine {
     }
   }
 
-  void close() {
+  Future<void> close() async {
     if (_closing) return;
     _closing = true;
     _closed = true;
@@ -3298,7 +3300,9 @@ class DownloadEngine {
       } catch (_) {}
     }
     _activeCancelTokens.clear();
-    _sharedDio.close(force: true);
+    try {
+      _sharedDio.close(force: true);
+    } catch (_) {}
     for (final client in List<Dio>.from(_activeDioClients)) {
       try {
         client.close(force: true);
@@ -3312,7 +3316,12 @@ class DownloadEngine {
     _pool = null;
     _poolInit = null;
     if (poolToClose != null) {
-      unawaited(poolToClose.shutdown().catchError((_) {}));
+      try {
+        await poolToClose.shutdown().timeout(const Duration(seconds: 10));
+      } catch (e) {
+        debugPrint(
+            '[DownloadEngine] Isolate pool shutdown timed out or failed: $e');
+      }
     }
     for (final id in List<int>.from(_activeTorrentIds)) {
       try {
@@ -3406,7 +3415,15 @@ Dio buildTransferDio({
     adapter.createHttpClient = () {
       final httpClient = HttpClient();
       if (bypassSSL) {
-        httpClient.badCertificateCallback = (cert, h, p) => true;
+        final isBackendHost =
+            url != null && Uri.tryParse(url)?.host.contains('run.app') == true;
+        bool devMode = false;
+        try {
+          devMode = SettingsProvider.instance.developerMode;
+        } catch (_) {}
+        if (isBackendHost || devMode) {
+          httpClient.badCertificateCallback = (cert, h, p) => true;
+        }
       }
       return httpClient;
     };

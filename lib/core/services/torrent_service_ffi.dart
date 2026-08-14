@@ -370,14 +370,16 @@ class TorrentService {
   static final ValueNotifier<bool> isAvailable = ValueNotifier(false);
 
   static bool get isSupported => true;
-  static bool get isInitialized => _state == TorrentSessionState.ready && isPluginAvailable;
+  static bool get isInitialized =>
+      _state == TorrentSessionState.ready && isPluginAvailable;
   static Set<int> get activeTorrentIds => Set.unmodifiable(_activeTorrentIds);
   static Map<int, TorrentUpdateInfo> get latestStats =>
       Map.unmodifiable(_latestStats);
 
   /// Future getter that callers can await to ensure TorrentService is ready.
   static Future<void> get ready {
-    if (_state == TorrentSessionState.ready && isPluginAvailable) return Future.value();
+    if (_state == TorrentSessionState.ready && isPluginAvailable)
+      return Future.value();
     if (_state == TorrentSessionState.initializing && _initCompleter != null) {
       return _initCompleter!.future;
     }
@@ -980,14 +982,12 @@ class TorrentService {
         LibtorrentFlutter.instance.pauseTorrent(id);
         // FIX-H3: Replace polling loop with Completer / stream listener with 2s timeout
         try {
-          await torrentUpdates
-              .firstWhere((updateMap) {
-                final stats = updateMap[id];
-                return stats == null ||
-                    stats.stateLabel.toLowerCase().contains('paused') ||
-                    stats.stateLabel.toLowerCase().contains('stopped');
-              })
-              .timeout(const Duration(seconds: 2));
+          await torrentUpdates.firstWhere((updateMap) {
+            final stats = updateMap[id];
+            return stats == null ||
+                stats.stateLabel.toLowerCase().contains('paused') ||
+                stats.stateLabel.toLowerCase().contains('stopped');
+          }).timeout(const Duration(seconds: 2));
         } catch (_) {}
 
         // FIX T-9: Snapshot files AFTER pause-poll, not before

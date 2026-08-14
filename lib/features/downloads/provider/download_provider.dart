@@ -182,7 +182,8 @@ class DownloadProvider extends ChangeNotifier
     // Initialize modular split services
     _taskRepository = DownloadTaskRepository(databaseService: _databaseService);
     _torrentSessionManager = TorrentSessionManager();
-    _notificationBridge = DownloadNotificationBridge(coordinator: _notifications);
+    _notificationBridge =
+        DownloadNotificationBridge(coordinator: _notifications);
     _downloadWidgetSync = DownloadWidgetSync();
     _queueService = DownloadQueueService(host: this);
     _executionService = DownloadExecutionService(host: this);
@@ -211,7 +212,8 @@ class DownloadProvider extends ChangeNotifier
   int get maxConcurrentDownloads => _settingsProvider.maxDownloads;
 
   @override
-  bool isTaskStarting(String taskId) => _orchestrator.isTaskPendingStart(taskId);
+  bool isTaskStarting(String taskId) =>
+      _orchestrator.isTaskPendingStart(taskId);
 
   @override
   Future<void> executeTask(String taskId) => resumeTask(taskId);
@@ -2953,8 +2955,12 @@ class DownloadProvider extends ChangeNotifier
 
     // FIX YT-4: If video exists and is complete but audio is missing/failed,
     // re-download audio only without wiping the video stream.
-    if (videoExists && !audioExists && task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
-      debugPrint('[DMX] FIX YT-4: Video leg intact; retrying audio stream only for task ${task.id}');
+    if (videoExists &&
+        !audioExists &&
+        task.mergedAudioUrl != null &&
+        task.mergedAudioUrl!.isNotEmpty) {
+      debugPrint(
+          '[DMX] FIX YT-4: Video leg intact; retrying audio stream only for task ${task.id}');
       task = task.copyWith(
         audioProgress: 0.0,
         audioDownloadedBytes: 0,
@@ -5411,11 +5417,11 @@ class DownloadProvider extends ChangeNotifier
 
     if (pendingSaves.isNotEmpty) {
       Future.wait(pendingSaves).then(
-        (_) => _downloadEngine.close(),
-        onError: (_) => _downloadEngine.close(),
+        (_) => unawaited(_downloadEngine.close()),
+        onError: (_) => unawaited(_downloadEngine.close()),
       );
     } else {
-      _downloadEngine.close();
+      unawaited(_downloadEngine.close());
     }
 
     _latestTorrentStats.clear();
