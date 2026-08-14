@@ -83,24 +83,25 @@ class DmxCard extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
-        child: Stack(
-          children: [
-            Padding(padding: padding, child: child),
-            if (showRail && accentColor != null)
-              PositionedDirectional(
-                start: 0,
-                top: DmxTokens.spaceSm,
-                bottom: DmxTokens.spaceSm,
-                width: 3.5,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: accentColor!,
-                    borderRadius: BorderRadius.circular(2),
+        child: !(showRail && accentColor != null)
+            ? Padding(padding: padding, child: child)
+            : Stack(
+                children: [
+                  Padding(padding: padding, child: child),
+                  PositionedDirectional(
+                    start: 0,
+                    top: DmxTokens.spaceSm,
+                    bottom: DmxTokens.spaceSm,
+                    width: 3.5,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: accentColor!,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
-          ],
-        ),
       ),
     );
 

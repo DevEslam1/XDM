@@ -162,7 +162,21 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
                     ? 'يحدد التحميلات المتزامنة بـ 1، الخيوط بـ 2، ويفعل الواجهة الكلاسيكية'
                     : 'Limits downloads to 1, threads to 2, and forces Classic UI mode',
                 value: settings.batterySaverMode,
-                onChanged: (val) {
+                onChanged: (val) async {
+                  if (val) {
+                    final confirmed = await DmxConfirmDialog.show(
+                      context,
+                      title: isRtl
+                          ? 'تفعيل وضع توفير البطارية؟'
+                          : 'Enable Battery Saver?',
+                      message: isRtl
+                          ? 'سيحدد هذا التحميلات بـ 1، الخيوط بـ 2، ويفرض وضع الواجهة الكلاسيكية.'
+                          : 'This will limit downloads to 1, threads to 2, and force Classic UI mode.',
+                      confirmLabel: isRtl ? 'تفعيل' : 'Enable',
+                      cancelLabel: isRtl ? 'إلغاء' : 'Cancel',
+                    );
+                    if (confirmed != true) return;
+                  }
                   settings.setBatterySaverMode(val);
                   triggerHaptic(settings);
                 },

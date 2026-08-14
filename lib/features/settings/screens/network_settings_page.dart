@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/haptic_helper.dart';
-import '../../../shared/design/dmx_design.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../core/services/xdm_backend_client.dart';
@@ -49,25 +48,6 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
   void dispose() {
     _backendUrlController.dispose();
     super.dispose();
-  }
-
-  void _maybeConfirmBypassSSL(
-      BuildContext context, SettingsProvider settings) async {
-    if (!settings.pendingBypassSSLConfirmation) return;
-    final confirmed = await DmxConfirmDialog.show(
-      context,
-      title: L10n.of(context, 'bypass_ssl_dialog_title'),
-      message: L10n.of(context, 'bypass_ssl_dialog_body'),
-      confirmLabel: L10n.of(context, 'bypass_ssl_dialog_confirm'),
-      cancelLabel: L10n.of(context, 'cancel_btn'),
-      isDestructive: true,
-      icon: Icons.shield_outlined,
-    );
-    if (confirmed == true) {
-      settings.confirmBypassSSL();
-    } else {
-      settings.setBypassSSL(false);
-    }
   }
 
   @override
@@ -188,19 +168,6 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
           SettingsSectionGroup(
             accentColor: accent,
             children: [
-              if (settings.developerMode)
-                SwitchTile(
-                  accentColor:
-                      isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                  title: L10n.of(context, 'settings_bypass_ssl'),
-                  subtitle: L10n.of(context, 'settings_bypass_ssl_sub'),
-                  value: settings.bypassSSL,
-                  onChanged: (val) {
-                    settings.setBypassSSL(val);
-                    triggerHaptic(settings);
-                    _maybeConfirmBypassSSL(context, settings);
-                  },
-                ),
               SwitchTile(
                 accentColor: accent,
                 title: L10n.of(context, 'settings_https_only'),

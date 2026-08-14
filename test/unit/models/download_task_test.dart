@@ -182,7 +182,8 @@ void main() {
     });
 
     // TEST-T1: Chunk averaging, padding, and NaN/Inf handling
-    test('TEST-T1: sanitizedChunks handles padding, averaging, and NaN/Inf', () {
+    test('TEST-T1: sanitizedChunks handles padding, averaging, and NaN/Inf',
+        () {
       final taskWithFewerChunks = DownloadTask(
         id: 't_chunks_1',
         fileName: 'file.bin',

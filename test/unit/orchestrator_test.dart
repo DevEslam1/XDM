@@ -380,7 +380,6 @@ class _TestDownloadEngine extends DownloadEngine {
     bool isRetry = false,
     String? customUserAgent,
     String? referer,
-    bool bypassSSL = false,
     String? cookies,
     String? oauthToken,
     List<Map<String, dynamic>>? Function()? getTorrentFiles,

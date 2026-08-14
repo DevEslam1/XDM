@@ -151,6 +151,43 @@ class UserScriptManager extends ChangeNotifier {
       throw Exception(
           'Dynamic code execution (eval, new Function) is prohibited for security.');
     }
+    // FIX-7.2: Strengthen sandbox validation
+    if (code.contains('document.cookie') ||
+        code.contains('document["cookie"]') ||
+        code.contains("document['cookie']")) {
+      _log.severe(
+          'Security Violation: Cookie access in script "${script.name}"');
+      throw Exception('Cookie access is prohibited in UserScripts.');
+    }
+    if (code.contains('window.open(') || code.contains('window.open ')) {
+      _log.severe('Security Violation: window.open in script "${script.name}"');
+      throw Exception('Opening new windows is prohibited in UserScripts.');
+    }
+    if (code.contains('navigator.sendBeacon')) {
+      _log.severe('Security Violation: sendBeacon in script "${script.name}"');
+      throw Exception('Beacon transmission is prohibited in UserScripts.');
+    }
+    final hasDynamicImport = RegExp(r'\bimport\s*\(').hasMatch(code);
+    if (hasDynamicImport) {
+      _log.severe(
+          'Security Violation: dynamic import in script "${script.name}"');
+      throw Exception('Dynamic imports are prohibited in UserScripts.');
+    }
+    // FIX SEC-1: Detect obfuscated dynamic code execution
+    final hasObfuscatedEval = RegExp(r'window\s*\[\s*["\x27]ev').hasMatch(code);
+    final hasObfuscatedFunction =
+        RegExp(r'window\s*\[\s*["\x27]Function').hasMatch(code);
+    final hasGlobalThis = RegExp(r'globalThis\s*\[').hasMatch(code);
+    final hasConstructorCall = RegExp(r'constructor\s*\(').hasMatch(code);
+
+    if (hasObfuscatedEval ||
+        hasObfuscatedFunction ||
+        hasGlobalThis ||
+        hasConstructorCall) {
+      _log.severe(
+          'Security Violation: Obfuscated dynamic execution in script "${script.name}"');
+      throw Exception('Obfuscated dynamic execution detected');
+    }
   }
 
   Future<void> add(UserScript script) async {
@@ -219,6 +256,14 @@ if (!window['$marker']) {
 
     // Isolated scope wrappers
     const _noop = function() {};
+
+    // FIX: Block Function.prototype.constructor access
+    try {
+      Object.defineProperty(Function.prototype, 'constructor', {
+        get: function() { throw new Error('[XDM Sandbox] Function constructor blocked'); },
+        configurable: false
+      });
+    } catch(e) {}
 
     // DOM Write blocking
     if (!$hasDomWrite) {

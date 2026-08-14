@@ -91,7 +91,8 @@ class TorrentSessionManager {
         (id) => TorrentService.resumeBlobFor(id),
       );
     } catch (e) {
-      debugPrint('[TorrentSessionManager] Failed to save resume data on pause: $e');
+      debugPrint(
+          '[TorrentSessionManager] Failed to save resume data on pause: $e');
     }
 
     return isPaused;

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/services/download_journal.dart';
 import '../../../core/services/power_monitor.dart';
+import '../background_gate.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -108,9 +109,13 @@ class HttpDownloadEngine {
       return;
     }
     _monitorTimer?.cancel();
-    final intervalSec = PowerMonitor.screenOff ? 30 : 5;
+    // FIX-2.4: HttpDownloadEngine._monitorTimer background awareness
+    final baseInterval = PowerMonitor.screenOff
+        ? const Duration(seconds: 30)
+        : const Duration(seconds: 5);
+    final adaptedInterval = BackgroundGate.adaptInterval(baseInterval);
     _monitorTimer = Timer.periodic(
-      Duration(seconds: intervalSec),
+      adaptedInterval,
       (_) => _evaluate(),
     );
   }

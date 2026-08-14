@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'logging_service.dart';
+import 'background_gate.dart';
 import '../utils/crypto_utils.dart';
 import '../utils/url_utils.dart';
 
@@ -180,7 +181,8 @@ class SingleInstanceService {
 
   void _startHeartbeatTimer() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+    _heartbeatTimer = Timer.periodic(
+        BackgroundGate.adaptInterval(const Duration(seconds: 30)), (_) async {
       await _writeTokenFileWithLock();
     });
   }

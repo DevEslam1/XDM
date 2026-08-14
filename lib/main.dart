@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'core/utils/url_utils.dart';
@@ -32,6 +33,7 @@ import 'features/downloads/provider/download_queue_provider.dart';
 import 'features/downloads/provider/download_filter_provider.dart';
 import 'features/downloads/provider/torrent_provider.dart';
 import 'features/downloads/provider/download_coordinator.dart';
+import 'features/downloads/widgets/download_card.dart';
 import 'features/settings/provider/settings_provider.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
 import 'features/onboarding/screens/permission_request_screen.dart';
@@ -53,12 +55,18 @@ class _ScreenObserver with WidgetsBindingObserver {
     DownloadEngine.appInForeground = isResumed;
     DownloadEngine.isInBackground = !isResumed;
     PowerMonitor.setScreenOn(isResumed);
+    // FIX MISC-4: Lifecycle management for watchdog, performance monitor, and pulse driver
     if (isResumed) {
-      PerformanceMonitor.instance.start();
-      FrameWatchdog.start();
-    } else if (state == AppLifecycleState.paused) {
-      PerformanceMonitor.instance.stop();
-      FrameWatchdog.stop();
+      FrameWatchdog.resume();
+      PerformanceMonitor.instance.resume();
+      StatusChipPulseDriver.instance.restartIfActive();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      FrameWatchdog.pause();
+      PerformanceMonitor.instance.pause();
+      StatusChipPulseDriver.stopAll();
     }
   }
 
@@ -67,6 +75,21 @@ class _ScreenObserver with WidgetsBindingObserver {
     CookieCache().clear();
     debugPrint('[MemoryPressure] Cleared non-essential caches');
   }
+}
+
+Future<double> _getDeviceMemoryGB() async {
+  try {
+    if (kIsWeb) return 4.0;
+    final deviceInfo = DeviceInfoPlugin();
+    if (Platform.isAndroid) {
+      final androidInfo = await deviceInfo.androidInfo;
+      if (androidInfo.isLowRamDevice) return 2.0;
+      return 4.0;
+    } else if (Platform.isIOS) {
+      return 4.0;
+    }
+  } catch (_) {}
+  return 4.0;
 }
 
 Future<void> main(List<String> args) async {
@@ -86,14 +109,12 @@ Future<void> main(List<String> args) async {
     WidgetsFlutterBinding.ensureInitialized();
     AppLifecycleCoordinator.init();
 
-    // ── Image cache sizing ──
-    // Bound the decoded-image cache so large thumbnails/artwork don't consume
-    // all available memory on low-end devices. Defaults are ~100 MB / 1000
-    // images; we keep a slightly conservative budget and rely on Flutter's
-    // built-in memory-pressure clearing for the rest.
+    // FIX-0.4: Adaptive ImageCache sizing based on device RAM
+    final deviceMemory = await _getDeviceMemoryGB();
+    final cacheMB = deviceMemory <= 2 ? 30 : (deviceMemory <= 4 ? 50 : 80);
     PaintingBinding.instance.imageCache
-      ..maximumSizeBytes = 80 * 1024 * 1024
-      ..maximumSize = 1000;
+      ..maximumSizeBytes = cacheMB * 1024 * 1024
+      ..maximumSize = deviceMemory <= 2 ? 300 : 1000;
 
     // ── Frame performance monitoring (UI-jank diagnostics) ──
     await FrameWatchdog.detectRefreshRate();

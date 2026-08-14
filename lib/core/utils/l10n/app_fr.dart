@@ -176,10 +176,6 @@ const Map<String, String> frTranslations = {
   'browser_youtube_video': 'Vidéo YouTube',
   'btn_install_now': 'Installer maintenant',
   'btn_later': 'Plus tard',
-  'bypass_ssl_dialog_body':
-      'Cela expose tous les téléchargements à des attaques ',
-  'bypass_ssl_dialog_confirm': 'Je comprends le risque',
-  'bypass_ssl_dialog_title': 'Désactiver la vérification SSL ?',
   'cancel': 'Annuler',
   'cancel_btn': 'Annuler',
   'cancel_btn_uppercase': 'Annuler',
@@ -423,9 +419,6 @@ const Map<String, String> frTranslations = {
   'settings_backup_sub': 'Archiver et récupérer les journaux de téléchargement',
   'settings_backup_title': 'Sauvegardes du système',
   'settings_bandwidth': 'Réseau et limites de vitesse',
-  'settings_bypass_ssl': 'Faire confiance à tous les certificats SSL',
-  'settings_bypass_ssl_sub':
-      'Contourner la validation SSL (AVERTISSEMENT : Risque MITM)',
   'settings_chime': 'Sonnerie de fin de téléchargement',
   'settings_chime_sub': 'Jouer un son à la fin d’un téléchargement',
   'settings_classic_ui': 'Mode d\'interface classique',

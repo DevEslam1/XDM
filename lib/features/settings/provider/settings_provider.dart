@@ -54,7 +54,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _scheduleStartTimeKey = 'scheduleStartTime';
   static const _scheduleEndTimeKey = 'scheduleEndTime';
   static const _scheduleSpeedLimitMbKey = 'scheduleSpeedLimitMb';
-  static const _bypassSSLKey = 'bypassSSL_v2';
   static const _httpsOnlyKey = 'httpsOnly';
   static const _reduceVisualsKey = 'reduceVisuals';
   static const _textScaleFactorKey = 'textScaleFactor';
@@ -196,7 +195,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  bool bypassSSL = false;
+  // FIX-0.1 / FIX-0.5: developerMode cannot bypass SSL in release.
   bool developerMode = false;
   bool httpsOnly = false;
   bool _reduceVisuals = false;
@@ -380,6 +379,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> load() async {
+    // FIX MISC-1: Ensure load() is strictly idempotent
+    if (_loaded) return;
     if (_loadCompleter != null) return _loadCompleter!.future;
     _loadCompleter = Completer<void>();
 
@@ -421,7 +422,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       batterySaverMode =
           _prefs.getBool(_batterySaverModeKey) ?? batterySaverMode;
       developerMode = _prefs.getBool(_developerModeKey) ?? false;
-      bypassSSL = _prefs.getBool(_bypassSSLKey) ?? false;
       httpsOnly = _prefs.getBool(_httpsOnlyKey) ?? httpsOnly;
       reduceVisuals = _prefs.getBool(_reduceVisualsKey) ?? reduceVisuals;
       textScaleFactor =
@@ -744,30 +744,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> setCategoryFolders(bool value) async {
     categoryFolders = value;
     await _prefs.setBool(_categoryFoldersKey, value);
-    notifyListeners();
-  }
-
-  Future<void> setBypassSSL(bool value) async {
-    if (value && !developerMode) {
-      _log.warning('Attempted to enable bypassSSL without developer mode enabled.');
-      return;
-    }
-    bypassSSL = value;
-    _pendingBypassSSLConfirmation = false;
-    await _prefs.setBool(_bypassSSLKey, value);
-    notifyListeners();
-  }
-
-  bool _pendingBypassSSLConfirmation = false;
-  bool get pendingBypassSSLConfirmation => _pendingBypassSSLConfirmation;
-
-  Future<void> confirmBypassSSL() async {
-    if (!developerMode) return;
-    _log.warning(
-        'P0-2: WARNING: SSL certificate validation has been bypassed by user in Developer Mode');
-    bypassSSL = true;
-    _pendingBypassSSLConfirmation = false;
-    await _prefs.setBool(_bypassSSLKey, true);
     notifyListeners();
   }
 
@@ -1145,7 +1121,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _themeModeKey,
       _showOnboardingKey,
       _classicUiKey,
-      _bypassSSLKey,
       _httpsOnlyKey,
       _reduceVisualsKey,
       _customUserAgentKey,
@@ -1225,10 +1200,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     themeMode = 'system';
     showOnboarding = true;
     batterySaverMode = false;
-
-    bypassSSL = true;
     httpsOnly = false;
-    _pendingBypassSSLConfirmation = false;
+
     reduceVisuals = false;
     textScaleFactor = 1.0;
     customUserAgent = '';
@@ -1297,7 +1270,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _prefs.setBool(_showOnboardingKey, showOnboarding);
     await _prefs.setBool(_batterySaverModeKey, batterySaverMode);
 
-    await _prefs.setBool(_bypassSSLKey, bypassSSL);
     await _prefs.setBool(_httpsOnlyKey, httpsOnly);
     await _prefs.setBool(_reduceVisualsKey, reduceVisuals);
     await _prefs.setDouble(_textScaleFactorKey, textScaleFactor);

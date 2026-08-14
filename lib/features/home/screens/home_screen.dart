@@ -158,11 +158,12 @@ class _HomeScreenState extends State<HomeScreen>
         final classicUi = settingsState.classicUi;
         final textClr =
             isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-        final downloadProvider = context.watch<DownloadProvider>();
-        final accentClr = getActiveFilterColor(downloadProvider, isDark);
+        final isInSelectionMode = context.select<DownloadProvider, bool>(
+          (p) => p.isSelectionMode,
+        );
+        final accentClr =
+            getActiveFilterColor(context.read<DownloadProvider>(), isDark);
         final isRtl = L10n.isRtl(context);
-
-        final isInSelectionMode = downloadProvider.isSelectionMode;
 
         return GeometricGridBackground(
           child: Scaffold(
@@ -196,15 +197,16 @@ class _HomeScreenState extends State<HomeScreen>
                             children: [
                               const SizedBox(height: 12),
                               // FIX(14): iOS has no persistent background downloads
-                              ..._buildIosBackgroundBanner(
-                                  isDark, isRtl, downloadProvider),
+                              ..._buildIosBackgroundBanner(isDark, isRtl,
+                                  context.read<DownloadProvider>()),
                               _stagger(
                                   0.0,
                                   _buildAnimatedSegmentedControl(
                                     context,
                                     isDark: isDark,
                                     isRtl: isRtl,
-                                    downloadProvider: downloadProvider,
+                                    downloadProvider:
+                                        context.read<DownloadProvider>(),
                                   )),
                               const SizedBox(height: 12),
                               // Analytics Panel
@@ -1601,6 +1603,15 @@ class _DownloadTaskList extends StatelessWidget {
     } else {
       child = Selector<DownloadProvider, List<DownloadTask>>(
         selector: (_, p) => p.filteredTasks,
+        shouldRebuild: (prev, next) {
+          if (prev.length != next.length) return true;
+          for (var i = 0; i < prev.length; i++) {
+            if (prev[i].id != next[i].id || prev[i].status != next[i].status) {
+              return true;
+            }
+          }
+          return false;
+        },
         builder: (context, fullList, __) {
           final displayTasks = fullList
               .where((task) =>

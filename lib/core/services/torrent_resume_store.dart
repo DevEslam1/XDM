@@ -159,6 +159,12 @@ class TorrentResumeStore {
       await metaTmp.rename(metaFile.path);
       await blobTmp.rename(blobFile.path);
 
+      // FIX P1-8: Verify that renamed file actually exists on disk
+      if (!await blobFile.exists()) {
+        debugPrint('[TorrentResumeStore] rename verification failed');
+        return false;
+      }
+
       registerSource(torrentId, sourceUrl);
       await _updateIndex(torrentId, fileName);
       return true;

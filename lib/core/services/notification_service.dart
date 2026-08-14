@@ -14,6 +14,7 @@ import '../utils/localization.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import 'download_engine.dart';
 import 'power_monitor.dart';
+import 'background_gate.dart';
 
 const String _nonceKey = 'dmx_notification_nonce';
 const String _pendingActionsKey = 'dmx_pending_notification_actions';
@@ -266,7 +267,10 @@ class NotificationService {
   void startPollingPendingActions() {
     if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     if (_pollTimer != null && _pollTimer!.isActive) return;
-    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    // FIX: Guard against multiple timer creations
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(
+        BackgroundGate.adaptInterval(const Duration(seconds: 30)), (_) {
       unawaited(processPendingBackgroundActions());
     });
   }
@@ -489,9 +493,9 @@ class NotificationService {
     if (!_initialized) return;
     final now = DateTime.now();
     final lastPost = _lastProgressPostTimes[notificationId];
-    // FIX-M5: 2000ms background throttle, 1000ms foreground
+    // FIX PERF-5: 5000ms background throttle, 2000ms foreground
     final isBg = DownloadEngine.isInBackground || PowerMonitor.screenOff;
-    final throttleMs = isBg ? 2000 : 1000;
+    final throttleMs = isBg ? 5000 : 2000;
     if (!isPaused &&
         lastPost != null &&
         now.difference(lastPost).inMilliseconds < throttleMs) {

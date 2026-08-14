@@ -134,17 +134,13 @@ class BandwidthGovernor {
         }
 
         _taskTokens[taskId] = (_taskTokens[taskId] ?? 0) - bytes;
-        final maxDeficit = -(taskLimit * 0.5);
-        if ((_taskTokens[taskId] ?? 0) < maxDeficit) {
-          _taskTokens[taskId] = maxDeficit;
+        if ((_taskTokens[taskId] ?? 0) < 0) {
+          final deficit = -(_taskTokens[taskId] ?? 0);
+          final waitMs = (deficit / taskLimit * 1000.0).ceil();
+          _taskTokens[taskId] = 0; // clamp to zero, not negative
+          return waitMs.clamp(0, 1000);
         }
-        if ((_taskTokens[taskId] ?? 0) >= 0) {
-          return 0;
-        }
-
-        final deficit = -(_taskTokens[taskId] ?? 0);
-        final waitMs = (deficit / taskLimit * 1000.0).ceil();
-        return waitMs.clamp(0, 1000);
+        return 0;
       });
     }
 
@@ -160,18 +156,13 @@ class BandwidthGovernor {
       if (share <= 0) return 1000;
 
       _availableTokens -= bytes;
-      final maxDeficit = -(share * 0.5);
-      if (_availableTokens < maxDeficit) {
-        _availableTokens = maxDeficit;
+      if (_availableTokens < 0) {
+        final deficit = -_availableTokens;
+        final waitMs = (deficit / share * 1000.0).ceil();
+        _availableTokens = 0; // clamp to zero, not negative
+        return waitMs.clamp(0, 1000);
       }
-      if (_availableTokens >= 0) {
-        return 0;
-      }
-
-      final deficit = -_availableTokens;
-
-      final waitMs = (deficit / share * 1000.0).ceil();
-      return waitMs.clamp(0, 1000);
+      return 0;
     });
   }
 

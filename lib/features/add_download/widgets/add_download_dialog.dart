@@ -627,7 +627,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         url: url,
         requestedFileName: nameForReq,
         customUserAgent: settings.customUserAgent,
-        bypassSSL: settings.bypassSSL,
       );
       if (!mounted) return;
       setState(() {
@@ -1431,6 +1430,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                             );
                                           }
                                           for (final line in lines) {
+                                            if (line.startsWith('magnet:') &&
+                                                !isMagnetUrl(line)) {
+                                              return 'Invalid magnet link format';
+                                            }
                                             if (!isValidTransmissionUrl(line)) {
                                               return L10n.of(
                                                 context,

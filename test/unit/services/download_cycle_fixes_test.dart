@@ -92,7 +92,7 @@ void main() {
     });
 
     test(
-        'BUG 3 (Audit Fix): combinedTotalSize returns 0 when videoStreamSize == 0 and fileSize <= 0 to trigger indeterminate state',
+        'FIX P0-3: combinedTotalSize returns audioSize fallback when videoStreamSize == 0 and fileSize <= 0',
         () {
       final task = createTestTask(
         id: 't_unknown_size_av',
@@ -106,7 +106,7 @@ void main() {
         mergedAudioUrl: 'https://youtube.com/audio',
       );
 
-      expect(task.combinedTotalSize, equals(0));
+      expect(task.combinedTotalSize, equals(5000000));
     });
 
     test('FIX 11 & 4: videoStreamSize reset sentinel path in copyWith', () {

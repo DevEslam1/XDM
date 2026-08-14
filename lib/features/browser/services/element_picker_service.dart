@@ -60,6 +60,12 @@ class ElementPickerService {
     }
   }
 
+  setTimeout(function() {
+    if (window.__xdmPicker) {
+      cleanup();
+    }
+  }, 60000);
+
 })();
 ''';
 

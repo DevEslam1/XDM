@@ -1286,4 +1286,6 @@ class YoutubeService {
     }
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
+
+  static void dispose() => close();
 }

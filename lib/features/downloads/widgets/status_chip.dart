@@ -84,29 +84,33 @@ class StatusChip extends StatelessWidget {
     );
 
     if (!isPulsing) {
-      return _buildChipContent(
-        context,
-        color: color,
-        pulseValue: 1.0,
-        isPulsing: false,
-        child: textWidget,
+      return RepaintBoundary(
+        child: _buildChipContent(
+          context,
+          color: color,
+          pulseValue: 1.0,
+          isPulsing: false,
+          child: textWidget,
+        ),
       );
     }
 
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.4, end: 1.0),
-      duration: const Duration(milliseconds: 1500),
-      curve: Curves.easeInOut,
-      builder: (context, value, child) {
-        return _buildChipContent(
-          context,
-          color: color,
-          pulseValue: value,
-          isPulsing: true,
-          child: child!,
-        );
-      },
-      child: textWidget,
+    return RepaintBoundary(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.4, end: 1.0),
+        duration: const Duration(milliseconds: 1500),
+        curve: Curves.easeInOut,
+        builder: (context, value, child) {
+          return _buildChipContent(
+            context,
+            color: color,
+            pulseValue: value,
+            isPulsing: true,
+            child: child!,
+          );
+        },
+        child: textWidget,
+      ),
     );
   }
 

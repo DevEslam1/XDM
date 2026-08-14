@@ -138,6 +138,10 @@ class RedirectGuard {
     required String tabId,
     required String navigatingTo,
   }) async {
+    // FIX: Cap _tabs map size to prevent unbounded memory growth
+    if (_tabs.length > 50) {
+      _tabs.remove(_tabs.keys.first);
+    }
     final st = _tabs.putIfAbsent(tabId, () => _TabState());
     st.currentUrl = navigatingTo;
     st.isAdBridge = _looksLikeAdBridge(navigatingTo);

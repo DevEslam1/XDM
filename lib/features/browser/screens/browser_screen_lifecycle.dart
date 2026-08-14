@@ -148,6 +148,12 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     for (final tab in _tabs) {
       _cleanupTabState(tab.id);
     }
+    for (final notifier in _blockedAdsNotifiers.values) {
+      notifier.dispose();
+    }
+    _blockedAdsNotifiers.clear();
+    _blockedAdsPerTab.clear();
+    _blockedPopupsPerTab.clear();
 
     final bool hasIncognito = _tabs.any((t) => t.isIncognito);
     if (hasIncognito) {

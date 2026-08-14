@@ -4,6 +4,7 @@ import '../../../core/utils/localization.dart';
 import '../../../core/app_theme.dart';
 import '../provider/download_provider.dart';
 import '../models/download_task.dart';
+import '../../../shared/design/dmx_design.dart';
 
 /// Modal bottom sheet allowing users to perform bulk actions on selected tasks.
 enum BatchAction { pause, resume, delete, changeCategory }
@@ -259,31 +260,17 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
   }
 
   Future<bool?> _showDeleteConfirmDialog(BuildContext context, int count) {
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          count == 1
-              ? L10n.of(ctx, 'delete_download_single')
-              : L10n.of(ctx, 'delete_downloads_count', args: {'count': count}),
-        ),
-        content: Text(
-          _deleteFiles
-              ? L10n.of(ctx, 'delete_files_label')
-              : L10n.of(ctx, 'delete_desc'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(L10n.of(ctx, 'cancel_btn')),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-            child: Text(L10n.of(ctx, 'delete_btn')),
-          ),
-        ],
-      ),
+    return DmxConfirmDialog.show(
+      context,
+      title: count == 1
+          ? L10n.of(context, 'delete_download_single')
+          : L10n.of(context, 'delete_downloads_count', args: {'count': count}),
+      message: _deleteFiles
+          ? L10n.of(context, 'delete_files_label')
+          : L10n.of(context, 'delete_desc'),
+      confirmLabel: L10n.of(context, 'delete_btn'),
+      cancelLabel: L10n.of(context, 'cancel_btn'),
+      isDestructive: true,
     );
   }
 }

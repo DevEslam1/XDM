@@ -9,7 +9,10 @@ import 'package:libtorrent_flutter/libtorrent_flutter.dart'
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:synchronized/synchronized.dart';
 import '../../features/settings/provider/settings_provider.dart';
+import 'download_engine.dart';
+import 'power_monitor.dart';
 import 'torrent_models.dart';
 import 'torrent_resume_store.dart';
 import 'tracker_manager.dart';
@@ -340,6 +343,7 @@ enum TorrentSessionState {
 }
 
 class TorrentService {
+  static final Lock _libtorrentLock = Lock();
   static TorrentSessionState _state = TorrentSessionState.uninitialized;
   static Completer<void>? _initCompleter;
   static Completer<void>? _disposeCompleter;
@@ -601,19 +605,22 @@ class TorrentService {
               _latestStats[value.id] = info; // FIX-22
               return MapEntry(key, info);
             });
-            // FIX-H2: Add backpressure: only emit updates if 500ms have passed since last emission
+            // PERF-1: Throttle to 2s when app is backgrounded or screen is off
             _pendingUpdate = mapped;
             final now = DateTime.now();
+            final interval =
+                PowerMonitor.screenOff || !DownloadEngine.appInForeground
+                    ? const Duration(seconds: 2)
+                    : const Duration(milliseconds: 500);
             if (_lastEmitTime == null ||
-                now.difference(_lastEmitTime!) >=
-                    const Duration(milliseconds: 500)) {
+                now.difference(_lastEmitTime!) >= interval) {
               _lastEmitTime = now;
               _throttleTimer?.cancel();
               _throttleTimer = null;
               if (!controller!.isClosed) controller.add(mapped);
             } else {
               _throttleTimer ??= Timer(
-                const Duration(milliseconds: 500),
+                interval,
                 () {
                   if (_pendingUpdate != null &&
                       controller != null &&
@@ -979,56 +986,58 @@ class TorrentService {
   static Future<void> pauseTorrent(int id) async {
     if (!isPluginAvailable || !isInitialized || !isTorrentAlive(id)) return;
     if (id >= 0) {
-      try {
-        LibtorrentFlutter.instance.pauseTorrent(id);
-        // FIX-H3: Replace polling loop with Completer / stream listener with 2s timeout
+      await _libtorrentLock.synchronized(() async {
         try {
-          await torrentUpdates.firstWhere((updateMap) {
-            final stats = updateMap[id];
-            return stats == null ||
-                stats.stateLabel.toLowerCase().contains('paused') ||
-                stats.stateLabel.toLowerCase().contains('stopped');
-          }).timeout(const Duration(seconds: 2));
-        } catch (_) {}
+          LibtorrentFlutter.instance.pauseTorrent(id);
+          // FIX-H3: Replace polling loop with Completer / stream listener with 2s timeout
+          try {
+            await torrentUpdates.firstWhere((updateMap) {
+              final stats = updateMap[id];
+              return stats == null ||
+                  stats.stateLabel.toLowerCase().contains('paused') ||
+                  stats.stateLabel.toLowerCase().contains('stopped');
+            }).timeout(const Duration(seconds: 2));
+          } catch (_) {}
 
-        // FIX T-9: Snapshot files AFTER pause-poll, not before
-        List<Map<String, dynamic>>? torrentFiles;
-        try {
-          final items = getFiles(id);
-          if (items.isNotEmpty) {
-            torrentFiles = items
-                .map((f) => {
-                      'name': f.name,
-                      'size': f.size,
-                      'priority': f.priority,
-                      'selected': f.selected,
-                      'downloadedBytes': f.safeDownloadedBytes,
-                    })
-                .toList();
+          // FIX T-9: Snapshot files AFTER pause-poll, not before
+          List<Map<String, dynamic>>? torrentFiles;
+          try {
+            final items = getFiles(id);
+            if (items.isNotEmpty) {
+              torrentFiles = items
+                  .map((f) => {
+                        'name': f.name,
+                        'size': f.size,
+                        'priority': f.priority,
+                        'selected': f.selected,
+                        'downloadedBytes': f.safeDownloadedBytes,
+                      })
+                  .toList();
+            }
+          } catch (e) {
+            _log.warning('getFiles snapshot failed for id $id (non-fatal): $e');
+          }
+
+          // Persist native fast-resume bytes under the stable source key.
+          // Best-effort: never throw out of pauseTorrent.
+          try {
+            final source = _torrentSources[id];
+            if (source != null) {
+              await TorrentResumeStore.saveAndWait(
+                torrentId: id,
+                sourceUrl: source,
+                fetchResumeData: () =>
+                    _CapabilityGate.instance.saveResumeData(id),
+                files: torrentFiles,
+              );
+            }
+          } catch (e) {
+            _log.warning('saveResumeData failed for id $id: $e');
           }
         } catch (e) {
-          _log.warning('getFiles snapshot failed for id $id (non-fatal): $e');
+          _log.warning('pauseTorrent failed for id $id: $e');
         }
-
-        // Persist native fast-resume bytes under the stable source key.
-        // Best-effort: never throw out of pauseTorrent.
-        try {
-          final source = _torrentSources[id];
-          if (source != null) {
-            await TorrentResumeStore.saveAndWait(
-              torrentId: id,
-              sourceUrl: source,
-              fetchResumeData: () =>
-                  _CapabilityGate.instance.saveResumeData(id),
-              files: torrentFiles,
-            );
-          }
-        } catch (e) {
-          _log.warning('saveResumeData failed for id $id: $e');
-        }
-      } catch (e) {
-        _log.warning('pauseTorrent failed for id $id: $e');
-      }
+      });
     }
   }
 

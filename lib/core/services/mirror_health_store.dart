@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'background_gate.dart';
 
 /// Persists mirror health data across app restarts.
 ///
@@ -14,11 +15,26 @@ class MirrorHealthStore {
   static const _storeKey = 'mirror_health_data';
   static const _blacklistTtl = Duration(hours: 6);
   static Map<String, _PersistedMirrorState>? _cache;
+  static Timer? _cleanupTimer;
+
+  /// Clean up expired entries from in-memory cache and persist.
+  static Future<void> cleanupStaleEntries() async {
+    if (_cache == null) return;
+    final countBefore = _cache!.length;
+    _cache!.removeWhere((_, state) => state.isExpired);
+    if (_cache!.length != countBefore) {
+      await _persist();
+    }
+  }
 
   /// Loads persisted health data from [SharedPreferences].
   /// Safe to call repeatedly; already-loaded data is refreshed from disk.
   static Future<void> init() async {
     await flushPending();
+    _cleanupTimer?.cancel();
+    _cleanupTimer = Timer.periodic(const Duration(hours: 6), (_) {
+      cleanupStaleEntries();
+    });
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_storeKey);
     if (raw == null) {
@@ -30,11 +46,7 @@ class MirrorHealthStore {
       _cache = map.map(
         (k, v) => MapEntry(k, _PersistedMirrorState.fromJson(v)),
       );
-      final countBefore = _cache!.length;
-      _cache!.removeWhere((_, state) => state.isExpired);
-      if (_cache!.length != countBefore) {
-        await _persist();
-      }
+      await cleanupStaleEntries();
     } catch (e) {
       _log.warning('Failed to decode mirror health data: $e');
       _cache = {};
@@ -167,8 +179,9 @@ class MirrorHealthStore {
     if (_persistPending) return;
     _persistPending = true;
     _persistTimer?.cancel();
-    // FIX-M3: 15s debounce interval
-    _persistTimer = Timer(const Duration(seconds: 15), () async {
+    // FIX-2.1: Route persist debounce interval through BackgroundGate
+    _persistTimer = Timer(
+        BackgroundGate.adaptInterval(const Duration(seconds: 15)), () async {
       _persistPending = false;
       await flushPending();
     });
@@ -196,6 +209,11 @@ class MirrorHealthStore {
     await prefs.remove(_storeKey);
     await prefs.remove(_rankingCacheKey);
     await prefs.remove(_rankingTtlKey);
+  }
+
+  /// FIX-1.2: Dispose method to flush pending writes and cancel timer
+  static Future<void> dispose() async {
+    await flushPending();
   }
 }
 

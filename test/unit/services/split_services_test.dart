@@ -41,7 +41,8 @@ class MockExecutionHost implements DownloadExecutionHost {
   final List<String> cancelled = [];
 
   @override
-  Future<void> executeDownload(String taskId, {bool isAutoRetry = false}) async {
+  Future<void> executeDownload(String taskId,
+      {bool isAutoRetry = false}) async {
     started.add(taskId);
   }
 

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:dmx/shared/mixins/pausable_loop_animation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -244,7 +245,7 @@ class _CardShell extends StatelessWidget {
 // Status chip — pulses while downloading / seeding
 // ────────────────────────────────────────────────────────────────────────────
 
-// FIX-P2: StatusChipPulseDriver — Stop timer when app backgrounded
+// FIX P0-1: StatusChipPulseDriver — Replace Timer.periodic with efficient Ticker & stopAll
 class StatusChipPulseDriver with WidgetsBindingObserver {
   static final StatusChipPulseDriver instance = StatusChipPulseDriver._();
   factory StatusChipPulseDriver() => instance;
@@ -260,13 +261,18 @@ class StatusChipPulseDriver with WidgetsBindingObserver {
     });
   }
 
+  static void stopAll() {
+    instance._stop();
+  }
+
   final ValueNotifier<double> value = ValueNotifier<double>(0.7);
-  Timer? _timer;
+  Ticker? _ticker;
   int _refCount = 0;
   int _visibleChips = 0;
   int get visibleChips => _visibleChips;
   double _current = 0.4;
   bool _increasing = true;
+  DateTime? _lastTick;
 
   void incrementVisibleChips() {
     _visibleChips++;
@@ -281,7 +287,7 @@ class StatusChipPulseDriver with WidgetsBindingObserver {
 
   void addRef() {
     _refCount++;
-    if (_timer == null) {
+    if (_ticker == null) {
       _start();
     }
   }
@@ -306,31 +312,41 @@ class StatusChipPulseDriver with WidgetsBindingObserver {
   void _start() {
     if (PowerMonitor.screenOff || _refCount <= 0) return;
     _stop();
-    _timer = Timer.periodic(const Duration(milliseconds: 33), (_) {
+    _lastTick = DateTime.now();
+    _ticker = Ticker((elapsed) {
       if (PowerMonitor.screenOff || _refCount <= 0) {
         _stop();
         return;
       }
+      final now = DateTime.now();
+      if (_lastTick != null && now.difference(_lastTick!).inMilliseconds < 45) {
+        return;
+      }
+      _lastTick = now;
       if (_increasing) {
-        _current += 0.02;
+        _current += 0.03;
         if (_current >= 1.0) {
           _current = 1.0;
           _increasing = false;
         }
       } else {
-        _current -= 0.02;
+        _current -= 0.03;
         if (_current <= 0.4) {
           _current = 0.4;
           _increasing = true;
         }
       }
-      value.value = _current;
+      if ((value.value - _current).abs() > 0.01) {
+        value.value = _current;
+      }
     });
+    _ticker?.start();
   }
 
   void _stop() {
-    _timer?.cancel();
-    _timer = null;
+    _ticker?.stop();
+    _ticker?.dispose();
+    _ticker = null;
   }
 
   @override
@@ -390,6 +406,7 @@ class _StatusChipState extends State<_StatusChip> {
   }
 
   void _syncPulse() {
+    if (!mounted) return;
     final needsPulse =
         _shouldPulse(widget.task) && modernAnimationsAllowed(context);
     if (needsPulse && !_hasActiveRef) {
@@ -498,41 +515,43 @@ class _StatusChipState extends State<_StatusChip> {
           )
         : buildChipContainer(1.0);
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        chipContent,
-        if (isScheduled) ...[
-          const SizedBox(width: 6),
-          Tooltip(
-            message: formatLocalizedDateTime(context, task.scheduledAt!),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: AppTheme.chipDecoration(
-                color: AppTheme.neonAmber,
-                isDark: isDark,
-                radius: 8,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.schedule_rounded,
-                      size: 12, color: AppTheme.neonAmber),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Scheduled for ${formatLocalizedTime(context, task.scheduledAt!)}',
-                    style: TextStyle(
-                      fontSize: responsiveFontSize(context, 10),
-                      color: AppTheme.neonAmber,
-                      fontWeight: FontWeight.bold,
+    return RepaintBoundary(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          chipContent,
+          if (isScheduled) ...[
+            const SizedBox(width: 6),
+            Tooltip(
+              message: formatLocalizedDateTime(context, task.scheduledAt!),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: AppTheme.chipDecoration(
+                  color: AppTheme.neonAmber,
+                  isDark: isDark,
+                  radius: 8,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.schedule_rounded,
+                        size: 12, color: AppTheme.neonAmber),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Scheduled for ${formatLocalizedTime(context, task.scheduledAt!)}',
+                      style: TextStyle(
+                        fontSize: responsiveFontSize(context, 10),
+                        color: AppTheme.neonAmber,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -1443,16 +1462,19 @@ class _FileCard extends StatelessWidget with HapticHelper {
                           Row(
                             children: [
                               Expanded(
-                                child: Text(
-                                  task.fileName,
-                                  textDirection: TextDirection.ltr,
-                                  style: AppTheme.dataStyle(
-                                    isDark: isDark,
-                                    size: compact ? 13 : 14,
-                                    weight: FontWeight.w700,
+                                child: Tooltip(
+                                  message: task.fileName,
+                                  child: Text(
+                                    task.fileName,
+                                    textDirection: TextDirection.ltr,
+                                    style: AppTheme.dataStyle(
+                                      isDark: isDark,
+                                      size: compact ? 13 : 14,
+                                      weight: FontWeight.w700,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               if (task.siteDisplayName != null) ...[
@@ -1624,6 +1646,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                                   task.thumbnailUrl!.startsWith('//')
                                       ? 'https:${task.thumbnailUrl}'
                                       : task.thumbnailUrl!,
+                                  maxWidth: 144,
                                 ),
                                 fit: BoxFit.cover,
                                 onError: (context, error) {
@@ -1651,16 +1674,19 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                           Row(
                             children: [
                               Expanded(
-                                child: Text(
-                                  task.fileName,
-                                  textDirection: TextDirection.ltr,
-                                  style: AppTheme.dataStyle(
-                                    isDark: isDark,
-                                    size: compact ? 13 : 14,
-                                    weight: FontWeight.w700,
+                                child: Tooltip(
+                                  message: task.fileName,
+                                  child: Text(
+                                    task.fileName,
+                                    textDirection: TextDirection.ltr,
+                                    style: AppTheme.dataStyle(
+                                      isDark: isDark,
+                                      size: compact ? 13 : 14,
+                                      weight: FontWeight.w700,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               if (task.siteDisplayName != null) ...[
@@ -1880,16 +1906,19 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                               Row(
                                 children: [
                                   Expanded(
-                                    child: Text(
-                                      widget.task.fileName,
-                                      textDirection: TextDirection.ltr,
-                                      style: AppTheme.dataStyle(
-                                        isDark: isDark,
-                                        size: widget.compact ? 13 : 14,
-                                        weight: FontWeight.w700,
+                                    child: Tooltip(
+                                      message: widget.task.fileName,
+                                      child: Text(
+                                        widget.task.fileName,
+                                        textDirection: TextDirection.ltr,
+                                        style: AppTheme.dataStyle(
+                                          isDark: isDark,
+                                          size: widget.compact ? 13 : 14,
+                                          weight: FontWeight.w700,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                   if (widget.task.siteDisplayName != null) ...[

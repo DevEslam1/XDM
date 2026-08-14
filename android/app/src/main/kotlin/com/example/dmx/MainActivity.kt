@@ -3,6 +3,8 @@ package com.example.dmx
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.PackageInfo
 import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Bundle

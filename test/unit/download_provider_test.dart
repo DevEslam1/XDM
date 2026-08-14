@@ -7,7 +7,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('TEST-T2: youtubeStreamIdentityChanged', () {
-    test('returns false when itag, mime, and clen match across host rotations', () {
+    test('returns false when itag, mime, and clen match across host rotations',
+        () {
       const url1 =
           'https://rr1---sn-4g5ednks.googlevideo.com/videoplayback?itag=22&mime=video%2Fmp4&clen=10485760&expire=123';
       const url2 =
@@ -73,7 +74,8 @@ void main() {
         isTrue,
       );
       expect(
-        DownloadOrchestrator.isYouTubePageUrl('https://m.youtube.com/watch?v=xyz'),
+        DownloadOrchestrator.isYouTubePageUrl(
+            'https://m.youtube.com/watch?v=xyz'),
         isTrue,
       );
     });
@@ -180,7 +182,8 @@ void main() {
       bool shouldAutoResume(DownloadTask task) {
         if (task.pausedByUser) return false;
         if (task.waitingWifi || task.waitingNetwork) return false;
-        if (task.scheduledAt != null && task.scheduledAt!.isAfter(DateTime.now())) {
+        if (task.scheduledAt != null &&
+            task.scheduledAt!.isAfter(DateTime.now())) {
           return false;
         }
         return task.status == DownloadStatus.downloading ||

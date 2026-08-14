@@ -152,6 +152,12 @@ class XdmBackendClient {
       _log.fine('Settings not available, using health-service URL: $e');
     }
 
+    // SEC-1: Force HTTPS for backend communication
+    if (baseUrl.startsWith('http://')) {
+      _log.severe('HTTP backend URL rejected. HTTPS is required.');
+      baseUrl = baseUrl.replaceFirst('http://', 'https://');
+    }
+
     // Ensure baseUrl doesn't end with / to avoid double slashes with /api
     if (baseUrl.endsWith('/')) {
       baseUrl = baseUrl.substring(0, baseUrl.length - 1);
@@ -655,31 +661,33 @@ class XdmBackendClient {
     return BackendUnknownException(error.toString());
   }
 
-  // FIX-S5: Per-domain SSL bypass only (debug mode)
+  // FIX-0.1: Remove user-reachable SSL bypass; release builds enforce strict certificate validation
   void _configureDioSSL(Dio client) {
     try {
-      final bypassSSL = SettingsProvider.instance.bypassSSL;
-      if (kDebugMode &&
-          bypassSSL &&
-          client.httpClientAdapter is IOHttpClientAdapter) {
-        assert(kDebugMode, 'SSL bypass cannot activate in release builds');
-        final targetHost =
-            Uri.tryParse(client.options.baseUrl)?.host.toLowerCase();
+      if (client.httpClientAdapter is IOHttpClientAdapter) {
         final adapter = client.httpClientAdapter as IOHttpClientAdapter;
         adapter.createHttpClient = () {
           final httpClient = HttpClient();
           httpClient.badCertificateCallback = (cert, host, port) {
-            if (targetHost != null && targetHost.isNotEmpty) {
-              final h = host.toLowerCase();
-              return h == targetHost || h.endsWith('.$targetHost');
-            }
-            return false;
+            bool allow = false;
+            assert(() {
+              if (kDebugMode) {
+                final targetHost =
+                    Uri.tryParse(client.options.baseUrl)?.host.toLowerCase();
+                if (targetHost != null && targetHost.isNotEmpty) {
+                  final h = host.toLowerCase();
+                  allow = h == targetHost || h.endsWith('.$targetHost');
+                }
+              }
+              return true;
+            }());
+            return allow;
           };
           return httpClient;
         };
       }
     } catch (e) {
-      _log.warning('Failed to configure SSL bypass for Dio: $e');
+      _log.warning('Failed to configure SSL for Dio: $e');
     }
   }
 

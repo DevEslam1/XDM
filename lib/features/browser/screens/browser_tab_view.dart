@@ -200,15 +200,6 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                         ),
                         onReceivedServerTrustAuthRequest:
                             (controller, challenge) async {
-                          if (!mounted) {
-                            return ServerTrustAuthResponse(
-                                action: ServerTrustAuthResponseAction.CANCEL);
-                          }
-                          final currentSettings = widget.state._settings;
-                          if (currentSettings.bypassSSL) {
-                            return ServerTrustAuthResponse(
-                                action: ServerTrustAuthResponseAction.PROCEED);
-                          }
                           return ServerTrustAuthResponse(
                               action: ServerTrustAuthResponseAction.CANCEL);
                         },
@@ -483,25 +474,12 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                                 (widget.state._blockedAdsPerTab[tab.id] ?? 0) +
                                     1;
                             widget.state._blockedAdsPerTab[tab.id] = count;
+                            widget.state._evictTrackingMapsIfNeeded();
 
-                            // Fix: Update the active tab's notifier so the UI badge updates in real-time
-                            if (widget.state._currentTabIndex >= 0 &&
-                                widget.state._currentTabIndex <
-                                    widget.state._tabs.length &&
-                                widget
-                                        .state
-                                        ._tabs[widget.state._currentTabIndex]
-                                        .id ==
-                                    tab.id) {
-                              if (widget.state._zeroNotifierTabId == tab.id) {
-                                widget.state._zeroNotifier.value = count;
-                              } else {
-                                final notifier =
-                                    widget.state._blockedAdsNotifiers[tab.id];
-                                if (notifier != null) {
-                                  notifier.value = count;
-                                }
-                              }
+                            final notifier =
+                                widget.state._blockedAdsNotifiers[tab.id];
+                            if (notifier != null) {
+                              notifier.value = count;
                             }
 
                             return WebResourceResponse(

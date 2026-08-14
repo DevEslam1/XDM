@@ -244,7 +244,7 @@ class DownloadProvider extends ChangeNotifier
 
   Timer? _torrentInitTimer;
 
-  bool _isLoadingTasks = true;
+  bool _isLoadingTasks = false;
   bool get isLoadingTasks => _isLoadingTasks;
 
   int _revision = 0;
@@ -460,6 +460,14 @@ class DownloadProvider extends ChangeNotifier
         .toSet();
     _speedHistories.removeWhere((id, _) => !activeIds.contains(id));
     _uploadSpeedHistories.removeWhere((id, _) => !activeIds.contains(id));
+
+    // FIX P1-2: Enforce max cap of 100 total entries in speed histories map
+    while (_speedHistories.length > 100) {
+      _speedHistories.remove(_speedHistories.keys.first);
+    }
+    while (_uploadSpeedHistories.length > 100) {
+      _uploadSpeedHistories.remove(_uploadSpeedHistories.keys.first);
+    }
   }
 
   /// Per-task progress and speed ValueNotifiers for isolated repainting.
@@ -477,6 +485,10 @@ class DownloadProvider extends ChangeNotifier
   ValueNotifier<double> speedNotifier(String taskId) =>
       _speedNotifiers.putIfAbsent(taskId, () => ValueNotifier(0.0));
 
+  /// Monotonically increasing revision number updated on progress ticks.
+  /// Isolates high-frequency progress rebuilds from structural notifyListeners().
+  final ValueNotifier<int> progressRevision = ValueNotifier<int>(0);
+
   /// Disposes and removes progress and speed ValueNotifiers for [taskId] (NEW-01).
   void disposeTaskNotifier(String taskId) {
     _progressNotifiers.remove(taskId)?.dispose();
@@ -487,6 +499,7 @@ class DownloadProvider extends ChangeNotifier
     if (!DownloadEngine.appInForeground || PowerMonitor.screenOff) {
       return;
     }
+    progressRevision.value++;
     final progressNotif = progressNotifier(taskId);
     final speedNotif = speedNotifier(taskId);
     // FIX-AUDIT-E1: Only update if change is visually / numerically significant
@@ -1108,276 +1121,290 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
+  bool _isLoaded = false;
+  bool get isLoaded => _isLoaded;
+
   /// [pauseOrphanDownloads] should be true only on initial app startup, when
   /// in-flight downloads (from a previous run) cannot be resumed safely.
   /// On user-triggered reload, we must preserve currently active downloads.
   Future<void> load({bool pauseOrphanDownloads = true}) async {
-    _generation++;
+    // FIX MISC-2: Guard against concurrent in-flight loads
+    if (_isLoadingTasks) return;
     _isLoadingTasks = true;
+    _generation++;
 
-    // Cancel stale notifications from previous sessions
-    await _notifications.cancelAll();
+    try {
+      // Cancel stale notifications from previous sessions
+      await _notifications.cancelAll();
 
-    final cleanupDays = _settingsProvider.cleanupDays;
-    final now = DateTime.now();
-    final toDelete = <DownloadTask>[];
+      final cleanupDays = _settingsProvider.cleanupDays;
+      final now = DateTime.now();
+      final toDelete = <DownloadTask>[];
 
-    final dbTasks = await _databaseService.loadTasks();
+      final dbTasks = await _databaseService.loadTasks();
 
-    final loaded = dbTasks.map((t) {
-      // FIX-AUDIT-4: Clamp downloadedBytes to fileSize and chunks to [0.0, 1.0] to prevent >100% display.
-      int clampedBytes = t.downloadedBytes;
-      if (t.fileSize > 0 && clampedBytes > t.fileSize) {
-        clampedBytes = t.fileSize;
-      }
-      final clampedChunks = t.chunks.map((c) => c.clamp(0.0, 1.0)).toList();
-      final task = t.copyWith(
-        downloadedBytes: clampedBytes,
-        chunks: clampedChunks,
-      );
+      final loaded = dbTasks.map((t) {
+        // FIX-AUDIT-4: Clamp downloadedBytes to fileSize and chunks to [0.0, 1.0] to prevent >100% display.
+        int clampedBytes = t.downloadedBytes;
+        if (t.fileSize > 0 && clampedBytes > t.fileSize) {
+          clampedBytes = t.fileSize;
+        }
+        final clampedChunks = t.chunks.map((c) => c.clamp(0.0, 1.0)).toList();
+        final task = t.copyWith(
+          downloadedBytes: clampedBytes,
+          chunks: clampedChunks,
+        );
 
-      // When the app starts, mark any non-completed and non-failed download (downloading, queued, merging) as paused/queued depending on autoStart.
-      final hasActiveStream = _cancelTokens.containsKey(task.id);
-      if (!hasActiveStream &&
-          task.status != DownloadStatus.completed &&
-          task.status != DownloadStatus.failed) {
-        final wasAlreadyPaused = task.status == DownloadStatus.paused;
-        if (!wasAlreadyPaused && _settingsProvider.autoStart) {
+        // When the app starts, mark any non-completed and non-failed download (downloading, queued, merging) as paused/queued depending on autoStart.
+        final hasActiveStream = _cancelTokens.containsKey(task.id);
+        if (!hasActiveStream &&
+            task.status != DownloadStatus.completed &&
+            task.status != DownloadStatus.failed) {
+          final wasAlreadyPaused = task.status == DownloadStatus.paused;
+          if (!wasAlreadyPaused && _settingsProvider.autoStart) {
+            return task.copyWith(
+              status: DownloadStatus.queued,
+              pausedByUser: false,
+              speed: 0,
+              clearEta: true,
+              clearError: true,
+            );
+          }
           return task.copyWith(
-            status: DownloadStatus.queued,
-            pausedByUser: false,
+            status: DownloadStatus.paused,
+            pausedByUser: wasAlreadyPaused ? task.pausedByUser : true,
             speed: 0,
             clearEta: true,
-            clearError: true,
+            errorMessage: wasAlreadyPaused
+                ? task.errorMessage
+                : (task.status == DownloadStatus.merging
+                    ? 'Merge was interrupted. Tap Resume/Retry to continue.'
+                    : (task.isTorrent
+                        ? 'App restarted — resume to continue'
+                        : DownloadStatusMessages.pausedOrphaned)),
           );
         }
+
         return task.copyWith(
-          status: DownloadStatus.paused,
-          pausedByUser: wasAlreadyPaused ? task.pausedByUser : true,
           speed: 0,
-          clearEta: true,
-          errorMessage: wasAlreadyPaused
-              ? task.errorMessage
-              : (task.status == DownloadStatus.merging
-                  ? 'Merge was interrupted. Tap Resume/Retry to continue.'
-                  : (task.isTorrent
-                      ? 'App restarted — resume to continue'
-                      : DownloadStatusMessages.pausedOrphaned)),
+          clearEta: task.status != DownloadStatus.downloading,
         );
-      }
+      }).where((task) {
+        if (cleanupDays > 0 &&
+            (task.status == DownloadStatus.completed ||
+                task.status == DownloadStatus.failed)) {
+          final difference =
+              now.difference(task.completedAt ?? task.createdAt).inDays;
 
-      return task.copyWith(
-        speed: 0,
-        clearEta: task.status != DownloadStatus.downloading,
-      );
-    }).where((task) {
-      if (cleanupDays > 0 &&
-          (task.status == DownloadStatus.completed ||
-              task.status == DownloadStatus.failed)) {
-        final difference =
-            now.difference(task.completedAt ?? task.createdAt).inDays;
-
-        if (difference >= cleanupDays) {
-          toDelete.add(task);
-          return false;
-        }
-      }
-      return true;
-    }).toList();
-
-    // Phase 1 — load tasks into memory immediately so the UI can render.
-    // File-reconciliation I/O is deferred to phase 2 (post-first-frame) below.
-    _tasks
-      ..clear()
-      ..addAll(loaded);
-
-    _isLoadingTasks = false;
-    filteredTasksDirty = true;
-
-    for (final task in toDelete) {
-      await _databaseService.deleteTask(task.id);
-      await cleanupPartFiles(task);
-    }
-
-    await _databaseService.saveTasks(_tasks);
-
-    // In load(), after loading tasks:
-    if (Platform.isIOS && !kIsWeb) {
-      final activeDownloads = _tasks
-          .where(
-            (t) => t.status == DownloadStatus.downloading,
-          )
-          .length;
-      if (activeDownloads > 0) {
-        final supported = await IosBackgroundCapability.instance.isSupported();
-        if (supported) {
-          _log.info(
-            'iOS: $activeDownloads active download(s) scheduled with native BGTaskScheduler / URLSession.',
-          );
-          unawaited(BackgroundService.start());
-        } else {
-          _log.warning(
-            'iOS: $activeDownloads download(s) were active but native background execution is unsupported. Pausing.',
-          );
-          // Mark them as paused so the UI reflects reality
-          for (var i = 0; i < _tasks.length; i++) {
-            if (_tasks[i].status == DownloadStatus.downloading) {
-              _tasks[i] = _tasks[i].copyWith(
-                status: DownloadStatus.paused,
-                speed: 0,
-                clearEta: true,
-                errorMessage: 'Paused: iOS background execution is unsupported',
-              );
-            }
+          if (difference >= cleanupDays) {
+            toDelete.add(task);
+            return false;
           }
         }
-      }
-    }
+        return true;
+      }).toList();
 
-    // Automatically restart seeding for completed torrents with seeding enabled
-    for (final task in _tasks) {
-      if (task.isTorrent &&
-          task.status == DownloadStatus.completed &&
-          task.seedingEnabled) {
-        unawaited(startSeedingTorrent(task));
-      }
-    }
+      // Phase 1 — load tasks into memory immediately so the UI can render.
+      // File-reconciliation I/O is deferred to phase 2 (post-first-frame) below.
+      _tasks
+        ..clear()
+        ..addAll(loaded);
 
-    // FIX R-3: Recover torrent IDs for paused/in-progress torrents from TorrentService
-    for (final task in _tasks) {
-      if (task.isTorrent &&
-          task.status != DownloadStatus.completed &&
-          task.status != DownloadStatus.failed &&
-          !_torrentIds.containsKey(task.id)) {
-        for (final tid in TorrentService.activeTorrentIds) {
-          try {
-            final liveFiles = TorrentService.getFiles(tid);
-            if (liveFiles.isNotEmpty &&
-                task.torrentFiles != null &&
-                liveFiles.length == task.torrentFiles!.length) {
-              final liveNames = liveFiles.map((f) => f.name).toSet();
-              final storedNames = task.torrentFiles!
-                  .map((f) => (f['name'] as String? ?? ''))
-                  .toSet();
-              if (liveNames.length == storedNames.length &&
-                  liveNames.containsAll(storedNames)) {
-                _torrentIds[task.id] = tid;
-                debugPrint(
-                  '[DMX] load(): recovered torrent ID $tid for task ${task.id} (name-matched)',
+      _isLoadingTasks = false;
+      filteredTasksDirty = true;
+
+      for (final task in toDelete) {
+        await _databaseService.deleteTask(task.id);
+        await cleanupPartFiles(task);
+      }
+
+      await _databaseService.saveTasks(_tasks);
+
+      // In load(), after loading tasks:
+      if (Platform.isIOS && !kIsWeb) {
+        final activeDownloads = _tasks
+            .where(
+              (t) => t.status == DownloadStatus.downloading,
+            )
+            .length;
+        if (activeDownloads > 0) {
+          final supported =
+              await IosBackgroundCapability.instance.isSupported();
+          if (supported) {
+            _log.info(
+              'iOS: $activeDownloads active download(s) scheduled with native BGTaskScheduler / URLSession.',
+            );
+            unawaited(BackgroundService.start());
+          } else {
+            _log.warning(
+              'iOS: $activeDownloads download(s) were active but native background execution is unsupported. Pausing.',
+            );
+            // Mark them as paused so the UI reflects reality
+            for (var i = 0; i < _tasks.length; i++) {
+              if (_tasks[i].status == DownloadStatus.downloading) {
+                _tasks[i] = _tasks[i].copyWith(
+                  status: DownloadStatus.paused,
+                  speed: 0,
+                  clearEta: true,
+                  errorMessage:
+                      'Paused: iOS background execution is unsupported',
                 );
-                break;
               }
             }
-          } catch (_) {}
+          }
         }
       }
-    }
 
-    updateActualTorrentUploadLimit();
-
-    _startWidgetTimer();
-    notifyListeners();
-
-    // Resolve connectivity BEFORE any scheduled downloads or pumpQueue to
-    // prevent downloads starting on mobile data when wifiOnly is enabled.
-    await _networkMonitor.ensureInitialConnectivity();
-    await _networkMonitor.checkNetworkConnectivity(skipPump: true);
-
-    // SCHED-FIX-7: Mark schedule manager ready after initial load completes
-    _scheduleManager.markReady();
-    _scheduleManager.checkScheduledDownloads();
-
-    await _cleanupOrphanedFiles();
-
-    if (_settingsProvider.autoStart) {
-      await _autoResumeIncomplete();
-    }
-
-    // Always pump the queue so queued-downloads (including newly
-    // auto-resumed ones) start without requiring user interaction.
-    Future<void> safePumpQueue() async {
-      if (TorrentService.isSupported && !TorrentService.isInitialized) {
-        // Wait up to 10s for torrent init
-        final stopwatch = Stopwatch()..start();
-        while (!TorrentService.isInitialized &&
-            stopwatch.elapsed < const Duration(seconds: 10)) {
-          await Future.delayed(const Duration(milliseconds: 200));
-        }
-      }
-      pumpQueue();
-    }
-
-    unawaited(safePumpQueue());
-
-    _updateTelemetryWidget(force: true);
-
-    // Phase 2 — deferred per-task file reconciliation (I/O heavy).
-    // Runs after the first frame so the UI renders immediately with stale
-    // progress, then updates in place once files are stat'ed.
-    final loadGen = _generation;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (_disposed || _generation != loadGen) return;
-
-      final reconciled = <DownloadTask>[];
-
-      // Run all per-task file-stat calls in parallel. Each call already
-      // offloads to a background isolate via _statPartialFileIsolate, so
-      // awaiting them sequentially wastes the parallelism opportunity.
-      // FIX(C3): Batch reconciliation to avoid spawning N isolates
-      // simultaneously. Process in batches of 4 to limit memory usage.
-      const batchSize = 4;
-      final pendingTasks = <DownloadTask>[];
+      // Automatically restart seeding for completed torrents with seeding enabled
       for (final task in _tasks) {
-        final hasActiveStream = _cancelTokens.containsKey(task.id);
-
-        if (hasActiveStream) {
-          final memoryTask = _findTask(task.id);
-          if (memoryTask != null) {
-            reconciled.add(memoryTask);
-            continue;
-          }
+        if (task.isTorrent &&
+            task.status == DownloadStatus.completed &&
+            task.seedingEnabled) {
+          unawaited(startSeedingTorrent(task));
         }
-
-        pendingTasks.add(task);
       }
 
-      for (var i = 0; i < pendingTasks.length; i += batchSize) {
-        if (_disposed || _generation != loadGen) break;
-        final batch = pendingTasks.skip(i).take(batchSize);
-        final batchResults = await Future.wait(
-          batch.map((task) async {
+      // FIX R-3: Recover torrent IDs for paused/in-progress torrents from TorrentService
+      for (final task in _tasks) {
+        if (task.isTorrent &&
+            task.status != DownloadStatus.completed &&
+            task.status != DownloadStatus.failed &&
+            !_torrentIds.containsKey(task.id)) {
+          for (final tid in TorrentService.activeTorrentIds) {
             try {
-              return await _reconcilePartialProgress(task);
-            } catch (e) {
-              debugPrint('Failed to reconcile partial file for ${task.id}: $e');
-              return task;
-            }
-          }),
-        );
-        reconciled.addAll(batchResults);
-      }
-
-      for (final task in reconciled) {
-        final idx = _tasks.indexWhere((t) => t.id == task.id);
-        if (idx != -1) {
-          // If the task was deleted or status in memory transitioned during the async gap, do NOT overwrite or recreate in DB!
-          if (_tasks[idx].status != task.status &&
-              _tasks[idx].status != DownloadStatus.paused) {
-            continue;
-          }
-          if (_tasks[idx].status != task.status ||
-              _tasks[idx].downloadedBytes != task.downloadedBytes) {
-            _tasks[idx] = task;
-            await _databaseService.saveTask(task);
-          } else {
-            _tasks[idx] = task;
+              final liveFiles = TorrentService.getFiles(tid);
+              if (liveFiles.isNotEmpty &&
+                  task.torrentFiles != null &&
+                  liveFiles.length == task.torrentFiles!.length) {
+                final liveNames = liveFiles.map((f) => f.name).toSet();
+                final storedNames = task.torrentFiles!
+                    .map((f) => (f['name'] as String? ?? ''))
+                    .toSet();
+                if (liveNames.length == storedNames.length &&
+                    liveNames.containsAll(storedNames)) {
+                  _torrentIds[task.id] = tid;
+                  debugPrint(
+                    '[DMX] load(): recovered torrent ID $tid for task ${task.id} (name-matched)',
+                  );
+                  break;
+                }
+              }
+            } catch (_) {}
           }
         }
       }
 
+      updateActualTorrentUploadLimit();
+
+      _startWidgetTimer();
       notifyListeners();
-    });
+
+      // Resolve connectivity BEFORE any scheduled downloads or pumpQueue to
+      // prevent downloads starting on mobile data when wifiOnly is enabled.
+      await _networkMonitor.ensureInitialConnectivity();
+      await _networkMonitor.checkNetworkConnectivity(skipPump: true);
+
+      // SCHED-FIX-7: Mark schedule manager ready after initial load completes
+      _scheduleManager.markReady();
+      _scheduleManager.checkScheduledDownloads();
+
+      await _cleanupOrphanedFiles();
+
+      if (_settingsProvider.autoStart) {
+        await _autoResumeIncomplete();
+      }
+
+      // Always pump the queue so queued-downloads (including newly
+      // auto-resumed ones) start without requiring user interaction.
+      Future<void> safePumpQueue() async {
+        if (TorrentService.isSupported && !TorrentService.isInitialized) {
+          // Wait up to 10s for torrent init
+          final stopwatch = Stopwatch()..start();
+          while (!TorrentService.isInitialized &&
+              stopwatch.elapsed < const Duration(seconds: 10)) {
+            await Future.delayed(const Duration(milliseconds: 200));
+          }
+        }
+        pumpQueue();
+      }
+
+      unawaited(safePumpQueue());
+
+      _updateTelemetryWidget(force: true);
+
+      // Phase 2 — deferred per-task file reconciliation (I/O heavy).
+      // Runs after the first frame so the UI renders immediately with stale
+      // progress, then updates in place once files are stat'ed.
+      final loadGen = _generation;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (_disposed || _generation != loadGen) return;
+
+        final reconciled = <DownloadTask>[];
+
+        // Run all per-task file-stat calls in parallel. Each call already
+        // offloads to a background isolate via _statPartialFileIsolate, so
+        // awaiting them sequentially wastes the parallelism opportunity.
+        // FIX(C3): Batch reconciliation to avoid spawning N isolates
+        // simultaneously. Process in batches of 4 to limit memory usage.
+        const batchSize = 4;
+        final pendingTasks = <DownloadTask>[];
+        for (final task in _tasks) {
+          final hasActiveStream = _cancelTokens.containsKey(task.id);
+
+          if (hasActiveStream) {
+            final memoryTask = _findTask(task.id);
+            if (memoryTask != null) {
+              reconciled.add(memoryTask);
+              continue;
+            }
+          }
+
+          pendingTasks.add(task);
+        }
+
+        for (var i = 0; i < pendingTasks.length; i += batchSize) {
+          if (_disposed || _generation != loadGen) break;
+          final batch = pendingTasks.skip(i).take(batchSize);
+          final batchResults = await Future.wait(
+            batch.map((task) async {
+              try {
+                return await _reconcilePartialProgress(task);
+              } catch (e) {
+                debugPrint(
+                    'Failed to reconcile partial file for ${task.id}: $e');
+                return task;
+              }
+            }),
+          );
+          reconciled.addAll(batchResults);
+        }
+
+        for (final task in reconciled) {
+          final idx = _tasks.indexWhere((t) => t.id == task.id);
+          if (idx != -1) {
+            // If the task was deleted or status in memory transitioned during the async gap, do NOT overwrite or recreate in DB!
+            if (_tasks[idx].status != task.status &&
+                _tasks[idx].status != DownloadStatus.paused) {
+              continue;
+            }
+            if (_tasks[idx].status != task.status ||
+                _tasks[idx].downloadedBytes != task.downloadedBytes) {
+              _tasks[idx] = task;
+              await _databaseService.saveTask(task);
+            } else {
+              _tasks[idx] = task;
+            }
+          }
+        }
+
+        notifyListeners();
+      });
+
+      _isLoaded = true;
+    } finally {
+      _isLoadingTasks = false;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -2842,8 +2869,9 @@ class DownloadProvider extends ChangeNotifier
         speed: 0,
         clearEta: true,
         errorMessage: 'Transfer cancelled.',
-        // FIX-S11: Set pausedByUser: true so auto-resume skips cancelled tasks
-        pausedByUser: true,
+        // FIX-2: Set isCancelled: true so auto-resume skips cancelled tasks
+        isCancelled: true,
+        pausedByUser: false,
       ),
     );
 
@@ -3592,12 +3620,7 @@ class DownloadProvider extends ChangeNotifier
       _dbRetryTimers[id]?.cancel();
       _dbRetryTimers.remove(id);
 
-      _activeFutures.remove(id);
-
-      final notifId = _notifications.idFor(id);
-      _notifications.cancelNotification(notifId);
-      final savedNotificationId = _notifications.removeId(id);
-
+      _cleanupTaskState(id);
       _tasks.removeWhere((task) => task.id == id);
 
       final torrentId = _torrentIds[id];
@@ -3606,9 +3629,7 @@ class DownloadProvider extends ChangeNotifier
         _torrentIds.remove(id);
       }
 
-      if (savedNotificationId != null) {
-        _notifications.cancelNotification(savedNotificationId);
-      }
+      _notifications.cleanupTask(id);
     }
 
     filteredTasksDirty = true;
@@ -4572,7 +4593,6 @@ class DownloadProvider extends ChangeNotifier
             url: cleanUrl,
             requestedFileName: task.fileName,
             customUserAgent: _settingsProvider.customUserAgent,
-            bypassSSL: _settingsProvider.bypassSSL,
           );
         } catch (e) {
           throw Exception('Failed to resolve new torrent: $e');
@@ -4676,7 +4696,6 @@ class DownloadProvider extends ChangeNotifier
             url: cleanUrl,
             requestedFileName: task.fileName,
             customUserAgent: _settingsProvider.customUserAgent,
-            bypassSSL: _settingsProvider.bypassSSL,
             referer: task.downloadPageUrl,
           );
         } catch (e) {
@@ -4845,7 +4864,6 @@ class DownloadProvider extends ChangeNotifier
           final meta = await _downloadEngine.resolveMetadata(
             url: cleanUrl,
             customUserAgent: _settingsProvider.customUserAgent,
-            bypassSSL: _settingsProvider.bypassSSL,
             referer: task.downloadPageUrl,
           );
           if (meta.fileSize > 0) {
@@ -5400,6 +5418,7 @@ class DownloadProvider extends ChangeNotifier
 
     // Clear ALL tracking maps
     _speedHistories.clear();
+    _uploadSpeedHistories.clear();
     _lastProgressUpdateTimes.clear();
     _lastDbSaveTimes.clear();
     _lastDbSaveBytes.clear();
@@ -5479,6 +5498,7 @@ class DownloadProvider extends ChangeNotifier
       // FIX-H6: Skip tasks where pausedByUser, waitingWifi, waitingNetwork, or scheduled in future
       final isPaused = t.status == DownloadStatus.paused;
       if (!isPaused) return false;
+      if (t.isCancelled) return false;
       if (t.pausedByUser) return false;
       if (t.waitingWifi ||
           t.errorMessage == DownloadStatusMessages.waitingWifi ||
@@ -5528,6 +5548,22 @@ class DownloadProvider extends ChangeNotifier
             realBytesOnDisk = diskBytes;
           }
         }
+      }
+
+      // FIX P0-5: Check wifiOnly setting before auto-resuming incomplete tasks
+      if (_settingsProvider.wifiOnly && !_networkMonitor.hasWifiOrEthernet) {
+        final waitingTask = task.copyWith(
+          status: DownloadStatus.paused,
+          errorMessage: DownloadStatusMessages.waitingWifi,
+          speed: 0,
+          clearEta: true,
+        );
+        final idx = _tasks.indexWhere((t) => t.id == task.id);
+        if (idx != -1) {
+          _tasks[idx] = waitingTask;
+          await _databaseService.saveTask(waitingTask);
+        }
+        continue;
       }
 
       final updated = task.copyWith(

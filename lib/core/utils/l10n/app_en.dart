@@ -175,10 +175,6 @@ const Map<String, String> enTranslations = {
   'browser_youtube_video': 'YouTube Video',
   'btn_install_now': 'Install Now',
   'btn_later': 'Later',
-  'bypass_ssl_dialog_body':
-      'This exposes all downloads to man-in-the-middle attacks. ',
-  'bypass_ssl_dialog_confirm': 'I Understand the Risk',
-  'bypass_ssl_dialog_title': 'Disable SSL Verification?',
   'cancel': 'Cancel',
   'cancel_btn': 'Cancel',
   'cancel_btn_uppercase': 'Cancel',
@@ -416,9 +412,6 @@ const Map<String, String> enTranslations = {
   'settings_backup_sub': 'Archive and retrieve download logs',
   'settings_backup_title': 'System backups',
   'settings_bandwidth': 'Network & Speed Limits',
-  'settings_bypass_ssl': 'Trust all ssl certificates',
-  'settings_bypass_ssl_sub':
-      'Bypass SSL validation (WARNING: MITM vulnerability)',
   'settings_chime': 'Completion Notification Chime',
   'settings_chime_sub': 'Play a sound when a download completes',
   'settings_classic_ui': 'Classic ui mode',

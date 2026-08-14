@@ -18,6 +18,7 @@ import 'torrent_settings_page.dart';
 import 'advanced_settings_page.dart';
 import '../widgets/settings_tiles.dart';
 import '../widgets/browser_extensions_sheet.dart';
+import '../../../shared/design/dmx_design.dart';
 
 Color getSettingsTabColor(int tabIndex, bool isDark) {
   return switch (tabIndex) {
@@ -440,7 +441,20 @@ class _SettingsScreenState extends State<SettingsScreen>
           subtitle:
               'Limits downloads to 1, threads to 2, and forces Classic UI mode',
           value: settings.batterySaverMode,
-          onChanged: (val) => settings.setBatterySaverMode(val),
+          onChanged: (val) async {
+            if (val) {
+              final confirmed = await DmxConfirmDialog.show(
+                ctx,
+                title: 'Enable Battery Saver?',
+                message:
+                    'This will limit downloads to 1, threads to 2, and force Classic UI mode.',
+                confirmLabel: 'Enable',
+                cancelLabel: 'Cancel',
+              );
+              if (confirmed != true) return;
+            }
+            settings.setBatterySaverMode(val);
+          },
         ),
       ),
 
@@ -506,10 +520,11 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
+    final (isDark, classicUi, isAmoled) =
+        context.select<SettingsProvider, (bool, bool, bool)>(
+      (s) => (s.isDarkMode, s.classicUi, s.isAmoledMode),
+    );
     final isRtl = L10n.isRtl(context);
-    final isDark = settings.isDarkMode;
-    final classicUi = settings.classicUi;
     final screenType = getScreenType(context);
     final isDesktop = screenType == ScreenType.desktop;
 
@@ -555,15 +570,11 @@ class _SettingsScreenState extends State<SettingsScreen>
         appBar: AppBar(
           backgroundColor: classicUi
               ? (isDark
-                  ? (settings.isAmoledMode
-                      ? AppTheme.amoledBackground
-                      : AppTheme.surface)
+                  ? (isAmoled ? AppTheme.amoledBackground : AppTheme.surface)
                   : AppTheme.lightSurface)
-              : (settings.isAmoledMode
-                  ? AppTheme.amoledBackground
-                  : Colors.transparent),
+              : (isAmoled ? AppTheme.amoledBackground : Colors.transparent),
           elevation: 0,
-          flexibleSpace: (classicUi || settings.isAmoledMode)
+          flexibleSpace: (classicUi || isAmoled)
               ? null
               : ClipRect(
                   child: DmxBackdropFilter(
@@ -599,7 +610,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                         : AppTheme.lightTextPrimary,
                   ),
                   onPressed: () {
-                    triggerHaptic(settings);
+                    triggerHaptic(context.read<SettingsProvider>());
                     context.read<DownloadProvider>().setActiveTabIndex(0);
                   },
                 ),
@@ -695,8 +706,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                 // Search Overlay Mode vs Nav Mode
                 if (_searchQuery.isNotEmpty)
                   Expanded(
-                    child: _buildSearchResultsView(
-                        context, settings, isDark, isRtl),
+                    child: _buildSearchResultsView(context,
+                        context.read<SettingsProvider>(), isDark, isRtl),
                   )
                 else
                   Expanded(

@@ -8,6 +8,7 @@ import 'database/app_database.dart';
 import 'download_engine.dart';
 import 'logging_service.dart';
 import 'power_monitor.dart';
+import 'background_gate.dart';
 import '../../features/downloads/models/download_task.dart';
 import '../../features/browser/models/bookmark.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -83,9 +84,11 @@ class DatabaseService {
     await _migrateFromHivePerBox(prefs);
     _initialized = true;
 
-    // FIX(15): periodic WAL checkpoint (TRUNCATE) keeps the -wal file small;
-    // VACUUM reclaims freed pages every ~12 runs (approx 6h).
-    _maintenanceTimer = Timer.periodic(const Duration(minutes: 30), (_) async {
+    // FIX-2.1 / FIX-3.1: Periodic WAL checkpoint adapted via BackgroundGate
+    final interval = BackgroundGate.adaptInterval(const Duration(minutes: 30));
+    // FIX: Guard against multiple timer creations if init() is called repeatedly
+    _maintenanceTimer?.cancel();
+    _maintenanceTimer = Timer.periodic(interval, (_) async {
       final swCheckpoint = Stopwatch()..start();
       try {
         await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
@@ -113,6 +116,10 @@ class DatabaseService {
               'Skipping periodic DB incremental_vacuum because $activeCount active/paused/queued download(s) in progress',
             );
           } else {
+            // FIX: Only vacuum if checkpoint returned pages > 0
+            try {
+              await _db.customSelect('PRAGMA wal_checkpoint(PASSIVE)').get();
+            } catch (_) {}
             final swVacuum = Stopwatch()..start();
             await _db.customStatement('PRAGMA incremental_vacuum(50)');
             swVacuum.stop();
@@ -729,8 +736,8 @@ class DatabaseService {
         DownloadEngine.isInBackground ||
         PowerMonitor.screenOff;
     final interval = isBackground
-        ? const Duration(seconds: 120) // BG-05: 120s in background (was 45s)
-        : const Duration(seconds: 8); // 8s in foreground
+        ? const Duration(seconds: 120) // BG-05: 120s in background
+        : const Duration(seconds: 15); // FIX PERF-4: 15s in foreground (was 8s)
 
     _dbBatchTimer ??= Timer(interval, flushPendingSaves);
   }
@@ -757,6 +764,9 @@ class DatabaseService {
 
   Future<void> saveTask(DownloadTask task) async {
     _pendingProgressSaves.remove(task.id);
+    if (_pendingProgressSaves.length > 50) {
+      await flushPendingSaves();
+    }
     int retries = 3;
     int attempt = 0;
     while (true) {

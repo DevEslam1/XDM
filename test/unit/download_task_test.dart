@@ -152,6 +152,18 @@ void main() {
       expect(task.combinedTotalSize, equals(12000));
     });
 
+    test('combinedTotalSize when videoStreamSize=0 and fileSize=0', () {
+      final task = createDummyTask(
+        id: 'task-audio-fallback',
+        fileSize: 0,
+        audioSize: 5000,
+      ).copyWith(
+        videoStreamSize: 0,
+        mergedAudioUrl: 'https://example.com/audio',
+      );
+      expect(task.combinedTotalSize, equals(5000));
+    });
+
     test('10. isTorrent detects magnet URLs', () {
       final task = createDummyTask(
         id: 'task-109',

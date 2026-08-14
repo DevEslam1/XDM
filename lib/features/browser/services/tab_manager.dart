@@ -304,6 +304,13 @@ class TabManager extends ChangeNotifier {
     final isClosingActive = targetIndex == _currentIndex;
     final closingTab = _tabs[targetIndex];
 
+    // Dispose WebView controller BEFORE removing from list (PERF-6)
+    try {
+      closingTab.controller?.dispose();
+    } catch (_) {}
+    closingTab.controller = null;
+    closingTab.pullToRefreshController = null;
+
     cleanupTabState(closingTab.id);
 
     // Atomic removal and index recalculation

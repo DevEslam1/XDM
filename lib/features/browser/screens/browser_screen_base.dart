@@ -79,17 +79,56 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
 
   bool _scriptsInjectedSnackbarShown = false;
 
-  // Fix #10: Per-tab blocked-ad and blocked-popup counters.
-  // Using ValueNotifier per tab so increments in shouldInterceptRequest do NOT call setState.
-  final ValueNotifier<int> _zeroNotifier = ValueNotifier<int>(0);
-
-  String? _zeroNotifierTabId;
-
+  // FIX-0.2 / FIX-0.3: Per-tab ValueNotifier for blocked ads (no shared _zeroNotifier)
   final Map<String, ValueNotifier<int>> _blockedAdsNotifiers = {};
 
   final Map<String, int> _blockedAdsPerTab = {};
 
   final Map<String, int> _blockedPopupsPerTab = {};
+
+  ValueNotifier<int> _notifierForTab(String tabId) {
+    return _blockedAdsNotifiers.putIfAbsent(
+      tabId,
+      () => ValueNotifier<int>(_blockedAdsPerTab[tabId] ?? 0),
+    );
+  }
+
+  // FIX P1-3: Cap _blockedAdsNotifiers (50), _blockedAdsPerTab (200), and _blockedPopupsPerTab (200)
+  void _evictTrackingMapsIfNeeded() {
+    if (_blockedAdsNotifiers.length > 50) {
+      final activeTabIds = _tabs.map((t) => t.id).toSet();
+      final toRemove = _blockedAdsNotifiers.keys
+          .where((k) => !activeTabIds.contains(k))
+          .take(_blockedAdsNotifiers.length - 50)
+          .toList();
+      for (final k in toRemove) {
+        final n = _blockedAdsNotifiers.remove(k);
+        n?.dispose();
+      }
+    }
+    if (_blockedAdsPerTab.length > 200) {
+      final activeTabIds = _tabs.map((t) => t.id).toSet();
+      final toRemove = _blockedAdsPerTab.keys
+          .where((k) => !activeTabIds.contains(k))
+          .take(_blockedAdsPerTab.length - 200)
+          .toList();
+      for (final k in toRemove) {
+        _blockedAdsPerTab.remove(k);
+        final n = _blockedAdsNotifiers.remove(k);
+        n?.dispose();
+      }
+    }
+    if (_blockedPopupsPerTab.length > 200) {
+      final activeTabIds = _tabs.map((t) => t.id).toSet();
+      final toRemove = _blockedPopupsPerTab.keys
+          .where((k) => !activeTabIds.contains(k))
+          .take(_blockedPopupsPerTab.length - 200)
+          .toList();
+      for (final k in toRemove) {
+        _blockedPopupsPerTab.remove(k);
+      }
+    }
+  }
 
   // E13: Tab Suspension/Resume Visual Feedback
   String? _restoringTabId;

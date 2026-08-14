@@ -175,6 +175,7 @@ class DownloadTask {
   final double audioProgress;
   final int audioThreadCount;
   final bool pausedByUser;
+  final bool isCancelled;
   final String? youtubeQualityPreset;
   final String? notes;
   final bool isAppUpdate;
@@ -233,6 +234,7 @@ class DownloadTask {
     this.audioThreadCount = 2,
     this.isMergeInProgress = false,
     this.pausedByUser = false,
+    this.isCancelled = false,
     this.youtubeQualityPreset,
     this.notes,
     this.isAppUpdate = false,
@@ -312,16 +314,12 @@ class DownloadTask {
 
   bool get hasTorrentFiles => torrentFiles != null && torrentFiles!.isNotEmpty;
 
-  // FIX-AUDIT-09: Unambiguous total size calculation
+  // FIX P0-3: combinedTotalSize returns audioSize fallback when videoStreamSize==0 and fileSize<=0
   int get combinedTotalSize {
     if (hasMergedAudio && audioSize > 0) {
-      // If we know the video-only size, use the explicit sum
       if (videoStreamSize > 0) return videoStreamSize + audioSize;
-      // fileSize is the authoritative combined total when set by stream resolution
       if (fileSize > 0) return fileSize;
-      // BUG 3 FIX: Return 0 when both videoStreamSize and fileSize are 0
-      // to trigger indeterminate state instead of wrong denominator (audioSize only)
-      return 0;
+      return audioSize; // fallback: at least show audio size
     }
     return resolvedFileSize;
   }
@@ -561,6 +559,7 @@ class DownloadTask {
     double? audioProgress,
     int? audioThreadCount,
     bool? pausedByUser,
+    bool? isCancelled,
     String? youtubeQualityPreset,
     bool clearYoutubeQualityPreset = false,
     String? notes,
@@ -641,6 +640,7 @@ class DownloadTask {
       audioThreadCount: audioThreadCount ?? this.audioThreadCount,
       isMergeInProgress: isMergeInProgress ?? this.isMergeInProgress,
       pausedByUser: pausedByUser ?? this.pausedByUser,
+      isCancelled: isCancelled ?? this.isCancelled,
       youtubeQualityPreset: clearYoutubeQualityPreset
           ? null
           : (youtubeQualityPreset ?? this.youtubeQualityPreset),
@@ -743,6 +743,7 @@ class DownloadTask {
       'audioProgress': audioProgress,
       'audioThreadCount': audioThreadCount,
       'pausedByUser': pausedByUser,
+      'isCancelled': isCancelled,
       'youtubeQualityPreset': youtubeQualityPreset,
       'notes': notes,
       'isAppUpdate': isAppUpdate,
@@ -882,6 +883,7 @@ class DownloadTask {
       audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
       audioThreadCount: (map['audioThreadCount'] as num?)?.toInt() ?? 2,
       pausedByUser: map['pausedByUser'] as bool? ?? false,
+      isCancelled: map['isCancelled'] as bool? ?? false,
       youtubeQualityPreset: map['youtubeQualityPreset'] as String?,
       notes: map['notes'] as String?,
       isAppUpdate: map['isAppUpdate'] as bool? ?? false,

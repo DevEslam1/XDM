@@ -93,32 +93,33 @@ class DmxCardShell extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
-        child: Stack(
-          children: [
-            child,
-            if (showRail)
-              Positioned.directional(
-                textDirection: Directionality.of(context),
-                start: 0,
-                top: 0,
-                bottom: 0,
-                width: 3.5,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: resolvedAccent,
-                    borderRadius: BorderRadiusDirectional.only(
-                      topStart: Radius.circular(radius),
-                      bottomStart: Radius.circular(radius),
+        child: !showRail
+            ? child
+            : Stack(
+                children: [
+                  child,
+                  Positioned.directional(
+                    textDirection: Directionality.of(context),
+                    start: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: 3.5,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: resolvedAccent,
+                        borderRadius: BorderRadiusDirectional.only(
+                          topStart: Radius.circular(radius),
+                          bottomStart: Radius.circular(radius),
+                        ),
+                        boxShadow: [
+                          AppTheme.glow(resolvedAccent,
+                              alpha: 0.30, blur: 6, spread: 0),
+                        ],
+                      ),
                     ),
-                    boxShadow: [
-                      AppTheme.glow(resolvedAccent,
-                          alpha: 0.30, blur: 6, spread: 0),
-                    ],
                   ),
-                ),
+                ],
               ),
-          ],
-        ),
       ),
     );
 

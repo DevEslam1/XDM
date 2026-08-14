@@ -799,8 +799,12 @@ void main() {
         }
 
         await server.close();
-        if (localFile.existsSync()) localFile.deleteSync();
-        if (tempFile.existsSync()) tempFile.deleteSync();
+        await engine.close();
+        await Future.delayed(const Duration(milliseconds: 50));
+        try {
+          if (localFile.existsSync()) localFile.deleteSync();
+          if (tempFile.existsSync()) tempFile.deleteSync();
+        } catch (_) {}
       },
     );
 

@@ -415,11 +415,14 @@ class StateStore {
     return adjusted;
   }
 
-  static final Map<String, String> _lastWrittenPayloads = {};
+  // FIX P1-7: Store payload hash instead of full string for dedup
+  static final Map<String, int> _lastWrittenPayloads = {};
+  static final Map<String, int> _lastWrittenBytes = {};
   static const int _maxCachedPayloads = 16;
 
   static void removeCachedPayload(String taskId) {
     _lastWrittenPayloads.removeWhere((key, _) => key.contains(taskId));
+    _lastWrittenBytes.removeWhere((key, _) => key.contains(taskId));
   }
 
   static void removeTaskState(String taskId) => removeCachedPayload(taskId);
@@ -436,34 +439,34 @@ class StateStore {
     final tmpPath = '$targetPath.tmp';
     try {
       final payload = jsonEncode(state.toJson());
-      if (!durable && _lastWrittenPayloads[targetPath] == payload) {
+      final payloadHash = payload.hashCode;
+      if (!durable && _lastWrittenPayloads[targetPath] == payloadHash) {
         return; // Skip redundant state write
       }
-      _lastWrittenPayloads[targetPath] = payload;
+      _lastWrittenPayloads[targetPath] = payloadHash;
       if (_lastWrittenPayloads.length > _maxCachedPayloads) {
         final keysToRemove = _lastWrittenPayloads.keys
             .take(_lastWrittenPayloads.length - _maxCachedPayloads)
             .toList();
         for (final key in keysToRemove) {
           _lastWrittenPayloads.remove(key);
+          _lastWrittenBytes.remove(key);
         }
       }
 
-      // FIX-P6: In save(), when screenOff is true, use direct writeAsString without tmp+rename
-      if (isScreenOff && !durable) {
-        await File(targetPath).writeAsString(payload, flush: false);
-        return;
+      // FIX-3: Always write when downloadedBytes changed by >5MB regardless of screen state
+      final bytesSinceLastWrite =
+          (state.downloadedBytes - (_lastWrittenBytes[targetPath] ?? 0)).abs();
+      if (isScreenOff && !durable && bytesSinceLastWrite < 5 * 1024 * 1024) {
+        return; // skip only small deltas when screen off
       }
+      _lastWrittenBytes[targetPath] = state.downloadedBytes;
 
       final tmp = File(tmpPath);
       await tmp.parent.create(recursive: true);
       if (durable) {
         await tmp.writeAsString(payload, flush: true);
-        try {
-          final raf = await tmp.open(mode: FileMode.append);
-          await raf.flush();
-          await raf.close();
-        } catch (_) {}
+        // REMOVED: redundant raf.flush() — writeAsString with flush:true is sufficient
       } else {
         await tmp.writeAsString(payload, flush: false);
       }
@@ -481,6 +484,7 @@ class StateStore {
   static Future<void> remove(String tempFilePath) async {
     final targetPath = pathFor(tempFilePath);
     _lastWrittenPayloads.remove(targetPath);
+    _lastWrittenBytes.remove(targetPath);
     final tmpPath = '$targetPath.tmp';
     try {
       final f = File(targetPath);
@@ -550,10 +554,12 @@ class DownloadJournal {
     final isBg = !DownloadEngine.appInForeground ||
         DownloadEngine.isInBackground ||
         PowerMonitor.screenOff;
-    // BG-04: When in background/screen off, increase byte threshold to 4MB
+    // FIX-3.2: 4MB delta threshold in background, 8MB when screen is off
     if (isBg) {
+      final threshold =
+          PowerMonitor.screenOff ? 8 * 1024 * 1024 : 4 * 1024 * 1024;
       final last = _lastBgRecordedBytes[index] ?? 0;
-      if ((bytes - last).abs() < 4 * 1024 * 1024) {
+      if ((bytes - last).abs() < threshold) {
         return;
       }
       _lastBgRecordedBytes[index] = bytes;
@@ -689,6 +695,7 @@ class DownloadJournal {
     return lastCheckpoint;
   }
 
+  /// Flushes and closes the underlying journal sink.
   Future<void> close() async {
     await _lock.synchronized(() async {
       await _closeLocked();

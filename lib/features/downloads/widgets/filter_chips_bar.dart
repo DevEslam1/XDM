@@ -204,11 +204,23 @@ class _StatusFilterButtons extends StatelessWidget {
     if (isScrollable) {
       return SizedBox(
         height: 38,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          itemCount: filters.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
-          itemBuilder: (context, i) => _buildButton(context, filters[i]),
+        child: ShaderMask(
+          shaderCallback: (bounds) => const LinearGradient(
+            colors: [
+              Colors.transparent,
+              Colors.white,
+              Colors.white,
+              Colors.transparent,
+            ],
+            stops: [0.0, 0.05, 0.95, 1.0],
+          ).createShader(bounds),
+          blendMode: BlendMode.dstIn,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: filters.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, i) => _buildButton(context, filters[i]),
+          ),
         ),
       );
     }

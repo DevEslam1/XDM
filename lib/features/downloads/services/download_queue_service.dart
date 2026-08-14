@@ -54,7 +54,8 @@ class DownloadQueueService {
         }));
       } catch (e) {
         _pendingStarts.remove(task.id);
-        debugPrint('[DownloadQueueService] Failed to start task ${task.id}: $e');
+        debugPrint(
+            '[DownloadQueueService] Failed to start task ${task.id}: $e');
       }
     }
   }

@@ -234,8 +234,14 @@ class PowerMonitor {
     });
   }
 
+  // FIX-1.3: Close StreamControllers and cancel timers on dispose
   static void dispose() {
     _sub?.cancel();
+    _sub = null;
     _thermalTimer?.cancel();
+    _thermalTimer = null;
+    if (!_screenStateController.isClosed) {
+      _screenStateController.close();
+    }
   }
 }

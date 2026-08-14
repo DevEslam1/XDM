@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart' as pkg_logging;
 import 'package:logging/logging.dart' show Level;
+import 'package:dmx/core/services/background_gate.dart';
 
 /// Centralized application logger with console and optional rolling file logging.
 class LoggingService {
@@ -57,9 +58,13 @@ class LoggingService {
     if (_releaseLogBuffer.length >= _maxReleaseBufferSize) {
       flushLogBuffer();
     } else {
-      _releaseFlushTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
-        flushLogBuffer();
-      });
+      // FIX-2.1: Route timer through BackgroundGate.adaptInterval
+      _releaseFlushTimer ??= Timer.periodic(
+        BackgroundGate.adaptInterval(const Duration(seconds: 30)),
+        (_) {
+          flushLogBuffer();
+        },
+      );
     }
   }
 
@@ -117,12 +122,6 @@ class LoggingService {
     _fileSink = null;
   }
 
-  /// Disposes logging timers and flushes release buffers (NEW-05).
-  static void dispose() {
-    closeFileLogging();
-    _initialized = false;
-  }
-
   /// Returns a named [pkg_logging.Logger] for use throughout the app.
   static pkg_logging.Logger logger(String name) {
     if (!_initialized) init();
@@ -162,6 +161,18 @@ class LoggingService {
   }
 
   static pkg_logging.Logger log(String name) => logger(name);
+
+  // FIX-1.2: Cancel _releaseFlushTimer and flush logs on dispose
+  static void dispose() {
+    _releaseFlushTimer?.cancel();
+    _releaseFlushTimer = null;
+    flushLogBuffer();
+    try {
+      _fileSink?.close();
+      _fileSink = null;
+    } catch (_) {}
+    _initialized = false;
+  }
 }
 
 extension LoggingExtension on pkg_logging.Logger {

@@ -7,13 +7,12 @@ import 'package:dmx/features/settings/provider/settings_provider.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('DownloadEngine SSL Scoping (SEC-01)', () {
+  group('DownloadEngine SSL Hardening (FIX-0.1)', () {
     test(
-        'buildTransferDio creates adapter with scoped client callback for backend host',
+        'buildTransferDio creates secure adapter with standard client callback',
         () {
       final client = buildTransferDio(
         url: 'https://backend-service-xyz.a.run.app/download',
-        bypassSSL: true,
       );
 
       expect(client.httpClientAdapter, isA<IOHttpClientAdapter>());
@@ -23,11 +22,10 @@ void main() {
       expect(httpClient, isA<HttpClient>());
     });
 
-    test('buildTransferDio configures standard client when bypassSSL is false',
+    test('buildTransferDio configures standard client for arbitrary domains',
         () {
       final client = buildTransferDio(
         url: 'https://arbitrary-site.com/file.zip',
-        bypassSSL: false,
       );
 
       expect(client.httpClientAdapter, isA<IOHttpClientAdapter>());
@@ -37,12 +35,13 @@ void main() {
       expect(httpClient, isA<HttpClient>());
     });
 
-    test('buildTransferDio handles developerMode setting gracefully', () {
+    test(
+        'buildTransferDio handles developerMode setting gracefully without SSL bypass',
+        () {
       SettingsProvider.instance.developerMode = true;
 
       final client = buildTransferDio(
         url: 'https://custom-server.local/file.zip',
-        bypassSSL: true,
       );
 
       final adapter = client.httpClientAdapter as IOHttpClientAdapter;

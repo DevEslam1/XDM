@@ -77,12 +77,12 @@ class ScheduleManager {
   static Future<void> initialize() async {
     if (Platform.isAndroid || isAndroidForTesting) {
       try {
-        Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+        Workmanager().initialize(callbackDispatcher);
         Workmanager().registerPeriodicTask(
           'dmx_schedule',
           'dmx_schedule_check',
           frequency: const Duration(minutes: 15),
-          existingWorkPolicy: ExistingWorkPolicy.keep,
+          existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
         );
       } catch (e) {
         debugPrint('[ScheduleManager] Workmanager initialization error: $e');

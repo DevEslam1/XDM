@@ -16,6 +16,21 @@ class RemoteApiService {
   static String? _cachedTokenFilePath;
 
   static const _tokenFileName = '.xdm_remote_token';
+  // FIX-7.3: Rate limiting state
+  static final List<int> _requestTimestamps = [];
+  static const int _maxRequestsPerMinute = 120;
+  static const int _maxRequestSize = 65536;
+
+  static bool _checkRateLimit() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final oneMinAgo = now - 60000;
+    _requestTimestamps.removeWhere((ts) => ts < oneMinAgo);
+    if (_requestTimestamps.length >= _maxRequestsPerMinute) {
+      return false;
+    }
+    _requestTimestamps.add(now);
+    return true;
+  }
 
   /// Path to the token file (app support directory).
   static Future<String> _tokenFilePath() async {
@@ -52,6 +67,10 @@ class RemoteApiService {
           '[RemoteApiService] chmod on token dir skipped: $e',
         );
       }
+    } else {
+      LoggingService.logger('RemoteApiService').fine(
+        'Windows: token directory relies on user profile ACLs',
+      );
     }
 
     _cachedTokenFilePath =
@@ -124,6 +143,38 @@ class RemoteApiService {
           final method = request.method;
 
           request.response.headers.contentType = ContentType.json;
+
+          // FIX SEC-2: Reject non-loopback client connections
+          if (request.connectionInfo != null &&
+              !request.connectionInfo!.remoteAddress.isLoopback) {
+            request.response.statusCode = 403;
+            request.response.write(
+              jsonEncode(
+                  {'error': 'Forbidden: only loopback connections allowed'}),
+            );
+            await request.response.close();
+            return;
+          }
+
+          // FIX-7.3: Request size limits
+          if (request.contentLength > _maxRequestSize) {
+            request.response.statusCode = 413;
+            request.response.write(
+              jsonEncode({'error': 'Payload Too Large'}),
+            );
+            await request.response.close();
+            return;
+          }
+
+          // FIX-7.3: Rate limiting
+          if (!_checkRateLimit()) {
+            request.response.statusCode = 429;
+            request.response.write(
+              jsonEncode({'error': 'Too Many Requests'}),
+            );
+            await request.response.close();
+            return;
+          }
 
           // Health check — always allowed without auth
           if (path == '/api/health' && method == 'GET') {
@@ -280,6 +331,11 @@ class RemoteApiService {
               '[RemoteApiService] chmod on token file skipped: $e',
             );
           }
+        } else {
+          // FIX: Document Windows limitation — token file is user-profile scoped
+          LoggingService.logger('RemoteApiService').fine(
+            'Windows: token file relies on user profile ACLs',
+          );
         }
       } catch (e) {
         debugPrint('Remote API: failed to write token file: $e');

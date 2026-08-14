@@ -8,6 +8,9 @@ class _MockOrchestratorHost implements DownloadOrchestratorHost {
   DownloadTask? lastTaskState;
 
   @override
+  DownloadTask? findTaskById(String id) => lastTaskState;
+
+  @override
   Future<void> setTaskState(DownloadTask task) async {
     lastTaskState = task;
   }
@@ -19,7 +22,7 @@ class _MockOrchestratorHost implements DownloadOrchestratorHost {
   bool get enableBackgroundTimers => false;
 
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => null;
 }
 
 void main() {

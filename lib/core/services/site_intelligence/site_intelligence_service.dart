@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../logging_service.dart';
+import '../background_gate.dart';
 import 'url_patterns.dart';
 import 'site_registry.dart';
 
@@ -258,8 +259,9 @@ class SiteIntelligenceService {
     if (_persistPending) return;
     _persistPending = true;
     _persistTimer?.cancel();
-    // FIX-M4: 30s debounce delay
-    _persistTimer = Timer(const Duration(seconds: 30), () async {
+    // FIX-2.1: Route persist debounce interval through BackgroundGate
+    _persistTimer = Timer(
+        BackgroundGate.adaptInterval(const Duration(seconds: 30)), () async {
       _persistPending = false;
       if (_disposed) return;
       await flushPending();

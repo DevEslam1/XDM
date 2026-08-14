@@ -177,27 +177,36 @@ class PositionalFileWriter {
     final handleLock = _handleLocks[key]!;
     final buffer = _buffers[key]!;
 
-    await handleLock.synchronized(() async {
-      _checkOpen();
+    try {
+      await handleLock.synchronized(() async {
+        _checkOpen();
 
-      // Check if write is non-sequential with buffer start
-      if (buffer.isNotEmpty &&
-          buffer.startPos + buffer.length != absolutePosition) {
-        await _flushBufferInternal(raf, buffer);
+        // Check if write is non-sequential with buffer start
+        if (buffer.isNotEmpty &&
+            buffer.startPos + buffer.length != absolutePosition) {
+          await _flushBufferInternal(raf, buffer);
+        }
+
+        buffer.add(absolutePosition, data);
+        _bytesSinceLastFlush += data.length;
+
+        if (buffer.length >= _bufferSize) {
+          await _flushBufferInternal(raf, buffer);
+        }
+
+        if (threadIndex >= 0 && threadIndex < _highWater.length) {
+          final end = absolutePosition + data.length;
+          if (end > _highWater[threadIndex]) _highWater[threadIndex] = end;
+        }
+      });
+    } on FileSystemException catch (e) {
+      final osError = e.osError;
+      if (osError != null &&
+          (osError.errorCode == 28 || osError.errorCode == 112)) {
+        throw const InsufficientStorageException();
       }
-
-      buffer.add(absolutePosition, data);
-      _bytesSinceLastFlush += data.length;
-
-      if (buffer.length >= _bufferSize) {
-        await _flushBufferInternal(raf, buffer);
-      }
-
-      if (threadIndex >= 0 && threadIndex < _highWater.length) {
-        final end = absolutePosition + data.length;
-        if (end > _highWater[threadIndex]) _highWater[threadIndex] = end;
-      }
-    });
+      throw PositionalFileWriterException('write failed: ${e.message}');
+    }
   }
 
   Future<void> _flushBufferInternal(
@@ -331,6 +340,9 @@ class PositionalFileWriter {
   Future<void> close() async {
     await _metaLock.synchronized(() async {
       if (_closed) return;
+      try {
+        await flushAll();
+      } catch (_) {}
       _closed = true;
 
       for (final entry in _handles.entries) {

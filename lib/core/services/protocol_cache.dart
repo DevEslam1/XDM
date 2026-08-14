@@ -49,11 +49,25 @@ class ProtocolCache {
     return caps.support;
   }
 
+  static const int _maxEntries = 500;
+
   static Future<void> record(String url, ProtocolSupport support) async {
     final host = Uri.tryParse(url)?.host;
     if (host == null) return;
     _cache ??= {};
     _cache![host] = _HostCaps(support: support, at: DateTime.now());
+
+    // FIX P1-4: Cap cache to 500 entries, evicting expired then oldest
+    if (_cache!.length > _maxEntries) {
+      _cache!.removeWhere((_, c) => c.isExpired);
+      if (_cache!.length > _maxEntries) {
+        final sortedKeys = _cache!.keys.toList()
+          ..sort((a, b) => _cache![a]!.at.compareTo(_cache![b]!.at));
+        for (final k in sortedKeys.take(_cache!.length - _maxEntries)) {
+          _cache!.remove(k);
+        }
+      }
+    }
     await _persist();
   }
 

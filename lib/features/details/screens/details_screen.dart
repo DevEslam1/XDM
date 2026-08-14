@@ -195,12 +195,33 @@ class _DetailsScreenState extends State<DetailsScreen>
 
             if (taskIndex == -1) {
               return Center(
-                child: Text(
-                  isRtl ? 'مهمة التنزيل غير موجودة' : 'DOWNLOAD TASK NOT FOUND',
-                  style: TextStyle(
-                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      size: 48,
+                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      isRtl
+                          ? 'مهمة التنزيل غير موجودة'
+                          : 'Download Task Not Found',
+                      style: TextStyle(
+                        color:
+                            isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back),
+                      label: Text(isRtl ? 'رجوع' : 'Go Back'),
+                    ),
+                  ],
                 ),
               );
             }

@@ -7,6 +7,7 @@ import '../provider/settings_provider.dart';
 import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';
 import '../widgets/system_monitors_card.dart';
+import '../../../shared/design/dmx_design.dart';
 
 class PowerSettingsPage extends StatelessWidget with HapticHelper {
   const PowerSettingsPage({super.key});
@@ -23,18 +24,19 @@ class PowerSettingsPage extends StatelessWidget with HapticHelper {
       padding: const EdgeInsets.only(
         left: 12.0,
         right: 12.0,
-        top: 16.0,
-        bottom: 84.0,
+        top: 12.0,
+        bottom: 80.0,
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SystemMonitorsCard(
             accentColor: accent,
             isDark: isDark,
           ),
+          const SizedBox(height: 12),
           SettingsSectionHeader(
-            title: isRtl ? 'إدارة الطاقة والبطارية' : 'Power Management',
+            title: isRtl ? 'حالة الطاقة العامة' : 'General Power & Efficiency',
             accentColor: accent,
             isDark: isDark,
           ),
@@ -48,7 +50,21 @@ class PowerSettingsPage extends StatelessWidget with HapticHelper {
                     ? 'يحدد التحميلات المتزامنة بـ 1، الخيوط بـ 2، ويفعل الواجهة الكلاسيكية'
                     : 'Limits downloads to 1, threads to 2, and forces Classic UI mode',
                 value: settings.batterySaverMode,
-                onChanged: (val) {
+                onChanged: (val) async {
+                  if (val) {
+                    final confirmed = await DmxConfirmDialog.show(
+                      context,
+                      title: isRtl
+                          ? 'تفعيل وضع توفير البطارية؟'
+                          : 'Enable Battery Saver?',
+                      message: isRtl
+                          ? 'سيحدد هذا التحميلات بـ 1، الخيوط بـ 2، ويفرض وضع الواجهة الكلاسيكية.'
+                          : 'This will limit downloads to 1, threads to 2, and force Classic UI mode.',
+                      confirmLabel: isRtl ? 'تفعيل' : 'Enable',
+                      cancelLabel: isRtl ? 'إلغاء' : 'Cancel',
+                    );
+                    if (confirmed != true) return;
+                  }
                   settings.setBatterySaverMode(val);
                   triggerHaptic(settings);
                 },

@@ -63,7 +63,8 @@ class AmbientProgress with WidgetsBindingObserver {
       _stopTimer();
       return;
     }
-    const int intervalMs = 1000;
+    // FIX P1-1: Reduce repaint frequency from 1s to 5s
+    const int intervalMs = 5000;
     _timer ??= Timer.periodic(const Duration(milliseconds: intervalMs), (_) {
       if (!BackgroundGate.allowHeavyOps ||
           _isBackgrounded ||
@@ -74,8 +75,8 @@ class AmbientProgress with WidgetsBindingObserver {
       }
       final elapsed =
           DateTime.now().difference(_startTime).inMilliseconds / 1000;
-      final newVal = (elapsed / 20) % 1.0;
-      if ((newVal - progress.value).abs() >= 0.004) {
+      final newVal = (elapsed / 30) % 1.0;
+      if ((newVal - progress.value).abs() >= 0.01) {
         progress.value = newVal;
       }
     });
