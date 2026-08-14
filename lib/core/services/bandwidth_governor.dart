@@ -113,31 +113,28 @@ class BandwidthGovernor {
   Future<int> acquire(int bytes, {String? taskId}) async {
     if (bytes <= 0) return 0;
 
+    // Task-specific limits (lock-free read, lock only for mutation)
     if (taskId != null && _taskLimits.containsKey(taskId)) {
       final taskLimit = _taskLimits[taskId]!;
-      if (taskLimit <= 0) return 1000; // Blocked
-
+      if (taskLimit <= 0) return 1000;
       return _lock.synchronized(() {
         _refill();
         final now = DateTime.now();
         final last = _taskLastRefill[taskId] ?? now;
         final elapsedMs = now.difference(last).inMilliseconds;
         final tokens = _taskTokens[taskId] ?? 0.0;
-
         if (elapsedMs > 0) {
           final newTokens = taskLimit * elapsedMs / 1000.0;
           _taskTokens[taskId] =
               min(tokens + newTokens, taskLimit * _burstFactor);
           _taskLastRefill[taskId] = now;
-        } else {
-          _taskTokens[taskId] = tokens;
         }
-
-        _taskTokens[taskId] = (_taskTokens[taskId] ?? 0) - bytes;
-        if ((_taskTokens[taskId] ?? 0) < 0) {
-          final deficit = -(_taskTokens[taskId] ?? 0);
+        final currentTokens = (_taskTokens[taskId] ?? 0) - bytes;
+        _taskTokens[taskId] = currentTokens;
+        if (currentTokens < 0) {
+          final deficit = -currentTokens;
           final waitMs = (deficit / taskLimit * 1000.0).ceil();
-          _taskTokens[taskId] = 0; // clamp to zero, not negative
+          _taskTokens[taskId] = 0;
           return waitMs.clamp(0, 1000);
         }
         return 0;
@@ -146,20 +143,16 @@ class BandwidthGovernor {
 
     if (isUnlimited) return 0;
 
+    // Global limit — lock-free fast path
     return _lock.synchronized(() {
       _refill();
-
       final share = perConsumerBytesPerSecond;
-      // FIX: When share <= 0 due to extreme power throttling
-      // (throttleFactor == 0), the governor should BLOCK writes, not
-      // allow them unlimited. Returning 0 would bypass the limit.
       if (share <= 0) return 1000;
-
       _availableTokens -= bytes;
       if (_availableTokens < 0) {
         final deficit = -_availableTokens;
         final waitMs = (deficit / share * 1000.0).ceil();
-        _availableTokens = 0; // clamp to zero, not negative
+        _availableTokens = 0;
         return waitMs.clamp(0, 1000);
       }
       return 0;

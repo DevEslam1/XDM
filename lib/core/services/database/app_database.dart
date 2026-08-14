@@ -462,8 +462,12 @@ class AppDatabase extends _$AppDatabase {
                 'CREATE INDEX IF NOT EXISTS idx_browser_history_visited_at ON browser_history (visited_at)');
           }
           if (from < 10) {
-            await customStatement(
-                'ALTER TABLE download_tasks ADD COLUMN thumbnail_url TEXT');
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN thumbnail_url TEXT');
+            } catch (e) {
+              _dbLog.info('Column thumbnail_url may already exist: $e');
+            }
           }
           if (from < 11) {
             await customStatement('''
@@ -547,36 +551,76 @@ class AppDatabase extends _$AppDatabase {
             }
           }
           if (from < 12) {
-            await customStatement(
-                'ALTER TABLE download_tasks ADD COLUMN mirror_urls TEXT');
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN mirror_urls TEXT');
+            } catch (e) {
+              _dbLog.info('Column mirror_urls may already exist: $e');
+            }
           }
           if (from < 13) {
-            await customStatement(
-                'ALTER TABLE download_tasks ADD COLUMN queue_order INTEGER NOT NULL DEFAULT 0');
-            await customStatement(
-                'UPDATE download_tasks SET queue_order = (SELECT COUNT(*) FROM download_tasks t2 WHERE t2.created_at < download_tasks.created_at)');
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN queue_order INTEGER NOT NULL DEFAULT 0');
+            } catch (e) {
+              _dbLog.info('Column queue_order may already exist: $e');
+            }
+            try {
+              await customStatement(
+                  'UPDATE download_tasks SET queue_order = (SELECT COUNT(*) FROM download_tasks t2 WHERE t2.created_at < download_tasks.created_at)');
+            } catch (e) {
+              _dbLog.info('Failed updating queue_order: $e');
+            }
           }
           if (from < 14) {
-            await customStatement(
-                'ALTER TABLE download_tasks ADD COLUMN video_stream_size INTEGER NOT NULL DEFAULT 0');
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN video_stream_size INTEGER NOT NULL DEFAULT 0');
+            } catch (e) {
+              _dbLog.info('Column video_stream_size may already exist: $e');
+            }
           }
           if (from < 15) {
-            await customStatement(
-                'ALTER TABLE download_tasks ADD COLUMN audio_downloaded_bytes INTEGER NOT NULL DEFAULT 0');
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN audio_downloaded_bytes INTEGER NOT NULL DEFAULT 0');
+            } catch (e) {
+              _dbLog.info('Column audio_downloaded_bytes may already exist: $e');
+            }
           }
           if (from < 16) {
-            await customStatement(
-                'ALTER TABLE download_tasks ADD COLUMN uploaded_bytes INTEGER NOT NULL DEFAULT 0');
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN uploaded_bytes INTEGER NOT NULL DEFAULT 0');
+            } catch (e) {
+              _dbLog.info('Column uploaded_bytes may already exist: $e');
+            }
           }
           if (from < 17) {
-            await customStatement(
-                'ALTER TABLE browser_history ADD COLUMN visit_count INTEGER NOT NULL DEFAULT 1');
-            await customStatement(
-                'ALTER TABLE browser_history ADD COLUMN favicon_url TEXT');
-            await customStatement(
-                'ALTER TABLE browser_tabs ADD COLUMN last_visited_at INTEGER NOT NULL DEFAULT 0');
-            await customStatement(
-                'ALTER TABLE browser_tabs ADD COLUMN favicon_url TEXT');
+            try {
+              await customStatement(
+                  'ALTER TABLE browser_history ADD COLUMN visit_count INTEGER NOT NULL DEFAULT 1');
+            } catch (e) {
+              _dbLog.info('Column visit_count may already exist: $e');
+            }
+            try {
+              await customStatement(
+                  'ALTER TABLE browser_history ADD COLUMN favicon_url TEXT');
+            } catch (e) {
+              _dbLog.info('Column favicon_url on browser_history may already exist: $e');
+            }
+            try {
+              await customStatement(
+                  'ALTER TABLE browser_tabs ADD COLUMN last_visited_at INTEGER NOT NULL DEFAULT 0');
+            } catch (e) {
+              _dbLog.info('Column last_visited_at may already exist: $e');
+            }
+            try {
+              await customStatement(
+                  'ALTER TABLE browser_tabs ADD COLUMN favicon_url TEXT');
+            } catch (e) {
+              _dbLog.info('Column favicon_url on browser_tabs may already exist: $e');
+            }
             await customStatement(
                 'CREATE INDEX IF NOT EXISTS idx_browser_history_url ON browser_history (url)');
             await customStatement(

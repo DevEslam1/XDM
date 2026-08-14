@@ -429,75 +429,82 @@ class StateStore {
 
   static void removeTaskState(String taskId) => removeCachedPayload(taskId);
 
+  static final Map<String, Lock> _pathLocks = {};
+
   static Future<void> save(
     String tempFilePath,
     TransferState state, {
     bool durable = false,
     bool screenOff = false,
   }) async {
-    state.updatedAt = DateTime.now();
     final targetPath = pathFor(tempFilePath);
-    final isScreenOff = screenOff || PowerMonitor.screenOff;
-    final tmpPath = '$targetPath.tmp';
-    try {
-      final now = DateTime.now();
-      final lastSave = _lastSaveTimes[targetPath];
-      final bytesSinceLastWrite =
-          (state.downloadedBytes - (_lastWrittenBytes[targetPath] ?? 0)).abs();
+    final pathLock = _pathLocks.putIfAbsent(targetPath, () => Lock());
 
-      // FIX-P1: Rate-limit non-durable state saves to at most once per 2s unless delta >= 5MB
-      if (!durable &&
-          lastSave != null &&
-          now.difference(lastSave) < const Duration(seconds: 2) &&
-          bytesSinceLastWrite < 5 * 1024 * 1024) {
-        return;
-      }
-
-      final payload = jsonEncode(state.toJson());
-      final payloadHash = payload.hashCode;
-      if (!durable && _lastWrittenPayloads[targetPath] == payloadHash) {
-        return; // Skip redundant state write
-      }
-      _lastWrittenPayloads[targetPath] = payloadHash;
-      _lastSaveTimes[targetPath] = now;
-      if (_lastWrittenPayloads.length > _maxCachedPayloads) {
-        final keysToRemove = _lastWrittenPayloads.keys
-            .take(_lastWrittenPayloads.length - _maxCachedPayloads)
-            .toList();
-        for (final key in keysToRemove) {
-          _lastWrittenPayloads.remove(key);
-          _lastWrittenBytes.remove(key);
-          _lastSaveTimes.remove(key);
-        }
-      }
-
-      // FIX-3: Always write when downloadedBytes changed by >5MB regardless of screen state
-      if (isScreenOff && !durable && bytesSinceLastWrite < 5 * 1024 * 1024) {
-        return; // skip only small deltas when screen off
-      }
-      _lastWrittenBytes[targetPath] = state.downloadedBytes;
-
-      final tmp = File(tmpPath);
-      await tmp.parent.create(recursive: true);
-      if (durable) {
-        await tmp.writeAsString(payload, flush: true);
-        // REMOVED: redundant raf.flush() — writeAsString with flush:true is sufficient
-      } else {
-        await tmp.writeAsString(payload, flush: false);
-      }
+    return pathLock.synchronized(() async {
+      state.updatedAt = DateTime.now();
+      final isScreenOff = screenOff || PowerMonitor.screenOff;
+      final tmpPath = '$targetPath.tmp';
       try {
-        await tmp.rename(targetPath);
+        final now = DateTime.now();
+        final lastSave = _lastSaveTimes[targetPath];
+        final bytesSinceLastWrite =
+            (state.downloadedBytes - (_lastWrittenBytes[targetPath] ?? 0)).abs();
+
+        // FIX-P1: Rate-limit non-durable state saves to at most once per 2s unless delta >= 5MB
+        if (!durable &&
+            lastSave != null &&
+            now.difference(lastSave) < const Duration(seconds: 2) &&
+            bytesSinceLastWrite < 5 * 1024 * 1024) {
+          return;
+        }
+
+        final payload = jsonEncode(state.toJson());
+        final payloadHash = payload.hashCode;
+        if (!durable && _lastWrittenPayloads[targetPath] == payloadHash) {
+          return; // Skip redundant state write
+        }
+        _lastWrittenPayloads[targetPath] = payloadHash;
+        _lastSaveTimes[targetPath] = now;
+        if (_lastWrittenPayloads.length > _maxCachedPayloads) {
+          final keysToRemove = _lastWrittenPayloads.keys
+              .take(_lastWrittenPayloads.length - _maxCachedPayloads)
+              .toList();
+          for (final key in keysToRemove) {
+            _lastWrittenPayloads.remove(key);
+            _lastWrittenBytes.remove(key);
+            _lastSaveTimes.remove(key);
+          }
+        }
+
+        // FIX-3: Always write when downloadedBytes changed by >5MB regardless of screen state
+        if (isScreenOff && !durable && bytesSinceLastWrite < 5 * 1024 * 1024) {
+          return; // skip only small deltas when screen off
+        }
+        _lastWrittenBytes[targetPath] = state.downloadedBytes;
+
+        final tmp = File(tmpPath);
+        await tmp.parent.create(recursive: true);
+        if (durable) {
+          await tmp.writeAsString(payload, flush: true);
+          // REMOVED: redundant raf.flush() — writeAsString with flush:true is sufficient
+        } else {
+          await tmp.writeAsString(payload, flush: false);
+        }
+        try {
+          await tmp.rename(targetPath);
+        } catch (e) {
+          // Fallback to direct write if rename fails (e.g. file lock on Windows)
+          await File(targetPath).writeAsString(payload, flush: true);
+        }
       } catch (e) {
-        // Fallback to direct write if rename fails (e.g. file lock on Windows)
-        await File(targetPath).writeAsString(payload, flush: true);
+        debugPrint('[DmxState] save failed for $tempFilePath: $e');
       }
-    } catch (e) {
-      debugPrint('[DmxState] save failed for $tempFilePath: $e');
-    }
+    });
   }
 
   static Future<void> remove(String tempFilePath) async {
     final targetPath = pathFor(tempFilePath);
+    _pathLocks.remove(targetPath);
     _lastWrittenPayloads.remove(targetPath);
     _lastWrittenBytes.remove(targetPath);
     final tmpPath = '$targetPath.tmp';
@@ -569,12 +576,20 @@ class DownloadJournal {
     final isBg = !DownloadEngine.appInForeground ||
         DownloadEngine.isInBackground ||
         PowerMonitor.screenOff;
-    // FIX-3.2: 4MB delta threshold in background, 8MB when screen is off
+
     if (isBg) {
       final threshold =
           PowerMonitor.screenOff ? 8 * 1024 * 1024 : 4 * 1024 * 1024;
       final last = _lastBgRecordedBytes[index] ?? 0;
       if ((bytes - last).abs() < threshold) {
+        return;
+      }
+      _lastBgRecordedBytes[index] = bytes;
+    } else {
+      // NEW: foreground throttle — 1MB minimum delta
+      final fgThreshold = 1024 * 1024;
+      final last = _lastBgRecordedBytes[index] ?? 0;
+      if ((bytes - last).abs() < fgThreshold) {
         return;
       }
       _lastBgRecordedBytes[index] = bytes;

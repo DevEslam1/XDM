@@ -114,13 +114,7 @@ class LoggingService {
     _releaseFlushTimer = timer;
   }
 
-  static void closeFileLogging() {
-    _releaseFlushTimer?.cancel();
-    _releaseFlushTimer = null;
-    flushLogBuffer();
-    _fileSink?.close();
-    _fileSink = null;
-  }
+  static void closeFileLogging() => dispose();
 
   /// Returns a named [pkg_logging.Logger] for use throughout the app.
   static pkg_logging.Logger logger(String name) {

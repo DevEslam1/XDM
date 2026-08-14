@@ -669,20 +669,22 @@ class XdmBackendClient {
         adapter.createHttpClient = () {
           final httpClient = HttpClient();
           httpClient.badCertificateCallback = (cert, host, port) {
-            bool allow = false;
-            assert(() {
-              if (kDebugMode) {
-                final targetHost =
-                    Uri.tryParse(client.options.baseUrl)?.host.toLowerCase();
-                if (targetHost != null && targetHost.isNotEmpty) {
-                  final h = host.toLowerCase();
-                  allow = h == targetHost || h.endsWith('.$targetHost');
-                }
-              }
-              return true;
-            }());
-            return allow;
+            // PRODUCTION: reject ALL self-signed certificates unconditionally.
+            return false;
           };
+          assert(() {
+            // DEBUG ONLY: allow self-signed for local dev backend.
+            httpClient.badCertificateCallback = (cert, host, port) {
+              final targetHost =
+                  Uri.tryParse(client.options.baseUrl)?.host.toLowerCase();
+              if (targetHost != null && targetHost.isNotEmpty) {
+                final h = host.toLowerCase();
+                return h == targetHost || h.endsWith('.$targetHost');
+              }
+              return false;
+            };
+            return true;
+          }());
           return httpClient;
         };
       }

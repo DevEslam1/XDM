@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:logging/logging.dart';
 import 'package:synchronized/synchronized.dart';
 import 'download_engine.dart';
+
+final _log = Logger('PositionalFileWriter');
 
 /// I/O failure inside the writer. The engine maps message heuristics
 /// (ENOSPC / "space") onto [InsufficientStorageException].
@@ -340,35 +343,43 @@ class PositionalFileWriter {
   Future<void> close() async {
     await _metaLock.synchronized(() async {
       if (_closed) return;
-      _closed = true;
       try {
-        try {
-          await flushAll();
-        } catch (_) {}
+        await flushAll(); // let errors propagate
+      } on PositionalFileWriterException {
+        rethrow; // disk-full must not be swallowed
+      } catch (e, st) {
+        _log.warning('flushAll during close failed: $e', e, st);
       } finally {
+        _closed = true;
         for (final entry in _handles.entries) {
           final key = entry.key;
           final handle = entry.value;
           final lock = _handleLocks[key];
           final buffer = _buffers[key];
-          if (lock != null && buffer != null) {
-            try {
+          try {
+            if (lock != null && buffer != null) {
               await lock.synchronized(() async {
                 try {
                   await _flushBufferInternal(handle, buffer);
                   await handle.flush();
-                } catch (_) {}
-                await handle.close();
+                } catch (e, st) {
+                  _log.finest('Flush buffer during close failed', e, st);
+                }
+                try {
+                  await handle.close();
+                } catch (e, st) {
+                  _log.finest('Close handle in lock failed', e, st);
+                }
               });
-            } catch (_) {
+            } else {
               try {
                 await handle.close();
-              } catch (_) {}
+              } catch (e, st) {
+                _log.finest('Close handle failed', e, st);
+              }
             }
-          } else {
-            try {
-              await handle.close();
-            } catch (_) {}
+          } catch (e, st) {
+            _log.finest('Handle cleanup failed', e, st);
           }
         }
         _handles.clear();

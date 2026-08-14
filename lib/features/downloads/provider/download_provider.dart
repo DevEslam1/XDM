@@ -1298,6 +1298,7 @@ class DownloadProvider extends ChangeNotifier
       updateActualTorrentUploadLimit();
 
       _startWidgetTimer();
+      filteredTasksDirty = true;
       notifyListeners();
 
       // Resolve connectivity BEFORE any scheduled downloads or pumpQueue to

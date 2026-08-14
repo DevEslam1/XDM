@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/background_gate.dart';
 import '../../core/services/power_monitor.dart';
@@ -35,11 +36,33 @@ class DmxBackdropFilter extends StatefulWidget {
 class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   bool _allocated = false;
 
+  bool get _isLowEndDevice {
+    return _cachedIsLowEnd ??= _detectLowEnd();
+  }
+  static bool? _cachedIsLowEnd;
+
+  static bool _detectLowEnd() {
+    try {
+      final scheduler = SchedulerBinding.instance;
+      final view = scheduler.platformDispatcher.implicitView;
+      if (view == null) return false;
+      final size = view.physicalSize;
+      final ratio = view.devicePixelRatio;
+      if (ratio <= 0) return false;
+      final logicalW = size.width / ratio;
+      // Heuristic: very low resolution + low DPR = low-end
+      return logicalW < 400 && ratio <= 2.0;
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     // FIX-P4 / P0-GPU: If _activeCount >= 3 or not allowed by BackgroundGate, skip BackdropFilter
     if (!widget.forceSolid &&
+        !_isLowEndDevice &&
         BackgroundGate.allowHeavyOps &&
         !PowerMonitor.screenOff &&
         DmxBackdropFilter._activeCount < DmxBackdropFilter._maxConcurrent) {
@@ -60,8 +83,9 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
 
   @override
   Widget build(BuildContext context) {
-    // FIX-P4 / U-04 / P0-GPU: When PowerMonitor.screenOff, !BackgroundGate.allowHeavyOps, reduceVisuals, classicUi, or not allocated, render solid fallback
-    if (widget.forceSolid ||
+    // FIX-P4 / U-04 / P0-GPU: When low-end, PowerMonitor.screenOff, !BackgroundGate.allowHeavyOps, reduceVisuals, classicUi, or not allocated, render solid fallback
+    if (_isLowEndDevice ||
+        widget.forceSolid ||
         PowerMonitor.screenOff ||
         !BackgroundGate.allowHeavyOps ||
         !_allocated) {

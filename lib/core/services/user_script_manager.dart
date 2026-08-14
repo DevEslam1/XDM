@@ -329,6 +329,9 @@ if (!window['$marker']) {
             return target[prop](fn, safeDelay, ...args);
           };
         }
+        if (prop === 'crypto' && target.crypto) {
+          return { subtle: undefined };
+        }
         if (prop === '__proto__' || prop === 'prototype') {
           return null;
         }

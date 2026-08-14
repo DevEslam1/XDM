@@ -21,22 +21,22 @@ void main() {
   test('valid journal records CRC32 and recovers successfully', () async {
     final journal = DownloadJournal(journalPath);
     await journal.open();
-    await journal.writeInit(4, 1024 * 1024);
-    await journal.recordChunkProgress(0, 100);
-    await journal.recordChunkProgress(1, 200);
+    await journal.writeInit(4, 50 * 1024 * 1024);
+    await journal.recordChunkProgress(0, 2 * 1024 * 1024);
+    await journal.recordChunkProgress(1, 3 * 1024 * 1024);
     await journal.close();
 
     final recovered = await DownloadJournal.recover(journalPath);
     expect(recovered, isNotNull);
-    expect(recovered, equals([100, 200, 0, 0]));
+    expect(recovered, equals([2 * 1024 * 1024, 3 * 1024 * 1024, 0, 0]));
   });
 
   test('corrupted journal line is skipped gracefully during recovery',
       () async {
     final journal = DownloadJournal(journalPath);
     await journal.open();
-    await journal.writeInit(2, 500);
-    await journal.recordChunkProgress(0, 50);
+    await journal.writeInit(2, 50 * 1024 * 1024);
+    await journal.recordChunkProgress(0, 2 * 1024 * 1024);
     await journal.close();
 
     // Manually append a corrupted line (invalid CRC)
@@ -54,13 +54,13 @@ void main() {
 
     final journal2 = DownloadJournal(journalPath);
     await journal2.open();
-    await journal2.recordChunkProgress(1, 100);
+    await journal2.recordChunkProgress(1, 3 * 1024 * 1024);
     await journal2.close();
 
     final recovered = await DownloadJournal.recover(journalPath);
     expect(recovered, isNotNull);
-    // The corrupted line (b: 999) was skipped, so chunk 0 remains 50 and chunk 1 is 100
-    expect(recovered, equals([50, 100]));
+    // The corrupted line (b: 999) was skipped, so chunk 0 remains 2MB and chunk 1 is 3MB
+    expect(recovered, equals([2 * 1024 * 1024, 3 * 1024 * 1024]));
   });
 
   test('legacy unchecksummed journal lines recover cleanly', () async {

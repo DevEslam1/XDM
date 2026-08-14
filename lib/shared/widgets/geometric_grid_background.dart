@@ -83,7 +83,11 @@ class AmbientProgress with WidgetsBindingObserver {
   }
 
   void removeRef() {
-    _refCount = math.max(0, _refCount - 1);
+    if (_refCount <= 0) {
+      // Already zero — do NOT go negative (FIX-03 regression guard)
+      return;
+    }
+    _refCount--;
     if (_refCount == 0) {
       _stopTimer();
     }

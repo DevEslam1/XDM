@@ -33,9 +33,9 @@ void main() {
       final journalPath = '${tempDir.path}/test_chunk.journal';
       final journal = DownloadJournal(journalPath);
       await journal.open();
-      await journal.writeInit(4, 10000);
-      // Send >64KB bytes to trigger record
-      await journal.recordChunkProgress(0, 70000);
+      await journal.writeInit(4, 10000000);
+      // Send >1MB bytes to trigger record
+      await journal.recordChunkProgress(0, 2000000);
       await journal.close();
 
       final content = await File(journalPath).readAsString();

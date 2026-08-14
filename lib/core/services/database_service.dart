@@ -1111,6 +1111,8 @@ class DatabaseService {
     await flushPendingSaves();
     _maintenanceTimer?.cancel();
     _maintenanceTimer = null;
+    _dbBatchTimer?.cancel();
+    _dbBatchTimer = null;
     await _db.close();
   }
 }

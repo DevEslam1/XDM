@@ -3504,11 +3504,18 @@ Dio buildTransferDio({
       // FIX-0.1: badCertificateCallback must ALWAYS return false in release builds.
       // In debug builds, it may ONLY allow the backend URL host.
       httpClient.badCertificateCallback = (cert, h, p) {
-        if (!kDebugMode) return false;
-        final isBackendHost =
-            url != null && Uri.tryParse(url)?.host.contains('run.app') == true;
-        return isBackendHost;
+        // PRODUCTION: reject ALL self-signed certificates unconditionally.
+        return false;
       };
+      assert(() {
+        // DEBUG ONLY: allow self-signed for local dev backend.
+        httpClient.badCertificateCallback = (cert, h, p) {
+          final isBackendHost =
+              url != null && Uri.tryParse(url)?.host.contains('run.app') == true;
+          return isBackendHost;
+        };
+        return true;
+      }());
       return httpClient;
     };
   }
