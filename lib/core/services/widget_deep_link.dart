@@ -50,10 +50,39 @@ class WidgetDeepLinkHandler {
     });
   }
 
+  static const Set<String> validRoutes = {
+    'downloads',
+    'download',
+    'toggle',
+    'pause',
+    'cancel',
+    'resume',
+    'open',
+    'settings',
+    'category',
+    'add',
+    'share',
+    'pause_all',
+    'pause-all',
+    'resume_all',
+    'resume-all',
+  };
+
+  /// Validates whether [url] is a well-formed and recognized deep link (I-01/I-02).
+  static bool isValidDeepLink(String url) {
+    if (url.trim().isEmpty) return false;
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null) return false;
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme != 'dmx' && scheme != 'xdm') return false;
+    final host = uri.host.toLowerCase();
+    return validRoutes.contains(host);
+  }
+
   static void handleUrl(String url) {
-    if (url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    if (uri == null || uri.scheme.toLowerCase() != 'dmx') return;
+    if (!isValidDeepLink(url)) return;
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null) return;
 
     final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
 
