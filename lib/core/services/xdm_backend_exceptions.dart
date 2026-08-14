@@ -70,3 +70,5 @@ class XdmBackendTimeoutException extends BackendException {
   const XdmBackendTimeoutException(
       [super.message = 'The backend request timed out.']);
 }
+
+typedef BackendTimeoutException = XdmBackendTimeoutException;

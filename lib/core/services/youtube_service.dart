@@ -568,12 +568,12 @@ class YoutubeService {
     }
 
     try {
-      // FIX-H4: Wrap backend call with 35s timeout
+      // FIX-H4 / Y-03: Wrap backend call with 45s total budget timeout
       final results = await _resolveWithRetry(
         targetUrl,
         cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,
-      ).timeout(const Duration(seconds: 35), onTimeout: () {
-        throw TimeoutException('getStreams request timed out after 35 seconds');
+      ).timeout(const Duration(seconds: 45), onTimeout: () {
+        throw const BackendTimeoutException('Total retry budget exceeded');
       });
 
       if (results != null && results.isNotEmpty) {
@@ -736,8 +736,12 @@ class YoutubeService {
     String? cookies,
     int maxRetries = 3,
   }) async {
+    final stopwatch = Stopwatch()..start();
     int effectiveRetries = maxRetries;
     for (int attempt = 0; attempt <= effectiveRetries; attempt++) {
+      if (stopwatch.elapsed > const Duration(seconds: 45)) {
+        throw const BackendTimeoutException('Total retry budget exceeded');
+      }
       try {
         final result = await _resolveStreamsWithFallback(url, cookies: cookies);
         if (result != null && result.isNotEmpty) return result;
@@ -749,6 +753,9 @@ class YoutubeService {
         }
         continue;
       } catch (e) {
+        if (stopwatch.elapsed > const Duration(seconds: 45)) {
+          throw const BackendTimeoutException('Total retry budget exceeded');
+        }
         final isTimeout = e is TimeoutException ||
             e is XdmBackendTimeoutException ||
             e.toString().contains('timed out');
