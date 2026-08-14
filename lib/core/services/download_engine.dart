@@ -22,6 +22,7 @@ import 'package:dmx/core/services/torrent_service.dart';
 import 'package:dmx/core/services/torrent_resume_store.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import 'engines/http_download_engine.dart';
+import '../interfaces/i_download_engine.dart';
 import '../utils/bencode_decoder.dart';
 import '../utils/file_utils.dart';
 import '../utils/url_utils.dart';
@@ -741,7 +742,7 @@ class DownloadProgressHandler {
   }
 }
 
-class DownloadEngine {
+class DownloadEngine implements IDownloadEngine {
   static Future<void> validateSavePath(
     String savePath, {
     int requiredSizeBytes = 0,
@@ -805,6 +806,25 @@ class DownloadEngine {
         throw const InvalidPathException(
             'Save path is outside allowed storage locations');
       }
+
+      // FIX C-SEC-01: Symlink traversal check
+      try {
+        final isLink = await FileSystemEntity.isLink(normalized);
+        if (isLink) {
+          final resolved = await Link(normalized).resolveSymbolicLinks();
+          final isResolvedAllowed = allowedStorageRoots.any((root) {
+            final normRoot = p.normalize(root);
+            return p.equals(resolved, normRoot) ||
+                p.isWithin(normRoot, resolved);
+          });
+          if (!isResolvedAllowed) {
+            throw const InvalidPathException(
+                'Symlink points outside allowed storage locations');
+          }
+        }
+      } on InvalidPathException {
+        rethrow;
+      } catch (_) {}
     }
 
     if (requiredSizeBytes > 0) {
@@ -1016,6 +1036,7 @@ class DownloadEngine {
     client.close(force: true);
   }
 
+  @override
   Future<DownloadMetadata> resolveMetadata({
     required String url,
     String? requestedFileName,
@@ -1521,6 +1542,7 @@ class DownloadEngine {
     }
   }
 
+  @override
   Future<void> download({
     required String taskId,
     required String url,
@@ -3454,6 +3476,7 @@ class DownloadEngine {
 
   final Lock _closeLock = Lock();
 
+  @override
   Future<void> close() async {
     await _closeLock.synchronized(() async {
       if (_closing) return;

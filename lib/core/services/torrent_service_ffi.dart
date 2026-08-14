@@ -13,6 +13,8 @@ import 'package:synchronized/synchronized.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import 'download_engine.dart';
 import 'power_monitor.dart';
+import 'torrent_session_config.dart';
+import 'torrent_seeding_manager.dart';
 import 'torrent_models.dart';
 import 'torrent_resume_store.dart';
 import 'tracker_manager.dart';
@@ -449,6 +451,9 @@ class TorrentService {
         _CapabilityGate.instance.probeCapabilities();
         _configureSessionFromSettings();
         _startTrackingUpdates();
+        startAutoSaveTimer();
+        startDhtRebootstrapTimer();
+        TorrentSeedingManager.startSeedingCheck();
         _state = TorrentSessionState.ready;
         isAvailable.value = true;
       } on TimeoutException {
@@ -492,7 +497,50 @@ class TorrentService {
     'dht.aelitis.com:6881',
     'router.silotis.us:6881',
     'dht.libtorrent.org:25401',
+    'bootstrap.bittorrent.com:6881',
+    'dht.anacrolix.link:42069',
+    'router.bitcomet.com:6881',
   ];
+
+  static Timer? _autoSaveResumeTimer;
+  static Timer? _dhtRebootstrapTimer;
+
+  static void startAutoSaveTimer() {
+    _autoSaveResumeTimer?.cancel();
+    _autoSaveResumeTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => autoSaveResumeData(),
+    );
+  }
+
+  static void startDhtRebootstrapTimer() {
+    _dhtRebootstrapTimer?.cancel();
+    _dhtRebootstrapTimer = Timer.periodic(
+      const Duration(minutes: 30),
+      (_) => refreshDhtBootstrapNodes(),
+    );
+  }
+
+  static Future<void> autoSaveResumeData() async {
+    if (!isPluginAvailable || _activeTorrentIds.isEmpty) return;
+    for (final id in _activeTorrentIds) {
+      try {
+        final blob = _CapabilityGate.instance.saveResumeData(id);
+        if (blob != null && blob.isNotEmpty && TorrentResumeStore.validateResumeData(blob)) {
+          final source = _torrentSources[id];
+          if (source != null) {
+            await TorrentResumeStore.saveAndWait(
+              torrentId: id,
+              sourceUrl: source,
+              fetchResumeData: () => blob,
+            );
+          }
+        }
+      } catch (e) {
+        _log.fine('Auto-save resume data skipped for $id: $e');
+      }
+    }
+  }
 
   static void _injectDhtNodes() {
     try {
@@ -512,16 +560,7 @@ class TorrentService {
   static void configureSession([SettingsProvider? settings]) {
     try {
       final s = settings ?? SettingsProvider.instance;
-      final config = LibtorrentFlutter.instance.getDefaultConfig().copyWith(
-            disableDht: !s.enableDht,
-            disableUpnp: !s.enableUpnp,
-            forceEncrypt: s.forceEncrypt,
-            connectionsLimit: s.torrentConnectionsLimit,
-            downloadRateLimit: s.effectiveSpeedLimitBytesPerSecond ~/ 1024,
-            uploadRateLimit: s.globalTorrentSeedingLimited
-                ? s.globalTorrentSeedingLimitKbps
-                : 0,
-          );
+      final config = TorrentSessionConfig.buildOptimizedConfig(s);
       LibtorrentFlutter.instance.configureSession(config);
       _injectDhtNodes();
 
@@ -535,6 +574,26 @@ class TorrentService {
     } catch (e) {
       _log.warning('Session configuration failed: $e');
     }
+  }
+
+  static void reconfigureSession() => configureSession();
+
+  static void autoEnableSequentialForVideo(int torrentId) {
+    if (!isInitialized || torrentId < 0) return;
+    try {
+      final nativeFiles = LibtorrentFlutter.instance.getFiles(torrentId);
+      final hasVideo = nativeFiles.any((f) =>
+          f.size > 50 * 1024 * 1024 &&
+          (f.name.endsWith('.mp4') ||
+              f.name.endsWith('.mkv') ||
+              f.name.endsWith('.avi') ||
+              f.name.endsWith('.webm') ||
+              f.name.endsWith('.mov') ||
+              f.name.endsWith('.ts')));
+      if (hasVideo) {
+        enableSequentialDownload(torrentId, true);
+      }
+    } catch (_) {}
   }
 
   static void _configureSessionFromSettings() => configureSession();

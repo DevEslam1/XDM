@@ -261,6 +261,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   int _maxConcurrentFilesPerTorrent = 0;
   double shareRatioLimit = 2.0;
   int maxSeedingTimeMinutes = 0;
+  int minSeedTimeMinutes = 0;
   int maxPeerConnectionsPerTorrent = 50;
   int maxHalfOpenConnections = 20;
   bool enableUtp = true;

@@ -1,3 +1,5 @@
+import 'error_taxonomy.dart';
+
 enum CircuitBreakerState { closed, open, halfOpen }
 
 /// Thrown when a [CircuitBreaker] is OPEN (or not yet allowed) and the caller
@@ -96,7 +98,12 @@ class CircuitBreaker {
       recordSuccess();
       return result;
     } catch (e) {
-      recordFailure();
+      final classified = ErrorTaxonomy.classify(e);
+      if (classified.retryable ||
+          classified.isServerError ||
+          classified.isNetworkError) {
+        recordFailure();
+      }
       rethrow;
     }
   }

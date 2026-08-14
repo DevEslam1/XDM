@@ -538,10 +538,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_local_notifications
-      sha256: "9375211fd7df9c070504ac4db7047c7fae857e238291433b770cfe696b5c357a"
+      sha256: "1447ba911c60f2ba3f25dae1af151ec187162566b0f57e37771bf0b400f013ad"
       url: "https://pub.dev"
     source: hosted
-    version: "22.2.0"
+    version: "22.3.0"
   flutter_local_notifications_linux:
     dependency: transitive
     description:
@@ -554,10 +554,10 @@ packages:
     dependency: transitive
     description:
       name: flutter_local_notifications_platform_interface
-      sha256: "945a438a4779f3aca3a948718d8a4048cbe9f9c8c797492c00abd5d39112bf37"
+      sha256: "43c3761d916c9bd3d5c7ebbc44d82f4990329840c0c5d62ad5260cc1b5d399bd"
       url: "https://pub.dev"
     source: hosted
-    version: "12.1.0"
+    version: "12.2.0"
   flutter_local_notifications_web:
     dependency: transitive
     description:
@@ -809,10 +809,10 @@ packages:
     dependency: "direct main"
     description:
       name: libtorrent_flutter
-      sha256: ee514f12b305c4d0f860aa4b03a9eb8d7096ba9c751c5ef80c0088e799af9790
+      sha256: fd954704312c6990294e7bcb40ed5bcf6c9edf8976a547649de32100e0523199
       url: "https://pub.dev"
     source: hosted
-    version: "1.9.2"
+    version: "2.0.0"
   lints:
     dependency: transitive
     description:
@@ -1009,10 +1009,10 @@ packages:
     dependency: "direct main"
     description:
       name: permission_handler
-      sha256: "06149cba29bc46206f8b54b56065fe74b07602d2454a281287685ae66b5ab7b5"
+      sha256: e7317eb2eb611d1bf0386b6b974be9c50449f975f19a90a7b8ea013550302b30
       url: "https://pub.dev"
     source: hosted
-    version: "13.0.0"
+    version: "13.0.1"
   permission_handler_android:
     dependency: transitive
     description:
@@ -1025,10 +1025,10 @@ packages:
     dependency: transitive
     description:
       name: permission_handler_apple
-      sha256: "11b7e94a9d2fbee23c27f0cae0105c6266c03fd83b9a2eda6cf09141fc82624b"
+      sha256: f49cb15a064ea9d974fc7fbb302099353b7b170d07284e86e264561579e5bcf8
       url: "https://pub.dev"
     source: hosted
-    version: "9.5.0"
+    version: "9.6.1"
   permission_handler_html:
     dependency: transitive
     description:
@@ -1201,18 +1201,18 @@ packages:
     dependency: transitive
     description:
       name: sentry
-      sha256: "330a341076e16b87aa8a4f97b0bd48c085737d087e81ef337aee2b4c3e8896f9"
+      sha256: c2ecd8abe82e63cdcb6947f71320612ced56e10ba94db7529d85cc02be47cb3b
       url: "https://pub.dev"
     source: hosted
-    version: "9.26.0"
+    version: "9.27.0"
   sentry_flutter:
     dependency: "direct main"
     description:
       name: sentry_flutter
-      sha256: "163685070e173b9b28cd10e56eb76fdaca34067831bd7e3563f98a5bc5866165"
+      sha256: ec89cc6ba939ca19155ea83900d9740a36544f50b3b6baf265518e3348fb0f50
       url: "https://pub.dev"
     source: hosted
-    version: "9.26.0"
+    version: "9.27.0"
   share_plus:
     dependency: "direct main"
     description:

@@ -336,9 +336,9 @@ class UpdateService {
           {'path': apkFile.path},
         );
       } on MissingPluginException {
-        certFingerprint = sha256.convert(bytes).toString();
-      } catch (_) {
-        certFingerprint = sha256.convert(bytes).toString();
+        _log.warning('Security channel unavailable for APK signature verification');
+      } catch (e) {
+        _log.warning('Security channel verification exception: $e');
       }
 
       if (developerMode) {
@@ -352,20 +352,25 @@ class UpdateService {
         );
       }
 
-      if (expectedFingerprint != null &&
-          expectedFingerprint.isNotEmpty &&
-          certFingerprint != null &&
-          certFingerprint.toLowerCase() !=
-              expectedFingerprint.trim().toLowerCase()) {
-        try {
-          await apkFile.delete();
-        } catch (_) {}
-        return ApkVerificationResult(
-          isValid: false,
-          certificateFingerprint: certFingerprint,
-          expectedFingerprint: expectedFingerprint,
-          failureReason: 'Certificate fingerprint mismatch',
-        );
+      if (expectedFingerprint != null && expectedFingerprint.isNotEmpty) {
+        if (certFingerprint == null) {
+          return const ApkVerificationResult(
+            isValid: false,
+            failureReason: 'Native signature verification unavailable',
+          );
+        }
+        if (certFingerprint.toLowerCase() !=
+            expectedFingerprint.trim().toLowerCase()) {
+          try {
+            await apkFile.delete();
+          } catch (_) {}
+          return ApkVerificationResult(
+            isValid: false,
+            certificateFingerprint: certFingerprint,
+            expectedFingerprint: expectedFingerprint,
+            failureReason: 'Certificate fingerprint mismatch',
+          );
+        }
       }
 
       return ApkVerificationResult(

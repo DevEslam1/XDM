@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import 'download_engine.dart';
+import 'positional_file_writer.dart';
 import 'xdm_backend_exceptions.dart';
 
 /// High-level family of an error, used to decide user messaging, retry policy
@@ -144,6 +145,17 @@ class ErrorTaxonomy {
       return const ErrorClassification(
         family: ErrorFamily.disk,
         message: 'Not enough storage space',
+        severe: true,
+        recoveryAction: RecoveryAction.showSettings,
+      );
+    }
+
+    if (error is PositionalFileWriterException) {
+      final msg = error.message.toLowerCase();
+      final isSpace = msg.contains('enospc') || msg.contains('space') || msg.contains('disk');
+      return ErrorClassification(
+        family: ErrorFamily.disk,
+        message: isSpace ? 'Not enough storage space' : 'Disk write error: ${error.message}',
         severe: true,
         recoveryAction: RecoveryAction.showSettings,
       );

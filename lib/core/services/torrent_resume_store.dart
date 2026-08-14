@@ -313,6 +313,18 @@ class TorrentResumeStore {
     } catch (_) {}
   }
 
+  /// Validates that a resume blob is structurally valid and non-corrupt (Phase 4).
+  static bool validateResumeData(Uint8List blob) {
+    if (blob.isEmpty) return false;
+    if (blob.length > 1024 * 1024) return false;
+    try {
+      final decoded = BencodeDecoder(blob).decode();
+      return decoded is Map;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Delete by torrent id (resolves via the registry).
   static Future<void> delete(int torrentId) async {
     await _removeFromIndex(torrentId);

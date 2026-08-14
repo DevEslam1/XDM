@@ -168,10 +168,11 @@ class MirrorFailover {
         continue;
       }
       try {
-        final retries = candidateUrls.length > 1 ? 0 : 2;
+        final isMultiMirror = candidateUrls.length > 1;
+        final retries = isMultiMirror ? 0 : 2;
         await RetryEngine(
           maxRetries: retries,
-          baseDelay: const Duration(seconds: 2),
+          baseDelay: isMultiMirror ? Duration.zero : const Duration(seconds: 2),
           backoffMultiplier: 2.0,
           maxDelay: const Duration(seconds: 10),
         ).execute(

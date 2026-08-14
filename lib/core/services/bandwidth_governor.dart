@@ -126,7 +126,8 @@ class BandwidthGovernor {
   }
 
   int _acquireTaskLimited(int bytes, String taskId) {
-    final taskLimit = _taskLimits[taskId]!;
+    final rawLimit = _taskLimits[taskId]!;
+    final taskLimit = (rawLimit * throttleFactor).round();
     if (taskLimit <= 0) return 1000;
     final now = DateTime.now();
     final last = _taskLastRefill[taskId] ?? now;

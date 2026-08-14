@@ -234,6 +234,23 @@ class PowerMonitor {
     });
   }
 
+  @visibleForTesting
+  static void setBatteryForTesting({
+    required int level,
+    required BatteryState state,
+  }) {
+    _level = level;
+    _state = state;
+    _lastSaverMode = null;
+    _notifyThrottleFactor();
+  }
+
+  @visibleForTesting
+  static void setThermalForTesting(ThermalStatus thermal) {
+    _thermal = thermal;
+    _notifyThrottleFactor();
+  }
+
   // FIX-1.3: Close StreamControllers and cancel timers on dispose
   static void dispose() {
     _sub?.cancel();

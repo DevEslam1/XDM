@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:dmx/core/services/database_service.dart';
+import 'package:dmx/core/interfaces/i_task_data_source.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'task_repository.dart';
 
-class DriftTaskRepository implements TaskRepository {
+class DriftTaskRepository implements TaskRepository, ITaskDataSource {
   final DatabaseService _db;
   DriftTaskRepository(this._db);
 

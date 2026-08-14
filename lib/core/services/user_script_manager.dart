@@ -173,7 +173,7 @@ class UserScriptManager extends ChangeNotifier {
           'Security Violation: dynamic import in script "${script.name}"');
       throw Exception('Dynamic imports are prohibited in UserScripts.');
     }
-    // FIX SEC-1 / FIX-25: Detect obfuscated dynamic code execution
+    // FIX SEC-1 / FIX-25 / C-SEC-02: Detect obfuscated dynamic code execution and reflection bypasses
     final hasObfuscatedEval = RegExp(r'window\s*\[\s*["\x27]ev').hasMatch(code);
     final hasObfuscatedFunction =
         RegExp(r'window\s*\[\s*["\x27]Function').hasMatch(code);
@@ -181,6 +181,10 @@ class UserScriptManager extends ChangeNotifier {
     final hasConstructorCall = RegExp(r'constructor\s*\(').hasMatch(code);
     final hasCharCode = code.contains('String.fromCharCode');
     final hasAtob = code.contains('atob(');
+    final hasBtoa = code.contains('btoa(');
+    final hasReflect = code.contains('Reflect.') || code.contains('Reflect[');
+    final hasProxy = code.contains('new Proxy(');
+    final hasProtoGetSet = code.contains('getPrototypeOf') || code.contains('setPrototypeOf');
     final hasProtoConstructor = code.contains('Function.prototype.constructor');
 
     if (hasObfuscatedEval ||
@@ -189,10 +193,14 @@ class UserScriptManager extends ChangeNotifier {
         hasConstructorCall ||
         hasCharCode ||
         hasAtob ||
+        hasBtoa ||
+        hasReflect ||
+        hasProxy ||
+        hasProtoGetSet ||
         hasProtoConstructor) {
       _log.severe(
-          'Security Violation: Obfuscated dynamic execution in script "${script.name}"');
-      throw Exception('Obfuscated dynamic execution detected');
+          'Security Violation: Obfuscated dynamic execution / reflection in script "${script.name}"');
+      throw Exception('Obfuscated dynamic execution or reflection detected');
     }
   }
 
@@ -320,8 +328,8 @@ if (!window['$marker']) {
             throw new Error('[DMX Sandbox] Access to ' + String(prop) + ' is prohibited');
           };
         }
-        if (prop === 'eval' || prop === 'Function' || prop === 'importScripts') {
-          throw new Error('[DMX Sandbox] Dynamic execution prohibited: ' + String(prop));
+        if (prop === 'eval' || prop === 'Function' || prop === 'importScripts' || prop === 'Reflect' || prop === 'Proxy') {
+          throw new Error('[DMX Sandbox] Dynamic execution / reflection prohibited: ' + String(prop));
         }
         if (prop === 'setTimeout' || prop === 'setInterval') {
           return function(fn, delay, ...args) {

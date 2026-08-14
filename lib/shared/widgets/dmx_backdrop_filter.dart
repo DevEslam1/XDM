@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'dart:ui';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
@@ -36,6 +37,9 @@ class DmxBackdropFilter extends StatefulWidget {
 
 class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   bool _allocated = false;
+  ImageFilter? _cachedFilter;
+  double? _lastSigmaX;
+  double? _lastSigmaY;
 
   bool get _isLowEndDevice {
     return _cachedIsLowEnd ??= _detectLowEnd();
@@ -65,7 +69,8 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   }
 
   void _tryAllocate() {
-    if (!widget.forceSolid &&
+    if (!kIsWeb &&
+        !widget.forceSolid &&
         !_isLowEndDevice &&
         BackgroundGate.allowHeavyOps &&
         !PowerMonitor.screenOff &&
@@ -87,18 +92,19 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_allocated && (!BackgroundGate.allowHeavyOps || PowerMonitor.screenOff)) {
+    if (_allocated && (kIsWeb || !BackgroundGate.allowHeavyOps || PowerMonitor.screenOff)) {
       DmxBackdropFilter._activeCount = max(0, DmxBackdropFilter._activeCount - 1);
       _allocated = false;
-    } else if (!_allocated && BackgroundGate.allowHeavyOps && !PowerMonitor.screenOff) {
+    } else if (!_allocated && !kIsWeb && BackgroundGate.allowHeavyOps && !PowerMonitor.screenOff) {
       _tryAllocate();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // FIX-P4 / U-04 / P0-GPU: When low-end, PowerMonitor.screenOff, !BackgroundGate.allowHeavyOps, reduceVisuals, classicUi, or not allocated, render solid fallback
-    if (_isLowEndDevice ||
+    // FIX-P4 / U-04 / P0-GPU / M-PLT-03: When on Web, low-end, PowerMonitor.screenOff, !BackgroundGate.allowHeavyOps, reduceVisuals, classicUi, or not allocated, render solid fallback
+    if (kIsWeb ||
+        _isLowEndDevice ||
         widget.forceSolid ||
         PowerMonitor.screenOff ||
         !BackgroundGate.allowHeavyOps ||
@@ -129,9 +135,21 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
     }
     final effectiveSigmaX = widget.sigmaX.clamp(0.0, 12.0);
     final effectiveSigmaY = widget.sigmaY.clamp(0.0, 12.0);
+
+    // FIX M-UI-08: Cache ImageFilter instance to avoid allocation overhead on every rebuild
+    if (_cachedFilter == null ||
+        _lastSigmaX != effectiveSigmaX ||
+        _lastSigmaY != effectiveSigmaY) {
+      _cachedFilter = ImageFilter.blur(
+        sigmaX: effectiveSigmaX,
+        sigmaY: effectiveSigmaY,
+      );
+      _lastSigmaX = effectiveSigmaX;
+      _lastSigmaY = effectiveSigmaY;
+    }
+
     return BackdropFilter(
-      filter:
-          ImageFilter.blur(sigmaX: effectiveSigmaX, sigmaY: effectiveSigmaY),
+      filter: _cachedFilter!,
       child: widget.child,
     );
   }

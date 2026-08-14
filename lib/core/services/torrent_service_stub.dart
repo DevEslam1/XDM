@@ -61,6 +61,9 @@ class TorrentService {
       const Stream.empty();
   static Map<int, TorrentUpdateInfo> get latestStats => const {};
   static void configureSession([SettingsProvider? settings]) {}
+  static void reconfigureSession() {}
+  static void autoEnableSequentialForVideo(int torrentId) {}
+  static Future<void> autoSaveResumeData() async {}
 
   static List<TrackerInfo> getTrackers(int torrentId) => [];
   static void addTracker(int torrentId, String trackerUrl, {int tier = 0}) {}

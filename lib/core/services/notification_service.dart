@@ -493,9 +493,9 @@ class NotificationService {
     if (!_initialized) return;
     final now = DateTime.now();
     final lastPost = _lastProgressPostTimes[notificationId];
-    // FIX PERF-5: 5000ms background throttle, 2000ms foreground
+    // FIX M-BG-10: 10000ms background throttle, 2000ms foreground
     final isBg = DownloadEngine.isInBackground || PowerMonitor.screenOff;
-    final throttleMs = isBg ? 5000 : 2000;
+    final throttleMs = isBg ? 10000 : 2000;
     if (!isPaused &&
         lastPost != null &&
         now.difference(lastPost).inMilliseconds < throttleMs) {

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 import 'download_engine.dart';
@@ -436,8 +437,8 @@ class StateStore {
     return adjusted;
   }
 
-  // FIX P1-7: Store payload hash instead of full string for dedup
-  static final Map<String, int> _lastWrittenPayloads = {};
+  // FIX C-DL-02: Store SHA-256 string instead of int hashCode to eliminate collision bugs
+  static final Map<String, String> _lastWrittenPayloads = {};
   static final Map<String, int> _lastWrittenBytes = {};
   static final Map<String, DateTime> _lastSaveTimes = {};
   // FIX-M1: Track last written status to write immediately on status changes
@@ -467,6 +468,9 @@ class StateStore {
     return pathLock.synchronized(() async {
       state.updatedAt = DateTime.now();
       final isScreenOff = screenOff || PowerMonitor.screenOff;
+      final isBg = isScreenOff ||
+          !DownloadEngine.appInForeground ||
+          DownloadEngine.isInBackground;
       final tmpPath = '$targetPath.tmp';
       try {
         final now = DateTime.now();
@@ -476,17 +480,23 @@ class StateStore {
                 .abs();
         final statusChanged = _lastWrittenStatus[targetPath] != state.status;
 
-        // FIX-P1: Rate-limit non-durable state saves to at most once per 2s unless delta >= 5MB or status changed
-        if (!durable &&
-            !statusChanged &&
-            lastSave != null &&
-            now.difference(lastSave) < const Duration(seconds: 2) &&
-            bytesSinceLastWrite < 5 * 1024 * 1024) {
-          return;
+        // FIX-C-BG-03: Rate-limit non-durable state saves in background (60s / 16MB) or foreground (2s / 5MB)
+        if (!durable && !statusChanged && lastSave != null) {
+          if (isBg) {
+            if (now.difference(lastSave) < const Duration(seconds: 60) &&
+                bytesSinceLastWrite < 16 * 1024 * 1024) {
+              return;
+            }
+          } else {
+            if (now.difference(lastSave) < const Duration(seconds: 2) &&
+                bytesSinceLastWrite < 5 * 1024 * 1024) {
+              return;
+            }
+          }
         }
 
         final payload = jsonEncode(state.toJson());
-        final payloadHash = payload.hashCode;
+        final payloadHash = sha256.convert(utf8.encode(payload)).toString();
         if (!durable &&
             !statusChanged &&
             _lastWrittenPayloads[targetPath] == payloadHash) {
@@ -507,7 +517,7 @@ class StateStore {
           }
         }
 
-        // FIX-P0-4: Screen-off threshold increased to 5MB; always write when status changed
+        // Screen-off threshold: always write when status changed or durable
         if (isScreenOff &&
             !durable &&
             !statusChanged &&
@@ -520,7 +530,6 @@ class StateStore {
         await tmp.parent.create(recursive: true);
         if (durable) {
           await tmp.writeAsString(payload, flush: true);
-          // REMOVED: redundant raf.flush() — writeAsString with flush:true is sufficient
         } else {
           await tmp.writeAsString(payload, flush: false);
         }
@@ -612,10 +621,10 @@ class DownloadJournal {
         PowerMonitor.screenOff;
 
     final threshold = PowerMonitor.screenOff
-        ? 16 * 1024 * 1024 // 16MB when screen off (was 8MB)
+        ? 16 * 1024 * 1024 // 16MB when screen off (C-BG-02)
         : isBg
-            ? 8 * 1024 * 1024 // 8MB when backgrounded (was 4MB)
-            : 2 * 1024 * 1024; // 2MB foreground (was 1MB)
+            ? 4 * 1024 * 1024 // 4MB when backgrounded (BG-04 / C-BG-02)
+            : 512 * 1024; // 512KB foreground (M-DL-08)
 
     final last = _lastBgRecordedBytes[index] ?? 0;
     if ((bytes - last).abs() < threshold) return;
