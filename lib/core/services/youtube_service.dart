@@ -9,6 +9,19 @@ import 'xdm_backend_client.dart';
 import 'xdm_backend_exceptions.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
+class StreamRefreshResult {
+  final Map<String, dynamic> stream;
+  final bool qualityChanged;
+  final String? originalQuality;
+  final String? newQuality;
+  const StreamRefreshResult({
+    required this.stream,
+    this.qualityChanged = false,
+    this.originalQuality,
+    this.newQuality,
+  });
+}
+
 class YoutubeService {
   static String? _cookies;
   static String? _oauthToken;
@@ -1002,6 +1015,31 @@ class YoutubeService {
     return (details?['videos'] as List?)
         ?.map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
+  }
+
+  static int qualityLadderDistance(String? q1, String? q2) {
+    const ladder = [2160, 1440, 1080, 720, 480, 360, 240, 144];
+    final h1 = parseQualityHeight(q1 ?? '');
+    final h2 = parseQualityHeight(q2 ?? '');
+    if (h1 <= 0 || h2 <= 0) return 0;
+    final idx1 = ladder.indexWhere((h) => h <= h1);
+    final idx2 = ladder.indexWhere((h) => h <= h2);
+    if (idx1 == -1 || idx2 == -1) return 0;
+    return (idx1 - idx2).abs();
+  }
+
+  static StreamRefreshResult evaluateQualityDowngrade({
+    required Map<String, dynamic> stream,
+    String? originalQuality,
+    String? newQuality,
+  }) {
+    final steps = qualityLadderDistance(originalQuality, newQuality);
+    return StreamRefreshResult(
+      stream: stream,
+      qualityChanged: steps > 1,
+      originalQuality: originalQuality,
+      newQuality: newQuality,
+    );
   }
 
   static Future<Map<String, dynamic>?> refreshStreamUrl(
