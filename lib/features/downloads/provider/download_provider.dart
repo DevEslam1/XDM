@@ -823,20 +823,21 @@ class DownloadProvider extends ChangeNotifier
     required int fileSize,
     required int threadCount,
   }) {
-    final n = threadCount > 0 ? threadCount : 1;
-    if (fileSize <= 0 || actualBytesOnDisk <= 0) {
-      return List.filled(n, 0.0);
+    final count = threadCount > 0 ? threadCount : 1;
+    if (fileSize <= 0) return List.filled(count, 0.0);
+    final overallFraction = (actualBytesOnDisk / fileSize).clamp(0.0, 1.0);
+
+    if (stateChunks == null ||
+        stateChunks.isEmpty ||
+        stateChunks.length != count) {
+      return List.filled(count, overallFraction);
     }
-    final overall = (actualBytesOnDisk / fileSize).clamp(0.0, 1.0);
-    if (stateChunks == null || stateChunks.isEmpty) {
-      return List.filled(n, overall);
-    }
-    if (stateChunks.length != n) {
-      return List.filled(n, overall);
-    }
-    final chunkAvg = stateChunks.fold<double>(0.0, (s, c) => s + c) / n;
-    if (chunkAvg <= 0) return List.filled(n, overall);
-    final scale = overall / chunkAvg;
+
+    // Scale existing chunks to match actual bytes
+    final chunkSum = stateChunks.fold<double>(0.0, (s, c) => s + c);
+    if (chunkSum <= 0) return List.filled(count, overallFraction);
+
+    final scale = (overallFraction * count) / chunkSum;
     return stateChunks.map((c) => (c * scale).clamp(0.0, 1.0)).toList();
   }
 
@@ -2871,7 +2872,7 @@ class DownloadProvider extends ChangeNotifier
         errorMessage: 'Transfer cancelled.',
         // FIX-2: Set isCancelled: true so auto-resume skips cancelled tasks
         isCancelled: true,
-        pausedByUser: false,
+        pausedByUser: true,
       ),
     );
 
@@ -2927,28 +2928,33 @@ class DownloadProvider extends ChangeNotifier
               for (final p in [
                 task.tempFilePath,
                 '${task.tempFilePath}.dmxstate',
+                '${task.tempFilePath}.dmxstate.tmp',
                 '${task.tempFilePath}.journal',
                 '${task.tempFilePath}.audio',
                 '${task.tempFilePath}.audio.dmxstate',
+                '${task.tempFilePath}.audio.dmxstate.tmp',
                 '${task.tempFilePath}.audio.journal',
+                '${task.tempFilePath}.audio.itag',
               ]) {
                 final f = File(p);
                 if (await f.exists()) await f.delete();
               }
             } catch (_) {}
+            task = task.copyWith(
+              url: newUrl,
+              mergedAudioUrl: newAudioUrl,
+              downloadedBytes: 0,
+              audioProgress: 0.0,
+              audioDownloadedBytes: 0,
+              chunks: List<double>.filled(
+                  task.threadCount > 0 ? task.threadCount : 1, 0.0),
+            );
+          } else {
+            task = task.copyWith(
+              url: newUrl,
+              mergedAudioUrl: newAudioUrl ?? task.mergedAudioUrl,
+            );
           }
-          task = task.copyWith(
-            url: newUrl,
-            mergedAudioUrl: newAudioUrl ?? task.mergedAudioUrl,
-            downloadedBytes: identityChanged ? 0 : task.downloadedBytes,
-            audioProgress: identityChanged ? 0.0 : task.audioProgress,
-            audioDownloadedBytes:
-                identityChanged ? 0 : task.audioDownloadedBytes,
-            chunks: identityChanged
-                ? List<double>.filled(
-                    task.threadCount > 0 ? task.threadCount : 1, 0.0)
-                : task.chunks,
-          );
           await _setTask(task);
           await _databaseService.saveTask(task);
         }
@@ -3075,10 +3081,13 @@ class DownloadProvider extends ChangeNotifier
       for (final path in [
         task.tempFilePath,
         '${task.tempFilePath}.dmxstate',
+        '${task.tempFilePath}.dmxstate.tmp',
         '${task.tempFilePath}.journal',
         '${task.tempFilePath}.audio',
         '${task.tempFilePath}.audio.dmxstate',
+        '${task.tempFilePath}.audio.dmxstate.tmp',
         '${task.tempFilePath}.audio.journal',
+        '${task.tempFilePath}.audio.itag',
       ]) {
         try {
           final f = File(path);
@@ -4928,18 +4937,20 @@ class DownloadProvider extends ChangeNotifier
                 '[DMX] FIX-01: Failed atomic state update on refresh: $e');
           }
         }
-      } else if (cleanUrl != task.url &&
-          !isSameResource &&
-          !sameTorrent(task.url, cleanUrl)) {
-        // Delete .dmxstate and temp file on manual URL change when not same resource (FIX H-4 / L-1)
-        for (final p in [
+      } else if (!isSameResource && !isRefresh) {
+        // Delete all .dmxstate and audio sidecars on manual URL change (FIX-02)
+        for (final path in [
           task.tempFilePath,
           '${task.tempFilePath}.dmxstate',
           '${task.tempFilePath}.dmxstate.tmp',
           '${task.tempFilePath}.journal',
+          '${task.tempFilePath}.audio',
+          '${task.tempFilePath}.audio.dmxstate',
+          '${task.tempFilePath}.audio.journal',
+          '${task.tempFilePath}.audio.itag',
         ]) {
           try {
-            final f = File(p);
+            final f = File(path);
             if (await f.exists()) await f.delete();
           } catch (_) {}
         }
@@ -5494,9 +5505,11 @@ class DownloadProvider extends ChangeNotifier
 
   Future<void> _autoResumeIncomplete() async {
     final now = DateTime.now();
-    final wifiBlocked =
-        _settingsProvider.wifiOnly && !_networkMonitor.hasWifiOrEthernet;
-    final noNetwork = !_networkMonitor.hasAnyNetworkConnection;
+    final wifiBlocked = _networkMonitor.hasResolvedInitialConnectivity &&
+        _settingsProvider.wifiOnly &&
+        !_networkMonitor.hasWifiOrEthernet;
+    final noNetwork = _networkMonitor.hasResolvedInitialConnectivity &&
+        _networkMonitor.hasNoNetwork;
 
     final candidates = _tasks.where((t) {
       // FIX-H6: Skip tasks where pausedByUser, waitingWifi, waitingNetwork, or scheduled in future
@@ -5554,37 +5567,6 @@ class DownloadProvider extends ChangeNotifier
         }
       }
 
-      // FIX P0-5: Check wifiOnly setting and network connectivity before auto-resuming incomplete tasks
-      if (wifiBlocked) {
-        final waitingTask = task.copyWith(
-          status: DownloadStatus.paused,
-          errorMessage: DownloadStatusMessages.waitingWifi,
-          speed: 0,
-          clearEta: true,
-        );
-        final idx = _tasks.indexWhere((t) => t.id == task.id);
-        if (idx != -1) {
-          _tasks[idx] = waitingTask;
-          await _databaseService.saveTask(waitingTask);
-        }
-        continue;
-      }
-
-      if (noNetwork) {
-        final waitingTask = task.copyWith(
-          status: DownloadStatus.paused,
-          errorMessage: DownloadStatusMessages.waitingNetwork,
-          speed: 0,
-          clearEta: true,
-        );
-        final idx = _tasks.indexWhere((t) => t.id == task.id);
-        if (idx != -1) {
-          _tasks[idx] = waitingTask;
-          await _databaseService.saveTask(waitingTask);
-        }
-        continue;
-      }
-
       final updated = task.copyWith(
         status: DownloadStatus.queued,
         downloadedBytes: realBytesOnDisk,
@@ -5607,13 +5589,11 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
-  // FIX-S9: Compare itag, mime, and clen only to prevent spurious restarts on benign host/token rotations
   static bool youtubeStreamIdentityChanged(String oldUrl, String newUrl) {
     try {
       final oldUri = Uri.tryParse(oldUrl);
       final newUri = Uri.tryParse(newUrl);
       if (oldUri == null || newUri == null) return false;
-      if (!oldUri.hasAuthority || !newUri.hasAuthority) return false;
 
       final oldItag = oldUri.queryParameters['itag'];
       final newItag = newUri.queryParameters['itag'];
@@ -5622,23 +5602,17 @@ class DownloadProvider extends ChangeNotifier
       final oldClen = oldUri.queryParameters['clen'];
       final newClen = newUri.queryParameters['clen'];
 
-      final hasItag = oldItag != null && newItag != null;
-      final hasMime = oldMime != null && newMime != null;
-      final hasClen = oldClen != null && newClen != null;
+      // If any identity param exists on both sides and differs → changed
+      if (oldItag != null && newItag != null && oldItag != newItag) return true;
+      if (oldMime != null && newMime != null && oldMime != newMime) return true;
+      if (oldClen != null && newClen != null && oldClen != newClen) return true;
 
-      if (!hasItag && !hasMime && !hasClen) return false;
+      // If clen matches, trust it (same stream, different CDN)
+      if (oldClen != null && newClen != null) return false;
 
-      if (hasItag && oldItag != newItag) return true;
-      if (hasMime && oldMime != newMime) return true;
-      if (hasClen && oldClen != newClen) return true;
-
-      // When both URLs carry a matching content length, the stream is the same
-      // even if the CDN host rotated (benign signature refresh).
-      if (hasClen) return false;
-
-      // Without clen we cannot confirm the stream is identical, so a host
-      // change indicates the stream identity may have changed.
+      // Fallback: if host differs AND no identity params match, assume changed
       if (oldUri.host != newUri.host) return true;
+
       return false;
     } catch (_) {
       return false;

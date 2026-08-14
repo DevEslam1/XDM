@@ -52,8 +52,11 @@ class NetworkMonitor {
   /// The most recent connectivity results reported by the platform.
   List<ConnectivityResult> get currentConnectivity => _currentConnectivity;
 
+  bool get hasResolvedInitialConnectivity => _hasResolvedInitialConnectivity;
+
   /// Whether the device is currently on Wi-Fi or Ethernet.
   bool get hasWifiOrEthernet =>
+      !_hasResolvedInitialConnectivity ||
       _currentConnectivity.contains(ConnectivityResult.wifi) ||
       _currentConnectivity.contains(ConnectivityResult.ethernet);
 
@@ -63,8 +66,9 @@ class NetworkMonitor {
 
   /// Whether there is no network connection available.
   bool get hasNoNetwork =>
-      _currentConnectivity.contains(ConnectivityResult.none) ||
-      _currentConnectivity.isEmpty;
+      _hasResolvedInitialConnectivity &&
+      (_currentConnectivity.contains(ConnectivityResult.none) ||
+          _currentConnectivity.isEmpty);
 
   /// Whether there is any active network connection.
   bool get hasAnyNetworkConnection => !hasNoNetwork;
@@ -126,6 +130,9 @@ class NetworkMonitor {
     }
     _checkingNetwork = true;
     try {
+      if (!_hasResolvedInitialConnectivity && _currentConnectivity.isEmpty) {
+        return;
+      }
       final hasNoNetwork =
           _currentConnectivity.contains(ConnectivityResult.none) ||
               _currentConnectivity.isEmpty;

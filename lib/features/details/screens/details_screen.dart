@@ -2848,30 +2848,46 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                             ),
                             const SizedBox(height: 6),
                             if (selected) ...[
-                              Stack(
-                                children: [
-                                  Container(
+                              if (isEstimated)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(2),
+                                  child: SizedBox(
                                     height: 4,
-                                    width: double.infinity,
-                                    decoration: AppTheme.progressTrack(
-                                      isDark: isDark,
-                                    ),
-                                  ),
-                                  FractionallySizedBox(
-                                    widthFactor: fileProgress,
-                                    child: Container(
-                                      height: 4,
-                                      decoration: AppTheme.progressFill(
-                                        fileComplete
-                                            ? greenClr
-                                            : (isDownloading
-                                                ? blueClr
-                                                : mutedClr),
+                                    child: LinearProgressIndicator(
+                                      backgroundColor: isDark
+                                          ? AppTheme.bgSunken
+                                          : AppTheme.lightBgSunken,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        isDownloading ? blueClr : mutedClr,
                                       ),
                                     ),
                                   ),
-                                ],
-                              ),
+                                )
+                              else
+                                Stack(
+                                  children: [
+                                    Container(
+                                      height: 4,
+                                      width: double.infinity,
+                                      decoration: AppTheme.progressTrack(
+                                        isDark: isDark,
+                                      ),
+                                    ),
+                                    FractionallySizedBox(
+                                      widthFactor: fileProgress,
+                                      child: Container(
+                                        height: 4,
+                                        decoration: AppTheme.progressFill(
+                                          fileComplete
+                                              ? greenClr
+                                              : (isDownloading
+                                                  ? blueClr
+                                                  : mutedClr),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               const SizedBox(height: 6),
                               Row(
                                 mainAxisAlignment:

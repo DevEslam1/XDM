@@ -314,12 +314,41 @@ class DownloadTask {
 
   bool get hasTorrentFiles => torrentFiles != null && torrentFiles!.isNotEmpty;
 
-  // FIX P0-3: combinedTotalSize returns audioSize fallback when videoStreamSize==0 and fileSize<=0
+  ({int totalFileBytes, int downloadedFileBytes}) get torrentFileAggregates {
+    if (torrentFiles == null || torrentFiles!.isEmpty) {
+      return (totalFileBytes: 0, downloadedFileBytes: 0);
+    }
+    int total = 0;
+    int dl = 0;
+    for (final f in torrentFiles!) {
+      if (isTorrentFileSelected(f)) {
+        final len = (f['length'] as num?)?.toInt() ?? 0;
+        final d = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+        total += len;
+        if (d >= 0) dl += d;
+      }
+    }
+    return (totalFileBytes: total, downloadedFileBytes: dl);
+  }
+
+  double get torrentOverallPercent {
+    final agg = torrentFileAggregates;
+    if (agg.totalFileBytes > 0) {
+      final dl = agg.downloadedFileBytes.clamp(0, agg.totalFileBytes);
+      return (dl / agg.totalFileBytes).clamp(0.0, 1.0);
+    }
+    if (fileSize > 0) {
+      return (downloadedBytes / fileSize).clamp(0.0, 1.0);
+    }
+    return 0.0;
+  }
+
+  // FIX-11: combinedTotalSize returns 0 when videoStreamSize == 0 (indeterminate UI)
   int get combinedTotalSize {
     if (hasMergedAudio && audioSize > 0) {
       if (videoStreamSize > 0) return videoStreamSize + audioSize;
       if (fileSize > 0) return fileSize;
-      return audioSize; // fallback: at least show audio size
+      return 0; // Indeterminate — triggers indeterminate UI
     }
     return resolvedFileSize;
   }

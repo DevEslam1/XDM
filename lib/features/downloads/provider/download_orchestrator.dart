@@ -2170,6 +2170,22 @@ class DownloadOrchestrator {
                     _host.providerTasks[idx].copyWith(audioProgress: 1.0);
               }
             }
+
+            // Explicit audio state flush
+            try {
+              final audioStatePath = '$liveAudioTempPath.dmxstate';
+              final audioStateFile = File(audioStatePath);
+              if (await audioStateFile.exists()) {
+                final content = await audioStateFile.readAsString();
+                final decoded = jsonDecode(content);
+                if (decoded is Map) {
+                  decoded['downloadedBytes'] = audioBytesSoFar;
+                  await audioStateFile.writeAsString(jsonEncode(decoded),
+                      flush: true);
+                }
+              }
+            } catch (_) {}
+
             final currentTask = _host.findTaskById(task.id);
             if (currentTask != null &&
                 currentTask.downloadedBytes > videoBytesSoFar) {
@@ -3820,26 +3836,7 @@ class DownloadOrchestrator {
 
   bool shouldRejectResolvedYoutubeUrl(String? resolvedUrl) {
     if (resolvedUrl == null || resolvedUrl.trim().isEmpty) return true;
-
-    final uri = Uri.tryParse(resolvedUrl.trim());
-    if (uri == null) return false;
-
-    final host = uri.host.toLowerCase();
-    final isYouTubeHost = host == 'youtube.com' ||
-        host == 'www.youtube.com' ||
-        host == 'm.youtube.com' ||
-        host.endsWith('.youtube.com') ||
-        host == 'youtu.be' ||
-        host.endsWith('.youtu.be');
-
-    if (isYouTubeHost) return true;
-
-    final path = uri.path.toLowerCase();
-    return path == '/watch' ||
-        path == '/playlist' ||
-        path == '/shorts' ||
-        path.endsWith('.html') ||
-        path.endsWith('.htm');
+    return isYouTubePageUrl(resolvedUrl);
   }
 
   Future<Map<String, dynamic>?> _refreshYoutubeStreamUrlSafe(
