@@ -57,16 +57,20 @@ class AppLockService {
       return false;
     }
 
-    final hashedInput = hashSecret(pin, salt: salt);
-    var matches = timingSafeEqual(storedPin, hashedInput);
-
-    if (!matches) {
-      // Legacy hash fallback check for transparent upgrade
+    bool matches = false;
+    if (storedPin.startsWith('pbkdf2:')) {
+      final hashedInput = hashSecret(pin, salt: salt);
+      matches = timingSafeEqual(storedPin, hashedInput);
+    } else {
+      // Legacy SHA-256 fallback check for transparent upgrade
+      final stretchedInput = legacyStretchedHash(pin, salt: salt);
       final legacyInput = legacyHashSecret(pin, salt: salt);
-      if (timingSafeEqual(storedPin, legacyInput)) {
+      if (timingSafeEqual(storedPin, stretchedInput) ||
+          timingSafeEqual(storedPin, legacyInput)) {
         matches = true;
-        // Upgrade stored PIN hash to stretched format
-        await _storage.write(key: _pinKey, value: hashedInput);
+        // Transparently upgrade to PBKDF2 format
+        final upgradedHash = hashSecret(pin, salt: salt);
+        await _storage.write(key: _pinKey, value: upgradedHash);
       }
     }
 
