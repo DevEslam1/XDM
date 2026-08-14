@@ -317,6 +317,18 @@ class UpdateService {
         );
       }
 
+      final bytes = await apkFile.readAsBytes();
+      if (bytes.length < 4 ||
+          bytes[0] != 0x50 ||
+          bytes[1] != 0x4B ||
+          bytes[2] != 0x03 ||
+          bytes[3] != 0x04) {
+        return const ApkVerificationResult(
+          isValid: false,
+          failureReason: 'Invalid zip/APK file signature header',
+        );
+      }
+
       String? certFingerprint;
       try {
         certFingerprint = await _securityChannel.invokeMethod<String>(
@@ -324,10 +336,8 @@ class UpdateService {
           {'path': apkFile.path},
         );
       } on MissingPluginException {
-        final bytes = await apkFile.readAsBytes();
         certFingerprint = sha256.convert(bytes).toString();
       } catch (_) {
-        final bytes = await apkFile.readAsBytes();
         certFingerprint = sha256.convert(bytes).toString();
       }
 
