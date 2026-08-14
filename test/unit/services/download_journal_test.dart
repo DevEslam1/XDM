@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/download_journal.dart';
 
 void main() {
@@ -73,5 +74,34 @@ void main() {
     final recovered = await DownloadJournal.recover(journalPath);
     expect(recovered, isNotNull);
     expect(recovered, equals([300, 400]));
+  });
+
+  test('background writes respect 4MB delta threshold (BG-04)', () async {
+    final journal = DownloadJournal(journalPath);
+    await journal.open();
+    await journal.writeInit(2, 50 * 1024 * 1024);
+
+    // Set background mode
+    DownloadEngine.appInForeground = false;
+    DownloadEngine.isInBackground = true;
+
+    // First write at 10MB
+    await journal.recordChunkProgress(0, 10 * 1024 * 1024);
+
+    // Delta < 4MB (e.g. +2MB) -> should be throttled
+    await journal.recordChunkProgress(0, 12 * 1024 * 1024);
+
+    // Delta >= 4MB from last recorded (10MB -> 15MB) -> recorded
+    await journal.recordChunkProgress(0, 15 * 1024 * 1024);
+
+    await journal.close();
+
+    final recovered = await DownloadJournal.recover(journalPath);
+    expect(recovered, isNotNull);
+    expect(recovered![0], equals(15 * 1024 * 1024));
+
+    // Reset foreground
+    DownloadEngine.appInForeground = true;
+    DownloadEngine.isInBackground = false;
   });
 }

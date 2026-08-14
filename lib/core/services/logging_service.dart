@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
 
@@ -30,9 +31,8 @@ class LoggingService {
       final entryStr =
           '${record.time.toIso8601String()} [${record.level.name}] ${record.loggerName}: $safeMsg${record.error != null ? ' | error: ${sanitize(record.error.toString())}' : ''}\n';
 
-      _writeToFile(entryStr);
-
       if (kReleaseMode) {
+        _bufferReleaseLog(entryStr);
         developer.log(
           safeMsg,
           name: record.loggerName,
@@ -43,8 +43,31 @@ class LoggingService {
         return;
       }
 
+      _writeToFile(entryStr);
       debugPrint('${record.level.name}: ${record.loggerName}: $safeMsg');
     });
+  }
+
+  static final List<String> _releaseLogBuffer = [];
+  static Timer? _releaseFlushTimer;
+  static const int _maxReleaseBufferSize = 500;
+
+  static void _bufferReleaseLog(String entry) {
+    _releaseLogBuffer.add(entry);
+    if (_releaseLogBuffer.length >= _maxReleaseBufferSize) {
+      flushLogBuffer();
+    } else if (_releaseFlushTimer == null) {
+      _releaseFlushTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        flushLogBuffer();
+      });
+    }
+  }
+
+  static void flushLogBuffer() {
+    if (_releaseLogBuffer.isEmpty) return;
+    final toWrite = _releaseLogBuffer.join('');
+    _releaseLogBuffer.clear();
+    _writeToFile(toWrite);
   }
 
   static void _initFileLogging(Directory dir) {
@@ -78,6 +101,9 @@ class LoggingService {
   }
 
   static void closeFileLogging() {
+    _releaseFlushTimer?.cancel();
+    _releaseFlushTimer = null;
+    flushLogBuffer();
     _fileSink?.close();
     _fileSink = null;
   }

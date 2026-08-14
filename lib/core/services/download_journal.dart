@@ -547,11 +547,13 @@ class DownloadJournal {
   final Map<int, int> _lastBgRecordedBytes = {};
 
   Future<void> recordChunkProgress(int index, int bytes) async {
-    final isBg = DownloadEngine.isInBackground || PowerMonitor.screenOff;
-    // FIX-P5: When in background/screen off, increase byte threshold from 512KB to 2MB
+    final isBg = !DownloadEngine.appInForeground ||
+        DownloadEngine.isInBackground ||
+        PowerMonitor.screenOff;
+    // BG-04: When in background/screen off, increase byte threshold to 4MB
     if (isBg) {
       final last = _lastBgRecordedBytes[index] ?? 0;
-      if ((bytes - last).abs() < 2 * 1024 * 1024) {
+      if ((bytes - last).abs() < 4 * 1024 * 1024) {
         return;
       }
       _lastBgRecordedBytes[index] = bytes;
@@ -569,8 +571,8 @@ class DownloadJournal {
       _approxBytes += line.length + 1;
       _flushCounter++;
 
-      // FIX-P5: Flush every 50 records (foreground) or 200 records (background/screen off)
-      final flushInterval = isBg ? 200 : 50;
+      // BG-04: Flush every 50 records (foreground) or 500 records (background/screen off)
+      final flushInterval = isBg ? 500 : 50;
       if (_flushCounter - _lastFlushRecordCount >= flushInterval) {
         await _sink!.flush();
         _lastFlushRecordCount = _flushCounter;

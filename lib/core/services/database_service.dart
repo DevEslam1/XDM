@@ -714,13 +714,21 @@ class DatabaseService {
       return;
     }
 
-    final isBackground =
-        DownloadEngine.isInBackground || PowerMonitor.screenOff;
+    final isBackground = !DownloadEngine.appInForeground ||
+        DownloadEngine.isInBackground ||
+        PowerMonitor.screenOff;
     final interval = isBackground
-        ? const Duration(seconds: 45) // 45s in background
+        ? const Duration(seconds: 120) // BG-05: 120s in background (was 45s)
         : const Duration(seconds: 8); // 8s in foreground
 
     _dbBatchTimer ??= Timer(interval, flushPendingSaves);
+  }
+
+  void cancelPendingTimers() {
+    _dbBatchTimer?.cancel();
+    _dbBatchTimer = null;
+    _maintenanceTimer?.cancel();
+    _maintenanceTimer = null;
   }
 
   Future<void> flushImmediately() => flushPendingSaves();
