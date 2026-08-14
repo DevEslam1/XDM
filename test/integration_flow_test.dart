@@ -80,6 +80,7 @@ class FakeDownloadEngine extends DownloadEngine {
     YtStreamKind? ytStreamKind,
     int? ytCounterpartSize,
     int? ytCounterpartDownloadedBytes,
+    int? metadataTimeoutSeconds,
   }) {
     startedUrls.add(url);
     knownFileSizes[url] = knownFileSize;

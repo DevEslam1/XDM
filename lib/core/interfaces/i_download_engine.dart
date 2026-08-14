@@ -30,6 +30,7 @@ abstract class IDownloadEngine {
     int? ytCounterpartSize,
     int? ytCounterpartDownloadedBytes,
     bool isRetry = false,
+    int? metadataTimeoutSeconds,
   });
 
   Future<DownloadMetadata> resolveMetadata({

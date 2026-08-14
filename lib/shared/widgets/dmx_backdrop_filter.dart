@@ -1,3 +1,4 @@
+// FIX: P0-02 — Gate ALL BackdropFilter usage behind BackgroundGate, device capability, and SettingsProvider.reduceVisuals
 import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -102,7 +103,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
 
   @override
   Widget build(BuildContext context) {
-    // FIX-P4 / U-04 / P0-GPU / M-PLT-03: When on Web, low-end, PowerMonitor.screenOff, !BackgroundGate.allowHeavyOps, reduceVisuals, classicUi, or not allocated, render solid fallback
+    // FIX: P0-02 — Check all heavy ops gates, device status, and SettingsProvider.reduceVisuals
     if (kIsWeb ||
         _isLowEndDevice ||
         widget.forceSolid ||
@@ -117,10 +118,9 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
     bool reduceVisuals = false;
     bool classicUi = false;
     try {
-      reduceVisuals = context.select(
-        (SettingsProvider s) => s.reduceVisuals,
-      );
-      classicUi = context.select((SettingsProvider s) => s.classicUi);
+      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      reduceVisuals = settings.reduceVisuals;
+      classicUi = settings.classicUi;
     } catch (_) {
       try {
         reduceVisuals = SettingsProvider.instance.reduceVisuals;
@@ -136,7 +136,6 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
     final effectiveSigmaX = widget.sigmaX.clamp(0.0, 12.0);
     final effectiveSigmaY = widget.sigmaY.clamp(0.0, 12.0);
 
-    // FIX M-UI-08: Cache ImageFilter instance to avoid allocation overhead on every rebuild
     if (_cachedFilter == null ||
         _lastSigmaX != effectiveSigmaX ||
         _lastSigmaY != effectiveSigmaY) {

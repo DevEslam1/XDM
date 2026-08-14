@@ -740,6 +740,15 @@ class HttpTransferJob {
 
   Future<void> run() async {
     _stopwatch.start();
+    // FIX: P0-05 — hard ceiling per task (default 24 h)
+    Timer? hardTimeout;
+    hardTimeout = Timer(const Duration(hours: 24), () {
+      _send('error', {
+        'errorType': 'timeout',
+        'errorMessage': 'Hard timeout: 24h exceeded',
+      });
+    });
+
     final dio = buildTransferDio(
       url: cmd.punyUrl,
       customUserAgent: cmd.customUserAgent,
@@ -815,6 +824,7 @@ class HttpTransferJob {
       await _finalize(dio);
       _send('done');
     } finally {
+      hardTimeout.cancel();
       // FIX-H1: Guard against double state-write race on fast pause-resume
       if (!_stateSavedInCatch && _state != null) {
         try {
@@ -922,6 +932,15 @@ class HttpTransferJob {
     try {
       final f = File(cmd.tempFilePath);
       if (f.existsSync()) f.deleteSync();
+    } catch (_) {}
+
+    // FIX: also remove the stale state file so single-stream starts clean
+    try {
+      StateStore.remove(cmd.tempFilePath);
+    } catch (_) {}
+    try {
+      final journal = File('${cmd.tempFilePath}.journal');
+      if (journal.existsSync()) journal.deleteSync();
     } catch (_) {}
   }
 
@@ -1326,6 +1345,7 @@ class HttpTransferJob {
         if (hasUsableState && st.isComplete) {
           chunk.downloaded = st.totalSize;
           _emitProgress(0, statusMessage: 'Completed');
+          await _finalize(dio); // ← FIX: finalize (rename + clean state)
           return;
         }
         debugPrint(

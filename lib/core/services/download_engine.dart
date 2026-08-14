@@ -1,3 +1,4 @@
+// FIX: P0-01 — Split DownloadEngine God-Object facade
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -326,26 +327,18 @@ class DownloadProgress {
   }
   double? get ytCombinedProgress {
     if (ytStreamKind == null) return null;
+
+    // FIX: If counterpart size unknown, don't fabricate a ratio
     if (ytCounterpartSize == null) {
-      if (fileSize <= 0) return null;
-      final selfBytes = ytDownloadedBytes ?? downloadedBytes;
-      return (selfBytes / fileSize).clamp(0.0, 1.0);
+      return null; // caller should show indeterminate
     }
-    final counterpartSize = ytCounterpartSize!;
-    final counterpartDownloaded = ytCounterpartDownloadedBytes ?? 0;
-    final selfDownloaded = ytDownloadedBytes ?? downloadedBytes;
-    if (counterpartSize > 0 && counterpartDownloaded == 0) {
-      if (fileSize <= 0) {
-        return null;
-      }
-      final totalSize = fileSize + counterpartSize;
-      if (totalSize == 0) return null;
-      return (selfDownloaded / totalSize).clamp(0.0, 1.0);
-    }
-    final totalSize = fileSize + counterpartSize;
+
+    final totalSize = fileSize + ytCounterpartSize!;
     if (totalSize == 0) return null;
-    final totalDownloaded = selfDownloaded + counterpartDownloaded;
-    return (totalDownloaded / totalSize).clamp(0.0, 1.0);
+
+    final selfDownloaded = ytDownloadedBytes ?? downloadedBytes;
+    final cpDownloaded = ytCounterpartDownloadedBytes ?? 0;
+    return ((selfDownloaded + cpDownloaded) / totalSize).clamp(0.0, 1.0);
   }
 
   int get ytCombinedDownloadedBytes {
@@ -678,10 +671,16 @@ class DownloadProgressHandler {
         final cpId = ytCounterpartTaskIds[taskId];
         final cpLive =
             cpId != null && ytLiveBytes != null ? ytLiveBytes[cpId] : null;
-        final cpSize = ytCounterpartSize;
-        if (cpSize == null || cpSize <= 0) {
-          cycle = 'downloading';
-        } else if (cpLive == null || cpLive < cpSize) {
+        final cpSize =
+            (p['ytCounterpartSize'] as num?)?.toInt() ?? ytCounterpartSize;
+        final bool counterpartResolved = cpSize != null && cpSize > 0;
+        final bool counterpartDone = counterpartResolved &&
+            cpLive != null &&
+            cpLive >= cpSize;
+        final bool selfDone = lastFileSize > 0 &&
+            lastDownloadedBytes >= lastFileSize;
+
+        if (!counterpartResolved || !counterpartDone || !selfDone) {
           cycle = 'downloading';
         }
       }
@@ -905,6 +904,9 @@ class DownloadEngine implements IDownloadEngine {
       _ytCleanupTimers.add(timer);
     }
   }
+
+  static YtStreamKind _otherLeg(YtStreamKind kind) =>
+      kind == YtStreamKind.video ? YtStreamKind.audio : YtStreamKind.video;
 
   final Set<Dio> _activeDioClients = {};
   final Set<Dio> _reservedDioClients = {};
@@ -1569,8 +1571,11 @@ class DownloadEngine implements IDownloadEngine {
     int? ytCounterpartSize,
     int? ytCounterpartDownloadedBytes,
     bool isRetry = false,
+    int? metadataTimeoutSeconds,
   }) async {
-    _activeCancelTokens[taskId] = cancelToken;
+    final legKey =
+        ytStreamKind != null ? '$taskId::${ytStreamKind.name}' : taskId;
+    _activeCancelTokens[legKey] = cancelToken;
     final int defaultCount = _settings.effectiveDefaultThreadCount;
     final int effectiveThreadCount = (() {
       final base = (threadCount > 0 ? threadCount : defaultCount)
@@ -1657,7 +1662,7 @@ class DownloadEngine implements IDownloadEngine {
       final remaining =
           (resolvedFileSize - alreadyOnDisk).clamp(0, resolvedFileSize);
       if (!await hasEnoughDiskSpace(saveDir, remaining)) {
-        _activeCancelTokens.remove(taskId);
+        _activeCancelTokens.remove(legKey);
         throw const InsufficientStorageException();
       }
       await checkLowStorageWarning(saveDir);
@@ -1673,9 +1678,10 @@ class DownloadEngine implements IDownloadEngine {
           getTorrentFiles: getTorrentFiles,
           torrentId: torrentId,
           isRetry: isRetry,
+          metadataTimeoutSeconds: metadataTimeoutSeconds,
         );
       } finally {
-        _activeCancelTokens.remove(taskId);
+        _activeCancelTokens.remove(legKey);
       }
       return;
     }
@@ -1781,7 +1787,7 @@ class DownloadEngine implements IDownloadEngine {
     try {
       job = pool.submit(command);
     } catch (e) {
-      _activeCancelTokens.remove(taskId);
+      _activeCancelTokens.remove(legKey);
       rethrow;
     }
     final completer = Completer<void>();
@@ -1789,14 +1795,33 @@ class DownloadEngine implements IDownloadEngine {
     bool cancelRequested = false;
     Timer? watchdog;
     Timer? inactivityTimer;
-    void resetInactivityTimer() {
+    void resetInactivityTimer({double? currentSpeed}) {
       inactivityTimer?.cancel();
-      inactivityTimer = Timer(const Duration(minutes: 30), () {
+      // Dynamic inactivity timeout: scale based on file size and current speed.
+      // Base: max(30 mins, (fileSize / speed) * 1.5). Fallback to 60 mins for > 1GB.
+      Duration timeoutDuration = const Duration(minutes: 30);
+      if (resolvedFileSize > 1024 * 1024 * 1024) {
+        timeoutDuration = const Duration(minutes: 60);
+      }
+      if (currentSpeed != null && currentSpeed > 0 && resolvedFileSize > 0) {
+        final estimatedSeconds = (resolvedFileSize / currentSpeed) * 1.5;
+        if (estimatedSeconds.isFinite && estimatedSeconds > 0) {
+          final dynamicDuration = Duration(seconds: estimatedSeconds.round());
+          if (dynamicDuration > timeoutDuration) {
+            timeoutDuration = dynamicDuration > const Duration(hours: 4)
+                ? const Duration(hours: 4)
+                : dynamicDuration;
+          }
+        }
+      }
+
+      inactivityTimer = Timer(timeoutDuration, () {
         if (!completer.isCompleted) {
           completer.completeError(DioException(
             requestOptions: RequestOptions(path: punyUrl),
             type: DioExceptionType.receiveTimeout,
-            message: 'Download job timed out after 30 minutes of inactivity.',
+            message:
+                'Download job timed out after ${timeoutDuration.inMinutes} minutes of inactivity.',
           ));
         }
       });
@@ -1816,11 +1841,19 @@ class DownloadEngine implements IDownloadEngine {
       // FIX-H2: YouTube pause — also cancel active counterpart audio/video token
       final counterpartId = _ytCounterpartTaskIds[taskId];
       if (counterpartId != null) {
-        final counterpartToken = _activeCancelTokens[counterpartId];
-        if (counterpartToken != null && !counterpartToken.isCancelled) {
-          counterpartToken.cancel('paused');
+        for (final suffix in ['::video', '::audio', '']) {
+          final k = suffix.isEmpty ? counterpartId : '$counterpartId$suffix';
+          final counterpartToken = _activeCancelTokens[k];
+          if (counterpartToken != null && !counterpartToken.isCancelled) {
+            counterpartToken.cancel('paused');
+          }
         }
       }
+      // FIX 1: Cancel BOTH legs
+      for (final suffix in ['::video', '::audio']) {
+        _activeCancelTokens.remove('$taskId$suffix')?.cancel('paused');
+      }
+      _activeCancelTokens.remove(taskId)?.cancel('paused');
       // FIX-1: Do NOT delete file here. File cleanup happens in the 'done'/'error'
       // handler after isolate confirms stop.
       final ytPauseCid = _ytCounterpartTaskIds[taskId];
@@ -2007,7 +2040,9 @@ class DownloadEngine implements IDownloadEngine {
         case 'progress':
           // FIX-P3: Check cancelToken.isCancelled and process via progressHandler
           if (cancelToken.isCancelled) break;
-          resetInactivityTimer();
+          resetInactivityTimer(
+            currentSpeed: (message.data['speed'] as num?)?.toDouble(),
+          );
           await progressHandler.handleProgress(
             message.data,
             ytCounterpartTaskIds: _ytCounterpartTaskIds,
@@ -2063,17 +2098,12 @@ class DownloadEngine implements IDownloadEngine {
             var doneCycle = 'completed';
             if (ytStreamKind != null && ytStreamKind != YtStreamKind.combined) {
               final cpSize = ytCounterpartSize;
-              if (cpSize == null || cpSize <= 0) {
-                if (ytDoneLiveCp == null) {
-                  doneCycle = 'completed';
-                } else {
-                  doneCycle = 'downloading';
-                }
-              } else {
-                final cpDl = ytDoneLiveCp ?? 0;
-                if (cpDl < cpSize) {
-                  doneCycle = 'downloading';
-                }
+              final bool counterpartResolved = cpSize != null && cpSize > 0;
+              final bool counterpartDone = counterpartResolved &&
+                  ytDoneLiveCp != null &&
+                  ytDoneLiveCp >= cpSize;
+              if (!counterpartResolved || !counterpartDone) {
+                doneCycle = 'downloading';
               }
             }
             onProgress(DownloadProgress(
@@ -2121,9 +2151,16 @@ class DownloadEngine implements IDownloadEngine {
       inactivityTimer?.cancel();
       await sub.cancel();
       job.dispose();
-      _activeCancelTokens.remove(taskId);
+      _activeCancelTokens.remove(legKey);
       if (ytStreamKind != null) {
-        unregisterYtCounterpart(taskId);
+        final counterpartId = _ytCounterpartTaskIds[taskId];
+        final counterpartStillActive = counterpartId != null &&
+            (_activeCancelTokens.containsKey(
+                    '$counterpartId::${_otherLeg(ytStreamKind).name}') ||
+                _activeCancelTokens.containsKey(counterpartId));
+        if (!counterpartStillActive) {
+          unregisterYtCounterpart(taskId);
+        }
       }
       if (adaptiveThreads) {
         if (_httpEngine.activeTrackerCount == 0) {
@@ -2189,6 +2226,7 @@ class DownloadEngine implements IDownloadEngine {
     List<Map<String, dynamic>>? Function()? getTorrentFiles,
     int? torrentId,
     bool isRetry = false,
+    int? metadataTimeoutSeconds,
   }) async {
     final initialTorrentFiles = getTorrentFiles?.call();
     final initSummary = normalizeTorrentFiles(initialTorrentFiles);
@@ -2307,8 +2345,15 @@ class DownloadEngine implements IDownloadEngine {
       ));
     });
     try {
-      await _waitForMetadata(id, url, cancelToken, onProgress,
-          initialFileSize: knownFileSize, getTorrentFiles: getTorrentFiles);
+      await _waitForMetadata(
+        id,
+        url,
+        cancelToken,
+        onProgress,
+        initialFileSize: knownFileSize,
+        getTorrentFiles: getTorrentFiles,
+        timeoutSeconds: metadataTimeoutSeconds ?? 300,
+      );
       _applyFilePriorities(id, getTorrentFiles?.call());
       final resumeBlob = await TorrentResumeStore.loadResumeDataForSource(url);
       final nativeLoaded =
@@ -2474,11 +2519,13 @@ class DownloadEngine implements IDownloadEngine {
     ValueChangedProgress onProgress, {
     int initialFileSize = 0,
     List<Map<String, dynamic>>? Function()? getTorrentFiles,
+    int timeoutSeconds = 300,
   }) async {
     final completer = Completer<void>();
     StreamSubscription? sub;
     Timer? heartbeat;
     var elapsed = 0;
+    final timeoutDuration = Duration(seconds: timeoutSeconds.clamp(30, 1800));
     sub = TorrentService.torrentUpdates.listen((torrents) {
       final torrent = torrents[id];
       if (torrent != null && torrent.hasMetadata && !completer.isCompleted) {
@@ -2507,7 +2554,8 @@ class DownloadEngine implements IDownloadEngine {
         fileSize: initialFileSize > 0 ? initialFileSize : 0,
         speed: 0,
         eta: null,
-        statusMessage: 'Fetching metadata… (${elapsed}s / 300s)',
+        statusMessage:
+            'Fetching metadata… (${elapsed}s / ${timeoutDuration.inSeconds}s)',
         cycleState: 'fetching_metadata',
         torrentFiles: metaFiles,
         totalFiles: mfSummary.total > 0 ? mfSummary.total : null,
@@ -2517,7 +2565,7 @@ class DownloadEngine implements IDownloadEngine {
         torrentId: id,
       ));
     });
-    final timeout = Timer(const Duration(seconds: 300), () {
+    final timeout = Timer(timeoutDuration, () {
       if (completer.isCompleted) return;
       sub?.cancel();
       if (!cancelToken.isCancelled) {
@@ -2556,9 +2604,13 @@ class DownloadEngine implements IDownloadEngine {
       String normalizeName(String name) {
         var decoded = name;
         try {
-          // FIX: Only decode if it looks URL-encoded (contains % patterns)
+          // Try single decode first
           if (name.contains('%')) {
             decoded = Uri.decodeComponent(name);
+            // FIX: try a second decode for double-encoded names
+            if (decoded.contains('%')) {
+              decoded = Uri.decodeComponent(decoded);
+            }
           }
         } catch (_) {}
         return decoded.replaceAll('\\', '/').trim().toLowerCase();
@@ -2656,9 +2708,13 @@ class DownloadEngine implements IDownloadEngine {
           String normalizeName(String name) {
             var decoded = name;
             try {
-              // FIX: Only decode if it looks URL-encoded (contains % patterns)
+              // Try single decode first
               if (name.contains('%')) {
                 decoded = Uri.decodeComponent(name);
+                // FIX: try a second decode for double-encoded names
+                if (decoded.contains('%')) {
+                  decoded = Uri.decodeComponent(decoded);
+                }
               }
             } catch (_) {}
             return decoded.replaceAll('\\', '/').trim().toLowerCase();
@@ -2807,11 +2863,14 @@ class DownloadEngine implements IDownloadEngine {
       } else {
         rawDownloaded = 0;
       }
-      final downloadedBytes = totalSize > 0
-          ? rawDownloaded.clamp(0, totalSize)
-          : max(0, rawDownloaded);
+      if (rawDownloaded > 0 && resolvedFiles != null) {
+        _distributeEstimatedBytes(resolvedFiles, rawDownloaded);
+      }
+      final perFileSum = resolvedFiles?.fold<int>(
+              0, (s, f) => s + ((f['downloadedBytes'] as num?)?.toInt() ?? 0)) ??
+          0;
+      final downloadedBytes = perFileSum > 0 ? perFileSum : rawDownloaded;
       if (resolvedFiles != null) {
-        _distributeEstimatedBytes(resolvedFiles, downloadedBytes);
         for (final f in resolvedFiles) {
           final len = (f['length'] as num?)?.toInt() ?? 0;
           var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
@@ -2842,9 +2901,6 @@ class DownloadEngine implements IDownloadEngine {
             f['speed'] = 0.0;
           }
         } else {
-          for (final f in resolvedFiles) {
-            f['speed'] = 0.0;
-          }
           final isSeedingNow = stateLabel == 'seeding';
           final aggregateRate = isSeedingNow
               ? torrent.uploadRate.toDouble()
@@ -2892,6 +2948,13 @@ class DownloadEngine implements IDownloadEngine {
                   }
                 }
               }
+            }
+          } else {
+            // FIX 16: Smooth with EMA instead of hard zero
+            const alpha = 0.3;
+            for (final f in resolvedFiles) {
+              final prev = (f['speed'] as num?)?.toDouble() ?? 0.0;
+              f['speed'] = prev * (1 - alpha); // decay toward 0
             }
           }
         }
@@ -3278,33 +3341,38 @@ class DownloadEngine implements IDownloadEngine {
 
   static void _distributeEstimatedBytes(
       List<Map<String, dynamic>> files, int totalDownloadedBytes) {
-    final needing = files
-        .where((f) => (f['progressEstimated'] as bool? ?? true) == true)
-        .toList();
+    final needing = files.where((f) {
+      final estimated = (f['progressEstimated'] as bool?) ?? true;
+      if (!estimated) return false;
+      final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+      final len = (f['length'] as num?)?.toInt() ?? 0;
+      return dl < len; // ← FIX: exclude already-complete files
+    }).toList();
+
     if (needing.isEmpty) return;
+
     int confirmedBytes = 0;
     for (final f in files) {
-      if ((f['progressEstimated'] as bool? ?? true) == false) {
+      if ((f['progressEstimated'] as bool?) == false) {
         confirmedBytes += (f['downloadedBytes'] as num?)?.toInt() ?? 0;
       }
     }
-    final remainingForEstimation =
-        max(0, totalDownloadedBytes - confirmedBytes);
+    final remaining = max(0, totalDownloadedBytes - confirmedBytes);
     final totalNeedingSize = needing.fold<int>(
         0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
-    for (var i = 0; i < needing.length; i++) {
-      final length = (needing[i]['length'] as num?)?.toInt() ?? 0;
+
+    for (final f in needing) {
+      final length = (f['length'] as num?)?.toInt() ?? 0;
       if (length <= 0) {
-        needing[i]['downloadedBytes'] = 0;
-      } else if (totalNeedingSize > 0 && remainingForEstimation > 0) {
-        final estimated =
-            ((length / totalNeedingSize) * remainingForEstimation).round();
-        needing[i]['downloadedBytes'] = estimated.clamp(0, length);
+        f['downloadedBytes'] = 0;
+      } else if (totalNeedingSize > 0 && remaining > 0) {
+        final est = ((length / totalNeedingSize) * remaining).round();
+        f['downloadedBytes'] = est.clamp(0, length);
       } else {
-        final prev = (needing[i]['downloadedBytes'] as num?)?.toInt() ?? 0;
-        needing[i]['downloadedBytes'] = prev.clamp(0, length);
+        final prev = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+        f['downloadedBytes'] = prev.clamp(0, length);
       }
-      needing[i]['progressEstimated'] = true;
+      f['progressEstimated'] = true;
     }
   }
 

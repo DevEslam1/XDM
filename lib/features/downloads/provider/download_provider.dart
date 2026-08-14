@@ -16,7 +16,7 @@ import '../../../core/services/torrent_service.dart';
 import '../../../core/services/update_service.dart';
 import '../../../core/services/youtube_service.dart';
 
-// ignore_for_file: prefer_initializing_formals
+import '../../../core/services/app_lifecycle_coordinator.dart';
 import '../../../core/services/background_gate.dart';
 import '../../../core/services/background_service.dart';
 import '../../../core/services/database_service.dart';
@@ -192,6 +192,23 @@ class DownloadProvider extends ChangeNotifier
     if (enableBackgroundTimers) {
       _initTorrentSubscription();
     }
+
+    AppLifecycleCoordinator.addOnResumedCallback(forceEmitAllProgress);
+    BackgroundService.setActiveDownloadCountQuery(
+      () => downloadingTasksCount + seedingTasksCount,
+    );
+  }
+
+  /// Forces immediate emission of the latest progress for all active downloads,
+  /// bypassing any background throttling intervals upon app foreground/resume.
+  void forceEmitAllProgress() {
+    _lastProgressUpdateTimes.clear();
+    for (final task in _tasks) {
+      if (task.status == DownloadStatus.downloading) {
+        pushProgressTick(task.id, task.progress, task.speed);
+      }
+    }
+    notifyListeners();
   }
 
   late final DownloadTaskRepository _taskRepository;
@@ -2094,12 +2111,16 @@ class DownloadProvider extends ChangeNotifier
         // Flush progress BEFORE cancelling so no in-flight write is lost
         await _flushPendingProgress(id);
 
-        // FIX H-3: Cancel token and await engine future directly instead of arbitrary 300ms sleep
-        if (_cancelTokens.containsKey(id)) {
-          try {
-            _cancelTokens[id]?.cancel('paused');
-          } catch (e) {
-            // ignore
+        final hasAnyToken = _cancelTokens.containsKey(id) ||
+            _cancelTokens.containsKey('$id::video') ||
+            _cancelTokens.containsKey('$id::audio');
+        if (hasAnyToken) {
+          for (final suffix in ['::video', '::audio', '']) {
+            final k = suffix.isEmpty ? id : '$id$suffix';
+            try {
+              _cancelTokens[k]?.cancel('paused');
+            } catch (_) {}
+            _cancelTokens.remove(k);
           }
           final fut = _activeFutures[id];
           if (fut != null) {
@@ -2114,7 +2135,6 @@ class DownloadProvider extends ChangeNotifier
             } catch (_) {}
           }
 
-          _cancelTokens.remove(id);
           _activeFutures.remove(id);
         }
 
@@ -2840,7 +2860,12 @@ class DownloadProvider extends ChangeNotifier
     );
     validatedTask = await validateAudioProgress(validatedTask);
 
+    for (final suffix in ['::video', '::audio', '']) {
+      _cancelTokens.remove('$id$suffix');
+    }
+
     await _setTask(validatedTask);
+    await _databaseService.saveTask(validatedTask);
 
     _scheduleManager.reschedule();
 
@@ -2887,9 +2912,14 @@ class DownloadProvider extends ChangeNotifier
 
     _cleanupTaskState(id);
 
-    // Cancel the token - removing it allows future resumes.
-    _cancelTokens[id]?.cancel('cancelled');
-    _cancelTokens.remove(id);
+    // Cancel both leg tokens - removing them allows future resumes.
+    for (final suffix in ['::video', '::audio', '']) {
+      final k = suffix.isEmpty ? id : '$id$suffix';
+      try {
+        _cancelTokens[k]?.cancel('cancelled');
+      } catch (_) {}
+      _cancelTokens.remove(k);
+    }
 
     // Cancel any lingering progress notification (M2).
     _notifications.cancelForTask(id);
@@ -3072,7 +3102,25 @@ class DownloadProvider extends ChangeNotifier
         errMsg.contains('too small') ||
         errMsg.contains('incomplete') ||
         errMsg.contains('not found') ||
-        errMsg.contains('missing');
+        errMsg.contains('missing') ||
+        errMsg.contains('merge_failed') ||
+        errMsg.contains('MERGE_FAILED') ||
+        errMsg.contains('ffmpeg');
+
+    // When retrying a MERGE_FAILED task, only re-download the missing leg:
+    if (task.statusMessage == 'MERGE_FAILED' ||
+        errMsg.contains('merge_failed') ||
+        errMsg.contains('MERGE_FAILED') ||
+        errMsg.contains('ffmpeg')) {
+      if (videoExists && !audioExists) {
+        task = task.copyWith(audioProgress: 0.0, audioDownloadedBytes: 0);
+      } else if (!videoExists && audioExists) {
+        task = task.copyWith(
+          downloadedBytes: 0,
+          chunks: List.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0),
+        );
+      }
+    }
 
     // Resource identity changed or non-resumeable auth/gone error force a clean state wipe:
     var youtubeIdentityChanged = false;
@@ -3110,8 +3158,15 @@ class DownloadProvider extends ChangeNotifier
         errMsg.contains('expired') ||
         errMsg.contains('sign in to confirm');
 
+    final isMergeLegPartial = (task.statusMessage == 'MERGE_FAILED' ||
+            errMsg.contains('merge_failed') ||
+            errMsg.contains('MERGE_FAILED') ||
+            errMsg.contains('ffmpeg')) &&
+        (videoExists ^ audioExists);
+
     final shouldResetAllProgressMetadata =
-        shouldClearState || isUnrecoverable || youtubeIdentityChanged;
+        (shouldClearState || isUnrecoverable || youtubeIdentityChanged) &&
+            !isMergeLegPartial;
 
     if (shouldResetAllProgressMetadata) {
       debugPrint(
@@ -5308,6 +5363,11 @@ class DownloadProvider extends ChangeNotifier
           (updated.status == DownloadStatus.paused ||
               updated.status == DownloadStatus.failed)) {
         await resumeTask(id);
+      } else if (updated != null) {
+        await _setTask(updated.copyWith(
+          status: DownloadStatus.downloading,
+          clearStatusMessage: true, // ← FIX: clear "updating_links" message
+        ));
       }
     }
   }
@@ -5477,6 +5537,7 @@ class DownloadProvider extends ChangeNotifier
   void dispose() {
     _disposed = true;
 
+    AppLifecycleCoordinator.removeOnResumedCallback(forceEmitAllProgress);
     _settingsProvider.removeListener(_onSettingsChanged);
 
     _notifications.dispose();

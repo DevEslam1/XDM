@@ -166,6 +166,21 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                   settings.setMaxPeerConnectionsPerTorrent(val.round());
                 },
               ),
+              SliderTile(
+                accentColor: accent,
+                title: isRtl
+                    ? 'مهلة جلب بيانات التورنت (Metadata)'
+                    : 'Metadata Fetch Timeout',
+                subtitle:
+                    '${settings.torrentMetadataTimeoutSeconds}s (${(settings.torrentMetadataTimeoutSeconds / 60).toStringAsFixed(1)} min)',
+                value: settings.torrentMetadataTimeoutSeconds.toDouble(),
+                min: 30,
+                max: 1800,
+                divisions: 59,
+                onChanged: (val) {
+                  settings.setTorrentMetadataTimeoutSeconds(val.round());
+                },
+              ),
             ],
           ),
           const SizedBox(height: 12),

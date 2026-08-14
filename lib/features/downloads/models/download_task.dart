@@ -351,6 +351,10 @@ class DownloadTask {
       if (downloadedBytes > 0) return downloadedBytes + audioSize;
       return 0;
     }
+    // FIX: when audioSize == 0 but hasMergedAudio, use fileSize as fallback
+    if (hasMergedAudio && audioSize == 0 && fileSize > 0) {
+      return fileSize;
+    }
     return resolvedFileSize;
   }
 
@@ -389,19 +393,14 @@ class DownloadTask {
     double safe(double c) =>
         (c.isNaN || c.isInfinite) ? 0.0 : c.clamp(0.0, 1.0);
 
-    if (chunks.length == count) {
-      return chunks.map(safe).toList();
-    }
+    if (chunks.length == count) return chunks.map(safe).toList();
     if (chunks.isEmpty) {
-      // No chunk data at all → distribute overall progress evenly.
-      final frac = resolvedFileSize > 0
-          ? (displayDownloadedBytes / resolvedFileSize).clamp(0.0, 1.0)
+      final frac = fileSize > 0
+          ? (displayDownloadedBytes / fileSize).clamp(0.0, 1.0)
           : 0.0;
       return List.filled(count, frac);
     }
     if (chunks.length < count) {
-      // Thread count increased: keep existing progress, pad remainder
-      // with the average so total progress is preserved.
       final existing = chunks.map(safe).toList();
       final avg = existing.isEmpty
           ? 0.0
@@ -411,8 +410,10 @@ class DownloadTask {
         ...List.filled(count - existing.length, avg.clamp(0.0, 1.0))
       ];
     }
-    // Thread count decreased: keep the first `count` chunks.
-    return chunks.sublist(0, count).map(safe).toList();
+    // chunks.length > threadCount → redistribute proportionally
+    final totalProgress = chunks.fold<double>(0, (s, c) => s + safe(c));
+    final perChunk = totalProgress / count;
+    return List.generate(count, (_) => perChunk.clamp(0.0, 1.0));
   }
 
   /// Downloaded bytes clamped to total size for safe display / ratio math.

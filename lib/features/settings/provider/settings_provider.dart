@@ -64,6 +64,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _globalTorrentSeedingLimitedKey = 'globalTorrentSeedingLimited';
   static const _globalTorrentSeedingLimitKbpsKey =
       'globalTorrentSeedingLimitKbps';
+  static const _torrentMetadataTimeoutSecondsKey =
+      'torrentMetadataTimeoutSeconds';
   static const _enableDhtKey = 'enableDht';
   static const _enableUpnpKey = 'enableUpnp';
   static const _enableNatPmpKey = 'enableNatPmp';
@@ -246,6 +248,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool globalTorrentSeeding = true;
   bool globalTorrentSeedingLimited = false;
   int globalTorrentSeedingLimitKbps = 500;
+  int torrentMetadataTimeoutSeconds = 300;
   bool enableDht = true;
   bool enableUpnp = true;
   bool enableNatPmp = true;
@@ -449,6 +452,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       globalTorrentSeedingLimitKbps =
           _prefs.getInt(_globalTorrentSeedingLimitKbpsKey) ??
               globalTorrentSeedingLimitKbps;
+      torrentMetadataTimeoutSeconds =
+          _prefs.getInt(_torrentMetadataTimeoutSecondsKey) ??
+              torrentMetadataTimeoutSeconds;
       enableDht = _prefs.getBool(_enableDhtKey) ?? enableDht;
       enableUpnp = _prefs.getBool(_enableUpnpKey) ?? enableUpnp;
       enableNatPmp = _prefs.getBool(_enableNatPmpKey) ?? enableNatPmp;
@@ -827,6 +833,15 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  Future<void> setTorrentMetadataTimeoutSeconds(int value) async {
+    torrentMetadataTimeoutSeconds = value.clamp(30, 1800);
+    await _prefs.setInt(
+      _torrentMetadataTimeoutSecondsKey,
+      torrentMetadataTimeoutSeconds,
+    );
+    notifyListeners();
+  }
+
   Future<void> setMaxPeerConnectionsPerTorrent(int value) async {
     maxPeerConnectionsPerTorrent = value.clamp(5, 500);
     await _prefs.setInt(
@@ -1130,6 +1145,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _globalTorrentSeedingKey,
       _globalTorrentSeedingLimitedKey,
       _globalTorrentSeedingLimitKbpsKey,
+      _torrentMetadataTimeoutSecondsKey,
       _enableDhtKey,
       _enableUpnpKey,
       _forceEncryptKey,
@@ -1211,6 +1227,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     globalTorrentSeeding = true;
     globalTorrentSeedingLimited = false;
     globalTorrentSeedingLimitKbps = 500;
+    torrentMetadataTimeoutSeconds = 300;
     enableDht = true;
     enableUpnp = true;
     forceEncrypt = false;
@@ -1282,6 +1299,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
         _globalTorrentSeedingLimitedKey, globalTorrentSeedingLimited);
     await _prefs.setInt(
         _globalTorrentSeedingLimitKbpsKey, globalTorrentSeedingLimitKbps);
+    await _prefs.setInt(
+        _torrentMetadataTimeoutSecondsKey, torrentMetadataTimeoutSeconds);
     await _prefs.setBool(_enableDhtKey, enableDht);
     await _prefs.setBool(_enableUpnpKey, enableUpnp);
     await _prefs.setBool(_forceEncryptKey, forceEncrypt);

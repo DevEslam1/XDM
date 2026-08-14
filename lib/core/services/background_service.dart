@@ -1,3 +1,4 @@
+// FIX: P0-03 & P0-04 — Guard BackgroundService.stop() and WakeLock auto-release against active downloads
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -32,6 +33,19 @@ class BackgroundService {
   static const Duration _maxWakeLockHold = Duration(hours: 2);
   static DateTime? _lastHeartbeatTime;
   static bool _hasActiveDownloads = false;
+  static int Function()? _activeDownloadCountQuery;
+
+  /// Injected query callback to determine active download count from DownloadProvider
+  static void setActiveDownloadCountQuery(int Function()? query) {
+    _activeDownloadCountQuery = query;
+  }
+
+  static Future<int> _checkActiveDownloadCount() async {
+    if (_activeDownloadCountQuery != null) {
+      return _activeDownloadCountQuery!();
+    }
+    return _hasActiveDownloads ? 1 : 0;
+  }
 
   /// Callback invoked when background execution is requested on iOS where it is unsupported.
   static VoidCallback? onIosBackgroundUnavailable;
@@ -171,6 +185,13 @@ class BackgroundService {
       return;
     }
 
+    // FIX: P0-04 — never stop while downloads are running
+    final activeCount = await _checkActiveDownloadCount();
+    if (_hasActiveDownloads || activeCount > 0) {
+      _log.info('Not stopping: downloads still active ($activeCount running)');
+      return;
+    }
+
     if (!kIsWeb && Platform.isIOS) {
       _log.info('Cancelling native iOS BGTaskScheduler background task');
       await IosBackgroundService.cancelBackgroundDownload();
@@ -221,15 +242,8 @@ class BackgroundService {
       _wakeLockHeld = true;
       _log.fine('Wake lock acquired');
 
-      // Safety net: auto-release after max hold duration
-      _wakeLockSafetyTimer?.cancel();
-      _wakeLockSafetyTimer = Timer(_maxWakeLockHold, () async {
-        if (_wakeLockHeld) {
-          _log.warning(
-              'Wake lock held for ${_maxWakeLockHold.inHours}h. Auto-releasing.');
-          await releaseWakeLock();
-        }
-      });
+      // Safety net: auto-release or renew if downloads still active
+      _scheduleWakeLockSafetyCheck();
 
       // Start periodic renewal every 15 minutes to prevent native timeout expiry.
       _wakeLockRenewalTimer?.cancel();
@@ -255,6 +269,24 @@ class BackgroundService {
     } catch (e) {
       _log.warning('Failed to acquire wake lock', e);
     }
+  }
+
+  static void _scheduleWakeLockSafetyCheck() {
+    _wakeLockSafetyTimer?.cancel();
+    _wakeLockSafetyTimer = Timer(_maxWakeLockHold, () async {
+      // FIX: P0-03 — check active downloads before releasing
+      final hasActive = await _checkActiveDownloadCount();
+      if (hasActive > 0) {
+        _log.info('Wake lock safety timer fired but downloads active. Renewing.');
+        try {
+          await _wakeLockChannel.invokeMethod<void>('acquire');
+        } catch (_) {}
+        // Restart the safety timer for another cycle
+        _scheduleWakeLockSafetyCheck();
+        return;
+      }
+      await releaseWakeLock();
+    });
   }
 
   /// Releases the partial wake lock. Safe to call even if no lock is held.

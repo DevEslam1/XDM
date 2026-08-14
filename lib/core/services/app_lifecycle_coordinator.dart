@@ -18,6 +18,17 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
 
   static bool isAppForegrounded = true;
   static Timer? _inactiveTimer;
+  static final List<VoidCallback> _onResumedCallbacks = [];
+
+  static void addOnResumedCallback(VoidCallback cb) {
+    if (!_onResumedCallbacks.contains(cb)) {
+      _onResumedCallbacks.add(cb);
+    }
+  }
+
+  static void removeOnResumedCallback(VoidCallback cb) {
+    _onResumedCallbacks.remove(cb);
+  }
 
   @visibleForTesting
   static Timer? get inactiveTimerForTesting => _inactiveTimer;
@@ -31,6 +42,7 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
   static void dispose() {
     _inactiveTimer?.cancel();
     _inactiveTimer = null;
+    _onResumedCallbacks.clear();
     WidgetsBinding.instance.removeObserver(instance);
   }
 
@@ -47,6 +59,15 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
 
       // Resume widget updates (NEW-02)
       WidgetDataBridge.instance.resumeWidgetUpdates();
+
+      // Trigger all registered onResumed callbacks immediately (e.g. force progress emission)
+      for (final cb in List.of(_onResumedCallbacks)) {
+        try {
+          cb();
+        } catch (e) {
+          debugPrint('[AppLifecycleCoordinator] onResumedCallback error: $e');
+        }
+      }
 
       // Restart ONLY if screen is on
       if (!PowerMonitor.screenOff) {

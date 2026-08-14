@@ -391,6 +391,7 @@ class _TestDownloadEngine extends DownloadEngine {
     YtStreamKind? ytStreamKind,
     int? ytCounterpartSize,
     int? ytCounterpartDownloadedBytes,
+    int? metadataTimeoutSeconds,
   }) async {
     throw const SocketException('Simulated network failure');
   }

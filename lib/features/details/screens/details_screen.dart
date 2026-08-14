@@ -2735,7 +2735,7 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                       final isEstimated = f['progressEstimated'] == true;
 
                       final progressText = isEstimated
-                          ? '~${(fileProgress * 100).toStringAsFixed(0)}% (est)'
+                          ? '≈${(fileProgress * 100).toStringAsFixed(0)}%'
                           : '${(fileProgress * 100).toStringAsFixed(1)}%';
 
                       final textClr = isDark
@@ -2868,20 +2868,32 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                                 const SizedBox(height: 6),
                                 if (selected) ...[
                                   if (isEstimated)
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(2),
-                                      child: SizedBox(
-                                        height: 4,
-                                        child: LinearProgressIndicator(
-                                          backgroundColor: isDark
-                                              ? AppTheme.bgSunken
-                                              : AppTheme.lightBgSunken,
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                            isDownloading ? blueClr : mutedClr,
+                                    Stack(
+                                      children: [
+                                        Container(
+                                          height: 4,
+                                          width: double.infinity,
+                                          decoration: AppTheme.progressTrack(
+                                            isDark: isDark,
                                           ),
                                         ),
-                                      ),
+                                        FractionallySizedBox(
+                                          widthFactor: fileProgress,
+                                          child: Container(
+                                            height: 4,
+                                            decoration: BoxDecoration(
+                                              color: (fileComplete
+                                                      ? greenClr
+                                                      : (isDownloading
+                                                          ? blueClr
+                                                          : mutedClr))
+                                                  .withValues(alpha: 0.45),
+                                              borderRadius:
+                                                  BorderRadius.circular(2),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     )
                                   else
                                     Stack(

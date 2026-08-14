@@ -2448,7 +2448,7 @@ class _TorrentFileRow extends StatelessWidget {
         : (!hasEngineData && !isEstimated
             ? '…'
             : (isEstimated
-                ? '~${(p * 100).toStringAsFixed(0)}%'
+                ? '≈${(p * 100).toStringAsFixed(0)}%'
                 : '${(p * 100).toStringAsFixed(0)}%'));
 
     // FIX(M-4): Render unselected torrent files with reduced opacity
@@ -2508,7 +2508,10 @@ class _TorrentFileRow extends StatelessWidget {
                                 child: Container(
                                   height: 2,
                                   decoration: BoxDecoration(
-                                    color: done ? greenClr : accent,
+                                    color: isEstimated
+                                        ? (done ? greenClr : accent)
+                                            .withValues(alpha: 0.45)
+                                        : (done ? greenClr : accent),
                                     borderRadius: BorderRadius.circular(1),
                                   ),
                                 ),

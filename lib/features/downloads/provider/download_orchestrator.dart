@@ -2309,6 +2309,8 @@ class DownloadOrchestrator {
                 ytStreamKind: YtStreamKind.video,
                 ytCounterpartSize: liveAudioSize,
                 ytCounterpartDownloadedBytes: audioBytesSoFar,
+                metadataTimeoutSeconds:
+                    _host.providerSettingsProvider.torrentMetadataTimeoutSeconds,
                 onProgress: (progress) {
                   if (progress.torrentId != null) {
                     _host.providerTorrentIds[task.id] = progress.torrentId!;

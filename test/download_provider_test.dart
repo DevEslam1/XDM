@@ -79,6 +79,7 @@ class FakeDownloadEngine extends DownloadEngine {
     YtStreamKind? ytStreamKind,
     int? ytCounterpartSize,
     int? ytCounterpartDownloadedBytes,
+    int? metadataTimeoutSeconds,
   }) {
     startedUrls.add(url);
     final completer = Completer<void>();
@@ -1372,6 +1373,7 @@ class FakeDownloadEngine403 extends DownloadEngine {
     YtStreamKind? ytStreamKind,
     int? ytCounterpartSize,
     int? ytCounterpartDownloadedBytes,
+    int? metadataTimeoutSeconds,
   }) async {
     throw DioException(
       requestOptions: response.requestOptions,
