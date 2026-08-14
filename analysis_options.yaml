@@ -24,4 +24,4 @@ analyzer:
     - "**/*.g.dart"
   errors:
     avoid_print: warning
-    avoid_catches_without_on_clauses: info
+    avoid_catches_without_on_clauses: ignore

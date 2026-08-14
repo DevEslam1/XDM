@@ -36,7 +36,7 @@ void main() {
 
     test('ErrorTaxonomy classifies Dio and Socket errors accurately (A-07)',
         () {
-      final socketError = const SocketException('Connection refused');
+      const socketError = SocketException('Connection refused');
       final classification = ErrorTaxonomy.classify(socketError);
 
       expect(classification.family, equals(ErrorFamily.network));

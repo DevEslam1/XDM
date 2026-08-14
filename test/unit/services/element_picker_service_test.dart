@@ -15,7 +15,7 @@ void main() {
     });
 
     test('pickerScript contains required JS event handlers and namespace', () {
-      final js = ElementPickerService.pickerScript;
+      const js = ElementPickerService.pickerScript;
       expect(js, contains('window.__xdmPicker'));
       expect(js, contains('window.XdmPickerChannel'));
       expect(js, contains('display:none;'));

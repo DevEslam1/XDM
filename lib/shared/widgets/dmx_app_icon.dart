@@ -154,7 +154,7 @@ class _DashRingPainter extends CustomPainter {
     final path = Path();
     for (var i = 0; i < dashes; i++) {
       final start = i * step;
-      final sweep = step * (1 - gapRatio);
+      const sweep = step * (1 - gapRatio);
       path.addArc(rect, start, sweep);
     }
     canvas.drawPath(path, _paint);

@@ -14,7 +14,7 @@ void main() {
     test('Script with eval or Function is rejected during validation', () {
       final manager = UserScriptManager();
 
-      final invalidScript = const UserScript(
+      const invalidScript = UserScript(
         id: 'bad_1',
         name: 'Eval Attack',
         urlPattern: '*',
@@ -27,7 +27,7 @@ void main() {
     test('Script with new Function is rejected during validation', () {
       final manager = UserScriptManager();
 
-      final invalidScript = const UserScript(
+      const invalidScript = UserScript(
         id: 'bad_2',
         name: 'Function Attack',
         urlPattern: '*',
@@ -40,7 +40,7 @@ void main() {
     test('Sandbox JS generation includes network and cookie blocking wrappers',
         () async {
       final manager = UserScriptManager();
-      final script = const UserScript(
+      const script = UserScript(
         id: 's1',
         name: 'Test Script',
         urlPattern: 'https://example.com/*',

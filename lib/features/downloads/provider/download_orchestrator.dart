@@ -342,24 +342,26 @@ class DownloadOrchestrator {
         }
       }
 
-      if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
+      // FIX-C4: YouTube — audio progress validation on resume
+      if (task.hasMergedAudio && task.tempFilePath.isNotEmpty) {
         final audioPath = '${task.tempFilePath}.audio';
-        if (!await File(audioPath).exists()) {
-          task = task.copyWith(
-            audioProgress: 0.0,
-            audioDownloadedBytes: 0,
-          );
-          await _host.setTaskState(task);
-          await _host.providerDatabaseService.saveTask(task);
+        final audioStateFile = File('$audioPath.dmxstate');
+        if (!await audioStateFile.exists()) {
+          task = task.copyWith(audioProgress: 0.0, audioDownloadedBytes: 0);
         } else {
-          final validated = await DownloadProvider.validateAudioProgress(task);
-          if (validated.audioProgress != task.audioProgress ||
-              validated.audioDownloadedBytes != task.audioDownloadedBytes) {
-            await _host.setTaskState(validated);
-            await _host.providerDatabaseService.saveTask(validated);
-            task = validated;
+          final audioBytes = await actualDownloadedBytes(
+            audioPath,
+            threadCount: max(1, task.audioThreadCount),
+          );
+          if (task.audioSize > 0) {
+            final frac = (audioBytes / task.audioSize).clamp(0.0, 1.0);
+            task = task.copyWith(
+              audioProgress: frac,
+              audioDownloadedBytes: audioBytes,
+            );
           }
         }
+        await _host.setTaskState(task);
       }
     } catch (e) {
       debugPrint('[DMX] StateStore validation failed: $e');
@@ -1116,12 +1118,42 @@ class DownloadOrchestrator {
 
   /// FIX-B2: Re-attempt merge only when both video and audio files already exist on disk
   Future<void> retryMergeOnly(DownloadTask task) async {
-    final audioTempPath = '${task.tempFilePath}.audio';
-
-    // FIX: Restore video-only file from previous merge failure
+    // FIX-C6: Check if merge output already exists with sufficient size
     final ext = p.extension(task.localFilePath).isNotEmpty
         ? p.extension(task.localFilePath)
         : '.mp4';
+    final mergedPath = '${task.tempFilePath}.merged$ext';
+    final mergedFile = File(mergedPath);
+    if (await mergedFile.exists()) {
+      final mergedLen = await mergedFile.length();
+      final expectedMin =
+          task.fileSize > 0 ? (task.fileSize * 0.9).round() : 1024;
+      if (mergedLen >= expectedMin) {
+        // Merge already done — set merging status and skip straight to finalize
+        await _host.setTaskState(
+          task.copyWith(
+            status: DownloadStatus.merging,
+            statusMessage: 'Finalizing merged download...',
+            clearError: true,
+          ),
+        );
+        final videoOnlyPath =
+            '${p.withoutExtension(task.localFilePath)}_video_only$ext';
+        final videoOnlyFile = File(videoOnlyPath);
+        if (videoOnlyFile.existsSync()) {
+          try {
+            await videoOnlyFile.delete();
+          } catch (_) {}
+        }
+        await mergedFile.rename(task.localFilePath);
+        await _finalizeDownload(task.id, _host.notifications.idFor(task.id));
+        return;
+      }
+    }
+
+    final audioTempPath = '${task.tempFilePath}.audio';
+
+    // FIX: Restore video-only file from previous merge failure
     final videoOnlyPath =
         '${p.withoutExtension(task.localFilePath)}_video_only$ext';
     final videoOnlyFile = File(videoOnlyPath);
@@ -1417,6 +1449,14 @@ class DownloadOrchestrator {
     );
 
     _sessionCachedTotalSize.remove(taskId);
+
+    // FIX-M6: Cleanup orphan audio sidecars after successful merge
+    if (current.hasMergedAudio && current.tempFilePath.isNotEmpty) {
+      await DownloadEngine.cleanupOrphanFiles(
+        current.tempFilePath,
+        mergeConfirmed: true,
+      );
+    }
 
     if (_host.providerSettingsProvider.vibration) {
       HapticFeedback.vibrate();

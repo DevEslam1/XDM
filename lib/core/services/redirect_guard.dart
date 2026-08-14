@@ -404,7 +404,7 @@ class RedirectGuard {
     InAppWebViewController c,
     String baseUrl,
   ) async {
-    final js = r'''
+    const js = r'''
 (function() {
   var out = [];
   function push(u) { if (u && out.indexOf(u) < 0) out.push(u); }

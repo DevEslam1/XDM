@@ -26,7 +26,7 @@ void main() {
     });
 
     test('normal text filter file passes', () async {
-      final content = '||ads.example.com^\n||tracker.io^\n';
+      const content = '||ads.example.com^\n||tracker.io^\n';
       final f = File(p.join(tempDir.path, 'filter.txt'));
       await f.writeAsString(content);
       final size = await f.length();
@@ -43,7 +43,7 @@ void main() {
     });
 
     test('file much smaller than last good size is rejected', () async {
-      final tiny = '||a.com^\n';
+      const tiny = '||a.com^\n';
       final f = File(p.join(tempDir.path, 'tiny.txt'));
       await f.writeAsString(tiny);
       final size = await f.length();
@@ -64,7 +64,7 @@ void main() {
 
     test('no previous size (first download) always passes size check',
         () async {
-      final content = '||ads.example.com^\n';
+      const content = '||ads.example.com^\n';
       final f = File(p.join(tempDir.path, 'first.txt'));
       await f.writeAsString(content);
       final size = await f.length();

@@ -219,14 +219,33 @@ class StateStore {
     TransferState? state;
     String? migratedFrom;
 
-    // ERR-RESILIENCE-2.3: If a crash left a pending .tmp behind (rename never
-    // completed), prefer it — it is the freshest copy.
+    // FIX-C2: Validate tmp file before accepting it; if unparseable, delete and fall back
     var effectivePath = path;
     final tmpStale = File('$path.tmp');
     if (!await file.exists() && await tmpStale.exists()) {
-      effectivePath = '$path.tmp';
+      bool tmpValid = false;
+      try {
+        final decoded = jsonDecode(await tmpStale.readAsString());
+        if (decoded is Map) {
+          final json = Map<String, dynamic>.from(decoded);
+          if (TransferState.tryParseV3(json) != null ||
+              TransferState.tryParseV2(json) != null) {
+            tmpValid = true;
+          }
+        }
+      } catch (e) {
+        debugPrint('[DmxState] unreadable tmp state at ${tmpStale.path}: $e');
+      }
+      if (tmpValid) {
+        effectivePath = '$path.tmp';
+      } else {
+        try {
+          await tmpStale.delete();
+        } catch (_) {}
+      }
     }
 
+    // FIX-C1: Multi-stage parse trying V3, then V2, before falling back to journal recovery
     if (await File(effectivePath).exists()) {
       try {
         final decoded = jsonDecode(await File(effectivePath).readAsString());
@@ -234,12 +253,14 @@ class StateStore {
           final json = Map<String, dynamic>.from(decoded);
           state = TransferState.tryParseV3(json);
           if (state == null) {
-            state = _migrateV2(json, threadCount);
+            state = TransferState.tryParseV2(json);
+            state ??= _migrateV2(json, threadCount);
             if (state != null) migratedFrom = 'v2';
           }
         }
       } catch (e) {
-        debugPrint('[DmxState] unreadable state at $effectivePath: $e');
+        debugPrint(
+            '[DmxState] [WARNING] unreadable state at $effectivePath: $e');
         state = null;
       }
     }
@@ -419,12 +440,15 @@ class StateStore {
   static final Map<String, int> _lastWrittenPayloads = {};
   static final Map<String, int> _lastWrittenBytes = {};
   static final Map<String, DateTime> _lastSaveTimes = {};
+  // FIX-M1: Track last written status to write immediately on status changes
+  static final Map<String, DmxStateStatus> _lastWrittenStatus = {};
   static const int _maxCachedPayloads = 16;
 
   static void removeCachedPayload(String taskId) {
     _lastWrittenPayloads.removeWhere((key, _) => key.contains(taskId));
     _lastWrittenBytes.removeWhere((key, _) => key.contains(taskId));
     _lastSaveTimes.removeWhere((key, _) => key.contains(taskId));
+    _lastWrittenStatus.removeWhere((key, _) => key.contains(taskId));
   }
 
   static void removeTaskState(String taskId) => removeCachedPayload(taskId);
@@ -448,10 +472,13 @@ class StateStore {
         final now = DateTime.now();
         final lastSave = _lastSaveTimes[targetPath];
         final bytesSinceLastWrite =
-            (state.downloadedBytes - (_lastWrittenBytes[targetPath] ?? 0)).abs();
+            (state.downloadedBytes - (_lastWrittenBytes[targetPath] ?? 0))
+                .abs();
+        final statusChanged = _lastWrittenStatus[targetPath] != state.status;
 
-        // FIX-P1: Rate-limit non-durable state saves to at most once per 2s unless delta >= 5MB
+        // FIX-P1: Rate-limit non-durable state saves to at most once per 2s unless delta >= 5MB or status changed
         if (!durable &&
+            !statusChanged &&
             lastSave != null &&
             now.difference(lastSave) < const Duration(seconds: 2) &&
             bytesSinceLastWrite < 5 * 1024 * 1024) {
@@ -460,11 +487,14 @@ class StateStore {
 
         final payload = jsonEncode(state.toJson());
         final payloadHash = payload.hashCode;
-        if (!durable && _lastWrittenPayloads[targetPath] == payloadHash) {
+        if (!durable &&
+            !statusChanged &&
+            _lastWrittenPayloads[targetPath] == payloadHash) {
           return; // Skip redundant state write
         }
         _lastWrittenPayloads[targetPath] = payloadHash;
         _lastSaveTimes[targetPath] = now;
+        _lastWrittenStatus[targetPath] = state.status;
         if (_lastWrittenPayloads.length > _maxCachedPayloads) {
           final keysToRemove = _lastWrittenPayloads.keys
               .take(_lastWrittenPayloads.length - _maxCachedPayloads)
@@ -473,11 +503,15 @@ class StateStore {
             _lastWrittenPayloads.remove(key);
             _lastWrittenBytes.remove(key);
             _lastSaveTimes.remove(key);
+            _lastWrittenStatus.remove(key);
           }
         }
 
-        // FIX-3: Always write when downloadedBytes changed by >5MB regardless of screen state
-        if (isScreenOff && !durable && bytesSinceLastWrite < 5 * 1024 * 1024) {
+        // FIX-M1: Reduce screen-off threshold to 1MB; always write when status changed
+        if (isScreenOff &&
+            !durable &&
+            !statusChanged &&
+            bytesSinceLastWrite < 1 * 1024 * 1024) {
           return; // skip only small deltas when screen off
         }
         _lastWrittenBytes[targetPath] = state.downloadedBytes;
@@ -587,7 +621,7 @@ class DownloadJournal {
       _lastBgRecordedBytes[index] = bytes;
     } else {
       // NEW: foreground throttle — 1MB minimum delta
-      final fgThreshold = 1024 * 1024;
+      const fgThreshold = 1024 * 1024;
       final last = _lastBgRecordedBytes[index] ?? 0;
       if ((bytes - last).abs() < fgThreshold) {
         return;

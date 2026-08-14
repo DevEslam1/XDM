@@ -6,7 +6,7 @@ void main() {
 
   group('MagnetCacheService', () {
     test('cacheMetadata and getCachedMetadata roundtrip', () async {
-      final infoHash = 'c12fe1c06bba254a9dc9f519b335aa7c1367a88a';
+      const infoHash = 'c12fe1c06bba254a9dc9f519b335aa7c1367a88a';
       final metadata = {
         'name': 'Ubuntu 24.04 Desktop ISO',
         'size': 5000000000,

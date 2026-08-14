@@ -42,7 +42,7 @@ void main() {
 
   group('isRetryableError', () {
     test('SocketException is retryable', () {
-      final error = const SocketException('connection reset');
+      const error = SocketException('connection reset');
       expect(orchestrator.isRetryableError(error), isTrue);
     });
 
@@ -57,7 +57,7 @@ void main() {
     });
 
     test('DownloadIntegrityException is NOT retryable', () {
-      final error = const DownloadIntegrityException('checksum mismatch');
+      const error = DownloadIntegrityException('checksum mismatch');
       expect(orchestrator.isRetryableError(error), isFalse);
     });
 
@@ -177,14 +177,14 @@ void main() {
 
   group('errorMessage', () {
     test('DownloadIntegrityException includes message', () {
-      final error = const DownloadIntegrityException('size mismatch');
+      const error = DownloadIntegrityException('size mismatch');
       final msg = orchestrator.errorMessage(error);
       expect(msg, contains('Download integrity check failed'));
       expect(msg, contains('size mismatch'));
     });
 
     test('IsolateSpawnTimeoutException returns its message', () {
-      final error = const IsolateSpawnTimeoutException('spawn timed out');
+      const error = IsolateSpawnTimeoutException('spawn timed out');
       expect(orchestrator.errorMessage(error), equals('spawn timed out'));
     });
 

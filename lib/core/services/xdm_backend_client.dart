@@ -5,7 +5,6 @@ import 'dart:math' show max;
 
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../features/settings/provider/settings_provider.dart';
@@ -80,7 +79,7 @@ class XdmBackendClient {
   /// stops receiving requests (and stops failing over to it) until it recovers.
   final Map<String, CircuitBreaker> _backendCircuits = {};
 
-  static final _secureStorage = const FlutterSecureStorage();
+  static const _secureStorage = FlutterSecureStorage();
   static const _apiKeyStorageKey = 'xdm_backend_api_key';
 
   /// Reads the API key from secure storage or compile-time env var.

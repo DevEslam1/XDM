@@ -661,6 +661,8 @@ class HttpTransferJob {
   }
 
   TransferState? _state;
+  // FIX-H1: Track if state was already saved in catch block to avoid double write race
+  bool _stateSavedInCatch = false;
   int? _lastEta;
   int _lastStateSaveMs = 0;
   bool _stateSavePending = false;
@@ -813,6 +815,12 @@ class HttpTransferJob {
       await _finalize(dio);
       _send('done');
     } finally {
+      // FIX-H1: Guard against double state-write race on fast pause-resume
+      if (!_stateSavedInCatch && _state != null) {
+        try {
+          await StateStore.save(cmd.tempFilePath, _state!);
+        } catch (_) {}
+      }
       dio.close(force: true);
     }
   }
@@ -1053,6 +1061,8 @@ class HttpTransferJob {
       }
       try {
         await writer.flushAll();
+        // FIX-H1: Mark state as saved in catch block
+        _stateSavedInCatch = true;
         await StateStore.save(cmd.tempFilePath, st, durable: true);
       } catch (_) {}
       rethrow;

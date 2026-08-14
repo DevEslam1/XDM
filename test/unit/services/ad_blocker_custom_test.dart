@@ -99,7 +99,7 @@ void main() {
     });
 
     test('youtubeEarlyJs safely hooks ytcfg via Object.defineProperty', () {
-      final script = AdBlockerService.youtubeEarlyJs;
+      const script = AdBlockerService.youtubeEarlyJs;
       expect(script, contains('Object.defineProperty(window, \'ytcfg\''));
       expect(script, contains('val.web_enable_adblock_detection = false'));
     });

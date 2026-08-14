@@ -343,12 +343,13 @@ class DownloadTask {
     return 0.0;
   }
 
-  // FIX-11: combinedTotalSize returns 0 when videoStreamSize == 0 (indeterminate UI)
+  // FIX-M3: combinedTotalSize fallback when videoStreamSize == 0 and fileSize == 0
   int get combinedTotalSize {
     if (hasMergedAudio && audioSize > 0) {
       if (videoStreamSize > 0) return videoStreamSize + audioSize;
       if (fileSize > 0) return fileSize;
-      return 0; // Indeterminate — triggers indeterminate UI
+      // Fallback: use downloadedBytes as minimum indicator
+      return downloadedBytes + audioSize;
     }
     return resolvedFileSize;
   }

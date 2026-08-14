@@ -58,7 +58,7 @@ void main() {
     });
 
     test('reannounce enforces 15s rate limiting per tracker (T-04)', () {
-      final tracker = 'http://tracker-ratelimit.org/announce';
+      const tracker = 'http://tracker-ratelimit.org/announce';
       trackerManager.addTracker(2, tracker);
 
       // Immediately after adding, canAnnounce is false

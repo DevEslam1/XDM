@@ -4,7 +4,7 @@ import 'package:dmx/core/services/logging_service.dart';
 void main() {
   group('LoggingService Tests (L-01 / L-02)', () {
     test('sanitize redacts sensitive credentials and tokens (L-01)', () {
-      final msg =
+      const msg =
           'Connecting with Bearer secret_token_12345 to https://api.com?api_key=my_super_secret_key';
       final sanitized = LoggingService.sanitize(msg);
 
@@ -15,7 +15,7 @@ void main() {
     });
 
     test('sanitize redacts Basic auth and URI embedded passwords (L-01)', () {
-      final msg =
+      const msg =
           'Request with Basic dXNlcjpwYXNz to http://admin:password123@proxy.lan:8080';
       final sanitized = LoggingService.sanitize(msg);
 

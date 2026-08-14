@@ -851,7 +851,7 @@ class _ThreadOrbitsPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final threadCount = 8;
+    const threadCount = 8;
 
     for (int i = 0; i < threadCount; i++) {
       final angle = (progress * pi * 2) + (i * (pi * 2 / threadCount));
@@ -929,7 +929,7 @@ class _SpeedometerPainter extends CustomPainter {
 
     // Gradient active arc (simulate with segments)
     final activeSweep = sweepAngle * animationValue;
-    final segments = 30;
+    const segments = 30;
     for (int i = 0; i < segments; i++) {
       final segStart = startAngle + (activeSweep * i / segments);
       final segSweep = activeSweep / segments + 0.01;
@@ -1494,7 +1494,7 @@ class _TorrentNetworkPainter extends CustomPainter {
     canvas.drawCircle(center, 3, innerPaint);
 
     // Peer nodes
-    final peerCount = 10;
+    const peerCount = 10;
     final peers = <Offset>[];
 
     for (int i = 0; i < peerCount; i++) {

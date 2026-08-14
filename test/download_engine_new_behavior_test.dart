@@ -77,7 +77,7 @@ void main() {
     });
 
     test('writeInit and recover round-trip', () async {
-      final path = 'build/test_recover.journal';
+      const path = 'build/test_recover.journal';
       final file = File(path);
       if (await file.exists()) await file.delete();
 
@@ -101,7 +101,7 @@ void main() {
     });
 
     test('writeInit does not destroy recovered journal', () async {
-      final path = 'build/test_no_destroy.journal';
+      const path = 'build/test_no_destroy.journal';
       final file = File(path);
       if (await file.exists()) await file.delete();
 
@@ -130,7 +130,7 @@ void main() {
     });
 
     test('close releases file handle for delete', () async {
-      final path = 'build/test_close_delete.journal';
+      const path = 'build/test_close_delete.journal';
       final file = File(path);
       if (await file.exists()) await file.delete();
 
@@ -145,8 +145,8 @@ void main() {
 
   group('PositionalFileWriter', () {
     test('close releases file handle for rename', () async {
-      final path = 'build/test_writer_close.tmp';
-      final finalPath = 'build/test_writer_renamed.bin';
+      const path = 'build/test_writer_close.tmp';
+      const finalPath = 'build/test_writer_renamed.bin';
       final f = File(path);
       if (await f.exists()) await f.delete();
       final ff = File(finalPath);
@@ -172,7 +172,7 @@ void main() {
     });
 
     test('openForResume does not truncate existing data', () async {
-      final path = 'build/test_resume_no_truncate.tmp';
+      const path = 'build/test_resume_no_truncate.tmp';
       final f = File(path);
       if (await f.exists()) await f.delete();
 
@@ -193,7 +193,7 @@ void main() {
     });
 
     test('flushAll flushes all thread buffers', () async {
-      final path = 'build/test_flush_all.tmp';
+      const path = 'build/test_flush_all.tmp';
       final f = File(path);
       if (await f.exists()) await f.delete();
 
@@ -224,20 +224,20 @@ void main() {
 
   group('DownloadIntegrityException', () {
     test('is not retryable in error classification', () {
-      final error = const DownloadIntegrityException('size mismatch');
+      const error = DownloadIntegrityException('size mismatch');
       expect(error.toString(), contains('DownloadIntegrityException'));
       expect(error.message, 'size mismatch');
     });
 
     test('is a non-DioException type', () {
-      final error = const DownloadIntegrityException('test');
+      const error = DownloadIntegrityException('test');
       expect(error is DioException, isFalse);
     });
   });
 
   group('IsolateSpawnTimeoutException', () {
     test('has a default message', () {
-      final error = const IsolateSpawnTimeoutException();
+      const error = IsolateSpawnTimeoutException();
       expect(
         error.message,
         'Download engine failed to initialize. Please retry.',
@@ -245,7 +245,7 @@ void main() {
     });
 
     test('accepts custom message', () {
-      final error = const IsolateSpawnTimeoutException('Custom message');
+      const error = IsolateSpawnTimeoutException('Custom message');
       expect(error.message, 'Custom message');
     });
   });
@@ -271,7 +271,7 @@ void main() {
 
   group('DownloadMetadata', () {
     test('constructs with file info', () {
-      final meta = const DownloadMetadata(
+      const meta = DownloadMetadata(
         fileName: 'file.zip',
         category: 'Archive',
         fileSize: 500,
@@ -284,7 +284,7 @@ void main() {
 
   group('PositionalFileWriter thread safety', () {
     test('concurrent writes on different threads do not interfere', () async {
-      final path = 'build/test_thread_safety.tmp';
+      const path = 'build/test_thread_safety.tmp';
       final f = File(path);
       if (await f.exists()) await f.delete();
 
@@ -326,8 +326,8 @@ void main() {
   group('DownloadEngine integration', () {
     test('buildTempFilePath and buildLocalFilePath are distinct', () {
       final engine = DownloadEngine(enableCleanupTimer: false);
-      final dir = 'build';
-      final name = 'video.mp4';
+      const dir = 'build';
+      const name = 'video.mp4';
       final temp = engine.buildTempFilePath(dir, name);
       final local = engine.buildLocalFilePath(dir, name);
 
@@ -560,7 +560,7 @@ void main() {
     test(
       'writeCheckpoint triggers compaction when threshold is exceeded',
       () async {
-        final path = 'build/test_compaction.journal';
+        const path = 'build/test_compaction.journal';
         final file = File(path);
         if (await file.exists()) await file.delete();
 
@@ -589,7 +589,7 @@ void main() {
     );
 
     test('recover works correctly after compaction', () async {
-      final path = 'build/test_recover_after_compact.journal';
+      const path = 'build/test_recover_after_compact.journal';
       final file = File(path);
       if (await file.exists()) await file.delete();
 
@@ -613,7 +613,7 @@ void main() {
     });
 
     test('multiple checkpoint cycles and recover work', () async {
-      final path = 'build/test_multi_cycle.journal';
+      const path = 'build/test_multi_cycle.journal';
       final file = File(path);
       if (await file.exists()) await file.delete();
 
@@ -636,7 +636,7 @@ void main() {
 
   group('DownloadJournal — crash recovery', () {
     test('recover returns latest checkpoint after simulated crash', () async {
-      final path = 'build/test_crash_recover.journal';
+      const path = 'build/test_crash_recover.journal';
       final file = File(path);
       if (await file.exists()) await file.delete();
 
@@ -666,7 +666,7 @@ void main() {
     test(
       'non-contiguous write flushes before moving to new position',
       () async {
-        final path = 'build/test_non_contiguous.tmp';
+        const path = 'build/test_non_contiguous.tmp';
         final f = File(path);
         if (await f.exists()) await f.delete();
 
@@ -708,8 +708,8 @@ void main() {
     );
 
     test('flushAll then close allows rename', () async {
-      final path = 'build/test_flush_then_rename.tmp';
-      final finalPath = 'build/test_flush_then_renamed.bin';
+      const path = 'build/test_flush_then_rename.tmp';
+      const finalPath = 'build/test_flush_then_renamed.bin';
       for (final p in [path, finalPath]) {
         final pf = File(p);
         if (await pf.exists()) await pf.delete();
@@ -891,7 +891,7 @@ void main() {
     test(
       'integrity error thrown by engine is a DownloadIntegrityException',
       () {
-        final error = const DownloadIntegrityException('size mismatch');
+        const error = DownloadIntegrityException('size mismatch');
         expect(error.message, 'size mismatch');
         expect(error.toString(), contains('DownloadIntegrityException'));
       },

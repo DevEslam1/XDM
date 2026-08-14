@@ -2236,102 +2236,118 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
 
   @override
   Widget build(BuildContext context) {
-    try {
-      final files = widget.task.torrentFiles ?? [];
-      final isChecking = widget.task.statusMessage?.contains('checking') ==
-              true ||
-          widget.task.statusMessage?.contains('Checking') == true; // FIX-B10
-      final displayFiles = files.map((f) {
-        final selected = isTorrentFileSelected(f);
-        final length = (f['length'] as num?)?.toInt() ?? 0;
-        final rawBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-        // During a recheck the engine may report 0 temporarily;
-        // keep the last known value so the bar doesn't flicker to 0.
-        final downloaded = isChecking
-            ? (length > 0
-                ? rawBytes.clamp(0, length)
-                : (rawBytes < 0 ? 0 : rawBytes))
-            : (length > 0 ? rawBytes.clamp(0, length) : 0);
-        final resolvedBytes =
-            (widget.task.status == DownloadStatus.completed && selected)
-                ? length
-                : downloaded;
+    // FIX-H6: Wrap torrent file list in Selector to get live per-file percentages
+    return Selector<DownloadProvider, List<Map<String, dynamic>>?>(
+      selector: (_, p) =>
+          p.taskById(widget.task.id)?.torrentFiles ?? widget.task.torrentFiles,
+      shouldRebuild: (prev, next) {
+        if (prev == null && next == null) return false;
+        if (prev == null || next == null) return true;
+        if (prev.length != next.length) return true;
+        if (prev.isEmpty) return false;
+        final prevBytes = (prev.first['downloadedBytes'] as num?)?.toInt();
+        final nextBytes = (next.first['downloadedBytes'] as num?)?.toInt();
+        return prevBytes != nextBytes;
+      },
+      builder: (context, dynamicTorrentFiles, _) {
+        try {
+          final files = dynamicTorrentFiles ?? widget.task.torrentFiles ?? [];
+          final isChecking = widget.task.statusMessage?.contains('checking') ==
+                  true ||
+              widget.task.statusMessage?.contains('Checking') == true; // FIX-B10
+          final displayFiles = files.map((f) {
+            final selected = isTorrentFileSelected(f);
+            final length = (f['length'] as num?)?.toInt() ?? 0;
+            final rawBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+            // During a recheck the engine may report 0 temporarily;
+            // keep the last known value so the bar doesn't flicker to 0.
+            final downloaded = isChecking
+                ? (length > 0
+                    ? rawBytes.clamp(0, length)
+                    : (rawBytes < 0 ? 0 : rawBytes))
+                : (length > 0 ? rawBytes.clamp(0, length) : 0);
+            final resolvedBytes =
+                (widget.task.status == DownloadStatus.completed && selected)
+                    ? length
+                    : downloaded;
 
-        return {...f, 'downloadedBytes': resolvedBytes};
-      }).toList();
+            return {...f, 'downloadedBytes': resolvedBytes};
+          }).toList();
 
-      final visible = _showAllFiles
-          ? displayFiles
-          : displayFiles.take(_collapsedFileCount).toList();
-      final hiddenCount = displayFiles.length - visible.length;
-      final mutedClr =
-          widget.isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+          final visible = _showAllFiles
+              ? displayFiles
+              : displayFiles.take(_collapsedFileCount).toList();
+          final hiddenCount = displayFiles.length - visible.length;
+          final mutedClr =
+              widget.isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              'FILES • ${files.where((f) => isTorrentFileSelected(f)).length}/${files.length}',
-              style: AppTheme.microLabel(isDark: widget.isDark, size: 8),
-            ),
-          ),
-          ...visible.map(
-            (f) => _TorrentFileRow(
-              file: f,
-              isDark: widget.isDark,
-              accent: widget.accent,
-              isChecking: isChecking, // FIX-B10
-            ),
-          ),
-          if (hiddenCount > 0 || _showAllFiles)
-            GestureDetector(
-              onTap: () {
-                triggerHaptic(context.read<SettingsProvider>());
-                setState(() => _showAllFiles = !_showAllFiles);
-              },
-              child: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      _showAllFiles
-                          ? Icons.keyboard_arrow_up_rounded
-                          : Icons.keyboard_arrow_down_rounded,
-                      size: 14,
-                      color: mutedClr,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      _showAllFiles
-                          ? 'SHOW LESS'
-                          : '+$hiddenCount MORE FILE${hiddenCount == 1 ? '' : 'S'}',
-                      style: AppTheme.microLabel(
-                        isDark: widget.isDark,
-                        color: mutedClr,
-                        size: 8.5,
-                      ),
-                    ),
-                  ],
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'FILES • ${files.where((f) => isTorrentFileSelected(f)).length}/${files.length}',
+                  style: AppTheme.microLabel(isDark: widget.isDark, size: 8),
                 ),
               ),
+              ...visible.map(
+                (f) => _TorrentFileRow(
+                  file: f,
+                  isDark: widget.isDark,
+                  accent: widget.accent,
+                  isChecking: isChecking, // FIX-B10
+                ),
+              ),
+              if (hiddenCount > 0 || _showAllFiles)
+                GestureDetector(
+                  onTap: () {
+                    triggerHaptic(context.read<SettingsProvider>());
+                    setState(() => _showAllFiles = !_showAllFiles);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _showAllFiles
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          size: 14,
+                          color: mutedClr,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _showAllFiles
+                              ? 'SHOW LESS'
+                              : '+$hiddenCount MORE FILE${hiddenCount == 1 ? '' : 'S'}',
+                          style: AppTheme.microLabel(
+                            isDark: widget.isDark,
+                            color: mutedClr,
+                            size: 8.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          );
+        } catch (e) {
+          return Padding(
+            padding: const EdgeInsetsDirectional.only(start: 12, bottom: 8),
+            child: Text(
+              'Corrupted torrent file list',
+              style: AppTheme.microLabel(
+                isDark: widget.isDark,
+                color: widget.isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+              ),
             ),
-        ],
-      );
-    } catch (e) {
-      return Padding(
-        padding: const EdgeInsetsDirectional.only(start: 12, bottom: 8),
-        child: Text(
-          'Corrupted torrent file list',
-          style: AppTheme.microLabel(
-            isDark: widget.isDark,
-            color: widget.isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-          ),
-        ),
-      );
-    }
+          );
+        }
+      },
+    );
   }
 }
 

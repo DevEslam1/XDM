@@ -123,7 +123,7 @@ void main() {
       final file = File(torrentFilePath);
 
       // Raw bencoded torrent bytes containing an info dict
-      final bencodedStr = 'd4:infod4:name4:test6:lengthi100eee';
+      const bencodedStr = 'd4:infod4:name4:test6:lengthi100eee';
       final bencodedBytes = Uint8List.fromList(utf8.encode(bencodedStr));
       await file.writeAsBytes(bencodedBytes);
 

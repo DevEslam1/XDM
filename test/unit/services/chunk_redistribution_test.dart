@@ -9,7 +9,7 @@ void main() {
         'redistributing 4 chunks (each partially downloaded) to 8 chunks maps byte ranges accurately',
         () {
       // 1MB total size (> minSizeForMultithread)
-      final totalSize = 1024 * 1024; // 1,048,576 bytes
+      const totalSize = 1024 * 1024; // 1,048,576 bytes
       final oldChunks =
           ChunkScheduler.plan(totalSize: totalSize, threadCount: 4);
       expect(oldChunks.length, 4);

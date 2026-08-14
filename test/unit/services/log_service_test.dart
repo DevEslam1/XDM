@@ -38,7 +38,7 @@ void main() {
     });
 
     test('sanitize does not modify safe messages', () {
-      final message = 'Download completed successfully';
+      const message = 'Download completed successfully';
       expect(LoggingService.sanitize(message), message);
     });
   });

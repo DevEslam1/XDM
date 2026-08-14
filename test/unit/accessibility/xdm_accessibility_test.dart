@@ -18,7 +18,7 @@ void main() {
 
     testWidgets('duration collapses to zero under reduced motion',
         (tester) async {
-      final full = const Duration(milliseconds: 240);
+      const full = Duration(milliseconds: 240);
       Duration? measured;
       await tester.pumpWidget(
         host(
@@ -36,7 +36,7 @@ void main() {
 
     testWidgets('duration keeps full value when motion is enabled',
         (tester) async {
-      final full = const Duration(milliseconds: 240);
+      const full = Duration(milliseconds: 240);
       Duration? measured;
       await tester.pumpWidget(
         host(

@@ -22,13 +22,13 @@ void main() {
     });
 
     test('4. Normal split: 10MB with 4 threads = 4 equal chunks', () {
-      final totalSize = 10 * 1024 * 1024;
+      const totalSize = 10 * 1024 * 1024;
       final chunks = ChunkScheduler.plan(totalSize: totalSize, threadCount: 4);
       expect(chunks.length, equals(4));
     });
 
     test('5. Last chunk gets remainder bytes', () {
-      final totalSize = 10000007; // Not evenly divisible by 4
+      const totalSize = 10000007; // Not evenly divisible by 4
       final chunks = ChunkScheduler.plan(totalSize: totalSize, threadCount: 4);
       expect(chunks.length, equals(4));
       expect(chunks.last.end, equals(totalSize - 1));

@@ -1293,15 +1293,29 @@ class TorrentService {
 
         int diskBytes = 0;
         bool exists = false;
+        // FIX-M5: Pre-allocated file probe with head, tail, and mid check
         if (await file.exists()) {
           exists = true;
-          diskBytes = await file.length();
-          if (diskBytes > 0 && diskBytes >= native.size) {
+          final diskLen = await file.length();
+          diskBytes = diskLen;
+          if (diskLen >= native.size && native.size > 0) {
             final raf = await file.open(mode: FileMode.read);
-            final probe = await raf.read(math.min(4096, diskBytes));
-            final hasContent = probe.any((b) => b != 0);
+            final headProbe = await raf.read(math.min(4096, diskLen));
+            final headHasContent = headProbe.any((b) => b != 0);
+            bool tailHasContent = headHasContent;
+            bool midHasContent = headHasContent;
+            if (diskLen > 8192) {
+              await raf.setPosition(diskLen - 4096);
+              final tailProbe = await raf.read(4096);
+              tailHasContent = tailProbe.any((b) => b != 0);
+              await raf.setPosition(diskLen ~/ 2);
+              final midProbe = await raf.read(4096);
+              midHasContent = midProbe.any((b) => b != 0);
+            }
             await raf.close();
-            if (!hasContent) diskBytes = 0;
+            if (!headHasContent && !tailHasContent && !midHasContent) {
+              diskBytes = 0; // truly pre-allocated
+            }
           }
         }
 

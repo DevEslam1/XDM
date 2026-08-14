@@ -34,6 +34,8 @@ class DownloadMetadata {
   final bool supportsResume;
   final List<Map<String, dynamic>>? torrentFiles;
   final int? torrentId;
+  final String? etag;
+  final String? lastModified;
   bool get isValid => fileName.isNotEmpty || fileSize > 0;
 
   const DownloadMetadata({
@@ -43,6 +45,8 @@ class DownloadMetadata {
     required this.supportsResume,
     this.torrentFiles,
     this.torrentId,
+    this.etag,
+    this.lastModified,
   });
 }
 
@@ -619,6 +623,11 @@ class DownloadProgressHandler {
       }
       lastDownloadedBytes =
           (p['downloadedBytes'] as num?)?.toInt() ?? lastDownloadedBytes;
+      // FIX-C5: Sync ytCounterpartDownloadedBytes from isolate progress payload in real-time
+      final ytCounterpart = (p['ytCounterpartDownloadedBytes'] as num?)?.toInt();
+      if (ytCounterpart != null) {
+        liveCounterpart = ytCounterpart;
+      }
       lastFileSize = (p['fileSize'] as num?)?.toInt() ?? lastFileSize;
       final pTorrentFiles = p['torrentFiles'];
       if (pTorrentFiles is List && pTorrentFiles.isNotEmpty) {
@@ -1082,6 +1091,8 @@ class DownloadEngine {
         : fileNameFromUrl(punyUrl);
     var fileSize = 0;
     var supportsResume = isYoutube;
+    String? etag;
+    String? lastModified;
 
     try {
       final response = await client.head<dynamic>(
@@ -1093,6 +1104,8 @@ class DownloadEngine {
       if (requestedFileName?.trim().isNotEmpty != true && headerName != null) {
         fileName = headerName;
       }
+      etag = response.headers.value('etag');
+      lastModified = response.headers.value('last-modified');
       fileSize = int.tryParse(
               response.headers.value(Headers.contentLengthHeader) ?? '') ??
           0;
@@ -1119,6 +1132,8 @@ class DownloadEngine {
       category: categoryFromFileName(fileName),
       fileSize: fileSize,
       supportsResume: supportsResume,
+      etag: etag,
+      lastModified: lastModified,
     );
   }
 
@@ -1134,6 +1149,8 @@ class DownloadEngine {
         : fileNameFromUrl(punyUrl);
     var fileSize = 0;
     var supportsResume = isYoutube;
+    String? etag;
+    String? lastModified;
 
     try {
       final getResponse = await client.get<ResponseBody>(
@@ -1153,6 +1170,8 @@ class DownloadEngine {
             getHeaderName != null) {
           fileName = getHeaderName;
         }
+        etag = getResponse.headers.value('etag');
+        lastModified = getResponse.headers.value('last-modified');
         final contentRange = getResponse.headers.value('content-range');
         if (contentRange != null) {
           final totalMatch = RegExp(r'/(\d+)').firstMatch(contentRange);
@@ -1183,6 +1202,8 @@ class DownloadEngine {
       category: categoryFromFileName(fileName),
       fileSize: fileSize,
       supportsResume: supportsResume,
+      etag: etag,
+      lastModified: lastModified,
     );
   }
 
@@ -1770,6 +1791,14 @@ class DownloadEngine {
       if (completer.isCompleted) return;
       cancelRequested = true;
       job.cancel();
+      // FIX-H2: YouTube pause — also cancel active counterpart audio/video token
+      final counterpartId = _ytCounterpartTaskIds[taskId];
+      if (counterpartId != null) {
+        final counterpartToken = _activeCancelTokens[counterpartId];
+        if (counterpartToken != null && !counterpartToken.isCancelled) {
+          counterpartToken.cancel('paused');
+        }
+      }
       // FIX-1: Do NOT delete file here. File cleanup happens in the 'done'/'error'
       // handler after isolate confirms stop.
       final ytPauseCid = _ytCounterpartTaskIds[taskId];
@@ -2164,12 +2193,12 @@ class DownloadEngine {
           initSummary.bytes > 0 ? initSummary.downloaded : null,
     ));
     int id = torrentId ?? -1;
+    final saveDir = File(currentLocalFilePath).parent.path;
     if (id >= 0 && !TorrentService.isTorrentAlive(id)) {
       debugPrint('[DMX] Stale torrent handle $id detected; re-adding.');
       id = -1;
     }
     if (id == -1) {
-      final saveDir = File(currentLocalFilePath).parent.path;
       await validateSavePath(saveDir);
       if (url.startsWith('magnet:')) {
         id = TorrentService.addMagnet(url, saveDir);
@@ -2214,12 +2243,30 @@ class DownloadEngine {
     TorrentResumeStore.registerSource(id, url);
     _activeTorrentIds.add(id);
     bool torrentCompleted = false;
-    cancelToken.whenCancel.then((_) {
+    cancelToken.whenCancel.then((_) async {
       if (torrentCompleted) return;
       try {
         TorrentService.pauseTorrent(id);
       } catch (_) {}
-      final pauseFiles = getTorrentFiles?.call();
+      // FIX-H3: Torrent pause — 200ms delay and disk-accurate bytes
+      await Future.delayed(const Duration(milliseconds: 200));
+      List<Map<String, dynamic>>? pauseFiles = getTorrentFiles?.call();
+      try {
+        final accurateFiles =
+            await TorrentService.getAccurateFileProgress(id, saveDir);
+        if (accurateFiles.isNotEmpty) {
+          pauseFiles = accurateFiles
+              .map((f) => {
+                    'name': f.name,
+                    'length': f.size,
+                    'downloadedBytes':
+                        f.downloadedBytes >= 0 ? f.downloadedBytes : 0,
+                    'selected': f.isComplete || f.downloadedBytes > 0,
+                    'progress': f.progress,
+                  })
+              .toList();
+        }
+      } catch (_) {}
       final pSummary = normalizeTorrentFiles(pauseFiles);
       onProgress(DownloadProgress(
         downloadedBytes: pSummary.downloaded,
@@ -2244,7 +2291,33 @@ class DownloadEngine {
       final resumeBlob = await TorrentResumeStore.loadResumeDataForSource(url);
       final nativeLoaded =
           resumeBlob != null && TorrentService.loadResumeData(id, resumeBlob);
-      if (!nativeLoaded) {
+      if (nativeLoaded) {
+        // FIX-H4: Torrent resume — per-file bytes re-read after loadResumeData succeeds
+        final freshFiles = TorrentService.getFiles(id);
+        if (freshFiles.isNotEmpty) {
+          final updatedFiles = freshFiles.map((f) => {
+            'name': f.name,
+            'length': f.size,
+            'downloadedBytes': f.downloadedBytes >= 0 ? f.downloadedBytes : 0,
+            'selected': f.selected,
+            'priority': f.priority,
+            'progress': f.size > 0
+                ? (f.downloadedBytes / f.size).clamp(0.0, 1.0)
+                : 0.0,
+          }).toList();
+          // Emit progress with fresh file data
+          onProgress(DownloadProgress(
+            downloadedBytes: freshFiles.fold<int>(0, (s, f) =>
+                s + (f.downloadedBytes >= 0 ? f.downloadedBytes : 0)),
+            fileSize: freshFiles.fold<int>(0, (s, f) => s + f.size),
+            speed: 0,
+            eta: null,
+            torrentFiles: updatedFiles,
+            statusMessage: 'Resuming from saved state…',
+            cycleState: 'resuming',
+          ));
+        }
+      } else {
         if (resumeBlob != null) {
           debugPrint(
               '[DMX] stored resume data rejected by engine — rechecking');
@@ -2480,7 +2553,16 @@ class DownloadEngine {
       var userDeselectedCount = 0;
       for (final ef in engineFiles) {
         final key = normalizeName(ef.name);
-        final stored = storedByName[key];
+        var stored = storedByName[key];
+        // FIX-H5: After storedByName lookup fails, try size-based match
+        if (stored == null) {
+          final sizeMatches = currentTorrentFiles.where(
+            (f) => (f['length'] as num?)?.toInt() == ef.size,
+          ).toList();
+          if (sizeMatches.length == 1) {
+            stored = sizeMatches.first;
+          }
+        }
         if (stored != null) {
           final selected = isTorrentFileSelected(stored);
           if (!selected) userDeselectedCount++;

@@ -4845,17 +4845,32 @@ class DownloadProvider extends ChangeNotifier
             );
           }
 
-          // FIX-18: Use percentage-based tolerance instead of fixed 1024 bytes
+          // FIX-C3: Use percentage-based tolerance and ETag mismatch check
           final tolerance =
               (task.fileSize * 0.01).clamp(1024.0, 10.0 * 1024 * 1024);
-          if (resolvedMetaSize > 0 &&
-              task.fileSize > 0 &&
-              (resolvedMetaSize - task.fileSize).abs() > tolerance) {
+          String? storedEtag;
+          if (task.tempFilePath.isNotEmpty) {
+            final sf = File('${task.tempFilePath}.dmxstate');
+            if (await sf.exists()) {
+              try {
+                final dec = jsonDecode(await sf.readAsString());
+                if (dec is Map) storedEtag = dec['etag'] as String?;
+              } catch (_) {}
+            }
+          }
+          final etagMismatch = metadata?.etag != null &&
+              metadata!.etag!.isNotEmpty &&
+              storedEtag != null &&
+              storedEtag.isNotEmpty &&
+              metadata.etag != storedEtag;
+          if ((resolvedMetaSize > 0 &&
+                  task.fileSize > 0 &&
+                  (resolvedMetaSize - task.fileSize).abs() > tolerance) ||
+              etagMismatch) {
             sizeChanged = true;
 
             debugPrint(
-              '[DMX] URL update: size changed ${task.fileSize} → '
-              '$resolvedMetaSize, resetting progress',
+              '[DMX] FIX-C3: URL update: size or etag changed, resetting progress',
             );
           }
         } catch (e) {
@@ -5155,17 +5170,37 @@ class DownloadProvider extends ChangeNotifier
       throw Exception('Backend returned page URL, not stream URL: $newUrl');
     }
 
-    if (!isYoutube) {
+    if (!isYoutube && !task.isTorrent) {
       try {
         final meta = await _downloadEngine.resolveMetadata(
           url: newUrl,
           referer: task.downloadPageUrl,
         );
-        if (meta.fileSize > 0 &&
+        String? storedEtag;
+        if (task.tempFilePath.isNotEmpty) {
+          final sf = File('${task.tempFilePath}.dmxstate');
+          if (await sf.exists()) {
+            try {
+              final dec = jsonDecode(await sf.readAsString());
+              if (dec is Map) storedEtag = dec['etag'] as String?;
+            } catch (_) {}
+          }
+        }
+        // FIX-C3: If Content-Length differs by >1% OR if ETag present and differs from stored etag, call startOverTask
+        final sizeMismatch = meta.fileSize > 0 &&
             task.fileSize > 0 &&
-            (meta.fileSize - task.fileSize).abs() >
-                max(100 * 1024, (task.fileSize * 0.05).toInt())) {
-          await startOverTask(id, newUrl, newAudioUrl: newAudioUrl);
+            (meta.fileSize - task.fileSize).abs() > (task.fileSize * 0.01);
+        final etagMismatch = meta.etag != null &&
+            meta.etag!.isNotEmpty &&
+            storedEtag != null &&
+            storedEtag.isNotEmpty &&
+            meta.etag != storedEtag;
+        if (sizeMismatch || etagMismatch) {
+          debugPrint(
+            '[DMX] FIX-C3: Content-identity check in updateTaskUrlAndResume failed (size diff: $sizeMismatch, etag diff: $etagMismatch). Starting over.',
+          );
+          await startOverTask(id, newUrl,
+              newAudioUrl: newAudioUrl, deleteTempFiles: true);
           return;
         }
       } catch (_) {

@@ -216,8 +216,7 @@ void main() {
     });
 
     test('11. URL expired -> refresh URL -> resume', () async {
-      final ex =
-          const UrlExpiredException('URL expired', refreshAllMirrors: true);
+      const ex = UrlExpiredException('URL expired', refreshAllMirrors: true);
       expect(ex.refreshAllMirrors, isTrue);
     });
 

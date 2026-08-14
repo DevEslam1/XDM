@@ -4,7 +4,7 @@ import 'package:dmx/core/utils/constants.dart';
 
 void main() async {
   final dio = Dio();
-  final targetVideo =
+  const targetVideo =
       'https://m.youtube.com/watch?v=04qaw2nx5qY&list=RD04qaw2nx5qY&start_radio=1&pp=oAcB';
   final url =
       '$kDefaultBackendBaseUrl/api/streams?url=${Uri.encodeComponent(targetVideo)}';

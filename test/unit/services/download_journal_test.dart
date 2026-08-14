@@ -104,4 +104,24 @@ void main() {
     DownloadEngine.appInForeground = true;
     DownloadEngine.isInBackground = false;
   });
+
+  test('TEST-T1: StateStore corrupt file recovery recovers from journal or returns zero gracefully', () async {
+    final tempFilePath = '${tempDir.path}/test_download.dmxpart';
+    final stateFilePath = StateStore.pathFor(tempFilePath);
+
+    // Write a corrupted state file
+    final stateFile = File(stateFilePath);
+    await stateFile.writeAsString('{BAD_JSON: "corrupted"');
+
+    // Call loadOrCreate - must NOT throw and recover gracefully
+    final result = await StateStore.loadOrCreate(
+      tempFilePath,
+      url: 'https://example.com/test.zip',
+      threadCount: 2,
+      knownFileSize: 20 * 1024 * 1024,
+    );
+
+    expect(result.state, isNotNull);
+    expect(result.state.totalSize, equals(20 * 1024 * 1024));
+  });
 }

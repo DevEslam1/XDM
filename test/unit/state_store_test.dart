@@ -59,7 +59,7 @@ void main() {
     test('3. loadOrCreate migrates v2 state to v3', () async {
       final tempFilePath = '${tempDir.path}/test_v2.tmp';
       final statePath = StateStore.pathFor(tempFilePath);
-      final v2Json =
+      const v2Json =
           '{"totalSize":10000,"progress":[2000,3000],"threadCount":2,"url":"https://example.com/v2.bin"}';
       await File(statePath).writeAsString(v2Json);
 

@@ -17,13 +17,13 @@ void main() {
     });
 
     test('2. InsufficientStorageException → ErrorFamily.disk', () {
-      final err = const InsufficientStorageException('Not enough space');
+      const err = InsufficientStorageException('Not enough space');
       final res = ErrorTaxonomy.classify(err);
       expect(res.family, equals(ErrorFamily.disk));
     });
 
     test('3. DownloadIntegrityException → ErrorFamily.integrity', () {
-      final err = const DownloadIntegrityException('CRC mismatch');
+      const err = DownloadIntegrityException('CRC mismatch');
       final res = ErrorTaxonomy.classify(err);
       expect(res.family, equals(ErrorFamily.integrity));
     });
