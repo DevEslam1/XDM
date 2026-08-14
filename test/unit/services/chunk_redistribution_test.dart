@@ -1,13 +1,17 @@
 import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dmx/core/services/download_journal.dart';
 import 'package:dmx/core/services/engines/http_download_engine.dart';
 
 void main() {
   group('H-1 Chunk Redistribution with Overlap Mapping', () {
-    test('redistributing 4 chunks (each partially downloaded) to 8 chunks maps byte ranges accurately', () {
+    test(
+        'redistributing 4 chunks (each partially downloaded) to 8 chunks maps byte ranges accurately',
+        () {
       // 1MB total size (> minSizeForMultithread)
       final totalSize = 1024 * 1024; // 1,048,576 bytes
-      final oldChunks = ChunkScheduler.plan(totalSize: totalSize, threadCount: 4);
+      final oldChunks =
+          ChunkScheduler.plan(totalSize: totalSize, threadCount: 4);
       expect(oldChunks.length, 4);
 
       // Set 50,000 bytes downloaded in each old chunk
@@ -16,7 +20,8 @@ void main() {
       }
 
       // New 8 chunks
-      final newChunks = ChunkScheduler.plan(totalSize: totalSize, threadCount: 8);
+      final newChunks =
+          ChunkScheduler.plan(totalSize: totalSize, threadCount: 8);
       expect(newChunks.length, 8);
 
       for (var ni = 0; ni < newChunks.length; ni++) {
@@ -48,6 +53,30 @@ void main() {
       // Sum matches total downloaded bytes (200,000)
       final sum = newChunks.fold<int>(0, (s, c) => s + c.downloaded);
       expect(sum, 200000);
+    });
+
+    test('chunks smaller than 2MB are never subdivided (C-01)', () {
+      // 1.5MB chunk with 0 downloaded
+      final smallChunk =
+          ChunkState(start: 0, end: (1.5 * 1024 * 1024).round() - 1);
+      expect(ChunkScheduler.canSplitChunk(smallChunk), isFalse);
+      expect(ChunkScheduler.trySplitChunk(smallChunk), isNull);
+
+      // 4MB chunk with 0 downloaded -> can split
+      final largeChunk = ChunkState(start: 0, end: (4 * 1024 * 1024) - 1);
+      expect(ChunkScheduler.canSplitChunk(largeChunk), isTrue);
+      final splitResult = ChunkScheduler.trySplitChunk(largeChunk);
+      expect(splitResult, isNotNull);
+      final (c1, c2) = splitResult!;
+      expect(c1.start, equals(0));
+      expect(c1.end, equals((2 * 1024 * 1024) - 1));
+      expect(c2.start, equals(2 * 1024 * 1024));
+      expect(c2.end, equals((4 * 1024 * 1024) - 1));
+
+      // 4MB chunk with 2.5MB downloaded -> remaining is 1.5MB (< 2MB) -> cannot split
+      largeChunk.downloaded = (2.5 * 1024 * 1024).round();
+      expect(ChunkScheduler.canSplitChunk(largeChunk), isFalse);
+      expect(ChunkScheduler.trySplitChunk(largeChunk), isNull);
     });
   });
 }

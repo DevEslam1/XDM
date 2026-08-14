@@ -19,6 +19,37 @@ class ChunkScheduler {
   /// Files smaller than this never benefit from parallel ranges.
   static const int minSizeForMultithread = 512 * 1024;
 
+  /// C-01: Minimum remaining bytes required to subdivide/split a chunk (2MB).
+  static const int minSplitThreshold = 2 * 1024 * 1024; // 2MB
+
+  /// Checks if [chunk] has sufficient remaining un-downloaded bytes to be split (C-01).
+  static bool canSplitChunk(ChunkState chunk) {
+    if (chunk.end < 0) return false;
+    final remaining = (chunk.end - chunk.start + 1) - chunk.downloaded;
+    return remaining >= minSplitThreshold;
+  }
+
+  /// Splits [chunk] into two sub-chunks if it has at least [minSplitThreshold] remaining.
+  /// Returns null if chunk cannot or should not be split (C-01).
+  static (ChunkState, ChunkState)? trySplitChunk(ChunkState chunk) {
+    if (!canSplitChunk(chunk)) return null;
+    final unreadStart = chunk.start + chunk.downloaded;
+    final remaining = (chunk.end - unreadStart + 1);
+    final mid = unreadStart + (remaining ~/ 2);
+
+    final first = ChunkState(
+      start: chunk.start,
+      end: mid - 1,
+      downloaded: chunk.downloaded,
+    );
+    final second = ChunkState(
+      start: mid,
+      end: chunk.end,
+      downloaded: 0,
+    );
+    return (first, second);
+  }
+
   /// Fixed partition of [totalSize] into [threadCount] contiguous ranges.
   /// This layout is IDENTICAL to the legacy v2 layout, which makes v2→v3
   /// migration a 1:1 mapping of the `progress` array.
