@@ -100,12 +100,27 @@ class LoggingService {
     } catch (_) {}
   }
 
+  @visibleForTesting
+  static bool get hasActiveTimer => _releaseFlushTimer != null;
+
+  @visibleForTesting
+  static void setReleaseFlushTimerForTesting(Timer timer) {
+    _releaseFlushTimer?.cancel();
+    _releaseFlushTimer = timer;
+  }
+
   static void closeFileLogging() {
     _releaseFlushTimer?.cancel();
     _releaseFlushTimer = null;
     flushLogBuffer();
     _fileSink?.close();
     _fileSink = null;
+  }
+
+  /// Disposes logging timers and flushes release buffers (NEW-05).
+  static void dispose() {
+    closeFileLogging();
+    _initialized = false;
   }
 
   /// Returns a named [pkg_logging.Logger] for use throughout the app.

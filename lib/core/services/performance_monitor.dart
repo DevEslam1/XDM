@@ -25,6 +25,7 @@ class PerformanceMonitor {
   bool _listening = true;
 
   bool get isListening => _listening;
+  bool get isActive => _listening && !PowerMonitor.screenOff;
 
   int get totalFrames => _totalFrames;
   int get jankyFrameCount => _jankyFrames;

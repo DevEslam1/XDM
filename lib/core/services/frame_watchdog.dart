@@ -82,7 +82,7 @@ class FrameWatchdog {
 
   static void _onTimings(List<FrameTiming> timings) {
     if (PowerMonitor.screenOff) return;
-    if (PerformanceMonitor.instance.isListening) {
+    if (PerformanceMonitor.instance.isActive) {
       PerformanceMonitor.instance.ingestFrameTimings(timings);
     }
     for (final t in timings) {

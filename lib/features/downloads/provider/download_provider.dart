@@ -477,6 +477,12 @@ class DownloadProvider extends ChangeNotifier
   ValueNotifier<double> speedNotifier(String taskId) =>
       _speedNotifiers.putIfAbsent(taskId, () => ValueNotifier(0.0));
 
+  /// Disposes and removes progress and speed ValueNotifiers for [taskId] (NEW-01).
+  void disposeTaskNotifier(String taskId) {
+    _progressNotifiers.remove(taskId)?.dispose();
+    _speedNotifiers.remove(taskId)?.dispose();
+  }
+
   void _pushTick(String taskId, double progress, double speed) {
     if (!DownloadEngine.appInForeground || PowerMonitor.screenOff) {
       return;

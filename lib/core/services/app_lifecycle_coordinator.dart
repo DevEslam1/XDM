@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'download_engine.dart';
 import 'frame_watchdog.dart';
 import 'performance_monitor.dart';
 import 'power_monitor.dart';
+import 'widget_data_bridge.dart';
 import '../../shared/widgets/geometric_grid_background.dart';
 import '../../features/downloads/widgets/download_card.dart';
 
@@ -15,6 +17,10 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
   AppLifecycleCoordinator._();
 
   static bool isAppForegrounded = true;
+  static Timer? _inactiveTimer;
+
+  @visibleForTesting
+  static Timer? get inactiveTimerForTesting => _inactiveTimer;
 
   /// Register this observer once in `main.dart` after [WidgetsFlutterBinding.ensureInitialized].
   static void init() {
@@ -23,32 +29,24 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
 
   /// Manually dispose / remove the observer (useful for testing).
   static void dispose() {
+    _inactiveTimer?.cancel();
+    _inactiveTimer = null;
     WidgetsBinding.instance.removeObserver(instance);
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.hidden ||
-        state == AppLifecycleState.detached) {
-      isAppForegrounded = false;
-      PowerMonitor.isAppForegrounded = false;
-      PowerMonitor.setScreenOn(false);
-      DownloadEngine.appInForeground = false;
-      DownloadEngine.isInBackground = true;
-
-      // Suspend all ambient work
-      FrameWatchdog.stop();
-      PerformanceMonitor.instance.stop();
-      AmbientProgress.instance.stopAll();
-      StatusChipPulseDriver.instance.stop();
-    } else if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.resumed) {
+      _inactiveTimer?.cancel();
+      _inactiveTimer = null;
       isAppForegrounded = true;
       PowerMonitor.isAppForegrounded = true;
       PowerMonitor.setScreenOn(true);
       DownloadEngine.appInForeground = true;
       DownloadEngine.isInBackground = false;
+
+      // Resume widget updates (NEW-02)
+      WidgetDataBridge.instance.resumeWidgetUpdates();
 
       // Restart ONLY if screen is on
       if (!PowerMonitor.screenOff) {
@@ -57,6 +55,35 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
         AmbientProgress.instance.restartIfMounted();
         StatusChipPulseDriver.instance.restartIfActive();
       }
+    } else if (state == AppLifecycleState.inactive) {
+      // 500ms delay timer before ambient suspension (NEW-04)
+      _inactiveTimer?.cancel();
+      _inactiveTimer = Timer(const Duration(milliseconds: 500), () {
+        _suspendAmbientWork();
+      });
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _inactiveTimer?.cancel();
+      _inactiveTimer = null;
+      _suspendAmbientWork();
     }
+  }
+
+  void _suspendAmbientWork() {
+    isAppForegrounded = false;
+    PowerMonitor.isAppForegrounded = false;
+    PowerMonitor.setScreenOn(false);
+    DownloadEngine.appInForeground = false;
+    DownloadEngine.isInBackground = true;
+
+    // Pause widget updates (NEW-02)
+    WidgetDataBridge.instance.pauseWidgetUpdates();
+
+    // Suspend all ambient work
+    FrameWatchdog.stop();
+    PerformanceMonitor.instance.stop();
+    AmbientProgress.instance.stopAll();
+    StatusChipPulseDriver.instance.stop();
   }
 }

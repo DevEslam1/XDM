@@ -219,6 +219,19 @@ class WidgetDataBridge {
 
   DateTime? _lastPush;
   Timer? _pendingTimer;
+  bool _isPaused = false;
+
+  bool get isPaused => _isPaused;
+
+  void pauseWidgetUpdates() {
+    _isPaused = true;
+    _pendingTimer?.cancel();
+    _pendingTimer = null;
+  }
+
+  void resumeWidgetUpdates() {
+    _isPaused = false;
+  }
 
   /// Pushes [dashboard] to the native widgets.
   ///
@@ -228,6 +241,7 @@ class WidgetDataBridge {
   Future<void> pushDashboard(WidgetDashboard dashboard,
       {bool force = false}) async {
     if (kIsWeb) return;
+    if (_isPaused && !force) return;
     if (PowerMonitor.screenOff && dashboard.totalActiveCount == 0) return;
     _pendingTimer?.cancel();
     _pendingTimer = null;
