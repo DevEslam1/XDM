@@ -136,13 +136,12 @@ class DownloadCard extends StatelessWidget with HapticHelper {
             child: cardWidget,
           );
 
-    // FIX-H7: Wrap the entire DownloadCard build return in a RepaintBoundary
-    return RepaintBoundary(
-      child: Semantics(
-        container: true,
-        explicitChildNodes: true,
-        label: semanticLabel,
-        hint: L10n.of(context, 'double_tap_details_hint'),
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label: semanticLabel,
+      hint: L10n.of(context, 'double_tap_details_hint'),
+      child: RepaintBoundary(
         child: Hero(
           tag: 'download_card_${task.id}',
           createRectTween: (begin, end) => RectTween(begin: begin, end: end),
