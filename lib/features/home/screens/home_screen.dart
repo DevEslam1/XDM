@@ -1766,6 +1766,16 @@ class _DownloadTaskList extends StatelessWidget {
                     crossAxisSpacing: 14,
                     mainAxisSpacing: 12,
                   ),
+                  findChildIndexCallback: (Key key) {
+                    if (key is ValueKey<String>) {
+                      final keyVal = key.value;
+                      final idx = renderItems.indexWhere((it) => it.isPlaylist
+                          ? 'playlist_${it.playlistId}' == keyVal
+                          : it.task?.id == keyVal);
+                      return idx != -1 ? idx : null;
+                    }
+                    return null;
+                  },
                   itemCount: renderItems.length,
                   itemBuilder: (context, index) {
                     final item = renderItems[index];
@@ -1824,6 +1834,16 @@ class _DownloadTaskList extends StatelessWidget {
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: BouncingScrollPhysics(),
                   ),
+                  findChildIndexCallback: (Key key) {
+                    if (key is ValueKey<String>) {
+                      final keyVal = key.value;
+                      final idx = renderItems.indexWhere((it) => it.isPlaylist
+                          ? 'playlist_${it.playlistId}' == keyVal
+                          : it.task?.id == keyVal);
+                      return idx != -1 ? idx : null;
+                    }
+                    return null;
+                  },
                   itemCount: renderItems.length,
                   separatorBuilder: (context, index) =>
                       const SizedBox(height: 10),
