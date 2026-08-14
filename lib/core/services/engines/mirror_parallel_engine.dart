@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:collection';
+import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 import '../mirror_failover.dart';
 
@@ -20,6 +22,48 @@ class MirrorParallelEngine {
   MirrorFailover? failover;
 
   MirrorParallelEngine(this._mirrorUrls, {this.failover});
+
+  /// Races mirrors concurrently for [fetch] and cancels all slower requests as soon as the first succeeds (M-01/M-02).
+  static Future<T> raceMirrors<T>(
+    List<String> urls,
+    Future<T> Function(String url, CancelToken cancelToken) fetch,
+  ) async {
+    if (urls.isEmpty) {
+      throw ArgumentError('No mirror URLs provided for race');
+    }
+    if (urls.length == 1) {
+      final token = CancelToken();
+      return fetch(urls.first, token);
+    }
+
+    final completer = Completer<T>();
+    final tokens = <CancelToken>[];
+    int failures = 0;
+
+    for (final url in urls) {
+      final token = CancelToken();
+      tokens.add(token);
+      fetch(url, token).then((result) {
+        if (!completer.isCompleted) {
+          completer.complete(result);
+          for (final t in tokens) {
+            if (t != token && !t.isCancelled) {
+              t.cancel('mirror_race_winner_found');
+            }
+          }
+        }
+      }).catchError((dynamic err) {
+        failures++;
+        if (failures >= urls.length && !completer.isCompleted) {
+          completer.completeError(
+            err ?? Exception('All mirrors failed during race'),
+          );
+        }
+      });
+    }
+
+    return completer.future;
+  }
 
   List<String> get mirrorUrls => List.unmodifiable(_mirrorUrls);
 
