@@ -49,6 +49,17 @@ class FFmpegMuxService {
         onProgress: onProgress,
         totalDuration: totalDuration,
         expectedDuration: expectedDuration,
+      ).timeout(
+        const Duration(minutes: 5),
+        onTimeout: () {
+          _log.severe(
+            '[FFmpegMuxService] Merge job timed out after 5 minutes; cancelling session',
+          );
+          try {
+            FFmpegKit.cancel();
+          } catch (_) {}
+          return false;
+        },
       );
     } finally {
       if (wakelockAcquired) {
