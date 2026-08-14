@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pointycastle/asymmetric/api.dart' show RSAPublicKey;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logging/logging.dart';
 
@@ -297,7 +298,10 @@ class UpdateService {
     }
   }
 
-  /// FIX-S2: Complete APK Signature and Integrity Verification.
+  static const MethodChannel _securityChannel =
+      MethodChannel('com.dmx.app/security');
+
+  /// Complete APK Signature and Integrity Verification (SEC-06).
   Future<ApkVerificationResult> verifyApkSignature(
     File apkFile, {
     String? expectedFingerprint,
@@ -313,19 +317,19 @@ class UpdateService {
         );
       }
 
-      final bytes = await apkFile.readAsBytes();
-      if (bytes.length < 4 ||
-          bytes[0] != 0x50 ||
-          bytes[1] != 0x4B ||
-          bytes[2] != 0x03 ||
-          bytes[3] != 0x04) {
-        return const ApkVerificationResult(
-          isValid: false,
-          failureReason: 'Invalid zip/APK file signature header',
+      String? certFingerprint;
+      try {
+        certFingerprint = await _securityChannel.invokeMethod<String>(
+          'verifyApkSignature',
+          {'path': apkFile.path},
         );
+      } on MissingPluginException {
+        final bytes = await apkFile.readAsBytes();
+        certFingerprint = sha256.convert(bytes).toString();
+      } catch (_) {
+        final bytes = await apkFile.readAsBytes();
+        certFingerprint = sha256.convert(bytes).toString();
       }
-
-      final certFingerprint = sha256.convert(bytes).toString();
 
       if (developerMode) {
         _log.warning(
@@ -340,8 +344,12 @@ class UpdateService {
 
       if (expectedFingerprint != null &&
           expectedFingerprint.isNotEmpty &&
+          certFingerprint != null &&
           certFingerprint.toLowerCase() !=
               expectedFingerprint.trim().toLowerCase()) {
+        try {
+          await apkFile.delete();
+        } catch (_) {}
         return ApkVerificationResult(
           isValid: false,
           certificateFingerprint: certFingerprint,

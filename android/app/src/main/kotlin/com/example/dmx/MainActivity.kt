@@ -391,5 +391,41 @@ class MainActivity : FlutterActivity() {
                 result.notImplemented()
             }
         }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.dmx.app/security").setMethodCallHandler { call, result ->
+            if (call.method == "verifyApkSignature") {
+                val path = call.argument<String>("path")
+                if (path == null) {
+                    result.error("INVALID_ARGS", "path is required", null)
+                    return@setMethodCallHandler
+                }
+                try {
+                    val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        packageManager.getPackageArchiveInfo(path, PackageManager.GET_SIGNING_CERTIFICATES)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        packageManager.getPackageArchiveInfo(path, PackageManager.GET_SIGNATURES)
+                    }
+                    val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        packageInfo?.signingInfo?.apkContentsSigners
+                    } else {
+                        @Suppress("DEPRECATION")
+                        packageInfo?.signatures
+                    }
+                    if (signatures != null && signatures.isNotEmpty()) {
+                        val certBytes = signatures[0].toByteArray()
+                        val digest = java.security.MessageDigest.getInstance("SHA-256")
+                        val hashBytes = digest.digest(certBytes)
+                        val hexString = hashBytes.joinToString("") { "%02x".format(it) }
+                        result.success(hexString)
+                    } else {
+                        result.error("NO_SIGNATURE", "Could not extract APK signatures", null)
+                    }
+                } catch (e: Exception) {
+                    result.error("VERIFY_FAILED", e.message, null)
+                }
+            } else {
+                result.notImplemented()
+            }
+        }
     }
 }
