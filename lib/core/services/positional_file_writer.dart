@@ -187,6 +187,7 @@ class PositionalFileWriter {
       }
 
       buffer.add(absolutePosition, data);
+      _bytesSinceLastFlush += data.length;
 
       if (buffer.length >= _bufferSize) {
         await _flushBufferInternal(raf, buffer);
@@ -256,6 +257,22 @@ class PositionalFileWriter {
           await handle.flush();
         }
       });
+    }
+  }
+
+  DateTime _lastPacedFlush = DateTime.fromMillisecondsSinceEpoch(0);
+  int _bytesSinceLastFlush = 0;
+  static const Duration minFlushInterval = Duration(milliseconds: 500);
+  static const int flushByteThreshold = 1024 * 1024; // 1MB
+
+  /// Paced flush: flushes only if 500ms has elapsed or 1MB written since last flush (F-01/F-02).
+  Future<void> flushPaced() async {
+    final now = DateTime.now();
+    if (now.difference(_lastPacedFlush) >= minFlushInterval ||
+        _bytesSinceLastFlush >= flushByteThreshold) {
+      _lastPacedFlush = now;
+      _bytesSinceLastFlush = 0;
+      await flushBuffers();
     }
   }
 

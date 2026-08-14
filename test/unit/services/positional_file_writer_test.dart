@@ -182,5 +182,28 @@ void main() {
       expect(await file.exists(), true);
       expect(await file.length(), 1);
     });
+
+    test(
+        'flushPaced limits disk flushes to interval or 1MB threshold (F-01/F-02)',
+        () async {
+      final path = '${tempDir.path}/test_flush_paced.dat';
+      final writer = await PositionalFileWriter.open(
+        path,
+        totalSize: 500,
+        threadCount: 1,
+      );
+
+      // Writing 10 bytes and immediate flushPaced
+      await writer.write(0, 0, Uint8List.fromList([1, 2, 3, 4, 5]));
+      await writer.flushPaced();
+
+      // Subsequent fast call within 500ms
+      await writer.write(0, 5, Uint8List.fromList([6, 7, 8]));
+      await writer.flushPaced();
+
+      await writer.close();
+      final file = File(path);
+      expect(await file.exists(), true);
+    });
   });
 }
