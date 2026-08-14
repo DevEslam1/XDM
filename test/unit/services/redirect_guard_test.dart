@@ -42,5 +42,22 @@ void main() {
       final res = await guard.evaluate(tabId: 'tab1', navigatingTo: url);
       expect(res.decision, RedirectDecision.ignore);
     });
+
+    test('circular redirect chain (A -> B -> A) is blocked (N-02)', () async {
+      guard.addToChain('tab2', 'https://siteA.com');
+      guard.addToChain('tab2', 'https://siteB.com');
+
+      final res = await guard.evaluate(
+          tabId: 'tab2', navigatingTo: 'https://siteA.com');
+      expect(res.decision, RedirectDecision.block);
+    });
+
+    test('protocol downgrade (HTTPS -> HTTP) is blocked (N-03)', () async {
+      guard.addToChain('tab3', 'https://secure.example.com');
+
+      final res = await guard.evaluate(
+          tabId: 'tab3', navigatingTo: 'http://insecure.example.com');
+      expect(res.decision, RedirectDecision.block);
+    });
   });
 }

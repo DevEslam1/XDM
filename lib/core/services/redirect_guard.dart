@@ -142,12 +142,12 @@ class RedirectGuard {
     st.currentUrl = navigatingTo;
     st.isAdBridge = _looksLikeAdBridge(navigatingTo);
 
-    // 1) Loop guard: same URL twice in a row, or rapid re-fire (<800ms).
-    if (st.chain.isNotEmpty &&
-        (st.chain.last == navigatingTo ||
-            (st.lastAutoFollow != null &&
-                DateTime.now().difference(st.lastAutoFollow!) <
-                    const Duration(milliseconds: 800)))) {
+    // 1) Loop guard: circular reference in chain (A -> B -> A) or rapid re-fire (<800ms) (N-02).
+    if (st.chain.contains(navigatingTo) ||
+        (st.chain.isNotEmpty && st.chain.last == navigatingTo) ||
+        (st.lastAutoFollow != null &&
+            DateTime.now().difference(st.lastAutoFollow!) <
+                const Duration(milliseconds: 800))) {
       _log.warning('Redirect loop detected for $navigatingTo — blocking.');
       return const RedirectResult(
         targetUrl: null,
@@ -157,8 +157,23 @@ class RedirectGuard {
       );
     }
 
-    // 2) Depth cap — too many hops usually means an ad wall.
-    if (st.depth >= 6) {
+    // 2) Protocol downgrade guard (HTTPS -> HTTP) (N-03).
+    if (st.chain.isNotEmpty &&
+        st.chain.any((u) => u.startsWith('https://')) &&
+        navigatingTo.startsWith('http://')) {
+      _log.warning(
+        'Insecure protocol downgrade blocked for $navigatingTo',
+      );
+      return const RedirectResult(
+        targetUrl: null,
+        strategy: 'protocol-downgrade-guard',
+        confidence: 1.0,
+        decision: RedirectDecision.block,
+      );
+    }
+
+    // 3) Depth cap — too many hops (max 10) usually means an ad wall or redirection loop.
+    if (st.depth >= 10) {
       _log.warning('Redirect depth cap reached for tab $tabId — blocking.');
       return const RedirectResult(
         targetUrl: null,
@@ -167,6 +182,10 @@ class RedirectGuard {
         decision: RedirectDecision.block,
       );
     }
+
+    st.chain.add(navigatingTo);
+    if (st.chain.length > 20) st.chain.removeAt(0);
+    st.depth++;
 
     // 3) If the destination is itself an ad network, never follow.
     if (_isAdNetwork(navigatingTo)) {
