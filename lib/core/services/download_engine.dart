@@ -34,6 +34,8 @@ class DownloadMetadata {
   final bool supportsResume;
   final List<Map<String, dynamic>>? torrentFiles;
   final int? torrentId;
+  bool get isValid => fileSize > 0;
+
   const DownloadMetadata({
     required this.fileName,
     required this.category,
@@ -1037,8 +1039,54 @@ class DownloadEngine {
       cookies: cookies,
       oauthToken: oauthToken,
     );
+    final headFuture = _probeWithHead(
+      punyUrl: punyUrl,
+      client: isolatedDio,
+      requestedFileName: requestedFileName,
+      isYoutube: isYoutube,
+      cancelToken: cancelToken,
+    );
+    final getFuture = _probeWithGet(
+      punyUrl: punyUrl,
+      client: isolatedDio,
+      requestedFileName: requestedFileName,
+      isYoutube: isYoutube,
+      cancelToken: cancelToken,
+    );
+
     try {
-      final response = await isolatedDio.head<dynamic>(
+      final headResult = await headFuture;
+      if (headResult.isValid) {
+        getFuture.ignore();
+        return headResult;
+      }
+      final getResult = await getFuture;
+      if (getResult.isValid) return getResult;
+      return headResult;
+    } catch (_) {
+      final getResult = await getFuture;
+      if (getResult.isValid) return getResult;
+      rethrow;
+    } finally {
+      _releaseClient(isolatedDio);
+    }
+  }
+
+  Future<DownloadMetadata> _probeWithHead({
+    required String punyUrl,
+    required Dio client,
+    String? requestedFileName,
+    required bool isYoutube,
+    CancelToken? cancelToken,
+  }) async {
+    var fileName = requestedFileName?.trim().isNotEmpty == true
+        ? safeFileName(requestedFileName!.trim())
+        : fileNameFromUrl(punyUrl);
+    var fileSize = 0;
+    var supportsResume = isYoutube;
+
+    try {
+      final response = await client.head<dynamic>(
         punyUrl,
         cancelToken: cancelToken,
         options: Options(followRedirects: true, validateStatus: (_) => true),
@@ -1064,59 +1112,74 @@ class DownloadEngine {
           fileSize = 0;
         }
       }
-      if (fileSize == 0 ||
-          response.statusCode == 403 ||
-          response.statusCode == 405 ||
-          response.statusCode == 400) {
-        try {
-          final getResponse = await isolatedDio.get<ResponseBody>(
-            punyUrl,
-            cancelToken: cancelToken,
-            options: Options(
-              responseType: ResponseType.stream,
-              followRedirects: true,
-              headers: {'Range': 'bytes=0-0'},
-              validateStatus: (_) => true,
-            ),
-          );
-          if (getResponse.statusCode == 200 || getResponse.statusCode == 206) {
-            final getHeaderName =
-                fileNameFromContentDisposition(getResponse.headers);
-            if (requestedFileName?.trim().isNotEmpty != true &&
-                getHeaderName != null) {
-              fileName = getHeaderName;
-            }
-            final contentRange = getResponse.headers.value('content-range');
-            if (contentRange != null) {
-              final totalMatch = RegExp(r'/(\d+)').firstMatch(contentRange);
-              fileSize = int.tryParse(totalMatch?.group(1) ?? '') ?? fileSize;
-            }
-            if (fileSize == 0) {
-              fileSize = int.tryParse(
-                      getResponse.headers.value(Headers.contentLengthHeader) ??
-                          '') ??
-                  0;
-            }
-            final getContentType =
-                getResponse.headers.value(Headers.contentTypeHeader);
-            if (isLikelyHtmlResponse(getContentType) &&
-                fileSize < 1024 * 1024) {
-              fileSize = 0;
-            }
-            supportsResume = isYoutube ||
-                getResponse.statusCode == 206 ||
-                getResponse.headers.value('accept-ranges') == 'bytes';
-            await getResponse.data?.stream.listen((_) {}).cancel();
-          }
-        } catch (e) {
-          debugPrint('[DownloadEngine] ranged GET probe failed: $e');
-        }
-      }
     } catch (e) {
       debugPrint('HEAD request failed for ${_redactUrl(punyUrl)}: $e');
-    } finally {
-      _releaseClient(isolatedDio);
     }
+
+    return DownloadMetadata(
+      fileName: fileName,
+      category: categoryFromFileName(fileName),
+      fileSize: fileSize,
+      supportsResume: supportsResume,
+    );
+  }
+
+  Future<DownloadMetadata> _probeWithGet({
+    required String punyUrl,
+    required Dio client,
+    String? requestedFileName,
+    required bool isYoutube,
+    CancelToken? cancelToken,
+  }) async {
+    var fileName = requestedFileName?.trim().isNotEmpty == true
+        ? safeFileName(requestedFileName!.trim())
+        : fileNameFromUrl(punyUrl);
+    var fileSize = 0;
+    var supportsResume = isYoutube;
+
+    try {
+      final getResponse = await client.get<ResponseBody>(
+        punyUrl,
+        cancelToken: cancelToken,
+        options: Options(
+          responseType: ResponseType.stream,
+          followRedirects: true,
+          headers: {'Range': 'bytes=0-0'},
+          validateStatus: (_) => true,
+        ),
+      );
+      if (getResponse.statusCode == 200 || getResponse.statusCode == 206) {
+        final getHeaderName =
+            fileNameFromContentDisposition(getResponse.headers);
+        if (requestedFileName?.trim().isNotEmpty != true &&
+            getHeaderName != null) {
+          fileName = getHeaderName;
+        }
+        final contentRange = getResponse.headers.value('content-range');
+        if (contentRange != null) {
+          final totalMatch = RegExp(r'/(\d+)').firstMatch(contentRange);
+          fileSize = int.tryParse(totalMatch?.group(1) ?? '') ?? fileSize;
+        }
+        if (fileSize == 0) {
+          fileSize = int.tryParse(
+                  getResponse.headers.value(Headers.contentLengthHeader) ??
+                      '') ??
+              0;
+        }
+        final getContentType =
+            getResponse.headers.value(Headers.contentTypeHeader);
+        if (isLikelyHtmlResponse(getContentType) && fileSize < 1024 * 1024) {
+          fileSize = 0;
+        }
+        supportsResume = isYoutube ||
+            getResponse.statusCode == 206 ||
+            getResponse.headers.value('accept-ranges') == 'bytes';
+        await getResponse.data?.stream.listen((_) {}).cancel();
+      }
+    } catch (e) {
+      debugPrint('[DownloadEngine] ranged GET probe failed: $e');
+    }
+
     return DownloadMetadata(
       fileName: fileName,
       category: categoryFromFileName(fileName),
@@ -1360,14 +1423,14 @@ class DownloadEngine {
     return fullPath;
   }
 
-  static Future<void> cleanupOrphanFiles(
+  static Future<int> cleanupOrphanFiles(
     String tempFilePath, {
     bool mergeConfirmed = false,
   }) async {
-    if (tempFilePath.trim().isEmpty) return;
+    if (tempFilePath.trim().isEmpty) return 0;
     try {
       final dir = File(tempFilePath).parent;
-      if (!await dir.exists()) return;
+      if (!await dir.exists()) return 0;
       final baseWithoutExt = p.withoutExtension(tempFilePath);
       final patterns = <String>{
         tempFilePath,
@@ -1389,28 +1452,48 @@ class DownloadEngine {
           '$baseWithoutExt.merged',
         });
       }
+      int cleaned = 0;
       for (final path in patterns) {
         try {
           final f = File(path);
-          if (await f.exists()) await f.delete();
+          if (await f.exists()) {
+            await f.delete();
+            cleaned++;
+          }
         } catch (e) {
           debugPrint('[DownloadEngine] cleanup failed for $path: $e');
         }
       }
+
       final stem = p.basenameWithoutExtension(tempFilePath);
       final stemPartPrefix = '$stem.part';
-      await for (final entity in dir.list(recursive: false)) {
-        final basename = p.basename(entity.path);
-        if (entity is File &&
-            basename.startsWith(stemPartPrefix) &&
-            entity.path != tempFilePath) {
-          try {
-            await entity.delete();
-          } catch (_) {}
+      final dirPath = dir.path;
+
+      final partPathsToDelete = await Isolate.run(() {
+        final d = Directory(dirPath);
+        if (!d.existsSync()) return <String>[];
+        final orphans = <String>[];
+        for (final entity in d.listSync(recursive: false)) {
+          final basename = p.basename(entity.path);
+          if (entity is File &&
+              basename.startsWith(stemPartPrefix) &&
+              entity.path != tempFilePath) {
+            orphans.add(entity.path);
+          }
         }
+        return orphans;
+      });
+
+      for (final path in partPathsToDelete) {
+        try {
+          await File(path).delete();
+          cleaned++;
+        } catch (_) {}
       }
+      return cleaned;
     } catch (e) {
       debugPrint('[DownloadEngine] cleanupOrphanFiles error: $e');
+      return 0;
     }
   }
 
