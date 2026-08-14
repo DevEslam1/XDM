@@ -29,9 +29,9 @@ class BandwidthGovernor {
 
   BandwidthGovernor([
     this._globalBytesPerSecond = 0,
-    double burstFactor = 1.0,
+    double burstFactor = 1.5,
     double? throttleFactor,
-  ])  : _burstFactor = burstFactor.clamp(1.0, 4.0),
+  ])  : _burstFactor = burstFactor.clamp(1.0, 1.5),
         throttleFactor = throttleFactor ?? PowerMonitor.throttleFactor;
 
   void dispose() {}
@@ -45,10 +45,9 @@ class BandwidthGovernor {
 
   double get burstFactor => _burstFactor;
 
-  /// FIX(13): change the burst allowance at runtime. Values below 1.0 are
-  /// clamped to 1.0 (strict), values above 4.0 are clamped to 4.0.
+  /// Clamps burst allowance to 1.0 (strict) - 1.5x (S-01 burst clamp).
   void setBurstFactor(double factor) {
-    _burstFactor = factor.clamp(1.0, 4.0);
+    _burstFactor = factor.clamp(1.0, 1.5);
   }
 
   bool get isUnlimited => _globalBytesPerSecond <= 0 || _activeConsumers <= 0;

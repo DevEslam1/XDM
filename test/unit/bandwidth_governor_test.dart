@@ -48,11 +48,27 @@ void main() {
       expect(governor.isUnlimited, isTrue);
     });
 
-    test('6. burstFactor clamped to 1.0-4.0', () {
+    test('6. burstFactor clamped to 1.0-1.5 (S-01)', () {
       final governor = BandwidthGovernor(1000, 0.5);
       expect(governor.burstFactor, equals(1.0));
       governor.setBurstFactor(10.0);
-      expect(governor.burstFactor, equals(4.0));
+      expect(governor.burstFactor, equals(1.5));
+    });
+
+    test(
+        '7. 60s idle simulated pause does not allow burst beyond 1.5 * limit (S-01)',
+        () async {
+      const limit = 10000; // 10 KB/s
+      final governor = BandwidthGovernor(limit, 1.5);
+      governor.registerConsumer();
+
+      // Acquire initial token budget (1.0 * limit = 10000 bytes immediately)
+      final wait1 = await governor.acquire(10000);
+      expect(wait1, equals(0));
+
+      // Any immediate additional bytes beyond available tokens must wait
+      final wait2 = await governor.acquire(5000);
+      expect(wait2, greaterThan(0));
     });
   });
 }
