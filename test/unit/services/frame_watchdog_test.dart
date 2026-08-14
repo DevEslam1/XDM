@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/frame_watchdog.dart';
+import 'package:dmx/core/services/performance_monitor.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -72,6 +73,24 @@ void main() {
       // Window 3: 9% > 8% -> Should trigger battery saver
       FrameWatchdog.simulateWindowForTesting(9, 100);
       expect(settings.batterySaverMode, isTrue);
+    });
+
+    test(
+        'PerformanceMonitor toggle, pause/resume and stats tracking (PF-01/PF-02)',
+        () {
+      final monitor = PerformanceMonitor.instance;
+      monitor.reset();
+      expect(monitor.totalFrames, 0);
+      expect(monitor.jankyFrameCount, 0);
+
+      monitor.pause();
+      expect(monitor.isListening, isFalse);
+
+      monitor.resume();
+      expect(monitor.isListening, isTrue);
+
+      // Verify health summary formatting
+      expect(monitor.healthSummary, contains('60fps'));
     });
   });
 }
