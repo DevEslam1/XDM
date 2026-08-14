@@ -248,6 +248,15 @@ class PageIntentClassifier {
     }
   }
 
+  static const Set<String> allowedSchemes = {'http', 'https', 'magnet'};
+
+  /// Checks if URL uses a safe and whitelisted scheme (SEC-03).
+  static bool isAllowedScheme(String url) {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || !uri.hasScheme) return false;
+    return allowedSchemes.contains(uri.scheme.toLowerCase());
+  }
+
   PageClassification classify(String url) {
     if (!_enabled) {
       return PageClassification(
@@ -267,6 +276,20 @@ class PageIntentClassifier {
         url: url,
         confidence: 1.0,
         reason: 'Empty URL',
+      );
+    }
+
+    // Scheme validation & whitelist guard (SEC-03)
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null &&
+        uri.hasScheme &&
+        !allowedSchemes.contains(uri.scheme.toLowerCase())) {
+      return PageClassification(
+        intent: PageIntent.adPage,
+        action: PageAction.block,
+        url: url,
+        confidence: 1.0,
+        reason: 'Blocked dangerous or unsupported URL scheme: ${uri.scheme}',
       );
     }
 
