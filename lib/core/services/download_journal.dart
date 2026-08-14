@@ -418,11 +418,13 @@ class StateStore {
   // FIX P1-7: Store payload hash instead of full string for dedup
   static final Map<String, int> _lastWrittenPayloads = {};
   static final Map<String, int> _lastWrittenBytes = {};
+  static final Map<String, DateTime> _lastSaveTimes = {};
   static const int _maxCachedPayloads = 16;
 
   static void removeCachedPayload(String taskId) {
     _lastWrittenPayloads.removeWhere((key, _) => key.contains(taskId));
     _lastWrittenBytes.removeWhere((key, _) => key.contains(taskId));
+    _lastSaveTimes.removeWhere((key, _) => key.contains(taskId));
   }
 
   static void removeTaskState(String taskId) => removeCachedPayload(taskId);
@@ -438,12 +440,26 @@ class StateStore {
     final isScreenOff = screenOff || PowerMonitor.screenOff;
     final tmpPath = '$targetPath.tmp';
     try {
+      final now = DateTime.now();
+      final lastSave = _lastSaveTimes[targetPath];
+      final bytesSinceLastWrite =
+          (state.downloadedBytes - (_lastWrittenBytes[targetPath] ?? 0)).abs();
+
+      // FIX-P1: Rate-limit non-durable state saves to at most once per 2s unless delta >= 5MB
+      if (!durable &&
+          lastSave != null &&
+          now.difference(lastSave) < const Duration(seconds: 2) &&
+          bytesSinceLastWrite < 5 * 1024 * 1024) {
+        return;
+      }
+
       final payload = jsonEncode(state.toJson());
       final payloadHash = payload.hashCode;
       if (!durable && _lastWrittenPayloads[targetPath] == payloadHash) {
         return; // Skip redundant state write
       }
       _lastWrittenPayloads[targetPath] = payloadHash;
+      _lastSaveTimes[targetPath] = now;
       if (_lastWrittenPayloads.length > _maxCachedPayloads) {
         final keysToRemove = _lastWrittenPayloads.keys
             .take(_lastWrittenPayloads.length - _maxCachedPayloads)
@@ -451,12 +467,11 @@ class StateStore {
         for (final key in keysToRemove) {
           _lastWrittenPayloads.remove(key);
           _lastWrittenBytes.remove(key);
+          _lastSaveTimes.remove(key);
         }
       }
 
       // FIX-3: Always write when downloadedBytes changed by >5MB regardless of screen state
-      final bytesSinceLastWrite =
-          (state.downloadedBytes - (_lastWrittenBytes[targetPath] ?? 0)).abs();
       if (isScreenOff && !durable && bytesSinceLastWrite < 5 * 1024 * 1024) {
         return; // skip only small deltas when screen off
       }

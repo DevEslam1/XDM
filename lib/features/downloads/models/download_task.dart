@@ -515,6 +515,7 @@ class DownloadTask {
     String? fileName,
     String? url,
     int? fileSize,
+    bool clearFileSize = false,
     int? downloadedBytes,
     double? speed,
     int? eta,
@@ -577,18 +578,23 @@ class DownloadTask {
     String? contentHint,
     bool? isMergeInProgress,
   }) {
+    final effectiveFileSize = clearFileSize
+        ? 0
+        : (fileSize != null ? max(0, fileSize) : this.fileSize);
+    final rawDownloadedBytes =
+        max(0, downloadedBytes ?? this.downloadedBytes);
+
     return DownloadTask(
       id: id,
       fileName: fileName ?? this.fileName,
       url: url ?? this.url,
-      fileSize: max(0, fileSize ?? this.fileSize),
-      downloadedBytes: max(
-        0,
-        max(0, fileSize ?? this.fileSize) > 0
-            ? (downloadedBytes ?? this.downloadedBytes)
-                .clamp(0, max(0, fileSize ?? this.fileSize))
-            : max(0, downloadedBytes ?? this.downloadedBytes),
-      ),
+      fileSize: effectiveFileSize,
+      downloadedBytes: (effectiveFileSize > 0 &&
+              !hasMergedAudio &&
+              !isTorrent &&
+              (mergedAudioUrl == null || mergedAudioUrl.isEmpty))
+          ? rawDownloadedBytes.clamp(0, effectiveFileSize)
+          : rawDownloadedBytes,
       speed: speed ?? this.speed,
       eta: clearEta ? null : (eta ?? this.eta),
       category: category ?? this.category,

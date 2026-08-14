@@ -1411,49 +1411,76 @@ class _StepBtnState extends State<_StepBtn> {
 
 // ─────────────────────────────────────────────────────────────
 
-class _SpeedGraphPanel extends StatelessWidget {
+class _SpeedGraphPanel extends StatefulWidget {
   final DownloadTask task;
   final DownloadProvider provider;
 
   const _SpeedGraphPanel({required this.task, required this.provider});
 
   @override
+  State<_SpeedGraphPanel> createState() => _SpeedGraphPanelState();
+}
+
+class _SpeedGraphPanelState extends State<_SpeedGraphPanel> {
+  DateTime _lastUpdateTime = DateTime.fromMillisecondsSinceEpoch(0);
+  List<FlSpot> _cachedDownloadSpots = const [];
+  List<FlSpot> _cachedUploadSpots = const [];
+  int _cachedMaxLen = 1;
+
+  void _updateSpotsIfNeeded() {
+    final now = DateTime.now();
+    if (now.difference(_lastUpdateTime) >= const Duration(milliseconds: 1000) ||
+        _cachedDownloadSpots.isEmpty) {
+      _lastUpdateTime = now;
+      final speedHistory = widget.provider.getSpeedHistory(widget.task.id);
+      final uploadHistory =
+          widget.provider.getUploadSpeedHistory(widget.task.id);
+
+      final List<FlSpot> dlSpots = List.generate(speedHistory.length, (i) {
+        return FlSpot(i.toDouble(), speedHistory[i]);
+      });
+      if (dlSpots.length == 1) {
+        dlSpots.add(FlSpot(1.0, dlSpots[0].y));
+      }
+
+      final List<FlSpot> ulSpots = List.generate(uploadHistory.length, (i) {
+        return FlSpot(i.toDouble(), uploadHistory[i]);
+      });
+      if (ulSpots.length == 1) {
+        ulSpots.add(FlSpot(1.0, ulSpots[0].y));
+      }
+
+      _cachedDownloadSpots = dlSpots;
+      _cachedUploadSpots = ulSpots;
+      _cachedMaxLen = math.max(
+        dlSpots.length,
+        ulSpots.isNotEmpty ? ulSpots.length : 1,
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    _updateSpotsIfNeeded();
     final isDark = Provider.of<SettingsProvider>(context).isDarkMode;
     final primaryClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
-    final speedHistory = provider.getSpeedHistory(task.id);
-    final uploadHistory = provider.getUploadSpeedHistory(task.id);
+    final isDownloading = widget.task.status == DownloadStatus.downloading;
+    final isSeeding = widget.task.status == DownloadStatus.completed &&
+        widget.task.isTorrent &&
+        widget.task.seedingEnabled;
 
-    final isDownloading = task.status == DownloadStatus.downloading;
-    final isSeeding = task.status == DownloadStatus.completed &&
-        task.isTorrent &&
-        task.seedingEnabled;
+    final showUploadSpeed =
+        widget.task.isTorrent && (isDownloading || isSeeding);
+    final uploadSpeed = showUploadSpeed
+        ? widget.provider.getTorrentUploadSpeed(widget.task.id)
+        : 0.0;
 
-    final showUploadSpeed = task.isTorrent && (isDownloading || isSeeding);
-    final uploadSpeed =
-        showUploadSpeed ? provider.getTorrentUploadSpeed(task.id) : 0.0;
-
-    final List<FlSpot> downloadSpots = List.generate(speedHistory.length, (i) {
-      return FlSpot(i.toDouble(), speedHistory[i]);
-    });
-    if (downloadSpots.length == 1) {
-      downloadSpots.add(FlSpot(1.0, downloadSpots[0].y));
-    }
-
-    final List<FlSpot> uploadSpots = List.generate(uploadHistory.length, (i) {
-      return FlSpot(i.toDouble(), uploadHistory[i]);
-    });
-    if (uploadSpots.length == 1) {
-      uploadSpots.add(FlSpot(1.0, uploadSpots[0].y));
-    }
-
-    final maxLen = math.max(
-      downloadSpots.length,
-      uploadSpots.isNotEmpty ? uploadSpots.length : 1,
-    );
+    final downloadSpots = _cachedDownloadSpots;
+    final uploadSpots = _cachedUploadSpots;
+    final maxLen = _cachedMaxLen;
 
     return DmxCardShell(
       showRail: false,
@@ -1481,7 +1508,7 @@ class _SpeedGraphPanel extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '${L10n.isRtl(context) ? 'تحميل' : 'DL'}: ${formatBytes(task.speed)}/s',
+                      '${L10n.isRtl(context) ? 'تحميل' : 'DL'}: ${formatBytes(widget.task.speed)}/s',
                       style: AppTheme.dataStyle(
                         isDark: isDark,
                         size: 10,
@@ -1541,30 +1568,39 @@ class _SpeedGraphPanel extends StatelessWidget {
                       topTitles: const AxisTitles(
                         sideTitles: SideTitles(showTitles: false),
                       ),
-                      bottomTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 18,
+                          interval: math.max(1.0, (maxLen / 4).floorToDouble()),
+                          getTitlesWidget: (value, meta) {
+                            final idx = value.toInt();
+                            if (idx < 0 || idx >= maxLen) {
+                              return const SizedBox.shrink();
+                            }
+                            final secAgo = (maxLen - 1 - idx);
+                            if (secAgo % 5 != 0 && idx != 0) {
+                              return const SizedBox.shrink();
+                            }
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                '${secAgo}s',
+                                style: TextStyle(
+                                  fontSize: 8,
+                                  fontFamily: 'monospace',
+                                  color: mutedClr,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                       rightTitles: const AxisTitles(
                         sideTitles: SideTitles(showTitles: false),
                       ),
-                      leftTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 45,
-                          getTitlesWidget: (value, meta) {
-                            if (value == meta.max && meta.max > 0) {
-                              return Text(
-                                '${formatBytes(meta.max.round())}/s',
-                                style: AppTheme.microLabel(
-                                  isDark: isDark,
-                                  color: mutedClr,
-                                  size: 8,
-                                ),
-                              );
-                            }
-                            return const SizedBox.shrink();
-                          },
-                        ),
+                      leftTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
                       ),
                     ),
                     borderData: FlBorderData(show: false),
@@ -1576,7 +1612,7 @@ class _SpeedGraphPanel extends StatelessWidget {
                         spots: downloadSpots,
                         isCurved: true,
                         color: primaryClr,
-                        barWidth: 2.5,
+                        barWidth: 2.0,
                         isStrokeCapRound: true,
                         dotData: const FlDotData(show: false),
                         belowBarData: BarAreaData(
@@ -1585,7 +1621,7 @@ class _SpeedGraphPanel extends StatelessWidget {
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              primaryClr.withValues(alpha: 0.2),
+                              primaryClr.withValues(alpha: 0.25),
                               primaryClr.withValues(alpha: 0.0),
                             ],
                           ),

@@ -61,6 +61,14 @@ class NetworkMonitor {
   bool get isCellular =>
       _currentConnectivity.contains(ConnectivityResult.mobile);
 
+  /// Whether there is no network connection available.
+  bool get hasNoNetwork =>
+      _currentConnectivity.contains(ConnectivityResult.none) ||
+      _currentConnectivity.isEmpty;
+
+  /// Whether there is any active network connection.
+  bool get hasAnyNetworkConnection => !hasNoNetwork;
+
   void markWifiWaiting(String taskId) {
     _tasksPausedDueToWifiOnly.add(taskId);
   }

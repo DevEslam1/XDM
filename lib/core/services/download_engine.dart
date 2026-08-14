@@ -564,6 +564,7 @@ class DownloadProgressHandler {
   Future<void> handleProgress(
     Map<String, dynamic> p, {
     required TimestampedLruMap<String, String> ytCounterpartTaskIds,
+    TimestampedLruMap<String, int>? ytLiveBytes,
     bool adaptiveThreads = false,
     int effectiveThreadCount = 1,
     HttpDownloadEngine? httpEngine,
@@ -606,12 +607,12 @@ class DownloadProgressHandler {
           (ytStreamKind != null
               ? (p['downloadedBytes'] as num?)?.toInt()
               : null);
-      if (ytEffectiveLive != null) {
-        DownloadEngine._ytLiveBytes[taskId] = ytEffectiveLive;
+      if (ytEffectiveLive != null && ytLiveBytes != null) {
+        ytLiveBytes[taskId] = ytEffectiveLive;
       }
       final counterpartId = ytCounterpartTaskIds[taskId];
-      int? liveCounterpart = counterpartId != null
-          ? DownloadEngine._ytLiveBytes[counterpartId]
+      int? liveCounterpart = counterpartId != null && ytLiveBytes != null
+          ? ytLiveBytes[counterpartId]
           : null;
       if (liveCounterpart == null && counterpartId != null) {
         liveCounterpart = ytCounterpartDownloadedBytes ?? 0;
@@ -665,7 +666,8 @@ class DownloadProgressHandler {
           ytStreamKind != null &&
           ytStreamKind != YtStreamKind.combined) {
         final cpId = ytCounterpartTaskIds[taskId];
-        final cpLive = cpId != null ? DownloadEngine._ytLiveBytes[cpId] : null;
+        final cpLive =
+            cpId != null && ytLiveBytes != null ? ytLiveBytes[cpId] : null;
         final cpSize = ytCounterpartSize;
         if (cpSize == null || cpSize <= 0) {
           cycle = 'downloading';
@@ -831,9 +833,9 @@ class DownloadEngine {
   final Dio _sharedDio;
   final TimestampedLruMap<String, String> _ytCounterpartTaskIds =
       TimestampedLruMap<String, String>(maxCapacity: 100);
-  static final TimestampedLruMap<String, int> _ytLiveBytes =
+  final TimestampedLruMap<String, int> _ytLiveBytes =
       TimestampedLruMap<String, int>(maxCapacity: 100);
-  static final TimestampedLruMap<String, bool> _ytFinishedStreams =
+  final TimestampedLruMap<String, bool> _ytFinishedStreams =
       TimestampedLruMap<String, bool>(maxCapacity: 100);
 
   void registerYtCounterpart(String taskId, String counterpartTaskId) {
@@ -850,12 +852,12 @@ class DownloadEngine {
     if (c != null && _ytFinishedStreams.containsKey(c)) {
       _ytCounterpartTaskIds.remove(taskId);
       _ytCounterpartTaskIds.remove(c);
-      DownloadEngine._ytLiveBytes.remove(taskId);
-      DownloadEngine._ytLiveBytes.remove(c);
+      _ytLiveBytes.remove(taskId);
+      _ytLiveBytes.remove(c);
       _ytFinishedStreams.remove(taskId);
       _ytFinishedStreams.remove(c);
     } else if (c == null) {
-      DownloadEngine._ytLiveBytes.remove(taskId);
+      _ytLiveBytes.remove(taskId);
       _ytFinishedStreams.remove(taskId);
     } else {
       Timer? timer;
@@ -865,8 +867,8 @@ class DownloadEngine {
             _ytCounterpartTaskIds.containsKey(taskId)) {
           _ytCounterpartTaskIds.remove(taskId);
           _ytCounterpartTaskIds.remove(c);
-          DownloadEngine._ytLiveBytes.remove(taskId);
-          DownloadEngine._ytLiveBytes.remove(c);
+          _ytLiveBytes.remove(taskId);
+          _ytLiveBytes.remove(c);
           _ytFinishedStreams.remove(taskId);
           _ytFinishedStreams.remove(c);
         }
@@ -901,9 +903,8 @@ class DownloadEngine {
       _ytPeriodicTimer = Timer.periodic(const Duration(minutes: 5), (_) {
         if (_closed) return;
         _ytCounterpartTaskIds.removeStale(const Duration(minutes: 10));
-        DownloadEngine._ytLiveBytes.removeStale(const Duration(minutes: 10));
-        DownloadEngine._ytFinishedStreams
-            .removeStale(const Duration(minutes: 10));
+        _ytLiveBytes.removeStale(const Duration(minutes: 10));
+        _ytFinishedStreams.removeStale(const Duration(minutes: 10));
       });
       _cleanupTimer = Timer.periodic(const Duration(seconds: 60), (_) {
         if (_closed) return;
@@ -1671,12 +1672,12 @@ class DownloadEngine {
     }
     int? ytStartingCounterpartBytes = ytCounterpartDownloadedBytes;
     if (ytStreamKind != null) {
-      DownloadEngine._ytLiveBytes[taskId] = alreadyOnDisk;
+      _ytLiveBytes[taskId] = alreadyOnDisk;
       final counterpartBytes = ytCounterpartDownloadedBytes;
       if (counterpartBytes != null && counterpartBytes > 0) {
         final counterpartId = _ytCounterpartTaskIds[taskId];
         if (counterpartId != null) {
-          DownloadEngine._ytLiveBytes.putIfAbsent(
+          _ytLiveBytes.putIfAbsent(
             counterpartId,
             () => counterpartBytes,
           );
@@ -1684,7 +1685,7 @@ class DownloadEngine {
       }
       final ytStartCid = _ytCounterpartTaskIds[taskId];
       if (ytStartCid != null) {
-        final live = DownloadEngine._ytLiveBytes[ytStartCid];
+        final live = _ytLiveBytes[ytStartCid];
         if (live != null) {
           ytStartingCounterpartBytes = live;
         }
@@ -1773,7 +1774,7 @@ class DownloadEngine {
       // handler after isolate confirms stop.
       final ytPauseCid = _ytCounterpartTaskIds[taskId];
       int? ytPauseLiveCp =
-          ytPauseCid != null ? DownloadEngine._ytLiveBytes[ytPauseCid] : null;
+          ytPauseCid != null ? _ytLiveBytes[ytPauseCid] : null;
       if (ytPauseLiveCp == null && ytPauseCid != null) {
         ytPauseLiveCp = ytCounterpartDownloadedBytes ?? 0;
       }
@@ -1790,7 +1791,7 @@ class DownloadEngine {
         ytCounterpartSize: ytCounterpartSize,
         ytCounterpartDownloadedBytes:
             ytPauseLiveCp ?? ytCounterpartDownloadedBytes,
-        ytDownloadedBytes: DownloadEngine._ytLiveBytes[taskId],
+        ytDownloadedBytes: _ytLiveBytes[taskId],
         chunkDetails: progressHandler.lastChunkDetails,
         totalChunks: progressHandler.lastTotalChunks,
         completedChunks: progressHandler.lastCompletedChunks,
@@ -1840,11 +1841,11 @@ class DownloadEngine {
           if (errorType == 'urlExpired') {
             final ytUlcId = _ytCounterpartTaskIds[taskId];
             int? ytUlcLiveCp =
-                ytUlcId != null ? DownloadEngine._ytLiveBytes[ytUlcId] : null;
+                ytUlcId != null ? _ytLiveBytes[ytUlcId] : null;
             if (ytUlcLiveCp == null && ytUlcId != null) {
               ytUlcLiveCp = ytCounterpartDownloadedBytes ?? 0;
             }
-            final ytUlcLiveSelf = DownloadEngine._ytLiveBytes[taskId];
+            final ytUlcLiveSelf = _ytLiveBytes[taskId];
             onProgress(DownloadProgress(
               downloadedBytes:
                   ytUlcLiveSelf ?? progressHandler.lastDownloadedBytes,
@@ -1880,7 +1881,7 @@ class DownloadEngine {
               errorType == 'sendTimeout';
           final ytFailCid = _ytCounterpartTaskIds[taskId];
           int? ytFailLiveCp =
-              ytFailCid != null ? DownloadEngine._ytLiveBytes[ytFailCid] : null;
+              ytFailCid != null ? _ytLiveBytes[ytFailCid] : null;
           if (ytFailLiveCp == null && ytFailCid != null) {
             ytFailLiveCp = ytCounterpartDownloadedBytes ?? 0;
           }
@@ -1897,7 +1898,7 @@ class DownloadEngine {
             ytCounterpartSize: ytCounterpartSize,
             ytCounterpartDownloadedBytes:
                 ytFailLiveCp ?? ytCounterpartDownloadedBytes,
-            ytDownloadedBytes: DownloadEngine._ytLiveBytes[taskId],
+            ytDownloadedBytes: _ytLiveBytes[taskId],
             chunkDetails: progressHandler.lastChunkDetails,
             totalChunks: progressHandler.lastTotalChunks,
             completedChunks: progressHandler.lastCompletedChunks,
@@ -1959,6 +1960,7 @@ class DownloadEngine {
           await progressHandler.handleProgress(
             message.data,
             ytCounterpartTaskIds: _ytCounterpartTaskIds,
+            ytLiveBytes: _ytLiveBytes,
             adaptiveThreads: adaptiveThreads,
             effectiveThreadCount: effectiveThreadCount,
             httpEngine: _httpEngine,
@@ -1966,7 +1968,7 @@ class DownloadEngine {
           break;
         case 'done':
           if (ytStreamKind != null && progressHandler.lastFileSize > 0) {
-            DownloadEngine._ytLiveBytes[taskId] = progressHandler.lastFileSize;
+            _ytLiveBytes[taskId] = progressHandler.lastFileSize;
           }
           watchdog?.cancel();
           inactivityTimer?.cancel();
@@ -1985,7 +1987,7 @@ class DownloadEngine {
           } else {
             final ytDoneCid = _ytCounterpartTaskIds[taskId];
             int? ytDoneLiveCp = ytDoneCid != null
-                ? DownloadEngine._ytLiveBytes[ytDoneCid]
+                ? _ytLiveBytes[ytDoneCid]
                 : null;
             if (ytDoneLiveCp == null && ytDoneCid != null) {
               ytDoneLiveCp = ytCounterpartDownloadedBytes ?? 0;
@@ -2040,7 +2042,7 @@ class DownloadEngine {
               ytCounterpartSize: ytCounterpartSize,
               ytCounterpartDownloadedBytes:
                   ytDoneLiveCp ?? ytCounterpartDownloadedBytes,
-              ytDownloadedBytes: DownloadEngine._ytLiveBytes[taskId] ??
+              ytDownloadedBytes: _ytLiveBytes[taskId] ??
                   progressHandler.lastDownloadedBytes,
               chunkDetails: progressHandler.lastChunkDetails,
               totalChunks: progressHandler.lastTotalChunks,
@@ -3519,36 +3521,51 @@ Future<int> actualDownloadedBytes(
 }) async {
   try {
     final stateFile = File('$path.dmxstate');
-    if (!await stateFile.exists()) {
+    if (await stateFile.exists()) {
+      final content = await stateFile.readAsString();
+      final decoded = jsonDecode(content);
+      if (decoded is Map && decoded['chunks'] is List) {
+        final chunks = decoded['chunks'] as List;
+        return chunks.fold<int>(
+          0,
+          (s, c) =>
+              s + ((c is Map ? (c['downloaded'] as num?)?.toInt() : 0) ?? 0),
+        );
+      }
+      if (decoded is Map && decoded['progress'] is List) {
+        final progress = decoded['progress'] as List;
+        return progress.fold<int>(
+          0,
+          (s, c) => s + ((c is num) ? c.toInt() : 0),
+        );
+      }
+    }
+
+    // Check journal if .dmxstate was absent or did not contain valid chunks
+    final journalPath = '$path.journal';
+    if (await File(journalPath).exists()) {
+      final journalBytes = await DownloadJournal.recover(journalPath);
+      if (journalBytes != null && journalBytes.isNotEmpty) {
+        return journalBytes.fold<int>(0, (s, b) => s + (b < 0 ? 0 : b));
+      }
+    }
+
+    // For single-threaded downloads without state, file length represents actual downloaded bytes.
+    // For multi-threaded downloads, the file may have been pre-allocated to full size, so we return 0.
+    if (threadCount <= 1) {
       final f = File(path);
       if (await f.exists()) {
         final len = await f.length();
         if (len > 0) return len;
       }
-      return 0;
-    }
-    final content = await stateFile.readAsString();
-    final decoded = jsonDecode(content);
-    if (decoded is Map && decoded['chunks'] is List) {
-      final chunks = decoded['chunks'] as List;
-      return chunks.fold<int>(
-        0,
-        (s, c) =>
-            s + ((c is Map ? (c['downloaded'] as num?)?.toInt() : 0) ?? 0),
-      );
-    }
-    if (decoded is Map && decoded['progress'] is List) {
-      final progress = decoded['progress'] as List;
-      return progress.fold<int>(
-        0,
-        (s, c) => s + ((c is num) ? c.toInt() : 0),
-      );
     }
     return 0;
   } catch (e) {
     debugPrint('[DMX] actualDownloadedBytes failed for $path: $e');
-    final f = File(path);
-    if (await f.exists()) return await f.length();
+    if (threadCount <= 1) {
+      final f = File(path);
+      if (await f.exists()) return await f.length();
+    }
     return 0;
   }
 }

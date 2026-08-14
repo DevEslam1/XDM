@@ -47,7 +47,7 @@ class PositionalFileWriter {
     required this.totalSize,
     required this.threadCount,
     int? bufferSize,
-  })  : _bufferSize = bufferSize ?? 128 * 1024,
+  })  : _bufferSize = bufferSize ?? 256 * 1024,
         _highWater = List<int>.filled(threadCount < 1 ? 1 : threadCount, 0);
 
   final String path;
@@ -340,31 +340,41 @@ class PositionalFileWriter {
   Future<void> close() async {
     await _metaLock.synchronized(() async {
       if (_closed) return;
-      try {
-        await flushAll();
-      } catch (_) {}
       _closed = true;
-
-      for (final entry in _handles.entries) {
-        final key = entry.key;
-        final handle = entry.value;
-        final lock = _handleLocks[key];
-        final buffer = _buffers[key];
-        if (lock != null && buffer != null) {
-          try {
-            await lock.synchronized(() async {
+      try {
+        try {
+          await flushAll();
+        } catch (_) {}
+      } finally {
+        for (final entry in _handles.entries) {
+          final key = entry.key;
+          final handle = entry.value;
+          final lock = _handleLocks[key];
+          final buffer = _buffers[key];
+          if (lock != null && buffer != null) {
+            try {
+              await lock.synchronized(() async {
+                try {
+                  await _flushBufferInternal(handle, buffer);
+                  await handle.flush();
+                } catch (_) {}
+                await handle.close();
+              });
+            } catch (_) {
               try {
-                await _flushBufferInternal(handle, buffer);
-                await handle.flush();
+                await handle.close();
               } catch (_) {}
+            }
+          } else {
+            try {
               await handle.close();
-            });
-          } catch (_) {}
+            } catch (_) {}
+          }
         }
+        _handles.clear();
+        _handleLocks.clear();
+        _buffers.clear();
       }
-      _handles.clear();
-      _handleLocks.clear();
-      _buffers.clear();
     });
   }
 

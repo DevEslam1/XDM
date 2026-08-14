@@ -5494,6 +5494,10 @@ class DownloadProvider extends ChangeNotifier
 
   Future<void> _autoResumeIncomplete() async {
     final now = DateTime.now();
+    final wifiBlocked =
+        _settingsProvider.wifiOnly && !_networkMonitor.hasWifiOrEthernet;
+    final noNetwork = !_networkMonitor.hasAnyNetworkConnection;
+
     final candidates = _tasks.where((t) {
       // FIX-H6: Skip tasks where pausedByUser, waitingWifi, waitingNetwork, or scheduled in future
       final isPaused = t.status == DownloadStatus.paused;
@@ -5550,11 +5554,26 @@ class DownloadProvider extends ChangeNotifier
         }
       }
 
-      // FIX P0-5: Check wifiOnly setting before auto-resuming incomplete tasks
-      if (_settingsProvider.wifiOnly && !_networkMonitor.hasWifiOrEthernet) {
+      // FIX P0-5: Check wifiOnly setting and network connectivity before auto-resuming incomplete tasks
+      if (wifiBlocked) {
         final waitingTask = task.copyWith(
           status: DownloadStatus.paused,
           errorMessage: DownloadStatusMessages.waitingWifi,
+          speed: 0,
+          clearEta: true,
+        );
+        final idx = _tasks.indexWhere((t) => t.id == task.id);
+        if (idx != -1) {
+          _tasks[idx] = waitingTask;
+          await _databaseService.saveTask(waitingTask);
+        }
+        continue;
+      }
+
+      if (noNetwork) {
+        final waitingTask = task.copyWith(
+          status: DownloadStatus.paused,
+          errorMessage: DownloadStatusMessages.waitingNetwork,
           speed: 0,
           clearEta: true,
         );
