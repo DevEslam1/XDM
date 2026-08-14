@@ -19,6 +19,38 @@ class YoutubeService {
   static int _consecutiveTimeouts = 0;
   static DateTime? _circuitBreakerUntil;
 
+  // FIX Y-01: Client rotation & cooldown state
+  static final Map<String, DateTime> _clientCooldowns = {};
+  static const Duration defaultClientCooldown = Duration(minutes: 5);
+
+  static void markClientCoolingDown(String clientName, [Duration? duration]) {
+    _clientCooldowns[clientName] =
+        DateTime.now().add(duration ?? defaultClientCooldown);
+    debugPrint(
+        '[YouTubeService] Client $clientName cooled down until ${_clientCooldowns[clientName]}');
+  }
+
+  static bool isClientCoolingDown(String clientName) {
+    final expiry = _clientCooldowns[clientName];
+    if (expiry == null) return false;
+    if (DateTime.now().isAfter(expiry)) {
+      _clientCooldowns.remove(clientName);
+      return false;
+    }
+    return true;
+  }
+
+  static List<String> getAvailableClients(
+      [List<String> preferenceOrder = const ['android', 'ios', 'web', 'tv']]) {
+    return preferenceOrder
+        .where((client) => !isClientCoolingDown(client))
+        .toList();
+  }
+
+  static void resetClientCooldowns() {
+    _clientCooldowns.clear();
+  }
+
   static Future<void> init() async {
     try {
       final savedCookies = await _secureStorage.read(key: _cookiesStorageKey);
@@ -559,7 +591,8 @@ class YoutubeService {
         return results;
       }
     } on TimeoutException catch (e) {
-      throw Exception(e.message ?? 'Stream resolution timed out after 35 seconds');
+      throw Exception(
+          e.message ?? 'Stream resolution timed out after 35 seconds');
     } on BackendException catch (e) {
       throw Exception(e.toUserMessage());
     } catch (e) {
@@ -651,7 +684,8 @@ class YoutubeService {
           return localStreams;
         }
       }
-      throw Exception('YouTube backend circuit breaker active (30s cooldown due to consecutive timeouts).');
+      throw Exception(
+          'YouTube backend circuit breaker active (30s cooldown due to consecutive timeouts).');
     }
 
     try {

@@ -128,4 +128,26 @@ void main() {
     expect(e, isA<BackendException>());
     expect(e.toUserMessage(), contains('30s'));
   });
+
+  test(
+      'YouTube client rotation cools down rate-limited client and rotates (Y-01)',
+      () {
+    YoutubeService.resetClientCooldowns();
+    expect(YoutubeService.getAvailableClients(),
+        equals(['android', 'ios', 'web', 'tv']));
+
+    // Simulate 429/bot detection on android client
+    YoutubeService.markClientCoolingDown('android', const Duration(minutes: 5));
+    expect(YoutubeService.isClientCoolingDown('android'), isTrue);
+
+    // Available clients must now rotate to iOS first
+    final available = YoutubeService.getAvailableClients();
+    expect(available, equals(['ios', 'web', 'tv']));
+    expect(available.first, equals('ios'));
+
+    // Reset cooldowns
+    YoutubeService.resetClientCooldowns();
+    expect(YoutubeService.isClientCoolingDown('android'), isFalse);
+    expect(YoutubeService.getAvailableClients().first, equals('android'));
+  });
 }
