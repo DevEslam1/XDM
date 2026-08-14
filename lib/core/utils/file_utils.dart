@@ -136,7 +136,7 @@ String safeFileName(String value) {
       // Step 1: strip null bytes and ASCII/Unicode control characters
       .replaceAll(RegExp(r'[\x00-\x1f\x7f-\x9f]'), '')
       // Step 2: strip leading/repeated path traversal sequences
-      .replaceAll(RegExp(r'\.\.[/\\]+'), '')
+      .replaceAll(RegExp(r'\.\.[/\\]+'), '_')
       // Step 3: replace path separators and invalid chars with an underscore
       .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
       // Step 4: collapse runs of dots or underscores

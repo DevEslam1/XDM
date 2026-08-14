@@ -161,7 +161,7 @@ void main() {
         videoStreamSize: 0,
         mergedAudioUrl: 'https://example.com/audio',
       );
-      expect(task.combinedTotalSize, equals(5000));
+      expect(task.combinedTotalSize, equals(0));
     });
 
     test('10. isTorrent detects magnet URLs', () {

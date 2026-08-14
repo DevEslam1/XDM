@@ -158,6 +158,7 @@
 				<false/>
 			</dict>
 		</dict>
+	</dict>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>StartDownloadIntent</string>

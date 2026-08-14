@@ -173,17 +173,23 @@ class UserScriptManager extends ChangeNotifier {
           'Security Violation: dynamic import in script "${script.name}"');
       throw Exception('Dynamic imports are prohibited in UserScripts.');
     }
-    // FIX SEC-1: Detect obfuscated dynamic code execution
+    // FIX SEC-1 / FIX-25: Detect obfuscated dynamic code execution
     final hasObfuscatedEval = RegExp(r'window\s*\[\s*["\x27]ev').hasMatch(code);
     final hasObfuscatedFunction =
         RegExp(r'window\s*\[\s*["\x27]Function').hasMatch(code);
     final hasGlobalThis = RegExp(r'globalThis\s*\[').hasMatch(code);
     final hasConstructorCall = RegExp(r'constructor\s*\(').hasMatch(code);
+    final hasCharCode = code.contains('String.fromCharCode');
+    final hasAtob = code.contains('atob(');
+    final hasProtoConstructor = code.contains('Function.prototype.constructor');
 
     if (hasObfuscatedEval ||
         hasObfuscatedFunction ||
         hasGlobalThis ||
-        hasConstructorCall) {
+        hasConstructorCall ||
+        hasCharCode ||
+        hasAtob ||
+        hasProtoConstructor) {
       _log.severe(
           'Security Violation: Obfuscated dynamic execution in script "${script.name}"');
       throw Exception('Obfuscated dynamic execution detected');

@@ -87,6 +87,7 @@ void main() {
     db = MockDatabaseService();
     settings = SettingsProvider();
     await settings.load();
+    settings.autoStart = false;
     provider = DownloadProvider(
       databaseService: db,
       settingsProvider: settings,

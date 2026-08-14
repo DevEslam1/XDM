@@ -836,35 +836,22 @@ class DownloadTask {
 
     final threadCount =
         (map['threadCount'] as num?)?.toInt() ?? rawChunks.length;
+    final downloadedBytes = (map['downloadedBytes'] as num?)?.toInt() ?? 0;
+    final fileSize = (map['fileSize'] as num?)?.toInt() ?? 0;
 
     List<double> chunks;
     if (rawChunks.length == threadCount) {
       chunks = rawChunks;
-    } else if (rawChunks.length > threadCount) {
-      final safeThreadCount = threadCount > 0 ? threadCount : 1;
-      final totalSum = rawChunks.fold<double>(0.0, (s, c) => s + c);
-      final overall = rawChunks.isEmpty
-          ? 0.0
-          : (totalSum / rawChunks.length).clamp(0.0, 1.0);
-      chunks = List<double>.filled(safeThreadCount, overall);
-      if (kDebugMode) {
-        debugPrint(
-          'DownloadTask.fromMap: chunk count mismatch for task ${map['id']}: '
-          'stored ${rawChunks.length} chunks but threadCount=$threadCount. '
-          'Redistributing progress to $overall per chunk.',
-        );
-      }
     } else {
-      final remaining = threadCount - rawChunks.length;
-      chunks = [...rawChunks, ...List.filled(remaining, 0.0)];
-      if (kDebugMode) {
-        debugPrint(
-          'DownloadTask.fromMap: chunk count mismatch for task ${map['id']}: '
-          'stored ${rawChunks.length} chunks but threadCount=$threadCount. '
-          'Padding with $remaining zero chunks.',
-        );
-      }
+      final safeThreadCount = threadCount > 0 ? threadCount : 1;
+      final overallProgress = downloadedBytes > 0 && fileSize > 0
+          ? (downloadedBytes / fileSize).clamp(0.0, 1.0)
+          : 0.0;
+      chunks = List<double>.filled(safeThreadCount, overallProgress);
     }
+    chunks = chunks
+        .map((c) => (c.isNaN || c.isInfinite) ? 0.0 : c.clamp(0.0, 1.0))
+        .toList();
 
     String? errorMessage = map['errorMessage'] as String?;
     if (matched.isEmpty && errorMessage == null) {

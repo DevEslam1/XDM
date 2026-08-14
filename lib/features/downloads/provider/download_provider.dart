@@ -5505,11 +5505,6 @@ class DownloadProvider extends ChangeNotifier
 
   Future<void> _autoResumeIncomplete() async {
     final now = DateTime.now();
-    final wifiBlocked = _networkMonitor.hasResolvedInitialConnectivity &&
-        _settingsProvider.wifiOnly &&
-        !_networkMonitor.hasWifiOrEthernet;
-    final noNetwork = _networkMonitor.hasResolvedInitialConnectivity &&
-        _networkMonitor.hasNoNetwork;
 
     final candidates = _tasks.where((t) {
       // FIX-H6: Skip tasks where pausedByUser, waitingWifi, waitingNetwork, or scheduled in future

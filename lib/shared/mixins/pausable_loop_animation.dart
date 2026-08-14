@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
@@ -78,11 +79,13 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
   }
 
   bool _foreground = true;
+  StreamSubscription<bool>? _screenSub;
 
   /// Registers the lifecycle observer and starts the loop if wanted.
   /// Call once from `initState` after the controller is created.
   void startPausableLoop() {
     WidgetsBinding.instance.addObserver(this);
+    _screenSub = PowerMonitor.screenStateStream.listen((_) => _sync());
     _sync();
   }
 
@@ -94,6 +97,7 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
   /// the controller.
   void stopPausableLoop() {
     WidgetsBinding.instance.removeObserver(this);
+    _screenSub?.cancel();
   }
 
   void _sync() {

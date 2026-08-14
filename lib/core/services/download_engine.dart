@@ -34,7 +34,7 @@ class DownloadMetadata {
   final bool supportsResume;
   final List<Map<String, dynamic>>? torrentFiles;
   final int? torrentId;
-  bool get isValid => fileName.isNotEmpty;
+  bool get isValid => fileName.isNotEmpty || fileSize > 0;
 
   const DownloadMetadata({
     required this.fileName,

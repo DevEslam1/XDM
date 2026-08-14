@@ -56,7 +56,6 @@ class NetworkMonitor {
 
   /// Whether the device is currently on Wi-Fi or Ethernet.
   bool get hasWifiOrEthernet =>
-      !_hasResolvedInitialConnectivity ||
       _currentConnectivity.contains(ConnectivityResult.wifi) ||
       _currentConnectivity.contains(ConnectivityResult.ethernet);
 
@@ -66,9 +65,8 @@ class NetworkMonitor {
 
   /// Whether there is no network connection available.
   bool get hasNoNetwork =>
-      _hasResolvedInitialConnectivity &&
-      (_currentConnectivity.contains(ConnectivityResult.none) ||
-          _currentConnectivity.isEmpty);
+      _currentConnectivity.contains(ConnectivityResult.none) ||
+      _currentConnectivity.isEmpty;
 
   /// Whether there is any active network connection.
   bool get hasAnyNetworkConnection => !hasNoNetwork;
@@ -97,8 +95,9 @@ class NetworkMonitor {
     });
   }
 
-  /// N-01: Probes generate_204 endpoint to ensure network is truly online without captive portal loops.
-  static Future<bool> verifyConnectivityProbe({Dio? dioClient}) async {
+  static Future<bool> isNetworkReachable({
+    Dio? dioClient,
+  }) async {
     try {
       final dio = dioClient ?? Dio();
       dio.options.connectTimeout = const Duration(seconds: 3);
@@ -113,6 +112,10 @@ class NetworkMonitor {
       return false;
     }
   }
+
+  /// N-01: Probes generate_204 endpoint to ensure network is truly online without captive portal loops.
+  static Future<bool> verifyConnectivityProbe({Dio? dioClient}) =>
+      isNetworkReachable(dioClient: dioClient);
 
   /// Resolves connectivity synchronously on first load so wifi-only checks
   /// run against real data before any downloads are pumped.
@@ -130,9 +133,6 @@ class NetworkMonitor {
     }
     _checkingNetwork = true;
     try {
-      if (!_hasResolvedInitialConnectivity && _currentConnectivity.isEmpty) {
-        return;
-      }
       final hasNoNetwork =
           _currentConnectivity.contains(ConnectivityResult.none) ||
               _currentConnectivity.isEmpty;

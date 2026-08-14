@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/shared/widgets/pausable_loop_animation.dart';
+import 'package:dmx/shared/widgets/pausable_loop_builder.dart';
 import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
 
 void main() {
-  group('PausableLoopAnimation Widget (U-03)', () {
+  group('PausableLoopBuilder Widget', () {
     testWidgets('renders child and loops animation', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: PausableLoopAnimation(
+            body: PausableLoopBuilder(
               duration: const Duration(seconds: 1),
               builder: (context, value, child) {
                 return Opacity(
