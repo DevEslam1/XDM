@@ -23,6 +23,13 @@ class FFmpegMuxService {
     return await video.exists() && (audio == null || await audio.exists());
   }
 
+  @visibleForTesting
+  static Future<bool> Function(
+    String videoPath,
+    String audioPath,
+    String outputPath,
+  )? mockMergeHandler;
+
   static Future<bool> mergeVideoAudio(
     String videoPath,
     String audioPath,
@@ -32,6 +39,9 @@ class FFmpegMuxService {
     Duration? totalDuration,
     Duration? expectedDuration,
   }) async {
+    if (mockMergeHandler != null) {
+      return await mockMergeHandler!(videoPath, audioPath, outputPath);
+    }
     await _mergeSemaphore.acquire();
     var wakelockAcquired = false;
     try {
