@@ -16,9 +16,9 @@ class FadeInSlideScope extends StatefulWidget {
     this.curve = AppTheme.motionCurve,
   });
 
-  static _FadeInSlideScopeInherited? maybeOf(BuildContext context) {
+  static FadeInSlideScopeInherited? maybeOf(BuildContext context) {
     return context
-        .dependOnInheritedWidgetOfExactType<_FadeInSlideScopeInherited>();
+        .dependOnInheritedWidgetOfExactType<FadeInSlideScopeInherited>();
   }
 
   @override
@@ -44,7 +44,7 @@ class FadeInSlideScopeState extends State<FadeInSlideScope>
 
   @override
   Widget build(BuildContext context) {
-    return _FadeInSlideScopeInherited(
+    return FadeInSlideScopeInherited(
       controller: controller,
       curve: widget.curve,
       child: widget.child,
@@ -52,18 +52,19 @@ class FadeInSlideScopeState extends State<FadeInSlideScope>
   }
 }
 
-class _FadeInSlideScopeInherited extends InheritedWidget {
+class FadeInSlideScopeInherited extends InheritedWidget {
   final AnimationController controller;
   final Curve curve;
 
-  const _FadeInSlideScopeInherited({
+  const FadeInSlideScopeInherited({
+    super.key,
     required this.controller,
     required this.curve,
     required super.child,
   });
 
   @override
-  bool updateShouldNotify(_FadeInSlideScopeInherited oldWidget) =>
+  bool updateShouldNotify(FadeInSlideScopeInherited oldWidget) =>
       controller != oldWidget.controller || curve != oldWidget.curve;
 }
 

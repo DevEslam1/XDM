@@ -1021,16 +1021,11 @@ class DownloadEngine {
       );
     }
     final punyUrl = convertIdnToPunycode(url);
-    var fileName = requestedFileName?.trim().isNotEmpty == true
-        ? safeFileName(requestedFileName!.trim())
-        : fileNameFromUrl(punyUrl);
-    var fileSize = 0;
     final uri = Uri.tryParse(punyUrl);
     final host = uri?.host.toLowerCase() ?? '';
     final isYoutube = host.contains('youtube.com') ||
         host == 'youtu.be' ||
         host.endsWith('.googlevideo.com');
-    var supportsResume = isYoutube;
     final isolatedDio = _buildIsolatedClient(
       url: punyUrl,
       customUserAgent: customUserAgent,

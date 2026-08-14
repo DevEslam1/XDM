@@ -16,16 +16,17 @@ void main() {
           .setMockMethodCallHandler(
         const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
         (methodCall) async {
+          final args = methodCall.arguments as Map?;
           if (methodCall.method == 'write') {
-            final key = methodCall.arguments['key'] as String;
-            final value = methodCall.arguments['value'] as String;
+            final key = args?['key'] as String;
+            final value = args?['value'] as String;
             storage[key] = value;
             return null;
           } else if (methodCall.method == 'read') {
-            final key = methodCall.arguments['key'] as String;
+            final key = args?['key'] as String;
             return storage[key];
           } else if (methodCall.method == 'delete') {
-            final key = methodCall.arguments['key'] as String;
+            final key = args?['key'] as String;
             storage.remove(key);
             return null;
           }
