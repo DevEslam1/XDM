@@ -92,5 +92,27 @@ void main() {
           tabManager.tabs.where((t) => t.origin == TabOrigin.adOrPopup).length;
       expect(adTabs, lessThanOrEqualTo(3));
     });
+
+    test('evictInactiveTabs caps active non-suspended tabs to 3 LRU tabs', () {
+      for (int i = 0; i < 6; i++) {
+        tabManager.openInNewTab('https://site$i.com', switchToTab: true);
+      }
+      expect(tabManager.tabs.length, equals(6));
+      expect(tabManager.currentIndex, equals(5));
+
+      // Invoke eviction
+      tabManager.evictInactiveTabs(keepRecentCount: 3);
+
+      final nonSuspended =
+          tabManager.tabs.where((t) => !t.isSuspended).toList();
+      expect(nonSuspended.length, lessThanOrEqualTo(3));
+
+      // Oldest tabs must be marked suspended
+      expect(tabManager.tabs[0].isSuspended, isTrue);
+      expect(tabManager.tabs[1].isSuspended, isTrue);
+      expect(tabManager.tabs[2].isSuspended, isTrue);
+      // Active tab (site5) must remain active
+      expect(tabManager.activeTab!.isSuspended, isFalse);
+    });
   });
 }

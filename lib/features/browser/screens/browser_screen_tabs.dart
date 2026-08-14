@@ -57,11 +57,11 @@ mixin _TabsMixin on _BrowserScreenStateBase {
       _lruTabIds.remove(activeTab.id);
       _lruTabIds.insert(0, activeTab.id);
     }
-    final settings = _settings;
-    final cap = (settings.maxTabs ~/ 4).clamp(3, 6);
+    const cap = 3;
     if (_lruTabIds.length > cap) {
       _lruTabIds.removeRange(cap, _lruTabIds.length);
     }
+    _tabManager.evictInactiveTabs(keepRecentCount: cap);
   }
 
   void _onTabSwitched(int oldIndex, int newIndex) {

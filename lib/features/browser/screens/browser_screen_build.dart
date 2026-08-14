@@ -945,111 +945,12 @@ mixin _BuildMixin on _BrowserScreenStateBase {
                                                   _tabs.indexOf(tab);
                                               final isActiveTab =
                                                   tabIndex == _currentTabIndex;
-
-                                              if (tab.isHome) {
-                                                return SizedBox(
-                                                  width: double.infinity,
-                                                  height: double.infinity,
-                                                  child: _buildHomeDashboard(
-                                                    context,
-                                                    settings,
-                                                    scrollController: isActiveTab
-                                                        ? _dashboardScrollController
-                                                        : null,
-                                                  ),
-                                                );
-                                              } else {
-                                                final isLive =
-                                                    _lruTabIds.contains(tab.id);
-                                                if (!isLive ||
-                                                    tab.isSuspended) {
-                                                  return SizedBox(
-                                                    width: double.infinity,
-                                                    height: double.infinity,
-                                                    child: Container(
-                                                      color: isDark
-                                                          ? AppTheme.surface
-                                                          : AppTheme
-                                                              .lightSurface,
-                                                      child: Center(
-                                                        child: Column(
-                                                          mainAxisAlignment:
-                                                              MainAxisAlignment
-                                                                  .center,
-                                                          children: [
-                                                            Icon(Icons.web,
-                                                                size: 48,
-                                                                color: (isDark
-                                                                        ? AppTheme
-                                                                            .neonBlue
-                                                                        : AppTheme
-                                                                            .lightNeonBlue)
-                                                                    .withValues(
-                                                                        alpha:
-                                                                            0.6)),
-                                                            const SizedBox(
-                                                                height: 12),
-                                                            Text(
-                                                              tab.title
-                                                                      .isNotEmpty
-                                                                  ? tab.title
-                                                                  : 'Web Page',
-                                                              style: TextStyle(
-                                                                  fontSize: 16,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
-                                                                  color: isDark
-                                                                      ? Colors
-                                                                          .white
-                                                                      : Colors
-                                                                          .black87),
-                                                              textAlign:
-                                                                  TextAlign
-                                                                      .center,
-                                                            ),
-                                                            if (tab.url
-                                                                .isNotEmpty) ...[
-                                                              const SizedBox(
-                                                                  height: 4),
-                                                              Padding(
-                                                                padding: const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        24),
-                                                                child: Text(
-                                                                  tab.domain
-                                                                          .isNotEmpty
-                                                                      ? tab
-                                                                          .domain
-                                                                      : tab.url,
-                                                                  style: TextStyle(
-                                                                      fontSize:
-                                                                          12,
-                                                                      color: isDark
-                                                                          ? Colors
-                                                                              .white54
-                                                                          : Colors
-                                                                              .black54),
-                                                                  maxLines: 1,
-                                                                  overflow:
-                                                                      TextOverflow
-                                                                          .ellipsis,
-                                                                ),
-                                                              ),
-                                                            ],
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  );
-                                                }
-                                                return _BrowserTabView(
-                                                  tab: tab,
-                                                  state: this,
-                                                  settings: settings,
-                                                );
-                                              }
+                                              return _buildLazyTab(
+                                                tab,
+                                                isActiveTab,
+                                                settings,
+                                                isDark,
+                                              );
                                             }).toList(),
                                           ),
                                         );
@@ -1397,6 +1298,79 @@ mixin _BuildMixin on _BrowserScreenStateBase {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildLazyTab(
+    BrowserTab tab,
+    bool isActiveTab,
+    SettingsProvider settings,
+    bool isDark,
+  ) {
+    if (tab.isHome) {
+      return SizedBox(
+        width: double.infinity,
+        height: double.infinity,
+        child: _buildHomeDashboard(
+          context,
+          settings,
+          scrollController: isActiveTab ? _dashboardScrollController : null,
+        ),
+      );
+    }
+
+    final isLive = _lruTabIds.contains(tab.id);
+    if (!isLive || tab.isSuspended) {
+      return SizedBox(
+        width: double.infinity,
+        height: double.infinity,
+        child: Container(
+          color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.web,
+                  size: 48,
+                  color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                      .withValues(alpha: 0.6),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  tab.title.isNotEmpty ? tab.title : 'Web Page',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                if (tab.url.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(
+                      tab.domain.isNotEmpty ? tab.domain : tab.url,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white54 : Colors.black54,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return _BrowserTabView(
+      tab: tab,
+      state: this,
+      settings: settings,
     );
   }
 }

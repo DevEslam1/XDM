@@ -197,16 +197,23 @@ class TabManager extends ChangeNotifier {
   /// Evicts inactive tab controllers to keep memory footprint bounded.
   void evictInactiveTabs({int keepRecentCount = 3}) {
     final activeId = activeTab?.id;
-    final recentIds = _tabIdHistory.reversed.take(keepRecentCount).toSet();
+    final recentIds = <String>{};
     if (activeId != null) recentIds.add(activeId);
+    for (final id in _tabIdHistory.reversed) {
+      if (recentIds.length >= keepRecentCount) break;
+      recentIds.add(id);
+    }
 
     for (final tab in _tabs) {
       if (recentIds.contains(tab.id) || tab.isHome) continue;
-      if (!tab.isSuspended && tab.controller != null) {
+      if (!tab.isSuspended ||
+          tab.controller != null ||
+          tab.pullToRefreshController != null) {
         try {
           tab.controller?.dispose();
         } catch (_) {}
         tab.controller = null;
+        tab.pullToRefreshController = null;
         tab.isSuspended = true;
         _log.info('Evicted background WebView controller for tab ${tab.id}');
       }
