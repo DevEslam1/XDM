@@ -44,6 +44,8 @@ class NetworkMonitor {
   bool _hasResolvedInitialConnectivity = false;
   bool _checkingNetwork = false;
   bool _networkRecheckPending = false;
+  Timer? _debounceTimer;
+  static const Duration debounceDuration = Duration(seconds: 2);
   final Set<String> _tasksPausedDueToDisconnect = {};
   final Set<String> _tasksPausedDueToWifiOnly = {};
 
@@ -69,7 +71,10 @@ class NetworkMonitor {
     ) {
       _currentConnectivity = results;
       _hasResolvedInitialConnectivity = true;
-      checkNetworkConnectivity();
+      _debounceTimer?.cancel();
+      _debounceTimer = Timer(debounceDuration, () {
+        checkNetworkConnectivity();
+      });
     });
     Connectivity().checkConnectivity().then((results) {
       if (!_hasResolvedInitialConnectivity) {
@@ -78,6 +83,23 @@ class NetworkMonitor {
         checkNetworkConnectivity();
       }
     });
+  }
+
+  /// N-01: Probes generate_204 endpoint to ensure network is truly online without captive portal loops.
+  static Future<bool> verifyConnectivityProbe({Dio? dioClient}) async {
+    try {
+      final dio = dioClient ?? Dio();
+      dio.options.connectTimeout = const Duration(seconds: 3);
+      dio.options.receiveTimeout = const Duration(seconds: 3);
+      final res = await dio
+          .get<void>('http://connectivitycheck.gstatic.com/generate_204');
+      return res.statusCode == 204 ||
+          (res.statusCode != null &&
+              res.statusCode! >= 200 &&
+              res.statusCode! < 300);
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Resolves connectivity synchronously on first load so wifi-only checks
@@ -244,6 +266,8 @@ class NetworkMonitor {
   }
 
   void dispose() {
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
     _connectivitySubscription?.cancel();
     _tasksPausedDueToDisconnect.clear();
     _tasksPausedDueToWifiOnly.clear();
