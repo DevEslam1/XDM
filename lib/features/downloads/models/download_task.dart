@@ -348,8 +348,8 @@ class DownloadTask {
     if (hasMergedAudio && audioSize > 0) {
       if (videoStreamSize > 0) return videoStreamSize + audioSize;
       if (fileSize > 0) return fileSize;
-      // Fallback: use downloadedBytes as minimum indicator
-      return downloadedBytes + audioSize;
+      if (downloadedBytes > 0) return downloadedBytes + audioSize;
+      return 0;
     }
     return resolvedFileSize;
   }

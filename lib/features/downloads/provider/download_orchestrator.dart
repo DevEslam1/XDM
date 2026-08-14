@@ -1658,13 +1658,31 @@ class DownloadOrchestrator {
     int audioBytesFromDisk = 0;
     final effectiveAudioPath = audioTempPath ?? '${task.tempFilePath}.audio';
     if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
-      // FIX-AUDIO-INIT: guard against audioThreadCount == 0 so the
-      // multi-thread guard inside actualDownloadedBytes does not discard
-      // a valid existing .audio file on session start.
-      audioBytesFromDisk = await actualDownloadedBytes(
+      // FIX-AUDIO-INIT: Load audio state explicitly from StateStore and verify against disk
+      final audioThreadCount = max(1, task.audioThreadCount);
+      final audioStateResult = await StateStore.loadOrCreate(
         effectiveAudioPath,
-        threadCount: max(1, task.audioThreadCount),
+        url: task.mergedAudioUrl!,
+        threadCount: audioThreadCount,
+        knownFileSize: task.audioSize,
       );
+      final stateAudioBytes = audioStateResult.state.downloadedBytes;
+      final diskAudioBytes = await actualDownloadedBytes(
+        effectiveAudioPath,
+        threadCount: audioThreadCount,
+      );
+      audioBytesFromDisk = min(stateAudioBytes, diskAudioBytes);
+      if (diskAudioBytes == 0 && stateAudioBytes > 0) {
+        audioBytesFromDisk = 0;
+      }
+      final freshProgress = task.audioSize > 0
+          ? (audioBytesFromDisk / task.audioSize).clamp(0.0, 1.0)
+          : (task.audioProgress > 0 ? task.audioProgress : 0.0);
+      task = task.copyWith(
+        audioProgress: freshProgress,
+        audioDownloadedBytes: audioBytesFromDisk,
+      );
+      await _host.setTaskState(task);
     }
     int audioBytesSoFar = audioBytesFromDisk;
     bool audioDone = false; // FIX-02: Track audio stream completion state
@@ -3284,7 +3302,40 @@ class DownloadOrchestrator {
       // overwrite with real data.
       List<Map<String, dynamic>>? verifiedTorrentFiles;
       if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
-        verifiedTorrentFiles = task.torrentFiles!.map((f) {
+        if (torrentId != null) {
+          try {
+            final accurateFiles = await TorrentService.getAccurateFileProgress(
+              torrentId,
+              task.savePath,
+            );
+            if (accurateFiles.isNotEmpty) {
+              final accurateByIndex = {
+                for (final af in accurateFiles) af.index: af
+              };
+              final accurateByName = {
+                for (final af in accurateFiles) af.name: af
+              };
+              verifiedTorrentFiles = task.torrentFiles!.map((f) {
+                final idx = f['index'] as int?;
+                final accurate = (idx != null ? accurateByIndex[idx] : null) ??
+                    accurateByName[f['name'] as String? ?? ''];
+                if (accurate != null) {
+                  return {
+                    ...f,
+                    'downloadedBytes': accurate.downloadedBytes,
+                    'progressEstimated': false,
+                  };
+                }
+                final copy = Map<String, dynamic>.from(f);
+                if (copy['progressEstimated'] == true) {
+                  copy['downloadedBytes'] = 0;
+                }
+                return copy;
+              }).toList();
+            }
+          } catch (_) {}
+        }
+        verifiedTorrentFiles ??= task.torrentFiles!.map((f) {
           final copy = Map<String, dynamic>.from(f);
           if (copy['progressEstimated'] == true) {
             copy['downloadedBytes'] = 0;

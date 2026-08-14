@@ -1854,11 +1854,23 @@ class DownloadProvider extends ChangeNotifier
     final maxOrder =
         _tasks.isEmpty ? -1 : _tasks.map((t) => t.queueOrder).reduce(max);
 
+    // FIX-COMBINED: Set combined fileSize (video + audio) and videoStreamSize
+    final int finalFileSize;
+    final int finalVideoStreamSize;
+    if (mergedAudioUrl != null && mergedAudioUrl.isNotEmpty && audioSize > 0) {
+      finalVideoStreamSize = size > 0 ? size : 0;
+      finalFileSize = size > 0 ? (size + audioSize) : (fileSize > 0 ? fileSize : 0);
+    } else {
+      finalVideoStreamSize = 0;
+      finalFileSize = fileSize;
+    }
+
     final task = DownloadTask(
       id: '${now.microsecondsSinceEpoch}_${Random.secure().nextInt(1000000000)}',
       fileName: fileName,
       url: url.trim(),
-      fileSize: fileSize,
+      fileSize: finalFileSize,
+      videoStreamSize: finalVideoStreamSize,
       downloadedBytes: existingBytes,
       category: resolvedCategory,
       status: isScheduled ? DownloadStatus.paused : DownloadStatus.queued,
@@ -2150,26 +2162,53 @@ class DownloadProvider extends ChangeNotifier
 
           // Snapshot per-file bytes AFTER engine has stopped
           try {
-            final liveFiles = TorrentService.getFiles(torrentId);
-            if (liveFiles.isNotEmpty && task.torrentFiles != null) {
-              final liveByIndex = {for (final lf in liveFiles) lf.index: lf};
-              final liveByName = {for (final lf in liveFiles) lf.name: lf};
+            final accurateFiles = await TorrentService.getAccurateFileProgress(
+              torrentId,
+              task.savePath,
+            );
+            if (accurateFiles.isNotEmpty && task.torrentFiles != null) {
+              final accurateByIndex = {
+                for (final af in accurateFiles) af.index: af
+              };
+              final accurateByName = {
+                for (final af in accurateFiles) af.name: af
+              };
               final updatedFiles = task.torrentFiles!.map((stored) {
                 final idx = stored['index'] as int?;
-                final live = (idx != null ? liveByIndex[idx] : null) ??
-                    liveByName[stored['name'] as String? ?? ''];
-                if (live == null) return stored;
-                final prevBytes =
-                    (stored['downloadedBytes'] as num?)?.toInt() ?? 0;
-                final liveBytes = live.downloadedBytes;
-                final resolvedBytes = liveBytes >= 0 ? liveBytes : prevBytes;
-                return {
-                  ...stored,
-                  'downloadedBytes': resolvedBytes,
-                  'progressEstimated': liveBytes < 0,
-                };
+                final accurate = (idx != null ? accurateByIndex[idx] : null) ??
+                    accurateByName[stored['name'] as String? ?? ''];
+                if (accurate != null) {
+                  return {
+                    ...stored,
+                    'downloadedBytes': accurate.downloadedBytes,
+                    'progressEstimated': false,
+                  };
+                }
+                return stored;
               }).toList();
               task = task.copyWith(torrentFiles: updatedFiles);
+            } else {
+              final liveFiles = TorrentService.getFiles(torrentId);
+              if (liveFiles.isNotEmpty && task.torrentFiles != null) {
+                final liveByIndex = {for (final lf in liveFiles) lf.index: lf};
+                final liveByName = {for (final lf in liveFiles) lf.name: lf};
+                final updatedFiles = task.torrentFiles!.map((stored) {
+                  final idx = stored['index'] as int?;
+                  final live = (idx != null ? liveByIndex[idx] : null) ??
+                      liveByName[stored['name'] as String? ?? ''];
+                  if (live == null) return stored;
+                  final prevBytes =
+                      (stored['downloadedBytes'] as num?)?.toInt() ?? 0;
+                  final liveBytes = live.downloadedBytes;
+                  final resolvedBytes = liveBytes >= 0 ? liveBytes : prevBytes;
+                  return {
+                    ...stored,
+                    'downloadedBytes': resolvedBytes,
+                    'progressEstimated': liveBytes < 0,
+                  };
+                }).toList();
+                task = task.copyWith(torrentFiles: updatedFiles);
+              }
             }
 
             if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
@@ -5139,6 +5178,13 @@ class DownloadProvider extends ChangeNotifier
   }) async {
     final task = _findTask(id);
     if (task == null) return;
+
+    // Clear state files before URL change so old chunk sizes are not reused
+    if (task.tempFilePath.isNotEmpty) {
+      await StateStore.remove(task.tempFilePath);
+      final audioPath = '${task.tempFilePath}.audio';
+      await StateStore.remove(audioPath);
+    }
 
     // Check if the stream format (itag) changed
     final oldUri = Uri.tryParse(task.url);

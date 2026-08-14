@@ -423,6 +423,16 @@ class StateStore {
 
     final limit = state.totalSize > 0 ? len.clamp(0, state.totalSize) : len;
     for (final c in state.chunks) {
+      final chunkStart = c.start;
+      final chunkEnd = c.start + c.downloaded;
+      if (chunkEnd > len) {
+        final newDownloaded =
+            (len - chunkStart).clamp(0, c.size >= 0 ? c.size : 0);
+        if (c.downloaded != newDownloaded) {
+          c.downloaded = newDownloaded;
+          adjusted = true;
+        }
+      }
       final maxForChunk = (limit - c.start).clamp(0, 1 << 62);
       if (c.downloaded > maxForChunk) {
         c.downloaded = maxForChunk;

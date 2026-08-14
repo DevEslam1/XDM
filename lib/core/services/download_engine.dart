@@ -3644,24 +3644,32 @@ Future<int> actualDownloadedBytes(
   required int threadCount,
 }) async {
   try {
+    final f = File(path);
+    if (!await f.exists()) {
+      return 0;
+    }
+    final actualLen = await f.length();
+
     final stateFile = File('$path.dmxstate');
     if (await stateFile.exists()) {
       final content = await stateFile.readAsString();
       final decoded = jsonDecode(content);
       if (decoded is Map && decoded['chunks'] is List) {
         final chunks = decoded['chunks'] as List;
-        return chunks.fold<int>(
+        final stateBytes = chunks.fold<int>(
           0,
           (s, c) =>
               s + ((c is Map ? (c['downloaded'] as num?)?.toInt() : 0) ?? 0),
         );
+        return min(stateBytes, actualLen);
       }
       if (decoded is Map && decoded['progress'] is List) {
         final progress = decoded['progress'] as List;
-        return progress.fold<int>(
+        final stateBytes = progress.fold<int>(
           0,
           (s, c) => s + ((c is num) ? c.toInt() : 0),
         );
+        return min(stateBytes, actualLen);
       }
     }
 
@@ -3670,18 +3678,16 @@ Future<int> actualDownloadedBytes(
     if (await File(journalPath).exists()) {
       final journalBytes = await DownloadJournal.recover(journalPath);
       if (journalBytes != null && journalBytes.isNotEmpty) {
-        return journalBytes.fold<int>(0, (s, b) => s + (b < 0 ? 0 : b));
+        final journalSum =
+            journalBytes.fold<int>(0, (s, b) => s + (b < 0 ? 0 : b));
+        return min(journalSum, actualLen);
       }
     }
 
     // For single-threaded downloads without state, file length represents actual downloaded bytes.
     // For multi-threaded downloads, the file may have been pre-allocated to full size, so we return 0.
     if (threadCount <= 1) {
-      final f = File(path);
-      if (await f.exists()) {
-        final len = await f.length();
-        if (len > 0) return len;
-      }
+      if (actualLen > 0) return actualLen;
     }
     return 0;
   } catch (e) {
