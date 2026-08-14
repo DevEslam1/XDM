@@ -82,26 +82,18 @@ class _SettingsScreenState extends State<SettingsScreen>
   final Set<int> _loadedTabs = {};
 
   Widget _buildLazyTab(int index) {
-    if (!_loadedTabs.contains(index)) {
-      return const SizedBox.shrink();
-    }
     return switch (index) {
       0 => const AppearanceSettingsPage(),
       1 => const DownloadsSettingsPage(),
       2 => const NetworkSettingsPage(),
-      3 => const NotificationsSettingsPage(),
-      4 => const TorrentSettingsPage(),
-      5 => const PowerSettingsPage(),
-      6 => const AdvancedSettingsPage(),
+      3 => const TorrentSettingsPage(),
+      4 => const AdvancedSettingsPage(),
       _ => const SizedBox.shrink(),
     };
   }
 
   Widget _buildLazyTabStack() {
-    return IndexedStack(
-      index: _selectedCategoryIndex,
-      children: List.generate(7, (i) => _buildLazyTab(i)),
-    );
+    return _buildLazyTab(_selectedCategoryIndex);
   }
 
   @override
