@@ -344,6 +344,28 @@ void main() {
       });
     });
 
+    group('platform scheduling (BG-09)', () {
+      test('no Timer.periodic created when running on Android', () {
+        ScheduleManager.isAndroidForTesting = true;
+        try {
+          final androidManager = ScheduleManager(
+            tasks: () => tasks,
+            databaseService: db,
+            isDisposed: () => disposed,
+            downloadingTasksCount: () => downloadingCount,
+            updateTorrentUploadLimit: () => torrentUploadLimitCalls++,
+            notifyListeners: () => notifyCalls++,
+            pumpQueue: () => pumpQueueCalls++,
+          );
+          androidManager.start();
+          expect(androidManager.schedulingTimer, isNull);
+          androidManager.dispose();
+        } finally {
+          ScheduleManager.isAndroidForTesting = false;
+        }
+      });
+    });
+
     group('dispose', () {
       test('cancels the scheduling timer', () {
         manager.start();

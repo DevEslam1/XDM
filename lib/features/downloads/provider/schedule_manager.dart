@@ -1,14 +1,20 @@
 import 'dart:async';
-
-// ignore_for_file: prefer_initializing_formals
-
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:workmanager/workmanager.dart';
 
 import '../../../core/services/background_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/update_service.dart';
 import '../models/download_task.dart';
 import 'package:dmx/core/services/logging_service.dart';
+
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    return Future.value(true);
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEDULED DOWNLOAD FIXES (applied together)
@@ -63,6 +69,27 @@ class ScheduleManager {
   // FIX-S12: Guard ready state until provider completes initial load
   bool _ready = false;
 
+  Timer? get schedulingTimer => _schedulingTimer;
+
+  static bool isAndroidForTesting = false;
+
+  /// Initializes platform-specific scheduling alarms (Workmanager on Android) (BG-09).
+  static Future<void> initialize() async {
+    if (Platform.isAndroid || isAndroidForTesting) {
+      try {
+        Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+        Workmanager().registerPeriodicTask(
+          'dmx_schedule',
+          'dmx_schedule_check',
+          frequency: const Duration(minutes: 15),
+          existingWorkPolicy: ExistingWorkPolicy.keep,
+        );
+      } catch (e) {
+        debugPrint('[ScheduleManager] Workmanager initialization error: $e');
+      }
+    }
+  }
+
   // FIX-S12: Mark schedule manager ready after initial load completes
   void markReady() {
     _ready = true;
@@ -75,6 +102,10 @@ class ScheduleManager {
   }
 
   void start() {
+    if (Platform.isAndroid || isAndroidForTesting) {
+      // On Android, periodic checks are handled by platform Workmanager
+      return;
+    }
     _schedulingTimer?.cancel();
     _scheduleNextCheck();
   }
@@ -83,6 +114,10 @@ class ScheduleManager {
   void _scheduleNextCheck() {
     _schedulingTimer?.cancel();
     if (_isDisposed()) return;
+    if (Platform.isAndroid || isAndroidForTesting) {
+      _schedulingTimer = null;
+      return;
+    }
 
     final now = DateTime.now().toUtc();
     DateTime? nearest;
