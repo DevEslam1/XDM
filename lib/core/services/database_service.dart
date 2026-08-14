@@ -33,7 +33,7 @@ class DatabaseService {
 
   DatabaseService._create();
 
-  late final AppDatabase _db;
+  late AppDatabase _db;
   bool _initialized = false;
   bool get isInitialized => _initialized;
 
@@ -769,13 +769,15 @@ class DatabaseService {
   Future<void> saveTasks(Iterable<DownloadTask> tasks) async {
     final comps = tasks.map(_taskToCompanion).toList();
     if (comps.isEmpty) return;
-    await _db.batch(
-      (batch) => batch.insertAll(
-        _db.downloadTasks,
-        comps,
-        mode: drift.InsertMode.insertOrReplace,
-      ),
-    );
+    await _db.transaction(() async {
+      await _db.batch(
+        (batch) => batch.insertAll(
+          _db.downloadTasks,
+          comps,
+          mode: drift.InsertMode.insertOrReplace,
+        ),
+      );
+    });
   }
 
   Future<void> deleteTask(String id) {

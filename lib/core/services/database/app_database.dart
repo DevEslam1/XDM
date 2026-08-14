@@ -254,6 +254,7 @@ LazyDatabase _openConnection(String path) {
       file,
       setup: (database) {
         database.execute('PRAGMA journal_mode=WAL;');
+        database.execute('PRAGMA synchronous=NORMAL;');
         database.execute('PRAGMA foreign_keys=ON;');
         database.execute('PRAGMA busy_timeout=5000;');
       },
