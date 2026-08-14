@@ -16,6 +16,18 @@ class TrackerManager extends ChangeNotifier {
   ];
 
   final Map<int, List<TorrentTrackerInfo>> _trackersByTorrent = {};
+  final Map<String, DateTime> _lastAnnounceTime = {};
+  static const Duration minAnnounceInterval = Duration(seconds: 15);
+
+  bool canAnnounce(String trackerUrl) {
+    final last = _lastAnnounceTime[trackerUrl];
+    if (last == null) return true;
+    return DateTime.now().difference(last) >= minAnnounceInterval;
+  }
+
+  void recordAnnounce(String trackerUrl) {
+    _lastAnnounceTime[trackerUrl] = DateTime.now();
+  }
 
   List<TorrentTrackerInfo> getTrackers(int torrentId) {
     return List.unmodifiable(_trackersByTorrent[torrentId] ?? []);
@@ -47,8 +59,11 @@ class TrackerManager extends ChangeNotifier {
     final list = _trackersByTorrent[torrentId];
     if (list != null) {
       bool modified = false;
+      final now = DateTime.now();
       for (var i = 0; i < list.length; i++) {
-        if (list[i].status == TrackerStatus.notWorking) {
+        if (list[i].status == TrackerStatus.notWorking &&
+            canAnnounce(list[i].url)) {
+          _lastAnnounceTime[list[i].url] = now;
           list[i] = list[i].copyWith(
             status: TrackerStatus.updating,
             message: 'Auto-reannouncing failing tracker...',
@@ -86,6 +101,7 @@ class TrackerManager extends ChangeNotifier {
       status: TrackerStatus.updating,
       message: 'Announcing...',
     ));
+    _lastAnnounceTime[trimmed] = DateTime.now();
     notifyListeners();
     return true;
   }
@@ -98,16 +114,27 @@ class TrackerManager extends ChangeNotifier {
     }
   }
 
-  void reannounce(int torrentId) {
+  bool reannounce(int torrentId, {bool force = false}) {
     final list = _trackersByTorrent[torrentId];
     if (list != null) {
+      bool anyUpdated = false;
+      final now = DateTime.now();
       for (var i = 0; i < list.length; i++) {
-        list[i] = list[i].copyWith(
-          status: TrackerStatus.updating,
-          message: 'Manual announce queued...',
-        );
+        final url = list[i].url;
+        if (force || canAnnounce(url)) {
+          _lastAnnounceTime[url] = now;
+          list[i] = list[i].copyWith(
+            status: TrackerStatus.updating,
+            message: 'Manual announce queued...',
+          );
+          anyUpdated = true;
+        }
       }
-      notifyListeners();
+      if (anyUpdated) {
+        notifyListeners();
+        return true;
+      }
     }
+    return false;
   }
 }
