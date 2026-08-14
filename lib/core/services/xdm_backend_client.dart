@@ -242,52 +242,18 @@ class XdmBackendClient {
     String url, {
     String? cookies,
     String? oauthToken,
+    bool forceRefresh = false,
   }) async {
-    final cached = _streamsCache[url];
-    if (cached != null) {
-      if (!cached.isExpired) {
-        cached.lastAccessed = DateTime.now();
-        // Validate stream reachability with HEAD request (5s timeout)
-        String? testStreamUrl;
-        try {
-          final streams = cached.data['streams'] as List<dynamic>?;
-          if (streams != null && streams.isNotEmpty) {
-            // ignore: avoid_dynamic_calls
-            testStreamUrl = streams.first['url'] as String?;
-          }
-        } catch (_) {}
-
-        bool valid = true;
-        if (testStreamUrl != null && testStreamUrl.isNotEmpty) {
-          final checkDio = _acquireDio(testStreamUrl);
-          try {
-            final headRes = await checkDio.head(
-              testStreamUrl,
-              options: Options(
-                connectTimeout: const Duration(seconds: 5),
-                receiveTimeout: const Duration(seconds: 5),
-                validateStatus: (s) => true,
-              ),
-            );
-            if (headRes.statusCode == 403 || headRes.statusCode == 410) {
-              _log.info(
-                  'Cached stream URL returned ${headRes.statusCode}, evicting cache for $url');
-              _streamsCache.remove(url);
-              valid = false;
-            }
-          } catch (_) {
-            // Best effort validation
-          } finally {
-            _releaseDio(checkDio);
-          }
-        }
-
-        if (valid) {
+    if (!forceRefresh) {
+      final cached = _streamsCache[url];
+      if (cached != null) {
+        if (!cached.isExpired) {
+          cached.lastAccessed = DateTime.now();
           cacheHits++;
           return cached.data;
+        } else {
+          _streamsCache.remove(url);
         }
-      } else {
-        _streamsCache.remove(url);
       }
     }
     cacheMisses++;

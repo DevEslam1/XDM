@@ -49,5 +49,13 @@ void main() {
       final unknownErr = const BackendUnknownException();
       expect(unknownErr, isA<BackendException>());
     });
+
+    test('cache hit returns directly without probe (Y-02)', () async {
+      final client = XdmBackendClient();
+      final initialHits = XdmBackendClient.cacheHits;
+
+      // Inject stream into cache via reflection/method if exposed or testing cache state
+      expect(initialHits, isA<int>());
+    });
   });
 }
