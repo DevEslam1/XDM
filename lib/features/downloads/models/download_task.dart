@@ -659,6 +659,50 @@ class DownloadTask {
     );
   }
 
+  /// D-01: Validates if transition from [from] to [to] is legally allowed.
+  static bool isValidTransition(DownloadStatus from, DownloadStatus to) {
+    if (from == to) return true;
+    switch (from) {
+      case DownloadStatus.queued:
+        return to == DownloadStatus.downloading ||
+            to == DownloadStatus.paused ||
+            to == DownloadStatus.failed ||
+            to == DownloadStatus.merging ||
+            to == DownloadStatus.completed;
+      case DownloadStatus.downloading:
+        return to == DownloadStatus.paused ||
+            to == DownloadStatus.completed ||
+            to == DownloadStatus.failed ||
+            to == DownloadStatus.merging ||
+            to == DownloadStatus.queued;
+      case DownloadStatus.paused:
+        return to == DownloadStatus.queued ||
+            to == DownloadStatus.downloading ||
+            to == DownloadStatus.failed ||
+            to == DownloadStatus.merging;
+      case DownloadStatus.merging:
+        return to == DownloadStatus.completed ||
+            to == DownloadStatus.failed ||
+            to == DownloadStatus.paused;
+      case DownloadStatus.failed:
+        return to == DownloadStatus.queued ||
+            to == DownloadStatus.downloading ||
+            to == DownloadStatus.paused;
+      case DownloadStatus.completed:
+        return to == DownloadStatus.queued ||
+            to == DownloadStatus.downloading; // Explicit restart
+    }
+  }
+
+  /// Transition to new status with validation
+  DownloadTask transitionTo(DownloadStatus nextStatus) {
+    if (!isValidTransition(status, nextStatus)) {
+      debugPrint(
+          '[DownloadTask] Warning: Invalid status transition from $status to $nextStatus on task $id');
+    }
+    return copyWith(status: nextStatus);
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,

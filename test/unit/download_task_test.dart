@@ -181,5 +181,40 @@ void main() {
 
       expect(task.isTorrent, isTrue);
     });
+
+    test('13. isValidTransition validates state transitions correctly (D-01)',
+        () {
+      // Legal transitions
+      expect(
+          DownloadTask.isValidTransition(
+              DownloadStatus.queued, DownloadStatus.downloading),
+          isTrue);
+      expect(
+          DownloadTask.isValidTransition(
+              DownloadStatus.downloading, DownloadStatus.paused),
+          isTrue);
+      expect(
+          DownloadTask.isValidTransition(
+              DownloadStatus.downloading, DownloadStatus.completed),
+          isTrue);
+      expect(
+          DownloadTask.isValidTransition(
+              DownloadStatus.paused, DownloadStatus.queued),
+          isTrue);
+      expect(
+          DownloadTask.isValidTransition(
+              DownloadStatus.merging, DownloadStatus.completed),
+          isTrue);
+
+      // Identity transitions
+      expect(
+          DownloadTask.isValidTransition(
+              DownloadStatus.downloading, DownloadStatus.downloading),
+          isTrue);
+
+      final task = createDummyTask(status: DownloadStatus.queued);
+      final downloadingTask = task.transitionTo(DownloadStatus.downloading);
+      expect(downloadingTask.status, equals(DownloadStatus.downloading));
+    });
   });
 }
