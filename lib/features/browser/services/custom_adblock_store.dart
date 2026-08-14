@@ -17,6 +17,11 @@ class CustomAdBlockStore {
   Set<String> get hosts => Set.unmodifiable(_hosts);
   bool get useCustomOnly => _useCustomOnly;
 
+  /// Checks if [input] is a valid host, IPv4, IPv6, or domain name (B-06).
+  static bool isValidHost(String input) {
+    return CustomAdBlockStore.instance._sanitizeHost(input).isNotEmpty;
+  }
+
   Future<void> init() async {
     try {
       final prefs = await SharedPreferences.getInstance();
