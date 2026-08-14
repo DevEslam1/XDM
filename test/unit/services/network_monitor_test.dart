@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/features/downloads/provider/network_monitor.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
@@ -48,6 +46,8 @@ void main() {
       // Verify captive portal probe helper exists and works
       final probeResult = await NetworkMonitor.verifyConnectivityProbe();
       expect(probeResult, isA<bool>());
+      expect(pumpCount, equals(0));
+      expect(setTaskCount, equals(0));
 
       monitor.dispose();
     });
