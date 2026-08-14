@@ -245,12 +245,12 @@ class _CardShell extends StatelessWidget {
 // Status chip — pulses while downloading / seeding
 // ────────────────────────────────────────────────────────────────────────────
 
-// FIX-P2: _StatusChipPulseDriver — Stop timer when app backgrounded
-class _StatusChipPulseDriver with WidgetsBindingObserver {
-  static final _instance = _StatusChipPulseDriver._();
-  factory _StatusChipPulseDriver() => _instance;
+// FIX-P2: StatusChipPulseDriver — Stop timer when app backgrounded
+class StatusChipPulseDriver with WidgetsBindingObserver {
+  static final StatusChipPulseDriver instance = StatusChipPulseDriver._();
+  factory StatusChipPulseDriver() => instance;
 
-  _StatusChipPulseDriver._() {
+  StatusChipPulseDriver._() {
     WidgetsBinding.instance.addObserver(this);
     PowerMonitor.screenStateStream.listen((screenOn) {
       if (!screenOn) {
@@ -264,8 +264,21 @@ class _StatusChipPulseDriver with WidgetsBindingObserver {
   final ValueNotifier<double> value = ValueNotifier<double>(0.7);
   Timer? _timer;
   int _refCount = 0;
+  int _visibleChips = 0;
+  int get visibleChips => _visibleChips;
   double _current = 0.4;
   bool _increasing = true;
+
+  void incrementVisibleChips() {
+    _visibleChips++;
+  }
+
+  void decrementVisibleChips() {
+    _visibleChips = (_visibleChips - 1).clamp(0, 999999);
+    if (_visibleChips == 0) {
+      _stop();
+    }
+  }
 
   void addRef() {
     _refCount++;
@@ -281,11 +294,21 @@ class _StatusChipPulseDriver with WidgetsBindingObserver {
     }
   }
 
+  void stop() {
+    _stop();
+  }
+
+  void restartIfActive() {
+    if (_refCount > 0 && !PowerMonitor.screenOff) {
+      _start();
+    }
+  }
+
   void _start() {
-    if (PowerMonitor.screenOff) return;
+    if (PowerMonitor.screenOff || _refCount <= 0) return;
     _stop();
     _timer = Timer.periodic(const Duration(milliseconds: 33), (_) {
-      if (PowerMonitor.screenOff) {
+      if (PowerMonitor.screenOff || _refCount <= 0) {
         _stop();
         return;
       }
@@ -314,7 +337,8 @@ class _StatusChipPulseDriver with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
       _stop();
     } else if (state == AppLifecycleState.resumed && _refCount > 0) {
       if (!PowerMonitor.screenOff) {
@@ -323,6 +347,8 @@ class _StatusChipPulseDriver with WidgetsBindingObserver {
     }
   }
 }
+
+typedef _StatusChipPulseDriver = StatusChipPulseDriver;
 
 class _StatusChip extends StatefulWidget {
   final DownloadTask task;

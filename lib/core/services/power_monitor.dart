@@ -29,6 +29,7 @@ class PowerMonitor {
   static StreamSubscription? _sub;
   static Timer? _thermalTimer;
   static bool _screenOn = true;
+  static bool isAppForegrounded = true;
 
   /// Notifies subscribers immediately whenever [throttleFactor] changes.
   static final ValueNotifier<double> throttleFactorNotifier =

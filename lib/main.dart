@@ -43,6 +43,7 @@ import 'core/services/power_monitor.dart';
 import 'core/services/protocol_cache.dart';
 import 'core/services/network/cookie_cache.dart';
 import 'core/services/widget_deep_link.dart';
+import 'core/services/app_lifecycle_coordinator.dart';
 import 'core/di/injection.dart';
 
 class _ScreenObserver with WidgetsBindingObserver {
@@ -83,6 +84,7 @@ Future<void> main(List<String> args) async {
     }
 
     WidgetsFlutterBinding.ensureInitialized();
+    AppLifecycleCoordinator.init();
 
     // ── Image cache sizing ──
     // Bound the decoded-image cache so large thumbnails/artwork don't consume

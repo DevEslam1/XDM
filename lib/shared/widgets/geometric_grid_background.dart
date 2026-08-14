@@ -10,11 +10,11 @@ import '../../features/downloads/provider/download_provider.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
 /// Shared ambient animation state — one timer drives all background instances.
-class _AmbientProgress with WidgetsBindingObserver {
-  static final _instance = _AmbientProgress._();
-  factory _AmbientProgress() => _instance;
+class AmbientProgress with WidgetsBindingObserver {
+  static final AmbientProgress instance = AmbientProgress._();
+  factory AmbientProgress() => instance;
 
-  _AmbientProgress._() {
+  AmbientProgress._() {
     WidgetsBinding.instance.addObserver(this);
     PowerMonitor.throttleFactorNotifier.addListener(_onPowerThrottleChanged);
     PowerMonitor.screenStateStream.listen((screenOn) {
@@ -29,6 +29,7 @@ class _AmbientProgress with WidgetsBindingObserver {
   final ValueNotifier<double> progress = ValueNotifier<double>(0);
   Timer? _timer;
   int _refCount = 0;
+  int get refCount => _refCount;
   final _startTime = DateTime.now();
   bool _isBackgrounded = false;
 
@@ -44,14 +45,30 @@ class _AmbientProgress with WidgetsBindingObserver {
     _startTimer();
   }
 
+  void stopAll() {
+    _stopTimer();
+  }
+
+  void restartIfMounted() {
+    if (_refCount > 0 && !_isBackgrounded && !PowerMonitor.screenOff) {
+      _startTimer();
+    }
+  }
+
   void _startTimer() {
-    if (!BackgroundGate.allowHeavyOps || _isBackgrounded) {
+    if (!BackgroundGate.allowHeavyOps ||
+        _isBackgrounded ||
+        PowerMonitor.screenOff ||
+        _refCount <= 0) {
       _stopTimer();
       return;
     }
     const int intervalMs = 1000;
     _timer ??= Timer.periodic(const Duration(milliseconds: intervalMs), (_) {
-      if (!BackgroundGate.allowHeavyOps || _isBackgrounded) {
+      if (!BackgroundGate.allowHeavyOps ||
+          _isBackgrounded ||
+          PowerMonitor.screenOff ||
+          _refCount <= 0) {
         _stopTimer();
         return;
       }
@@ -65,10 +82,8 @@ class _AmbientProgress with WidgetsBindingObserver {
   }
 
   void removeRef() {
-    if (_refCount <= 0) return;
-    _refCount--;
-    if (_refCount <= 0) {
-      _refCount = 0;
+    _refCount = math.max(0, _refCount - 1);
+    if (_refCount == 0) {
       _stopTimer();
     }
   }
@@ -81,17 +96,20 @@ class _AmbientProgress with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
       _isBackgrounded = true;
       _stopTimer();
     } else if (state == AppLifecycleState.resumed) {
       _isBackgrounded = false;
-      if (_refCount > 0) {
+      if (_refCount > 0 && !PowerMonitor.screenOff) {
         _startTimer();
       }
     }
   }
 }
+
+typedef _AmbientProgress = AmbientProgress;
 
 class GeometricGridBackground extends StatefulWidget {
   final Widget child;
@@ -106,24 +124,19 @@ class GeometricGridBackground extends StatefulWidget {
 class _GeometricGridBackgroundState extends State<GeometricGridBackground>
     with WidgetsBindingObserver {
   bool _isVisible = true;
-  // FIX-P1: Guard flag against double-add/double-remove
-  bool _refAdded = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (!_refAdded) {
-      _AmbientProgress().addRef();
-      _refAdded = true;
-    }
+    AmbientProgress.instance.addRef();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // FIX-P1: Stop animation when paused/inactive, restart on resumed
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
       if (_isVisible) {
         setState(() {
           _isVisible = false;
@@ -141,11 +154,7 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // FIX-P1: Guard against double-remove
-    if (_refAdded) {
-      _AmbientProgress().removeRef();
-      _refAdded = false;
-    }
+    AmbientProgress.instance.removeRef();
     super.dispose();
   }
 

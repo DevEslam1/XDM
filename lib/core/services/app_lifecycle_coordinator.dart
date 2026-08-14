@@ -1,0 +1,62 @@
+import 'package:flutter/widgets.dart';
+import 'download_engine.dart';
+import 'frame_watchdog.dart';
+import 'performance_monitor.dart';
+import 'power_monitor.dart';
+import '../../shared/widgets/geometric_grid_background.dart';
+import '../../features/downloads/widgets/download_card.dart';
+
+/// Central coordinator for application lifecycle events (BG-01/BG-02/BG-03/BG-08).
+/// Ensures that when the application is backgrounded or inactive, all ambient timers,
+/// frame timing callbacks, performance diagnostics, and GPU animations are suspended.
+class AppLifecycleCoordinator with WidgetsBindingObserver {
+  static final AppLifecycleCoordinator instance = AppLifecycleCoordinator._();
+  factory AppLifecycleCoordinator() => instance;
+  AppLifecycleCoordinator._();
+
+  static bool isAppForegrounded = true;
+
+  /// Register this observer once in `main.dart` after [WidgetsFlutterBinding.ensureInitialized].
+  static void init() {
+    WidgetsBinding.instance.addObserver(instance);
+  }
+
+  /// Manually dispose / remove the observer (useful for testing).
+  static void dispose() {
+    WidgetsBinding.instance.removeObserver(instance);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      isAppForegrounded = false;
+      PowerMonitor.isAppForegrounded = false;
+      PowerMonitor.setScreenOn(false);
+      DownloadEngine.appInForeground = false;
+      DownloadEngine.isInBackground = true;
+
+      // Suspend all ambient work
+      FrameWatchdog.stop();
+      PerformanceMonitor.instance.stop();
+      AmbientProgress.instance.stopAll();
+      StatusChipPulseDriver.instance.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      isAppForegrounded = true;
+      PowerMonitor.isAppForegrounded = true;
+      PowerMonitor.setScreenOn(true);
+      DownloadEngine.appInForeground = true;
+      DownloadEngine.isInBackground = false;
+
+      // Restart ONLY if screen is on
+      if (!PowerMonitor.screenOff) {
+        FrameWatchdog.start();
+        PerformanceMonitor.instance.start();
+        AmbientProgress.instance.restartIfMounted();
+        StatusChipPulseDriver.instance.restartIfActive();
+      }
+    }
+  }
+}
