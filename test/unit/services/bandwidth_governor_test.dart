@@ -11,19 +11,19 @@ void main() {
       expect(gov1.burstFactor, 1.0); // clamped to 1.0
 
       final gov2 = BandwidthGovernor(1000, 5.0);
-      expect(gov2.burstFactor, 4.0); // clamped to 4.0
+      expect(gov2.burstFactor, 1.5); // clamped to 1.5
 
-      final gov3 = BandwidthGovernor(1000, 2.5);
-      expect(gov3.burstFactor, 2.5);
+      final gov3 = BandwidthGovernor(1000, 1.25);
+      expect(gov3.burstFactor, 1.25);
     });
 
     test('setBurstFactor clamping', () {
-      final gov = BandwidthGovernor(1000, 2.0);
+      final gov = BandwidthGovernor(1000, 1.2);
       gov.setBurstFactor(0.1);
       expect(gov.burstFactor, 1.0);
 
       gov.setBurstFactor(10.0);
-      expect(gov.burstFactor, 4.0);
+      expect(gov.burstFactor, 1.5);
     });
 
     test('isUnlimited behavior', () {

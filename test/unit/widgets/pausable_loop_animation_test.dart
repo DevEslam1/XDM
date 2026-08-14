@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 import 'package:dmx/shared/widgets/pausable_loop_animation.dart';
 import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
-import 'package:dmx/features/settings/provider/settings_provider.dart';
 
 void main() {
   group('PausableLoopAnimation Widget (U-03)', () {
@@ -33,13 +31,13 @@ void main() {
   group('DmxBackdropFilter Widget (U-04)', () {
     testWidgets('falls back to Container with forceSolid true', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: DmxBackdropFilter(
               sigmaX: 10,
               sigmaY: 10,
               forceSolid: true,
-              child: const Text('Backdrop Content'),
+              child: Text('Backdrop Content'),
             ),
           ),
         ),

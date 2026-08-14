@@ -5,7 +5,6 @@ import 'package:dmx/core/services/live_activity_service.dart';
 import 'package:dmx/core/services/error_taxonomy.dart';
 import 'package:dmx/core/services/diagnostic_service.dart';
 import 'package:dmx/core/services/engines/speed_predictor.dart';
-import 'package:dmx/core/services/magnet_cache_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

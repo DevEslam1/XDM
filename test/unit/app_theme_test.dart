@@ -42,10 +42,10 @@ void main() {
     });
 
     test('neon accent colors are distinct and valid', () {
-      expect(AppTheme.neonBlue.value, isNonZero);
-      expect(AppTheme.neonViolet.value, isNonZero);
-      expect(AppTheme.neonGreen.value, isNonZero);
-      expect(AppTheme.neonCyan.value, isNonZero);
+      expect(AppTheme.neonBlue.toARGB32(), isNonZero);
+      expect(AppTheme.neonViolet.toARGB32(), isNonZero);
+      expect(AppTheme.neonGreen.toARGB32(), isNonZero);
+      expect(AppTheme.neonCyan.toARGB32(), isNonZero);
     });
   });
 }
