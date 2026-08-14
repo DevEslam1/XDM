@@ -88,9 +88,42 @@ void main() {
 
       tabManager.evictStaleAdTabs();
       expect(tabManager.activeTab!.url, equals('https://main.com'));
-      final adTabs =
-          tabManager.tabs.where((t) => t.origin == TabOrigin.adOrPopup).length;
-      expect(adTabs, lessThanOrEqualTo(3));
+      final adTabs = tabManager.tabs
+          .where((t) => t.origin == TabOrigin.adOrPopup)
+          .toList();
+      expect(adTabs.length, lessThanOrEqualTo(3));
+    });
+
+    test(
+        'incognito tabs are isolated, cleaned up on close, and never persisted (B-03/B-04)',
+        () {
+      bool cleanedUp = false;
+      final customManager = TabManager(
+        isActive: () => true,
+        createTab: dummyCreateTab,
+        resolveDatabase: () => throw UnimplementedError(),
+        fallbackTitle: () => 'New Tab',
+        cleanupTabState: (tabId) {
+          cleanedUp = true;
+        },
+        syncUrlController: () {},
+        updateNavState: () {},
+      );
+
+      // Open a normal tab and an incognito tab
+      customManager.openInNewTab('https://normal.com', isIncognito: false);
+      customManager.openInNewTab('https://private.com', isIncognito: true);
+
+      expect(customManager.tabs.length, equals(2));
+      expect(customManager.tabs[1].isIncognito, isTrue);
+
+      // Close the incognito tab
+      final incognitoId = customManager.tabs[1].id;
+      customManager.closeTab(incognitoId);
+
+      expect(cleanedUp, isTrue);
+      expect(customManager.tabs.length, equals(1));
+      expect(customManager.tabs.first.isIncognito, isFalse);
     });
 
     test('evictInactiveTabs caps active non-suspended tabs to 3 LRU tabs', () {
