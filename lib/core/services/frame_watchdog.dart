@@ -73,8 +73,8 @@ class FrameWatchdog {
   }
 
   static void start() {
-    // FIX-H9: Guard start() with screen-off check
-    if (_isRunning || PowerMonitor.screenOff || !DownloadEngine.appInForeground) return;
+    // FIX-H9: Guard start() with background and screen-off checks
+    if (_isRunning || PowerMonitor.screenOff || !DownloadEngine.appInForeground || DownloadEngine.isInBackground) return;
     _isRunning = true;
     _windowStart = DateTime.now();
     _dropped = 0;
@@ -91,7 +91,7 @@ class FrameWatchdog {
 
   // FIX-H9: Resume when active and screen is on
   static void resume() {
-    if (_isRunning || PowerMonitor.screenOff || !DownloadEngine.appInForeground) return;
+    if (_isRunning || PowerMonitor.screenOff || !DownloadEngine.appInForeground || DownloadEngine.isInBackground) return;
     start();
   }
 

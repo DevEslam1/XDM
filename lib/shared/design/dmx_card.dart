@@ -37,11 +37,16 @@ class DmxCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
-    final isDark = settings.isDarkMode;
-    final isAmoled = settings.isAmoledMode;
-    final classicUi = settings.classicUi;
-    final glow = settings.enableGlow;
+    final (:isDark, :isAmoled, :classicUi, :glow) =
+        context.select<SettingsProvider,
+            ({bool isDark, bool isAmoled, bool classicUi, bool glow})>(
+      (s) => (
+        isDark: s.isDarkMode,
+        isAmoled: s.isAmoledMode,
+        classicUi: s.classicUi,
+        glow: s.enableGlow,
+      ),
+    );
 
     final bgColor = switch (variant) {
       DmxCardVariant.flat => isDark

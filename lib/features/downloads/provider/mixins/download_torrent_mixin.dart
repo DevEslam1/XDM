@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
 import '../../../../core/services/database_service.dart';
+import '../../../../core/services/download_engine.dart';
+import '../../../../core/services/power_monitor.dart';
 import '../../../../core/services/retry_engine.dart';
 import '../../../../core/services/torrent_service.dart';
 import '../../../../core/utils/file_utils.dart';
@@ -45,6 +47,11 @@ mixin DownloadTorrentMixin {
   void providerNotifyListeners();
   void providerStartWidgetTimer();
   set filteredTasksDirty(bool value);
+
+  void safeNotify() {
+    if (DownloadEngine.isInBackground && PowerMonitor.screenOff) return;
+    providerNotifyListeners();
+  }
 
   /// Whether the device is currently on Wi-Fi / ethernet (used by the seeding
   /// ratio policy's "seed only on Wi-Fi" rule).

@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../power_monitor.dart';
 import '../service_registry.dart';
+import '../shared_prefs_batcher.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Mirror Health Store & Persistence
@@ -148,9 +149,9 @@ class MirrorHealthStore implements DisposableService {
   /// Persists the ranked mirror list to SharedPreferences with 1-hour TTL.
   Future<void> persistMirrorRanking(List<String> rankedUrls) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_rankingCacheKey, jsonEncode(rankedUrls));
-      await prefs.setInt(
+      SharedPrefsBatcher.instance
+          .setString(_rankingCacheKey, jsonEncode(rankedUrls));
+      SharedPrefsBatcher.instance.setInt(
         _rankingTtlKey,
         DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
       );
@@ -235,9 +236,8 @@ class MirrorHealthStore implements DisposableService {
     }
     _flushing = true;
     try {
-      final prefs = await SharedPreferences.getInstance();
       final raw = jsonEncode(_cache!.map((k, v) => MapEntry(k, v.toJson())));
-      await prefs.setString(_storeKey, raw);
+      SharedPrefsBatcher.instance.setString(_storeKey, raw);
       _dirty = false;
     } catch (e) {
       _log.warning('Failed to persist mirror health data: $e');

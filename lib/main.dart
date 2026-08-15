@@ -19,6 +19,7 @@ import 'core/services/crash_reporting_service.dart';
 import 'core/services/database_service.dart';
 import 'core/services/diagnostic_service.dart';
 import 'core/services/download_engine.dart';
+import 'core/services/engine/http_transfer_job.dart';
 import 'core/services/frame_watchdog.dart';
 import 'core/services/logging_service.dart';
 import 'core/services/mirror/mirror_registry.dart';
@@ -81,7 +82,10 @@ class _ScreenObserver with WidgetsBindingObserver {
   @override
   void didHaveMemoryPressure() {
     CookieCache().clear();
-    debugPrint('[MemoryPressure] Cleared non-essential caches');
+    HttpTransferJob.clearIdentityCache();
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+    debugPrint('[MemoryPressure] Cleared non-essential caches and image memory');
   }
 }
 
@@ -661,10 +665,17 @@ class _AppErrorBoundaryWidget extends StatefulWidget {
 
 class _AppErrorBoundaryWidgetState extends State<_AppErrorBoundaryWidget> {
   static int _consecutiveFailures = 0;
+  static DateTime? _lastFailureTime;
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    if (_lastFailureTime == null ||
+        now.difference(_lastFailureTime!) > const Duration(minutes: 2)) {
+      _consecutiveFailures = 0;
+    }
+    _lastFailureTime = now;
     _consecutiveFailures++;
     DiagnosticService.instance.record(
       'ui_build_error',
@@ -677,6 +688,7 @@ class _AppErrorBoundaryWidgetState extends State<_AppErrorBoundaryWidget> {
 
   void _retry() {
     _consecutiveFailures = 0;
+    _lastFailureTime = null;
     setState(() {});
   }
 
@@ -850,6 +862,7 @@ class _FpsOverlayState extends State<_FpsOverlay> {
     _active = true;
     _scheduleNextFrame();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (PowerMonitor.screenOff || DownloadEngine.isInBackground) return;
       if (mounted) {
         setState(() {
           _fps = _frameCount.toDouble();
@@ -860,9 +873,9 @@ class _FpsOverlayState extends State<_FpsOverlay> {
   }
 
   void _scheduleNextFrame() {
-    if (!_active || !mounted) return;
+    if (!_active || !mounted || PowerMonitor.screenOff || DownloadEngine.isInBackground) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_active || !mounted) return;
+      if (!_active || !mounted || PowerMonitor.screenOff || DownloadEngine.isInBackground) return;
       _frameCount++;
       _scheduleNextFrame();
     });

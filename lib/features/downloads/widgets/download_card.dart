@@ -1639,7 +1639,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
   @override
   Widget build(BuildContext context) {
     final settings = context.read<SettingsProvider>();
-    final isDark = settings.isDarkMode;
+    final isDark = context.select<SettingsProvider, bool>((s) => s.isDarkMode);
     final provider = context.read<DownloadProvider>();
     final statusColor = getEffectiveCardAccent(task, provider, isDark);
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
@@ -1880,6 +1880,11 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
 
     return Selector<DownloadProvider,
         ({int seeds, int peers, double uploadSpeed})>(
+      shouldRebuild: (prev, next) {
+        return (prev.seeds - next.seeds).abs() > 2 ||
+            (prev.peers - next.peers).abs() > 2 ||
+            (prev.uploadSpeed - next.uploadSpeed).abs() > 10240;
+      },
       selector: (context, provider) => (
         seeds: provider.getTorrentSeeds(widget.task.id),
         peers: provider.getTorrentPeers(widget.task.id),

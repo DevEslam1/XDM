@@ -405,7 +405,7 @@ class HttpTransferJob {
   }
 
   static final TimestampedLruMap<String, bool> _serverIdentityCache =
-      TimestampedLruMap<String, bool>(maxCapacity: 50);
+      TimestampedLruMap<String, bool>(maxCapacity: 25);
   static int probeSkipCount = 0;
   static int probeRunCount = 0;
 
@@ -1370,7 +1370,7 @@ class HttpTransferJob {
       _stateSavePending = true;
       _lastStateSaveMs = nowMs;
       _bytesSinceSave = 0;
-      unawaited(() async {
+      scheduleMicrotask(() async {
         try {
           if (preSaveFlush != null) await preSaveFlush();
           if (writer != null) await writer.flushBuffers();
@@ -1381,7 +1381,7 @@ class HttpTransferJob {
         } finally {
           _stateSavePending = false;
         }
-      }());
+      });
     }
 
     if (dueReport && !PowerMonitor.screenOff) {

@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import '../../../../core/services/database_service.dart';
+import '../../../../core/services/download_engine.dart';
+import '../../../../core/services/power_monitor.dart';
 import '../../../../features/settings/provider/settings_provider.dart';
 import '../../models/download_task.dart';
 
@@ -43,6 +45,11 @@ mixin DownloadQueueMixin {
   DatabaseService get providerDatabaseService; // FIX(13)
   set filteredTasksDirty(bool value); // FIX(13)
   void notifyListeners(); // FIX(13)
+
+  void safeNotify() {
+    if (DownloadEngine.isInBackground && PowerMonitor.screenOff) return;
+    notifyListeners();
+  }
 
   String get statusFilter;
   String get searchQuery;
@@ -125,7 +132,7 @@ mixin DownloadQueueMixin {
     }
     filteredTasksDirty = true;
     await providerDatabaseService.saveTasks(updates);
-    notifyListeners();
+    safeNotify();
   }
 
   // ---------------------------------------------------------------------------

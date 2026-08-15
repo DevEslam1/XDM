@@ -391,8 +391,8 @@ class DatabaseService {
       _pendingProgressSaves[task.id] = task;
     });
 
-    // FIX-M2: Higher threshold = fewer flushes (flush immediately if pending >= 20)
-    if (_pendingProgressSaves.length >= 20) {
+    // Flush immediately if pending saves reach batch threshold (10)
+    if (_pendingProgressSaves.length >= 10) {
       await flushPendingSaves();
       return;
     }
@@ -435,9 +435,7 @@ class DatabaseService {
     });
 
     if (toSave.isEmpty) return;
-    await _db.transaction(() async {
-      await saveTasks(toSave);
-    });
+    await saveTasks(toSave);
   }
 
   Future<void> saveTask(DownloadTask task) async {

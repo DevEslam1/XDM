@@ -4,9 +4,9 @@ import 'package:dmx/core/services/engine/engine_utils.dart';
 /// Coordinates YouTube audio/video stream pairs for synchronization.
 /// Task 1.2: Specialized Service for YT sync logic.
 class YtCounterpartCoordinator {
-  final _ytCounterpartTaskIds = TimestampedLruMap<String, String>(maxCapacity: 100);
-  final _ytLiveBytes = TimestampedLruMap<String, int>(maxCapacity: 100);
-  final _ytFinishedStreams = TimestampedLruMap<String, bool>(maxCapacity: 100);
+  final _ytCounterpartTaskIds = TimestampedLruMap<String, String>(maxCapacity: 50);
+  final _ytLiveBytes = TimestampedLruMap<String, int>(maxCapacity: 50);
+  final _ytFinishedStreams = TimestampedLruMap<String, bool>(maxCapacity: 50);
   final Set<Timer> _cleanupTimers = {};
   Timer? _periodicTimer;
 

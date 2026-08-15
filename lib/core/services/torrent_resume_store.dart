@@ -29,6 +29,7 @@ class TorrentResumeStore {
 
   /// torrentId → sourceUrl registry (populated by the engine on add).
   static final Map<int, String> _sourceByTorrentId = {};
+  static final Map<String, String> _lastSavedDigest = {};
 
   static Future<Directory> _dir() async {
     final support = await getApplicationSupportDirectory();
@@ -83,6 +84,7 @@ class TorrentResumeStore {
 
   static void unregisterSource(String sourceUrl) {
     _sourceByTorrentId.removeWhere((_, url) => url == sourceUrl);
+    _lastSavedDigest.remove(sourceUrl);
   }
 
   static const String _indexKey = 'torrent_resume_index';
@@ -134,6 +136,12 @@ class TorrentResumeStore {
         return false;
       }
 
+      final digest = sha256.convert(blob).toString();
+      if (_lastSavedDigest[sourceUrl] == digest) {
+        // Content unchanged, skip redundant disk I/O
+        return true;
+      }
+
       final dir = await _dir();
       final key = _stableKey(sourceUrl);
       final fileName = '$key.resume';
@@ -141,8 +149,6 @@ class TorrentResumeStore {
       final metaFile = File('${dir.path}/$key.meta.json');
       final blobTmp = File('${dir.path}/$fileName.tmp');
       final metaTmp = File('${dir.path}/$key.meta.json.tmp');
-
-      final digest = sha256.convert(blob).toString();
 
       final meta = jsonEncode({
         'sourceUrl': sourceUrl,
@@ -173,6 +179,7 @@ class TorrentResumeStore {
         return false;
       }
 
+      _lastSavedDigest[sourceUrl] = digest;
       registerSource(torrentId, sourceUrl);
       await _updateIndex(torrentId, fileName);
       return true;
@@ -305,6 +312,7 @@ class TorrentResumeStore {
 
   static Future<void> deleteResumeDataForSource(String sourceUrl) async {
     try {
+      _lastSavedDigest.remove(sourceUrl);
       final dir = await _dir();
       final key = _stableKey(sourceUrl);
       // FIX-M12: Delete all resume and metadata artifacts including temp files

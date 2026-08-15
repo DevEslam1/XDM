@@ -75,11 +75,13 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
-    final isDark = settings.isDarkMode;
+    final (:isDark, :enableGlow) = context.select<SettingsProvider,
+        ({bool isDark, bool enableGlow})>(
+      (s) => (isDark: s.isDarkMode, enableGlow: s.enableGlow),
+    );
     final filledContentColor =
         isDark ? AppTheme.background : AppTheme.lightBackground;
-    final effectiveGlow = widget.hasGlow || settings.enableGlow;
+    final effectiveGlow = widget.hasGlow || enableGlow;
     final enabled = widget.onPressed != null && !widget.isLoading;
     final glow = widget.glowColor ?? widget.color;
 
@@ -123,10 +125,13 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
         PerformanceMonitor.shouldReduceMotion;
 
     // Shimmer sweep across filled buttons
+    // ignore: deprecated_member_use
+    final isTickerActive = TickerMode.of(context);
     final label = (!reduceMotion &&
             effectiveGlow &&
             widget.isFilled &&
             enabled &&
+            isTickerActive &&
             !_shimmer.isDismissed)
         ? ClipRRect(
             borderRadius: BorderRadius.circular(12),
@@ -134,37 +139,40 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
               children: [
                 content,
                 Positioned.fill(
-                  child: AnimatedBuilder(
-                    animation: _shimmer,
-                    builder: (context, _) {
-                      return LayoutBuilder(
-                        builder: (context, c) {
-                          final w = c.maxWidth;
-                          final x = (w + 60) * _shimmer.value - 60;
-                          return Stack(
-                            children: [
-                              Positioned(
-                                left: x,
-                                top: 0,
-                                bottom: 0,
-                                child: Container(
-                                  width: 44,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Colors.white.withValues(alpha: 0),
-                                        Colors.white.withValues(alpha: 0.16),
-                                        Colors.white.withValues(alpha: 0),
-                                      ],
+                  child: TickerMode(
+                    enabled: isTickerActive,
+                    child: AnimatedBuilder(
+                      animation: _shimmer,
+                      builder: (context, _) {
+                        return LayoutBuilder(
+                          builder: (context, c) {
+                            final w = c.maxWidth;
+                            final x = (w + 60) * _shimmer.value - 60;
+                            return Stack(
+                              children: [
+                                Positioned(
+                                  left: x,
+                                  top: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    width: 44,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.white.withValues(alpha: 0),
+                                          Colors.white.withValues(alpha: 0.16),
+                                          Colors.white.withValues(alpha: 0),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                    },
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    ),
                   ),
                 ),
               ],

@@ -859,12 +859,16 @@ class TorrentService {
               _latestStats[value.id] = info; // FIX-22
               return MapEntry(key, info);
             });
-            // PERF-1: Throttle to 2s when app is backgrounded or screen is off
+            if (PowerMonitor.screenOff && _activeTorrentIds.isEmpty) {
+              return;
+            }
+            // PERF: Throttle updates according to app & screen power state
             _pendingUpdate = mapped;
             final now = DateTime.now();
-            final interval =
-                PowerMonitor.screenOff || !DownloadEngine.appInForeground
-                    ? const Duration(seconds: 2)
+            final interval = PowerMonitor.screenOff
+                ? const Duration(seconds: 120)
+                : DownloadEngine.isInBackground
+                    ? const Duration(seconds: 30)
                     : const Duration(milliseconds: 500);
             if (_lastEmitTime == null ||
                 now.difference(_lastEmitTime!) >= interval) {

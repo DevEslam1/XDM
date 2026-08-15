@@ -15,6 +15,7 @@ import '../../core/app_theme.dart';
 import '../../core/services/app_lock_service.dart';
 import '../../core/services/background_service.dart';
 import '../../core/services/clipboard_service.dart';
+import '../../core/services/power_monitor.dart';
 import '../../core/services/share_service.dart';
 import '../../core/services/share_url_handler.dart';
 import '../../core/services/single_instance_service.dart';
@@ -395,15 +396,10 @@ class _FadeIndexedStackState extends State<_FadeIndexedStack>
       child: IndexedStack(
         index: widget.index,
         children: List.generate(widget.children.length, (i) {
-          if (i == widget.index || (i - widget.index).abs() == 1) {
-            return widget.children[i];
-          }
-          return Offstage(
-            offstage: true,
-            child: TickerMode(
-              enabled: false,
-              child: widget.children[i],
-            ),
+          final isCurrent = i == widget.index;
+          return TickerMode(
+            enabled: isCurrent,
+            child: widget.children[i],
           );
         }),
       ),
@@ -444,10 +440,11 @@ class _PhoneBottomNavBar extends StatelessWidget {
           : const Offset(0, 1.8),
       duration: AppTheme.motionBase,
       curve: AppTheme.motionCurve,
-      child: SafeArea(
-        top: false,
-        child: Container(
-          margin: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
+      child: RepaintBoundary(
+        child: SafeArea(
+          top: false,
+          child: Container(
+            margin: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
           alignment: Alignment.bottomCenter,
           child: Container(
             constraints: const BoxConstraints(maxWidth: 480),
@@ -536,8 +533,9 @@ class _PhoneBottomNavBar extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _TabletFloatingNavBar extends StatelessWidget {
@@ -573,67 +571,68 @@ class _TabletFloatingNavBar extends StatelessWidget {
           : const Offset(0, 1.8),
       duration: AppTheme.motionSlow,
       curve: AppTheme.motionCurve,
-      child: SafeArea(
-        top: false,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 24, left: 32, right: 32),
-          alignment: Alignment.bottomCenter,
-          constraints: const BoxConstraints(minHeight: 70),
+      child: RepaintBoundary(
+        child: SafeArea(
+          top: false,
           child: Container(
-            constraints: const BoxConstraints(maxWidth: 460),
-            decoration: settingsTuple.classicUi
-                ? BoxDecoration(
-                    color: navBg,
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                      color: isDark
-                          ? (settingsTuple.isAmoled
-                              ? AppTheme.amoledBorder
-                              : AppTheme.border)
-                          : AppTheme.lightBorder,
-                      width: 1.0,
-                    ),
-                  )
-                : BoxDecoration(
-                    color: navBg.withValues(
-                      alpha: settingsTuple.isAmoled ? 1.0 : 0.7,
-                    ),
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                      color: isDark
-                          ? (settingsTuple.isAmoled
-                              ? AppTheme.amoledBorder
-                              : AppTheme.glassBorder)
-                          : AppTheme.lightGlassBorder,
-                      width: 0.8,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(
-                          alpha: isDark ? 0.45 : 0.15,
-                        ),
-                        blurRadius: 20,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 8),
+            margin: const EdgeInsets.only(bottom: 24, left: 32, right: 32),
+            alignment: Alignment.bottomCenter,
+            constraints: const BoxConstraints(minHeight: 70),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 460),
+              decoration: settingsTuple.classicUi
+                  ? BoxDecoration(
+                      color: navBg,
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                        color: isDark
+                            ? (settingsTuple.isAmoled
+                                ? AppTheme.amoledBorder
+                                : AppTheme.border)
+                            : AppTheme.lightBorder,
+                        width: 1.0,
                       ),
-                    ],
-                  ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(30),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _NavItem(
-                      index: 0,
-                      icon: Icons.file_download_outlined,
-                      activeIcon: Icons.file_download,
-                      label: L10n.of(context, 'title_transmissions'),
-                      settingsTuple: settingsTuple,
-                      isDark: isDark,
-                      currentIndex: currentIndex,
+                    )
+                  : BoxDecoration(
+                      color: navBg.withValues(
+                        alpha: settingsTuple.isAmoled ? 1.0 : 0.7,
+                      ),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                        color: isDark
+                            ? (settingsTuple.isAmoled
+                                ? AppTheme.amoledBorder
+                                : AppTheme.glassBorder)
+                            : AppTheme.lightGlassBorder,
+                        width: 0.8,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(
+                            alpha: isDark ? 0.45 : 0.15,
+                          ),
+                          blurRadius: 20,
+                          spreadRadius: 2,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
                     ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(30),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _NavItem(
+                        index: 0,
+                        icon: Icons.file_download_outlined,
+                        activeIcon: Icons.file_download,
+                        label: L10n.of(context, 'title_transmissions'),
+                        settingsTuple: settingsTuple,
+                        isDark: isDark,
+                        currentIndex: currentIndex,
+                      ),
                       _NavItem(
                         index: 1,
                         icon: Icons.language_outlined,
@@ -659,7 +658,8 @@ class _TabletFloatingNavBar extends StatelessWidget {
             ),
           ),
         ),
-      );
+      ),
+    );
   }
 }
 
@@ -720,11 +720,12 @@ class _NavigationRailWidget extends StatelessWidget {
             ? AppTheme.lightBorder
             : AppTheme.lightGlassBorder);
 
+    final useSolidNav = settingsTuple.classicUi || PowerMonitor.isLowEndDevice;
     return Container(
       width: totalRailWidth,
       height: double.infinity,
       decoration: BoxDecoration(
-        color: settingsTuple.classicUi
+        color: useSolidNav
             ? navBg
             : navBg.withValues(
                 alpha: settingsTuple.isAmoled ? 1.0 : 0.85,
@@ -739,8 +740,9 @@ class _NavigationRailWidget extends StatelessWidget {
         ),
       ),
       child: DmxBackdropFilter(
-        sigmaX: settingsTuple.classicUi ? 0 : 16,
-        sigmaY: settingsTuple.classicUi ? 0 : 16,
+        sigmaX: useSolidNav ? 0 : 16,
+        sigmaY: useSolidNav ? 0 : 16,
+        forceSolid: useSolidNav,
         child: SafeArea(
           top: true,
           bottom: true,

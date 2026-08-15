@@ -358,12 +358,18 @@ class BackgroundService {
         _,
       ) async {
         if (!isSupported) return;
+        final activeCount = await _checkActiveDownloadCount();
+        if (activeCount == 0) {
+          _log.fine('Releasing wake lock during renewal: no active downloads');
+          await releaseWakeLock();
+          return;
+        }
+        if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
+          _log.fine('Releasing wake lock during renewal due to low battery');
+          await releaseWakeLock();
+          return;
+        }
         try {
-          if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
-            _log.fine('Releasing wake lock during renewal due to low battery');
-            await releaseWakeLock();
-            return;
-          }
           await _wakeLockChannel.invokeMethod<void>('acquire');
           _wakeLockHeld = true;
           _wakeLockRenewalFailures = 0;

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dmx/core/services/download_engine.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
@@ -13,7 +14,6 @@ class SharedPrefsBatcher {
   final Map<String, dynamic> _pendingWrites = {};
   final Set<String> _pendingRemovals = {};
   Timer? _flushTimer;
-  static const Duration _flushInterval = Duration(seconds: 30);
 
   void setString(String key, String value) => _stage(key, value);
   void setInt(String key, int value) => _stage(key, value);
@@ -39,7 +39,10 @@ class SharedPrefsBatcher {
   }
 
   void _scheduleFlush() {
-    _flushTimer ??= Timer(_flushInterval, () {
+    final interval = DownloadEngine.isInBackground
+        ? const Duration(seconds: 120)
+        : const Duration(seconds: 30);
+    _flushTimer ??= Timer(interval, () {
       flush();
     });
   }

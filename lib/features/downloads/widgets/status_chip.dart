@@ -22,7 +22,7 @@ class StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.watch<SettingsProvider>().isDarkMode;
+    final isDark = context.select<SettingsProvider, bool>((s) => s.isDarkMode);
 
     Color color;
     String label;

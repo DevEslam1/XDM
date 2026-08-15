@@ -88,9 +88,12 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
 
   void _tryAllocate() {
     final blurEnabled = widget.enableBlur ?? BackgroundGate.shouldAnimate;
+    final isBatterySaver =
+        PowerMonitor.batterySaverMode != BatterySaverMode.off;
     if (!kIsWeb &&
         !DmxBackdropFilter.disabled &&
         !widget.forceSolid &&
+        !isBatterySaver &&
         blurEnabled &&
         !_isLowEndDevice &&
         BackgroundGate.allowHeavyOps &&
@@ -117,10 +120,27 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final blurEnabled = widget.enableBlur ?? BackgroundGate.shouldAnimate;
-    if (_allocated && (kIsWeb || DmxBackdropFilter.disabled || !blurEnabled || !BackgroundGate.allowHeavyOps || PowerMonitor.screenOff || PerformanceMonitor.shouldReduceMotion)) {
-      DmxBackdropFilter._activeCount = max(0, DmxBackdropFilter._activeCount - 1);
+    final isBatterySaver =
+        PowerMonitor.batterySaverMode != BatterySaverMode.off;
+    if (_allocated &&
+        (kIsWeb ||
+            DmxBackdropFilter.disabled ||
+            isBatterySaver ||
+            !blurEnabled ||
+            !BackgroundGate.allowHeavyOps ||
+            PowerMonitor.screenOff ||
+            PerformanceMonitor.shouldReduceMotion)) {
+      DmxBackdropFilter._activeCount =
+          max(0, DmxBackdropFilter._activeCount - 1);
       _allocated = false;
-    } else if (!_allocated && !kIsWeb && !DmxBackdropFilter.disabled && blurEnabled && BackgroundGate.allowHeavyOps && !PowerMonitor.screenOff && !PerformanceMonitor.shouldReduceMotion) {
+    } else if (!_allocated &&
+        !kIsWeb &&
+        !DmxBackdropFilter.disabled &&
+        !isBatterySaver &&
+        blurEnabled &&
+        BackgroundGate.allowHeavyOps &&
+        !PowerMonitor.screenOff &&
+        !PerformanceMonitor.shouldReduceMotion) {
       _tryAllocate();
     }
   }
@@ -128,9 +148,12 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   @override
   Widget build(BuildContext context) {
     final blurEnabled = widget.enableBlur ?? BackgroundGate.shouldAnimate;
+    final isBatterySaver =
+        PowerMonitor.batterySaverMode != BatterySaverMode.off;
     if (kIsWeb ||
         DmxBackdropFilter.disabled ||
         _isLowEndDevice ||
+        isBatterySaver ||
         !blurEnabled ||
         widget.forceSolid ||
         PowerMonitor.screenOff ||
@@ -140,7 +163,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
       return RepaintBoundary(
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.35),
+            color: Colors.black.withValues(alpha: 0.85),
           ),
           child: widget.child,
         ),

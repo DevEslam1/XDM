@@ -1,3 +1,5 @@
+import '../../../../core/services/download_engine.dart';
+import '../../../../core/services/power_monitor.dart';
 import '../../../../core/utils/file_utils.dart';
 import '../../models/download_task.dart';
 
@@ -14,6 +16,11 @@ mixin DownloadFilterMixin {
   List<DownloadTask> get providerTasks;
   void notifyListeners();
   DownloadTask? findTaskById(String id);
+
+  void safeNotify() {
+    if (DownloadEngine.isInBackground && PowerMonitor.screenOff) return;
+    notifyListeners();
+  }
 
   // ---------------------------------------------------------------------------
   // State
@@ -59,18 +66,18 @@ mixin DownloadFilterMixin {
     } else {
       _selectedTaskIds.add(id);
     }
-    notifyListeners();
+    safeNotify();
   }
 
   void selectAllTasks({Iterable<String>? visibleTaskIds}) {
     _selectedTaskIds.clear();
     _selectedTaskIds.addAll(visibleTaskIds ?? filteredTasks.map((t) => t.id));
-    notifyListeners();
+    safeNotify();
   }
 
   void clearTaskSelection() {
     _selectedTaskIds.clear();
-    notifyListeners();
+    safeNotify();
   }
 
   // ---------------------------------------------------------------------------
@@ -222,27 +229,27 @@ mixin DownloadFilterMixin {
     if (_searchQuery == query) return;
     _searchQuery = query;
     _filteredTasksDirty = true;
-    notifyListeners();
+    safeNotify();
   }
 
   void setStatusFilter(String filter) {
     if (_statusFilter == filter) return;
     _statusFilter = filter;
     _filteredTasksDirty = true;
-    notifyListeners();
+    safeNotify();
   }
 
   void setSortOption(SortOption option) {
     if (_sortOption == option) return;
     _sortOption = option;
     _filteredTasksDirty = true;
-    notifyListeners();
+    safeNotify();
   }
 
   void toggleSortDirection() {
     _sortAscending = !_sortAscending;
     _filteredTasksDirty = true;
-    notifyListeners();
+    safeNotify();
   }
 
   void setCategoryFilter(String? category) {
@@ -251,7 +258,7 @@ mixin DownloadFilterMixin {
       _categoryFilters.add(category);
     }
     _filteredTasksDirty = true;
-    notifyListeners();
+    safeNotify();
   }
 
   void toggleCategoryFilter(String category) {
@@ -261,30 +268,30 @@ mixin DownloadFilterMixin {
       _categoryFilters.add(category);
     }
     _filteredTasksDirty = true;
-    notifyListeners();
+    safeNotify();
   }
 
   void clearCategoryFilters() {
     _categoryFilters.clear();
     _filteredTasksDirty = true;
-    notifyListeners();
+    safeNotify();
   }
 
   void setNavbarVisible(bool visible) {
     if (_isNavbarVisible != visible) {
       _isNavbarVisible = visible;
-      notifyListeners();
+      safeNotify();
     }
   }
 
   void setMixinActiveTabIndex(int index, {void Function()? onBrowserTab}) {
     _isNavbarVisible = true;
     if (_activeTabIndex == index) {
-      notifyListeners();
+      safeNotify();
       return;
     }
     _activeTabIndex = index;
-    notifyListeners();
+    safeNotify();
     if (index == 1) {
       onBrowserTab?.call();
     }
@@ -294,7 +301,7 @@ mixin DownloadFilterMixin {
     _browserUrlToLoad = url;
     _activeTabIndex = 1;
     _isNavbarVisible = true;
-    notifyListeners();
+    safeNotify();
   }
 
   void clearBrowserUrlToLoad() {

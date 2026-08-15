@@ -514,6 +514,10 @@ class DownloadProvider extends ChangeNotifier
       _speedHistories.remove(completedTaskId);
       _uploadSpeedHistories.remove(completedTaskId);
     }
+    final allTaskIds = _tasks.map((t) => t.id).toSet();
+    _speedHistories.removeWhere((id, _) => !allTaskIds.contains(id));
+    _uploadSpeedHistories.removeWhere((id, _) => !allTaskIds.contains(id));
+
     final activeIds = _tasks
         .where((t) =>
             t.status == DownloadStatus.downloading ||
@@ -525,15 +529,20 @@ class DownloadProvider extends ChangeNotifier
     _speedHistories.removeWhere((id, _) => !activeIds.contains(id));
     _uploadSpeedHistories.removeWhere((id, _) => !activeIds.contains(id));
 
-    // Cap at 20 entries per queue
-    for (final q in _speedHistories.values) {
-      while (q.length > 20) {
-        q.removeFirst();
+    // Cap Queue length at 5 for non-downloading tasks, 20 for active
+    for (final entry in _speedHistories.entries) {
+      final task = _findTask(entry.key);
+      final maxLen = task?.status == DownloadStatus.downloading ? 20 : 5;
+      while (entry.value.length > maxLen) {
+        entry.value.removeFirst();
       }
     }
-    for (final q in _uploadSpeedHistories.values) {
-      while (q.length > 20) {
-        q.removeFirst();
+    for (final entry in _uploadSpeedHistories.entries) {
+      final task = _findTask(entry.key);
+      final isSeeding = task?.isTorrent == true && task?.seedingEnabled == true;
+      final maxLen = (task?.status == DownloadStatus.downloading || isSeeding) ? 20 : 5;
+      while (entry.value.length > maxLen) {
+        entry.value.removeFirst();
       }
     }
 

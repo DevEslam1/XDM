@@ -20,11 +20,15 @@ class TimestampedEntry<V> {
 }
 
 class TimestampedLruMap<K, V> {
-  TimestampedLruMap({this.maxCapacity = 100});
+  TimestampedLruMap({this.maxCapacity = 50});
   final int maxCapacity;
   final LinkedHashMap<K, TimestampedEntry<V>> _map = LinkedHashMap();
 
   int get length => _map.length;
+  bool get isEmpty => _map.isEmpty;
+  bool get isNotEmpty => _map.isNotEmpty;
+
+  void clear() => _map.clear();
 
   V? get(K key) {
     final entry = _map.remove(key);

@@ -118,9 +118,11 @@ class DownloadIsolatePool implements MemoryPressureListener {
   bool _isSpawning = false;
   Timer? _idleCheckTimer;
   Timer? _sweepCrashCountsTimer;
+  Timer? _bgIdleReaper;
+  bool _foregroundListenerAttached = false;
 
   int get effectiveMaxSize {
-    if (PowerMonitor.screenOff) {
+    if (PowerMonitor.screenOff || PowerMonitor.isLowEndDevice) {
       return 1;
     }
     if (DownloadEngine.isInBackground) {
@@ -152,6 +154,57 @@ class DownloadIsolatePool implements MemoryPressureListener {
     }
     _startIdleCheckTimer();
     _startCrashCountSweepTimer();
+    if (!_foregroundListenerAttached) {
+      _foregroundListenerAttached = true;
+      DownloadEngine.appInForegroundNotifier.addListener(_onForegroundChanged);
+    }
+    if (DownloadEngine.isInBackground) {
+      _startBgIdleReaper();
+    }
+  }
+
+  void _onForegroundChanged() {
+    if (DownloadEngine.appInForeground) {
+      _bgIdleReaper?.cancel();
+      _bgIdleReaper = null;
+      // On foreground return, respawn workers up to effectiveMaxSize
+      _maybeExpandWorkers();
+    } else {
+      _startBgIdleReaper();
+    }
+  }
+
+  void _startBgIdleReaper() {
+    _bgIdleReaper?.cancel();
+    _bgIdleReaper = Timer.periodic(const Duration(seconds: 60), (_) {
+      _reapBackgroundIdleWorkers();
+    });
+  }
+
+  void _reapBackgroundIdleWorkers() {
+    if (_shuttingDown || _workers.length <= 1) return;
+    if (!DownloadEngine.isInBackground) return;
+
+    final toRemove = <_Worker>[];
+    for (final w in _workers) {
+      if (w.activeJobs == 0 && !w.dead && w.pending.isEmpty) {
+        w.dead = true;
+        toRemove.add(w);
+        if (_workers.length - toRemove.length <= 1) break;
+      }
+    }
+
+    for (final w in toRemove) {
+      _workers.remove(w);
+      try {
+        w.commandPort?.send({'t': 'shutdown'});
+      } catch (e, st) {
+        LoggingService.logger('DownloadIsolatePool').warning('Operation failed', e, st);
+      }
+      w.inbox.close();
+      w.errorPort.close();
+      w.isolate.kill(priority: Isolate.beforeNextEvent);
+    }
   }
 
   void _startCrashCountSweepTimer() {
@@ -176,9 +229,11 @@ class DownloadIsolatePool implements MemoryPressureListener {
         (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ||
             PowerMonitor.screenOff ||
             _workers.length > effectiveMaxSize);
-    final idleThreshold = isPowerConstrained
-        ? const Duration(seconds: 5)
-        : const Duration(seconds: 30);
+    final idleThreshold = DownloadEngine.isInBackground
+        ? const Duration(seconds: 30)
+        : isPowerConstrained
+            ? const Duration(seconds: 5)
+            : const Duration(seconds: 30);
 
     for (final w in _workers) {
       if (w.activeJobs == 0 &&
@@ -196,8 +251,8 @@ class DownloadIsolatePool implements MemoryPressureListener {
       try {
         w.commandPort?.send({'t': 'shutdown'});
       } catch (e, st) {
-      LoggingService.logger('DownloadIsolatePool').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('DownloadIsolatePool').warning('Operation failed', e, st);
+      }
       w.inbox.close();
       w.errorPort.close();
       w.isolate.kill(priority: Isolate.beforeNextEvent);
@@ -428,6 +483,13 @@ class DownloadIsolatePool implements MemoryPressureListener {
     _idleCheckTimer = null;
     _sweepCrashCountsTimer?.cancel();
     _sweepCrashCountsTimer = null;
+    _bgIdleReaper?.cancel();
+    _bgIdleReaper = null;
+    if (_foregroundListenerAttached) {
+      DownloadEngine.appInForegroundNotifier
+          .removeListener(_onForegroundChanged);
+      _foregroundListenerAttached = false;
+    }
     _queue.clear();
     for (final w in _workers) {
       w.commandPort?.send({'t': 'shutdown'});
