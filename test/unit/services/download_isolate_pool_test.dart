@@ -207,4 +207,26 @@ void main() {
     await pool.shutdown();
     await server.close();
   });
+
+  test('PoolMetrics reflects workers and job status accurately', () async {
+    final pool = DownloadIsolatePool(size: 2);
+    await pool.init();
+
+    var metrics = pool.poolMetrics;
+    expect(metrics.totalWorkers, 2);
+    expect(metrics.idleWorkers, 2);
+    expect(metrics.busyWorkers, 0);
+    expect(metrics.queuedJobs, 0);
+    expect(metrics.completedJobs, 0);
+    expect(metrics.failedJobs, 0);
+
+    pool.reportJobCompleted();
+    pool.reportJobFailed();
+
+    metrics = pool.poolMetrics;
+    expect(metrics.completedJobs, 1);
+    expect(metrics.failedJobs, 1);
+
+    await pool.shutdown();
+  });
 }

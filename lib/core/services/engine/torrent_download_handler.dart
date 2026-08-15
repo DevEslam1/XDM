@@ -71,27 +71,29 @@ class TorrentDownloadHandler {
 
   static void distributeEstimatedBytes(
       List<Map<String, dynamic>> files, int totalDownloadedBytes) {
-    final needing = files.where((f) {
+    int confirmedBytes = 0;
+    int totalNeedingSize = 0;
+    final needing = <Map<String, dynamic>>[];
+
+    for (var i = 0; i < files.length; i++) {
+      final f = files[i];
       final estimated = (f['progressEstimated'] as bool?) ?? true;
-      if (!estimated) return false;
       final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
       final len = (f['length'] as num?)?.toInt() ?? 0;
-      return dl < len;
-    }).toList();
+
+      if (!estimated) {
+        confirmedBytes += dl;
+      } else if (dl < len) {
+        needing.add(f);
+        totalNeedingSize += len;
+      }
+    }
 
     if (needing.isEmpty) return;
 
-    int confirmedBytes = 0;
-    for (final f in files) {
-      if ((f['progressEstimated'] as bool?) == false) {
-        confirmedBytes += (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-      }
-    }
     final remaining = max(0, totalDownloadedBytes - confirmedBytes);
-    final totalNeedingSize = needing.fold<int>(
-        0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
-
-    for (final f in needing) {
+    for (var i = 0; i < needing.length; i++) {
+      final f = needing[i];
       final length = (f['length'] as num?)?.toInt() ?? 0;
       if (length <= 0) {
         f['downloadedBytes'] = 0;
@@ -405,13 +407,10 @@ class TorrentDownloadHandler {
           distributeEstimatedBytes(resolvedFiles, rawDownloaded);
         }
 
-        final perFileSum = resolvedFiles?.fold<int>(
-                0, (s, f) => s + ((f['downloadedBytes'] as num?)?.toInt() ?? 0)) ??
-            0;
-        final downloadedBytes = perFileSum > 0 ? perFileSum : rawDownloaded;
-
+        int perFileSum = 0;
         if (resolvedFiles != null) {
-          for (final f in resolvedFiles) {
+          for (var i = 0; i < resolvedFiles.length; i++) {
+            final f = resolvedFiles[i];
             final len = (f['length'] as num?)?.toInt() ?? 0;
             var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
             if (len > 0) {
@@ -419,8 +418,10 @@ class TorrentDownloadHandler {
               f['downloadedBytes'] = dl;
               f['progress'] = (dl / len).clamp(0.0, 1.0);
             }
+            perFileSum += dl;
           }
         }
+        final downloadedBytes = perFileSum > 0 ? perFileSum : rawDownloaded;
 
         if (stateLabel == 'seeding' ||
             (totalSize > 0 && downloadedBytes >= totalSize)) {

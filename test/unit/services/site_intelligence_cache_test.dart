@@ -73,5 +73,14 @@ void main() {
       SiteIntelligenceService.clearFastPathCache();
       await service.dispose();
     });
+
+    test('onMemoryPressure purges cache and flushes pending', () async {
+      final service = SiteIntelligenceService();
+      const url = 'https://customcdn.example.org/files/archive2.zip';
+      service.analyzeUrl(url);
+
+      service.onMemoryPressure();
+      await service.dispose();
+    });
   });
 }

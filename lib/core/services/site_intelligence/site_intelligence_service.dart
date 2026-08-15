@@ -217,6 +217,12 @@ class SiteIntelligenceService {
   @visibleForTesting
   static void clearFastPathCache() => _fastPathCache.clear();
 
+  /// Clears in-memory caches and flushes pending writes under memory pressure.
+  void onMemoryPressure() {
+    _fastPathCache.clear();
+    flushPending();
+  }
+
   final Map<String, SiteReliability> _reliability = {};
   bool _loaded = false;
   bool _disposed = false;

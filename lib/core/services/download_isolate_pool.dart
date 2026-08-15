@@ -41,6 +41,28 @@ class EngineMessage {
   }
 }
 
+class PoolMetrics {
+  final int totalWorkers;
+  final int busyWorkers;
+  final int idleWorkers;
+  final int queuedJobs;
+  final int completedJobs;
+  final int failedJobs;
+
+  const PoolMetrics({
+    required this.totalWorkers,
+    required this.busyWorkers,
+    required this.idleWorkers,
+    required this.queuedJobs,
+    required this.completedJobs,
+    required this.failedJobs,
+  });
+
+  @override
+  String toString() =>
+      'PoolMetrics(totalWorkers: $totalWorkers, busyWorkers: $busyWorkers, idleWorkers: $idleWorkers, queuedJobs: $queuedJobs, completedJobs: $completedJobs, failedJobs: $failedJobs)';
+}
+
 class DownloadIsolatePool implements MemoryPressureListener {
   DownloadIsolatePool({
     int size = 4,
@@ -59,6 +81,25 @@ class DownloadIsolatePool implements MemoryPressureListener {
   /// re-queue (transient) then permanently fail (repeated native crashes).
   final Map<String, int> _jobCrashCounts = {};
   static const int _maxJobCrashRetries = 3;
+
+  int _completedJobs = 0;
+  int _failedJobs = 0;
+
+  void reportJobCompleted() => _completedJobs++;
+  void reportJobFailed() => _failedJobs++;
+
+  PoolMetrics get poolMetrics {
+    final busy = _workers.where((w) => !w.dead && w.activeJobs > 0).length;
+    final idle = _workers.where((w) => !w.dead && w.activeJobs == 0).length;
+    return PoolMetrics(
+      totalWorkers: _workers.length,
+      busyWorkers: busy,
+      idleWorkers: idle,
+      queuedJobs: _queue.length,
+      completedJobs: _completedJobs,
+      failedJobs: _failedJobs,
+    );
+  }
 
   bool _shuttingDown = false;
   int _seq = 0;

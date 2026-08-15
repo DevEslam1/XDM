@@ -1671,6 +1671,8 @@ class _DownloadTaskList extends StatelessWidget {
             contentWidget = KeyedSubtree(
               key: const ValueKey('reorderable'),
               child: ReorderableListView.builder(
+                // ignore: deprecated_member_use
+                cacheExtent: 500.0,
                 padding: EdgeInsets.only(
                   left: screenPadding(context).left,
                   right: screenPadding(context).left,
@@ -1765,6 +1767,8 @@ class _DownloadTaskList extends StatelessWidget {
               contentWidget = KeyedSubtree(
                 key: const ValueKey('grid'),
                 child: GridView.builder(
+                  // ignore: deprecated_member_use
+                  cacheExtent: 500.0,
                   padding: EdgeInsets.only(
                     left: screenPadding(context).left,
                     right: screenPadding(context).left,
@@ -1840,6 +1844,8 @@ class _DownloadTaskList extends StatelessWidget {
               contentWidget = KeyedSubtree(
                 key: const ValueKey('list'),
                 child: ListView.separated(
+                  // ignore: deprecated_member_use
+                  cacheExtent: 500.0,
                   padding: EdgeInsets.only(
                     left: screenPadding(context).left,
                     right: screenPadding(context).left,
