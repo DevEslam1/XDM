@@ -351,14 +351,21 @@ class DownloadIsolatePool implements MemoryPressureListener {
     worker.isolate.kill(priority: Isolate.immediate);
     if (!_shuttingDown) {
       _workers.remove(worker);
-      if (_workers.isEmpty) {
-        _spawnWorker(0).then((w) {
-          _workers.add(w);
+      Future.microtask(() async {
+        if (_shuttingDown) return;
+        if (_workers.isEmpty) {
+          try {
+            final w = await _spawnWorker(0);
+            _workers.add(w);
+            _drain();
+          } catch (e, st) {
+            LoggingService.logger('DownloadIsolatePool')
+                .warning('Failed to respawn worker after crash', e, st);
+          }
+        } else {
           _drain();
-        });
-      } else {
-        _drain();
-      }
+        }
+      });
     }
   }
 

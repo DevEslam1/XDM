@@ -15,6 +15,10 @@ final _log = LoggingService.logger('TorrentDownloadHandler');
 
 class TorrentDownloadHandler {
   final Set<int> _activeTorrentIds = {};
+  DateTime lastProgressTick = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime lastAccurateSync = DateTime.fromMillisecondsSinceEpoch(0);
+  List<Map<String, dynamic>>? cachedAccurateFiles;
+  String lastStateLabel = '';
 
   TorrentDownloadHandler();
 
@@ -173,8 +177,8 @@ class TorrentDownloadHandler {
                 await tempTorrentFile.delete();
               }
             } catch (e, st) {
-      LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
+            }
           }
         } else {
           id = TorrentService.addTorrentFile(filePath, saveDir, sourceKey: url);
@@ -199,8 +203,8 @@ class TorrentDownloadHandler {
       try {
         TorrentService.pauseTorrent(id);
       } catch (e, st) {
-      LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
+      }
       await Future.delayed(const Duration(milliseconds: 200));
       List<Map<String, dynamic>>? pauseFiles = getTorrentFiles?.call();
       try {
@@ -222,8 +226,8 @@ class TorrentDownloadHandler {
               .toList();
         }
       } catch (e, st) {
-      LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
+      }
       final pauseSummary = normalizeTorrentFiles(pauseFiles);
       onProgress(DownloadProgress(
         downloadedBytes: pauseSummary.downloaded,
@@ -247,8 +251,8 @@ class TorrentDownloadHandler {
       try {
         TorrentService.pauseTorrent(id);
       } catch (e, st) {
-      LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
+      }
       throw DioException(
         requestOptions: RequestOptions(path: url),
         type: DioExceptionType.cancel,
@@ -284,145 +288,150 @@ class TorrentDownloadHandler {
     final completer = Completer<void>();
     StreamSubscription? sub;
     final saveDir = File(localFilePath).parent.path;
-    DateTime lastProgressTick = DateTime.fromMillisecondsSinceEpoch(0);
-    DateTime lastAccurateSync = DateTime.fromMillisecondsSinceEpoch(0);
-    List<Map<String, dynamic>>? cachedAccurateFiles;
-    String lastStateLabel = '';
 
-    sub = TorrentService.torrentUpdates.listen((torrents) async {
-      final torrent = torrents[id];
-      if (torrent == null) {
-        if (!TorrentService.isTorrentAlive(id)) {
+    lastProgressTick = DateTime.fromMillisecondsSinceEpoch(0);
+    lastAccurateSync = DateTime.fromMillisecondsSinceEpoch(0);
+    cachedAccurateFiles = null;
+    lastStateLabel = '';
+
+    try {
+      sub = TorrentService.torrentUpdates.listen((torrents) async {
+        final torrent = torrents[id];
+        if (torrent == null) {
+          if (!TorrentService.isTorrentAlive(id)) {
+            sub?.cancel();
+            _activeTorrentIds.remove(id);
+            if (!completer.isCompleted) {
+              completer.completeError(DioException(
+                requestOptions: RequestOptions(path: url),
+                type: DioExceptionType.unknown,
+                error: 'Torrent handle lost.',
+              ));
+            }
+          }
+          return;
+        }
+
+        final stateLabel = torrent.stateLabel.toLowerCase();
+        final isStateChange = stateLabel != lastStateLabel;
+        final isTerminal = stateLabel == 'seeding' ||
+            stateLabel == 'paused' ||
+            stateLabel == 'stopped' ||
+            stateLabel == 'error';
+        final now = DateTime.now();
+        if (!isTerminal &&
+            !isStateChange &&
+            now.difference(lastProgressTick) < const Duration(milliseconds: 750)) {
+          return;
+        }
+        lastProgressTick = now;
+        lastStateLabel = stateLabel;
+
+        final isCheckingOrMetadata = stateLabel == 'checking' ||
+            stateLabel == 'downloading_metadata' ||
+            stateLabel == 'queued_for_checking' ||
+            !torrent.hasMetadata;
+
+        List<Map<String, dynamic>>? resolvedFiles = getTorrentFiles?.call();
+        final cachedFileCount = cachedAccurateFiles?.length ?? 0;
+        // FIX-BG-05: Large torrents skip expensive per-file progress queries.
+        final skipPerFileSync = cachedFileCount > 1000;
+        if (!isCheckingOrMetadata &&
+            torrent.hasMetadata &&
+            !PowerMonitor.screenOff &&
+            !skipPerFileSync) {
+          // FIX-P1-02 / FIX-BG-04: Throttle accurate file progress (4s foreground, 30s background)
+          final syncInterval = DownloadEngine.isInBackground
+              ? const Duration(seconds: 30)
+              : const Duration(seconds: 4);
+
+          if (now.difference(lastAccurateSync) >= syncInterval || cachedAccurateFiles == null) {
+            lastAccurateSync = now;
+            try {
+              final accurate =
+                  await TorrentService.getAccurateFileProgress(id, saveDir);
+              if (accurate.isNotEmpty) {
+                cachedAccurateFiles = accurate
+                    .map((f) => {
+                          'name': f.name,
+                          'length': f.size,
+                          'downloadedBytes': f.downloadedBytes,
+                          'selected': true,
+                          'priority': 4,
+                          'progress': f.progress,
+                          'percent': f.progress,
+                          'isComplete': f.isComplete,
+                          'progressEstimated': false,
+                        })
+                    .toList();
+              }
+            } catch (e, st) {
+              LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
+            }
+          }
+          if (cachedAccurateFiles != null) {
+            resolvedFiles = cachedAccurateFiles;
+          }
+        }
+
+        final totalWanted = torrent.totalWanted;
+        final totalSize = totalWanted > 0
+            ? totalWanted
+            : (resolvedFiles?.fold<int>(
+                    0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0)) ??
+                0);
+
+        final torrentAggregate = torrent.totalWantedDone > 0
+            ? torrent.totalWantedDone
+            : (torrent.totalDone > 0 ? torrent.totalDone : 0);
+
+        final rawDownloaded = torrentAggregate > 0 ? torrentAggregate : 0;
+        if (rawDownloaded > 0 && resolvedFiles != null) {
+          distributeEstimatedBytes(resolvedFiles, rawDownloaded);
+        }
+
+        final perFileSum = resolvedFiles?.fold<int>(
+                0, (s, f) => s + ((f['downloadedBytes'] as num?)?.toInt() ?? 0)) ??
+            0;
+        final downloadedBytes = perFileSum > 0 ? perFileSum : rawDownloaded;
+
+        if (resolvedFiles != null) {
+          for (final f in resolvedFiles) {
+            final len = (f['length'] as num?)?.toInt() ?? 0;
+            var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+            if (len > 0) {
+              dl = dl.clamp(0, len);
+              f['downloadedBytes'] = dl;
+              f['progress'] = (dl / len).clamp(0.0, 1.0);
+            }
+          }
+        }
+
+        if (stateLabel == 'seeding' ||
+            (totalSize > 0 && downloadedBytes >= totalSize)) {
           sub?.cancel();
           _activeTorrentIds.remove(id);
           if (!completer.isCompleted) {
-            completer.completeError(DioException(
-              requestOptions: RequestOptions(path: url),
-              type: DioExceptionType.unknown,
-              error: 'Torrent handle lost.',
-            ));
+            completer.complete();
           }
         }
-        return;
-      }
+      });
 
-      final stateLabel = torrent.stateLabel.toLowerCase();
-      final isStateChange = stateLabel != lastStateLabel;
-      final isTerminal = stateLabel == 'seeding' ||
-          stateLabel == 'paused' ||
-          stateLabel == 'stopped' ||
-          stateLabel == 'error';
-      final now = DateTime.now();
-      if (!isTerminal &&
-          !isStateChange &&
-          now.difference(lastProgressTick) < const Duration(milliseconds: 750)) {
-        return;
-      }
-      lastProgressTick = now;
-      lastStateLabel = stateLabel;
-
-      final isCheckingOrMetadata = stateLabel == 'checking' ||
-          stateLabel == 'downloading_metadata' ||
-          stateLabel == 'queued_for_checking' ||
-          !torrent.hasMetadata;
-
-      List<Map<String, dynamic>>? resolvedFiles = getTorrentFiles?.call();
-      final cachedFileCount = cachedAccurateFiles?.length ?? 0;
-      // FIX-BG-05: Large torrents skip expensive per-file progress queries.
-      final skipPerFileSync = cachedFileCount > 1000;
-      if (!isCheckingOrMetadata &&
-          torrent.hasMetadata &&
-          !PowerMonitor.screenOff &&
-          !skipPerFileSync) {
-        // FIX-P1-02 / FIX-BG-04: Throttle accurate file progress (4s foreground, 30s background)
-        final syncInterval = DownloadEngine.isInBackground
-            ? const Duration(seconds: 30)
-            : const Duration(seconds: 4);
-
-        if (now.difference(lastAccurateSync) >= syncInterval || cachedAccurateFiles == null) {
-          lastAccurateSync = now;
-          try {
-            final accurate =
-                await TorrentService.getAccurateFileProgress(id, saveDir);
-            if (accurate.isNotEmpty) {
-              cachedAccurateFiles = accurate
-                  .map((f) => {
-                        'name': f.name,
-                        'length': f.size,
-                        'downloadedBytes': f.downloadedBytes,
-                        'selected': true,
-                        'priority': 4,
-                        'progress': f.progress,
-                        'percent': f.progress,
-                        'isComplete': f.isComplete,
-                        'progressEstimated': false,
-                      })
-                  .toList();
-            }
-          } catch (e, st) {
-      LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
-    }
-        }
-        if (cachedAccurateFiles != null) {
-          resolvedFiles = cachedAccurateFiles;
-        }
-      }
-
-      final totalWanted = torrent.totalWanted;
-      final totalSize = totalWanted > 0
-          ? totalWanted
-          : (resolvedFiles?.fold<int>(
-                  0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0)) ??
-              0);
-
-      final torrentAggregate = torrent.totalWantedDone > 0
-          ? torrent.totalWantedDone
-          : (torrent.totalDone > 0 ? torrent.totalDone : 0);
-
-      final rawDownloaded = torrentAggregate > 0 ? torrentAggregate : 0;
-      if (rawDownloaded > 0 && resolvedFiles != null) {
-        distributeEstimatedBytes(resolvedFiles, rawDownloaded);
-      }
-
-      final perFileSum = resolvedFiles?.fold<int>(
-              0, (s, f) => s + ((f['downloadedBytes'] as num?)?.toInt() ?? 0)) ??
-          0;
-      final downloadedBytes = perFileSum > 0 ? perFileSum : rawDownloaded;
-
-      if (resolvedFiles != null) {
-        for (final f in resolvedFiles) {
-          final len = (f['length'] as num?)?.toInt() ?? 0;
-          var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-          if (len > 0) {
-            dl = dl.clamp(0, len);
-            f['downloadedBytes'] = dl;
-            f['progress'] = (dl / len).clamp(0.0, 1.0);
-          }
-        }
-      }
-
-      if (stateLabel == 'seeding' ||
-          (totalSize > 0 && downloadedBytes >= totalSize)) {
+      cancelToken.whenCancel.then((_) {
         sub?.cancel();
         _activeTorrentIds.remove(id);
         if (!completer.isCompleted) {
-          completer.complete();
+          completer.completeError(DioException(
+            requestOptions: RequestOptions(path: url),
+            type: DioExceptionType.cancel,
+            message: 'Torrent paused',
+          ));
         }
-      }
-    });
+      });
 
-    cancelToken.whenCancel.then((_) {
-      sub?.cancel();
-      _activeTorrentIds.remove(id);
-      if (!completer.isCompleted) {
-        completer.completeError(DioException(
-          requestOptions: RequestOptions(path: url),
-          type: DioExceptionType.cancel,
-          message: 'Torrent paused',
-        ));
-      }
-    });
-
-    return completer.future;
+      await completer.future;
+    } finally {
+      await sub?.cancel();
+    }
   }
 }

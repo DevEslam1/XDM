@@ -56,8 +56,8 @@ class FilterChipsBar extends StatelessWidget {
         final glow = settings.glow;
 
         final filters = isHistory
-            ? ['All', 'Completed', 'Failed']
-            : ['All', 'Downloading', 'Paused', 'Scheduled', 'Torrents'];
+            ? _historyFilters
+            : _downloadFilters;
 
         return Selector<DownloadProvider, _FilterState>(
           selector: (_, p) {
@@ -141,6 +141,15 @@ class FilterChipsBar extends StatelessWidget {
       },
     );
   }
+
+  static const List<String> _historyFilters = ['All', 'Completed', 'Failed'];
+  static const List<String> _downloadFilters = [
+    'All',
+    'Downloading',
+    'Paused',
+    'Scheduled',
+    'Torrents'
+  ];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -163,6 +172,26 @@ class _StatusFilterButtons extends StatelessWidget {
     required this.glow,
   });
 
+  static const Map<String, IconData> _filterIcons = {
+    'All': Icons.space_dashboard_rounded,
+    'Downloading': Icons.arrow_downward_rounded,
+    'Completed': Icons.check_circle_outline_rounded,
+    'Failed': Icons.error_outline_rounded,
+    'Paused': Icons.pause_circle_outline_rounded,
+    'Scheduled': Icons.schedule_rounded,
+    'Torrents': Icons.grain_rounded,
+  };
+
+  static const Map<String, String> _filterL10nKeys = {
+    'All': 'filter_all',
+    'Downloading': 'stats_downloading',
+    'Completed': 'stats_completed_short',
+    'Failed': 'stats_failed_short',
+    'Paused': 'stats_paused_short',
+    'Scheduled': 'add_download_schedule',
+    'Torrents': 'filter_torrents',
+  };
+
   Color _colorForFilter(String filter) {
     return switch (filter) {
       'All' => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
@@ -177,29 +206,15 @@ class _StatusFilterButtons extends StatelessWidget {
   }
 
   IconData _iconForFilter(String filter) {
-    return switch (filter) {
-      'All' => Icons.space_dashboard_rounded,
-      'Downloading' => Icons.arrow_downward_rounded,
-      'Completed' => Icons.check_circle_outline_rounded,
-      'Failed' => Icons.error_outline_rounded,
-      'Paused' => Icons.pause_circle_outline_rounded,
-      'Scheduled' => Icons.schedule_rounded,
-      'Torrents' => Icons.grain_rounded,
-      _ => Icons.filter_alt_rounded,
-    };
+    return _filterIcons[filter] ?? Icons.filter_alt_rounded;
   }
 
   String _labelFor(BuildContext context, String filter) {
-    return switch (filter) {
-      'All' => L10n.of(context, 'filter_all').toUpperCase(),
-      'Downloading' => L10n.of(context, 'stats_downloading').toUpperCase(),
-      'Completed' => L10n.of(context, 'stats_completed_short').toUpperCase(),
-      'Failed' => L10n.of(context, 'stats_failed_short').toUpperCase(),
-      'Paused' => L10n.of(context, 'stats_paused_short').toUpperCase(),
-      'Scheduled' => L10n.of(context, 'add_download_schedule').toUpperCase(),
-      'Torrents' => L10n.of(context, 'filter_torrents').toUpperCase(),
-      _ => filter.toUpperCase(),
-    };
+    final key = _filterL10nKeys[filter];
+    if (key != null) {
+      return L10n.of(context, key).toUpperCase();
+    }
+    return filter.toUpperCase();
   }
 
   @override

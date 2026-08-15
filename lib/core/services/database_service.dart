@@ -161,6 +161,11 @@ class DatabaseService {
     }
           final swVacuum = Stopwatch()..start();
           await _db.customStatement('PRAGMA incremental_vacuum(50)');
+          try {
+            await _db.customStatement('PRAGMA foreign_key_check');
+          } catch (e, st) {
+            LoggingService.logger('DatabaseService').warning('PRAGMA foreign_key_check failed', e, st);
+          }
           swVacuum.stop();
           if (swVacuum.elapsedMilliseconds > 500) {
             _log.info(
@@ -768,6 +773,8 @@ class DatabaseService {
     _dbBatchTimer = null;
     _maintenanceTimer?.cancel();
     _maintenanceTimer = null;
+    _historyFlushTimer?.cancel();
+    _historyFlushTimer = null;
   }
 
   Future<void> flushImmediately() => flushPendingSaves();
@@ -988,10 +995,16 @@ class DatabaseService {
     return rows.fold<int>(0, (sum, r) => sum + r.visitCount);
   }
 
-  final Map<String, Timer> _historyDebounceTimers = {};
+  Timer? _historyFlushTimer;
   final Map<String, Map<String, dynamic>> _pendingHistoryEntries = {};
 
-  /// Adds browser history with a 5-second per-URL write debounce (DB-04).
+  @visibleForTesting
+  Timer? get historyFlushTimer => _historyFlushTimer;
+
+  @visibleForTesting
+  int get pendingHistoryEntriesCount => _pendingHistoryEntries.length;
+
+  /// Adds browser history using a single global 5-second flush timer (DB-04).
   Future<int> addBrowserHistory(
     Map<String, dynamic> entry, {
     bool immediate = false,
@@ -1004,27 +1017,32 @@ class DatabaseService {
     }
 
     _pendingHistoryEntries[url] = entry;
-    _historyDebounceTimers[url]?.cancel();
 
-    // Cap debounce timers to 20 entries; flush the oldest pending entry on overflow
-    if (_historyDebounceTimers.length >= 20) {
-      final oldestUrl = _historyDebounceTimers.keys.first;
-      _historyDebounceTimers.remove(oldestUrl)?.cancel();
-      final flushedEntry = _pendingHistoryEntries.remove(oldestUrl);
-      if (flushedEntry != null) {
-        _writeBrowserHistoryDirect(flushedEntry);
-      }
+    if (_pendingHistoryEntries.length >= 20) {
+      await flushPendingHistory();
+      return 1;
     }
 
-    _historyDebounceTimers[url] = Timer(const Duration(seconds: 5), () async {
-      _historyDebounceTimers.remove(url);
-      final latestEntry = _pendingHistoryEntries.remove(url);
-      if (latestEntry != null) {
-        await _writeBrowserHistoryDirect(latestEntry);
-      }
+    _historyFlushTimer ??= Timer(const Duration(seconds: 5), () async {
+      _historyFlushTimer = null;
+      await flushPendingHistory();
     });
 
     return 1;
+  }
+
+  Future<void> flushPendingHistory() async {
+    _historyFlushTimer?.cancel();
+    _historyFlushTimer = null;
+    if (_pendingHistoryEntries.isEmpty) return;
+
+    final entries =
+        List<Map<String, dynamic>>.from(_pendingHistoryEntries.values);
+    _pendingHistoryEntries.clear();
+
+    for (final entry in entries) {
+      await _writeBrowserHistoryDirect(entry);
+    }
   }
 
   Future<int> _writeBrowserHistoryDirect(Map<String, dynamic> entry) async {
@@ -1155,6 +1173,7 @@ class DatabaseService {
   Future<void> dispose() async {
     // FIX-M2: Force flush on dispose
     await flushPendingSaves();
+    await flushPendingHistory();
 
     if (_throttleFactorListener != null) {
       PowerMonitor.throttleFactorNotifier.removeListener(_throttleFactorListener!);
@@ -1163,10 +1182,8 @@ class DatabaseService {
     _screenStateSub?.cancel();
     _screenStateSub = null;
 
-    for (final timer in _historyDebounceTimers.values) {
-      timer.cancel();
-    }
-    _historyDebounceTimers.clear();
+    _historyFlushTimer?.cancel();
+    _historyFlushTimer = null;
     _pendingHistoryEntries.clear();
 
     _maintenanceTimer?.cancel();

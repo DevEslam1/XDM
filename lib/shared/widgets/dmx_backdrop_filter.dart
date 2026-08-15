@@ -30,6 +30,7 @@ class DmxBackdropFilter extends StatefulWidget {
 
   static int _activeCount = 0;
   static const int _maxConcurrent = 1;
+  static bool disabled = false;
 
   @visibleForTesting
   static int get activeCount => _activeCount;
@@ -48,7 +49,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   double? _lastSigmaY;
 
   bool get _isLowEndDevice {
-    return _cachedIsLowEnd ??= _detectLowEnd();
+    return PowerMonitor.isLowEndDevice || (_cachedIsLowEnd ??= _detectLowEnd());
   }
   static bool? _cachedIsLowEnd;
 
@@ -80,8 +81,10 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
 
   void _tryAllocate() {
     if (!kIsWeb &&
+        !DmxBackdropFilter.disabled &&
         !widget.forceSolid &&
         !_isLowEndDevice &&
+        BackgroundGate.shouldAnimate &&
         BackgroundGate.allowHeavyOps &&
         !PowerMonitor.screenOff &&
         !PerformanceMonitor.shouldReduceMotion &&
@@ -105,10 +108,10 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_allocated && (kIsWeb || !BackgroundGate.allowHeavyOps || PowerMonitor.screenOff || PerformanceMonitor.shouldReduceMotion)) {
+    if (_allocated && (kIsWeb || DmxBackdropFilter.disabled || !BackgroundGate.shouldAnimate || !BackgroundGate.allowHeavyOps || PowerMonitor.screenOff || PerformanceMonitor.shouldReduceMotion)) {
       DmxBackdropFilter._activeCount = max(0, DmxBackdropFilter._activeCount - 1);
       _allocated = false;
-    } else if (!_allocated && !kIsWeb && BackgroundGate.allowHeavyOps && !PowerMonitor.screenOff && !PerformanceMonitor.shouldReduceMotion) {
+    } else if (!_allocated && !kIsWeb && !DmxBackdropFilter.disabled && BackgroundGate.shouldAnimate && BackgroundGate.allowHeavyOps && !PowerMonitor.screenOff && !PerformanceMonitor.shouldReduceMotion) {
       _tryAllocate();
     }
   }
@@ -117,7 +120,9 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   Widget build(BuildContext context) {
     // FIX: P0-02 — Check all heavy ops gates, device status, and SettingsProvider.reduceVisuals
     if (kIsWeb ||
+        DmxBackdropFilter.disabled ||
         _isLowEndDevice ||
+        !BackgroundGate.shouldAnimate ||
         widget.forceSolid ||
         PowerMonitor.screenOff ||
         PerformanceMonitor.shouldReduceMotion ||

@@ -35,19 +35,106 @@ void main() {
           expectedEnd: 199,
           expectedTotal: 500,
         ),
-        throwsA(isA<DioException>()),
+        throwsA(isA<DioException>().having(
+          (e) => e.message,
+          'message',
+          contains('Missing Content-Range header during resume.'),
+        )),
       );
-    });
 
-    test('validateContentRange rejects mismatching start offset', () {
       expect(
         () => HttpTransferJob.validateContentRange(
-          'bytes 50-199/500',
+          '   ',
           expectedStart: 100,
           expectedEnd: 199,
           expectedTotal: 500,
         ),
-        throwsA(isA<DioException>()),
+        throwsA(isA<DioException>().having(
+          (e) => e.message,
+          'message',
+          contains('Missing Content-Range header during resume.'),
+        )),
+      );
+    });
+
+    test('validateContentRange allows missing or malformed when allowUnknown is true', () {
+      expect(
+        () => HttpTransferJob.validateContentRange(
+          null,
+          expectedStart: 100,
+          expectedEnd: 199,
+          expectedTotal: 500,
+          allowUnknown: true,
+        ),
+        returnsNormally,
+      );
+
+      expect(
+        () => HttpTransferJob.validateContentRange(
+          '',
+          expectedStart: 100,
+          expectedEnd: 199,
+          expectedTotal: 500,
+          allowUnknown: true,
+        ),
+        returnsNormally,
+      );
+
+      expect(
+        () => HttpTransferJob.validateContentRange(
+          'invalid content range format',
+          expectedStart: 100,
+          expectedEnd: 199,
+          expectedTotal: 500,
+          allowUnknown: true,
+        ),
+        returnsNormally,
+      );
+    });
+
+    test('validateContentRange rejects malformed range when allowUnknown is false', () {
+      expect(
+        () => HttpTransferJob.validateContentRange(
+          'invalid format string',
+          expectedStart: 100,
+          expectedEnd: 199,
+          expectedTotal: 500,
+        ),
+        throwsA(isA<DioException>().having(
+          (e) => e.message,
+          'message',
+          contains('Malformed Content-Range during resume'),
+        )),
+      );
+    });
+
+    test('validateContentRange rejects mismatching end or total', () {
+      expect(
+        () => HttpTransferJob.validateContentRange(
+          'bytes 100-250/500',
+          expectedStart: 100,
+          expectedEnd: 199,
+          expectedTotal: 500,
+        ),
+        throwsA(isA<DioException>().having(
+          (e) => e.message,
+          'message',
+          contains('Invalid Content-Range response'),
+        )),
+      );
+
+      expect(
+        () => HttpTransferJob.validateContentRange(
+          'bytes 100-199/600',
+          expectedStart: 100,
+          expectedEnd: 199,
+          expectedTotal: 500,
+        ),
+        throwsA(isA<DioException>().having(
+          (e) => e.message,
+          'message',
+          contains('Invalid Content-Range response'),
+        )),
       );
     });
 

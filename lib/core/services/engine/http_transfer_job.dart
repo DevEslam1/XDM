@@ -63,6 +63,9 @@ Future<void> workerEntry(SendPort poolPort) async {
             ((raw['active'] as num?)?.toInt() ?? 1).clamp(1, 1000);
         break;
       case 'shutdown':
+        for (final job in _runningJobs.values) {
+          job.requestCancel();
+        }
         cmdPort.close();
         return;
     }
@@ -1100,8 +1103,10 @@ class HttpTransferJob {
           }
           rethrow;
         }
-        await sink.flush();
-        await sink.close();
+        try {
+          await sink.flush();
+          await sink.close();
+        } catch (_) {}
         sink = null;
         failover.reportSuccess();
         attempts = 0;

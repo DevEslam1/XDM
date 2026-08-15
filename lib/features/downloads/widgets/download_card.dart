@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:dmx/shared/mixins/pausable_loop_animation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -842,50 +843,26 @@ class _ChunkedProgressBar extends StatelessWidget {
         ),
       );
     } else {
-      // FIX(UI4): Isolate multi-chunk bar repaints
+      // FIX(UI4): Isolate multi-chunk bar repaints with memoized CustomPainter
       bar = RepaintBoundary(
         child: Selector<DownloadProvider, List<double>>(
           selector: (_, p) {
             final t = p.taskById(task.id);
             return t?.sanitizedChunks ?? [];
           },
+          shouldRebuild: (prev, next) => !listEquals(prev, next),
           builder: (_, liveChunks, __) {
             final activeChunks = liveChunks.isNotEmpty ? liveChunks : chunks;
-            return Row(
-              children: List.generate(activeChunks.length, (i) {
-                // FIX-UI-01: Clamp chunk values to [0, 1]
-                final raw = activeChunks[i];
-                final p = raw.isNaN ? 0.0 : raw.clamp(0.0, 1.0);
-                return Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      left: i == 0 ? 0 : 2.5,
-                      right: i == activeChunks.length - 1 ? 0 : 2.5,
-                    ),
-                    child: Stack(
-                      children: [
-                        Container(
-                          height: 8,
-                          decoration: AppTheme.progressTrack(
-                            isDark: isDark,
-                            radius: 3,
-                          ),
-                        ),
-                        FractionallySizedBox(
-                          widthFactor: p,
-                          child: Container(
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: color,
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
+            return SizedBox(
+              height: 8,
+              child: CustomPaint(
+                painter: _ChunkPainter(
+                  chunks: activeChunks,
+                  isDark: isDark,
+                  color: color,
+                ),
+                size: const Size(double.infinity, 8),
+              ),
             );
           },
         ),
@@ -911,6 +888,58 @@ class _ChunkedProgressBar extends StatelessWidget {
       value: task.progress,
       child: effectiveBar,
     );
+  }
+}
+
+class _ChunkPainter extends CustomPainter {
+  final List<double> chunks;
+  final bool isDark;
+  final Color color;
+  final int chunksHash;
+
+  _ChunkPainter({
+    required this.chunks,
+    required this.isDark,
+    required this.color,
+  }) : chunksHash = Object.hashAll(chunks);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (chunks.isEmpty || size.width <= 0 || size.height <= 0) return;
+    final totalSpacing = (chunks.length - 1) * 2.5;
+    final chunkWidth = (size.width - totalSpacing) / chunks.length;
+    final trackPaint = Paint()
+      ..color = (isDark ? AppTheme.surface : AppTheme.lightSurface)
+          .withValues(alpha: isDark ? 0.3 : 0.15)
+      ..style = PaintingStyle.fill;
+    final fillPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    for (int i = 0; i < chunks.length; i++) {
+      final left = i * (chunkWidth + 2.5);
+      final raw = chunks[i];
+      final p = raw.isNaN ? 0.0 : raw.clamp(0.0, 1.0);
+      final rrect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(left, 0, chunkWidth, size.height),
+        const Radius.circular(3),
+      );
+      canvas.drawRRect(rrect, trackPaint);
+      if (p > 0) {
+        final fillRRect = RRect.fromRectAndRadius(
+          Rect.fromLTWH(left, 0, chunkWidth * p, size.height),
+          const Radius.circular(3),
+        );
+        canvas.drawRRect(fillRRect, fillPaint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChunkPainter oldDelegate) {
+    return oldDelegate.chunksHash != chunksHash ||
+        oldDelegate.isDark != isDark ||
+        oldDelegate.color != color;
   }
 }
 

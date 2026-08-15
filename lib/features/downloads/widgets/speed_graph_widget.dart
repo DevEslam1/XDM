@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:dmx/core/app_theme.dart';
@@ -25,13 +24,14 @@ class SpeedGraphWidget extends StatefulWidget {
 }
 
 class _SpeedGraphWidgetState extends State<SpeedGraphWidget> {
-  LineChartData? _cachedChartData;
   List<int>? _lastSpeedHistory;
+  List<int> _displayHistory = [];
   bool? _lastIsDark;
   DownloadStatus? _lastStatus;
   int _lastCurrentSpeed = 0;
   int _lastAvgSpeed = 0;
   int _lastPeakSpeed = 0;
+  double _maxY = 100 * 1024;
   Color _lastColor = Colors.blue;
 
   Color _getStatusColor(DownloadStatus status, bool isDark) {
@@ -56,110 +56,33 @@ class _SpeedGraphWidgetState extends State<SpeedGraphWidget> {
     final color = _getStatusColor(widget.status, isDark);
     _lastColor = color;
 
-    final displayHistory = widget.speedHistory.length < 30
-        ? [
-            ...List.filled(30 - widget.speedHistory.length, 0),
-            ...widget.speedHistory
-          ]
-        : widget.speedHistory.sublist(widget.speedHistory.length - 30);
+    // Cap the rolling sample buffer at 60 entries (1 minute @ 1Hz)
+    _displayHistory = widget.speedHistory.length > 60
+        ? widget.speedHistory.sublist(widget.speedHistory.length - 60)
+        : (widget.speedHistory.length < 60
+            ? [
+                ...List.filled(60 - widget.speedHistory.length, 0),
+                ...widget.speedHistory,
+              ]
+            : widget.speedHistory);
 
-    _lastCurrentSpeed = displayHistory.isNotEmpty ? displayHistory.last : 0;
-    _lastPeakSpeed = displayHistory.isNotEmpty
-        ? displayHistory.reduce((a, b) => max(a, b))
+    _lastCurrentSpeed = _displayHistory.isNotEmpty ? _displayHistory.last : 0;
+    _lastPeakSpeed = _displayHistory.isNotEmpty
+        ? _displayHistory.reduce((a, b) => max(a, b))
         : 0;
-    final nonZero = displayHistory.where((s) => s > 0);
+    final nonZero = _displayHistory.where((s) => s > 0);
     _lastAvgSpeed = nonZero.isNotEmpty
         ? (nonZero.reduce((a, b) => a + b) / nonZero.length).round()
         : 0;
 
-    final maxY = max(100 * 1024, (_lastPeakSpeed * 1.2).toDouble());
-
-    final spots = List.generate(
-      displayHistory.length,
-      (i) => FlSpot(i.toDouble(), displayHistory[i].toDouble()),
-    );
-
-    _cachedChartData = LineChartData(
-      minX: 0,
-      maxX: 29,
-      minY: 0,
-      maxY: maxY.toDouble(),
-      gridData: FlGridData(
-        show: true,
-        drawVerticalLine: false,
-        getDrawingHorizontalLine: (value) => FlLine(
-          color: isDark ? Colors.white10 : Colors.black12,
-          strokeWidth: 1,
-        ),
-      ),
-      titlesData: FlTitlesData(
-        show: true,
-        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        rightTitles:
-            const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        bottomTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            reservedSize: 20,
-            interval: 10,
-            getTitlesWidget: (value, meta) {
-              final secs = 30 - value.toInt();
-              if (secs == 30) {
-                return const Text('30s', style: TextStyle(fontSize: 10));
-              }
-              if (secs == 15) {
-                return const Text('15s', style: TextStyle(fontSize: 10));
-              }
-              if (secs == 0) {
-                return const Text('now', style: TextStyle(fontSize: 10));
-              }
-              return const Text('');
-            },
-          ),
-        ),
-        leftTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            reservedSize: 50,
-            getTitlesWidget: (value, meta) {
-              if (value == 0) {
-                return const Text('0', style: TextStyle(fontSize: 9));
-              }
-              if (value == maxY) {
-                return Text(
-                  formatBytes(value.toInt()),
-                  style: const TextStyle(fontSize: 9),
-                );
-              }
-              return const Text('');
-            },
-          ),
-        ),
-      ),
-      borderData: FlBorderData(show: false),
-      lineBarsData: [
-        LineChartBarData(
-          spots: spots,
-          isCurved: true,
-          color: color,
-          barWidth: 2.5,
-          isStrokeCapRound: true,
-          dotData: const FlDotData(show: false),
-          belowBarData: BarAreaData(
-            show: true,
-            color: color.withValues(alpha: 0.15),
-          ),
-        ),
-      ],
-    );
+    _maxY = max(100 * 1024, (_lastPeakSpeed * 1.2).toDouble());
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (_cachedChartData == null ||
-        _lastIsDark != isDark ||
+    if (_lastIsDark != isDark ||
         _lastStatus != widget.status ||
         !listEquals(_lastSpeedHistory, widget.speedHistory)) {
       _updateCache(isDark);
@@ -220,7 +143,15 @@ class _SpeedGraphWidgetState extends State<SpeedGraphWidget> {
               SizedBox(
                 height: widget.height,
                 child: RepaintBoundary(
-                  child: LineChart(_cachedChartData!),
+                  child: CustomPaint(
+                    painter: _SpeedGraphPainter(
+                      samples: _displayHistory,
+                      color: color,
+                      isDark: isDark,
+                      maxY: _maxY,
+                    ),
+                    size: Size(double.infinity, widget.height),
+                  ),
                 ),
               ),
             ],
@@ -252,5 +183,82 @@ class _SpeedGraphWidgetState extends State<SpeedGraphWidget> {
         ),
       ],
     );
+  }
+}
+
+class _SpeedGraphPainter extends CustomPainter {
+  final List<int> samples;
+  final Color color;
+  final bool isDark;
+  final double maxY;
+  final int samplesHash;
+
+  _SpeedGraphPainter({
+    required this.samples,
+    required this.color,
+    required this.isDark,
+    required this.maxY,
+  }) : samplesHash = Object.hashAll(samples);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0 || samples.isEmpty) return;
+
+    final gridPaint = Paint()
+      ..color = isDark ? Colors.white10 : Colors.black12
+      ..strokeWidth = 1.0;
+    canvas.drawLine(
+        Offset(0, size.height * 0.5), Offset(size.width, size.height * 0.5), gridPaint);
+    canvas.drawLine(
+        Offset(0, size.height), Offset(size.width, size.height), gridPaint);
+
+    final linePaint = Paint()
+      ..color = color
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          color.withValues(alpha: 0.25),
+          color.withValues(alpha: 0.0),
+        ],
+      ).createShader(Offset.zero & size)
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    final fillPath = Path();
+    final stepX = size.width / (samples.length - 1);
+
+    for (int i = 0; i < samples.length; i++) {
+      final x = i * stepX;
+      final y =
+          size.height - ((samples[i] / maxY).clamp(0.0, 1.0) * (size.height - 4) + 2);
+      if (i == 0) {
+        path.moveTo(x, y);
+        fillPath.moveTo(x, size.height);
+        fillPath.lineTo(x, y);
+      } else {
+        path.lineTo(x, y);
+        fillPath.lineTo(x, y);
+      }
+    }
+    fillPath.lineTo(size.width, size.height);
+    fillPath.close();
+
+    canvas.drawPath(fillPath, fillPaint);
+    canvas.drawPath(path, linePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SpeedGraphPainter oldDelegate) {
+    return oldDelegate.samplesHash != samplesHash ||
+        oldDelegate.color != color ||
+        oldDelegate.isDark != isDark ||
+        oldDelegate.maxY != maxY;
   }
 }

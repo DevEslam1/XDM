@@ -3,7 +3,9 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'ios_background_service.dart';
 import 'logging_service.dart';
@@ -67,9 +69,14 @@ class BackgroundService {
         await releaseWakeLock();
       }
     } else {
-      _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
-        sendHeartbeat();
-      });
+      if (!kIsWeb && !Platform.isIOS) {
+        final isRunning = _testMode || await FlutterBackgroundService().isRunning();
+        if (isRunning) {
+          _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+            sendHeartbeat();
+          });
+        }
+      }
       await acquireWakeLock();
     }
   }
@@ -173,18 +180,40 @@ class BackgroundService {
     _log.info(
       'iOS background callback invoked. Bridging to native BackgroundDownloadController.',
     );
-    const channel = MethodChannel('com.dmx.app/background_download');
     try {
-      final result = await channel
-          .invokeMethod<bool>('scheduleDownload')
-          .timeout(const Duration(seconds: 5));
-      final success = result ?? false;
-      _log.info('iOS background schedule completed. Success: $success');
-      return success;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(
+        'lastScheduleAttemptAt',
+        DateTime.now().millisecondsSinceEpoch,
+      );
     } catch (e) {
-      _log.warning('Failed to bridge to iOS background download controller: $e');
-      return false;
+      _log.warning('Failed to persist lastScheduleAttemptAt: $e');
     }
+
+    final completer = Completer<bool>();
+    void performCall() async {
+      const channel = MethodChannel('com.dmx.app/background_download');
+      try {
+        final result = await channel
+            .invokeMethod<bool>('scheduleDownload')
+            .timeout(const Duration(seconds: 5));
+        final success = result ?? false;
+        _log.info('iOS background schedule completed. Success: $success');
+        if (!completer.isCompleted) completer.complete(success);
+      } catch (e) {
+        _log.warning('Failed to bridge to iOS background download controller: $e');
+        if (!completer.isCompleted) completer.complete(false);
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => performCall());
+    WidgetsBinding.instance.scheduleFrame();
+    Future.microtask(() {
+      if (!completer.isCompleted) {
+        performCall();
+      }
+    });
+    return completer.future;
   }
 
   @visibleForTesting
@@ -333,7 +362,7 @@ class BackgroundService {
   /// notification plus a battery-optimization exemption prompt (Android).
   static Future<void> _escalateWakeLockFailure() async {
     _log.warning(
-      '[BackgroundService] Wake lock renewal failed 3A consecutively — escalating',
+      '[BackgroundService] Wake lock renewal failed 3× consecutively — escalating',
     );
     try {
       await NotificationService().showServiceNotification(

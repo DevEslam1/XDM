@@ -162,7 +162,13 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
   Map<Dio, Set<String>> get activeDownloadsPerClient => _activeDownloadsPerClient;
 
   void releaseClient(Dio client) {
-    _activeDownloadsPerClient[client]?.clear();
+    final activeDownloads = _activeDownloadsPerClient[client];
+    if (activeDownloads != null && activeDownloads.isNotEmpty) {
+      _log.warning(
+        '[DioClientPool] Attempted to release client with ${activeDownloads.length} active download(s); skipping force close.',
+      );
+      return;
+    }
     _activeDownloadsPerClient.remove(client);
     _reservedClients.remove(client);
     _activeClients.remove(client);

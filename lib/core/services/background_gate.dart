@@ -28,8 +28,11 @@ abstract class BackgroundGate {
     return base;
   }
 
+  static bool? _manualShouldAnimate;
+
   /// Backward-compatible alias for shouldAnimate.
-  static bool get shouldAnimate => allowHeavyOps;
+  static bool get shouldAnimate => _manualShouldAnimate ?? allowHeavyOps;
+  static set shouldAnimate(bool val) => _manualShouldAnimate = val;
 
   /// Backward-compatible alias for adaptInterval.
   static Duration adaptInterval(Duration base) => scaleInterval(base);

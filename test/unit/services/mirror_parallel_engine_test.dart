@@ -55,5 +55,13 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(slowCancelled, isTrue);
     });
+
+    test('dispose cancels debounce timer and releases resources', () async {
+      final engine = MirrorParallelEngine(['https://m1.com', 'https://m2.com']);
+      engine.reportMirrorSpeed('https://m1.com', 500000);
+      await engine.dispose();
+      // Safe to call again
+      await engine.dispose();
+    });
   });
 }

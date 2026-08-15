@@ -80,6 +80,7 @@ class _QueueReorderWidgetState extends State<QueueReorderWidget> {
 
     return ReorderableListView.builder(
       itemCount: _items.length,
+      itemExtent: 80.0,
       onReorderItem: _handleReorder,
       proxyDecorator: (child, index, animation) {
         return AnimatedBuilder(

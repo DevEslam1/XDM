@@ -8,8 +8,14 @@ import 'package:dmx/core/services/ios_background_capability.dart';
 import 'package:dmx/core/services/background_service.dart';
 import 'package:dmx/core/services/crash_reporting_service.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
 
   group('IosBackgroundService', () {
     test('scheduleBackgroundDownload returns false when not on iOS', () async {
@@ -88,6 +94,10 @@ void main() {
         _DummyServiceInstance(),
       );
       expect(resTrue, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('lastScheduleAttemptAt'), isNotNull);
+      expect(prefs.getInt('lastScheduleAttemptAt'), isPositive);
     });
   });
 

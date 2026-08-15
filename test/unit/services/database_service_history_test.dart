@@ -50,6 +50,12 @@ void main() {
       final countImmediate =
           await dbService.getVisitCount('https://example.com/debounced');
       expect(countImmediate, equals(0));
+
+      await dbService.flushPendingHistory();
+
+      final countFlushed =
+          await dbService.getVisitCount('https://example.com/debounced');
+      expect(countFlushed, equals(1));
     });
   });
 }

@@ -1,15 +1,16 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit_config.dart';
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_session.dart';
 import 'package:ffmpeg_kit_flutter_new_min/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
 import 'package:logging/logging.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:dmx/core/services/logging_service.dart';
 import '../utils/semaphore.dart';
 
 enum MergeStrategy { streamCopy, hwReencode, swFallback }
@@ -74,13 +75,12 @@ class FFmpegMuxService {
             '[FFmpegMuxService] Merge job timed out after 5 minutes; cancelling session',
           );
           try {
-            // FIX-P0-06 / FIX-P1-05: Cancel only this specific session
             if (sessionHolder.activeSession != null) {
               FFmpegKit.cancel(sessionHolder.activeSession!.getSessionId());
             }
           } catch (e, st) {
-      LoggingService.logger('FfmpegMuxService').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('FfmpegMuxService').warning('Operation failed', e, st);
+          }
           return false;
         },
       );
@@ -224,8 +224,8 @@ class FFmpegMuxService {
         try {
           if (await file.exists()) await file.delete();
         } catch (e, st) {
-      LoggingService.logger('FfmpegMuxService').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('FfmpegMuxService').warning('Operation failed', e, st);
+        }
         return false;
       }
       return true;
@@ -234,8 +234,8 @@ class FFmpegMuxService {
       try {
         if (await file.exists()) await file.delete();
       } catch (e, st) {
-      LoggingService.logger('FfmpegMuxService').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('FfmpegMuxService').warning('Operation failed', e, st);
+      }
       return false;
     }
   }
@@ -315,30 +315,29 @@ class FFmpegMuxService {
       final session = await FFmpegKit.executeWithArguments(args);
       sessionHolder?.activeSession = session;
 
-      final pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      DateTime lastStatsProgress = DateTime.fromMillisecondsSinceEpoch(0);
+      FFmpegKitConfig.enableStatisticsCallback((statistics) {
+        if (session.getSessionId() != statistics.getSessionId()) return;
         if (onProgress == null ||
             totalDuration == null ||
-            totalDuration.inSeconds == 0) {
+            totalDuration.inMilliseconds == 0) {
           return;
         }
-        final logs = await session.getLogsAsString();
-        final lines = logs.split('\n');
-        for (var i = lines.length - 1; i >= 0; i--) {
-          final match =
-              RegExp(r'time=(\d+):(\d+):(\d+)\.(\d+)').firstMatch(lines[i]);
-          if (match != null) {
-            final secs = int.parse(match.group(1)!) * 3600 +
-                int.parse(match.group(2)!) * 60 +
-                int.parse(match.group(3)!);
-            onProgress((secs / totalDuration.inSeconds).clamp(0.0, 1.0));
-            break;
-          }
+        final now = DateTime.now();
+        // Cap statistics progress updates at 4 Hz (250 ms)
+        if (now.difference(lastStatsProgress).inMilliseconds < 250) {
+          return;
+        }
+        lastStatsProgress = now;
+        final timeMs = statistics.getTime();
+        if (timeMs > 0) {
+          onProgress((timeMs / totalDuration.inMilliseconds).clamp(0.0, 1.0));
         }
       });
 
       try {
         final returnCode = await session.getReturnCode();
-        pollTimer.cancel();
+        FFmpegKitConfig.enableStatisticsCallback(null);
         if (ReturnCode.isSuccess(returnCode)) {
           final targetExpectedDuration = expectedDuration ?? totalDuration;
           if (await _validateOutput(outputPath,
@@ -349,7 +348,7 @@ class FFmpegMuxService {
           }
         }
       } catch (e) {
-        pollTimer.cancel();
+        FFmpegKitConfig.enableStatisticsCallback(null);
         _log.warning('Merge strategy $strategy failed: $e');
       }
     }

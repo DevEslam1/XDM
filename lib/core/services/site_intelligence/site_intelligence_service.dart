@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../logging_service.dart';
@@ -9,6 +10,11 @@ import 'url_patterns.dart';
 import 'site_registry.dart';
 
 final _log = LoggingService.logger('SiteIntelligenceService');
+
+List<UrlAnalysisResult> _analyzeUrlsBatchWorker(List<String> urls) {
+  final service = SiteIntelligenceService();
+  return urls.map((u) => service.analyzeUrl(u)).toList();
+}
 
 enum SiteType {
   fileHosting,
@@ -201,6 +207,11 @@ class SiteIntelligenceService {
   SiteIntelligenceService();
 
   static const _reliabilityKey = 'site_reliability_data';
+  static final Map<String, UrlAnalysisResult> _fastPathCache = {};
+
+  @visibleForTesting
+  static void clearFastPathCache() => _fastPathCache.clear();
+
   final Map<String, SiteReliability> _reliability = {};
   bool _loaded = false;
   bool _disposed = false;
@@ -208,6 +219,14 @@ class SiteIntelligenceService {
   bool _persistPending = false;
   // FIX-M4: Dirty counter for debouncing
   int _dirtyCount = 0;
+
+  Future<List<UrlAnalysisResult>> analyzeUrlsBatch(List<String> urls) async {
+    if (urls.isEmpty) return [];
+    if (urls.length > 5) {
+      return compute(_analyzeUrlsBatchWorker, urls);
+    }
+    return urls.map(analyzeUrl).toList();
+  }
 
   // FIX: Regex to detect any valid URL scheme (e.g. http, https, ftp, file).
   // Previously only http:// and https:// were checked, causing URLs with
@@ -334,6 +353,24 @@ class SiteIntelligenceService {
     if (fileName == '/' || fileName.isEmpty) fileName = null;
     final String? extension = fileName != null ? p.extension(fileName) : null;
 
+    final cacheKey = '$host|${extension ?? ''}';
+    final cached = _fastPathCache[cacheKey];
+    if (cached != null && profile == null && !cleanUrl.contains('?')) {
+      return UrlAnalysisResult(
+        siteType: cached.siteType,
+        profile: cached.profile,
+        contentHint: cached.contentHint,
+        recommendedStrategy: cached.recommendedStrategy,
+        detectedFileName: fileName,
+        detectedExtension: extension,
+        detectedQuality: null,
+        isExpiredOrSigned: cached.isExpiredOrSigned,
+        recommendedHeaders: cached.recommendedHeaders,
+        inferredCategory: cached.inferredCategory,
+        confidence: cached.confidence,
+      );
+    }
+
     String? quality;
     final qualityMatch = UrlPatterns.qualityRegex.firstMatch(cleanUrl);
     if (qualityMatch != null) {
@@ -387,7 +424,7 @@ class SiteIntelligenceService {
       contentHint: contentHint,
     );
 
-    return UrlAnalysisResult(
+    final result = UrlAnalysisResult(
       siteType: siteType,
       profile: profile,
       contentHint: contentHint,
@@ -400,6 +437,12 @@ class SiteIntelligenceService {
       inferredCategory: category,
       confidence: confidence,
     );
+
+    if (profile == null && quality == null && !cleanUrl.contains('?')) {
+      _fastPathCache[cacheKey] = result;
+    }
+
+    return result;
   }
 
   MagnetAnalysis analyzeMagnet(String url) {

@@ -41,17 +41,25 @@ void main() {
       expect(pool.reservedClientsCount, lessThanOrEqualTo(4));
     });
 
-    test('registers 100 downloads and releases client mid-flight with zero leaks', () {
+    test('releaseClient guards against closing client with active downloads', () {
       final client = pool.acquireClient();
-      for (int i = 0; i < 100; i++) {
+      for (int i = 0; i < 10; i++) {
         pool.registerDownload(client, 'task_$i');
       }
-      expect(pool.activeDownloadsPerClient[client]?.length, equals(100));
+      expect(pool.activeDownloadsPerClient[client]?.length, equals(10));
 
-      // Release client mid-flight
+      // Attempt to release client mid-flight -> should NOT force close
       pool.releaseClient(client);
+      expect(pool.activeDownloadsPerClient.containsKey(client), isTrue);
 
-      // Verify mapping is completely cleared with no residual leak
+      // Unregister all downloads
+      for (int i = 0; i < 10; i++) {
+        pool.unregisterDownload(client, 'task_$i');
+      }
+      expect(pool.activeDownloadsPerClient[client]?.isEmpty, isTrue);
+
+      // Now releaseClient should cleanly remove the client
+      pool.releaseClient(client);
       expect(pool.activeDownloadsPerClient.containsKey(client), isFalse);
     });
   });

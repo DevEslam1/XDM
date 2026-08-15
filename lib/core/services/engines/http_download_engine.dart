@@ -238,7 +238,10 @@ class _AdaptiveTracker {
   /// a plateau was detected, the stale recommendation is cleared so the next
   /// start uses the original (higher) thread count.
   void evaluate() {
-    if (_samples.length < 6) return;
+    if (_samples.length < 6) {
+      recommendation = 0;
+      return;
+    }
     final tail = _samples.toList().sublist(_samples.length - 3);
     final avg = tail.reduce((a, b) => a + b) / tail.length;
     if (avg <= 0) {

@@ -97,6 +97,9 @@ class PerformanceMonitor {
     _listening = true;
   }
 
+  static bool sustainedJankDetected = false;
+  static void Function(bool)? onSustainedJank;
+
   void _onTimings(List<FrameTiming> timings) {
     for (final timing in timings) {
       _totalFrames++;
@@ -106,6 +109,10 @@ class PerformanceMonitor {
       if (build > jankThreshold) _jankyFrames++;
       _buildSamples.add(build);
       _rasterSamples.add(raster);
+    }
+    if (_totalFrames >= 60 && jankRatio > 0.05) {
+      sustainedJankDetected = true;
+      onSustainedJank?.call(true);
     }
     _trim();
   }

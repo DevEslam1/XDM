@@ -7,6 +7,7 @@ import 'package:logging/logging.dart';
 import '../circuit_breaker.dart';
 import '../protocol_cache.dart';
 import '../retry_engine.dart';
+import '../service_registry.dart';
 import 'mirror_registry.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -111,14 +112,23 @@ class _MirrorState {
   }
 }
 
-class MirrorParallelEngine {
+class MirrorParallelEngine implements DisposableService {
   static final _log = Logger('MirrorParallelEngine');
   final List<String> _mirrorUrls;
   final Map<String, _MirrorState> _mirrorStates = {};
   static const int maxMirrorStates = 50;
   MirrorFailover? failover;
 
-  MirrorParallelEngine(this._mirrorUrls, {this.failover});
+  MirrorParallelEngine(this._mirrorUrls, {this.failover}) {
+    ServiceRegistry.register(this);
+  }
+
+  @override
+  Future<void> dispose() async {
+    _cacheInvalidateDebounce?.cancel();
+    _cacheInvalidateDebounce = null;
+    ServiceRegistry.unregister(this);
+  }
 
   static Future<T> raceMirrors<T>(
     List<String> urls,

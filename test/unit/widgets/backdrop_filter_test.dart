@@ -66,7 +66,29 @@ void main() {
 
       expect(find.text('Card 1'), findsOneWidget);
       expect(find.text('Card 2'), findsOneWidget);
-      expect(DmxBackdropFilter.activeCount, equals(2));
+      expect(DmxBackdropFilter.activeCount, equals(1));
+    });
+
+    testWidgets('respects DmxBackdropFilter.disabled flag', (tester) async {
+      DmxBackdropFilter.disabled = true;
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: SettingsProvider.instance,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: DmxBackdropFilter(
+                sigmaX: 10,
+                sigmaY: 10,
+                child: Text('Disabled Blur'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Disabled Blur'), findsOneWidget);
+      expect(DmxBackdropFilter.activeCount, equals(0));
+      DmxBackdropFilter.disabled = false;
     });
   });
 }

@@ -133,11 +133,20 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
     with WidgetsBindingObserver {
   bool _isVisible = true;
 
+  AmbientProgress get _ambientProgress {
+    try {
+      if (getIt.isRegistered<AmbientProgress>()) {
+        return getIt<AmbientProgress>();
+      }
+    } catch (_) {}
+    return AmbientProgress.instance;
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    getIt<AmbientProgress>().addRef();
+    _ambientProgress.addRef();
   }
 
   @override
@@ -162,7 +171,7 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    getIt<AmbientProgress>().removeRef();
+    _ambientProgress.removeRef();
     super.dispose();
   }
 
@@ -222,40 +231,44 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
         PowerMonitor.screenOff ||
         !BackgroundGate.allowHeavyOps ||
         hasActiveDownloads) {
-      return Container(color: bgColor, child: widget.child);
+      return RepaintBoundary(
+        child: Container(color: bgColor, child: widget.child),
+      );
     }
 
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
 
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: RepaintBoundary(
-            child: ValueListenableBuilder<double>(
-              valueListenable: getIt<AmbientProgress>().progress,
-              builder: (context, progress, _) {
-                return CustomPaint(
-                  painter: _AmbientBlobPainter(
-                    progress: progress,
-                    isDark: isDark,
-                    intensity: gridOpacity / 40.0,
-                    bgColor: bgColor,
-                    violetClr: violetClr,
-                    blueClr: blueClr,
-                  ),
-                  size: Size.infinite,
-                );
-              },
+    return RepaintBoundary(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: ValueListenableBuilder<double>(
+                valueListenable: _ambientProgress.progress,
+                builder: (context, progress, _) {
+                  return CustomPaint(
+                    painter: _AmbientBlobPainter(
+                      progress: progress,
+                      isDark: isDark,
+                      intensity: gridOpacity / 40.0,
+                      bgColor: bgColor,
+                      violetClr: violetClr,
+                      blueClr: blueClr,
+                    ),
+                    size: Size.infinite,
+                  );
+                },
+              ),
             ),
           ),
-        ),
-        Positioned.fill(
-          child: RepaintBoundary(
-            child: widget.child,
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: widget.child,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

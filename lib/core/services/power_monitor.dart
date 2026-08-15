@@ -49,6 +49,20 @@ class PowerMonitor {
       _state == BatteryState.charging || _state == BatteryState.full;
   static bool get screenOff => !_screenOn;
 
+  static bool? _isLowEndDeviceCache;
+  static bool get isLowEndDevice {
+    if (_isLowEndDeviceCache != null) return _isLowEndDeviceCache!;
+    try {
+      if (kIsWeb) return false;
+      return _isLowEndDeviceCache = (Platform.numberOfProcessors <= 2);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @visibleForTesting
+  static set isLowEndDevice(bool val) => _isLowEndDeviceCache = val;
+
   static BatterySaverMode? _lastSaverMode;
 
   static BatterySaverMode get batterySaverMode {

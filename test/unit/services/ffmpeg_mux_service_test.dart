@@ -47,5 +47,25 @@ void main() {
 
       tempDir.deleteSync(recursive: true);
     });
+
+    test('mergeVideoAudio delegates to mockMergeHandler when configured',
+        () async {
+      int calls = 0;
+      FFmpegMuxService.mockMergeHandler = (video, audio, output) async {
+        calls++;
+        return true;
+      };
+
+      final result = await FFmpegMuxService.mergeVideoAudio(
+        'video.mp4',
+        'audio.aac',
+        'output.mp4',
+      );
+
+      expect(result, isTrue);
+      expect(calls, 1);
+
+      FFmpegMuxService.mockMergeHandler = null;
+    });
   });
 }

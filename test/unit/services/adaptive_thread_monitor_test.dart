@@ -108,6 +108,17 @@ void main() {
       });
     });
 
+    test('evaluate clears recommendation when samples count is less than 6', () {
+      fakeAsync((async) {
+        engine.startAdaptiveMonitorForTask('t6', 8);
+        for (var i = 0; i < 3; i++) {
+          engine.recordSample('t6', 4 * 1024 * 1024, 8);
+        }
+        async.elapse(const Duration(seconds: 6));
+        expect(engine.recommendedThreads('t6', 8), 8);
+      });
+    });
+
     test('stopAdaptiveThreadMonitor clears all trackers', () {
       engine.startAdaptiveMonitorForTask('x', 8);
       engine.startAdaptiveMonitorForTask('y', 4);
