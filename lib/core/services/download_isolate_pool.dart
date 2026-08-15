@@ -470,6 +470,60 @@ class DownloadIsolatePool implements MemoryPressureListener {
         ?.send({'t': 'cancel', 'jobId': job.command.taskId});
   }
 
+  void forceCancelJob(String taskId) {
+    _Worker? worker;
+    for (final w in _workers) {
+      if (w.pending.any((j) => j.command.taskId == taskId)) {
+        worker = w;
+        break;
+      }
+    }
+    if (worker != null) {
+      debugPrint('[DMX-Pool] forceCancelJob: killing worker isolate for task $taskId');
+      worker.dead = true;
+      final jobs = List<PoolJob>.from(worker.pending);
+      worker.pending.clear();
+      worker.activeJobs = 0;
+      for (final job in jobs) {
+        job._deliverError(
+          'forceCancelled',
+          'Worker isolate killed due to cancel timeout',
+          null,
+        );
+      }
+      worker.inbox.close();
+      worker.errorPort.close();
+      worker.isolate.kill(priority: Isolate.immediate);
+      if (!_shuttingDown) {
+        _workers.remove(worker);
+        Future.microtask(() async {
+          if (_shuttingDown) return;
+          if (_workers.isEmpty) {
+            try {
+              final w = await _spawnWorker(0);
+              _workers.add(w);
+              _drain();
+            } catch (e, st) {
+              LoggingService.logger('DownloadIsolatePool')
+                  .warning('Failed to respawn worker after force cancel', e, st);
+            }
+          } else {
+            _drain();
+          }
+        });
+      }
+    } else {
+      _queue.removeWhere((job) {
+        if (job.command.taskId == taskId) {
+          job._deliverError('forceCancelled', 'Job removed from queue', null);
+          return true;
+        }
+        return false;
+      });
+    }
+  }
+
+
   void updateSpeedLimit(int bytesPerSecond, int activeCount) {
     for (final w in _workers) {
       w.commandPort

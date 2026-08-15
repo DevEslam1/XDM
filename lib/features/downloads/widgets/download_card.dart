@@ -141,7 +141,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
             child: cardWidget,
           );
 
-    return Semantics(
+    final Widget buildResult = Semantics(
       container: true,
       explicitChildNodes: true,
       label: semanticLabel,
@@ -154,6 +154,17 @@ class DownloadCard extends StatelessWidget with HapticHelper {
         ),
       ),
     );
+
+    if (MediaQuery.sizeOf(context).width >= 600) {
+      return Align(
+        alignment: Alignment.center,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 450.0),
+          child: buildResult,
+        ),
+      );
+    }
+    return buildResult;
   }
 }
 
@@ -962,24 +973,28 @@ class _ProgressRow extends StatelessWidget {
         (task.hasUnknownSize || task.progress == -1.0) && isDownloading;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
-              child: showIndeterminate
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        minHeight: 8,
-                        color: color,
-                        backgroundColor: color.withValues(alpha: 0.15),
-                      ),
-                    )
-                  : _ChunkedProgressBar(
-                      task: task, isDark: isDark, color: color),
+              child: SizedBox(
+                width: double.infinity,
+                height: 6.0,
+                child: showIndeterminate
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          minHeight: 6.0,
+                          color: color,
+                          backgroundColor: color.withValues(alpha: 0.15),
+                        ),
+                      )
+                    : _ChunkedProgressBar(
+                        task: task, isDark: isDark, color: color),
+              ),
             ),
             const SizedBox(width: 10),
             // Total percentage or byte count readout

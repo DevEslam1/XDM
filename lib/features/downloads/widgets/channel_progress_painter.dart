@@ -18,6 +18,7 @@ class ChannelProgressPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (size.width == 0) return;
     if (size.width <= 0 || size.height <= 0) return;
     final rawVal = progress.value;
     final value =

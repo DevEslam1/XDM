@@ -287,7 +287,8 @@ class TorrentDownloadHandler {
       List<Map<String, dynamic>>? pauseFiles = getTorrentFiles?.call();
       try {
         final accurateFiles =
-            await TorrentService.getAccurateFileProgress(id, saveDir);
+            await TorrentService.getAccurateFileProgress(id, saveDir)
+                .timeout(const Duration(milliseconds: 500));
         if (accurateFiles.isNotEmpty) {
           pauseFiles = accurateFiles
               .map((f) => {

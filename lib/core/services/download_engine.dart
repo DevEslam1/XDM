@@ -363,6 +363,12 @@ class DownloadEngine implements IDownloadEngine {
     dispose();
   }
 
+  @override
+  void forceCancelJob(String taskId) {
+    _pool?.forceCancelJob(taskId);
+  }
+
+
   static Future<void> validateSavePath(
     String savePath, {
     int requiredSizeBytes = 0,

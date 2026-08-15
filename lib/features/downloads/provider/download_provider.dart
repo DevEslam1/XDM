@@ -2121,33 +2121,50 @@ class DownloadProvider extends ChangeNotifier
 
   @override
   Future<void> pauseTask(String id) async {
-    // FIX-P0-01: Guard task state mutations with synchronized lock
+    // Guard task state mutations with synchronized lock
     return _lockFor(id).synchronized(() async {
-      if (_taskOpInProgress[id] == true) return; // guard
-      _taskOpInProgress[id] = true;
-      try {
-        final task = _findTask(id);
-        if (task == null) return;
+      final task = _findTask(id);
+      if (task == null) return;
 
-        final isSeedingTorrent = task.status == DownloadStatus.completed &&
-            task.isTorrent &&
-            task.seedingEnabled;
+      final isSeedingTorrent = task.status == DownloadStatus.completed &&
+          task.isTorrent &&
+          task.seedingEnabled;
 
-        if (!isSeedingTorrent &&
-            (task.status == DownloadStatus.paused ||
-                task.status == DownloadStatus.completed)) {
-          return;
-        }
-
-        return await _runGuardedTaskOperation(
-            id, 'pauseTask', () => _pauseTaskInternal(id));
-      } finally {
-        _taskOpInProgress[id] = false;
+      if (!isSeedingTorrent &&
+          (task.status == DownloadStatus.paused ||
+              task.status == DownloadStatus.completed)) {
+        return;
       }
+
+      final wasDownloading = task.status == DownloadStatus.downloading;
+
+      // Optimistic UI Update: immediately mark as paused, speed = 0, clear eta
+      final updated = task.copyWith(
+        status: DownloadStatus.paused,
+        pausedByUser: true,
+        speed: 0,
+        clearEta: true,
+      );
+      await _setTask(updated);
+
+      // Fire-and-forget the engine pause/cancel execution in the background
+      unawaited(
+        _lockFor(id).synchronized(() async {
+          try {
+            await _pauseTaskInternal(id, wasDownloading: wasDownloading, wasSeeding: isSeedingTorrent);
+          } catch (e, st) {
+            _log.warning('Background engine pause failed for $id', e, st);
+          }
+        }),
+      );
     });
   }
 
-  Future<void> _pauseTaskInternal(String id) async {
+  Future<void> _pauseTaskInternal(
+    String id, {
+    required bool wasDownloading,
+    required bool wasSeeding,
+  }) async {
     _orchestrator.clearStartingFlag(id);
     final initialTask = _findTask(id);
     if (initialTask == null) return;
@@ -2166,13 +2183,9 @@ class DownloadProvider extends ChangeNotifier
     _retryTimers[id]?.cancel();
     _retryTimers.remove(id);
 
-    // FIX(C1): Handle seeding torrents — they have status=completed but
-    // an active native handle that must be paused.
-    final isSeedingTorrent = task.status == DownloadStatus.completed &&
-        task.isTorrent &&
-        task.seedingEnabled;
+    final isSeedingTorrent = wasSeeding;
 
-    if (task.status == DownloadStatus.downloading || isSeedingTorrent) {
+    if (wasDownloading || isSeedingTorrent) {
       int? torrentId = _torrentIds[id];
 
       if (task.isTorrent && torrentId == null) {
@@ -2217,7 +2230,7 @@ class DownloadProvider extends ChangeNotifier
       }
 
       // BUG 4 FIX: Cancel token and await engine future FIRST if downloading
-      if (task.status == DownloadStatus.downloading) {
+      if (wasDownloading) {
         // Flush progress BEFORE cancelling so no in-flight write is lost
         await _flushPendingProgress(id);
 
@@ -2230,23 +2243,29 @@ class DownloadProvider extends ChangeNotifier
             try {
               _cancelTokens[k]?.cancel('paused');
             } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+            }
             _cancelTokens.remove(k);
           }
           final fut = _activeFutures[id];
           if (fut != null) {
             try {
-              final pauseTimeoutSecs =
-                  (task.fileSize) > 500 * 1024 * 1024 ? 20 : 8;
-              await fut.timeout(Duration(seconds: pauseTimeoutSecs),
-                  onTimeout: () {
-                debugPrint(
-                    '[FIX-P1] Engine future timed out on pause (${pauseTimeoutSecs}s)');
-              });
+              await fut.timeout(const Duration(seconds: 3));
+            } on TimeoutException catch (e, st) {
+              _log.warning('Engine future timed out on pause (3s). Force-cancelling task $id.', e, st);
+              _downloadEngine.forceCancelJob(id);
+              final latest = _findTask(id) ?? task;
+              await _databaseService.saveTask(
+                latest.copyWith(
+                  status: DownloadStatus.paused,
+                  pausedByUser: true,
+                  speed: 0,
+                  clearEta: true,
+                ),
+              );
             } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+            }
           }
 
           _activeFutures.remove(id);

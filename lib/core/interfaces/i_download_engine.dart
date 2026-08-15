@@ -44,4 +44,7 @@ abstract class IDownloadEngine {
   });
 
   Future<void> close();
+
+  void forceCancelJob(String taskId);
 }
+
