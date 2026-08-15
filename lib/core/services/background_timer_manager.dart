@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'download_engine.dart';
 import 'power_monitor.dart';
 
@@ -38,7 +37,9 @@ class BackgroundTimerManager {
 
   /// Cancels all managed timers.
   void cancelAll() {
-    for (final t in _timers.values) t.cancel();
+    for (final t in _timers.values) {
+      t.cancel();
+    }
     _timers.clear();
     _baseIntervals.clear();
   }

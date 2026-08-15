@@ -30,7 +30,7 @@ void _onBackgroundNotificationResponse(NotificationResponse response) {
     actionId = parts[0];
     payload = parts[1];
   }
-  unawaited(_forwardBackgroundAction(actionId, payload));
+  unawaited(_forwardBackgroundAction(actionId, payload).catchError((e) => debugPrint('[Notifications] Failed to forward background action: $e')));
 }
 
 Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
@@ -68,7 +68,7 @@ String? _nonce;
 
 class NotificationService {
   NotificationService._() {
-    unawaited(_ensureNoncePersisted());
+    unawaited(_ensureNoncePersisted().catchError((e) => debugPrint('[Notifications] Failed to ensure nonce persisted: $e')));
   }
   static final NotificationService _instance = NotificationService._();
   factory NotificationService() => _instance;
@@ -116,7 +116,7 @@ class NotificationService {
       StreamController<Map<String, String>>.broadcast(
     sync: true,
     onListen: () {
-      unawaited(_drainActionQueue());
+      unawaited(_drainActionQueue().catchError((e) => debugPrint('[Notifications] Failed to drain action queue: $e')));
     },
   );
 
@@ -161,6 +161,8 @@ class NotificationService {
           _actionQueue.removeFirst();
         }
       }
+    }).catchError((e) {
+      debugPrint('[Notifications] Failed to add action to queue: $e');
     }));
   }
 
@@ -271,7 +273,7 @@ class NotificationService {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(
         BackgroundGate.adaptInterval(const Duration(seconds: 30)), (_) {
-      unawaited(processPendingBackgroundActions());
+      unawaited(processPendingBackgroundActions().catchError((e) => debugPrint('[Notifications] Failed to process pending background actions: $e')));
     });
   }
 
@@ -285,7 +287,7 @@ class NotificationService {
     if (_initFuture != null) {
       if (_receivePort != null &&
           IsolateNameServer.lookupPortByName('dmx_notification_port') != null) {
-        unawaited(processPendingBackgroundActions());
+        unawaited(processPendingBackgroundActions().catchError((e) => debugPrint('[Notifications] Failed to process pending background actions: $e')));
         return _initFuture!;
       }
       try {
@@ -353,7 +355,7 @@ class NotificationService {
               );
             }
           }
-          unawaited(processPendingBackgroundActions());
+          unawaited(processPendingBackgroundActions().catchError((e) => debugPrint('[Notifications] Failed to process pending background actions: $e')));
         }
       });
 
@@ -377,7 +379,7 @@ class NotificationService {
               'payload=${payload ?? "null"} failed validation',
             );
           }
-          unawaited(processPendingBackgroundActions());
+          unawaited(processPendingBackgroundActions().catchError((e) => debugPrint('[Notifications] Failed to process pending background actions: $e')));
         },
         onDidReceiveBackgroundNotificationResponse:
             _onBackgroundNotificationResponse,

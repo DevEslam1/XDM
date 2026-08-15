@@ -206,13 +206,26 @@ class StateLoadResult {
 class StateStore {
   StateStore._();
 
-  static String pathFor(String tempFilePath) => '$tempFilePath.dmxstate';
+  static String pathFor(String tempFilePath, {String? taskId}) {
+    if (taskId != null && taskId.isNotEmpty) {
+      return '$tempFilePath.$taskId.dmxstate';
+    }
+    return '$tempFilePath.dmxstate';
+  }
 
-  static Future<TransferState?> load(String tempFilePath) async {
-    final path = pathFor(tempFilePath);
-    final file = File(path);
+  static String _legacyPathFor(String tempFilePath) => '$tempFilePath.dmxstate';
+
+  static Future<TransferState?> load(String tempFilePath, {String? taskId}) async {
+    final path = pathFor(tempFilePath, taskId: taskId);
+    var file = File(path);
+    if (!await file.exists() && taskId != null && taskId.isNotEmpty) {
+      final legacyFile = File(_legacyPathFor(tempFilePath));
+      if (await legacyFile.exists()) {
+        file = legacyFile;
+      }
+    }
     if (!await file.exists()) {
-      final tmpFile = File('$path.tmp');
+      final tmpFile = File('${file.path}.tmp');
       if (await tmpFile.exists()) {
         try {
           final decoded = jsonDecode(await tmpFile.readAsString());
@@ -239,15 +252,23 @@ class StateStore {
     required String url,
     required int threadCount,
     required int knownFileSize,
+    String? taskId,
   }) async {
-    final path = pathFor(tempFilePath);
-    final file = File(path);
-
+    final path = pathFor(tempFilePath, taskId: taskId);
+    var file = File(path);
     TransferState? state;
     String? migratedFrom;
 
+    if (!await file.exists() && taskId != null && taskId.isNotEmpty) {
+      final legacyFile = File(_legacyPathFor(tempFilePath));
+      if (await legacyFile.exists()) {
+        file = legacyFile;
+        migratedFrom = 'legacy_path';
+      }
+    }
+
     // FIX-C2: Validate tmp file before accepting it; if unparseable, delete and fall back
-    var effectivePath = path;
+    var effectivePath = file.path;
     final tmpStale = File('$path.tmp');
     if (!await file.exists() && await tmpStale.exists()) {
       bool tmpValid = false;
@@ -497,8 +518,9 @@ class StateStore {
     TransferState state, {
     bool durable = false,
     bool screenOff = false,
+    String? taskId,
   }) async {
-    final targetPath = pathFor(tempFilePath);
+    final targetPath = pathFor(tempFilePath, taskId: taskId);
     final pathLock = _pathLocks.putIfAbsent(targetPath, () => Lock());
 
     return pathLock.synchronized(() async {
@@ -516,15 +538,15 @@ class StateStore {
                 .abs();
         final statusChanged = _lastWrittenStatus[targetPath] != state.status;
 
-        // FIX-C-BG-03: Rate-limit non-durable state saves in background (60s / 16MB) or foreground (2s / 5MB)
+        // Rate-limit non-durable state saves in background (120s / 16MB) or foreground (30s / 5MB)
         if (!durable && !statusChanged && lastSave != null) {
           if (isBg) {
-            if (now.difference(lastSave) < const Duration(seconds: 60) &&
+            if (now.difference(lastSave) < const Duration(seconds: 120) &&
                 bytesSinceLastWrite < 16 * 1024 * 1024) {
               return;
             }
           } else {
-            if (now.difference(lastSave) < const Duration(seconds: 2) &&
+            if (now.difference(lastSave) < const Duration(seconds: 30) &&
                 bytesSinceLastWrite < 5 * 1024 * 1024) {
               return;
             }
@@ -581,11 +603,13 @@ class StateStore {
     });
   }
 
-  static Future<void> remove(String tempFilePath) async {
-    final targetPath = pathFor(tempFilePath);
+  static Future<void> remove(String tempFilePath, {String? taskId}) async {
+    final targetPath = pathFor(tempFilePath, taskId: taskId);
     _pathLocks.remove(targetPath);
     _lastWrittenPayloads.remove(targetPath);
     _lastWrittenBytes.remove(targetPath);
+    _lastSaveTimes.remove(targetPath);
+    _lastWrittenStatus.remove(targetPath);
     final tmpPath = '$targetPath.tmp';
     try {
       final f = File(targetPath);
@@ -595,6 +619,22 @@ class StateStore {
       final tmp = File(tmpPath);
       if (await tmp.exists()) await tmp.delete();
     } catch (_) {}
+    if (taskId != null && taskId.isNotEmpty) {
+      final legacyPath = _legacyPathFor(tempFilePath);
+      _pathLocks.remove(legacyPath);
+      _lastWrittenPayloads.remove(legacyPath);
+      _lastWrittenBytes.remove(legacyPath);
+      _lastSaveTimes.remove(legacyPath);
+      _lastWrittenStatus.remove(legacyPath);
+      try {
+        final f = File(legacyPath);
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
+      try {
+        final tmp = File('$legacyPath.tmp');
+        if (await tmp.exists()) await tmp.delete();
+      } catch (_) {}
+    }
   }
 }
 

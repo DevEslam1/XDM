@@ -10,6 +10,28 @@ bool isHttpUrl(String value) {
       uri.host.isNotEmpty;
 }
 
+/// Verifies whether the URL uses safe protocols and strictly blocks
+/// dangerous schemes (javascript:, data:, vbscript:, about:).
+bool isSafeWebUrl(String value) {
+  final clean = value.trim().toLowerCase();
+  if (clean.isEmpty) return false;
+  if (clean.startsWith('javascript:') ||
+      clean.startsWith('data:') ||
+      clean.startsWith('vbscript:') ||
+      clean.startsWith('about:')) {
+    return false;
+  }
+  final uri = Uri.tryParse(clean);
+  if (uri == null) return false;
+  final scheme = uri.scheme.toLowerCase();
+  return scheme == 'http' ||
+      scheme == 'https' ||
+      scheme == 'magnet' ||
+      scheme == 'file' ||
+      scheme == 'content' ||
+      scheme == 'dmx';
+}
+
 String? extractUrlFromText(String text) {
   final trimmed = text.trim();
   if (isHttpUrl(trimmed) || isMagnetUrl(trimmed) || isTorrentFileUrl(trimmed)) {

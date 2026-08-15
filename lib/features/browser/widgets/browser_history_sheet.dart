@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -940,16 +941,21 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                     child: faviconUrl != null && faviconUrl.isNotEmpty
                         ? ClipRRect(
                             borderRadius: BorderRadius.circular(4),
-                            child: Image.network(
-                              faviconUrl,
+                            child: CachedNetworkImage(
+                              imageUrl: faviconUrl,
                               width: 16,
                               height: 16,
                               fit: BoxFit.contain,
-                              errorBuilder: (context, error, stack) => Icon(
+                              placeholder: (context, url) => const SizedBox(
+                                width: 16,
+                                height: 16,
+                              ),
+                              errorWidget: (context, url, error) => Icon(
                                 Icons.language_rounded,
                                 color: accent,
                                 size: 16,
                               ),
+                              memCacheWidth: 32,
                             ),
                           )
                         : Icon(

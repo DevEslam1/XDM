@@ -228,12 +228,14 @@ class PowerMonitor {
     // Stop if no active downloads
     if (!_hasActiveDownloads) return;
 
-    final int intervalSeconds = BackgroundGate.adaptInterval(
-      const Duration(seconds: 60),
-    ).inSeconds;
+    final int intervalSeconds = (PowerMonitor.screenOff || !isAppForegrounded)
+        ? 120
+        : BackgroundGate.adaptInterval(
+            const Duration(seconds: 60),
+          ).inSeconds;
 
     _thermalTimer = Timer.periodic(Duration(seconds: intervalSeconds), (_) {
-      if (PowerMonitor.screenOff) return;
+      if (PowerMonitor.screenOff && !_hasActiveDownloads) return;
       _pollThermalOnce();
     });
   }

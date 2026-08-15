@@ -32,7 +32,7 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     _checkOnboardingTooltip();
 
     _dashboardScrollController.addListener(_onDashboardScroll);
-    unawaited(_adBlocker.init());
+    unawaited(_adBlocker.init().catchError((e) => _log.warning('Failed to init ad blocker', e)));
   }
 
   Future<void> _updateAdBlockSettings() async {
@@ -138,7 +138,7 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
 
     if (!_quitPersisted && _tabs.isNotEmpty) {
       try {
-        unawaited(_tabManager.saveTabsImmediately());
+        unawaited(_tabManager.saveTabsImmediately().catchError((e) => _log.warning('Failed to save tabs', e)));
       } catch (e, st) {
         Logger('browser_screen')
             .warning('[browser_screen] operation failed', e, st);
@@ -158,8 +158,13 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     final bool hasIncognito = _tabs.any((t) => t.isIncognito);
     if (hasIncognito) {
       try {
-        unawaited(InAppWebViewController.clearAllCache());
-        unawaited(CookieManager.instance().deleteAllCookies());
+        unawaited(InAppWebViewController.clearAllCache().catchError((e) {
+          _log.warning('Failed to clear WebView cache', e);
+        }));
+        unawaited(CookieManager.instance().deleteAllCookies().catchError((e) {
+          _log.warning('Failed to delete cookies', e);
+          return false;
+        }));
       } catch (_) {}
     }
 

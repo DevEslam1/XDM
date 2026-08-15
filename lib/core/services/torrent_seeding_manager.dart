@@ -8,11 +8,15 @@ final _log = Logger('TorrentSeedingManager');
 
 /// Phase 5: Smart Seeding Manager & Adaptive Upload Regulation
 class TorrentSeedingManager {
-  static Timer? _seedingCheckTimer;
-  static final Map<int, DateTime> _seedStartTimes = {};
+  TorrentSeedingManager();
+
+  static final TorrentSeedingManager instance = TorrentSeedingManager();
+
+  Timer? _seedingCheckTimer;
+  final Map<int, DateTime> _seedStartTimes = {};
 
   /// Starts the periodic seeding policy enforcement loop.
-  static void startSeedingCheck() {
+  void startSeedingCheck() {
     _seedingCheckTimer?.cancel();
     _seedingCheckTimer = Timer.periodic(
       const Duration(seconds: 30),
@@ -21,23 +25,23 @@ class TorrentSeedingManager {
   }
 
   /// Stops the periodic seeding check loop.
-  static void stopSeedingCheck() {
+  void stopSeedingCheck() {
     _seedingCheckTimer?.cancel();
     _seedingCheckTimer = null;
   }
 
   /// Records when a torrent enters the seeding state.
-  static void recordSeedStart(int torrentId) {
+  void recordSeedStart(int torrentId) {
     _seedStartTimes.putIfAbsent(torrentId, () => DateTime.now());
   }
 
   /// Removes tracking when a torrent stops seeding.
-  static void clearSeedStart(int torrentId) {
+  void clearSeedStart(int torrentId) {
     _seedStartTimes.remove(torrentId);
   }
 
   /// Calculates elapsed duration of active seeding for a given torrent.
-  static Duration getSeedDuration(int torrentId) {
+  Duration getSeedDuration(int torrentId) {
     final start = _seedStartTimes[torrentId];
     if (start == null) return Duration.zero;
     return DateTime.now().difference(start);
@@ -50,7 +54,7 @@ class TorrentSeedingManager {
   }
 
   /// Checks all active torrents against seeding policies and pauses those that exceed limits.
-  static void checkSeedingPolicies({SettingsProvider? settingsProvider}) {
+  void checkSeedingPolicies({SettingsProvider? settingsProvider}) {
     final s = settingsProvider ?? SettingsProvider.instance;
     final activeIds = TorrentService.activeTorrentIds;
     final statsMap = TorrentService.latestStats;

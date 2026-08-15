@@ -258,7 +258,7 @@ class WidgetDataBridge {
       final wait = effectiveInterval - now.difference(_lastPush!);
       _pendingTimer = Timer(wait, () {
         _pendingTimer = null;
-        unawaited(_doPush(dashboard));
+        unawaited(_doPush(dashboard).catchError((e) => _log.warning('Failed to push widget data', e)));
       });
       return;
     }

@@ -158,10 +158,10 @@ class DownloadOrchestrator {
               if (matching.isEmpty) return null;
               return matching.first.torrentFiles;
             },
-          ));
+          ).catchError((e) => debugPrint('[DMX] Periodic resume save failed: $e')));
           // FIX-C4: Save fast resume data for all active torrents
           for (final tid in TorrentService.activeTorrentIds) {
-            unawaited(TorrentService.saveResumeData(tid));
+            unawaited(TorrentService.saveResumeData(tid).catchError((e) => debugPrint('[DMX] saveResumeData failed: $e')));
           }
         }
       },
@@ -379,7 +379,7 @@ class DownloadOrchestrator {
     if (_host.cancelTokens.containsKey(task.id)) return false;
     if (!_startingTaskIds.add(task.id)) return false; // atomic
     try {
-      unawaited(_runStartTaskBody(task));
+      unawaited(_runStartTaskBody(task).catchError((e) => debugPrint('[DMX] startTaskBody failed: $e')));
     } catch (_) {
       _startingTaskIds.remove(task.id);
       rethrow;
@@ -745,6 +745,7 @@ class DownloadOrchestrator {
     current = _host.findTaskById(taskId);
     if (current == null) return false;
 
+    String? mergedPath;
     try {
       final token = _host.cancelTokens[taskId];
       if (token != null && token.isCancelled) {
@@ -796,7 +797,7 @@ class DownloadOrchestrator {
           ? p.extension(actualVideoPath)
           : '.mp4';
 
-      final mergedPath = actualVideoPath == current.localFilePath
+      mergedPath = actualVideoPath == current.localFilePath
           ? '${current.tempFilePath}.merged$videoExt'
           : '${p.withoutExtension(actualVideoPath)}$videoExt.merged$videoExt';
 
@@ -1110,6 +1111,12 @@ class DownloadOrchestrator {
       final latest = _host.findTaskById(taskId);
       if (latest != null) {
         await _host.setTaskState(latest.copyWith(isMergeInProgress: false));
+        if (latest.status == DownloadStatus.failed && mergedPath != null) {
+          try {
+            final f = File(mergedPath);
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
+        }
       }
     }
 
@@ -1488,7 +1495,7 @@ class DownloadOrchestrator {
                 unawaited(
                   _mediaChannel.invokeMethod('scanMedia', {
                     'path': entity.path,
-                  }),
+                  }).catchError((e) => debugPrint('[DMX] scanMedia failed: $e')),
                 );
               } catch (e) {
                 debugPrint('Failed to scan media: $e');
@@ -1540,7 +1547,7 @@ class DownloadOrchestrator {
         if (mediaResult == null) {
           try {
             unawaited(
-              _mediaChannel.invokeMethod('scanMedia', {'path': actualFilePath}),
+              _mediaChannel.invokeMethod('scanMedia', {'path': actualFilePath}).catchError((e) => debugPrint('[DMX] scanMedia failed: $e')),
             );
           } catch (e) {
             debugPrint('Failed to scan media: $e');
@@ -1557,7 +1564,7 @@ class DownloadOrchestrator {
         if (mediaResult == null) {
           try {
             unawaited(
-              _mediaChannel.invokeMethod('scanMedia', {'path': finalPath}),
+              _mediaChannel.invokeMethod('scanMedia', {'path': finalPath}).catchError((e) => debugPrint('[DMX] scanMedia failed: $e')),
             );
           } catch (e) {
             debugPrint('Failed to scan media: $e');
@@ -1846,11 +1853,11 @@ class DownloadOrchestrator {
             eta: updated.etaFormatted,
             payload: _host.notifications.opaqueHandleFor(task.id),
           );
-          unawaited(BackgroundService.sendHeartbeat());
+          unawaited(BackgroundService.sendHeartbeat().catchError((e) => debugPrint('[DMX] sendHeartbeat failed: $e')));
         } else {
           _host.providerTasks[index] = updated;
           if (base.fileSize == 0 && updated.fileSize > 0) {
-            unawaited(_host.setTaskState(updated));
+            unawaited(_host.setTaskState(updated).catchError((e) => debugPrint('[DMX] setTaskState failed: $e')));
           }
           _host.pushProgressTick(task.id, updated.progress, updated.speed);
           _host.pendingProgressUpdates.add(task.id);
@@ -2125,7 +2132,7 @@ class DownloadOrchestrator {
                     unawaited(
                       _host.providerDatabaseService
                           .saveTask(updated)
-                          .catchError((_) {}),
+                          .catchError((e) => debugPrint('[DMX] saveTask failed on audio size discovery: $e')),
                     );
                   }
                 }
@@ -2154,14 +2161,14 @@ class DownloadOrchestrator {
                 if (audioNow - lastSave >= 2000) {
                   _lastAudioStateSaveMs[task.id] = audioNow;
                   unawaited(_persistAudioState(
-                      liveAudioTempPath, progress.downloadedBytes, size));
+                      liveAudioTempPath, progress.downloadedBytes, size).catchError((e) => debugPrint('[DMX] persistAudioState failed: $e')));
                   // FIX-AUDIO-DB: also persist the task row so a crash does not
                   // lose audioDownloadedBytes/audioProgress in the DB.
                   final audioDbIdx =
                       _host.providerTasks.indexWhere((x) => x.id == task.id);
                   if (audioDbIdx != -1) {
                     unawaited(
-                        _host.setTaskState(_host.providerTasks[audioDbIdx]));
+                        _host.setTaskState(_host.providerTasks[audioDbIdx]).catchError((e) => debugPrint('[DMX] setTaskState failed for audio: $e')));
                   }
                 }
               },
@@ -2538,8 +2545,7 @@ class DownloadOrchestrator {
                     unawaited(
                       _host.providerDatabaseService.saveTask(
                         _host.providerTasks[index],
-                      ),
-                    );
+                      ).catchError((e) => debugPrint('[DMX] saveTask failed on localPath change: $e')));
                   }
                 },
                 speedLimitBytesPerSecond: () {
@@ -2617,18 +2623,25 @@ class DownloadOrchestrator {
             }
           }
 
+          final videoFuture = runVideo();
+          final audioFuture = runAudio();
           try {
             await Future.wait([
-              runVideo().catchError((e) {
+              videoFuture.catchError((e) {
                 audioCancelToken.cancel();
                 throw e;
               }),
-              runAudio().catchError((e) {
+              audioFuture.catchError((e) {
                 videoCancelToken.cancel();
                 throw e;
               }),
             ]);
           } catch (e) {
+            // Await both futures to completely settle before teardown
+            await Future.wait([
+              videoFuture.catchError((_) {}),
+              audioFuture.catchError((_) {}),
+            ]);
             // FIX-P0-02: Clean up whichever stream completed successfully or handle partial failure
             if (e is! DioException || e.type != DioExceptionType.cancel) {
               final videoFile = File(task.tempFilePath);
@@ -2730,6 +2743,12 @@ class DownloadOrchestrator {
                 preMergeCheck.copyWith(status: DownloadStatus.merging));
             final mergeOk = await _mergeAudioVideo(task.id, effectiveAudioPath,
                 notificationId: notificationId);
+
+            // ADD THIS CHECK:
+            if (cancelToken.isCancelled) {
+              debugPrint('[DMX] Cancelled during merge, aborting finalize');
+              return;
+            }
 
             if (!mergeOk) {
               final current = _host.findTaskById(task.id);
@@ -3233,7 +3252,7 @@ class DownloadOrchestrator {
               _host.providerTorrentIds[task.id] = torrentId;
               // FIX-C4: Save resume data for magnet links so resume works across app restarts
               if (task.url.startsWith('magnet:')) {
-                unawaited(TorrentService.saveResumeData(torrentId));
+                unawaited(TorrentService.saveResumeData(torrentId).catchError((e) => debugPrint('[DMX] saveResumeData failed for magnet: $e')));
               }
             }
 

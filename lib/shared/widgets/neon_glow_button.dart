@@ -50,7 +50,10 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
       vsync: this,
       duration: const Duration(milliseconds: 2600),
     );
-    startPausableLoop();
+    final enabled = widget.onPressed != null && !widget.isLoading;
+    if (enabled) {
+      startPausableLoop();
+    }
   }
 
   @override
@@ -59,6 +62,8 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
     final enabled = widget.onPressed != null && !widget.isLoading;
     if (!enabled && _shimmer.isAnimating) {
       _shimmer.stop();
+    } else if (enabled && !_shimmer.isAnimating) {
+      startPausableLoop();
     }
   }
 
@@ -163,11 +168,15 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
           )
         : content;
 
-    return GestureDetector(
-      onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
-      onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
-      onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
-      child: AnimatedScale(
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: widget.text,
+      child: GestureDetector(
+        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+        onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+        child: AnimatedScale(
         scale: _pressed ? 0.96 : 1.0,
         duration: AppTheme.motionFast,
         curve: AppTheme.motionSpring,
@@ -250,6 +259,7 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
                         )
                       : label,
                 ),
+          ),
         ),
       ),
     );

@@ -12,6 +12,7 @@ import '../../features/settings/provider/settings_provider.dart';
 class ThemedSnackbar {
   ThemedSnackbar._();
 
+  static String? _lastMessage;
   static DateTime _lastShown = DateTime.fromMillisecondsSinceEpoch(0);
 
   static void show(
@@ -27,7 +28,11 @@ class ThemedSnackbar {
   }) {
     if (!context.mounted) return;
     final now = DateTime.now();
-    if (now.difference(_lastShown).inMilliseconds < 300) return; // debounce
+    if (_lastMessage == message &&
+        now.difference(_lastShown).inMilliseconds < 800) {
+      return; // debounce duplicate identical message
+    }
+    _lastMessage = message;
     _lastShown = now;
     final isDark =
         isDarkMode ?? Theme.of(context).brightness == Brightness.dark;

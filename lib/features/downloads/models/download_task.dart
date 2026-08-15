@@ -642,7 +642,10 @@ class DownloadTask {
       recoveryHint:
           clearRecoveryHint ? null : (recoveryHint ?? this.recoveryHint),
       threadCount: threadCount ?? this.threadCount,
-      chunks: (chunks ?? this.chunks).map((c) {
+      chunks: (chunks != null
+              ? List<double>.from(chunks)
+              : List<double>.from(this.chunks))
+          .map((c) {
         if (c.isNaN || c.isInfinite) return 0.0;
         return c.clamp(0.0, 1.0);
       }).toList(),
@@ -658,8 +661,15 @@ class DownloadTask {
       seedingLimited: seedingLimited ?? this.seedingLimited,
       seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
       uploadedBytes: uploadedBytes ?? this.uploadedBytes,
-      torrentFiles:
-          clearTorrentFiles ? null : (torrentFiles ?? this.torrentFiles),
+      torrentFiles: clearTorrentFiles
+          ? null
+          : (torrentFiles != null
+              ? List<Map<String, dynamic>>.from(
+                  torrentFiles.map((m) => Map<String, dynamic>.from(m)))
+              : (this.torrentFiles != null
+                  ? List<Map<String, dynamic>>.from(
+                      this.torrentFiles!.map((m) => Map<String, dynamic>.from(m)))
+                  : null)),
       downloadPageUrl: clearDownloadPageUrl
           ? null
           : (downloadPageUrl ?? this.downloadPageUrl),
@@ -689,7 +699,9 @@ class DownloadTask {
       playlistTitle: playlistTitle ?? this.playlistTitle,
       thumbnailUrl: clearThumbnail ? null : (thumbnailUrl ?? this.thumbnailUrl),
       expectedSha256: expectedSha256 ?? this.expectedSha256,
-      mirrorUrls: mirrorUrls ?? this.mirrorUrls,
+      mirrorUrls: mirrorUrls != null
+          ? List<String>.from(mirrorUrls)
+          : (this.mirrorUrls != null ? List<String>.from(this.mirrorUrls!) : null),
       siteType: siteType ?? this.siteType,
       siteDisplayName: siteDisplayName ?? this.siteDisplayName,
       contentHint: contentHint ?? this.contentHint,

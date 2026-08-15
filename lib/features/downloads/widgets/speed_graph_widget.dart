@@ -219,7 +219,9 @@ class _SpeedGraphWidgetState extends State<SpeedGraphWidget> {
               const SizedBox(height: 16),
               SizedBox(
                 height: widget.height,
-                child: LineChart(_cachedChartData!),
+                child: RepaintBoundary(
+                  child: LineChart(_cachedChartData!),
+                ),
               ),
             ],
           ),

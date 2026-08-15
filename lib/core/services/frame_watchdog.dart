@@ -1,7 +1,7 @@
-// FIX-H9: FrameWatchdog — Screen-off lifecycle
 import 'dart:ui';
 import 'package:flutter/scheduler.dart';
 import 'package:logging/logging.dart';
+import 'download_engine.dart';
 import 'performance_monitor.dart';
 import 'power_monitor.dart';
 
@@ -59,7 +59,7 @@ class FrameWatchdog {
 
   static void start() {
     // FIX-H9: Guard start() with screen-off check
-    if (_isRunning || PowerMonitor.screenOff) return;
+    if (_isRunning || PowerMonitor.screenOff || !DownloadEngine.appInForeground) return;
     _isRunning = true;
     _windowStart = DateTime.now();
     _dropped = 0;
@@ -76,12 +76,23 @@ class FrameWatchdog {
 
   // FIX-H9: Resume when active and screen is on
   static void resume() {
-    if (_isRunning || PowerMonitor.screenOff) return;
+    if (_isRunning || PowerMonitor.screenOff || !DownloadEngine.appInForeground) return;
     start();
   }
 
+  static int downloadingTasksCount = 0;
+
+  static void setDownloadingTasksCount(int count) {
+    downloadingTasksCount = count;
+  }
+
   static void _onTimings(List<FrameTiming> timings) {
-    if (PowerMonitor.screenOff) return;
+    if (PowerMonitor.screenOff ||
+        !DownloadEngine.appInForeground ||
+        DownloadEngine.isInBackground ||
+        downloadingTasksCount > 2) {
+      return;
+    }
     if (PerformanceMonitor.instance.isActive) {
       PerformanceMonitor.instance.ingestFrameTimings(timings);
     }

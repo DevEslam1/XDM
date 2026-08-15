@@ -30,33 +30,56 @@ class DownloadQueueService {
 
   void clearAllPendingStarts() => _pendingStarts.clear();
 
+  bool _isPumping = false;
+  bool _pendingPump = false;
+
   /// Pumps the download queue, starting next queued tasks up to [maxConcurrentDownloads].
   Future<void> pumpQueue() async {
-    final activeCount = _host.downloadingTasksCount + _pendingStarts.length;
-    final availableSlots = _host.maxConcurrentDownloads - activeCount;
+    if (_isPumping) {
+      _pendingPump = true;
+      return;
+    }
+    _isPumping = true;
+    _pendingPump = false;
+    try {
+      int passes = 0;
+      while (passes < 8) {
+        passes++;
+        _pendingPump = false;
+        final activeCount = _host.downloadingTasksCount + _pendingStarts.length;
+        final availableSlots = _host.maxConcurrentDownloads - activeCount;
 
-    if (availableSlots <= 0) return;
+        if (availableSlots <= 0) break;
 
-    final queued = _host.tasks
-        .where((t) =>
-            t.status == DownloadStatus.queued &&
-            !_pendingStarts.contains(t.id) &&
-            !_host.isTaskStarting(t.id))
-        .toList()
-      ..sort((a, b) => a.queueOrder.compareTo(b.queueOrder));
+        final queued = _host.tasks
+            .where((t) =>
+                t.status == DownloadStatus.queued &&
+                !_pendingStarts.contains(t.id) &&
+                !_host.isTaskStarting(t.id))
+            .toList()
+          ..sort((a, b) => a.queueOrder.compareTo(b.queueOrder));
 
-    final toStart = queued.take(availableSlots).toList();
-    for (final task in toStart) {
-      _pendingStarts.add(task.id);
-      try {
-        unawaited(_host.executeTask(task.id).whenComplete(() {
-          _pendingStarts.remove(task.id);
-        }));
-      } catch (e) {
-        _pendingStarts.remove(task.id);
-        debugPrint(
-            '[DownloadQueueService] Failed to start task ${task.id}: $e');
+        final toStart = queued.take(availableSlots).toList();
+        if (toStart.isEmpty) break;
+
+        for (final task in toStart) {
+          _pendingStarts.add(task.id);
+          try {
+            unawaited(_host.executeTask(task.id).whenComplete(() {
+              _pendingStarts.remove(task.id);
+            }));
+          } catch (e) {
+            _pendingStarts.remove(task.id);
+            debugPrint(
+                '[DownloadQueueService] Failed to start task ${task.id}: $e');
+          }
+        }
+
+        if (!_pendingPump) break;
       }
+    } finally {
+      _isPumping = false;
+      _pendingPump = false;
     }
   }
 

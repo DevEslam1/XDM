@@ -17,7 +17,8 @@
     <application
         android:label="XDM"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:largeHeap="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -95,7 +96,11 @@
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="dataSync|specialUse"
             android:exported="false"
-            tools:replace="android:exported" />
+            tools:replace="android:exported">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="File download manager requiring persistent background execution" />
+        </service>
         <service
             android:name="id.flutter.flutter_background_service.ForegroundService"
             android:foregroundServiceType="dataSync|specialUse"

@@ -163,64 +163,42 @@ class TorrentDownloadOrchestrator {
   ) async {
     final completer = Completer<void>();
     DateTime lastEmitTime = DateTime.fromMillisecondsSinceEpoch(0);
-    final saveDir = File(localFilePath).parent.path;
 
     final sub = TorrentService.torrentUpdates.listen((torrents) async {
-      final t = torrents[id];
-      if (t == null) return;
-      
-      final stateLabel = t.stateLabel.toLowerCase();
-      final isComplete = stateLabel == 'seeding' || (t.totalWanted > 0 && t.totalWantedDone >= t.totalWanted);
-      
+      final torrent = torrents[id];
+      if (torrent == null) return;
+
       final now = DateTime.now();
-      if (!isComplete && now.difference(lastEmitTime).inMilliseconds < 1000) {
-        return;
-      }
+      if (now.difference(lastEmitTime).inMilliseconds < 1000) return;
       lastEmitTime = now;
 
-      final resolvedFiles = getTorrentFiles?.call();
-      if (t.hasMetadata) {
-        try {
-          final accurate = await TorrentService.getAccurateFileProgress(id, saveDir);
-          if (accurate.isNotEmpty) {
-            final accurateMap = {for (final f in accurate) f.name: f};
-            if (resolvedFiles != null) {
-              for (final rf in resolvedFiles) {
-                final name = rf['name'] as String? ?? '';
-                final acc = accurateMap[name];
-                if (acc != null) {
-                  rf['downloadedBytes'] = acc.downloadedBytes;
-                  rf['progress'] = acc.progress;
-                  rf['percent'] = acc.progress;
-                  rf['isComplete'] = acc.isComplete;
-                  rf['progressEstimated'] = false;
-                }
-              }
-            }
-          }
-        } catch (_) {}
-      }
+      final files = getTorrentFiles?.call();
+      final summary = _normalizeTorrentFiles(files);
+      final totalWanted = torrent.totalWanted > 0
+          ? torrent.totalWanted
+          : (summary.bytes > 0 ? summary.bytes : fileSize);
+      final downloaded = torrent.totalWantedDone > 0
+          ? torrent.totalWantedDone
+          : (summary.downloaded > 0 ? summary.downloaded : torrent.totalDone);
 
-      final summary = _normalizeTorrentFiles(resolvedFiles);
-      final downloaded = t.totalWantedDone > 0 ? t.totalWantedDone : summary.downloaded;
-      final total = t.totalWanted > 0 ? t.totalWanted : (summary.bytes > 0 ? summary.bytes : fileSize);
-      final remaining = total - downloaded;
-      final eta = (remaining > 0 && t.downloadRate > 0) ? (remaining ~/ t.downloadRate) : null;
+      final stateLabel = torrent.stateLabel.toLowerCase();
+      final isComplete =
+          stateLabel == 'seeding' || (totalWanted > 0 && downloaded >= totalWanted);
 
       onProgress(DownloadProgress(
         downloadedBytes: downloaded,
-        fileSize: total,
-        speed: (t.downloadRate).toDouble(),
-        eta: eta,
+        fileSize: totalWanted,
+        speed: torrent.downloadRate.toDouble(),
+        eta: null,
         supportsResume: true,
-        torrentFiles: resolvedFiles,
-        statusMessage: isComplete ? 'Seeding' : 'Downloading',
-        cycleState: isComplete ? 'seeding' : 'downloading',
+        torrentFiles: files,
+        statusMessage: stateLabel,
+        cycleState: stateLabel,
         torrentId: id,
         totalFiles: summary.total > 0 ? summary.total : null,
         completedFiles: summary.done > 0 ? summary.done : null,
         totalFileBytes: summary.bytes > 0 ? summary.bytes : null,
-        downloadedFileBytes: summary.downloaded > 0 ? summary.downloaded : null,
+        downloadedFileBytes: downloaded > 0 ? downloaded : null,
       ));
 
       if (isComplete) {
@@ -228,9 +206,20 @@ class TorrentDownloadOrchestrator {
       }
     });
 
+    // ADD TIMEOUT:
+    final timeoutTimer = Timer(const Duration(minutes: 30), () {
+      if (!completer.isCompleted) {
+        sub.cancel();
+        completer.completeError(
+          TimeoutException('Torrent download timed out after 30 minutes'),
+        );
+      }
+    });
+
     try {
       await completer.future;
     } finally {
+      timeoutTimer.cancel();
       sub.cancel();
     }
   }

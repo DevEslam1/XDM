@@ -342,3 +342,28 @@ Future<void> deleteDownloadParts(String tempFilePath) async {
 }
 
 bool isTorrentFileSelected(Map f) => f['selected'] != false;
+
+/// Sanitizes a file name, stripping path traversal sequences and illegal OS characters.
+String sanitizeFileName(String fileName) {
+  var name = fileName.trim();
+  name = name.replaceAll(RegExp(r'[\x00-\x1f\x7f]'), '');
+  name = name.replaceAll(RegExp(r'[\\\/]'), '_');
+  name = name.replaceAll('..', '_');
+  name = name.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+  if (name.isEmpty || name == '.' || name == '..') {
+    return 'download_${DateTime.now().millisecondsSinceEpoch}';
+  }
+  if (name.length > 255) {
+    final ext = p.extension(name);
+    final base = p.basenameWithoutExtension(name);
+    name = '${base.substring(0, (255 - ext.length).clamp(1, 255))}$ext';
+  }
+  return name;
+}
+
+/// Validates that [targetPath] resolves safely within [rootDirectory] to prevent directory traversal.
+bool isSafeSubpath(String rootDirectory, String targetPath) {
+  final canonicalRoot = p.canonicalize(rootDirectory);
+  final canonicalTarget = p.canonicalize(targetPath);
+  return p.isWithin(canonicalRoot, canonicalTarget) || canonicalRoot == canonicalTarget;
+}

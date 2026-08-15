@@ -24,7 +24,7 @@ class DmxBackdropFilter extends StatefulWidget {
   });
 
   static int _activeCount = 0;
-  static const int _maxConcurrent = 3;
+  static const int _maxConcurrent = 1;
 
   @visibleForTesting
   static int get activeCount => _activeCount;

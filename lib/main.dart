@@ -46,6 +46,7 @@ import 'core/services/protocol_cache.dart';
 import 'core/services/network/cookie_cache.dart';
 import 'core/services/widget_deep_link.dart';
 import 'core/services/app_lifecycle_coordinator.dart';
+import 'core/services/service_registry.dart';
 import 'core/di/injection.dart';
 
 class _ScreenObserver with WidgetsBindingObserver {
@@ -59,7 +60,7 @@ class _ScreenObserver with WidgetsBindingObserver {
     if (isResumed) {
       FrameWatchdog.resume();
       PerformanceMonitor.instance.resume();
-      StatusChipPulseDriver.instance.restartIfActive();
+      getIt<StatusChipPulseDriver>().restartIfActive();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden ||
@@ -272,7 +273,12 @@ Future<void> main(List<String> args) async {
           if (TorrentService.isSupported) {
             initFutures.add(() async {
               try {
-                await TorrentService.init();
+                await TorrentService.init().timeout(
+                  const Duration(seconds: 15),
+                  onTimeout: () {
+                    throw TimeoutException('TorrentService.init timed out after 15s');
+                  },
+                );
                 debugPrint('Torrent service initialized successfully');
               } catch (e, s) {
                 debugPrint(
@@ -527,11 +533,18 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      unawaited(NotificationService().processPendingBackgroundActions());
+      unawaited(
+        NotificationService().processPendingBackgroundActions().catchError((e) {
+          debugPrint('processPendingBackgroundActions failed: $e');
+        }),
+      );
     }
 
     if (state == AppLifecycleState.detached) {
-      // App is being terminated — release wake lock
+      // App is being terminated — release wake lock and shutdown singleton services
+      unawaited(ServiceRegistry.shutdownAll().catchError((e) {
+        debugPrint('Failed to shutdown services on detach: $e');
+      }));
       unawaited(BackgroundService.releaseWakeLock().catchError((e) {
         debugPrint('Failed to release wake lock on detach: $e');
       }));
@@ -541,10 +554,18 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
 
     switch (state) {
       case AppLifecycleState.paused:
-        unawaited(_saveTorrentState());
+      unawaited(
+        _saveTorrentState().catchError((e) {
+          debugPrint('_saveTorrentState failed: $e');
+        }),
+      );
         break;
       case AppLifecycleState.resumed:
-        unawaited(_resumeTorrents());
+      unawaited(
+        _resumeTorrents().catchError((e) {
+          debugPrint('_resumeTorrents failed: $e');
+        }),
+      );
         break;
       default:
         break;
@@ -803,15 +824,13 @@ class _FpsOverlayState extends State<_FpsOverlay> {
   int _frameCount = 0;
   double _fps = 0;
   Timer? _timer;
+  bool _active = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPersistentFrameCallback((_) {
-      if (mounted) {
-        _frameCount++;
-      }
-    });
+    _active = true;
+    _scheduleNextFrame();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -822,9 +841,20 @@ class _FpsOverlayState extends State<_FpsOverlay> {
     });
   }
 
+  void _scheduleNextFrame() {
+    if (!_active || !mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_active || !mounted) return;
+      _frameCount++;
+      _scheduleNextFrame();
+    });
+  }
+
   @override
   void dispose() {
+    _active = false;
     _timer?.cancel();
+    _timer = null;
     super.dispose();
   }
 

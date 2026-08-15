@@ -1243,15 +1243,21 @@ mixin _TabsMixin on _BrowserScreenStateBase {
                                 height: 18,
                                 alignment: Alignment.center,
                                 child: tab.faviconUrl != null
-                                    ? Image.network(
-                                        tab.faviconUrl!,
+                                    ? CachedNetworkImage(
+                                        imageUrl: tab.faviconUrl!,
                                         width: 16,
                                         height: 16,
-                                        errorBuilder: (_, __, ___) => Icon(
+                                        fit: BoxFit.contain,
+                                        placeholder: (context, url) =>
+                                            const SizedBox(
+                                                width: 16, height: 16),
+                                        errorWidget: (context, url, error) =>
+                                            Icon(
                                           Icons.public_rounded,
                                           size: 14,
                                           color: textClr,
                                         ),
+                                        memCacheWidth: 32,
                                       )
                                     : Icon(
                                         Icons.public_rounded,

@@ -23,6 +23,7 @@ import '../../../core/services/background_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/download_engine.dart';
 import '../../../core/services/download_journal.dart';
+import '../../../core/services/frame_watchdog.dart';
 import '../../../core/services/ios_background_capability.dart';
 import '../../../core/services/power_monitor.dart';
 import '../../../core/services/diagnostic_service.dart';
@@ -276,15 +277,32 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, Lock> _taskLocks = {};
   Lock _lockFor(String id) => _taskLocks.putIfAbsent(id, () => Lock());
 
-  // FIX-PERF-03: Frame-batched listener notification
+  // FIX-PERF-03: Frame-batched listener notification with safety against disposed bindings
   bool _notifyScheduled = false;
   void scheduleNotify() {
+    if (_disposed) return;
     if (_notifyScheduled) return;
     _notifyScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    try {
+      final binding = WidgetsBinding.instance;
+      binding.addPostFrameCallback((_) {
+        _notifyScheduled = false;
+        if (!_disposed) {
+          try {
+            notifyListeners();
+          } catch (e) {
+            debugPrint('[DownloadProvider] notifyListeners failed: $e');
+          }
+        }
+      });
+    } catch (e) {
       _notifyScheduled = false;
-      if (!_disposed) notifyListeners();
-    });
+      if (!_disposed) {
+        try {
+          notifyListeners();
+        } catch (_) {}
+      }
+    }
   }
 
   /// Returns true if a pause, resume, or retry operation is currently executing for [taskId].
@@ -318,17 +336,25 @@ class DownloadProvider extends ChangeNotifier
     final completer = Completer<void>();
     _inFlightTaskOps[id] = completer.future;
     _lastTaskOpTimes[id] = DateTime.now();
-    notifyListeners();
+    scheduleNotify();
 
     try {
-      await body();
+      await _lockFor(id).synchronized(() async {
+        final task = _findTask(id);
+        if (task == null && opName != 'delete') {
+          debugPrint(
+              '[DMX Guard] $opName for $id aborted — task no longer exists.');
+          return;
+        }
+        await body();
+      });
       completer.complete();
     } catch (e, st) {
       completer.completeError(e, st);
       rethrow;
     } finally {
       _inFlightTaskOps.remove(id);
-      notifyListeners();
+      scheduleNotify();
     }
   }
 
@@ -454,7 +480,7 @@ class DownloadProvider extends ChangeNotifier
                   errorMessage: 'Torrent engine error: ${info.stateLabel}',
                   speed: 0,
                   clearEta: true,
-                )));
+                )).catchError((e) => _log.warning('Failed to set task state from torrent error', e)));
               }
             }
           }
@@ -482,7 +508,11 @@ class DownloadProvider extends ChangeNotifier
   Timer? _speedHistoryCleanupTimer;
   final Map<String, Future<void>> _dbSaveQueues = {};
 
-  void _cleanupInactiveSpeedHistories() {
+  void _cleanupInactiveSpeedHistories([String? completedTaskId]) {
+    if (completedTaskId != null) {
+      _speedHistories.remove(completedTaskId);
+      _uploadSpeedHistories.remove(completedTaskId);
+    }
     final activeIds = _tasks
         .where((t) =>
             t.status == DownloadStatus.downloading ||
@@ -494,11 +524,23 @@ class DownloadProvider extends ChangeNotifier
     _speedHistories.removeWhere((id, _) => !activeIds.contains(id));
     _uploadSpeedHistories.removeWhere((id, _) => !activeIds.contains(id));
 
-    // FIX P1-2: Enforce max cap of 100 total entries in speed histories map
-    while (_speedHistories.length > 100) {
+    // Cap at 20 entries per queue
+    for (final q in _speedHistories.values) {
+      while (q.length > 20) {
+        q.removeFirst();
+      }
+    }
+    for (final q in _uploadSpeedHistories.values) {
+      while (q.length > 20) {
+        q.removeFirst();
+      }
+    }
+
+    // Enforce max cap of 50 total entries in speed histories map
+    while (_speedHistories.length > 50) {
       _speedHistories.remove(_speedHistories.keys.first);
     }
-    while (_uploadSpeedHistories.length > 100) {
+    while (_uploadSpeedHistories.length > 50) {
       _uploadSpeedHistories.remove(_uploadSpeedHistories.keys.first);
     }
   }
@@ -532,6 +574,18 @@ class DownloadProvider extends ChangeNotifier
     if (!DownloadEngine.appInForeground || PowerMonitor.screenOff) {
       return;
     }
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final lastPush = _lastUiPushTimes[taskId] ?? 0;
+    final throttleMs = PowerMonitor.screenOff
+        ? 30000
+        : DownloadEngine.isInBackground
+            ? 5000
+            : 1000; // was 250ms
+
+    if (now - lastPush < throttleMs) return;
+    _lastUiPushTimes[taskId] = now;
+
     progressRevision.value++;
     final progressNotif = progressNotifier(taskId);
     final speedNotif = speedNotifier(taskId);
@@ -558,6 +612,7 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, bool> _ytThrottlingRefreshing = {};
 
   final Map<String, int> _lastProgressUpdateTimes = {};
+  final Map<String, int> _lastUiPushTimes = {};
   final Map<String, int> _lastDbSaveTimes = {};
   final Map<String, int> _lastDbSaveBytes = {};
   final Map<String, int> _lastTorrentFileDiskSync = {};
@@ -1146,7 +1201,9 @@ class DownloadProvider extends ChangeNotifier
         errorMessage: reason,
         speed: 0,
       );
-      unawaited(_databaseService.saveTask(_tasks[i]));
+      unawaited(_databaseService.saveTask(_tasks[i]).catchError((e) {
+        _log.warning('Failed to save torrent task failure state', e);
+      }));
       changed = true;
     }
     if (changed) {
@@ -1174,8 +1231,17 @@ class DownloadProvider extends ChangeNotifier
       final cleanupDays = _settingsProvider.cleanupDays;
       final now = DateTime.now();
       final toDelete = <DownloadTask>[];
-
-      final dbTasks = await _databaseService.loadTasks();
+      List<DownloadTask> dbTasks = [];
+      try {
+        dbTasks = await _databaseService.loadTasks();
+      } catch (e, st) {
+        _log.severe(
+          'Failed to load tasks from database, falling back to empty list: $e',
+          e,
+          st,
+        );
+        dbTasks = [];
+      }
 
       final loaded = dbTasks.map((t) {
         // FIX-AUDIT-4: Clamp downloadedBytes to fileSize and chunks to [0.0, 1.0] to prevent >100% display.
@@ -1268,7 +1334,11 @@ class DownloadProvider extends ChangeNotifier
             _log.info(
               'iOS: $activeDownloads active download(s) scheduled with native BGTaskScheduler / URLSession.',
             );
-            unawaited(BackgroundService.start());
+            unawaited(
+      BackgroundService.start().catchError((e) {
+        _log.warning('BackgroundService.start failed: $e');
+      }),
+    );
           } else {
             _log.warning(
               'iOS: $activeDownloads download(s) were active but native background execution is unsupported. Pausing.',
@@ -1294,39 +1364,34 @@ class DownloadProvider extends ChangeNotifier
         if (task.isTorrent &&
             task.status == DownloadStatus.completed &&
             task.seedingEnabled) {
-          unawaited(startSeedingTorrent(task));
+          unawaited(
+      startSeedingTorrent(task).catchError((e) {
+        _log.warning('startSeedingTorrent failed: $e');
+      }),
+    );
         }
       }
 
-      // FIX R-3: Recover torrent IDs for paused/in-progress torrents from TorrentService
+      // Reconcile torrent IDs after restart
+      final savedMapping = await TorrentResumeStore.loadTaskMapping();
       for (final task in _tasks) {
-        if (task.isTorrent &&
-            task.status != DownloadStatus.completed &&
-            task.status != DownloadStatus.failed &&
-            !_torrentIds.containsKey(task.id)) {
-          for (final tid in TorrentService.activeTorrentIds) {
-            try {
-              final liveFiles = TorrentService.getFiles(tid);
-              if (liveFiles.isNotEmpty &&
-                  task.torrentFiles != null &&
-                  liveFiles.length == task.torrentFiles!.length) {
-                final liveNames = liveFiles.map((f) => f.name).toSet();
-                final storedNames = task.torrentFiles!
-                    .map((f) => (f['name'] as String? ?? ''))
-                    .toSet();
-                if (liveNames.length == storedNames.length &&
-                    liveNames.containsAll(storedNames)) {
-                  _torrentIds[task.id] = tid;
-                  debugPrint(
-                    '[DMX] load(): recovered torrent ID $tid for task ${task.id} (name-matched)',
-                  );
-                  break;
-                }
+        if (task.isTorrent && task.status != DownloadStatus.completed) {
+          final savedId = savedMapping[task.id];
+          if (savedId != null && TorrentService.isTorrentAlive(savedId)) {
+            _torrentIds[task.id] = savedId;
+          } else {
+            // Try to match by name
+            for (final tid in TorrentService.activeTorrentIds) {
+              final stats = TorrentService.latestStats[tid];
+              if (stats != null && stats.name == task.fileName) {
+                _torrentIds[task.id] = tid;
+                break;
               }
-            } catch (_) {}
+            }
           }
         }
       }
+      await TorrentResumeStore.persistTaskMapping(_torrentIds);
 
       updateActualTorrentUploadLimit();
 
@@ -1363,7 +1428,11 @@ class DownloadProvider extends ChangeNotifier
         pumpQueue();
       }
 
-      unawaited(safePumpQueue());
+      unawaited(
+        safePumpQueue().catchError((e) {
+          _log.warning('safePumpQueue failed: $e');
+        }),
+      );
 
       _updateTelemetryWidget(force: true);
 
@@ -3319,7 +3388,9 @@ class DownloadProvider extends ChangeNotifier
             TorrentService.removeTorrent(staleTorrentId, deleteFiles: false);
           } catch (_) {}
         }
-        unawaited(TorrentResumeStore.deleteResumeDataForSource(task.url));
+        unawaited(TorrentResumeStore.deleteResumeDataForSource(task.url).catchError((e) {
+          _log.warning('Failed to delete resume data for torrent source', e);
+        }));
       }
     }
 
@@ -3465,7 +3536,42 @@ class DownloadProvider extends ChangeNotifier
     String tempFilePath, {
     int threadCount = 1,
   }) async {
-    return actualDownloadedBytes(tempFilePath, threadCount: threadCount);
+    final stateBytes =
+        await actualDownloadedBytes(tempFilePath, threadCount: threadCount);
+
+    // Zero-fill detection: sample file at start, middle, end
+    if (stateBytes > 0) {
+      final file = File(tempFilePath);
+      if (await file.exists()) {
+        final fileLen = await file.length();
+        if (fileLen > 0) {
+          final raf = await file.open(mode: FileMode.read);
+          try {
+            // Check first 4KB
+            final head = await raf.read(min(4096, fileLen));
+            final headHasContent = head.any((b) => b != 0);
+
+            // Check middle 4KB
+            await raf.setPosition(fileLen ~/ 2);
+            final mid = await raf.read(min(4096, fileLen ~/ 2));
+            final midHasContent = mid.any((b) => b != 0);
+
+            // Check last 4KB
+            await raf.setPosition(max(0, fileLen - 4096));
+            final tail = await raf.read(min(4096, fileLen));
+            final tailHasContent = tail.any((b) => b != 0);
+
+            if (!headHasContent && !midHasContent && !tailHasContent) {
+              debugPrint('[DMX] Zero-fill detected, resetting to 0');
+              return 0;
+            }
+          } finally {
+            await raf.close();
+          }
+        }
+      }
+    }
+    return stateBytes;
   }
 
   /// Reads per-chunk progress percentages via StateStore.
@@ -3500,6 +3606,15 @@ class DownloadProvider extends ChangeNotifier
 
   /// Centralized per-task state cleanup to prevent memory leaks.
   void _cleanupTaskState(String id) {
+    final token = _cancelTokens.remove(id);
+    if (token != null && !token.isCancelled) {
+      try {
+        token.cancel('cleaned_up');
+      } catch (_) {}
+    }
+    _taskLocks.remove(id);
+    _lastTaskOpTimes.remove(id);
+    _inFlightTaskOps.remove(id);
     _speedHistories.remove(id);
     _uploadSpeedHistories.remove(id);
     _progressNotifiers.remove(id)?.dispose();
@@ -3636,7 +3751,9 @@ class DownloadProvider extends ChangeNotifier
       }
 
       // 6. Heavy cleanup in BACKGROUND
-      unawaited(_backgroundDeleteCleanup(task, deleteFiles));
+      unawaited(_backgroundDeleteCleanup(task, deleteFiles).catchError((e) {
+        _log.warning('Background delete cleanup failed', e);
+      }));
 
       updateActualTorrentUploadLimit();
       pumpQueue();
@@ -4290,7 +4407,9 @@ class DownloadProvider extends ChangeNotifier
   void _updateTelemetryWidget({bool force = false}) {
     if (kIsWeb) return;
     _startWidgetTimer();
-    unawaited(_pushWidgetData(force: force));
+    unawaited(_pushWidgetData(force: force).catchError((e) {
+      _log.warning('Failed to push widget data', e);
+    }));
   }
 
   /// Builds the widget dashboard from the current task list and pushes it to
@@ -4378,14 +4497,22 @@ class DownloadProvider extends ChangeNotifier
     );
     final hasActive = downloadingTasksCount > 0 || seedingTasksCount > 0;
 
+    FrameWatchdog.setDownloadingTasksCount(downloadingTasksCount);
     BackgroundService.setDownloadActive(hasActive);
     PowerMonitor.setDownloadActive(hasActive);
 
-    if (!hasActive) return;
+    if (!hasActive) {
+      if (PowerMonitor.screenOff) {
+        _stopWidgetTimer();
+      }
+      return;
+    }
 
-    final int timerIntervalSec = BackgroundGate.adaptInterval(
-      const Duration(seconds: 5),
-    ).inSeconds;
+    final int timerIntervalSec = (DownloadEngine.isInBackground || PowerMonitor.screenOff)
+        ? 30
+        : BackgroundGate.adaptInterval(
+            const Duration(seconds: 5),
+          ).inSeconds;
 
     _widgetTimer = Timer.periodic(Duration(seconds: timerIntervalSec), (timer) {
       if (_disposed || !BackgroundGate.shouldWriteState) {
@@ -4442,7 +4569,9 @@ class DownloadProvider extends ChangeNotifier
       final nowMs = DateTime.now().millisecondsSinceEpoch;
       if (nowMs - _lastIntegrityCheckMs >= 60000) {
         _lastIntegrityCheckMs = nowMs;
-        unawaited(_verifyActiveStatesIntegrity());
+        unawaited(_verifyActiveStatesIntegrity().catchError((e) {
+          _log.warning('Integrity check failed', e);
+        }));
       }
 
       // Coalesce notifyListeners() calls from _setTask progress-only updates
@@ -4500,7 +4629,9 @@ class DownloadProvider extends ChangeNotifier
           errorMessage:
               'Download state file was corrupted. Tap Resume to re-validate and continue.',
         );
-        unawaited(_databaseService.saveTask(_tasks[i]).catchError((_) {}));
+        unawaited(_databaseService.saveTask(_tasks[i]).catchError((e) {
+          _log.warning('Failed to save task during integrity check recovery', e);
+        }));
       }
     }
   }
@@ -5248,7 +5379,9 @@ class DownloadProvider extends ChangeNotifier
       if (wasDownloading) {
         final t = _findTask(taskId);
         if (t != null && !t.pausedByUser) {
-          unawaited(resumeTask(taskId));
+          unawaited(resumeTask(taskId).catchError((e) {
+        _log.warning('Failed to resume task from YT throttle refresh', e);
+      }));
         }
       }
       rethrow;
@@ -5446,7 +5579,9 @@ class DownloadProvider extends ChangeNotifier
       TorrentService.removeTorrent(torrentId, deleteFiles: false);
       _torrentIds.remove(id);
       unawaited(TorrentResumeStore.delete(
-          torrentId)); // FIX-9: Clear TorrentResumeStore
+          torrentId).catchError((e) {
+        _log.warning('Failed to delete TorrentResumeStore entry', e);
+      })); // FIX-9: Clear TorrentResumeStore
     }
 
     // FIX-R-1: Delete audio sidecars when newAudioUrl differs from task.mergedAudioUrl
@@ -5627,11 +5762,11 @@ class DownloadProvider extends ChangeNotifier
 
     if (pendingSaves.isNotEmpty) {
       Future.wait(pendingSaves).then(
-        (_) => unawaited(_downloadEngine.close()),
-        onError: (_) => unawaited(_downloadEngine.close()),
+        (_) => unawaited(_downloadEngine.close().catchError((e) => _log.warning('Failed to close engine after wait', e))),
+        onError: (_) => unawaited(_downloadEngine.close().catchError((e) => _log.warning('Failed to close engine on error', e))),
       );
     } else {
-      unawaited(_downloadEngine.close());
+      unawaited(_downloadEngine.close().catchError((e) => _log.warning('Failed to close engine', e)));
     }
 
     _latestTorrentStats.clear();

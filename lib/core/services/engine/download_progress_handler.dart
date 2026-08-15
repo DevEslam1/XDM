@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:synchronized/synchronized.dart';
 import '../engines/http_download_engine.dart';
 import 'engine_models.dart';
+import 'engine_utils.dart';
 
 /// Encapsulates progress state management and throttling for download tasks.
 /// Task 1.2: Decoupled progress handling.
@@ -32,6 +33,8 @@ class DownloadProgressHandler {
   int? lastDownloadedFileBytes;
   DateTime? lastProgressEmitTime;
 
+  final List<Map<String, dynamic>>? Function()? getTorrentFiles;
+
   DownloadProgressHandler({
     required this.taskId,
     required this.onProgress,
@@ -49,6 +52,7 @@ class DownloadProgressHandler {
     this.lastChunkDetails,
     this.lastTotalChunks,
     this.lastCompletedChunks,
+    this.getTorrentFiles,
   });
 
   void emit(DownloadProgress progress) {
@@ -75,6 +79,31 @@ class DownloadProgressHandler {
     if (sm.contains('resum')) return 'resuming';
     if (sm.contains('starting') || sm.contains('prepar')) return 'starting';
     return 'downloading';
+  }
+
+  Future<void> handleProgress(
+    Map<String, dynamic> p, {
+    int? ytCounterpartDownloadedOverride,
+    bool adaptiveThreads = false,
+    int effectiveThreadCount = 1,
+    HttpDownloadEngine? httpEngine,
+    TimestampedLruMap<String, String>? ytCounterpartTaskIds,
+    TimestampedLruMap<String, int>? ytLiveBytes,
+  }) async {
+    int? override = ytCounterpartDownloadedOverride;
+    if (override == null && ytLiveBytes != null && ytCounterpartTaskIds != null) {
+      final cpId = ytCounterpartTaskIds[taskId];
+      if (cpId != null) {
+        override = ytLiveBytes[cpId];
+      }
+    }
+    return handleWorkerProgress(
+      p,
+      ytCounterpartDownloadedOverride: override,
+      adaptiveThreads: adaptiveThreads,
+      effectiveThreadCount: effectiveThreadCount,
+      httpEngine: httpEngine,
+    );
   }
 
   Future<void> handleWorkerProgress(

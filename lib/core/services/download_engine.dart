@@ -134,8 +134,40 @@ class DownloadEngine implements IDownloadEngine {
       if (!await dir.exists()) {
         await dir.create(recursive: true);
       }
-      return true;
-    } catch (_) {
+
+      if (Platform.isAndroid) {
+        final stat = await Process.run('df', [saveDir]);
+        final lines = stat.stdout.toString().split('\n');
+        if (lines.length > 1) {
+          final parts = lines[1].trim().split(RegExp(r'\s+'));
+          if (parts.length >= 4) {
+            final availableKb = int.tryParse(parts[3]) ?? 0;
+            final availableBytes = availableKb * 1024;
+            return availableBytes > requiredBytes;
+          }
+        }
+      } else if (Platform.isIOS || Platform.isMacOS || Platform.isLinux) {
+        final stat = await Process.run('df', [saveDir]);
+        final lines = stat.stdout.toString().split('\n');
+        if (lines.length > 1) {
+          final parts = lines[1].trim().split(RegExp(r'\s+'));
+          if (parts.length >= 4) {
+            final availableKb = int.tryParse(parts[3]) ?? 0;
+            return (availableKb * 1024) > requiredBytes;
+          }
+        }
+      } else if (Platform.isWindows) {
+        // Use PowerShell on Windows
+        final result = await Process.run('powershell', [
+          '-Command',
+          '(Get-PSDrive -Name (Get-Item \'$saveDir\').PSDrive.Name).Free'
+        ]);
+        final freeBytes = int.tryParse(result.stdout.toString().trim()) ?? 0;
+        return freeBytes > requiredBytes;
+      }
+      return true; // fallback: assume enough space
+    } catch (e) {
+      debugPrint('[DiskCheck] Failed to check disk space: $e');
       return true;
     }
   }
@@ -172,7 +204,7 @@ class DownloadEngine implements IDownloadEngine {
     }
   }
 
-  static bool isLikelyHtmlResponse(dynamic responseOrContentType) {
+  bool isLikelyHtmlResponse(dynamic responseOrContentType) {
     if (responseOrContentType == null) return false;
     String contentType = '';
     if (responseOrContentType is Response) {
@@ -192,12 +224,30 @@ class DownloadEngine implements IDownloadEngine {
     try {
       final file = File(dirOrFilePath);
       if (await file.exists() || dirOrFilePath.endsWith('.dmxpart')) {
-        final audioPath = '$dirOrFilePath.audio';
-        final audioFile = File(audioPath);
-        if (await audioFile.exists() && mergeConfirmed) {
-          try {
-            await audioFile.delete();
-          } catch (_) {}
+        final basePath = dirOrFilePath.endsWith('.dmxpart')
+            ? dirOrFilePath.substring(0, dirOrFilePath.length - 8)
+            : dirOrFilePath;
+        final dir = file.parent;
+        final baseName = p.basename(basePath);
+
+        if (await dir.exists()) {
+          final entries = await dir.list().toList();
+          for (final entity in entries) {
+            if (entity is File) {
+              final name = p.basename(entity.path);
+              if (name == p.basename(dirOrFilePath) ||
+                  name == '$baseName.dmxpart' ||
+                  name == '$baseName.dmxstate' ||
+                  name == '$baseName.journal' ||
+                  name == '$baseName.audio' ||
+                  name.startsWith('$baseName.part') ||
+                  name.startsWith('$baseName.dmxpart')) {
+                try {
+                  await entity.delete();
+                } catch (_) {}
+              }
+            }
+          }
         }
         return;
       }
@@ -205,7 +255,7 @@ class DownloadEngine implements IDownloadEngine {
       if (!await directory.exists()) return;
       final files = await directory.list().toList();
       for (final f in files) {
-        if (f is File && f.path.endsWith('.dmxpart.tmp')) {
+        if (f is File && (f.path.endsWith('.dmxpart.tmp') || f.path.endsWith('.tmp'))) {
           try {
             await f.delete();
           } catch (_) {}

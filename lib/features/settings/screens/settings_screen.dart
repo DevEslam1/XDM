@@ -80,19 +80,32 @@ class _SettingsScreenState extends State<SettingsScreen>
   // FIX-H8: Set of loaded tab indices for lazy loading
   final Set<int> _loadedTabs = {};
 
+  final Map<int, Widget> _cachedTabs = {};
+
   Widget _buildLazyTab(int index) {
-    return switch (index) {
-      0 => const AppearanceSettingsPage(),
-      1 => const DownloadsSettingsPage(),
-      2 => const NetworkSettingsPage(),
-      3 => const TorrentSettingsPage(),
-      4 => const AdvancedSettingsPage(),
-      _ => const SizedBox.shrink(),
-    };
+    return _cachedTabs.putIfAbsent(index, () {
+      return switch (index) {
+        0 => const AppearanceSettingsPage(),
+        1 => const DownloadsSettingsPage(),
+        2 => const NetworkSettingsPage(),
+        3 => const TorrentSettingsPage(),
+        4 => const AdvancedSettingsPage(),
+        _ => const SizedBox.shrink(),
+      };
+    });
   }
 
   Widget _buildLazyTabStack() {
-    return _buildLazyTab(_selectedCategoryIndex);
+    _loadedTabs.add(_selectedCategoryIndex);
+    return IndexedStack(
+      index: _selectedCategoryIndex,
+      children: List.generate(5, (i) {
+        if (_loadedTabs.contains(i)) {
+          return _buildLazyTab(i);
+        }
+        return const SizedBox.shrink();
+      }),
+    );
   }
 
   @override

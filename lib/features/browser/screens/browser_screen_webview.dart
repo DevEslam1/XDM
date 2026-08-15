@@ -363,13 +363,13 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       } catch (e, st) {
         _log.warning('[Browser] Failed to apply Google accounts UA: $e', e, st);
       }
-      unawaited(_hideWebViewFingerprints(tab));
+      unawaited(_hideWebViewFingerprints(tab).catchError((e) => _log.warning('Failed to hide fingerprints', e)));
     } else {
       // Fix #20: Restore the correct UA when navigating away from Google login
       // pages. Without this, the Pixel 8 UA set for accounts.google.com
       // persisted permanently for all subsequent pages in the same tab.
       final settings = _settings;
-      unawaited(_applyUserAgent(tab, settings));
+      unawaited(_applyUserAgent(tab, settings).catchError((e) => _log.warning('Failed to apply user agent', e)));
     }
 
     if (mounted) {
@@ -407,7 +407,7 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     // Fix #4: Re-apply per-site settings on every navigation so that
     // site-specific desktop mode and ad-blocker overrides take effect
     // when the user navigates to a different domain within the same tab.
-    unawaited(_applySiteSettings(tab, url));
+    unawaited(_applySiteSettings(tab, url).catchError((e) => _log.warning('Failed to apply site settings', e)));
 
     _updateNavState();
     _delayed(const Duration(milliseconds: 500), _updateNavState);
@@ -422,11 +422,11 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     _loadingTimeoutTimers[tab.id]?.cancel();
     _navigatingBackForwardTabIds[tab.id] = false;
     final settings = _settings;
-    unawaited(_injectAllScripts(tab, url));
+    unawaited(_injectAllScripts(tab, url).catchError((e) => _log.warning('Failed to inject scripts', e)));
     // UX 3.6: Tab favicons — fetch after page load.
-    unawaited(_fetchFavicon(tab));
+    unawaited(_fetchFavicon(tab).catchError((e) => _log.warning('Failed to fetch favicon', e)));
     // UX 3.19: Autofill saved form data for this host.
-    unawaited(_autofillFormFields(tab));
+    unawaited(_autofillFormFields(tab).catchError((e) => _log.warning('Failed to autofill form fields', e)));
 
     // Fix #6: Corrected operator precedence — previously evaluated as
     // (mounted && _customJs.isNotEmpty) || _customCss.isNotEmpty, which

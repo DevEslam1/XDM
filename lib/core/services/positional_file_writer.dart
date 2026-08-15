@@ -274,8 +274,8 @@ class PositionalFileWriter {
 
   DateTime _lastPacedFlush = DateTime.fromMillisecondsSinceEpoch(0);
   int _bytesSinceLastFlush = 0;
-  static const Duration minFlushInterval = Duration(milliseconds: 500);
-  static const int flushByteThreshold = 1024 * 1024; // 1MB
+  static const Duration minFlushInterval = Duration(milliseconds: 2000); // was 500ms
+  static const int flushByteThreshold = 4 * 1024 * 1024; // was 1MB
 
   /// Paced flush: flushes only if 500ms has elapsed or 1MB written since last flush (F-01/F-02).
   Future<void> flushPaced() async {

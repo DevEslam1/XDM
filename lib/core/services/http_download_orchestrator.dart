@@ -47,8 +47,9 @@ class HttpDownloadOrchestrator {
     bool isRetry = false,
   }) async {
     final int defaultCount = _settings.effectiveDefaultThreadCount;
-    final int effectiveThreadCount = (threadCount > 0 ? threadCount : defaultCount)
-        .clamp(1, PowerMonitor.maxAllowedThreads);
+    final int effectiveThreadCount =
+        (threadCount > 0 ? threadCount : defaultCount)
+            .clamp(1, PowerMonitor.maxAllowedThreads);
 
     int resolvedFileSize = knownFileSize;
     bool resolvedSupportsResume = supportsResume;
@@ -130,7 +131,30 @@ class HttpDownloadOrchestrator {
 
     final job = pool.submit(command);
     final completer = Completer<void>();
-    
+
+    if (cancelToken.isCancelled) {
+      job.cancel();
+      throw DioException(
+        requestOptions: RequestOptions(path: punyUrl),
+        type: DioExceptionType.cancel,
+        message: 'Download cancelled',
+      );
+    }
+
+    unawaited(cancelToken.whenCancel.then((_) {
+      if (!completer.isCompleted) {
+        job.cancel();
+        if (ytStreamKind != null) _ytCoordinator.unregister(taskId);
+        completer.completeError(
+          DioException(
+            requestOptions: RequestOptions(path: punyUrl),
+            type: DioExceptionType.cancel,
+            message: 'Download cancelled',
+          ),
+        );
+      }
+    }));
+
     final sub = job.messages.listen((message) {
       switch (message.type) {
         case 'progress':
@@ -151,12 +175,14 @@ class HttpDownloadOrchestrator {
           break;
         case 'done':
           if (ytStreamKind != null) _ytCoordinator.unregister(taskId);
-          completer.complete();
+          if (!completer.isCompleted) completer.complete();
           break;
         case 'error':
           if (ytStreamKind != null) _ytCoordinator.unregister(taskId);
           final errData = message.data;
-          completer.completeError(_mapWorkerError(errData, punyUrl));
+          if (!completer.isCompleted) {
+            completer.completeError(_mapWorkerError(errData, punyUrl));
+          }
           break;
       }
     });
@@ -172,11 +198,19 @@ class HttpDownloadOrchestrator {
   Exception _mapWorkerError(Map<String, dynamic> data, String url) {
     final type = data['errorType'] as String? ?? 'uncaught';
     final msg = data['errorMessage'] as String? ?? 'Unknown error';
-    
-    if (type == 'cancel') return DioException(requestOptions: RequestOptions(path: url), type: DioExceptionType.cancel, message: msg);
-    if (type == 'urlExpired') return UrlExpiredException(msg, refreshAllMirrors: data['refreshAllMirrors'] == true);
+
+    if (type == 'cancel') {
+      return DioException(
+          requestOptions: RequestOptions(path: url),
+          type: DioExceptionType.cancel,
+          message: msg);
+    }
+    if (type == 'urlExpired') {
+      return UrlExpiredException(msg,
+          refreshAllMirrors: data['refreshAllMirrors'] == true);
+    }
     if (type == 'diskFull') return const InsufficientStorageException();
-    
+
     return DioException(
       requestOptions: RequestOptions(path: url),
       type: DioExceptionType.unknown,

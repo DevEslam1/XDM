@@ -14,6 +14,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/database/app_database.dart';

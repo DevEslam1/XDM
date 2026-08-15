@@ -1,5 +1,6 @@
 // FIX-H10: PerformanceMonitor — Screen-off lifecycle
 import 'package:flutter/scheduler.dart';
+import 'download_engine.dart';
 import 'frame_watchdog.dart';
 import 'power_monitor.dart';
 
@@ -25,7 +26,7 @@ class PerformanceMonitor {
   bool _listening = true;
 
   bool get isListening => _listening;
-  bool get isActive => _listening && !PowerMonitor.screenOff;
+  bool get isActive => _listening && !PowerMonitor.screenOff && DownloadEngine.appInForeground;
 
   int get totalFrames => _totalFrames;
   int get jankyFrameCount => _jankyFrames;
@@ -86,7 +87,7 @@ class PerformanceMonitor {
   }
 
   void resume() {
-    if (PowerMonitor.screenOff) return;
+    if (PowerMonitor.screenOff || !DownloadEngine.appInForeground) return;
     _listening = true;
   }
 
@@ -106,7 +107,13 @@ class PerformanceMonitor {
   /// Feeds timings from [FrameWatchdog] or test suites.
   // FIX-H10: Guard ingestFrameTimings with _listening and screenOff
   void ingestFrameTimings(List<FrameTiming> timings) {
-    if (!_listening || PowerMonitor.screenOff) return;
+    if (!_listening ||
+        PowerMonitor.screenOff ||
+        !DownloadEngine.appInForeground ||
+        DownloadEngine.isInBackground ||
+        PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
+      return;
+    }
     _onTimings(timings);
   }
 

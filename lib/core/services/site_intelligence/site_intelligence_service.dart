@@ -197,10 +197,7 @@ class SiteReliability {
 }
 
 class SiteIntelligenceService {
-  static final SiteIntelligenceService _instance =
-      SiteIntelligenceService._internal();
-  factory SiteIntelligenceService() => _instance;
-  SiteIntelligenceService._internal();
+  SiteIntelligenceService();
 
   static const _reliabilityKey = 'site_reliability_data';
   final Map<String, SiteReliability> _reliability = {};

@@ -1,4 +1,5 @@
 import 'dart:core';
+import '../service_registry.dart';
 
 class _CookieCacheEntry {
   final String cookie;
@@ -8,10 +9,10 @@ class _CookieCacheEntry {
 
 /// Thread-safe bounded cache for HTTP cookies per origin with TTL.
 /// Task 2.1: Injectable singleton service with clear/dispose on background.
-class CookieCache {
-  static final CookieCache _instance = CookieCache._();
-  factory CookieCache() => _instance;
-  CookieCache._();
+class CookieCache implements DisposableService {
+  CookieCache() {
+    ServiceRegistry.register(this);
+  }
 
   final Map<String, _CookieCacheEntry> _cache = {};
   static const int _maxEntries = 100;
@@ -48,7 +49,8 @@ class CookieCache {
     _cache.clear();
   }
 
-  void dispose() {
+  @override
+  Future<void> dispose() async {
     _cache.clear();
   }
 }

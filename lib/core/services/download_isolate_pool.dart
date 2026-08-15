@@ -194,6 +194,13 @@ class DownloadIsolatePool {
   Timer? _sweepCrashCountsTimer;
 
   int get effectiveMaxSize {
+    if (PowerMonitor.screenOff) {
+      return 1;
+    }
+    if (DownloadEngine.isInBackground) {
+      final bgCap = min(2, _size);
+      return _maxPoolSize != null ? min(bgCap, _maxPoolSize!) : bgCap;
+    }
     if (_powerAware) {
       if (PowerMonitor.isCharging) {
         return _maxPoolSize != null ? min(_size, _maxPoolSize!) : _size;
@@ -205,10 +212,6 @@ class DownloadIsolatePool {
       }
       if (PowerMonitor.batteryLevel < 20) {
         return 1;
-      }
-      if (PowerMonitor.screenOff) {
-        final base = max(1, _size ~/ 2);
-        return _maxPoolSize != null ? min(base, _maxPoolSize!) : base;
       }
     }
     return _maxPoolSize != null ? min(_size, _maxPoolSize!) : _size;
@@ -658,6 +661,8 @@ class HttpTransferJob {
   HttpTransferJob(this.cmd, this.out) {
     unawaited(_cancelToken.whenCancel.then((_) {
       _abortAllDelays();
+    }).catchError((e) {
+      debugPrint('[IsolatePool] whenCancel failed: $e');
     }));
   }
   final DownloadCommand cmd;
@@ -1619,6 +1624,14 @@ class HttpTransferJob {
           rethrow;
         }
         final status = e.response?.statusCode;
+
+        // Non-retryable: fail immediately
+        if (status == 401 || status == 403 || status == 404 || status == 410) {
+          _state!.status = DmxStateStatus.failed;
+          _emitProgress(0, statusMessage: 'Failed');
+          rethrow;
+        }
+
         if (status != null &&
             status >= 400 &&
             status < 500 &&

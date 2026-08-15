@@ -163,6 +163,20 @@ class UserScriptManager extends ChangeNotifier {
       _log.severe('Security Violation: window.open in script "${script.name}"');
       throw Exception('Opening new windows is prohibited in UserScripts.');
     }
+    // Block Symbol-based escapes
+    if (code.contains('Symbol.toPrimitive') ||
+        code.contains('Symbol.iterator') ||
+        code.contains('Symbol.hasInstance')) {
+      throw Exception('Symbol-based sandbox escape blocked.');
+    }
+    // Block with statement
+    if (RegExp(r'\bwith\s*\(').hasMatch(code)) {
+      throw Exception('"with" statement is prohibited.');
+    }
+    // Block __proto__ direct access
+    if (code.contains('__proto__')) {
+      throw Exception('__proto__ access is prohibited.');
+    }
     if (code.contains('navigator.sendBeacon')) {
       _log.severe('Security Violation: sendBeacon in script "${script.name}"');
       throw Exception('Beacon transmission is prohibited in UserScripts.');
@@ -331,6 +345,11 @@ if (!window['$marker']) {
         if (prop === 'eval' || prop === 'Function' || prop === 'importScripts' || prop === 'Reflect' || prop === 'Proxy') {
           throw new Error('[DMX Sandbox] Dynamic execution / reflection prohibited: ' + String(prop));
         }
+        if (typeof prop === 'symbol') {
+          if (prop === Symbol.toPrimitive || prop === Symbol.iterator || prop === Symbol.hasInstance) {
+            return undefined;
+          }
+        }
         if (prop === 'setTimeout' || prop === 'setInterval') {
           return function(fn, delay, ...args) {
             const safeDelay = Math.max(50, Number(delay) || 0);
@@ -340,7 +359,7 @@ if (!window['$marker']) {
         if (prop === 'crypto' && target.crypto) {
           return { subtle: undefined };
         }
-        if (prop === '__proto__' || prop === 'prototype') {
+        if (prop === '__proto__' || prop === 'prototype' || prop === 'constructor') {
           return null;
         }
         let val = target[prop];
@@ -349,6 +368,7 @@ if (!window['$marker']) {
       },
       set(target, prop, value) {
         if (prop === 'parent' || prop === 'top' || prop === 'opener' || prop === '__proto__' ||
+            prop === 'prototype' || prop === 'constructor' ||
             prop === 'open' || prop === 'close' || prop === 'postMessage') {
           return false;
         }

@@ -33,13 +33,25 @@ android {
         versionName = flutter.versionName
     }
 
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val keyPropertiesFile = rootProject.file("key.properties")
+    val propFile = if (keystorePropertiesFile.exists()) keystorePropertiesFile else if (keyPropertiesFile.exists()) keyPropertiesFile else null
+    val keystoreProperties = Properties()
+    var hasValidKeystore = false
+    if (propFile != null) {
+        keystoreProperties.load(FileInputStream(propFile))
+        val storePath = keystoreProperties.getProperty("storeFile")
+        if (storePath != null && (file(storePath).exists() || rootProject.file(storePath).exists())) {
+            hasValidKeystore = true
+        }
+    }
+
     signingConfigs {
-        create("release") {
-            val keystorePropertiesFile = rootProject.file("keystore.properties")
-            if (keystorePropertiesFile.exists()) {
-                val keystoreProperties = Properties()
-                keystoreProperties.load(FileInputStream(keystorePropertiesFile))
-                storeFile = file(keystoreProperties.getProperty("storeFile"))
+        if (hasValidKeystore) {
+            create("release") {
+                val storePath = keystoreProperties.getProperty("storeFile")
+                val keystoreFile = if (file(storePath).exists()) file(storePath) else rootProject.file(storePath)
+                storeFile = keystoreFile
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
@@ -52,7 +64,11 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasValidKeystore && signingConfigs.findByName("release") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

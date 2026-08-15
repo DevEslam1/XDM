@@ -4,18 +4,31 @@ import 'dart:convert';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'background_gate.dart';
+import 'service_registry.dart';
 
 /// Persists mirror health data across app restarts.
 ///
 /// Bad mirrors stay deprioritized for a configurable TTL. Known-bad mirrors
 /// are never retried immediately after an app restart; they are only retried
 /// once their blacklist expires (or a successful probe clears them).
-class MirrorHealthStore {
+class MirrorHealthStore implements DisposableService {
+  MirrorHealthStore() {
+    ServiceRegistry.register(this);
+  }
+
+  static final MirrorHealthStore instance = MirrorHealthStore();
+
   static final _log = Logger('MirrorHealthStore');
   static const _storeKey = 'mirror_health_data';
   static const _blacklistTtl = Duration(hours: 6);
   static Map<String, _PersistedMirrorState>? _cache;
   static Timer? _cleanupTimer;
+  static Timer? _persistTimer;
+  static bool _persistPending = false;
+  static int _dirtyCount = 0;
+
+  static const _rankingCacheKey = 'mirror_ranking_cache';
+  static const _rankingTtlKey = 'mirror_ranking_cache_ttl';
 
   /// Clean up expired entries from in-memory cache and persist.
   static Future<void> cleanupStaleEntries() async {
@@ -105,9 +118,6 @@ class MirrorHealthStore {
     return valid.map((e) => e.key).toList();
   }
 
-  static const _rankingCacheKey = 'mirror_ranking_cache';
-  static const _rankingTtlKey = 'mirror_ranking_cache_ttl';
-
   /// Persists the ranked mirror list to SharedPreferences with 1-hour TTL.
   static Future<void> persistMirrorRanking(List<String> rankedUrls) async {
     try {
@@ -163,11 +173,6 @@ class MirrorHealthStore {
     return _cache?[url]?.failures ?? 0;
   }
 
-  static Timer? _persistTimer;
-  static bool _persistPending = false;
-  // FIX-M3: Dirty counter for debouncing
-  static int _dirtyCount = 0;
-
   static Future<void> _persist() async {
     if (_cache == null) return;
     _dirtyCount++;
@@ -212,9 +217,24 @@ class MirrorHealthStore {
   }
 
   /// FIX-1.2: Dispose method to flush pending writes and cancel timer
-  static Future<void> dispose() async {
+  @override
+  Future<void> dispose() async {
     await flushPending();
   }
+
+  // Instance forwarders for DI / injection support
+  Future<void> initInstance() => init();
+  Future<void> recordFailureInstance(String url, {int statusCode = 0}) =>
+      recordFailure(url, statusCode: statusCode);
+  Future<void> recordSuccessInstance(String url, {double speedBps = 0.0}) =>
+      recordSuccess(url, speedBps: speedBps);
+  Future<void> recordSpeedInstance(String url, double bytesPerSec) =>
+      recordSpeed(url, bytesPerSec);
+  List<String> getMirrorRankingInstance() => getMirrorRanking();
+  bool isBlacklistedInstance(String url) => isBlacklisted(url);
+  double getPersistedSpeedInstance(String url) => getPersistedSpeed(url);
+  int getFailureCountInstance(String url) => getFailureCount(url);
+  Future<void> disposeInstance() => dispose();
 }
 
 class _PersistedMirrorState {

@@ -6,6 +6,8 @@ import 'frame_watchdog.dart';
 import 'performance_monitor.dart';
 import 'power_monitor.dart';
 import 'widget_data_bridge.dart';
+import 'background_timer_manager.dart';
+import '../di/injection.dart';
 import '../../shared/widgets/geometric_grid_background.dart';
 import '../../features/downloads/widgets/download_card.dart';
 
@@ -13,9 +15,9 @@ import '../../features/downloads/widgets/download_card.dart';
 /// Ensures that when the application is backgrounded or inactive, all ambient timers,
 /// frame timing callbacks, performance diagnostics, and GPU animations are suspended.
 class AppLifecycleCoordinator with WidgetsBindingObserver {
-  static final AppLifecycleCoordinator instance = AppLifecycleCoordinator._();
-  factory AppLifecycleCoordinator() => instance;
-  AppLifecycleCoordinator._();
+  AppLifecycleCoordinator();
+
+  static final AppLifecycleCoordinator instance = AppLifecycleCoordinator();
 
   static bool isAppForegrounded = true;
   static Timer? _inactiveTimer;
@@ -74,8 +76,8 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
       if (!PowerMonitor.screenOff) {
         FrameWatchdog.start();
         PerformanceMonitor.instance.start();
-        AmbientProgress.instance.restartIfMounted();
-        StatusChipPulseDriver.instance.restartIfActive();
+        getIt<AmbientProgress>().restartIfMounted();
+        getIt<StatusChipPulseDriver>().restartIfActive();
       }
     } else if (state == AppLifecycleState.inactive) {
       // 500ms delay timer before ambient suspension (NEW-04)
@@ -102,11 +104,13 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     // Pause widget updates (NEW-02)
     WidgetDataBridge.instance.pauseWidgetUpdates();
 
+    // STOP ALL TIMERS
+    getIt<BackgroundTimerManager>().cancelAll();
+
     // Suspend all ambient work
     FrameWatchdog.stop();
     PerformanceMonitor.instance.stop();
-    AmbientProgress.instance.stopAll();
-    StatusChipPulseDriver.instance.stop();
+    getIt<AmbientProgress>().stopAll();
     StatusChipPulseDriver.stopAll();
 
     // Task 4.3: Flush database saves on backgrounding/detaching

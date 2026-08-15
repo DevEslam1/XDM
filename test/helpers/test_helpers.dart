@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:get_it/get_it.dart';
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
@@ -147,6 +148,15 @@ DownloadTask createTestTask({
     createdAt: createdAt ?? DateTime.now(),
     updatedAt: DateTime.now(),
   );
+}
+
+/// Registers fake services in GetIt for unit testing.
+void registerTestServices() {
+  final getIt = GetIt.instance;
+  getIt.reset();
+  getIt.registerLazySingleton<DatabaseService>(() => FakeDatabaseService());
+  getIt.registerLazySingleton<SettingsProvider>(() => createMockSettingsProvider());
+  getIt.registerLazySingleton<DownloadProvider>(() => createMockDownloadProvider());
 }
 
 /// Creates a list of mixed-status tasks for testing.

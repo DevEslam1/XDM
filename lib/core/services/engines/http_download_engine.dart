@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/services/download_journal.dart';
 import '../../../core/services/power_monitor.dart';
 import '../background_gate.dart';
+import '../download_engine.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -178,9 +179,11 @@ class HttpDownloadEngine {
   }
 
   void _evaluate() {
-    if (PowerMonitor.screenOff) return;
+    if (PowerMonitor.screenOff || DownloadEngine.isInBackground) return;
     for (final tracker in _trackers.values) {
-      tracker.evaluate();
+      if (tracker._samples.isNotEmpty) {
+        tracker.evaluate();
+      }
     }
   }
 }

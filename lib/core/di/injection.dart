@@ -1,5 +1,10 @@
 import 'package:get_it/get_it.dart';
 import '../services/database_service.dart';
+import '../services/mirror_health_store.dart';
+import '../services/app_lifecycle_coordinator.dart';
+import '../services/background_timer_manager.dart';
+import '../../features/downloads/widgets/download_card.dart';
+import '../../shared/widgets/geometric_grid_background.dart';
 import '../../features/downloads/data/task_repository.dart';
 import '../../features/downloads/data/drift_task_repository.dart';
 import '../../features/downloads/provider/download_list_provider.dart';
@@ -34,6 +39,8 @@ import '../services/single_instance_service.dart';
 import '../services/tracker_manager.dart';
 import '../services/widget_data_bridge.dart';
 import '../services/site_intelligence/site_intelligence_service.dart';
+import '../services/shared_prefs_batcher.dart';
+import '../services/torrent_service.dart';
 
 final getIt = GetIt.instance;
 T inject<T extends Object>() => getIt<T>();
@@ -153,6 +160,42 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<CookieCache>(() => CookieCache(),
       dispose: (cache) => cache.dispose());
 
-  getIt
-      .registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);
+  getIt.registerLazySingleton<MirrorHealthStore>(
+    () => MirrorHealthStore(),
+    dispose: (s) => s.dispose(),
+  );
+
+  getIt.registerLazySingleton<AppLifecycleCoordinator>(
+    () => AppLifecycleCoordinator(),
+    dispose: (s) => AppLifecycleCoordinator.dispose(),
+  );
+
+  getIt.registerLazySingleton<TorrentSeedingManager>(
+    () => TorrentSeedingManager(),
+  );
+
+  getIt.registerLazySingleton<StatusChipPulseDriver>(
+    () => StatusChipPulseDriver(),
+    dispose: (s) => s.dispose(),
+  );
+
+  getIt.registerLazySingleton<AmbientProgress>(
+    () => AmbientProgress(),
+  );
+
+  getIt.registerLazySingleton<BackgroundTimerManager>(
+    () => BackgroundTimerManager.instance,
+  );
+
+  getIt.registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);
+
+  getIt.registerLazySingleton<SharedPrefsBatcher>(
+    () => SharedPrefsBatcher.instance,
+    dispose: (b) => b.dispose(),
+  );
+
+  getIt.registerLazySingleton<TorrentService>(
+    () => TorrentService(),
+    dispose: (_) => TorrentService.dispose(),
+  );
 }

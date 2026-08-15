@@ -3,28 +3,29 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/di/injection.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/background_gate.dart';
+import '../../core/services/download_engine.dart';
 import '../../core/services/power_monitor.dart';
 import '../../features/downloads/provider/download_provider.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
 /// Shared ambient animation state — one timer drives all background instances.
 class AmbientProgress with WidgetsBindingObserver {
-  static final AmbientProgress instance = AmbientProgress._();
-  factory AmbientProgress() => instance;
-
-  AmbientProgress._() {
+  AmbientProgress() {
     WidgetsBinding.instance.addObserver(this);
     PowerMonitor.throttleFactorNotifier.addListener(_onPowerThrottleChanged);
     PowerMonitor.screenStateStream.listen((screenOn) {
       if (!screenOn) {
         _stopTimer();
-      } else if (_refCount > 0 && !_isBackgrounded) {
+      } else if (_refCount > 0 && !_isBackgrounded && !DownloadEngine.isInBackground) {
         _startTimer();
       }
     });
   }
+
+  static final AmbientProgress instance = AmbientProgress();
 
   final ValueNotifier<double> progress = ValueNotifier<double>(0);
   Timer? _timer;
@@ -50,7 +51,7 @@ class AmbientProgress with WidgetsBindingObserver {
   }
 
   void restartIfMounted() {
-    if (_refCount > 0 && !_isBackgrounded && !PowerMonitor.screenOff) {
+    if (_refCount > 0 && !_isBackgrounded && !PowerMonitor.screenOff && !DownloadEngine.isInBackground) {
       _startTimer();
     }
   }
@@ -58,16 +59,18 @@ class AmbientProgress with WidgetsBindingObserver {
   void _startTimer() {
     if (!BackgroundGate.allowHeavyOps ||
         _isBackgrounded ||
+        DownloadEngine.isInBackground ||
         PowerMonitor.screenOff ||
         _refCount <= 0) {
       _stopTimer();
       return;
     }
-    // FIX P1-1: Reduce repaint frequency from 1s to 5s
-    const int intervalMs = 5000;
+    // FIX P1-1: Reduce repaint frequency from 1s to 30s
+    const int intervalMs = 30000;
     _timer ??= Timer.periodic(const Duration(milliseconds: intervalMs), (_) {
       if (!BackgroundGate.allowHeavyOps ||
           _isBackgrounded ||
+          DownloadEngine.isInBackground ||
           PowerMonitor.screenOff ||
           _refCount <= 0) {
         _stopTimer();
@@ -114,8 +117,6 @@ class AmbientProgress with WidgetsBindingObserver {
   }
 }
 
-typedef _AmbientProgress = AmbientProgress;
-
 class GeometricGridBackground extends StatefulWidget {
   final Widget child;
 
@@ -134,7 +135,7 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    AmbientProgress.instance.addRef();
+    getIt<AmbientProgress>().addRef();
   }
 
   @override
@@ -159,7 +160,7 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    AmbientProgress.instance.removeRef();
+    getIt<AmbientProgress>().removeRef();
     super.dispose();
   }
 
@@ -202,6 +203,8 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
     if (classicUi ||
         reduceVisuals ||
         !_isVisible ||
+        DownloadEngine.isInBackground ||
+        PowerMonitor.screenOff ||
         !BackgroundGate.allowHeavyOps ||
         hasActiveDownloads) {
       return Container(color: bgColor, child: widget.child);
@@ -215,7 +218,7 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
         Positioned.fill(
           child: RepaintBoundary(
             child: ValueListenableBuilder<double>(
-              valueListenable: _AmbientProgress().progress,
+              valueListenable: getIt<AmbientProgress>().progress,
               builder: (context, progress, _) {
                 return CustomPaint(
                   painter: _AmbientBlobPainter(

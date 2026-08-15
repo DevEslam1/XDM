@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
+import 'package:synchronized/synchronized.dart';
 
 import 'database/app_database.dart';
 import 'download_engine.dart';
@@ -113,14 +114,11 @@ class DatabaseService {
           ).get();
           if (walRows.isNotEmpty) {
             final row = walRows.first.data;
-            final busy = row['busy'] ?? 0;
             final log = row['log'] ?? 0;
-            final checkpointed = row['checkpointed'] ?? 0;
-            if (log is num && log > 2500) {
-              // 2500 pages * 4096 bytes/page ≈ 10MB
-              _log.warning(
-                '[DatabaseService] WAL size > 10MB (log: $log pages, checkpointed: $checkpointed, busy: $busy)',
-              );
+            if (log is num && log > 1250) {
+              // ~5MB in 4KB pages
+              _log.warning('WAL too large ($log pages), forcing TRUNCATE');
+              await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
             }
           }
         } catch (_) {}
@@ -743,10 +741,13 @@ class DatabaseService {
   }
 
   final Map<String, DownloadTask> _pendingProgressSaves = {};
+  final Lock _pendingSavesLock = Lock();
   Timer? _dbBatchTimer;
 
   Future<void> saveTaskDebounced(DownloadTask task) async {
-    _pendingProgressSaves[task.id] = task;
+    await _pendingSavesLock.synchronized(() {
+      _pendingProgressSaves[task.id] = task;
+    });
 
     // FIX-M2: Higher threshold = fewer flushes (flush immediately if pending >= 20)
     if (_pendingProgressSaves.length >= 20) {
@@ -758,8 +759,8 @@ class DatabaseService {
         DownloadEngine.isInBackground ||
         PowerMonitor.screenOff;
     final interval = isBackground
-        ? const Duration(seconds: 300) // BG-05 / FIX-P0-5: 300s in background
-        : const Duration(seconds: 15); // FIX PERF-4: 15s in foreground (was 8s)
+        ? const Duration(seconds: 600) // 600s in background
+        : const Duration(seconds: 30); // 30s in foreground
 
     _dbBatchTimer ??= Timer(interval, flushPendingSaves);
   }
@@ -776,9 +777,15 @@ class DatabaseService {
   Future<void> flushPendingSaves() async {
     _dbBatchTimer?.cancel();
     _dbBatchTimer = null;
-    if (_pendingProgressSaves.isEmpty) return;
-    final toSave = List<DownloadTask>.from(_pendingProgressSaves.values);
-    _pendingProgressSaves.clear();
+
+    List<DownloadTask> toSave = [];
+    await _pendingSavesLock.synchronized(() {
+      if (_pendingProgressSaves.isEmpty) return;
+      toSave = List<DownloadTask>.from(_pendingProgressSaves.values);
+      _pendingProgressSaves.clear();
+    });
+
+    if (toSave.isEmpty) return;
     await _db.transaction(() async {
       await saveTasks(toSave);
     });

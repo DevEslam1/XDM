@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/services/download_engine.dart';
 import '../../../core/services/power_monitor.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/utils/localization.dart';
@@ -247,19 +248,21 @@ class _CardShell extends StatelessWidget {
 
 // FIX P0-1: StatusChipPulseDriver — Replace Timer.periodic with efficient Ticker & stopAll
 class StatusChipPulseDriver with WidgetsBindingObserver {
-  static final StatusChipPulseDriver instance = StatusChipPulseDriver._();
-  factory StatusChipPulseDriver() => instance;
+  StreamSubscription? _screenSub;
 
-  StatusChipPulseDriver._() {
+  StatusChipPulseDriver._internal() {
     WidgetsBinding.instance.addObserver(this);
-    PowerMonitor.screenStateStream.listen((screenOn) {
+    _screenSub = PowerMonitor.screenStateStream.listen((screenOn) {
       if (!screenOn) {
         _stop();
-      } else if (_refCount > 0) {
+      } else if (_refCount > 0 && !DownloadEngine.isInBackground) {
         _start();
       }
     });
   }
+
+  static final StatusChipPulseDriver instance = StatusChipPulseDriver._internal();
+  factory StatusChipPulseDriver() => instance;
 
   static void stopAll() {
     instance._stop();
@@ -304,17 +307,17 @@ class StatusChipPulseDriver with WidgetsBindingObserver {
   }
 
   void restartIfActive() {
-    if (_refCount > 0 && !PowerMonitor.screenOff) {
+    if (_refCount > 0 && !PowerMonitor.screenOff && !DownloadEngine.isInBackground) {
       _start();
     }
   }
 
   void _start() {
-    if (PowerMonitor.screenOff || _refCount <= 0) return;
+    if (PowerMonitor.screenOff || DownloadEngine.isInBackground || _refCount <= 0) return;
     _stop();
     _lastTick = DateTime.now();
     _ticker = Ticker((elapsed) {
-      if (PowerMonitor.screenOff || _refCount <= 0) {
+      if (PowerMonitor.screenOff || DownloadEngine.isInBackground || _refCount <= 0) {
         _stop();
         return;
       }
@@ -356,10 +359,17 @@ class StatusChipPulseDriver with WidgetsBindingObserver {
         state == AppLifecycleState.hidden) {
       _stop();
     } else if (state == AppLifecycleState.resumed && _refCount > 0) {
-      if (!PowerMonitor.screenOff) {
+      if (!PowerMonitor.screenOff && !DownloadEngine.isInBackground) {
         _start();
       }
     }
+  }
+
+  void dispose() {
+    _stop();
+    _screenSub?.cancel();
+    _screenSub = null;
+    WidgetsBinding.instance.removeObserver(this);
   }
 }
 

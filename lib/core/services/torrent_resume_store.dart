@@ -331,4 +331,31 @@ class TorrentResumeStore {
     final source = _sourceByTorrentId.remove(torrentId);
     if (source != null) await deleteResumeDataForSource(source);
   }
+
+  static const _taskIdMappingKey = 'torrent_task_id_mapping';
+
+  static Future<void> persistTaskMapping(Map<String, int> mapping) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_taskIdMappingKey, jsonEncode(mapping));
+    } catch (e) {
+      debugPrint('Failed to persist torrent task mapping: $e');
+    }
+  }
+
+  static Future<Map<String, int>> loadTaskMapping() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_taskIdMappingKey);
+      if (raw != null) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          return decoded.map((k, v) => MapEntry(k.toString(), v as int));
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to load torrent task mapping: $e');
+    }
+    return {};
+  }
 }

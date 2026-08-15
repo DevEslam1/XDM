@@ -88,7 +88,16 @@ Dio buildTransferDio({
   if (client.httpClientAdapter is IOHttpClientAdapter) {
     (client.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
       final client = HttpClient();
-      client.badCertificateCallback = (cert, host, port) => true;
+      client.badCertificateCallback = null; // Use system default validation
+      assert(() {
+        // Debug-only: allow self-signed certs in dev
+        client.badCertificateCallback = (cert, host, port) {
+          final targetHost = Uri.tryParse(url ?? '')?.host.toLowerCase();
+          if (targetHost != null && host.toLowerCase().endsWith(targetHost)) return true;
+          return false;
+        };
+        return true;
+      }());
       return client;
     };
   }

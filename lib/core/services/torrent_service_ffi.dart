@@ -1,9 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show ValueNotifier, listEquals;
+import 'package:flutter/foundation.dart';
 import 'package:libtorrent_flutter/libtorrent_flutter.dart'
     hide formatBytes, TrackerManager;
 import 'package:logging/logging.dart';
@@ -11,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:synchronized/synchronized.dart';
 import '../../features/settings/provider/settings_provider.dart';
+import '../di/injection.dart';
 import 'download_engine.dart';
 import 'power_monitor.dart';
 import 'torrent_session_config.dart';
@@ -375,6 +375,11 @@ class TorrentService {
   static bool isPluginAvailable = false;
   static final ValueNotifier<bool> isAvailable = ValueNotifier(false);
 
+  static bool get isShuttingDown =>
+      _state == TorrentSessionState.pausing ||
+      _state == TorrentSessionState.disposing ||
+      _state == TorrentSessionState.disposed;
+
   static bool get isSupported => true;
   static bool get isInitialized =>
       _state == TorrentSessionState.ready && isPluginAvailable;
@@ -453,7 +458,7 @@ class TorrentService {
         _startTrackingUpdates();
         startAutoSaveTimer();
         startDhtRebootstrapTimer();
-        TorrentSeedingManager.startSeedingCheck();
+        getIt<TorrentSeedingManager>().startSeedingCheck();
         _state = TorrentSessionState.ready;
         isAvailable.value = true;
       } on TimeoutException {
@@ -877,7 +882,7 @@ class TorrentService {
   }
 
   static int addMagnet(String magnetUri, String savePath) {
-    if (!isInitialized) return -1;
+    if (!isInitialized || isShuttingDown) return -1;
     _startTrackingUpdates();
     try {
       final id = LibtorrentFlutter.instance.addMagnet(magnetUri, savePath);
@@ -885,7 +890,7 @@ class TorrentService {
         _activeTorrentIds.add(id);
         _torrentSources[id] = magnetUri;
         unawaited(
-            _tryLoadFastResumeForSource(id, magnetUri)); // FIX-02: kept async
+            _tryLoadFastResumeForSource(id, magnetUri).catchError((e) => debugPrint('[Torrent] Failed to load fast resume: $e'))); // FIX-02: kept async
       }
       return id;
     } catch (e) {
@@ -970,7 +975,7 @@ class TorrentService {
     String savePath, {
     String? sourceKey,
   }) {
-    if (!isInitialized) return -1;
+    if (!isInitialized || isShuttingDown) return -1;
     _startTrackingUpdates();
     try {
       final source = sourceKey ?? filePath;
@@ -979,7 +984,7 @@ class TorrentService {
         _activeTorrentIds.add(id);
         _torrentSources[id] = source;
         unawaited(
-            _tryLoadFastResumeForSource(id, source)); // FIX-02: kept async
+            _tryLoadFastResumeForSource(id, source).catchError((e) => debugPrint('[Torrent] Failed to load fast resume: $e'))); // FIX-02: kept async
       }
       return id;
     } catch (e) {
@@ -1019,15 +1024,15 @@ class TorrentService {
     // deletes the task (or on a definitive retry that requires a clean slate).
     bool deleteResumeData = false,
   }) {
-    if (!isInitialized) return;
-    if (id >= 0) {
+    if (!isInitialized || id < 0) return;
+    _libtorrentLock.synchronized(() {
       try {
         LibtorrentFlutter.instance.removeTorrent(id, deleteFiles: deleteFiles);
         if (deleteResumeData) {
-          unawaited(TorrentResumeStore.delete(id));
+          unawaited(TorrentResumeStore.delete(id).catchError((e) => debugPrint('[Torrent] Failed to delete resume data: $e')));
           final source = _torrentSources.remove(id);
           if (source != null) {
-            unawaited(TorrentResumeStore.deleteResumeDataForSource(source));
+            unawaited(TorrentResumeStore.deleteResumeDataForSource(source).catchError((e) => debugPrint('[Torrent] Failed to delete source resume data: $e')));
           }
         } else {
           // Just remove from the in-memory source map; the blob stays on disk.
@@ -1039,7 +1044,7 @@ class TorrentService {
       } catch (e) {
         _log.warning('removeTorrent failed for id $id: $e');
       }
-    }
+    });
   }
 
   static Future<void> pauseTorrent(int id) async {
@@ -1101,13 +1106,15 @@ class TorrentService {
   }
 
   static void resumeTorrent(int id) {
-    if (!isInitialized || !isTorrentAlive(id)) return;
+    if (!isInitialized || isShuttingDown || !isTorrentAlive(id)) return;
     if (id >= 0) {
-      try {
-        LibtorrentFlutter.instance.resumeTorrent(id);
-      } catch (e) {
-        _log.warning('resumeTorrent failed for id $id: $e');
-      }
+      _libtorrentLock.synchronized(() {
+        try {
+          LibtorrentFlutter.instance.resumeTorrent(id);
+        } catch (e) {
+          _log.warning('resumeTorrent failed for id $id: $e');
+        }
+      });
     }
   }
 

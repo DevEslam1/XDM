@@ -346,7 +346,7 @@ mixin DownloadTorrentMixin {
             }
 
             if (shouldStopSeeding) {
-              unawaited(updateTaskSeeding(task.id, enabled: false));
+              unawaited(updateTaskSeeding(task.id, enabled: false).catchError((e) => debugPrint('[DMX] updateTaskSeeding failed: $e')));
               filteredTasksDirty = true;
               changed = true;
             }
@@ -391,7 +391,7 @@ mixin DownloadTorrentMixin {
         if (torrentId != null) {
           TorrentService.resumeTorrent(torrentId);
         } else {
-          unawaited(startSeedingTorrent(providerTasks[index]));
+          unawaited(startSeedingTorrent(providerTasks[index]).catchError((e) => debugPrint('[DMX] startSeedingTorrent failed: $e')));
         }
       } else {
         // Only pause/remove the torrent session if the task has already
@@ -604,7 +604,7 @@ mixin DownloadTorrentMixin {
             unawaited(
               providerDatabaseService
                   .saveTask(providerTasks[idx])
-                  .catchError((_) {}),
+                  .catchError((e) => debugPrint('[DMX] saveTask failed on network change: $e')),
             );
           }
         }

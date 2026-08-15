@@ -435,7 +435,7 @@ class _PhoneBottomNavBar extends StatelessWidget {
     return AnimatedSlide(
       offset: (navState.isNavbarVisible && currentIndex != 1)
           ? Offset.zero
-          : const Offset(0, 1.0),
+          : const Offset(0, 1.8),
       duration: AppTheme.motionBase,
       curve: AppTheme.motionCurve,
       child: SafeArea(

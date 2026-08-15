@@ -275,7 +275,10 @@ class AdBlockFilterUpdater {
     _autoUpdateTimer = Timer.periodic(const Duration(hours: 24), (_) {
       updateIfNeeded();
     });
-    unawaited(updateIfNeeded());
+    unawaited(updateIfNeeded().catchError((e) {
+      _log.warning('Failed to update if needed', e);
+      return false;
+    }));
   }
 
   void stopAutoUpdateScheduler() {

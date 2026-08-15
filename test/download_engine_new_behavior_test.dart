@@ -770,7 +770,7 @@ void main() {
         if (tempFile.existsSync()) tempFile.deleteSync();
 
         // Start download and cancel after a short delay
-        Future.delayed(const Duration(milliseconds: 100), () {
+        Future.delayed(const Duration(milliseconds: 20), () {
           if (!cancelToken.isCancelled) cancelToken.cancel();
         });
 
