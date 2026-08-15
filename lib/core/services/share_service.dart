@@ -1,7 +1,9 @@
 import 'dart:async';
+
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
-import 'logging_service.dart';
+
 import '../utils/url_utils.dart';
+import 'logging_service.dart';
 
 final _log = LoggingService.logger('ShareService');
 

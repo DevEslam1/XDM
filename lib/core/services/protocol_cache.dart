@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum ProtocolSupport { http11, http2, http3 }
 

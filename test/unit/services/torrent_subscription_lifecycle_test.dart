@@ -1,12 +1,14 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/engine/torrent_download_handler.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('TorrentDownloadHandler Subscription Lifecycle', () {
     test('activeSubsForTesting tracks and cleans up properly', () {
-      expect(TorrentDownloadHandler.activeSubsForTesting, isEmpty);
+      final handler = TorrentDownloadHandler();
+      expect(handler.activeSubsForTesting, isEmpty);
+      expect(TorrentDownloadHandler.globalActiveSubsForTesting, isEmpty);
     });
 
     test('normalizeTorrentFile clamps values safely', () {

@@ -1,17 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:drift/drift.dart' as drift;
 import 'package:flutter/foundation.dart' show compute;
 import 'package:hive/hive.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:drift/drift.dart' as drift;
 
-import 'app_database.dart';
-import '../logging_service.dart';
-import '../history_merger.dart';
-import '../../../features/downloads/models/download_task.dart';
 import '../../../features/browser/models/bookmark.dart';
+import '../../../features/downloads/models/download_task.dart';
+import '../history_merger.dart';
+import '../logging_service.dart';
+import 'app_database.dart';
 
 final _log = LoggingService.logger('HiveMigrationService');
 

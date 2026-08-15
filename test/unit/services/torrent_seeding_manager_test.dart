@@ -1,8 +1,8 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/core/services/torrent_models.dart';
 import 'package:dmx/core/services/torrent_seeding_manager.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

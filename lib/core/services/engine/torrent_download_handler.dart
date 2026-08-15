@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
+
+import '../../di/injection.dart';
+import '../../interfaces/i_torrent_service.dart';
 import '../download_engine.dart';
 import '../logging_service.dart';
 import '../power_monitor.dart';
@@ -14,36 +18,103 @@ import '../torrent_service.dart';
 
 final _log = LoggingService.logger('TorrentDownloadHandler');
 
-class TorrentDownloadHandler {
-  final Set<int> _activeTorrentIds = {};
-  static final Map<int, StreamSubscription> _activeSubs = {};
+/// Registry holding weak references to active TorrentDownloadHandlers
+/// allowing retries/lookups to find active subscriptions without mutable static state.
+class TorrentSubscriptionRegistry {
+  TorrentSubscriptionRegistry._();
+  static final TorrentSubscriptionRegistry instance =
+      TorrentSubscriptionRegistry._();
+
+  final Map<int, WeakReference<TorrentDownloadHandler>> _handlers = {};
+  final Map<int, StreamSubscription> _subs = {};
+
+  void register(
+      int torrentId, TorrentDownloadHandler handler, StreamSubscription sub) {
+    _handlers[torrentId] = WeakReference(handler);
+    _subs[torrentId] = sub;
+  }
+
+  StreamSubscription? getSubscription(int torrentId) {
+    final handler = _handlers[torrentId]?.target;
+    if (handler == null) {
+      _handlers.remove(torrentId);
+      _subs.remove(torrentId);
+      return null;
+    }
+    return _subs[torrentId];
+  }
+
+  void unregister(int torrentId, TorrentDownloadHandler handler) {
+    final target = _handlers[torrentId]?.target;
+    if (target == null || identical(target, handler)) {
+      _handlers.remove(torrentId);
+      _subs.remove(torrentId);
+    }
+  }
 
   @visibleForTesting
-  static Map<int, StreamSubscription> get activeSubsForTesting => _activeSubs;
+  void clear() {
+    _handlers.clear();
+    _subs.clear();
+  }
+}
+
+class TorrentDownloadHandler {
+  final ITorrentService _torrentService;
+  final Set<int> _activeTorrentIds = {};
+  final Map<int, StreamSubscription> _activeSubs = {};
+
+  @visibleForTesting
+  Map<int, StreamSubscription> get activeSubsForTesting => _activeSubs;
+
+  @visibleForTesting
+  static Map<int, StreamSubscription> get globalActiveSubsForTesting =>
+      TorrentSubscriptionRegistry.instance._subs;
   DateTime lastProgressTick = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime lastAccurateSync = DateTime.fromMillisecondsSinceEpoch(0);
   List<Map<String, dynamic>>? cachedAccurateFiles;
   String lastStateLabel = '';
 
-  TorrentDownloadHandler();
+  TorrentDownloadHandler({ITorrentService? torrentService})
+      : _torrentService = torrentService ??
+            (getIt.isRegistered<ITorrentService>()
+                ? getIt<ITorrentService>()
+                : TorrentServiceImpl());
 
   Set<int> get activeTorrentIds => Set.unmodifiable(_activeTorrentIds);
 
-  void removeActiveTorrent(int id) => _activeTorrentIds.remove(id);
+  void removeActiveTorrent(int id) {
+    _activeTorrentIds.remove(id);
+    final sub = _activeSubs.remove(id);
+    sub?.cancel();
+    TorrentSubscriptionRegistry.instance.unregister(id, this);
+  }
 
-  static void normalizeTorrentFile(Map<String, dynamic> f) {
-    f['name'] = f['name'] as String? ?? 'file';
+  @visibleForTesting
+  static Duration computeAdaptiveSyncInterval(int fileCount, {bool inBackground = false}) {
+    if (inBackground) return const Duration(seconds: 30);
+    return Duration(milliseconds: max(4000, fileCount * 4));
+  }
+
+  @visibleForTesting
+  static bool shouldSkipPerFileSync(int fileCount) => fileCount > 1000;
+
+  static Map<String, dynamic> normalizeTorrentFile(Map<String, dynamic> f) {
     final len = (f['length'] as num?)?.toInt() ?? 0;
-    f['length'] = len;
     var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
     dl = len > 0 ? dl.clamp(0, len) : 0;
+    final progress = len > 0 ? (dl / len).clamp(0.0, 1.0) : 1.0;
+
+    f['name'] = f['name'] as String? ?? 'file';
+    f['length'] = len;
     f['downloadedBytes'] = dl;
     f['selected'] = f['selected'] as bool? ?? true;
     f['priority'] = (f['priority'] as num?)?.toInt() ?? 4;
     f['speed'] = (f['speed'] as num?)?.toDouble() ?? 0.0;
-    f['progress'] = len > 0 ? (dl / len).clamp(0.0, 1.0) : 1.0;
-    f['percent'] = f['progress'];
+    f['progress'] = progress;
+    f['percent'] = progress;
     f['isComplete'] = len == 0 || dl >= len;
+    return f;
   }
 
   static bool isTorrentFileSelected(Map<String, dynamic> f) =>
@@ -56,10 +127,10 @@ class TorrentDownloadHandler {
     }
     int total = 0, done = 0, bytes = 0, downloaded = 0;
     for (final f in files) {
-      normalizeTorrentFile(f);
-      if (isTorrentFileSelected(f)) {
-        final len = (f['length'] as num?)?.toInt() ?? 0;
-        final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+      final norm = normalizeTorrentFile(f);
+      if (isTorrentFileSelected(norm)) {
+        final len = (norm['length'] as num?)?.toInt() ?? 0;
+        final dl = (norm['downloadedBytes'] as num?)?.toInt() ?? 0;
         total++;
         bytes += len;
         downloaded += dl;
@@ -302,8 +373,10 @@ class TorrentDownloadHandler {
     final saveDir = File(localFilePath).parent.path;
 
     // Cancel any existing subscription for this torrent ID before attaching a new one
-    final existingSub = _activeSubs.remove(id);
+    final existingSub = _activeSubs.remove(id) ??
+        TorrentSubscriptionRegistry.instance.getSubscription(id);
     await existingSub?.cancel();
+    TorrentSubscriptionRegistry.instance.unregister(id, this);
 
     lastProgressTick = DateTime.fromMillisecondsSinceEpoch(0);
     lastAccurateSync = DateTime.fromMillisecondsSinceEpoch(0);
@@ -311,13 +384,14 @@ class TorrentDownloadHandler {
     lastStateLabel = '';
 
     try {
-      sub = TorrentService.torrentUpdates.listen((torrents) async {
+      sub = _torrentService.torrentUpdates.listen((torrents) async {
         final torrent = torrents[id];
         if (torrent == null) {
-          if (!TorrentService.isTorrentAlive(id)) {
+          if (!_torrentService.isTorrentAlive(id)) {
             sub?.cancel();
             _activeSubs.remove(id);
             _activeTorrentIds.remove(id);
+            TorrentSubscriptionRegistry.instance.unregister(id, this);
             if (!completer.isCompleted) {
               completer.completeError(DioException(
                 requestOptions: RequestOptions(path: url),
@@ -350,23 +424,24 @@ class TorrentDownloadHandler {
             !torrent.hasMetadata;
 
         List<Map<String, dynamic>>? resolvedFiles = getTorrentFiles?.call();
-        final cachedFileCount = cachedAccurateFiles?.length ?? 0;
-        // FIX-BG-05: Large torrents skip expensive per-file progress queries.
-        final skipPerFileSync = cachedFileCount > 1000;
+        final fileCount =
+            resolvedFiles?.length ?? cachedAccurateFiles?.length ?? 0;
+        final skipPerFileSync = shouldSkipPerFileSync(fileCount);
         if (!isCheckingOrMetadata &&
             torrent.hasMetadata &&
             !PowerMonitor.screenOff &&
             !skipPerFileSync) {
-          // FIX-P1-02 / FIX-BG-04: Throttle accurate file progress (4s foreground, 30s background)
-          final syncInterval = DownloadEngine.isInBackground
-              ? const Duration(seconds: 30)
-              : const Duration(seconds: 4);
+          final syncInterval = computeAdaptiveSyncInterval(
+            fileCount,
+            inBackground: DownloadEngine.isInBackground,
+          );
 
-          if (now.difference(lastAccurateSync) >= syncInterval || cachedAccurateFiles == null) {
+          if (now.difference(lastAccurateSync) >= syncInterval ||
+              cachedAccurateFiles == null) {
             lastAccurateSync = now;
             try {
               final accurate =
-                  await TorrentService.getAccurateFileProgress(id, saveDir);
+                  await _torrentService.getAccurateFileProgress(id, saveDir);
               if (accurate.isNotEmpty) {
                 cachedAccurateFiles = accurate
                     .map((f) => {
@@ -383,7 +458,8 @@ class TorrentDownloadHandler {
                     .toList();
               }
             } catch (e, st) {
-              LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
+              LoggingService.logger('TorrentDownloadHandler')
+                  .warning('Accurate file progress error', e, st);
             }
           }
           if (cachedAccurateFiles != null) {
@@ -422,12 +498,25 @@ class TorrentDownloadHandler {
           }
         }
         final downloadedBytes = perFileSum > 0 ? perFileSum : rawDownloaded;
+        final speed = torrent.downloadPayloadRate.toDouble();
+
+        onProgress(DownloadProgress(
+          downloadedBytes: downloadedBytes,
+          fileSize: totalSize,
+          speed: speed,
+          eta: null,
+          torrentFiles: resolvedFiles ?? cachedAccurateFiles,
+          cycleState: 'downloading',
+          statusMessage: torrent.stateLabel,
+          torrentId: id,
+        ));
 
         if (stateLabel == 'seeding' ||
             (totalSize > 0 && downloadedBytes >= totalSize)) {
           sub?.cancel();
           _activeSubs.remove(id);
           _activeTorrentIds.remove(id);
+          TorrentSubscriptionRegistry.instance.unregister(id, this);
           if (!completer.isCompleted) {
             completer.complete();
           }
@@ -435,11 +524,13 @@ class TorrentDownloadHandler {
       });
 
       _activeSubs[id] = sub;
+      TorrentSubscriptionRegistry.instance.register(id, this, sub);
 
       cancelToken.whenCancel.then((_) {
         sub?.cancel();
         _activeSubs.remove(id);
         _activeTorrentIds.remove(id);
+        TorrentSubscriptionRegistry.instance.unregister(id, this);
         if (!completer.isCompleted) {
           completer.completeError(DioException(
             requestOptions: RequestOptions(path: url),
@@ -453,6 +544,7 @@ class TorrentDownloadHandler {
     } finally {
       await sub?.cancel();
       _activeSubs.remove(id);
+      TorrentSubscriptionRegistry.instance.unregister(id, this);
     }
   }
 }

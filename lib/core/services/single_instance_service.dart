@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'logging_service.dart';
-import 'background_gate.dart';
+
 import '../utils/crypto_utils.dart';
 import '../utils/url_utils.dart';
+import 'background_gate.dart';
+import 'logging_service.dart';
 
 class SingleInstanceService {
   static final SingleInstanceService _instance =

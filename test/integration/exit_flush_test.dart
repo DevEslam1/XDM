@@ -1,9 +1,10 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/downloads/provider/schedule_manager.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../helpers/fake_services.dart';
 import '../helpers/test_helpers.dart';
 

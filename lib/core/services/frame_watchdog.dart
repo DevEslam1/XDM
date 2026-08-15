@@ -17,7 +17,8 @@ class FrameWatchdog {
   static int _dropped = 0;
   static int _total = 0;
   static DateTime _windowStart = DateTime.now();
-  static const _window = Duration(seconds: 30);
+  static const normalWindow = Duration(seconds: 30);
+  static const heavyWindow = Duration(seconds: 60);
   static double _refreshRate = 60.0;
 
   static double get frameBudgetMs => 1000.0 / _refreshRate;
@@ -25,18 +26,32 @@ class FrameWatchdog {
   static const _alertThreshold = PerformanceBudget.maxJankRatio;
   static bool _isRunning = false;
   static void Function(double jankRatio)? onJankDetected;
+  static double? _cachedRefreshRate;
+  static bool _metricsListenerRegistered = false;
 
-  static Future<void> detectRefreshRate() async {
+  static Future<void> detectRefreshRate({bool force = false}) async {
+    if (_cachedRefreshRate != null && !force) {
+      return;
+    }
+    if (!_metricsListenerRegistered) {
+      _metricsListenerRegistered = true;
+      PlatformDispatcher.instance.onMetricsChanged = () {
+        _cachedRefreshRate = null;
+        detectRefreshRate(force: true);
+      };
+    }
     try {
       final display = await getDisplayRefreshRate();
       if (display > 0) {
         _refreshRate = display;
+        _cachedRefreshRate = display;
         _log.info('[FrameWatchdog] Detected refresh rate: ${display}Hz '
             '(frame budget: ${frameBudgetMs.toStringAsFixed(2)}ms)');
       }
     } catch (e) {
       // FIX: Always fall back to 60Hz if detection fails
       _refreshRate = 60.0;
+      _cachedRefreshRate = 60.0;
       _log.fine(
           '[FrameWatchdog] Refresh rate detection failed, using 60Hz: $e');
     }
@@ -96,9 +111,8 @@ class FrameWatchdog {
     }
 
     final isHeavyDownloads = downloadingTasksCount > 2;
-    if (isHeavyDownloads && !alwaysObserveHeavyDownloads) {
-      return;
-    }
+    final currentWindow = isHeavyDownloads ? heavyWindow : normalWindow;
+    final currentThreshold = isHeavyDownloads ? 0.15 : _alertThreshold;
 
     if (PerformanceMonitor.instance.isActive) {
       PerformanceMonitor.instance.ingestFrameTimings(timings);
@@ -109,12 +123,12 @@ class FrameWatchdog {
     }
 
     final elapsed = DateTime.now().difference(_windowStart);
-    if (elapsed >= _window) {
+    if (elapsed >= currentWindow) {
       if (_total > 0) {
         final throttled = PowerMonitor.throttleFactor < 0.5;
         if (!throttled) {
           final rate = _dropped / _total;
-          if (rate > _alertThreshold) {
+          if (rate > currentThreshold) {
             final now = DateTime.now();
             if (isHeavyDownloads) {
               if (_lastHeavyWarning == null ||
@@ -152,10 +166,9 @@ class FrameWatchdog {
     _total = total;
     if (total > 0) {
       final rate = dropped / total;
-      if (rate > _alertThreshold) {
-        if (!isHeavy || alwaysObserveHeavyDownloads) {
-          onJankDetected?.call(rate);
-        }
+      final threshold = isHeavy ? 0.15 : _alertThreshold;
+      if (rate > threshold) {
+        onJankDetected?.call(rate);
       }
     }
     _dropped = 0;

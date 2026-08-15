@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/app_theme.dart';
-import '../../settings/provider/settings_provider.dart';
 import '../../../core/utils/localization.dart';
+import '../../settings/provider/settings_provider.dart';
 import 'smart_url_bar.dart';
 
 /// Extracted toolbar component for the in-app browser screen.

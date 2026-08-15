@@ -1,6 +1,6 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/torrent_models.dart';
 import 'package:dmx/core/services/torrent_tracker_optimizer.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('TorrentTrackerOptimizer Unit Tests (Phase 3 & 10)', () {

@@ -1,10 +1,12 @@
 import 'dart:async';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../utils/url_utils.dart';
-import 'package:dmx/core/services/logging_service.dart';
 
 class ClipboardService {
   static final ClipboardService _instance = ClipboardService._internal();
@@ -17,6 +19,10 @@ class ClipboardService {
   bool _initialized = false;
   bool _initStarted = false;
   int _initAttempts = 0;
+  bool _clipboardMonitoringDegraded = false;
+  bool get clipboardMonitoringDegraded => _clipboardMonitoringDegraded;
+  static final ValueNotifier<bool> monitoringDegradedNotifier =
+      ValueNotifier<bool>(false);
 
   /// When true, secure-storage reads/writes are skipped entirely. Used by
   /// tests where the flutter_secure_storage platform channel is unavailable.
@@ -56,6 +62,8 @@ class ClipboardService {
       LoggingService.logger('ClipboardService').warning(
         '[ClipboardService] Max initialization attempts reached. Halting init retries.',
       );
+      _clipboardMonitoringDegraded = true;
+      monitoringDegradedNotifier.value = true;
       // Mark as initialized to stop further attempts; dedupe uses memory state.
       _initialized = true;
     }

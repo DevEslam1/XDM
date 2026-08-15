@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:math';
+
 import 'package:flutter/foundation.dart';
-import '../../models/download_task.dart';
+
 import '../../../../core/services/database_service.dart';
 import '../../../../features/settings/provider/settings_provider.dart';
+import '../../models/download_task.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // QUEUE CONCURRENCY FIXES (applied together)

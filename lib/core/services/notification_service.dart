@@ -1,20 +1,22 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 import 'dart:ui';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'dart:collection';
-import 'package:synchronized/synchronized.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:synchronized/synchronized.dart';
+
 import '../utils/localization.dart';
-import 'package:dmx/core/services/logging_service.dart';
+import 'background_gate.dart';
 import 'download_engine.dart';
 import 'power_monitor.dart';
-import 'background_gate.dart';
 
 const String _nonceKey = 'dmx_notification_nonce';
 const String _pendingActionsKey = 'dmx_pending_notification_actions';

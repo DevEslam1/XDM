@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter_test/flutter_test.dart';
+
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_orchestrator.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 class _MockOrchestratorHost implements DownloadOrchestratorHost {
   DownloadTask? lastTaskState;

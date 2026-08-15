@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/quiet_hours.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('QuietHours', () {

@@ -1,10 +1,11 @@
 import 'dart:math';
-import 'package:flutter/foundation.dart' show listEquals;
-import 'package:flutter/material.dart';
+
 import 'package:dmx/core/app_theme.dart';
 import 'package:dmx/core/utils/file_utils.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/shared/design/dmx_design.dart';
+import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/material.dart';
 
 class SpeedGraphWidget extends StatefulWidget {
   const SpeedGraphWidget({

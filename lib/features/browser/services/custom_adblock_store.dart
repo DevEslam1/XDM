@@ -1,5 +1,6 @@
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'ad_blocker_service.dart';
 
 /// Manages user-defined ad-block hostnames with persistence.

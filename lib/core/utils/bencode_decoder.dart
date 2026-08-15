@@ -1,7 +1,8 @@
 import 'dart:convert';
+
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:flutter/foundation.dart';
 
 class BencodeDecoder {
   final Uint8List _data;

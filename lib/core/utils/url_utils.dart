@@ -1,7 +1,8 @@
 import 'package:dio/dio.dart';
-import 'file_utils.dart';
 import 'package:dmx/core/services/logging_service.dart';
+
 import '../services/site_intelligence/site_intelligence_service.dart';
+import 'file_utils.dart';
 
 bool isHttpUrl(String value) {
   final uri = Uri.tryParse(value.trim());

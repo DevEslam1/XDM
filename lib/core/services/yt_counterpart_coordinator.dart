@@ -10,8 +10,10 @@ class YtCounterpartCoordinator {
   final Set<Timer> _cleanupTimers = {};
   Timer? _periodicTimer;
 
-  YtCounterpartCoordinator() {
-    _startPeriodicTimer();
+  YtCounterpartCoordinator({bool enablePeriodicTimer = true}) {
+    if (enablePeriodicTimer) {
+      _startPeriodicTimer();
+    }
   }
 
   void _startPeriodicTimer() {

@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 DownloadTask createTestTask({
   String id = 'task-1',

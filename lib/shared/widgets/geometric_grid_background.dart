@@ -1,13 +1,15 @@
 // FIX-P1: GeometricGridBackground — Pause animation when backgrounded and guard ref counting
 import 'dart:async';
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../core/di/injection.dart';
+
 import '../../core/app_theme.dart';
-import '../../core/services/logging_service.dart';
+import '../../core/di/injection.dart';
 import '../../core/services/background_gate.dart';
 import '../../core/services/download_engine.dart';
+import '../../core/services/logging_service.dart';
 import '../../core/services/performance_monitor.dart';
 import '../../core/services/power_monitor.dart';
 import '../../features/downloads/provider/download_provider.dart';
@@ -81,7 +83,7 @@ class AmbientProgress with WidgetsBindingObserver {
       final elapsed =
           DateTime.now().difference(_startTime).inMilliseconds / 1000;
       final newVal = (elapsed / 30) % 1.0;
-      if ((newVal - progress.value).abs() >= 0.01) {
+      if ((newVal - progress.value).abs() >= 0.05) {
         progress.value = newVal;
       }
     });
@@ -138,7 +140,9 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
       if (getIt.isRegistered<AmbientProgress>()) {
         return getIt<AmbientProgress>();
       }
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('GeometricGridBackground').fine('getIt resolution fallback', e, st);
+    }
     return AmbientProgress.instance;
   }
 
@@ -371,7 +375,7 @@ class _AmbientBlobPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _AmbientBlobPainter oldDelegate) {
-    return (oldDelegate.progress - progress).abs() > 0.01 ||
+    return (oldDelegate.progress - progress).abs() > 0.05 ||
         oldDelegate.intensity != intensity ||
         oldDelegate.isDark != isDark;
   }

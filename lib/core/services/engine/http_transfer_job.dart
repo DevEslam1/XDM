@@ -6,19 +6,20 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:flutter/foundation.dart';
+
+import '../../constants/thresholds.dart';
 import '../bandwidth_governor.dart';
+import '../download_engine.dart' show DownloadEngine;
 import '../download_journal.dart';
+import '../engines/http_download_engine.dart';
+import '../mirror/mirror_selector.dart';
 import '../positional_file_writer.dart';
 import '../power_monitor.dart';
-import '../mirror/mirror_selector.dart';
 import 'engine_exceptions.dart';
 import 'engine_models.dart';
 import 'engine_utils.dart';
-import '../download_engine.dart' show DownloadEngine;
-import '../engines/http_download_engine.dart';
-import '../../constants/thresholds.dart';
 
 export 'engine_exceptions.dart' show FileChangedOnServerException, RangeUnsupportedException;
 export 'engine_models.dart' show SpeedSample;
@@ -85,8 +86,43 @@ class HttpTransferJob {
   final CancelToken _cancelToken = CancelToken();
   int _seq = 0;
   bool _cancelRequested = false;
+  static const int maxPendingDelays = 32;
   final List<Completer<void>> _pendingDelayCompleters = [];
   final List<Timer> _pendingDelayTimers = [];
+
+  @visibleForTesting
+  List<Completer<void>> get pendingDelayCompletersForTesting => _pendingDelayCompleters;
+
+  @visibleForTesting
+  List<Timer> get pendingDelayTimersForTesting => _pendingDelayTimers;
+
+  @visibleForTesting
+  Future<void> cancellableDelay(Duration duration) {
+    if (_cancelRequested || _cancelToken.isCancelled) return Future.value();
+
+    while (_pendingDelayCompleters.length >= maxPendingDelays) {
+      final oldCompleter = _pendingDelayCompleters.removeAt(0);
+      if (!oldCompleter.isCompleted) oldCompleter.complete();
+    }
+    while (_pendingDelayTimers.length >= maxPendingDelays) {
+      final oldTimer = _pendingDelayTimers.removeAt(0);
+      oldTimer.cancel();
+    }
+
+    final completer = Completer<void>();
+    _pendingDelayCompleters.add(completer);
+
+    final timer = Timer(duration, () {
+      _pendingDelayTimers.removeWhere((t) => !t.isActive);
+      _pendingDelayCompleters.remove(completer);
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    });
+    _pendingDelayTimers.add(timer);
+
+    return completer.future;
+  }
 
   void _abortAllDelays() {
     _cancelRequested = true;
@@ -117,6 +153,9 @@ class HttpTransferJob {
   int _lastProgressBytes = 0;
   int _lastProgressTimeMs = 0;
   bool _stalledEmitted = false;
+  int? _lastProgressFingerprint;
+  String? _lastEmittedCycleState;
+  int _currentWriterBufferSize = 256 * 1024;
   
   void requestCancel() {
     _abortAllDelays();
@@ -197,6 +236,7 @@ class HttpTransferJob {
   void registerWatchdogs() {
     final hardTimeoutDuration = _computeHardTimeout();
     void onHardTimeout() {
+      requestCancel();
       _send('error', {
         'errorType': 'timeout',
         'errorMessage': 'Hard timeout exceeded: ${_formatDuration(hardTimeoutDuration)}',
@@ -321,8 +361,8 @@ class HttpTransferJob {
     );
     _send('ack');
     try {
-      await loadAndReconcileState(dio);
       registerWatchdogs();
+      await loadAndReconcileState(dio);
       await executeDownload(dio);
       await _finalize(dio);
       _send('done');
@@ -1314,10 +1354,10 @@ class HttpTransferJob {
     final isBackground =
         DownloadEngine.isInBackground || PowerMonitor.screenOff;
     final saveInterval = isBackground
-        ? const Duration(seconds: 60).inMilliseconds
+        ? const Duration(seconds: 120).inMilliseconds
         : const Duration(seconds: 15).inMilliseconds;
     final saveByteThreshold = isBackground
-        ? 64 * 1024 * 1024
+        ? 128 * 1024 * 1024
         : 32 * 1024 * 1024;
 
     final dueSave = nowMs - _lastStateSaveMs >= saveInterval ||
@@ -1330,16 +1370,18 @@ class HttpTransferJob {
       _stateSavePending = true;
       _lastStateSaveMs = nowMs;
       _bytesSinceSave = 0;
-      try {
-        if (preSaveFlush != null) await preSaveFlush();
-        if (writer != null) await writer.flushBuffers();
-        await StateStore.save(cmd.tempFilePath, st,
-            screenOff: PowerMonitor.screenOff);
-      } catch (e) {
-        debugPrint('[DMX-Job] state save failed: $e');
-      } finally {
-        _stateSavePending = false;
-      }
+      unawaited(() async {
+        try {
+          if (preSaveFlush != null) await preSaveFlush();
+          if (writer != null) await writer.flushBuffers();
+          await StateStore.save(cmd.tempFilePath, st,
+              screenOff: PowerMonitor.screenOff);
+        } catch (e) {
+          debugPrint('[DMX-Job] state save failed: $e');
+        } finally {
+          _stateSavePending = false;
+        }
+      }());
     }
 
     if (dueReport && !PowerMonitor.screenOff) {
@@ -1398,9 +1440,11 @@ class HttpTransferJob {
       if (elapsed > 0) speed = (downloaded - first.bytes) / elapsed;
     }
     if (writer != null) {
-      if (speed > 50 * 1024 * 1024) {
+      if (_currentWriterBufferSize == 256 * 1024 && speed > 60 * 1024 * 1024) {
+        _currentWriterBufferSize = 512 * 1024;
         writer.setBufferSize(512 * 1024);
-      } else {
+      } else if (_currentWriterBufferSize == 512 * 1024 && speed < 30 * 1024 * 1024) {
+        _currentWriterBufferSize = 256 * 1024;
         writer.setBufferSize(256 * 1024);
       }
     }
@@ -1419,6 +1463,25 @@ class HttpTransferJob {
         ? st.chunks.where((c) => c.isComplete).length
         : null;
     final cycleState = _deriveCycleState(statusMessage, st.status);
+    final isCycleStateChanged = cycleState != _lastEmittedCycleState;
+
+    final fingerprint = Object.hash(
+      downloaded,
+      total,
+      (speed / 1024).round(),
+      eta,
+      cycleState,
+      statusMessage,
+      chunkDetails?.length,
+      completedChunks,
+    );
+
+    if (!isCycleStateChanged && fingerprint == _lastProgressFingerprint) {
+      return;
+    }
+    _lastProgressFingerprint = fingerprint;
+    _lastEmittedCycleState = cycleState;
+
     final ytLiveCounterpartBytes = cmd.ytCounterpartDownloadedBytes;
     _send('progress', {
       'downloadedBytes': downloaded,

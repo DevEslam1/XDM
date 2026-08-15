@@ -1,7 +1,7 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/services/download_journal.dart';
 import 'package:dmx/core/services/bandwidth_governor.dart';
+import 'package:dmx/core/services/download_journal.dart';
 import 'package:dmx/core/services/torrent_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

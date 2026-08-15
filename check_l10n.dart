@@ -1,8 +1,8 @@
 // ignore_for_file: avoid_print
 
-import 'lib/core/utils/l10n/app_en.dart';
 import 'lib/core/utils/l10n/app_ar.dart';
 import 'lib/core/utils/l10n/app_de.dart';
+import 'lib/core/utils/l10n/app_en.dart';
 import 'lib/core/utils/l10n/app_es.dart';
 import 'lib/core/utils/l10n/app_fr.dart';
 

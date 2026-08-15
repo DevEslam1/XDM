@@ -1,14 +1,15 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
+
 import '../../../core/app_theme.dart';
-import '../../../core/utils/localization.dart';
-import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/localization.dart';
 import '../provider/settings_provider.dart';
+import '../widgets/browser_extensions_sheet.dart';
 import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';
-import '../widgets/browser_extensions_sheet.dart';
 
 class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
   const DownloadsSettingsPage({super.key});

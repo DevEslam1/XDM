@@ -45,7 +45,10 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
   AnimationController get loopController => _shimmer;
 
   @override
-  bool get loopWanted => widget.onPressed != null && !widget.isLoading;
+  bool get loopWanted =>
+      widget.onPressed != null &&
+      !widget.isLoading &&
+      !PerformanceMonitor.shouldReduceMotion;
 
   @override
   void initState() {
@@ -184,87 +187,81 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
             curve: AppTheme.motionSpring,
             child: AnimatedOpacity(
               opacity: enabled ? 1.0 : 0.55,
-          duration: AppTheme.motionBase,
-          child: widget.isFilled
-              ? FilledButton(
-                  onPressed: enabled ? () => widget.onPressed!() : null,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: widget.color,
-                    foregroundColor: filledContentColor,
-                    overlayColor: isDark
-                        ? AppTheme.focusRing.withValues(alpha: 0.3)
-                        : AppTheme.lightFocusRing.withValues(alpha: 0.3),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(
-                        color: isDark
-                            ? AppTheme.focusRing
-                            : AppTheme.lightFocusRing,
-                        width: 0,
+              duration: AppTheme.motionBase,
+              child: widget.isFilled
+                  ? FilledButton(
+                      onPressed: enabled ? () => widget.onPressed!() : null,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: widget.color,
+                        foregroundColor: filledContentColor,
+                        overlayColor: isDark
+                            ? AppTheme.focusRing.withValues(alpha: 0.3)
+                            : AppTheme.lightFocusRing.withValues(alpha: 0.3),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: isDark
+                                ? AppTheme.focusRing
+                                : AppTheme.lightFocusRing,
+                            width: 0,
+                          ),
+                        ),
+                        minimumSize: Size(
+                          widget.isExpanded ? double.infinity : 0,
+                          48,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
                       ),
-                    ),
-                    minimumSize: Size(
-                      widget.isExpanded ? double.infinity : 0,
-                      48,
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                  ),
-                  child: effectiveGlow && enabled
-                      ? Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: glow.withValues(alpha: 0.3),
-                                blurRadius: 8.0,
-                                spreadRadius: -2,
+                      child: effectiveGlow && enabled
+                          ? Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: glow.withValues(alpha: 0.4),
+                                  width: 1.0,
+                                ),
                               ),
-                            ],
-                          ),
-                          child: label,
-                        )
-                      : label,
-                )
-              : OutlinedButton(
-                  onPressed: enabled ? () => widget.onPressed!() : null,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: widget.color,
-                    overlayColor: isDark
-                        ? AppTheme.focusRing.withValues(alpha: 0.3)
-                        : AppTheme.lightFocusRing.withValues(alpha: 0.3),
-                    side: BorderSide(
-                      color: widget.color.withValues(alpha: 0.3),
-                      width: 1.0,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    minimumSize: Size(
-                      widget.isExpanded ? double.infinity : 0,
-                      48,
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                  ),
-                  child: effectiveGlow && enabled
-                      ? Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: glow.withValues(alpha: 0.3),
-                                blurRadius: 8.0,
-                                spreadRadius: -2,
+                              child: label,
+                            )
+                          : label,
+                    )
+                  : OutlinedButton(
+                      onPressed: enabled ? () => widget.onPressed!() : null,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: widget.color,
+                        overlayColor: isDark
+                            ? AppTheme.focusRing.withValues(alpha: 0.3)
+                            : AppTheme.lightFocusRing.withValues(alpha: 0.3),
+                        side: BorderSide(
+                          color: widget.color.withValues(alpha: 0.3),
+                          width: 1.0,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        minimumSize: Size(
+                          widget.isExpanded ? double.infinity : 0,
+                          48,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                      ),
+                      child: effectiveGlow && enabled
+                          ? Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: glow.withValues(alpha: 0.4),
+                                  width: 1.0,
+                                ),
                               ),
-                            ],
-                          ),
-                          child: label,
-                        )
-                      : label,
-                ),
+                              child: label,
+                            )
+                          : label,
+                    ),
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }

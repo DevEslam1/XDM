@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
 
+import 'package:dmx/core/services/background_gate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart' as pkg_logging;
 import 'package:logging/logging.dart' show Level;
-import 'package:dmx/core/services/background_gate.dart';
 
 /// Centralized application logger with console and optional rolling file logging.
 class LoggingService {

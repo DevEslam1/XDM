@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/app_theme.dart';
 import '../../../core/services/notification_service.dart';
-import '../../../core/utils/localization.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/localization.dart';
 import '../provider/settings_provider.dart';
 import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';

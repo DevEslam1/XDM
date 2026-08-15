@@ -1,15 +1,16 @@
-import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
+import '../../../shared/design/dmx_design.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
+import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../downloads/widgets/download_card.dart';
 import '../../settings/provider/settings_provider.dart';
-import '../../../shared/widgets/geometric_grid_background.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
-import '../../../shared/design/dmx_design.dart';
 
 /// Displays a drill-down view for a single download category.
 /// Shows: total size, file count, pie chart, list of completed downloads.

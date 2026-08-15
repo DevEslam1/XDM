@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../../../core/di/injection.dart';
+import '../../../core/interfaces/i_torrent_service.dart';
 import '../../../core/services/torrent_resume_store.dart';
 import '../../../core/services/torrent_service.dart';
 import '../models/download_task.dart';
@@ -7,10 +9,15 @@ import '../models/download_task.dart';
 /// Service responsible for managing libtorrent sessions, FFI bridge communication,
 /// per-file priorities, fast-resume states, and seeding configurations.
 class TorrentSessionManager {
+  final ITorrentService _torrentService;
   final Map<String, int> _torrentIds = {};
   final Map<int, TorrentUpdateInfo> _latestStats = {};
 
-  TorrentSessionManager();
+  TorrentSessionManager({ITorrentService? torrentService})
+      : _torrentService = torrentService ??
+            (getIt.isRegistered<ITorrentService>()
+                ? getIt<ITorrentService>()
+                : TorrentServiceImpl());
 
   Map<String, int> get torrentIds => _torrentIds;
   Map<int, TorrentUpdateInfo> get latestStats => _latestStats;
@@ -32,7 +39,7 @@ class TorrentSessionManager {
   TorrentUpdateInfo? getStats(String taskId) {
     final tid = _torrentIds[taskId];
     if (tid == null) return null;
-    return _latestStats[tid] ?? TorrentService.latestStats[tid];
+    return _latestStats[tid] ?? _torrentService.latestStats[tid];
   }
 
   double getUploadSpeed(String taskId) {
@@ -53,7 +60,7 @@ class TorrentSessionManager {
   bool isTorrentAlive(String taskId) {
     final tid = _torrentIds[taskId];
     if (tid == null) return false;
-    return TorrentService.isTorrentAlive(tid);
+    return _torrentService.isTorrentAlive(tid);
   }
 
   /// Pauses a torrent and waits for confirmation up to [timeout] (FIX T-5).
@@ -62,23 +69,23 @@ class TorrentSessionManager {
     final tid = _torrentIds[taskId];
     if (tid == null) return true;
 
-    if (!TorrentService.isTorrentAlive(tid)) {
+    if (!_torrentService.isTorrentAlive(tid)) {
       _torrentIds.remove(taskId);
       return true;
     }
 
-    await TorrentService.pauseTorrent(tid);
+    await _torrentService.pauseTorrent(tid);
 
     final deadline = DateTime.now().add(timeout);
     bool isPaused = false;
     while (!isPaused && DateTime.now().isBefore(deadline)) {
       await Future.delayed(const Duration(milliseconds: 50));
       try {
-        final stats = _latestStats[tid] ?? TorrentService.latestStats[tid];
+        final stats = _latestStats[tid] ?? _torrentService.latestStats[tid];
         final stateLabel = stats?.stateLabel.toLowerCase() ?? '';
         isPaused = stateLabel.contains('paused') ||
             stateLabel.contains('stopped') ||
-            !TorrentService.isTorrentAlive(tid);
+            !_torrentService.isTorrentAlive(tid);
       } catch (_) {
         isPaused = true;
       }
@@ -88,7 +95,7 @@ class TorrentSessionManager {
     try {
       await TorrentResumeStore.saveAll(
         {tid},
-        (id) => TorrentService.resumeBlobFor(id),
+        (id) => _torrentService.resumeBlobFor(id),
       );
     } catch (e) {
       debugPrint(
@@ -101,25 +108,25 @@ class TorrentSessionManager {
   /// Starts or resumes seeding for a completed torrent task.
   Future<void> startSeeding(DownloadTask task) async {
     final tid = _torrentIds[task.id];
-    if (tid != null && TorrentService.isTorrentAlive(tid)) {
-      TorrentService.resumeTorrent(tid);
+    if (tid != null && _torrentService.isTorrentAlive(tid)) {
+      _torrentService.resumeTorrent(tid);
     }
   }
 
   /// Applies file priority selection for a torrent.
   void setFilePriorities(int torrentId, List<int> priorities) {
-    TorrentService.setFilePriorities(torrentId, priorities);
+    _torrentService.setFilePriorities(torrentId, priorities);
   }
 
   /// Retrieves live per-file statistics for a torrent.
   List<TorrentFileItem> getFiles(int torrentId) {
-    return TorrentService.getFiles(torrentId);
+    return _torrentService.getFiles(torrentId);
   }
 
   /// Removes a torrent from the session.
   void removeTorrent(int torrentId,
       {bool deleteFiles = false, bool deleteResumeData = true}) {
-    TorrentService.removeTorrent(torrentId,
+    _torrentService.removeTorrent(torrentId,
         deleteFiles: deleteFiles, deleteResumeData: deleteResumeData);
     _latestStats.remove(torrentId);
     _torrentIds.removeWhere((_, tid) => tid == torrentId);

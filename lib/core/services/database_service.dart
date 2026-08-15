@@ -1,24 +1,24 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'dart:io';
+
 import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
 
+import '../../features/browser/models/bookmark.dart';
+import '../../features/downloads/models/download_task.dart';
+import '../../features/settings/provider/settings_provider.dart';
+import 'background_gate.dart';
 import 'database/app_database.dart';
 import 'database/hive_migration_service.dart';
 import 'download_engine.dart';
 import 'logging_service.dart';
 import 'power_monitor.dart';
-import 'background_gate.dart';
-import '../../features/downloads/models/download_task.dart';
-import '../../features/browser/models/bookmark.dart';
-import '../../features/settings/provider/settings_provider.dart';
-
-import 'dart:io';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class DatabaseService {
   /// Shared singleton instance.
@@ -114,19 +114,29 @@ class DatabaseService {
   Future<void> runPeriodicMaintenanceForTesting() => _runPeriodicMaintenance();
 
   /// Periodic SQLite maintenance cadence:
-  /// - Every cycle (30m): PASSIVE WAL checkpoint
+  /// - When active downloads exist: skip wal_checkpoint to protect throughput; run PRAGMA optimize.
+  /// - When idle: wal_checkpoint(RESTART) to fully fold the WAL into the database file.
   /// - Every 6th cycle (3h): Check WAL size, force TRUNCATE if > 1250 pages (~5MB)
   /// - Every 12th cycle (6h): PRAGMA optimize, incremental_vacuum, foreign_key_check (when idle)
   Future<void> _runPeriodicMaintenance() async {
+    final activeRows = await _db
+        .customSelect("SELECT COUNT(*) as cnt FROM download_tasks WHERE status = 'downloading'")
+        .get();
+    final hasActiveDownloads = (activeRows.first.read<int>('cnt')) > 0;
+
     final swCheckpoint = Stopwatch()..start();
     int logPages = 0;
     try {
-      final walRows = await _db.customSelect('PRAGMA wal_checkpoint(PASSIVE)').get();
-      if (walRows.isNotEmpty) {
-        final row = walRows.first.data;
-        final log = row['log'] ?? 0;
-        if (log is num) {
-          logPages = log.toInt();
+      if (hasActiveDownloads) {
+        _log.fine('[DatabaseService] Active downloads in progress; skipping periodic wal_checkpoint');
+      } else {
+        final walRows = await _db.customSelect('PRAGMA wal_checkpoint(RESTART)').get();
+        if (walRows.isNotEmpty) {
+          final row = walRows.first.data;
+          final log = row['log'] ?? 0;
+          if (log is num) {
+            logPages = log.toInt();
+          }
         }
       }
       if (_maintenanceRuns % 12 == 0) {
@@ -135,14 +145,14 @@ class DatabaseService {
       swCheckpoint.stop();
       if (swCheckpoint.elapsedMilliseconds > 500) {
         _log.info(
-            'wal_checkpoint(PASSIVE) took ${swCheckpoint.elapsedMilliseconds}ms');
+            'wal_checkpoint took ${swCheckpoint.elapsedMilliseconds}ms');
       }
     } catch (e) {
-      _log.warning('wal_checkpoint(PASSIVE) failed', e);
+      _log.warning('wal_checkpoint failed', e);
     }
 
     _maintenanceRuns++;
-    if (_maintenanceRuns % 6 == 0) {
+    if (_maintenanceRuns % 6 == 0 && !hasActiveDownloads) {
       try {
         if (logPages > 1250) {
           // ~5MB in 4KB pages
@@ -153,39 +163,25 @@ class DatabaseService {
         LoggingService.logger('DatabaseService').warning('Operation failed', e, st);
       }
     }
-    if (_maintenanceRuns % 12 == 0) {
+    if (_maintenanceRuns % 12 == 0 && !hasActiveDownloads) {
       try {
-        final activeCountResult = await _db
-            .customSelect(
-              "SELECT COUNT(*) as cnt FROM download_tasks WHERE status IN ('downloading', 'paused', 'queued', 'seeding')",
-            )
-            .get();
-        final activeCount = activeCountResult.first.read<int>('cnt');
-        if (activeCount > 0) {
-          _log.info(
-            'Skipping periodic DB incremental_vacuum because $activeCount active/paused/queued download(s) in progress',
-          );
-        } else {
-          final swVacuum = Stopwatch()..start();
-          await _db.customStatement('PRAGMA incremental_vacuum(50)');
-          try {
-            await _db.customStatement('PRAGMA foreign_key_check');
-          } catch (e, st) {
-            LoggingService.logger('DatabaseService').warning('PRAGMA foreign_key_check failed', e, st);
-          }
-          swVacuum.stop();
-          if (swVacuum.elapsedMilliseconds > 500) {
-            _log.info(
-                'incremental_vacuum took ${swVacuum.elapsedMilliseconds}ms');
-          }
+        final swVacuum = Stopwatch()..start();
+        await _db.customStatement('PRAGMA incremental_vacuum(50)');
+        try {
+          await _db.customStatement('PRAGMA foreign_key_check');
+        } catch (e, st) {
+          LoggingService.logger('DatabaseService').warning('PRAGMA foreign_key_check failed', e, st);
         }
-      } catch (e) {
-        _log.warning('incremental_vacuum failed', e);
+        swVacuum.stop();
+        if (swVacuum.elapsedMilliseconds > 500) {
+          _log.info(
+              'incremental_vacuum took ${swVacuum.elapsedMilliseconds}ms');
+        }
+      } catch (e, st) {
+        LoggingService.logger('DatabaseService').warning('Periodic vacuum/fk check failed', e, st);
       }
     }
   }
-
-
 
   DownloadTasksCompanion _taskToCompanion(DownloadTask task) {
     return DownloadTasksCompanion.insert(
@@ -326,16 +322,52 @@ class DatabaseService {
     return rows.map(_rowToTask).toList();
   }
 
-  /// Paginated load of download tasks (DB-02).
+  /// Paginated load of download tasks (DB-02 / Fix 6).
   Future<List<DownloadTask>> loadTasksPage({
     int limit = 50,
     int offset = 0,
+    String? status,
+    String? category,
+    String? search,
   }) async {
-    final query = _db.select(_db.downloadTasks)
+    var query = _db.select(_db.downloadTasks);
+    if (status != null && status != 'All') {
+      query = query..where((t) => t.status.equals(status));
+    }
+    if (category != null && category != 'All') {
+      query = query..where((t) => t.category.equals(category));
+    }
+    if (search != null && search.trim().isNotEmpty) {
+      final term = '%${search.trim()}%';
+      query = query..where((t) => t.fileName.like(term) | t.url.like(term));
+    }
+    query = query
       ..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)])
       ..limit(limit, offset: offset);
     final rows = await query.get();
     return rows.map(_rowToTask).toList();
+  }
+
+  /// Get total task count with optional filters (Fix 6).
+  Future<int> getTaskCount({
+    String? status,
+    String? category,
+    String? search,
+  }) async {
+    final countExp = _db.downloadTasks.id.count();
+    var query = _db.selectOnly(_db.downloadTasks)..addColumns([countExp]);
+    if (status != null && status != 'All') {
+      query = query..where(_db.downloadTasks.status.equals(status));
+    }
+    if (category != null && category != 'All') {
+      query = query..where(_db.downloadTasks.category.equals(category));
+    }
+    if (search != null && search.trim().isNotEmpty) {
+      final term = '%${search.trim()}%';
+      query = query..where(_db.downloadTasks.fileName.like(term) | _db.downloadTasks.url.like(term));
+    }
+    final result = await query.getSingle();
+    return result.read(countExp) ?? 0;
   }
 
   Future<DownloadTask?> getTask(String id) async {

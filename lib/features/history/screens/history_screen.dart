@@ -1,16 +1,17 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
-import '../../../shared/widgets/geometric_grid_background.dart';
-import '../../downloads/provider/download_provider.dart';
-import '../../downloads/models/download_task.dart';
-import '../../downloads/widgets/download_card.dart';
-import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
-
+import '../../../shared/widgets/geometric_grid_background.dart';
+import '../../downloads/models/download_task.dart';
+import '../../downloads/provider/download_provider.dart';
+import '../../downloads/widgets/download_card.dart';
 import '../../downloads/widgets/filter_chips_bar.dart';
+import '../../settings/provider/settings_provider.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});

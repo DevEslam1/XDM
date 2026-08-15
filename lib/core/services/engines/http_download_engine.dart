@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'dart:collection';
 
+import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/services/download_journal.dart';
 import '../../../core/services/power_monitor.dart';
 import '../background_gate.dart';
 import '../download_engine.dart';
-import 'package:dmx/features/downloads/models/download_task.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CHUNK SCHEDULING — pure functions, no I/O, fully unit-testable.
@@ -104,6 +104,7 @@ class ChunkScheduler {
 class HttpDownloadEngine {
   final Map<String, _AdaptiveTracker> _trackers = {};
   Timer? _monitorTimer;
+  int _generation = 0;
 
   void _ensureTimerRunning() {
     if (_trackers.isEmpty) {
@@ -112,6 +113,7 @@ class HttpDownloadEngine {
       return;
     }
     _monitorTimer?.cancel();
+    final gen = ++_generation;
     // FIX-2.4: HttpDownloadEngine._monitorTimer background awareness
     final baseInterval = PowerMonitor.screenOff
         ? const Duration(seconds: 30)
@@ -119,7 +121,7 @@ class HttpDownloadEngine {
     final adaptedInterval = BackgroundGate.adaptInterval(baseInterval);
     _monitorTimer = Timer.periodic(
       adaptedInterval,
-      (_) => _evaluate(),
+      (_) => _evaluate(gen),
     );
   }
 
@@ -156,12 +158,14 @@ class HttpDownloadEngine {
   void stopFor(String taskId) {
     _trackers.remove(taskId);
     if (_trackers.isEmpty) {
+      _generation++;
       _monitorTimer?.cancel();
       _monitorTimer = null;
     }
   }
 
   void pauseAll() {
+    _generation++;
     _monitorTimer?.cancel();
     _monitorTimer = null;
   }
@@ -173,12 +177,14 @@ class HttpDownloadEngine {
   }
 
   void stopAdaptiveThreadMonitor() {
+    _generation++;
     _monitorTimer?.cancel();
     _monitorTimer = null;
     _trackers.clear();
   }
 
-  void _evaluate() {
+  void _evaluate(int gen) {
+    if (gen != _generation) return;
     if (PowerMonitor.screenOff || DownloadEngine.isInBackground) return;
     for (final tracker in _trackers.values) {
       if (tracker._samples.isNotEmpty) {

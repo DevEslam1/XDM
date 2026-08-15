@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:logging/logging.dart';
-import '../app_theme.dart';
+import 'package:provider/provider.dart';
+
 import '../../features/categories/screens/category_detail_screen.dart';
 import '../../features/details/screens/details_screen.dart';
 import '../../features/downloads/models/download_task.dart';
@@ -9,6 +9,7 @@ import '../../features/downloads/provider/download_provider.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../shared/widgets/themed_snackbar.dart';
+import '../app_theme.dart';
 import '../utils/file_opener.dart';
 import 'share_url_handler.dart';
 import 'widget_data_bridge.dart';

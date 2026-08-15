@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../../core/app_theme.dart';
-import '../../settings/provider/settings_provider.dart';
-import '../provider/download_provider.dart';
 import '../../../../core/utils/haptic_helper.dart';
 import '../../../../core/utils/localization.dart';
 import '../../../../shared/design/dmx_design.dart';
-
+import '../../settings/provider/settings_provider.dart';
+import '../provider/download_provider.dart';
 import 'filter_chips_bar.dart';
 
 class DownloadStatsPanel extends StatelessWidget with HapticHelper {
@@ -91,42 +91,48 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
                               ),
                               Material(
                                 color: Colors.transparent,
-                                child: Tooltip(
-                                  message: data.hasActive
+                                child: Semantics(
+                                  button: true,
+                                  label: data.hasActive
                                       ? L10n.of(context, 'pause_all_btn')
                                       : L10n.of(context, 'resume_all_btn'),
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(14),
-                                    onTap: () {
-                                      triggerHaptic(
-                                          context.read<SettingsProvider>());
-                                      context
-                                          .read<DownloadProvider>()
-                                          .toggleStartStopAll();
-                                    },
-                                    child: Container(
-                                      width: 48,
-                                      height: 48,
-                                      decoration: BoxDecoration(
-                                        color:
-                                            (data.hasActive ? redClr : greenClr)
-                                                .withValues(alpha: 0.08),
-                                        borderRadius: BorderRadius.circular(14),
-                                        border: Border.all(
-                                          color: (data.hasActive
-                                                  ? redClr
-                                                  : greenClr)
-                                              .withValues(alpha: 0.15),
-                                          width: 0.8,
+                                  child: Tooltip(
+                                    message: data.hasActive
+                                        ? L10n.of(context, 'pause_all_btn')
+                                        : L10n.of(context, 'resume_all_btn'),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(14),
+                                      onTap: () {
+                                        triggerHaptic(
+                                            context.read<SettingsProvider>());
+                                        context
+                                            .read<DownloadProvider>()
+                                            .toggleStartStopAll();
+                                      },
+                                      child: Container(
+                                        width: 48,
+                                        height: 48,
+                                        decoration: BoxDecoration(
+                                          color:
+                                              (data.hasActive ? redClr : greenClr)
+                                                  .withValues(alpha: 0.08),
+                                          borderRadius: BorderRadius.circular(14),
+                                          border: Border.all(
+                                            color: (data.hasActive
+                                                    ? redClr
+                                                    : greenClr)
+                                                .withValues(alpha: 0.15),
+                                            width: 0.8,
+                                          ),
                                         ),
-                                      ),
-                                      child: Icon(
-                                        data.hasActive
-                                            ? Icons.pause_rounded
-                                            : Icons.play_arrow_rounded,
-                                        color:
-                                            data.hasActive ? redClr : greenClr,
-                                        size: 20,
+                                        child: Icon(
+                                          data.hasActive
+                                              ? Icons.pause_rounded
+                                              : Icons.play_arrow_rounded,
+                                          color:
+                                              data.hasActive ? redClr : greenClr,
+                                          size: 20,
+                                        ),
                                       ),
                                     ),
                                   ),

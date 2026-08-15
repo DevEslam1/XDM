@@ -1,34 +1,36 @@
 import 'dart:async';
 import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
-import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../../../core/app_theme.dart';
+import '../../../core/di/injection.dart';
+import '../../../core/services/download_engine.dart';
 import '../../../core/services/permission_service.dart';
+import '../../../core/services/site_intelligence/site_intelligence_service.dart';
 import '../../../core/services/youtube_service.dart';
-import '../../../core/utils/localization.dart';
-import '../../../core/utils/url_utils.dart';
 import '../../../core/utils/bencode_decoder.dart';
-import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/file_utils.dart';
-import '../../../core/services/download_engine.dart';
-import '../../../core/di/injection.dart';
-import '../../../core/services/site_intelligence/site_intelligence_service.dart';
-import '../../downloads/provider/download_provider.dart';
-import '../../downloads/models/download_task.dart';
-import '../../settings/provider/settings_provider.dart';
-import '../../../shared/widgets/themed_snackbar.dart';
+import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/localization.dart';
+import '../../../core/utils/url_utils.dart';
+import '../../../shared/design/dmx_design.dart';
+import '../../../shared/mixins/pausable_loop_animation.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
+import '../../downloads/models/download_task.dart';
+import '../../downloads/provider/download_provider.dart';
+import '../../settings/provider/settings_provider.dart';
 import '../widgets/media_quality_sheet.dart';
 import '../widgets/youtube_playlist_sheet.dart';
-import 'package:logging/logging.dart';
-import '../../../shared/mixins/pausable_loop_animation.dart';
-import '../../../shared/design/dmx_design.dart';
 
 class AddDownloadDialog extends StatefulWidget {
   final String? prefilledUrl;

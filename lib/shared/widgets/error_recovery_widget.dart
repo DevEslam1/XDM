@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:dmx/core/app_theme.dart';
 import 'package:dmx/core/services/error_taxonomy.dart';
 import 'package:dmx/shared/design/dmx_design.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class ErrorRecoveryWidget extends StatefulWidget {
   const ErrorRecoveryWidget({

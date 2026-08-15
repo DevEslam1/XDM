@@ -1,5 +1,5 @@
-import '../../models/download_task.dart';
 import '../../../../core/utils/file_utils.dart';
+import '../../models/download_task.dart';
 
 /// Mixin that encapsulates UI filtering, sorting, searching, category
 /// management, and navigation state for the download list.

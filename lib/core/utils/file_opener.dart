@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
-import '../app_theme.dart';
-import 'localization.dart';
+
 import '../../features/settings/provider/settings_provider.dart';
 import '../../shared/widgets/themed_snackbar.dart';
+import '../app_theme.dart';
+import 'localization.dart';
 
 Future<void> openFile(
     BuildContext context, String path, SettingsProvider settings) async {

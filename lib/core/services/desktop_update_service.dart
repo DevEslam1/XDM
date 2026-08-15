@@ -1,8 +1,9 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -288,16 +289,33 @@ class DesktopUpdateService {
       } else if (Platform.isLinux) {
         final sigFile = '$filePath.sig';
         if (!await File(sigFile).exists()) {
-          _log.warning(
-              'Linux update signature file missing ($sigFile) — rejecting update');
+          _log.severe(
+              '[DesktopUpdateService] Linux update signature file missing ($sigFile) — rejecting unsigned update package');
           return false;
         }
-        final result = await Process.run('gpg', [
-          '--verify',
-          sigFile,
-          filePath,
-        ]);
-        return result.exitCode == 0;
+        try {
+          final gpgCheck = await Process.run('which', ['gpg']);
+          if (gpgCheck.exitCode != 0) {
+            _log.severe(
+                '[DesktopUpdateService] GPG binary missing on Linux system — cannot verify update signature');
+            return false;
+          }
+          final result = await Process.run('gpg', [
+            '--verify',
+            sigFile,
+            filePath,
+          ]);
+          if (result.exitCode != 0) {
+            _log.severe(
+                '[DesktopUpdateService] GPG signature verification failed: ${result.stderr}');
+            return false;
+          }
+          return true;
+        } catch (e) {
+          _log.severe(
+              '[DesktopUpdateService] Failed to execute gpg verification on Linux: $e');
+          return false;
+        }
       }
     } catch (e) {
       _log.warning('Code signature verification failed: $e');

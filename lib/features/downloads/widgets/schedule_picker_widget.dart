@@ -1,7 +1,8 @@
 import 'dart:async';
+
+import 'package:dmx/shared/design/dmx_design.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:dmx/shared/design/dmx_design.dart';
 
 enum ScheduleRepeat {
   none,

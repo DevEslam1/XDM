@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:workmanager/workmanager.dart';
 
@@ -7,7 +9,6 @@ import '../../../core/services/background_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/update_service.dart';
 import '../models/download_task.dart';
-import 'package:dmx/core/services/logging_service.dart';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {

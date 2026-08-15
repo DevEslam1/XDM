@@ -1,8 +1,8 @@
+import 'package:dmx/core/services/dio_client_pool.dart';
+import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
+import 'package:dmx/shared/animation/ambient_animation_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
-import 'package:dmx/core/services/dio_client_pool.dart';
-import 'package:dmx/shared/animation/ambient_animation_coordinator.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

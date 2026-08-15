@@ -1,6 +1,6 @@
+import 'package:dmx/core/services/database/app_database.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/services/database/app_database.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

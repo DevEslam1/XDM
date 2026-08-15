@@ -11,48 +11,46 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
 
-import '../../../core/services/torrent_resume_store.dart';
-import '../../../core/services/torrent_service.dart';
-
-import '../../../core/services/update_service.dart';
-import '../../../core/services/youtube_service.dart';
-
 import '../../../core/services/app_lifecycle_coordinator.dart';
 import '../../../core/services/background_gate.dart';
 import '../../../core/services/background_service.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/services/diagnostic_service.dart';
 import '../../../core/services/download_engine.dart';
-import '../../../core/services/engine/engine_utils.dart';
 import '../../../core/services/download_journal.dart';
+import '../../../core/services/download_metrics.dart';
+import '../../../core/services/engine/engine_utils.dart';
+import '../../../core/services/error_taxonomy.dart';
 import '../../../core/services/frame_watchdog.dart';
 import '../../../core/services/ios_background_capability.dart';
-import '../../../core/services/power_monitor.dart';
-import '../../../core/services/diagnostic_service.dart';
-import '../../../core/services/error_taxonomy.dart';
-import '../../../core/services/download_metrics.dart';
 import '../../../core/services/logging_service.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/permission_service.dart';
+import '../../../core/services/power_monitor.dart';
+import '../../../core/services/site_intelligence/site_intelligence_service.dart';
+import '../../../core/services/torrent_resume_store.dart';
+import '../../../core/services/torrent_service.dart';
+import '../../../core/services/update_service.dart';
 import '../../../core/services/widget_data_bridge.dart';
+import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
+import '../services/download_execution_service.dart';
+import '../services/download_notification_bridge.dart';
+import '../services/download_queue_service.dart';
+import '../services/download_task_repository.dart';
+import '../services/download_widget_sync.dart';
+import '../services/torrent_session_manager.dart';
 import 'download_orchestrator.dart';
-import 'network_monitor.dart';
-import 'notification_coordinator.dart';
-import '../../../core/services/site_intelligence/site_intelligence_service.dart';
-import 'schedule_manager.dart';
+import 'mixins/download_backup_mixin.dart';
 import 'mixins/download_filter_mixin.dart';
 import 'mixins/download_queue_mixin.dart';
 import 'mixins/download_torrent_mixin.dart';
-import 'mixins/download_backup_mixin.dart';
-import '../services/download_task_repository.dart';
-import '../services/download_execution_service.dart';
-import '../services/download_queue_service.dart';
-import '../services/torrent_session_manager.dart';
-import '../services/download_notification_bridge.dart';
-import '../services/download_widget_sync.dart';
+import 'network_monitor.dart';
+import 'notification_coordinator.dart';
+import 'schedule_manager.dart';
 
 /// A compact description for a single download item that can be added in bulk.
 class DownloadAddSpec {
@@ -2179,7 +2177,7 @@ class DownloadProvider extends ChangeNotifier
         );
         if (matchingTid != -1) {
           torrentId = matchingTid;
-          _torrentIds[id] = torrentId;
+          _torrentIds[id] = matchingTid;
         } else {
           // Poll briefly up to 1s for the torrentId to register
           final pollDeadline = DateTime.now().add(const Duration(seconds: 1));
@@ -4546,6 +4544,7 @@ class DownloadProvider extends ChangeNotifier
   }
 
   void _startWidgetTimer() {
+    if (_widgetTimer != null && _widgetTimer!.isActive) return;
     _widgetTimer?.cancel();
     // FIX-M7: Periodic cleanup of inactive speed histories every 5 minutes
     _speedHistoryCleanupTimer ??= Timer.periodic(
@@ -4577,7 +4576,9 @@ class DownloadProvider extends ChangeNotifier
         return;
       }
 
-      _updateTelemetryWidget();
+      unawaited(_pushWidgetData().catchError((e) {
+        _log.warning('Failed to push widget data', e);
+      }));
 
       unawaited(BackgroundService.sendHeartbeat().catchError((e, st) {
         _log.warning('[download_provider] operation failed', e, st);

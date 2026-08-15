@@ -1,0 +1,106 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart' show ValueNotifier;
+
+import '../../features/settings/provider/settings_provider.dart';
+import '../services/torrent_models.dart';
+
+/// Abstract interface contract for Torrent client operations.
+abstract class ITorrentService {
+  bool get isSupported;
+  bool get isInitialized;
+  Future<void> get ready;
+  ValueNotifier<bool> get isAvailable;
+  Set<int> get activeTorrentIds;
+  double progressFor(int id);
+  Uint8List? fetchResumeBytes(int id);
+  Uint8List? resumeBlobFor(int id);
+  bool get fileProgressSupported;
+  bool get filePrioritiesSupported;
+  bool get sequentialDownloadEnabled;
+  double get shareRatioLimit;
+  int get maxSeedingTimeMinutes;
+
+  Future<bool> hasResumeData(String source);
+  Future<void> init();
+  Future<void> saveResumeData(int torrentId);
+  Future<void> saveAllResumeData();
+  Future<void> dispose();
+
+  int addMagnet(String magnetUri, String savePath);
+  Future<int> addMagnetWithMetadataTimeout(
+    String magnetUri,
+    String savePath, {
+    Duration timeout = const Duration(seconds: 300),
+    void Function(String message)? onStatusUpdate,
+    int maxRetries = 2,
+    Duration retryDelay = const Duration(seconds: 10),
+  });
+  int addTorrentFile(
+    String filePath,
+    String savePath, {
+    String? sourceKey,
+  });
+
+  void removeTorrent(
+    int id, {
+    bool deleteFiles = false,
+    bool deleteResumeData = false,
+  });
+  Future<void> pauseTorrent(int id);
+  void resumeTorrent(int id);
+  bool loadResumeData(int id, List<int> data);
+  bool isTorrentAlive(int id);
+  void recheckTorrent(int id);
+  void setFilePriorities(int id, List<int> priorities);
+  int getFileCount(int id);
+  void setUploadLimit(int bps);
+  void setDownloadLimit(int bps);
+  List<TorrentFileItem> getFiles(int id);
+  Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates;
+  Map<int, TorrentUpdateInfo> get latestStats;
+  void configureSession([SettingsProvider? settings]);
+  void reconfigureSession();
+  void autoEnableSequentialForVideo(int torrentId);
+  Future<void> autoSaveResumeData();
+
+  List<TrackerInfo> getTrackers(int torrentId);
+  void addTracker(int torrentId, String trackerUrl, {int tier = 0});
+  void removeTracker(int torrentId, String trackerUrl);
+  void announceNow(int torrentId);
+
+  Future<String?> createTorrent({
+    required String sourcePath,
+    required String outputPath,
+    required List<String> trackers,
+    String comment = '',
+    int pieceSize = 0,
+    bool isPrivate = false,
+  });
+
+  Future<bool> loadIpFilter(String filePath);
+  Future<bool> downloadAndApplyBlocklist(String url);
+
+  void enableSequentialDownload(int torrentId, bool enabled);
+  void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs);
+  void enableSuperSeeding(int torrentId, bool enabled);
+
+  Future<List<TorrentFileProgress>> getAccurateFileProgress(
+    int torrentId,
+    String savePath,
+  );
+
+  bool shouldStopSeeding({
+    required double progress,
+    required int uploadedBytes,
+    int? totalBytes,
+    int? downloadedBytes,
+    Duration? seedingDuration,
+    double? shareRatioLimit,
+    double? customRatioLimit,
+    int? maxSeedingMinutes,
+    int? customMaxTimeMinutes,
+    DateTime? completedAt,
+  });
+}

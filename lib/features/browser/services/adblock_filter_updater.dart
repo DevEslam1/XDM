@@ -1,8 +1,9 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;

@@ -1,7 +1,8 @@
 import 'dart:io';
-import 'package:flutter_test/flutter_test.dart';
+
 import 'package:dmx/core/services/dio_client_pool.dart';
 import 'package:dmx/core/services/metadata_probe_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

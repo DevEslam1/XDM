@@ -1,14 +1,16 @@
 import 'dart:async';
+
+import 'package:dmx/core/services/database_service.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:dmx/features/downloads/provider/download_provider.dart';
+import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:get_it/get_it.dart';
-import 'package:dmx/core/services/database_service.dart';
-import 'package:dmx/features/downloads/provider/download_provider.dart';
-import 'package:dmx/features/settings/provider/settings_provider.dart';
-import 'package:dmx/features/downloads/models/download_task.dart';
+
 import 'fake_services.dart';
 
 void setupTestPluginMocks() {

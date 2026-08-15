@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../provider/settings_provider.dart';
 
 /// Unified container for grouping setting tiles inside a single clean card

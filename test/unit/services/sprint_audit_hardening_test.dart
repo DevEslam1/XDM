@@ -1,10 +1,10 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
 import 'package:dmx/core/services/background_service.dart';
-import 'package:dmx/core/services/mirror/mirror_selector.dart';
-import 'package:dmx/core/services/metadata_probe_service.dart';
 import 'package:dmx/core/services/dio_client_pool.dart';
 import 'package:dmx/core/services/engine/engine_models.dart';
+import 'package:dmx/core/services/metadata_probe_service.dart';
+import 'package:dmx/core/services/mirror/mirror_selector.dart';
+import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

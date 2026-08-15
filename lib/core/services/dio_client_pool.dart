@@ -1,10 +1,11 @@
 import 'dart:async';
+
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
+import 'package:dmx/core/services/engine/engine_utils.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/core/services/service_registry.dart';
-import 'package:dmx/core/services/engine/engine_utils.dart';
+import 'package:flutter/foundation.dart';
 
 /// Manages a bounded pool of Dio clients with LRU eviction and background-aware cleanup.
 /// Task 1.2: Specialized Service for Dio instance management.
@@ -16,10 +17,14 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
   final Set<Dio> _activeClients = {};
   final Set<Dio> _reservedClients = {};
   final Map<Dio, Set<String>> _activeDownloadsPerClient = {};
+  final Map<String, Dio> _idleClientsByHost = {};
+  final Map<Dio, String> _clientHosts = {};
   Timer? _cleanupTimer;
 
-  DioClientPool() {
-    _startCleanupTimer();
+  DioClientPool({bool enableCleanupTimer = true}) {
+    if (enableCleanupTimer) {
+      _startCleanupTimer();
+    }
     ServiceRegistry.register(this);
     ServiceRegistry.registerMemoryPressureListener(this);
   }
@@ -109,6 +114,11 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
     for (final client in toRelease) {
       releaseClient(client);
     }
+    if (toRelease.isNotEmpty) {
+      _log.fine(
+        '[DioClientPool] Periodic cleanup evicted ${toRelease.length} stale client(s).',
+      );
+    }
   }
 
   Dio acquireClient({
@@ -118,6 +128,26 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
     String? cookies,
     String? oauthToken,
   }) {
+    final uri = url != null ? Uri.tryParse(url) : null;
+    final host = uri?.host.toLowerCase() ?? '';
+
+    // Reuse idle client for same host if available
+    if (host.isNotEmpty && _idleClientsByHost.containsKey(host)) {
+      final cached = _idleClientsByHost.remove(host);
+      if (cached != null) {
+        _clientCreationTimes[cached] = DateTime.now();
+        buildTransferDio(
+          url: url,
+          customUserAgent: customUserAgent,
+          referer: referer,
+          cookies: cookies,
+          oauthToken: oauthToken,
+          pooled: cached,
+        );
+        return cached;
+      }
+    }
+
     // Evict oldest if pool is full
     while (_activeClients.length >= _effectiveMaxClients) {
       Dio? oldestClient;
@@ -154,12 +184,18 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
     _reservedClients.add(client);
     _clientCreationTimes[client] = DateTime.now();
     _activeDownloadsPerClient[client] = {};
+    if (host.isNotEmpty) {
+      _clientHosts[client] = host;
+    }
 
     return client;
   }
 
   @visibleForTesting
   Map<Dio, Set<String>> get activeDownloadsPerClient => _activeDownloadsPerClient;
+
+  @visibleForTesting
+  Map<String, Dio> get idleClientsByHostForTesting => _idleClientsByHost;
 
   void releaseClient(Dio client) {
     final activeDownloads = _activeDownloadsPerClient[client];
@@ -169,6 +205,15 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
       );
       return;
     }
+    final host = _clientHosts[client];
+    if (host != null &&
+        host.isNotEmpty &&
+        !_idleClientsByHost.containsKey(host) &&
+        _activeClients.contains(client)) {
+      _idleClientsByHost[host] = client;
+      return;
+    }
+    _clientHosts.remove(client);
     _activeDownloadsPerClient.remove(client);
     _reservedClients.remove(client);
     _activeClients.remove(client);

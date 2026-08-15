@@ -1,11 +1,11 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/widgets.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';

@@ -1,11 +1,12 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:io';
+
 import 'package:dio/dio.dart';
-import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/dio_client_pool.dart';
-import 'package:dmx/core/services/torrent_service.dart';
+import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/torrent_resume_store.dart';
+import 'package:dmx/core/services/torrent_service.dart';
 import 'package:path/path.dart' as p;
 
 /// Orchestrates Torrent downloads, managing libtorrent interaction and file priorities.

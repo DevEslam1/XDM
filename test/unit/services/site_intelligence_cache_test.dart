@@ -1,6 +1,6 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/utils/bounded_lru_cache.dart';
 import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
+import 'package:dmx/core/utils/bounded_lru_cache.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

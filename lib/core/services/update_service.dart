@@ -1,17 +1,18 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_lib;
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:pointycastle/asymmetric/api.dart' show RSAPublicKey;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logging/logging.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pointycastle/asymmetric/api.dart' show RSAPublicKey;
 
 class UpdateInfo {
   final String latestVersion;

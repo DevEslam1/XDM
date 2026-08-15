@@ -1,7 +1,9 @@
 import 'dart:io';
-import 'package:synchronized/synchronized.dart';
+
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:path/path.dart' as p;
+import 'package:synchronized/synchronized.dart';
+
 import '../services/site_intelligence/site_intelligence_service.dart';
 
 const List<String> videoExtensions = [

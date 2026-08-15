@@ -1,9 +1,10 @@
 import 'dart:ui';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
 import 'package:dmx/core/app_theme.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/shared/design/dmx_design.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class QueueReorderWidget extends StatefulWidget {
   const QueueReorderWidget({

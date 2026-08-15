@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:dmx/core/services/diagnostic_service.dart';
 import 'package:dmx/core/services/error_taxonomy.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/shared/widgets/error_recovery_widget.dart';
+import 'package:flutter/material.dart';
 
 class UnifiedErrorPresenter {
   UnifiedErrorPresenter._();

@@ -1,12 +1,14 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/app_theme.dart';
 import '../../../core/services/performance_monitor.dart';
 import '../../../core/services/power_monitor.dart';
 import '../../../core/utils/localization.dart';
-import '../provider/settings_provider.dart';
 import '../../downloads/provider/download_provider.dart';
+import '../provider/settings_provider.dart';
 
 class SystemMonitorsCard extends StatefulWidget {
   final Color accentColor;

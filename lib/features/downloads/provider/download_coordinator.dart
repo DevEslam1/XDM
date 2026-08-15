@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
+
 import '../models/download_task.dart';
+import '../usecases/delete_download_usecase.dart';
 import '../usecases/pause_download_usecase.dart';
 import '../usecases/resume_download_usecase.dart';
-import '../usecases/delete_download_usecase.dart';
 import 'download_filter_provider.dart';
 import 'download_list_provider.dart';
 import 'download_queue_provider.dart';

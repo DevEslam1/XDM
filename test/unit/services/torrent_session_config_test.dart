@@ -1,8 +1,8 @@
 import 'package:battery_plus/battery_plus.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/core/services/torrent_session_config.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

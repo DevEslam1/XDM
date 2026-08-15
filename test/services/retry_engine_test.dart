@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/services/retry_engine.dart';
 import 'package:dmx/core/services/error_taxonomy.dart';
+import 'package:dmx/core/services/retry_engine.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('RetryEngine', () {

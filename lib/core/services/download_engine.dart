@@ -1,26 +1,28 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
+
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 import 'package:dmx/core/services/download_journal.dart';
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/core/services/torrent_service.dart';
-import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/core/utils/url_utils.dart';
+import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+
 import '../interfaces/i_download_engine.dart';
 import 'dio_client_pool.dart';
-import 'service_registry.dart';
-import 'yt_counterpart_coordinator.dart';
-import 'metadata_probe_service.dart';
-import 'http_download_orchestrator.dart';
-import 'torrent_download_orchestrator.dart';
-import 'engine/engine_models.dart';
 import 'engine/engine_exceptions.dart';
+import 'engine/engine_models.dart';
 import 'engine/http_transfer_job.dart';
+import 'http_download_orchestrator.dart';
+import 'metadata_probe_service.dart';
+import 'service_registry.dart';
+import 'torrent_download_orchestrator.dart';
+import 'yt_counterpart_coordinator.dart';
 
 export 'engine/engine_exceptions.dart';
 export 'engine/engine_models.dart';
@@ -53,19 +55,26 @@ class DownloadEngine implements IDownloadEngine {
     DioClientPool? dioPool,
     Dio? dio,
     bool enableCleanupTimer = true,
-  })  : _dioPool = dioPool ?? DioClientPool(),
-        _ytCoordinator = ytCoordinator ?? YtCounterpartCoordinator(),
+  })  : _dioPool =
+            dioPool ?? DioClientPool(enableCleanupTimer: enableCleanupTimer),
+        _ytCoordinator = ytCoordinator ??
+            YtCounterpartCoordinator(enablePeriodicTimer: enableCleanupTimer),
         _metadataService = metadataService ??
-            MetadataProbeService(dioPool ?? DioClientPool()),
+            MetadataProbeService(dioPool ??
+                DioClientPool(enableCleanupTimer: enableCleanupTimer)),
         _httpOrchestrator = httpOrchestrator ??
             HttpDownloadOrchestrator(
               metadataService ??
-                  MetadataProbeService(dioPool ?? DioClientPool()),
-              ytCoordinator ?? YtCounterpartCoordinator(),
+                  MetadataProbeService(dioPool ??
+                      DioClientPool(enableCleanupTimer: enableCleanupTimer)),
+              ytCoordinator ??
+                  YtCounterpartCoordinator(
+                      enablePeriodicTimer: enableCleanupTimer),
               SettingsProvider.instance,
             ),
         _torrentOrchestrator = torrentOrchestrator ??
-            TorrentDownloadOrchestrator(dioPool ?? DioClientPool());
+            TorrentDownloadOrchestrator(dioPool ??
+                DioClientPool(enableCleanupTimer: enableCleanupTimer));
 
   String buildLocalFilePath(String dir, String fileName) =>
       p.join(dir, fileName);
@@ -139,14 +148,16 @@ class DownloadEngine implements IDownloadEngine {
           validateStatus: (status) => status != null && status < 500,
         ),
       );
-      final acceptRanges = response.headers.value('accept-ranges')?.toLowerCase();
+      final acceptRanges =
+          response.headers.value('accept-ranges')?.toLowerCase();
       final connection = response.headers.value('connection')?.toLowerCase();
       if (acceptRanges == 'none' || connection == 'close') {
         return 1;
       }
       return requestedThreads;
     } catch (e, st) {
-      LoggingService.logger('DownloadEngine').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('DownloadEngine')
+          .warning('Operation failed with fallback', e, st);
       return requestedThreads;
     }
   }
@@ -156,7 +167,8 @@ class DownloadEngine implements IDownloadEngine {
     String contentType = '';
     if (responseOrContentType is Response) {
       contentType =
-          responseOrContentType.headers.value('content-type')?.toLowerCase() ?? '';
+          responseOrContentType.headers.value('content-type')?.toLowerCase() ??
+              '';
     } else if (responseOrContentType is String) {
       contentType = responseOrContentType.toLowerCase();
     }
@@ -167,7 +179,8 @@ class DownloadEngine implements IDownloadEngine {
   bool isLikelyHtml(dynamic responseOrContentType) =>
       isLikelyHtmlResponse(responseOrContentType);
 
-  static Future<void> cleanupOrphanFiles(String dirOrFilePath, {bool mergeConfirmed = false}) async {
+  static Future<void> cleanupOrphanFiles(String dirOrFilePath,
+      {bool mergeConfirmed = false}) async {
     try {
       final file = File(dirOrFilePath);
       if (await file.exists() || dirOrFilePath.endsWith('.dmxpart')) {
@@ -192,8 +205,9 @@ class DownloadEngine implements IDownloadEngine {
                 try {
                   await entity.delete();
                 } catch (e, st) {
-      LoggingService.logger('DownloadEngine').warning('Operation failed', e, st);
-    }
+                  LoggingService.logger('DownloadEngine')
+                      .warning('Operation failed', e, st);
+                }
               }
             }
           }
@@ -204,16 +218,19 @@ class DownloadEngine implements IDownloadEngine {
       if (!await directory.exists()) return;
       final files = await directory.list().toList();
       for (final f in files) {
-        if (f is File && (f.path.endsWith('.dmxpart.tmp') || f.path.endsWith('.tmp'))) {
+        if (f is File &&
+            (f.path.endsWith('.dmxpart.tmp') || f.path.endsWith('.tmp'))) {
           try {
             await f.delete();
           } catch (e, st) {
-      LoggingService.logger('DownloadEngine').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadEngine')
+                .warning('Operation failed', e, st);
+          }
         }
       }
     } catch (e, st) {
-      LoggingService.logger('DownloadEngine').warning('Operation failed', e, st);
+      LoggingService.logger('DownloadEngine')
+          .warning('Operation failed', e, st);
     }
   }
 
@@ -367,7 +384,8 @@ class DownloadEngine implements IDownloadEngine {
         return p.isWithin(normRoot, normSave) || p.equals(normRoot, normSave);
       });
       if (!isAllowed) {
-        throw const InvalidPathException('Save path is outside allowed storage roots');
+        throw const InvalidPathException(
+            'Save path is outside allowed storage roots');
       }
     }
     try {

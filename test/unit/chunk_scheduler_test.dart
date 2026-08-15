@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/engines/http_download_engine.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('ChunkScheduler.plan()', () {

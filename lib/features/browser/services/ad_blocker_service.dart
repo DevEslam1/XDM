@@ -1,11 +1,13 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+
 import 'adblock_filter_updater.dart';
 import 'custom_adblock_store.dart';
 

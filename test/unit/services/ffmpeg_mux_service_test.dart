@@ -1,7 +1,8 @@
 import 'dart:io';
-import 'package:flutter_test/flutter_test.dart';
+
 import 'package:dmx/core/services/ffmpeg_mux_service.dart';
 import 'package:dmx/core/utils/semaphore.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../../core/app_theme.dart';
-import '../../core/services/power_monitor.dart';
 import '../../core/services/download_engine.dart';
+import '../../core/services/power_monitor.dart';
 import '../mixins/pausable_loop_animation.dart';
 
 /// Inherited provider for a single shared shimmer animation across all skeleton children.

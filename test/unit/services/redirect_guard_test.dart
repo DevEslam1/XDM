@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/redirect_guard.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('RedirectGuard Heuristics', () {

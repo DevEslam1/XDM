@@ -1,7 +1,7 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/engine/download_progress_handler.dart';
 import 'package:dmx/core/services/engine/engine_models.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

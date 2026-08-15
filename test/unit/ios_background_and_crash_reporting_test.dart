@@ -1,13 +1,13 @@
 import 'dart:io';
+
+import 'package:dmx/core/services/background_service.dart';
+import 'package:dmx/core/services/crash_reporting_service.dart';
+import 'package:dmx/core/services/ios_background_capability.dart';
+import 'package:dmx/core/services/ios_background_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/services/ios_background_service.dart';
-import 'package:dmx/core/services/ios_background_capability.dart';
-import 'package:dmx/core/services/background_service.dart';
-import 'package:dmx/core/services/crash_reporting_service.dart';
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

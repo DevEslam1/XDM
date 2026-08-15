@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'package:flutter_test/flutter_test.dart';
+
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

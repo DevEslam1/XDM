@@ -1,8 +1,8 @@
+import 'package:dmx/features/downloads/widgets/channel_progress_painter.dart';
+import 'package:dmx/features/downloads/widgets/speed_graph_widget.dart';
+import 'package:dmx/shared/widgets/glass_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/features/downloads/widgets/speed_graph_widget.dart';
-import 'package:dmx/features/downloads/widgets/channel_progress_painter.dart';
-import 'package:dmx/shared/widgets/glass_card.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

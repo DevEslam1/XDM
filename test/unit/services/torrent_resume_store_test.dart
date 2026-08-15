@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dmx/core/services/torrent_resume_store.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/services/torrent_resume_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -1,23 +1,24 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../../../core/app_theme.dart';
-import '../../../core/utils/localization.dart';
-import '../../../core/utils/haptic_helper.dart';
-import '../../../core/utils/constants.dart';
-import '../../../core/services/xdm_backend_client.dart';
 import '../../../core/services/app_lock_service.dart';
+import '../../../core/services/xdm_backend_client.dart';
+import '../../../core/utils/constants.dart';
+import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/localization.dart';
+import '../../../shared/design/dmx_design.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
-import '../../../shared/design/dmx_design.dart';
 import '../provider/settings_provider.dart';
+import '../utils/backup_helper.dart';
 import '../widgets/app_lock_screen.dart';
 import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';
-import '../utils/backup_helper.dart';
-
 import '../widgets/system_monitors_card.dart';
 
 class AdvancedSettingsPage extends StatefulWidget {

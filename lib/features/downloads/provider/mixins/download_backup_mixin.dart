@@ -1,9 +1,9 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_lib;
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';

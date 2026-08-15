@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/engine/torrent_download_handler.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('TorrentDownloadHandler', () {

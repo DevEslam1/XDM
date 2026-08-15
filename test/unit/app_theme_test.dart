@@ -1,6 +1,6 @@
+import 'package:dmx/core/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/app_theme.dart';
 
 double _relativeLuminance(Color color) {
   final r = _linearize(color.r);

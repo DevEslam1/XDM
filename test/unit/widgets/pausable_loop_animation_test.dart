@@ -1,7 +1,7 @@
+import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
+import 'package:dmx/shared/widgets/pausable_loop_builder.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/shared/widgets/pausable_loop_builder.dart';
-import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
 
 void main() {
   group('PausableLoopBuilder Widget', () {

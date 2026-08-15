@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../core/utils/localization.dart';
+
 import '../../../core/app_theme.dart';
-import '../provider/download_provider.dart';
-import '../models/download_task.dart';
+import '../../../core/utils/localization.dart';
 import '../../../shared/design/dmx_design.dart';
+import '../models/download_task.dart';
+import '../provider/download_provider.dart';
 
 /// Modal bottom sheet allowing users to perform bulk actions on selected tasks.
 enum BatchAction { pause, resume, delete, changeCategory }

@@ -1,6 +1,7 @@
-import 'package:flutter/services.dart';
-import '../../features/settings/provider/settings_provider.dart';
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:flutter/services.dart';
+
+import '../../features/settings/provider/settings_provider.dart';
 
 mixin HapticHelper {
   void triggerHaptic(SettingsProvider settings) {

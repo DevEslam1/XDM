@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/utils/localization.dart';
 import 'package:dmx/features/add_download/widgets/add_download_dialog.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
@@ -8,25 +10,25 @@ import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/app_theme.dart';
+import '../../core/services/app_lock_service.dart';
+import '../../core/services/background_service.dart';
 import '../../core/services/clipboard_service.dart';
 import '../../core/services/share_service.dart';
 import '../../core/services/share_url_handler.dart';
 import '../../core/services/single_instance_service.dart';
-import '../../core/services/update_service.dart';
-import '../../core/services/torrent_service.dart';
 import '../../core/services/torrent_resume_store.dart';
+import '../../core/services/torrent_service.dart';
+import '../../core/services/update_service.dart';
 import '../../core/utils/responsive.dart';
 import '../../features/browser/screens/browser_screen.dart';
+import '../../features/downloads/widgets/filter_chips_bar.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
-import '../../features/settings/widgets/update_dialogs.dart';
 import '../../features/settings/widgets/app_lock_screen.dart';
-import '../../core/services/app_lock_service.dart';
-import '../../core/services/background_service.dart';
-import '../../features/downloads/widgets/filter_chips_bar.dart';
+import '../../features/settings/widgets/update_dialogs.dart';
 import 'themed_snackbar.dart';
-import 'package:dmx/core/services/logging_service.dart';
 
 class MainNavigationContainer extends StatefulWidget {
   final String? initialUrl;
@@ -120,8 +122,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
           );
         }
       }
-    } catch (e) {
-      debugPrint('Update check error: $e');
+    } catch (e, st) {
+      LoggingService.logger('MainNavigationContainer').warning('Update check error', e, st);
     }
   }
 
@@ -303,11 +305,13 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                     (showSideNav && currentIndex != 1)
                         ? Row(
                             children: [
-                              _NavigationRailWidget(
-                                settingsTuple: settingsTuple,
-                                isDark: isDark,
-                                isRtl: isRtl,
-                                currentIndex: currentIndex,
+                              RepaintBoundary(
+                                child: _NavigationRailWidget(
+                                  settingsTuple: settingsTuple,
+                                  isDark: isDark,
+                                  isRtl: isRtl,
+                                  currentIndex: currentIndex,
+                                ),
                               ),
                               Expanded(child: bodyWithShortcuts),
                             ],
@@ -318,21 +322,23 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                         left: 0,
                         right: 0,
                         bottom: 0,
-                        child: IgnorePointer(
-                          ignoring: false,
-                          child: screenType == ScreenType.phone
-                              ? _PhoneBottomNavBar(
-                                  settingsTuple: settingsTuple,
-                                  isDark: isDark,
-                                  isRtl: isRtl,
-                                  navState: navState,
-                                )
-                              : _TabletFloatingNavBar(
-                                  settingsTuple: settingsTuple,
-                                  isDark: isDark,
-                                  isRtl: isRtl,
-                                  navState: navState,
-                                ),
+                        child: RepaintBoundary(
+                          child: IgnorePointer(
+                            ignoring: false,
+                            child: screenType == ScreenType.phone
+                                ? _PhoneBottomNavBar(
+                                    settingsTuple: settingsTuple,
+                                    isDark: isDark,
+                                    isRtl: isRtl,
+                                    navState: navState,
+                                  )
+                                : _TabletFloatingNavBar(
+                                    settingsTuple: settingsTuple,
+                                    isDark: isDark,
+                                    isRtl: isRtl,
+                                    navState: navState,
+                                  ),
+                          ),
                         ),
                       ),
                   ],
@@ -484,49 +490,45 @@ class _PhoneBottomNavBar extends StatelessWidget {
                   ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(32),
-              child: DmxBackdropFilter(
-                sigmaX: 20,
-                sigmaY: 20,
-                child: Directionality(
-                  textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-                  child: Container(
-                    constraints: const BoxConstraints(minHeight: 64),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12.0,
-                      vertical: 6.0,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _NavItem(
-                          index: 0,
-                          icon: Icons.file_download_outlined,
-                          activeIcon: Icons.file_download,
-                          label: L10n.of(context, 'title_transmissions'),
-                          settingsTuple: settingsTuple,
-                          isDark: isDark,
-                          currentIndex: currentIndex,
-                        ),
-                        _NavItem(
-                          index: 1,
-                          icon: Icons.language_outlined,
-                          activeIcon: Icons.language,
-                          label: L10n.of(context, 'title_browser'),
-                          settingsTuple: settingsTuple,
-                          isDark: isDark,
-                          currentIndex: currentIndex,
-                        ),
-                        _NavItem(
-                          index: 2,
-                          icon: Icons.settings_outlined,
-                          activeIcon: Icons.settings_rounded,
-                          label: L10n.of(context, 'title_config'),
-                          settingsTuple: settingsTuple,
-                          isDark: isDark,
-                          currentIndex: currentIndex,
-                        ),
-                      ],
-                    ),
+              child: Directionality(
+                textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 64),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12.0,
+                    vertical: 6.0,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _NavItem(
+                        index: 0,
+                        icon: Icons.file_download_outlined,
+                        activeIcon: Icons.file_download,
+                        label: L10n.of(context, 'title_transmissions'),
+                        settingsTuple: settingsTuple,
+                        isDark: isDark,
+                        currentIndex: currentIndex,
+                      ),
+                      _NavItem(
+                        index: 1,
+                        icon: Icons.language_outlined,
+                        activeIcon: Icons.language,
+                        label: L10n.of(context, 'title_browser'),
+                        settingsTuple: settingsTuple,
+                        isDark: isDark,
+                        currentIndex: currentIndex,
+                      ),
+                      _NavItem(
+                        index: 2,
+                        icon: Icons.settings_outlined,
+                        activeIcon: Icons.settings_rounded,
+                        label: L10n.of(context, 'title_config'),
+                        settingsTuple: settingsTuple,
+                        isDark: isDark,
+                        currentIndex: currentIndex,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -618,23 +620,20 @@ class _TabletFloatingNavBar extends StatelessWidget {
                   ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(30),
-              child: DmxBackdropFilter(
-                sigmaX: 15,
-                sigmaY: 15,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _NavItem(
-                        index: 0,
-                        icon: Icons.file_download_outlined,
-                        activeIcon: Icons.file_download,
-                        label: L10n.of(context, 'title_transmissions'),
-                        settingsTuple: settingsTuple,
-                        isDark: isDark,
-                        currentIndex: currentIndex,
-                      ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _NavItem(
+                      index: 0,
+                      icon: Icons.file_download_outlined,
+                      activeIcon: Icons.file_download,
+                      label: L10n.of(context, 'title_transmissions'),
+                      settingsTuple: settingsTuple,
+                      isDark: isDark,
+                      currentIndex: currentIndex,
+                    ),
                       _NavItem(
                         index: 1,
                         icon: Icons.language_outlined,
@@ -660,8 +659,7 @@ class _TabletFloatingNavBar extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }
 

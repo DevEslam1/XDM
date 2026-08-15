@@ -1,8 +1,10 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
+
 import 'package:file_picker/file_picker.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
+import 'package:provider/provider.dart';
+
 import '../../../core/app_theme.dart';
 import '../../../core/services/logging_service.dart';
 import '../../../core/services/torrent_service.dart';

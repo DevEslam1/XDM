@@ -1,8 +1,8 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
-import 'package:dmx/features/downloads/services/download_queue_service.dart';
 import 'package:dmx/features/downloads/services/download_execution_service.dart';
+import 'package:dmx/features/downloads/services/download_queue_service.dart';
 import 'package:dmx/features/downloads/services/torrent_session_manager.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 class MockQueueHost implements DownloadQueueHost {
   List<DownloadTask> taskList = [];

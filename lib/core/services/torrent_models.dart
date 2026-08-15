@@ -205,3 +205,22 @@ class SeedingPolicy {
     return false;
   }
 }
+
+class TrackerInfo {
+  final String url;
+  final int tier;
+  final String status;
+  final int seeds;
+  final int peers;
+  final String message;
+
+  const TrackerInfo({
+    required this.url,
+    required this.tier,
+    required this.status,
+    required this.seeds,
+    required this.peers,
+    required this.message,
+  });
+}
+

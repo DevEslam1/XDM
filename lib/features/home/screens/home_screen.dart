@@ -1,26 +1,27 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:fl_chart/fl_chart.dart';
+
 import '../../../core/app_theme.dart';
-import '../../../core/utils/localization.dart';
+import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/intl_formatters.dart';
+import '../../../core/utils/localization.dart';
 import '../../../core/utils/responsive.dart';
-import '../../downloads/provider/download_provider.dart';
+import '../../../shared/design/dmx_design.dart';
+import '../../../shared/mixins/pausable_loop_animation.dart';
+import '../../../shared/widgets/geometric_grid_background.dart';
+import '../../../shared/widgets/skeleton_loader.dart';
+// themed_snackbar removed - unused in this file
+import '../../add_download/widgets/add_download_dialog.dart';
 import '../../downloads/models/download_task.dart';
+import '../../downloads/provider/download_provider.dart';
+import '../../downloads/widgets/batch_operations_sheet.dart';
 import '../../downloads/widgets/download_card.dart';
 import '../../downloads/widgets/download_stats_panel.dart';
 import '../../downloads/widgets/filter_chips_bar.dart';
-import '../../downloads/widgets/batch_operations_sheet.dart';
 import '../../settings/provider/settings_provider.dart';
-import '../../../shared/widgets/geometric_grid_background.dart';
-// themed_snackbar removed - unused in this file
-import '../../add_download/widgets/add_download_dialog.dart';
-import '../../../core/utils/haptic_helper.dart';
-import '../../../shared/widgets/skeleton_loader.dart';
-import '../../../shared/mixins/pausable_loop_animation.dart';
-import '../../../shared/design/dmx_design.dart';
 
 bool _isActiveTask(DownloadTask t) {
   final isSeeding =
@@ -340,10 +341,11 @@ class _HomeScreenState extends State<HomeScreen>
 
   PreferredSizeWidget _buildSelectionAppBar(
       BuildContext context, bool isDark, Color textClr, Color accentClr) {
-    final provider = context.watch<DownloadProvider>();
+    final count = context.select<DownloadProvider, int>(
+        (p) => p.selectedTaskIds.length);
+    final provider = context.read<DownloadProvider>();
     final settings = context.watch<SettingsProvider>();
     final isAmoled = settings.isAmoledMode;
-    final count = provider.selectedTaskIds.length;
 
     return AppBar(
       backgroundColor: isDark
@@ -1037,10 +1039,11 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildFAB(BuildContext context, bool isDark, bool classicUi) {
-    final downloadProvider = context.watch<DownloadProvider>();
+    final downloadProvider = context.read<DownloadProvider>();
     final accentClr = getActiveFilterColor(downloadProvider, isDark);
     final screenType = getScreenType(context);
-    final isNavbarVisible = downloadProvider.isNavbarVisible;
+    final isNavbarVisible = context.select<DownloadProvider, bool>(
+        (p) => p.isNavbarVisible);
     final safeAreaBottom = MediaQuery.paddingOf(context).bottom;
     final double bottomPadding;
     switch (screenType) {
@@ -1593,8 +1596,8 @@ class _DownloadTaskList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final provider = context.watch<DownloadProvider>();
-    final isLoading = provider.isLoadingTasks;
+    final isLoading = context.select<DownloadProvider, bool>(
+        (p) => p.isLoadingTasks);
 
     Widget child;
     if (isLoading) {
@@ -1616,6 +1619,7 @@ class _DownloadTaskList extends StatelessWidget {
           return false;
         },
         builder: (context, fullList, __) {
+          final provider = context.read<DownloadProvider>();
           final displayTasks = fullList
               .where((task) =>
                   selectedTab == 0 ? _isActiveTask(task) : !_isActiveTask(task))
@@ -1928,7 +1932,7 @@ class _DownloadTaskList extends StatelessWidget {
     );
 
     if (selectedTab == 0) {
-      final provider = context.watch<DownloadProvider>();
+      final provider = context.read<DownloadProvider>();
       return RefreshIndicator(
         color: getActiveFilterColor(provider, isDark),
         backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
@@ -1968,7 +1972,7 @@ class _EmptyState extends StatelessWidget {
     final query =
         context.select<DownloadProvider, String>((p) => p.searchQuery);
     final accentClr =
-        getActiveFilterColor(context.watch<DownloadProvider>(), isDark);
+        getActiveFilterColor(context.read<DownloadProvider>(), isDark);
     if (query.isNotEmpty) {
       final isLandscape =
           MediaQuery.of(context).orientation == Orientation.landscape;

@@ -1,6 +1,6 @@
+import 'package:dmx/shared/widgets/fade_in_slide.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/shared/widgets/fade_in_slide.dart';
 
 void main() {
   group('FadeInSlideScope Shared Controller (U-08)', () {

@@ -1,8 +1,8 @@
 import 'package:battery_plus/battery_plus.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/background_gate.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/power_monitor.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Background Download & Power Gate Unit Test (FIX-35)', () {

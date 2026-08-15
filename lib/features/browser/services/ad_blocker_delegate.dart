@@ -1,11 +1,12 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:logging/logging.dart';
 
 import '../models/browser_tab.dart';
 import 'ad_blocker_service.dart';
-import 'package:logging/logging.dart';
 
 /// Thin delegate around [AdBlockerService] used by the browser screen.
 ///

@@ -1,13 +1,14 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/app_theme.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../settings/provider/settings_provider.dart';
-
-import '../../../core/utils/haptic_helper.dart';
 import '../services/search_engine_config.dart';
 
 enum SuggestionType { url, search, bookmark, history }

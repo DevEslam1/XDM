@@ -1,7 +1,7 @@
 // FIX-H7: Numeric comparison in shouldRepaint and RepaintBoundary
+import 'package:dmx/core/app_theme.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:dmx/core/app_theme.dart';
 
 /// Repaints in isolation — the parent widget never rebuilds on progress ticks.
 /// Pass a `ValueListenable<double>` and only the paint() call re-executes.
@@ -52,15 +52,15 @@ class ChannelProgressPainter extends CustomPainter {
       );
     }
 
-    // Leading glow dot
+    // Leading dot (crisp solid fill without GPU blur filter overhead)
     if (value > 0.02 && value < 0.99) {
-      final glow = Paint()
-        ..color = accent.withValues(alpha: 0.9)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+      final dotPaint = Paint()
+        ..color = accent
+        ..style = PaintingStyle.fill;
       canvas.drawCircle(
         Offset(size.width * value, size.height / 2),
         size.height / 2.4,
-        glow,
+        dotPaint,
       );
     }
   }

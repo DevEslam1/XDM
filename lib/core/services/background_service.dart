@@ -1,16 +1,17 @@
 // FIX: P0-03 & P0-04 — Guard BackgroundService.stop() and WakeLock auto-release against active downloads
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'diagnostic_service.dart';
 import 'ios_background_service.dart';
 import 'logging_service.dart';
-import 'power_monitor.dart';
-import 'diagnostic_service.dart';
 import 'notification_service.dart';
+import 'power_monitor.dart';
 
 final _log = LoggingService.logger('BackgroundService');
 
@@ -68,7 +69,7 @@ class BackgroundService {
         await releaseWakeLock();
       }
     } else {
-      if (!kIsWeb && !Platform.isIOS) {
+      if (!kIsWeb && Platform.isAndroid) {
         final isRunning = _testMode || await FlutterBackgroundService().isRunning();
         if (isRunning) {
           _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
@@ -115,19 +116,37 @@ class BackgroundService {
     );
   }
 
+  static StreamSubscription<Map<String, dynamic>?>? onStartStopSub;
+  static StreamSubscription<Map<String, dynamic>?>? onStartUpdateSub;
+  static StreamSubscription<Map<String, dynamic>?>? onStartHeartbeatSub;
+
+  @visibleForTesting
+  static StreamSubscription<Map<String, dynamic>?>? get onStartStopSubForTesting =>
+      onStartStopSub;
+
+  @visibleForTesting
+  static StreamSubscription<Map<String, dynamic>?>? get onStartUpdateSubForTesting =>
+      onStartUpdateSub;
+
+  @visibleForTesting
+  static StreamSubscription<Map<String, dynamic>?>? get onStartHeartbeatSubForTesting =>
+      onStartHeartbeatSub;
+
   @pragma('vm:entry-point')
   static void _onStart(ServiceInstance service) {
     bool isStopped = false;
-    StreamSubscription<Map<String, dynamic>?>? stopSub;
-    StreamSubscription<Map<String, dynamic>?>? updateSub;
 
     void cancelAll() {
       isStopped = true;
-      stopSub?.cancel();
-      updateSub?.cancel();
+      onStartStopSub?.cancel();
+      onStartUpdateSub?.cancel();
+      onStartHeartbeatSub?.cancel();
+      onStartStopSub = null;
+      onStartUpdateSub = null;
+      onStartHeartbeatSub = null;
     }
 
-    stopSub = service.on('stopService').listen(
+    onStartStopSub = service.on('stopService').listen(
           (_) {
             try {
               cancelAll();
@@ -142,7 +161,7 @@ class BackgroundService {
           },
         );
 
-    updateSub = service.on('updateNotification').listen(
+    onStartUpdateSub = service.on('updateNotification').listen(
           (event) {
             try {
               if (isStopped) return;
@@ -163,7 +182,7 @@ class BackgroundService {
           },
         );
 
-    service.on('heartbeat').listen(
+    onStartHeartbeatSub = service.on('heartbeat').listen(
           (_) {
             _log.finest('Heartbeat received');
           },
@@ -175,6 +194,16 @@ class BackgroundService {
   }
 
   static bool _iosBgCallInFlight = false;
+  static Timer? _iosBgWatchdogTimer;
+
+  @visibleForTesting
+  static bool get iosBgCallInFlightForTesting => _iosBgCallInFlight;
+
+  @visibleForTesting
+  static set iosBgCallInFlightForTesting(bool val) => _iosBgCallInFlight = val;
+
+  @visibleForTesting
+  static Timer? get iosBgWatchdogTimerForTesting => _iosBgWatchdogTimer;
 
   @pragma('vm:entry-point')
   static Future<bool> _onIosBackground(ServiceInstance service) async {
@@ -186,18 +215,25 @@ class BackgroundService {
       return false;
     }
     _iosBgCallInFlight = true;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(
-        'lastScheduleAttemptAt',
-        DateTime.now().millisecondsSinceEpoch,
-      );
-    } catch (e) {
-      _log.warning('Failed to persist lastScheduleAttemptAt: $e');
-    }
+    _iosBgWatchdogTimer?.cancel();
+    _iosBgWatchdogTimer = Timer(const Duration(seconds: 60), () {
+      if (_iosBgCallInFlight) {
+        _log.warning('[iOS BG Watchdog] iOS background call wedged for 60s; force-resetting in-flight flag.');
+        _iosBgCallInFlight = false;
+      }
+    });
 
-    final completer = Completer<bool>();
-    void performCall() async {
+    try {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt(
+          'lastScheduleAttemptAt',
+          DateTime.now().millisecondsSinceEpoch,
+        );
+      } catch (e, st) {
+        _log.fine('Failed to persist lastScheduleAttemptAt', e, st);
+      }
+
       const channel = MethodChannel('com.dmx.app/background_download');
       try {
         final result = await channel
@@ -205,17 +241,16 @@ class BackgroundService {
             .timeout(const Duration(seconds: 5));
         final success = result ?? false;
         _log.info('iOS background schedule completed. Success: $success');
-        if (!completer.isCompleted) completer.complete(success);
-      } catch (e) {
-        _log.warning('Failed to bridge to iOS background download controller: $e');
-        if (!completer.isCompleted) completer.complete(false);
-      } finally {
-        _iosBgCallInFlight = false;
+        return success;
+      } catch (e, st) {
+        _log.fine('Failed to bridge to iOS background download controller', e, st);
+        return false;
       }
+    } finally {
+      _iosBgWatchdogTimer?.cancel();
+      _iosBgWatchdogTimer = null;
+      _iosBgCallInFlight = false;
     }
-
-    Future.microtask(performCall);
-    return completer.future;
   }
 
   @visibleForTesting
@@ -317,9 +352,9 @@ class BackgroundService {
       // Safety net: auto-release or renew if downloads still active
       _scheduleWakeLockSafetyCheck();
 
-      // Start periodic renewal every 15 minutes to prevent native timeout expiry.
+      // Start periodic renewal every 30 minutes to prevent native timeout expiry.
       _wakeLockRenewalTimer?.cancel();
-      _wakeLockRenewalTimer = Timer.periodic(const Duration(minutes: 15), (
+      _wakeLockRenewalTimer = Timer.periodic(const Duration(minutes: 30), (
         _,
       ) async {
         if (!isSupported) return;
@@ -334,6 +369,7 @@ class BackgroundService {
           _wakeLockRenewalFailures = 0;
           _wakeLockEscalated = false;
           _log.fine('Wake lock renewed');
+          DiagnosticService.instance.record('WakeLock', 'renewed successfully');
         } catch (e) {
           _log.warning('Failed to renew wake lock', e);
           _wakeLockHeld = false;

@@ -70,7 +70,7 @@ class DmxCardShell extends StatelessWidget {
             : AppTheme.lightSurface.withValues(alpha: 0.4));
 
     final resolvedAccent = accent ?? AppTheme.neonBlue;
-    Widget content = Container(
+    final Widget content = Container(
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(radius),
@@ -127,17 +127,6 @@ class DmxCardShell extends StatelessWidget {
               ),
       ),
     );
-
-    if (!classicUi) {
-      content = ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: DmxBackdropFilter(
-          sigmaX: 12,
-          sigmaY: 12,
-          child: RepaintBoundary(child: content),
-        ),
-      );
-    }
 
     return Material(
       color: Colors.transparent,

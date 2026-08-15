@@ -1,6 +1,6 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/features/downloads/provider/network_monitor.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:dmx/features/downloads/provider/network_monitor.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

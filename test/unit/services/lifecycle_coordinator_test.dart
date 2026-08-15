@@ -1,11 +1,11 @@
-import 'package:flutter/widgets.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/app_lifecycle_coordinator.dart';
 import 'package:dmx/core/services/frame_watchdog.dart';
 import 'package:dmx/core/services/performance_monitor.dart';
 import 'package:dmx/core/services/power_monitor.dart';
-import 'package:dmx/shared/widgets/geometric_grid_background.dart';
 import 'package:dmx/features/downloads/widgets/download_card.dart';
+import 'package:dmx/shared/widgets/geometric_grid_background.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

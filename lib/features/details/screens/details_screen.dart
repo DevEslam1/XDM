@@ -1,58 +1,36 @@
 import 'dart:async';
-
 import 'dart:io';
-
 import 'dart:math' as math;
-
-import 'package:path/path.dart' as p;
-
-import 'package:flutter/material.dart';
-
-import 'package:flutter/services.dart';
-
-import 'package:provider/provider.dart';
-
-import 'package:fl_chart/fl_chart.dart';
-
-import '../../../core/app_theme.dart';
-
-import '../../../core/utils/localization.dart';
-
-import '../../../core/utils/intl_formatters.dart';
-
-import '../../../core/utils/responsive.dart';
-
-import '../../../core/utils/file_opener.dart';
-
-import '../../../core/utils/haptic_helper.dart';
-
-import '../../../core/utils/constants.dart';
-
-import '../../../core/utils/file_utils.dart';
-
-import '../../../shared/widgets/themed_snackbar.dart';
-
-import '../../../shared/widgets/geometric_grid_background.dart';
-
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
-import '../../../shared/design/dmx_design.dart';
-
-import '../../settings/provider/settings_provider.dart';
-
-import '../../downloads/models/download_task.dart';
-
-import '../../downloads/provider/download_provider.dart';
 
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:provider/provider.dart';
 
-import '../../../shared/mixins/pausable_loop_animation.dart';
-
+import '../../../core/app_theme.dart';
 import '../../../core/services/tracker_manager.dart';
+import '../../../core/utils/constants.dart';
+import '../../../core/utils/file_opener.dart';
+import '../../../core/utils/file_utils.dart';
+import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/intl_formatters.dart';
+import '../../../core/utils/localization.dart';
+import '../../../core/utils/responsive.dart';
+import '../../../shared/design/dmx_design.dart';
+import '../../../shared/mixins/pausable_loop_animation.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
+import '../../../shared/widgets/geometric_grid_background.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
+import '../../downloads/models/download_task.dart';
+import '../../downloads/provider/download_provider.dart';
+import '../../settings/provider/settings_provider.dart';
 import '../widgets/peer_panel.dart';
-import '../widgets/tracker_panel.dart';
 import '../widgets/torrent_health_indicator.dart';
 import '../widgets/torrent_stats_dashboard.dart';
+import '../widgets/tracker_panel.dart';
 
 class DetailsScreen extends StatefulWidget {
   final String taskId;
@@ -559,14 +537,16 @@ class _TelemetryHero extends StatelessWidget {
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
-                            CustomPaint(
-                              size: Size(responsiveValue(context, 110),
-                                  responsiveValue(context, 110)),
-                              painter: _RingPainter(
-                                progress: task.progress,
-                                color: statusColor,
-                                glow: pulse.value,
-                                isDark: isDark,
+                            RepaintBoundary(
+                              child: CustomPaint(
+                                size: Size(responsiveValue(context, 110),
+                                    responsiveValue(context, 110)),
+                                painter: _RingPainter(
+                                  progress: task.progress,
+                                  color: statusColor,
+                                  glow: pulse.value,
+                                  isDark: isDark,
+                                ),
                               ),
                             ),
                             Column(
@@ -762,7 +742,10 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RingPainter old) =>
-      old.progress != progress || old.glow != glow;
+      (old.progress - progress).abs() > 0.001 ||
+      (old.glow - glow).abs() > 0.01 ||
+      old.color != color ||
+      old.isDark != isDark;
 }
 
 // ─────────────────────────────────────────────────────────────

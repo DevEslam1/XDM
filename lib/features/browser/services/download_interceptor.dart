@@ -1,12 +1,12 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:collection';
+
 import 'package:dio/dio.dart';
+import 'package:dmx/core/services/logging_service.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
-import 'package:path/path.dart' as p;
-
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../models/browser_tab.dart';

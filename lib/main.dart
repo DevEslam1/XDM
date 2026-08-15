@@ -1,54 +1,56 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
+
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:logging/logging.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
-import 'core/utils/url_utils.dart';
-import 'core/utils/constants.dart';
-import 'core/services/torrent_service.dart';
-import 'core/services/torrent_resume_store.dart';
-import 'package:flutter/foundation.dart';
-import 'package:logging/logging.dart';
+
 import 'core/app_theme.dart';
-import 'core/services/crash_reporting_service.dart';
-import 'core/services/diagnostic_service.dart';
-import 'core/services/logging_service.dart';
-import 'core/services/mirror/mirror_registry.dart';
+import 'core/di/injection.dart';
+import 'core/services/app_lifecycle_coordinator.dart';
 import 'core/services/background_service.dart';
+import 'core/services/crash_reporting_service.dart';
 import 'core/services/database_service.dart';
-import 'core/services/notification_service.dart';
-import 'core/services/performance_monitor.dart';
-import 'core/services/single_instance_service.dart';
-import 'core/services/xdm_backend_client.dart';
-import 'core/services/youtube_service.dart';
-import 'core/services/remote_api_service.dart';
-import 'features/browser/services/page_intent_classifier.dart';
-import 'features/downloads/provider/download_provider.dart';
-import 'features/downloads/provider/download_list_provider.dart';
-import 'features/downloads/provider/download_queue_provider.dart';
-import 'features/downloads/provider/download_filter_provider.dart';
-import 'features/downloads/provider/torrent_provider.dart';
-import 'features/downloads/provider/download_coordinator.dart';
-import 'features/settings/provider/settings_provider.dart';
-import 'features/onboarding/screens/onboarding_screen.dart';
-import 'features/onboarding/screens/permission_request_screen.dart';
-import 'shared/widgets/main_navigation_container.dart';
-import 'shared/accessibility/xdm_text_scaler.dart';
+import 'core/services/diagnostic_service.dart';
 import 'core/services/download_engine.dart';
 import 'core/services/frame_watchdog.dart';
+import 'core/services/logging_service.dart';
+import 'core/services/mirror/mirror_registry.dart';
+import 'core/services/network/cookie_cache.dart';
+import 'core/services/notification_service.dart';
+import 'core/services/performance_monitor.dart';
 import 'core/services/power_monitor.dart';
 import 'core/services/protocol_cache.dart';
-import 'core/services/network/cookie_cache.dart';
-import 'core/services/widget_deep_link.dart';
-import 'core/services/app_lifecycle_coordinator.dart';
+import 'core/services/remote_api_service.dart';
 import 'core/services/service_registry.dart';
-import 'core/di/injection.dart';
+import 'core/services/single_instance_service.dart';
+import 'core/services/torrent_resume_store.dart';
+import 'core/services/torrent_service.dart';
+import 'core/services/widget_deep_link.dart';
+import 'core/services/xdm_backend_client.dart';
+import 'core/services/youtube_service.dart';
+import 'core/utils/constants.dart';
+import 'core/utils/url_utils.dart';
+import 'features/browser/services/page_intent_classifier.dart';
+import 'features/downloads/provider/download_coordinator.dart';
+import 'features/downloads/provider/download_filter_provider.dart';
+import 'features/downloads/provider/download_list_provider.dart';
+import 'features/downloads/provider/download_provider.dart';
+import 'features/downloads/provider/download_queue_provider.dart';
+import 'features/downloads/provider/torrent_provider.dart';
+import 'features/onboarding/screens/onboarding_screen.dart';
+import 'features/onboarding/screens/permission_request_screen.dart';
+import 'features/settings/provider/settings_provider.dart';
+import 'shared/accessibility/xdm_text_scaler.dart';
 import 'shared/animation/ambient_animation_coordinator.dart';
 import 'shared/animation/composite_ambient_animation_controller.dart';
+import 'shared/widgets/main_navigation_container.dart';
 
 class _ScreenObserver with WidgetsBindingObserver {
   @override
@@ -100,6 +102,8 @@ Future<double> _getDeviceMemoryGB() async {
   return 4.0;
 }
 
+final _mainLog = LoggingService.logger('main');
+
 Future<void> main(List<String> args) async {
   CrashReportingService.runWithErrorCapture(() async {
     // ── Logging: must be first so all subsequent init can log ──
@@ -110,8 +114,8 @@ Future<void> main(List<String> args) async {
     //    --dart-define=SENTRY_DSN=... (see crash_reporting_service.dart) ──
     try {
       await CrashReportingService.init();
-    } catch (e) {
-      debugPrint('Crash reporting init failed: $e');
+    } catch (e, st) {
+      _mainLog.warning('Crash reporting init failed', e, st);
     }
 
     WidgetsFlutterBinding.ensureInitialized();
@@ -292,12 +296,13 @@ Future<void> main(List<String> args) async {
                     throw TimeoutException('TorrentService.init timed out after 15s');
                   },
                 );
-                debugPrint('Torrent service initialized successfully');
+                _mainLog.info('Torrent service initialized successfully');
               } catch (e, s) {
-                debugPrint(
-                  'Torrent init failed, continuing without torrent support: $e',
+                _mainLog.severe(
+                  'Torrent init failed, continuing without torrent support',
+                  e,
+                  s,
                 );
-                Logger('main').severe('Torrent init failed', e, s);
                 // B2: isAvailable is now false — will be checked after load()
                 //     to mark stuck torrent tasks with a visible error state.
               }
@@ -317,7 +322,7 @@ Future<void> main(List<String> args) async {
             );
           }
         } catch (e, s) {
-          debugPrint('Deferred init failed: $e\n$s');
+          _mainLog.warning('Deferred init failed', e, s);
         }
 
         // Non-critical services — independent, fire-and-forget.
@@ -326,12 +331,12 @@ Future<void> main(List<String> args) async {
             downloadProvider,
             notificationService,
           ).catchError((e, st) {
-            Logger('main').warning('[main] operation failed', e, st);
+            _mainLog.warning('[main] operation failed', e, st);
           }),
         );
       });
     } catch (e, stack) {
-      debugPrint('Initialization error: $e\n$stack');
+      _mainLog.severe('Initialization error', e, stack);
       runApp(ErrorApp(error: e.toString()));
     }
   });
@@ -343,38 +348,38 @@ Future<void> _initNonCriticalServices(
 ) async {
   try {
     await MirrorHealthStore.instance.init();
-  } catch (e) {
-    debugPrint('Mirror health store init failed: $e');
+  } catch (e, st) {
+    _mainLog.warning('Mirror health store init failed', e, st);
   }
 
   try {
     await XdmBackendClient.loadApiKey();
-  } catch (e) {
-    debugPrint('API key load failed: $e');
+  } catch (e, st) {
+    _mainLog.warning('API key load failed', e, st);
   }
 
   try {
     await notificationService.init(requestPermission: false);
-  } catch (e) {
-    debugPrint('Notification init failed: $e');
+  } catch (e, st) {
+    _mainLog.warning('Notification init failed', e, st);
   }
 
   try {
     await BackgroundService.initialize();
-  } catch (e) {
-    debugPrint('Background service init failed: $e');
+  } catch (e, st) {
+    _mainLog.warning('Background service init failed', e, st);
   }
 
   try {
     await YoutubeService.init();
-  } catch (e) {
-    debugPrint('YouTube init failed: $e');
+  } catch (e, st) {
+    _mainLog.warning('YouTube init failed', e, st);
   }
 
   try {
     await PageIntentClassifier.instance.init();
-  } catch (e) {
-    debugPrint('PageIntentClassifier init failed: $e');
+  } catch (e, st) {
+    _mainLog.warning('PageIntentClassifier init failed', e, st);
   }
 
   unawaited(
@@ -384,8 +389,8 @@ Future<void> _initNonCriticalServices(
       pauseTask: (id) => downloadProvider.pauseTask(id),
       resumeTask: (id) => downloadProvider.resumeTask(id),
       deleteTask: (id) => downloadProvider.deleteTask(id),
-    ).catchError((e) {
-      debugPrint('RemoteApiService.start failed: $e');
+    ).catchError((e, st) {
+      _mainLog.warning('RemoteApiService.start failed', e, st);
     }),
   );
 }
@@ -547,19 +552,19 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(
-        NotificationService().processPendingBackgroundActions().catchError((e) {
-          debugPrint('processPendingBackgroundActions failed: $e');
+        NotificationService().processPendingBackgroundActions().catchError((e, st) {
+          _mainLog.warning('processPendingBackgroundActions failed', e, st);
         }),
       );
     }
 
     if (state == AppLifecycleState.detached) {
       // App is being terminated — release wake lock and shutdown singleton services
-      unawaited(ServiceRegistry.shutdownAll().catchError((e) {
-        debugPrint('Failed to shutdown services on detach: $e');
+      unawaited(ServiceRegistry.shutdownAll().catchError((e, st) {
+        _mainLog.warning('Failed to shutdown services on detach', e, st);
       }));
-      unawaited(BackgroundService.releaseWakeLock().catchError((e) {
-        debugPrint('Failed to release wake lock on detach: $e');
+      unawaited(BackgroundService.releaseWakeLock().catchError((e, st) {
+        _mainLog.warning('Failed to release wake lock on detach', e, st);
       }));
     }
 
@@ -568,15 +573,15 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
     switch (state) {
       case AppLifecycleState.paused:
       unawaited(
-        _saveTorrentState().catchError((e) {
-          debugPrint('_saveTorrentState failed: $e');
+        _saveTorrentState().catchError((e, st) {
+          _mainLog.warning('_saveTorrentState failed', e, st);
         }),
       );
         break;
       case AppLifecycleState.resumed:
       unawaited(
-        _resumeTorrents().catchError((e) {
-          debugPrint('_resumeTorrents failed: $e');
+        _resumeTorrents().catchError((e, st) {
+          _mainLog.warning('_resumeTorrents failed', e, st);
         }),
       );
         break;
@@ -619,12 +624,12 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
       ).timeout(
         const Duration(seconds: 5),
         onTimeout: () {
-          debugPrint(
+          _mainLog.warning(
               '[TorrentResumeStore] background saveAll timed out after 5s');
         },
       );
-    } catch (e) {
-      debugPrint('Failed to save torrent background state: $e');
+    } catch (e, st) {
+      _mainLog.warning('Failed to save torrent background state', e, st);
     } finally {
       _transitionInProgress = false;
     }
@@ -637,8 +642,8 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
       for (final id in TorrentService.activeTorrentIds.toList()) {
         TorrentService.resumeTorrent(id);
       }
-    } catch (e) {
-      debugPrint('Failed to resume torrents after foregrounding: $e');
+    } catch (e, st) {
+      _mainLog.warning('Failed to resume torrents after foregrounding', e, st);
     } finally {
       _transitionInProgress = false;
     }

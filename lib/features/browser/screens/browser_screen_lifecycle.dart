@@ -178,11 +178,15 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
                   source:
                       'window.localStorage.clear(); window.sessionStorage.clear();')
               .catchError((_) => null);
-        } catch (_) {/* ignore: clearing storage on close */}
+        } catch (_) {
+          // INTENTIONAL: Best-effort clearing storage on tab close
+        }
       }
       try {
         tab.dispose();
-      } catch (_) {/* ignore: disposing tab may already be disposed */}
+      } catch (_) {
+        // INTENTIONAL: Disposing tab may already be disposed
+      }
     }
 
     _tabManager.clearAllTabs();

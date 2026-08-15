@@ -1,6 +1,6 @@
+import 'package:dmx/features/browser/services/adblock_filter_updater.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:dmx/features/browser/services/adblock_filter_updater.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

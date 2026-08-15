@@ -1,18 +1,21 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import '../../../core/services/notification_service.dart';
+import '../../../core/services/power_monitor.dart';
 import '../../../core/services/quiet_hours.dart';
 import '../../../core/services/xdm_backend_client.dart';
-import '../../../core/services/power_monitor.dart';
-import '../../../core/services/notification_service.dart';
+
 // FIX-P2-03: Modular settings mixin references
 export 'mixins/download_settings_mixin.dart';
-export 'mixins/ui_settings_mixin.dart';
 export 'mixins/network_settings_mixin.dart';
-export 'mixins/torrent_settings_mixin.dart';
 export 'mixins/power_settings_mixin.dart';
+export 'mixins/torrent_settings_mixin.dart';
+export 'mixins/ui_settings_mixin.dart';
 
 class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static final _log = Logger('SettingsProvider');

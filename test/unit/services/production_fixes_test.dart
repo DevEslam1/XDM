@@ -1,9 +1,9 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/background_gate.dart';
 import 'package:dmx/core/services/network/cookie_cache.dart';
 import 'package:dmx/features/downloads/data/task_repository.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_list_provider.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 class MockTaskRepository implements TaskRepository {
   final List<DownloadTask> _storage = [];

@@ -1,14 +1,14 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/data/task_repository.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:dmx/features/downloads/provider/download_coordinator.dart';
+import 'package:dmx/features/downloads/provider/download_filter_provider.dart';
 import 'package:dmx/features/downloads/provider/download_list_provider.dart';
 import 'package:dmx/features/downloads/provider/download_queue_provider.dart';
-import 'package:dmx/features/downloads/provider/download_filter_provider.dart';
 import 'package:dmx/features/downloads/provider/torrent_provider.dart';
-import 'package:dmx/features/downloads/provider/download_coordinator.dart';
+import 'package:dmx/features/downloads/usecases/delete_download_usecase.dart';
 import 'package:dmx/features/downloads/usecases/pause_download_usecase.dart';
 import 'package:dmx/features/downloads/usecases/resume_download_usecase.dart';
-import 'package:dmx/features/downloads/usecases/delete_download_usecase.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

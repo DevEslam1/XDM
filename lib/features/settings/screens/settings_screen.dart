@@ -1,24 +1,26 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/app_theme.dart';
+import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/responsive.dart';
-import '../../../core/utils/haptic_helper.dart';
-import '../../../shared/widgets/geometric_grid_background.dart';
+import '../../../shared/design/dmx_design.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/empty_state_view.dart';
-import '../provider/settings_provider.dart';
-import '../../downloads/provider/download_provider.dart';
+import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../browser/services/ad_blocker_service.dart';
+import '../../downloads/provider/download_provider.dart';
+import '../provider/settings_provider.dart';
+import '../widgets/browser_extensions_sheet.dart';
+import '../widgets/settings_tiles.dart';
+import 'advanced_settings_page.dart';
 import 'appearance_settings_page.dart';
 import 'downloads_settings_page.dart';
 import 'network_settings_page.dart';
 import 'torrent_settings_page.dart';
-import 'advanced_settings_page.dart';
-import '../widgets/settings_tiles.dart';
-import '../widgets/browser_extensions_sheet.dart';
-import '../../../shared/design/dmx_design.dart';
 
 Color getSettingsTabColor(int tabIndex, bool isDark) {
   return switch (tabIndex) {

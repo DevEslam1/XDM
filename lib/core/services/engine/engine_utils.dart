@@ -1,12 +1,13 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:collection';
 import 'dart:io';
 import 'dart:math' as math;
-import 'package:flutter/foundation.dart';
+
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
-import 'package:dmx/core/services/retry_interceptor.dart';
 import 'package:dmx/core/services/download_journal.dart';
+import 'package:dmx/core/services/logging_service.dart';
+import 'package:dmx/core/services/retry_interceptor.dart';
+import 'package:flutter/foundation.dart';
 
 /// Utility classes and functions for the Download Engine.
 /// Task 1.2: Decoupled utilities.
@@ -65,12 +66,15 @@ Dio buildTransferDio({
   String? referer,
   String? cookies,
   String? oauthToken,
+  Dio? pooled,
 }) {
-  final client = Dio();
-  client.interceptors.add(ProfessionalRetryInterceptor(client));
-  client.options.connectTimeout = const Duration(seconds: 30);
-  client.options.sendTimeout = const Duration(seconds: 60);
-  client.options.receiveTimeout = const Duration(seconds: 60);
+  final client = pooled ?? Dio();
+  if (pooled == null) {
+    client.interceptors.add(ProfessionalRetryInterceptor(client));
+    client.options.connectTimeout = const Duration(seconds: 30);
+    client.options.sendTimeout = const Duration(seconds: 60);
+    client.options.receiveTimeout = const Duration(seconds: 60);
+  }
   
   final uri = url != null ? Uri.tryParse(url) : null;
   final host = uri?.host.toLowerCase() ?? '';
@@ -99,8 +103,12 @@ Dio buildTransferDio({
 }
 
 class DebugCertOverride {
-  static BadCertificateCallback? getCallback(String? url) {
-    if (kReleaseMode) return null;
+  static const bool allowDebugCert =
+      bool.fromEnvironment('ALLOW_DEBUG_CERT', defaultValue: false);
+
+  static BadCertificateCallback? getCallback(String? url, {bool? allowDebugCertOverride}) {
+    final enabled = allowDebugCertOverride ?? allowDebugCert;
+    if (kReleaseMode || !enabled) return null;
     bool isDebug = false;
     assert(() {
       isDebug = true;

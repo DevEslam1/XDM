@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/features/browser/services/download_interceptor.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('DownloadInterceptor status enum', () {

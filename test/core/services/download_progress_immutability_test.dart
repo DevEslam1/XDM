@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'package:flutter_test/flutter_test.dart';
+
 import 'package:dmx/core/services/engine/engine_models.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('DownloadProgress Immutability & Concurrency Stress Tests (Task 2.4 / Task 5.3)', () {

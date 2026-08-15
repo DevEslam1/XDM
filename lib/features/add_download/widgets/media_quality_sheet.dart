@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/app_theme.dart';
 import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/design/dmx_design.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../settings/provider/settings_provider.dart';
 
 class MediaQualitySheet extends StatefulWidget {

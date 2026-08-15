@@ -653,6 +653,7 @@ class DownloadJournal {
   /// capped at [maxBgRecordedEntries] (one entry per chunk across all jobs).
   final LinkedHashMap<int, int> _lastBgRecordedBytes = LinkedHashMap();
   static const int maxBgRecordedEntries = kJournalMaxBgRecordedEntries;
+  int _lastGlobalWriteBytes = 0;
 
   Future<void> recordChunkProgress(int index, int bytes) async {
     final isBg = !DownloadEngine.appInForeground ||
@@ -665,14 +666,17 @@ class DownloadJournal {
             ? kJournalBackgroundWriteDelta // 4MB when backgrounded (BG-04 / C-BG-02)
             : kJournalForegroundWriteDelta; // 512KB foreground (M-DL-08)
 
-    final last = _lastBgRecordedBytes[index] ?? 0;
-    if ((bytes - last).abs() < threshold) return;
-    // Move to tail (most-recently-used) then evict overflow from the head.
-    _lastBgRecordedBytes.remove(index);
     _lastBgRecordedBytes[index] = bytes;
     while (_lastBgRecordedBytes.length > maxBgRecordedEntries) {
       _lastBgRecordedBytes.remove(_lastBgRecordedBytes.keys.first);
     }
+
+    final totalWritten = _lastBgRecordedBytes.values.fold<int>(0, (sum, b) => sum + b);
+    final chunkCount = _lastBgRecordedBytes.isNotEmpty ? _lastBgRecordedBytes.length : 1;
+    final totalBytesSinceLastWrite = (totalWritten - _lastGlobalWriteBytes).abs();
+
+    if (totalBytesSinceLastWrite < threshold * chunkCount) return;
+    _lastGlobalWriteBytes = totalWritten;
 
     await _lock.synchronized(() async {
       _ensureOpen();

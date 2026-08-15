@@ -17,8 +17,7 @@
     <application
         android:label="XDM"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:largeHeap="true">
+        android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"

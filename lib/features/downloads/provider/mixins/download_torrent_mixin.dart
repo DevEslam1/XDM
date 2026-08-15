@@ -1,14 +1,15 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 
+import 'package:dmx/core/services/logging_service.dart';
+import 'package:flutter/foundation.dart';
+import 'package:logging/logging.dart';
+
+import '../../../../core/services/database_service.dart';
 import '../../../../core/services/retry_engine.dart';
 import '../../../../core/services/torrent_service.dart';
-import '../../../../core/services/database_service.dart';
 import '../../../../core/utils/file_utils.dart';
 import '../../../../features/settings/provider/settings_provider.dart';
 import '../../models/download_task.dart';
-import 'package:logging/logging.dart';
 
 /// Thrown when the native torrent engine rejects an add (returns -1).
 class TorrentAddRejectedException implements Exception {

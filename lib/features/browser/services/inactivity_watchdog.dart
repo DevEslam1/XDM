@@ -1,7 +1,9 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
+
 import '../models/browser_tab.dart';
 
 /// Manages inactivity timer, background hibernation, memory pressure, and

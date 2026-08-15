@@ -3,7 +3,6 @@ import 'dart:collection';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/download_metrics.dart';
@@ -13,6 +12,7 @@ import 'package:dmx/features/downloads/provider/download_orchestrator.dart';
 import 'package:dmx/features/downloads/provider/network_monitor.dart';
 import 'package:dmx/features/downloads/provider/notification_coordinator.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -1,7 +1,8 @@
 import 'dart:io';
+
+import 'package:dmx/features/browser/services/adblock_filter_updater.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:dmx/features/browser/services/adblock_filter_updater.dart';
 
 void main() {
   /// These tests verify the integrity check logic used in AdblockFilterUpdater._downloadAndParse.

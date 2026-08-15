@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import 'package:logging/logging.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/app_theme.dart';
-import '../../../core/utils/localization.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/localization.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/bookmark.dart';
 

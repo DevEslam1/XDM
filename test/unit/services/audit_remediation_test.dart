@@ -1,23 +1,24 @@
 import 'dart:async';
+
+import 'package:dmx/core/services/background_gate.dart';
+import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/download_journal.dart';
+import 'package:dmx/features/downloads/data/task_repository.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:dmx/features/downloads/provider/download_list_provider.dart';
+import 'package:dmx/features/downloads/provider/download_queue_provider.dart';
+import 'package:dmx/features/downloads/usecases/cancel_download_usecase.dart';
+import 'package:dmx/features/downloads/usecases/delete_download_usecase.dart';
+import 'package:dmx/features/downloads/usecases/pause_download_usecase.dart';
+import 'package:dmx/features/downloads/usecases/resume_download_usecase.dart';
+import 'package:dmx/features/downloads/usecases/retry_download_usecase.dart';
+import 'package:dmx/features/downloads/usecases/start_download_usecase.dart';
+import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:dmx/shared/mixins/pausable_loop_animation.dart';
+import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:dmx/core/services/download_engine.dart';
-import 'package:dmx/core/services/download_journal.dart';
-import 'package:dmx/core/services/background_gate.dart';
-import 'package:dmx/features/settings/provider/settings_provider.dart';
-import 'package:dmx/features/downloads/models/download_task.dart';
-import 'package:dmx/features/downloads/data/task_repository.dart';
-import 'package:dmx/features/downloads/provider/download_list_provider.dart';
-import 'package:dmx/features/downloads/provider/download_queue_provider.dart';
-import 'package:dmx/features/downloads/usecases/start_download_usecase.dart';
-import 'package:dmx/features/downloads/usecases/pause_download_usecase.dart';
-import 'package:dmx/features/downloads/usecases/resume_download_usecase.dart';
-import 'package:dmx/features/downloads/usecases/cancel_download_usecase.dart';
-import 'package:dmx/features/downloads/usecases/retry_download_usecase.dart';
-import 'package:dmx/features/downloads/usecases/delete_download_usecase.dart';
-import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
-import 'package:dmx/shared/mixins/pausable_loop_animation.dart';
 
 class _MockTaskRepo implements TaskRepository {
   final Map<String, DownloadTask> _store = {};

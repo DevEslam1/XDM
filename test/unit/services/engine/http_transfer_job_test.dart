@@ -1,8 +1,8 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/engine/http_transfer_job.dart';
-import 'package:dmx/core/services/mirror/mirror_selector.dart';
 import 'package:dmx/core/services/mirror/mirror_registry.dart';
+import 'package:dmx/core/services/mirror/mirror_selector.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

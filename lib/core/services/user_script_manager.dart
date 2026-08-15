@@ -1,7 +1,8 @@
 import 'dart:convert';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:dmx/core/services/logging_service.dart';
 
 enum ScriptPermission {
   domRead,
@@ -128,78 +129,110 @@ class UserScriptManager extends ChangeNotifier {
     await prefs.setString(_storeKey, raw);
   }
 
+  static String _decodeUnicodeEscapes(String input) {
+    return input.replaceAllMapped(
+      RegExp(r'\\u([0-9a-fA-F]{4})|\\u\{([0-9a-fA-F]+)\}'),
+      (match) {
+        final hex = match.group(1) ?? match.group(2);
+        if (hex != null) {
+          final code = int.tryParse(hex, radix: 16);
+          if (code != null) {
+            return String.fromCharCode(code);
+          }
+        }
+        return match.group(0)!;
+      },
+    );
+  }
+
   void _validateScript(UserScript script) {
     if (script.isCss) return;
     final code = script.code;
     if (code.length > 50000) {
+      _log.warning('Security Rejection: Script "${script.name}" exceeds 50,000 characters');
       throw Exception('Script too large (max 50,000 characters)');
     }
-    if (code.contains('flutter_inappwebview') ||
-        code.contains('callHandler') ||
-        code.contains('postMessage')) {
-      _log.severe(
+
+    final decoded = _decodeUnicodeEscapes(code);
+    final stripped = decoded.replaceAll(RegExp(r'/\*[\s\S]*?\*/|//.*'), '');
+
+    if (stripped.contains('flutter_inappwebview') ||
+        stripped.contains('callHandler') ||
+        stripped.contains('postMessage')) {
+      _log.warning(
           'Security Violation: Native bridge access detected in script "${script.name}"');
       throw Exception(
           'Scripts are not allowed to access native application bridges.');
     }
-    if (code.contains('eval(') ||
-        code.contains('eval ') ||
-        code.contains('new Function(') ||
-        code.contains('importScripts(')) {
-      _log.severe(
-          'Security Violation: Execution bypass detected in script "${script.name}"');
+
+    if (RegExp(r'\beval\b').hasMatch(stripped) ||
+        stripped.contains('eval(') ||
+        stripped.contains('eval ') ||
+        RegExp(r'\bFunction\b').hasMatch(stripped) ||
+        stripped.contains('new Function') ||
+        stripped.contains('importScripts(') ||
+        stripped.contains('importScripts ')) {
+      _log.warning(
+          'Security Violation: Dynamic code execution (eval/Function) detected in script "${script.name}"');
       throw Exception(
           'Dynamic code execution (eval, new Function) is prohibited for security.');
     }
-    // FIX-7.2: Strengthen sandbox validation
-    if (code.contains('document.cookie') ||
-        code.contains('document["cookie"]') ||
-        code.contains("document['cookie']")) {
-      _log.severe(
+
+    if (stripped.contains('document.cookie') ||
+        RegExp(r'document\s*\[\s*["\x27]cookie["\x27]\s*\]').hasMatch(stripped)) {
+      _log.warning(
           'Security Violation: Cookie access in script "${script.name}"');
       throw Exception('Cookie access is prohibited in UserScripts.');
     }
-    if (code.contains('window.open(') || code.contains('window.open ')) {
-      _log.severe('Security Violation: window.open in script "${script.name}"');
+
+    if (stripped.contains('window.open(') || stripped.contains('window.open ')) {
+      _log.warning('Security Violation: window.open in script "${script.name}"');
       throw Exception('Opening new windows is prohibited in UserScripts.');
     }
-    // Block Symbol-based escapes
-    if (code.contains('Symbol.toPrimitive') ||
-        code.contains('Symbol.iterator') ||
-        code.contains('Symbol.hasInstance')) {
+
+    if (stripped.contains('Symbol.toPrimitive') ||
+        stripped.contains('Symbol.iterator') ||
+        stripped.contains('Symbol.hasInstance')) {
+      _log.warning('Security Violation: Symbol-based sandbox escape in script "${script.name}"');
       throw Exception('Symbol-based sandbox escape blocked.');
     }
-    // Block with statement
-    if (RegExp(r'\bwith\s*\(').hasMatch(code)) {
+
+    if (RegExp(r'\bwith\s*\(').hasMatch(stripped)) {
+      _log.warning('Security Violation: "with" statement in script "${script.name}"');
       throw Exception('"with" statement is prohibited.');
     }
-    // Block __proto__ direct access
-    if (code.contains('__proto__')) {
-      throw Exception('__proto__ access is prohibited.');
+
+    if (stripped.contains('__proto__') ||
+        stripped.contains('constructor.prototype') ||
+        stripped.contains('Object.prototype') ||
+        stripped.contains('Function.prototype')) {
+      _log.warning('Security Violation: Prototype pollution in script "${script.name}"');
+      throw Exception('Prototype access or pollution is prohibited.');
     }
-    if (code.contains('navigator.sendBeacon')) {
-      _log.severe('Security Violation: sendBeacon in script "${script.name}"');
+
+    if (stripped.contains('navigator.sendBeacon')) {
+      _log.warning('Security Violation: sendBeacon in script "${script.name}"');
       throw Exception('Beacon transmission is prohibited in UserScripts.');
     }
-    final hasDynamicImport = RegExp(r'\bimport\s*\(').hasMatch(code);
-    if (hasDynamicImport) {
-      _log.severe(
+
+    if (RegExp(r'\bimport\s*[\(\b]').hasMatch(stripped) ||
+        RegExp(r'\bimport\s+').hasMatch(stripped)) {
+      _log.warning(
           'Security Violation: dynamic import in script "${script.name}"');
       throw Exception('Dynamic imports are prohibited in UserScripts.');
     }
-    // FIX SEC-1 / FIX-25 / C-SEC-02: Detect obfuscated dynamic code execution and reflection bypasses
-    final hasObfuscatedEval = RegExp(r'window\s*\[\s*["\x27]ev').hasMatch(code);
+
+    final hasObfuscatedEval = RegExp(r'window\s*\[\s*["\x27]ev').hasMatch(stripped);
     final hasObfuscatedFunction =
-        RegExp(r'window\s*\[\s*["\x27]Function').hasMatch(code);
-    final hasGlobalThis = RegExp(r'globalThis\s*\[').hasMatch(code);
-    final hasConstructorCall = RegExp(r'constructor\s*\(').hasMatch(code);
-    final hasCharCode = code.contains('String.fromCharCode');
-    final hasAtob = code.contains('atob(');
-    final hasBtoa = code.contains('btoa(');
-    final hasReflect = code.contains('Reflect.') || code.contains('Reflect[');
-    final hasProxy = code.contains('new Proxy(');
-    final hasProtoGetSet = code.contains('getPrototypeOf') || code.contains('setPrototypeOf');
-    final hasProtoConstructor = code.contains('Function.prototype.constructor');
+        RegExp(r'window\s*\[\s*["\x27]Function').hasMatch(stripped);
+    final hasGlobalThis = RegExp(r'globalThis\s*\[').hasMatch(stripped);
+    final hasConstructorCall = RegExp(r'constructor\s*\(').hasMatch(stripped);
+    final hasCharCode = stripped.contains('String.fromCharCode');
+    final hasAtob = stripped.contains('atob(');
+    final hasBtoa = stripped.contains('btoa(');
+    final hasReflect = stripped.contains('Reflect.') || stripped.contains('Reflect[');
+    final hasProxy = stripped.contains('Proxy(') || stripped.contains('new Proxy');
+    final hasProtoGetSet = stripped.contains('getPrototypeOf') || stripped.contains('setPrototypeOf');
 
     if (hasObfuscatedEval ||
         hasObfuscatedFunction ||
@@ -210,9 +243,8 @@ class UserScriptManager extends ChangeNotifier {
         hasBtoa ||
         hasReflect ||
         hasProxy ||
-        hasProtoGetSet ||
-        hasProtoConstructor) {
-      _log.severe(
+        hasProtoGetSet) {
+      _log.warning(
           'Security Violation: Obfuscated dynamic execution / reflection in script "${script.name}"');
       throw Exception('Obfuscated dynamic execution or reflection detected');
     }
@@ -378,9 +410,16 @@ if (!window['$marker']) {
     });
 
     try {
+      window.eval = function() { throw new Error('[DMX Sandbox] eval is disabled'); };
+      window.Function = function() { throw new Error('[DMX Sandbox] Function constructor is disabled'); };
+    } catch(e) {}
+
+    try {
       if (typeof Object.freeze === 'function') {
         try { Object.freeze(Object.prototype); } catch(e) {}
+        try { Object.freeze(Function.prototype); } catch(e) {}
         try { Object.freeze(Array.prototype); } catch(e) {}
+        try { Object.freeze(String.prototype); } catch(e) {}
       }
     } catch(e) {}
 

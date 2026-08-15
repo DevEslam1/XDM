@@ -132,10 +132,12 @@ class BandwidthGovernor {
     return _acquireGlobal(bytes);
   }
 
+  static const int _maxThrottleWaitMs = 1000;
+
   int _acquireTaskLimited(int bytes, String taskId) {
     final rawLimit = _taskLimits[taskId]!;
     final taskLimit = (rawLimit * throttleFactor).round();
-    if (taskLimit <= 0) return 1000;
+    if (taskLimit <= 0) return _maxThrottleWaitMs;
     final now = DateTime.now();
     final last = _taskLastRefill[taskId] ?? now;
     final elapsedMs = now.difference(last).inMilliseconds;
@@ -151,7 +153,7 @@ class BandwidthGovernor {
       final deficit = -currentTokens;
       final waitMs = (deficit / taskLimit * 1000.0).ceil();
       _taskTokens[taskId] = 0;
-      return waitMs.clamp(0, 1000);
+      return waitMs.clamp(0, _maxThrottleWaitMs);
     }
     return 0;
   }
@@ -159,13 +161,13 @@ class BandwidthGovernor {
   int _acquireGlobal(int bytes) {
     _refill();
     final share = perConsumerBytesPerSecond;
-    if (share <= 0) return 1000;
+    if (share <= 0) return _maxThrottleWaitMs;
     _availableTokens -= bytes;
     if (_availableTokens < 0) {
       final deficit = -_availableTokens;
       final waitMs = (deficit / share * 1000.0).ceil();
       _availableTokens = 0;
-      return waitMs.clamp(0, 1000);
+      return waitMs.clamp(0, _maxThrottleWaitMs);
     }
     return 0;
   }

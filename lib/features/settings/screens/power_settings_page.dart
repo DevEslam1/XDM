@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/app_theme.dart';
-import '../../../core/utils/localization.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/localization.dart';
+import '../../../shared/design/dmx_design.dart';
 import '../provider/settings_provider.dart';
 import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';
 import '../widgets/system_monitors_card.dart';
-import '../../../shared/design/dmx_design.dart';
 
 class PowerSettingsPage extends StatelessWidget with HapticHelper {
   const PowerSettingsPage({super.key});

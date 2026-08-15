@@ -1,10 +1,10 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 
 // ignore_for_file: prefer_initializing_formals
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 import '../../../core/services/torrent_service.dart';
 import '../models/download_task.dart';

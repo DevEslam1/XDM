@@ -1,6 +1,6 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/features/downloads/models/download_state_machine.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('DownloadStateMachine', () {

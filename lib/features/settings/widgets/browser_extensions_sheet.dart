@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../../../core/app_theme.dart';
-import '../../../core/utils/localization.dart';
 import '../../../core/services/share_url_handler.dart';
+import '../../../core/utils/localization.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
 
 class BrowserExtensionsSheet extends StatefulWidget {
   const BrowserExtensionsSheet({super.key});

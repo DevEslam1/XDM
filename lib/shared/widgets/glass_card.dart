@@ -15,6 +15,7 @@ class GlassCard extends StatefulWidget {
   final bool elevated;
   final LinearGradient? gradientBorder;
   final VoidCallback? onTap;
+  final bool? enableBlur;
 
   const GlassCard({
     super.key,
@@ -28,6 +29,7 @@ class GlassCard extends StatefulWidget {
     this.elevated = false,
     this.gradientBorder,
     this.onTap,
+    this.enableBlur,
   });
 
   @override

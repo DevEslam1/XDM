@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'download_engine.dart';
+import 'logging_service.dart';
 import 'power_monitor.dart';
 
 /// Centralized manager for timers that should be throttled or paused
@@ -10,6 +11,7 @@ class BackgroundTimerManager {
     _initListeners();
   }
   static final instance = BackgroundTimerManager._();
+  static final _log = LoggingService.logger('BackgroundTimerManager');
 
   final Map<String, Timer> _timers = {};
   final Map<String, Duration> _baseIntervals = {};
@@ -18,6 +20,14 @@ class BackgroundTimerManager {
   VoidCallback? _throttleListener;
   VoidCallback? _foregroundListener;
   StreamSubscription<bool>? _screenSub;
+  Timer? _debounceTimer;
+  final List<DateTime> _stateChangeTimestamps = [];
+
+  @visibleForTesting
+  Timer? get debounceTimerForTesting => _debounceTimer;
+
+  @visibleForTesting
+  int get stateChangeHistoryCount => _stateChangeTimestamps.length;
 
   void _initListeners() {
     _throttleListener = _onStateChanged;
@@ -28,7 +38,23 @@ class BackgroundTimerManager {
   }
 
   void _onStateChanged() {
-    _readaptAllTimers();
+    final now = DateTime.now();
+    _stateChangeTimestamps.add(now);
+    _stateChangeTimestamps.removeWhere(
+      (ts) => now.difference(ts) > const Duration(seconds: 2),
+    );
+
+    if (_stateChangeTimestamps.length >= 5) {
+      _log.warning(
+        '[BackgroundTimerManager] High state-change flapping detected: '
+        '${_stateChangeTimestamps.length} changes within 2s.',
+      );
+    }
+
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _readaptAllTimers();
+    });
   }
 
   void _readaptAllTimers() {
@@ -107,6 +133,9 @@ class BackgroundTimerManager {
 
   void dispose() {
     cancelAll();
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+    _stateChangeTimestamps.clear();
     if (_throttleListener != null) {
       PowerMonitor.throttleFactorNotifier.removeListener(_throttleListener!);
       _throttleListener = null;

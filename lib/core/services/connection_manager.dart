@@ -1,14 +1,17 @@
-import 'package:dmx/core/services/logging_service.dart';
+import 'dart:collection';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/protocol_cache.dart';
+import 'package:flutter/foundation.dart';
 
 class ConnectionManager {
   ConnectionManager();
-  static final Map<String, _HostProbe> _probes = {};
+  static final LinkedHashMap<String, _HostProbe> _probes =
+      LinkedHashMap<String, _HostProbe>();
   static const Duration _cacheTtl = Duration(minutes: 10);
   static const Duration _probeTimeout = Duration(seconds: 4);
+
   static Future<void> prewarm(String url) async {
     try {
       final uri = Uri.parse(url);
@@ -30,10 +33,13 @@ class ConnectionManager {
       final uri = Uri.parse(url);
       if (uri.scheme != 'https') return false;
       final host = uri.host;
-      final cached = _probes[host];
+      final cached = _probes.remove(host);
       final now = DateTime.now();
-      if (cached != null && now.difference(cached.at) < _cacheTtl) {
-        return cached.isHttp2;
+      if (cached != null) {
+        if (now.difference(cached.at) < _cacheTtl) {
+          _probes[host] = cached;
+          return cached.isHttp2;
+        }
       }
       var result = false;
       try {
@@ -52,7 +58,7 @@ class ConnectionManager {
       if (_probes.length > 500) {
         _probes
             .removeWhere((_, probe) => now.difference(probe.at) >= _cacheTtl);
-        if (_probes.length > 500) {
+        while (_probes.length > 500) {
           _probes.remove(_probes.keys.first);
         }
       }
@@ -67,7 +73,9 @@ class ConnectionManager {
     _probes.remove(host);
     ProtocolCache.invalidate(host);
   }
+
   static void clearCache() => _probes.clear();
+
   static Dio createDownloadDio() {
     final dio = Dio();
     dio.options.connectTimeout = const Duration(milliseconds: 15000);

@@ -1,6 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:dmx/core/utils/constants.dart';
+import 'package:flutter/foundation.dart';
 
 void main() async {
   final dio = Dio();

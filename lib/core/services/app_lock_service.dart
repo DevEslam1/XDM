@@ -1,9 +1,11 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:convert';
 import 'dart:math';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../utils/crypto_utils.dart';
 
 class AppLockService {

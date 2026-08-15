@@ -3,11 +3,11 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-
-import '../../../core/services/youtube_service.dart';
-import '../../../core/services/site_intelligence/site_intelligence_service.dart';
-import '../models/browser_tab.dart';
 import 'package:logging/logging.dart';
+
+import '../../../core/services/site_intelligence/site_intelligence_service.dart';
+import '../../../core/services/youtube_service.dart';
+import '../models/browser_tab.dart';
 
 /// Detects downloadable media on browser pages (REFACTOR B extraction from
 /// `_BrowserScreenState`).

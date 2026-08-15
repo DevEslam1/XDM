@@ -1,8 +1,9 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/features/settings/screens/settings_screen.dart';
-import 'package:dmx/features/settings/screens/appearance_settings_page.dart';
-import 'package:dmx/features/settings/screens/torrent_settings_page.dart';
 import 'package:dmx/features/settings/screens/advanced_settings_page.dart';
+import 'package:dmx/features/settings/screens/appearance_settings_page.dart';
+import 'package:dmx/features/settings/screens/settings_screen.dart';
+import 'package:dmx/features/settings/screens/torrent_settings_page.dart';
+import 'package:flutter_test/flutter_test.dart';
+
 import '../../helpers/test_helpers.dart';
 
 void main() {

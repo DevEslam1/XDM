@@ -1,15 +1,17 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/widgets.dart';
+
+import '../../shared/animation/ambient_animation_coordinator.dart';
+import '../di/injection.dart';
+import 'background_timer_manager.dart';
 import 'database_service.dart';
 import 'download_engine.dart';
 import 'frame_watchdog.dart';
 import 'performance_monitor.dart';
 import 'power_monitor.dart';
 import 'widget_data_bridge.dart';
-import 'background_timer_manager.dart';
-import '../di/injection.dart';
-import '../../shared/animation/ambient_animation_coordinator.dart';
 
 /// Central coordinator for application lifecycle events (BG-01/BG-02/BG-03/BG-08).
 /// Ensures that when the application is backgrounded or inactive, all ambient timers,

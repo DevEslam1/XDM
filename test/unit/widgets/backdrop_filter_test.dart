@@ -1,8 +1,8 @@
+import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
-import 'package:dmx/features/settings/provider/settings_provider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

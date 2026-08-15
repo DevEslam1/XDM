@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/circuit_breaker.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   late DateTime fakeNow;

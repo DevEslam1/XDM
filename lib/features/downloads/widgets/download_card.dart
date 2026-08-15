@@ -1,35 +1,36 @@
 import 'dart:async';
 import 'dart:io';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dmx/shared/mixins/pausable_loop_animation.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../../core/app_theme.dart';
 import '../../../core/services/download_engine.dart';
 import '../../../core/services/performance_monitor.dart';
 import '../../../core/services/power_monitor.dart';
-import '../../../core/services/torrent_service.dart';
-import '../../../core/utils/localization.dart';
-import '../../../core/utils/intl_formatters.dart';
-import '../../../core/utils/responsive.dart';
-import '../../../core/utils/haptic_helper.dart';
-import '../../../core/utils/file_utils.dart';
-import '../../../core/utils/file_opener.dart';
-import '../../../shared/widgets/themed_snackbar.dart';
-import '../../../shared/design/dmx_design.dart';
-import '../../../shared/accessibility/xdm_semantics.dart';
 import '../../../core/services/protocol_cache.dart';
-import '../../settings/provider/settings_provider.dart';
+import '../../../core/services/torrent_service.dart';
+import '../../../core/services/undo_service.dart';
+import '../../../core/utils/file_opener.dart';
+import '../../../core/utils/file_utils.dart';
+import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/intl_formatters.dart';
+import '../../../core/utils/localization.dart';
+import '../../../core/utils/responsive.dart';
+import '../../../shared/accessibility/xdm_semantics.dart';
+import '../../../shared/design/dmx_design.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
+import '../../details/screens/details_screen.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
-import '../../details/screens/details_screen.dart';
+import '../../settings/provider/settings_provider.dart';
 import 'channel_progress_painter.dart';
 import 'filter_chips_bar.dart';
-
-import '../../../core/services/undo_service.dart';
 
 /// Adaptive download card. Detects the download kind and renders a
 /// purpose-built variant:

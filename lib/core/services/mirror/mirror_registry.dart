@@ -1,4 +1,3 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -6,8 +5,10 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../power_monitor.dart';
 import '../service_registry.dart';
 
@@ -57,6 +58,12 @@ class MirrorHealthStore implements DisposableService {
     _cleanupTimer?.cancel();
     _cleanupTimer = Timer.periodic(const Duration(hours: 6), (_) {
       cleanupStaleEntries();
+    });
+    _flushTimer?.cancel();
+    _flushTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_dirty) {
+        flushPending();
+      }
     });
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_storeKey);
@@ -213,12 +220,9 @@ class MirrorHealthStore implements DisposableService {
     _cache!.remove(_cache!.keys.first);
   }
 
-  /// Marks state dirty and ensures the 30s periodic flusher is scheduled.
+  /// Marks state dirty. The 30s periodic flusher running since init() will flush.
   void _markDirty() {
     _dirty = true;
-    _flushTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
-      flushPending();
-    });
   }
 
   /// Flushes the coalesced state to SharedPreferences. Skipped while the
@@ -329,9 +333,17 @@ class ServerProfile {
   bool supportsRange = true;
   int successCount = 0;
   int failureCount = 0;
-  final Queue<int> _responseTimes = Queue<int>();
+  static const Duration profileTtl = Duration(days: 7);
+  final Queue<({int timestampMs, int timeMs})> _responseTimes = Queue();
 
   ServerProfile({required this.host});
+
+  bool get isExpired => DateTime.now().difference(lastAccess) > profileTtl;
+
+  void pruneStaleMetrics() {
+    final cutoff = DateTime.now().subtract(profileTtl).millisecondsSinceEpoch;
+    _responseTimes.removeWhere((item) => item.timestampMs < cutoff);
+  }
 
   bool get isCdn {
     const cdnPatterns = [
@@ -349,17 +361,25 @@ class ServerProfile {
       ? successCount / (successCount + failureCount)
       : 1.0;
 
-  int get avgResponseTimeMs => _responseTimes.isEmpty
-      ? 0
-      : (_responseTimes.reduce((a, b) => a + b) / _responseTimes.length)
-          .round();
+  int get avgResponseTimeMs {
+    pruneStaleMetrics();
+    return _responseTimes.isEmpty
+        ? 0
+        : (_responseTimes.map((e) => e.timeMs).reduce((a, b) => a + b) /
+                _responseTimes.length)
+            .round();
+  }
 
   double get reliabilityScore => successRate * 100.0 - failureCount;
 
   void recordSuccess(int responseTimeMs) {
     lastAccess = DateTime.now();
     successCount++;
-    _responseTimes.add(responseTimeMs);
+    pruneStaleMetrics();
+    _responseTimes.add((
+      timestampMs: DateTime.now().millisecondsSinceEpoch,
+      timeMs: responseTimeMs
+    ));
     if (_responseTimes.length > 20) _responseTimes.removeFirst();
     wasRateLimited = false;
   }
@@ -395,6 +415,7 @@ class ServerProfileManager {
   static const _maxProfiles = 100;
 
   static ServerProfile getProfile(String url) {
+    _evictIfNeeded();
     final host = Uri.tryParse(url)?.host ?? url;
     return _profiles.putIfAbsent(host, () => ServerProfile(host: host));
   }
@@ -445,6 +466,9 @@ class ServerProfileManager {
   }
 
   static void _evictIfNeeded() {
+    final now = DateTime.now();
+    _profiles.removeWhere(
+        (_, profile) => now.difference(profile.lastAccess) > ServerProfile.profileTtl);
     while (_profiles.length > _maxProfiles) {
       final toEvict = _profiles.entries.reduce((a, b) {
         final scoreA = a.value.lastAccess.millisecondsSinceEpoch +

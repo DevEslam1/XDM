@@ -1,10 +1,11 @@
 import 'dart:io';
-import 'package:flutter_test/flutter_test.dart';
+
 import 'package:dmx/core/services/desktop_update_service.dart';
-import 'package:dmx/core/services/live_activity_service.dart';
-import 'package:dmx/core/services/error_taxonomy.dart';
 import 'package:dmx/core/services/diagnostic_service.dart';
 import 'package:dmx/core/services/engines/speed_predictor.dart';
+import 'package:dmx/core/services/error_taxonomy.dart';
+import 'package:dmx/core/services/live_activity_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

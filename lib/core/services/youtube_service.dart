@@ -3,11 +3,12 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import '../../features/settings/provider/settings_provider.dart';
 import 'xdm_backend_client.dart';
 import 'xdm_backend_exceptions.dart';
-import '../../features/settings/provider/settings_provider.dart';
 
 class StreamRefreshResult {
   final Map<String, dynamic> stream;

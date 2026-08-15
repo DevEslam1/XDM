@@ -303,120 +303,77 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(downloadTasks, downloadTasks.notes);
           }
           if (from < 3) {
-            await customStatement('''
-          UPDATE download_tasks SET created_at =
-            SUBSTR(created_at, 1, INSTR(created_at, '.') - 1)
-          WHERE created_at LIKE '%.%';
-        ''');
-            await customStatement('''
-          UPDATE download_tasks SET created_at = SUBSTR(created_at, 1, INSTR(created_at, '+') - 1) WHERE created_at LIKE '%+%';
-          UPDATE download_tasks SET updated_at = SUBSTR(updated_at, 1, INSTR(updated_at, '+') - 1) WHERE updated_at LIKE '%+%';
-          UPDATE download_tasks SET completed_at = SUBSTR(completed_at, 1, INSTR(completed_at, '+') - 1) WHERE completed_at LIKE '%+%';
-          UPDATE download_tasks SET scheduled_at = SUBSTR(scheduled_at, 1, INSTR(scheduled_at, '+') - 1) WHERE scheduled_at LIKE '%+%';
-        ''');
-            await customStatement('''
-              CREATE TABLE download_tasks_new (
-                id TEXT PRIMARY KEY NOT NULL,
-                file_name TEXT NOT NULL,
-                url TEXT NOT NULL,
-                file_size INTEGER NOT NULL DEFAULT 0,
-                downloaded_bytes INTEGER NOT NULL DEFAULT 0,
-                speed REAL NOT NULL DEFAULT 0.0,
-                eta INTEGER,
-                category TEXT NOT NULL,
-                status TEXT NOT NULL,
-                save_path TEXT NOT NULL,
-                local_file_path TEXT NOT NULL,
-                temp_file_path TEXT NOT NULL,
-                error_message TEXT,
-                thread_count INTEGER NOT NULL,
-                chunks TEXT,
-                created_at INTEGER NOT NULL,
-                updated_at INTEGER NOT NULL,
-                completed_at INTEGER,
-                scheduled_at INTEGER,
-                supports_resume INTEGER NOT NULL DEFAULT 0,
-                speed_limit_kbps INTEGER NOT NULL DEFAULT 0,
-                seeding_enabled INTEGER NOT NULL DEFAULT 0,
-                seeding_limited INTEGER NOT NULL DEFAULT 0,
-                seeding_limit_kbps INTEGER NOT NULL DEFAULT 500,
-                torrent_files TEXT,
-                download_page_url TEXT,
-                merged_audio_url TEXT,
-                audio_size INTEGER NOT NULL DEFAULT 0,
-                audio_progress REAL NOT NULL DEFAULT 0.0,
-                paused_by_user INTEGER NOT NULL DEFAULT 0,
-                youtube_quality_preset TEXT,
-                notes TEXT
-              )
-            ''');
-            await customStatement('''
-              INSERT INTO download_tasks_new (
-                id, file_name, url, file_size, downloaded_bytes, speed, eta,
-                category, status, save_path, local_file_path, temp_file_path,
-                error_message, thread_count, chunks,
-                created_at, updated_at, completed_at, scheduled_at,
-                supports_resume, speed_limit_kbps, seeding_enabled,
-                seeding_limited, seeding_limit_kbps, torrent_files,
-                download_page_url, merged_audio_url, audio_size, audio_progress,
-                paused_by_user, youtube_quality_preset, notes
-              )
-              SELECT
-                id, file_name, url, file_size, downloaded_bytes, speed, eta,
-                category, status, save_path, local_file_path, temp_file_path,
-                error_message, thread_count, chunks,
-                COALESCE(CAST((julianday(REPLACE(REPLACE(created_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) as created_at,
-                COALESCE(CAST((julianday(REPLACE(REPLACE(updated_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) as updated_at,
-                CASE WHEN completed_at IS NOT NULL THEN COALESCE(CAST((julianday(REPLACE(REPLACE(completed_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) ELSE NULL END as completed_at,
-                CASE WHEN scheduled_at IS NOT NULL THEN COALESCE(CAST((julianday(REPLACE(REPLACE(scheduled_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) ELSE NULL END as scheduled_at,
-                supports_resume, speed_limit_kbps, seeding_enabled,
-                seeding_limited, seeding_limit_kbps, torrent_files,
-                download_page_url, merged_audio_url, audio_size, audio_progress,
-                paused_by_user, youtube_quality_preset, notes
-              FROM download_tasks
-            ''');
-            await customStatement('DROP TABLE download_tasks');
-            await customStatement(
-                'ALTER TABLE download_tasks_new RENAME TO download_tasks');
-            await customStatement(
-                'CREATE INDEX idx_download_tasks_status ON download_tasks (status)');
-            await customStatement(
-                'CREATE INDEX idx_download_tasks_category ON download_tasks (category)');
-            await customStatement(
-                'CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)');
-            await customStatement(
-                'UPDATE download_tasks SET created_at = 0 WHERE created_at < 0');
-            await customStatement(
-                'UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0');
-            final badDates = await customSelect(
-                    'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0')
-                .get();
-            final badCount = badDates.first.read<int>('cnt');
-            if (badCount > 0) {
-              debugPrint(
-                  'WARNING: $badCount tasks have epoch (0) created_at after migration');
-            }
-            final recoveredFromUpdated = await customSelect(
-              'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at > 0',
-            ).get();
-            final recoverFromUpdatedCount =
-                recoveredFromUpdated.first.read<int>('cnt');
-            if (recoverFromUpdatedCount > 0) {
+            await customStatement('BEGIN TRANSACTION');
+            try {
+              await customStatement('''
+            UPDATE download_tasks SET created_at =
+              SUBSTR(created_at, 1, INSTR(created_at, '.') - 1)
+            WHERE typeof(created_at) = 'text' AND created_at LIKE '%.%';
+          ''');
+              await customStatement('''
+            UPDATE download_tasks SET created_at = SUBSTR(created_at, 1, INSTR(created_at, '+') - 1) WHERE typeof(created_at) = 'text' AND created_at LIKE '%+%';
+            UPDATE download_tasks SET updated_at = SUBSTR(updated_at, 1, INSTR(updated_at, '+') - 1) WHERE typeof(updated_at) = 'text' AND updated_at LIKE '%+%';
+            UPDATE download_tasks SET completed_at = SUBSTR(completed_at, 1, INSTR(completed_at, '+') - 1) WHERE typeof(completed_at) = 'text' AND completed_at LIKE '%+%';
+            UPDATE download_tasks SET scheduled_at = SUBSTR(scheduled_at, 1, INSTR(scheduled_at, '+') - 1) WHERE typeof(scheduled_at) = 'text' AND scheduled_at LIKE '%+%';
+          ''');
+              await customStatement('''
+            UPDATE download_tasks SET
+              created_at = COALESCE(CAST((julianday(REPLACE(REPLACE(created_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0)
+            WHERE typeof(created_at) = 'text';
+          ''');
+              await customStatement('''
+            UPDATE download_tasks SET
+              updated_at = COALESCE(CAST((julianday(REPLACE(REPLACE(updated_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0)
+            WHERE typeof(updated_at) = 'text';
+          ''');
+              await customStatement('''
+            UPDATE download_tasks SET
+              completed_at = CASE WHEN completed_at IS NOT NULL THEN COALESCE(CAST((julianday(REPLACE(REPLACE(completed_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) ELSE NULL END
+            WHERE typeof(completed_at) = 'text';
+          ''');
+              await customStatement('''
+            UPDATE download_tasks SET
+              scheduled_at = CASE WHEN scheduled_at IS NOT NULL THEN COALESCE(CAST((julianday(REPLACE(REPLACE(scheduled_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) ELSE NULL END
+            WHERE typeof(scheduled_at) = 'text';
+          ''');
               await customStatement(
-                  'UPDATE download_tasks SET created_at = updated_at WHERE created_at = 0 AND updated_at > 0');
-              debugPrint(
-                  '[DMX] Migration v2→v3: recovered $recoverFromUpdatedCount rows (created_at = updated_at)');
-            }
-            final recoveredFromNow = await customSelect(
-              'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0',
-            ).get();
-            final recoverFromNowCount = recoveredFromNow.first.read<int>('cnt');
-            if (recoverFromNowCount > 0) {
+                  'UPDATE download_tasks SET created_at = 0 WHERE created_at < 0');
               await customStatement(
-                "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0",
-              );
-              debugPrint(
-                  '[DMX] Migration v2→v3: recovered $recoverFromNowCount rows (created_at = now)');
+                  'UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0');
+              final badDates = await customSelect(
+                      'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0')
+                  .get();
+              final badCount = badDates.first.read<int>('cnt');
+              if (badCount > 0) {
+                debugPrint(
+                    'WARNING: $badCount tasks have epoch (0) created_at after migration');
+              }
+              final recoveredFromUpdated = await customSelect(
+                'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at > 0',
+              ).get();
+              final recoverFromUpdatedCount =
+                  recoveredFromUpdated.first.read<int>('cnt');
+              if (recoverFromUpdatedCount > 0) {
+                await customStatement(
+                    'UPDATE download_tasks SET created_at = updated_at WHERE created_at = 0 AND updated_at > 0');
+                debugPrint(
+                    '[DMX] Migration v2→v3: recovered $recoverFromUpdatedCount rows (created_at = updated_at)');
+              }
+              final recoveredFromNow = await customSelect(
+                'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0',
+              ).get();
+              final recoverFromNowCount = recoveredFromNow.first.read<int>('cnt');
+              if (recoverFromNowCount > 0) {
+                await customStatement(
+                  "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0",
+                );
+                debugPrint(
+                    '[DMX] Migration v2→v3: recovered $recoverFromNowCount rows (created_at = now)');
+              }
+              await customStatement('COMMIT');
+            } catch (e) {
+              await customStatement('ROLLBACK');
+              rethrow;
             }
           }
           if (from < 4) {

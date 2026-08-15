@@ -1,6 +1,6 @@
+import 'package:dmx/features/browser/services/site_settings_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:dmx/features/browser/services/site_settings_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

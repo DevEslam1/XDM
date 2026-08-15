@@ -1,7 +1,7 @@
-import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/xdm_backend_client.dart';
 import 'package:dmx/core/services/xdm_backend_exceptions.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

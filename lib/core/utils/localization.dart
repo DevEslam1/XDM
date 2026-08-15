@@ -1,13 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../features/settings/provider/settings_provider.dart';
+
 import '../../features/downloads/models/download_task.dart';
-import 'l10n/app_en.dart';
+import '../../features/settings/provider/settings_provider.dart';
 import 'l10n/app_ar.dart';
+import 'l10n/app_de.dart';
+import 'l10n/app_en.dart';
 import 'l10n/app_es.dart';
 import 'l10n/app_fr.dart';
-import 'l10n/app_de.dart';
 
 class L10n {
   static final Map<String, Map<String, String>> _cache = {};

@@ -1,10 +1,11 @@
 import 'dart:io';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:hive/hive.dart';
-import 'package:drift/native.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:dmx/core/services/database/app_database.dart';
 import 'package:dmx/core/services/database/hive_migration_service.dart';
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hive/hive.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

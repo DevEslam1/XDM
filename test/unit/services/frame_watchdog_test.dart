@@ -1,8 +1,8 @@
-import 'package:flutter/services.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/frame_watchdog.dart';
 import 'package:dmx/core/services/performance_monitor.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

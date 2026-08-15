@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:dmx/core/services/torrent_models.dart';
+import 'package:flutter/foundation.dart';
 
 /// Single-responsibility provider for torrent session management and stats tracking.
 class TorrentProvider extends ChangeNotifier {

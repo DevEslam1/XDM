@@ -1,8 +1,8 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/utils/bounded_lru_cache.dart';
-import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
 import 'package:dmx/core/services/engine/engine_utils.dart';
+import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
+import 'package:dmx/core/utils/bounded_lru_cache.dart';
 import 'package:dmx/shared/animation/ambient_animation_coordinator.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

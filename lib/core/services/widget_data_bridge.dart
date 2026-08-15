@@ -1,9 +1,11 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:convert';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
+
 import 'download_engine.dart';
 import 'power_monitor.dart';
 

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../../core/app_theme.dart';
-import '../../settings/provider/settings_provider.dart';
-import '../models/download_task.dart';
 import '../../../../core/utils/localization.dart';
 import '../../../shared/mixins/pausable_loop_animation.dart';
+import '../../settings/provider/settings_provider.dart';
+import '../models/download_task.dart';
 
 class StatusChip extends StatelessWidget {
   final DownloadTask task;

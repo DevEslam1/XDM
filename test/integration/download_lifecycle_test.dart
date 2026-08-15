@@ -1,14 +1,15 @@
 import 'dart:io';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:dmx/features/downloads/models/download_task.dart';
+
+import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/notification_service.dart';
+import 'package:dmx/core/services/torrent_models.dart';
 import 'package:dmx/features/downloads/data/task_repository.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_list_provider.dart';
 import 'package:dmx/features/downloads/provider/download_queue_provider.dart';
 import 'package:dmx/features/downloads/provider/torrent_provider.dart';
-import 'package:dmx/core/services/download_engine.dart';
-import 'package:dmx/core/services/torrent_models.dart';
-import 'package:dmx/core/services/notification_service.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

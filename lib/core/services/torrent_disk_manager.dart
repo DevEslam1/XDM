@@ -1,6 +1,8 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:io';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
+
 import 'torrent_models.dart';
 
 enum DiskIoMode { ssd, hdd, emmc }

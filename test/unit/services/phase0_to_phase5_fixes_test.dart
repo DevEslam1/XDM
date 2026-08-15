@@ -1,17 +1,18 @@
 import 'dart:typed_data';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+
+import 'package:dmx/core/services/background_service.dart';
 import 'package:dmx/core/services/mirror/mirror_registry.dart';
 import 'package:dmx/core/services/mirror/mirror_selector.dart';
 import 'package:dmx/core/services/protocol_cache.dart';
 import 'package:dmx/core/services/torrent_resume_store.dart';
-import 'package:dmx/core/services/background_service.dart';
+import 'package:dmx/features/browser/models/browser_tab.dart';
 import 'package:dmx/features/browser/services/ad_blocker_service.dart';
+import 'package:dmx/features/browser/services/inactivity_watchdog.dart';
 import 'package:dmx/features/browser/services/picture_in_picture_service.dart';
 import 'package:dmx/features/browser/services/reader_mode_service.dart';
-import 'package:dmx/features/browser/services/inactivity_watchdog.dart';
-import 'package:dmx/features/browser/models/browser_tab.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

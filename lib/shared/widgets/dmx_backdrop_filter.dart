@@ -1,13 +1,15 @@
 import 'dart:math';
 import 'dart:ui';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/services/background_gate.dart';
+import '../../core/services/logging_service.dart';
 import '../../core/services/performance_monitor.dart';
 import '../../core/services/power_monitor.dart';
-import '../../core/services/logging_service.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
 /// High-performance backdrop blur filter with battery, thermal, and low-end gating.
@@ -19,6 +21,7 @@ class DmxBackdropFilter extends StatefulWidget {
   final double sigmaY;
   final Widget child;
   final bool forceSolid;
+  final bool? enableBlur;
 
   const DmxBackdropFilter({
     super.key,
@@ -26,11 +29,15 @@ class DmxBackdropFilter extends StatefulWidget {
     required this.sigmaY,
     required this.child,
     this.forceSolid = false,
+    this.enableBlur,
   });
 
   static int _activeCount = 0;
   static const int _maxConcurrent = 1;
-  static bool disabled = false;
+  static bool _disabled = false;
+  static bool get disabled =>
+      _disabled || PerformanceMonitor.shouldReduceMotion;
+  static set disabled(bool value) => _disabled = value;
 
   @visibleForTesting
   static int get activeCount => _activeCount;
@@ -80,11 +87,12 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   }
 
   void _tryAllocate() {
+    final blurEnabled = widget.enableBlur ?? BackgroundGate.shouldAnimate;
     if (!kIsWeb &&
         !DmxBackdropFilter.disabled &&
         !widget.forceSolid &&
+        blurEnabled &&
         !_isLowEndDevice &&
-        BackgroundGate.shouldAnimate &&
         BackgroundGate.allowHeavyOps &&
         !PowerMonitor.screenOff &&
         !PerformanceMonitor.shouldReduceMotion &&
@@ -108,29 +116,34 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_allocated && (kIsWeb || DmxBackdropFilter.disabled || !BackgroundGate.shouldAnimate || !BackgroundGate.allowHeavyOps || PowerMonitor.screenOff || PerformanceMonitor.shouldReduceMotion)) {
+    final blurEnabled = widget.enableBlur ?? BackgroundGate.shouldAnimate;
+    if (_allocated && (kIsWeb || DmxBackdropFilter.disabled || !blurEnabled || !BackgroundGate.allowHeavyOps || PowerMonitor.screenOff || PerformanceMonitor.shouldReduceMotion)) {
       DmxBackdropFilter._activeCount = max(0, DmxBackdropFilter._activeCount - 1);
       _allocated = false;
-    } else if (!_allocated && !kIsWeb && !DmxBackdropFilter.disabled && BackgroundGate.shouldAnimate && BackgroundGate.allowHeavyOps && !PowerMonitor.screenOff && !PerformanceMonitor.shouldReduceMotion) {
+    } else if (!_allocated && !kIsWeb && !DmxBackdropFilter.disabled && blurEnabled && BackgroundGate.allowHeavyOps && !PowerMonitor.screenOff && !PerformanceMonitor.shouldReduceMotion) {
       _tryAllocate();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // FIX: P0-02 — Check all heavy ops gates, device status, and SettingsProvider.reduceVisuals
+    final blurEnabled = widget.enableBlur ?? BackgroundGate.shouldAnimate;
     if (kIsWeb ||
         DmxBackdropFilter.disabled ||
         _isLowEndDevice ||
-        !BackgroundGate.shouldAnimate ||
+        !blurEnabled ||
         widget.forceSolid ||
         PowerMonitor.screenOff ||
         PerformanceMonitor.shouldReduceMotion ||
         !BackgroundGate.allowHeavyOps ||
         !_allocated) {
-      return Container(
-        color: Colors.black.withValues(alpha: 0.35),
-        child: widget.child,
+      return RepaintBoundary(
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.35),
+          ),
+          child: widget.child,
+        ),
       );
     }
     bool reduceVisuals = false;
@@ -152,9 +165,11 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
       }
     }
     if (reduceVisuals || classicUi) {
-      return Container(
-        color: Colors.black.withValues(alpha: 0.35),
-        child: widget.child,
+      return RepaintBoundary(
+        child: Container(
+          color: Colors.black.withValues(alpha: 0.35),
+          child: widget.child,
+        ),
       );
     }
     final effectiveSigmaX = widget.sigmaX.clamp(0.0, 12.0);
@@ -169,6 +184,15 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
       );
       _lastSigmaX = effectiveSigmaX;
       _lastSigmaY = effectiveSigmaY;
+    }
+
+    if (effectiveSigmaX > 10.0 || effectiveSigmaY > 10.0) {
+      return RepaintBoundary(
+        child: ImageFiltered(
+          imageFilter: _cachedFilter!,
+          child: widget.child,
+        ),
+      );
     }
 
     return RepaintBoundary(

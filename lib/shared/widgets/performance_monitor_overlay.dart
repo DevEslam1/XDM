@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/services/background_gate.dart';
+import '../../core/services/logging_service.dart';
 import '../../core/services/performance_monitor.dart';
 import '../../core/services/power_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -27,7 +28,9 @@ class _PerformanceMonitorOverlayState extends State<PerformanceMonitorOverlay> {
     super.initState();
     try {
       _reduceMotion = SettingsProvider.instance.reduceVisuals;
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('PerformanceOverlay').fine('Failed to read reduceVisuals setting', e, st);
+    }
     if (kDebugMode) {
       _timer = Timer.periodic(const Duration(seconds: 2), (_) {
         if (mounted) {
@@ -53,7 +56,9 @@ class _PerformanceMonitorOverlayState extends State<PerformanceMonitorOverlay> {
     });
     try {
       SettingsProvider.instance.setReduceVisuals(_reduceMotion);
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('PerformanceOverlay').fine('Failed to save reduceVisuals setting', e, st);
+    }
   }
 
   @override

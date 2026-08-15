@@ -1,14 +1,17 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../utils/bounded_lru_cache.dart';
-import '../logging_service.dart';
 import '../background_gate.dart';
+import '../logging_service.dart';
 import '../power_monitor.dart';
-import 'url_patterns.dart';
 import 'site_registry.dart';
+import 'url_patterns.dart';
 
 final _log = LoggingService.logger('SiteIntelligenceService');
 
@@ -223,7 +226,7 @@ class SiteIntelligenceService {
     flushPending();
   }
 
-  final Map<String, SiteReliability> _reliability = {};
+  final LinkedHashMap<String, SiteReliability> _reliability = LinkedHashMap();
   bool _loaded = false;
   bool _disposed = false;
   Timer? _persistTimer;
@@ -646,8 +649,8 @@ class SiteIntelligenceService {
     if (uri == null) return;
     final host = uri.host.toLowerCase();
     if (host.isEmpty) return;
-    final stat =
-        _reliability.putIfAbsent(host, () => SiteReliability(domain: host));
+    final stat = _reliability.remove(host) ?? SiteReliability(domain: host);
+    _reliability[host] = stat;
     stat.totalAttempts++;
     if (success) {
       stat.successes++;
@@ -668,33 +671,27 @@ class SiteIntelligenceService {
       }
     }
 
-    // LRU / bounded map cap: evict oldest entry if size exceeds limit
-    if (_reliability.length > maxReliabilityEntries) {
-      String? oldestKey;
-      DateTime? oldestTime;
-      for (final entry in _reliability.entries) {
-        if (entry.key == host) continue;
-        final t = entry.value.lastSuccess ??
-            entry.value.lastFailure ??
-            DateTime.fromMillisecondsSinceEpoch(0);
-        if (oldestTime == null || t.isBefore(oldestTime)) {
-          oldestTime = t;
-          oldestKey = entry.key;
-        }
-      }
-      if (oldestKey != null) {
-        _reliability.remove(oldestKey);
-        _log.info(
-          'Evicted oldest reliability record for domain: $oldestKey (capacity: $maxReliabilityEntries)',
-        );
-      }
+    // LRU / bounded map cap: evict oldest entry from head if size exceeds limit
+    while (_reliability.length > maxReliabilityEntries) {
+      final oldestKey = _reliability.keys.first;
+      _reliability.remove(oldestKey);
+      _log.info(
+        'Evicted oldest reliability record for domain: $oldestKey (capacity: $maxReliabilityEntries)',
+      );
     }
 
     _persist();
   }
 
-  SiteReliability? getReliability(String host) =>
-      _reliability[host.toLowerCase()];
+  SiteReliability? getReliability(String host) {
+    final key = host.toLowerCase();
+    final item = _reliability.remove(key);
+    if (item != null) {
+      _reliability[key] = item; // re-insert at tail for LRU
+      return item;
+    }
+    return null;
+  }
 
   UrlAnalysisResult _fallbackResult() => UrlAnalysisResult(
         siteType: SiteType.genericWebpage,

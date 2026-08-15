@@ -1,5 +1,6 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'dart:typed_data';
+
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 class ScreenshotService {

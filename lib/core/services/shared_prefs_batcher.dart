@@ -44,6 +44,8 @@ class SharedPrefsBatcher {
     });
   }
 
+  SharedPreferences? _cachedPrefs;
+
   Future<void> flush() async {
     _flushTimer?.cancel();
     _flushTimer = null;
@@ -62,7 +64,7 @@ class SharedPrefsBatcher {
     if (toWrite.isEmpty && toRemove.isEmpty) return;
 
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = _cachedPrefs ??= await SharedPreferences.getInstance();
       for (final key in toRemove) {
         await prefs.remove(key);
       }

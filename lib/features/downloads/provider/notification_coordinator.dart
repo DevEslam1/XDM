@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:dmx/core/services/logging_service.dart';
 // ignore_for_file: prefer_initializing_formals
 
 import 'package:flutter/foundation.dart';
@@ -17,7 +18,6 @@ import '../../../core/services/power_monitor.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
-import 'package:dmx/core/services/logging_service.dart';
 
 /// Translates download events into user-facing notifications.
 ///

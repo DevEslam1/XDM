@@ -1,11 +1,10 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:dmx/core/services/mirror/mirror_registry.dart';
+import 'package:dmx/core/services/mirror/mirror_selector.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:dmx/core/services/mirror/mirror_selector.dart';
-import 'package:dmx/core/services/mirror/mirror_registry.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

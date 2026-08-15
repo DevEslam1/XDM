@@ -1,7 +1,8 @@
-import 'package:fake_async/fake_async.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/engines/http_download_engine.dart';
+import 'package:fake_async/fake_async.dart';
+import 'package:flutter_test/flutter_test.dart';
+
 import '../../helpers/test_helpers.dart';
 
 void main() {

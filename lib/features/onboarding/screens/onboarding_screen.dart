@@ -1,12 +1,14 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../settings/provider/settings_provider.dart';
 import 'permission_request_screen.dart';
 

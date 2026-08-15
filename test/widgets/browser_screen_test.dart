@@ -1,6 +1,7 @@
+import 'package:dmx/features/browser/screens/browser_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/features/browser/screens/browser_screen.dart';
+
 import '../helpers/test_helpers.dart';
 
 void main() {

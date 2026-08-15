@@ -1,14 +1,15 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:fl_chart/fl_chart.dart';
+
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
+import '../../../shared/design/dmx_design.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
+import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
-import '../../../shared/widgets/geometric_grid_background.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
-import '../../../shared/design/dmx_design.dart';
 import 'category_detail_screen.dart';
 
 class CategoriesScreen extends StatelessWidget {
