@@ -81,6 +81,8 @@ class FrameWatchdog {
   }
 
   static int downloadingTasksCount = 0;
+  static bool alwaysObserveHeavyDownloads = false;
+  static DateTime? _lastHeavyWarning;
 
   static void setDownloadingTasksCount(int count) {
     downloadingTasksCount = count;
@@ -89,10 +91,15 @@ class FrameWatchdog {
   static void _onTimings(List<FrameTiming> timings) {
     if (PowerMonitor.screenOff ||
         !DownloadEngine.appInForeground ||
-        DownloadEngine.isInBackground ||
-        downloadingTasksCount > 2) {
+        DownloadEngine.isInBackground) {
       return;
     }
+
+    final isHeavyDownloads = downloadingTasksCount > 2;
+    if (isHeavyDownloads && !alwaysObserveHeavyDownloads) {
+      return;
+    }
+
     if (PerformanceMonitor.instance.isActive) {
       PerformanceMonitor.instance.ingestFrameTimings(timings);
     }
@@ -108,11 +115,25 @@ class FrameWatchdog {
         if (!throttled) {
           final rate = _dropped / _total;
           if (rate > _alertThreshold) {
-            _log.warning(
-              '[Jank] ${(rate * 100).toStringAsFixed(1)}% frames dropped '
-              '($_dropped/$_total) in ${elapsed.inSeconds}s',
-            );
-            onJankDetected?.call(rate);
+            final now = DateTime.now();
+            if (isHeavyDownloads) {
+              if (_lastHeavyWarning == null ||
+                  now.difference(_lastHeavyWarning!) >=
+                      const Duration(minutes: 1)) {
+                _lastHeavyWarning = now;
+                _log.warning(
+                  '[Jank] ${(rate * 100).toStringAsFixed(1)}% frames dropped '
+                  '($_dropped/$_total) in ${elapsed.inSeconds}s (during heavy downloads)',
+                );
+                onJankDetected?.call(rate);
+              }
+            } else {
+              _log.warning(
+                '[Jank] ${(rate * 100).toStringAsFixed(1)}% frames dropped '
+                '($_dropped/$_total) in ${elapsed.inSeconds}s',
+              );
+              onJankDetected?.call(rate);
+            }
           }
         }
       }
@@ -122,13 +143,19 @@ class FrameWatchdog {
     }
   }
 
-  static void simulateWindowForTesting(int dropped, int total) {
+  static void simulateWindowForTesting(
+    int dropped,
+    int total, {
+    bool isHeavy = false,
+  }) {
     _dropped = dropped;
     _total = total;
     if (total > 0) {
       final rate = dropped / total;
       if (rate > _alertThreshold) {
-        onJankDetected?.call(rate);
+        if (!isHeavy || alwaysObserveHeavyDownloads) {
+          onJankDetected?.call(rate);
+        }
       }
     }
     _dropped = 0;

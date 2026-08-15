@@ -494,7 +494,9 @@ class StateStore {
     return adjusted;
   }
 
-  // FIX C-DL-02: Store SHA-256 string instead of int hashCode to eliminate collision bugs
+  // FIX C-DL-02 & OPT-L3: Fast fingerprint dedup with optional SHA-256 strict mode
+  static bool stateSaveStrictDedup = false;
+  static final Map<String, int> _lastFingerprints = {};
   static final Map<String, String> _lastWrittenPayloads = {};
   static final Map<String, int> _lastWrittenBytes = {};
   static final Map<String, DateTime> _lastSaveTimes = {};
@@ -502,7 +504,21 @@ class StateStore {
   static final Map<String, DmxStateStatus> _lastWrittenStatus = {};
   static const int _maxCachedPayloads = 16;
 
+  static int computeFingerprint(TransferState state) {
+    int chunksHash = 0;
+    for (final c in state.chunks) {
+      chunksHash ^= (c.downloaded * 31 + c.start);
+    }
+    return Object.hash(
+      state.status,
+      state.downloadedBytes,
+      state.totalSize,
+      chunksHash,
+    );
+  }
+
   static void removeCachedPayload(String targetPath) {
+    _lastFingerprints.remove(targetPath);
     _lastWrittenPayloads.remove(targetPath);
     _lastWrittenBytes.remove(targetPath);
     _lastSaveTimes.remove(targetPath);
@@ -553,21 +569,34 @@ class StateStore {
           }
         }
 
-        final payload = jsonEncode(state.toJson());
-        final payloadHash = sha256.convert(utf8.encode(payload)).toString();
-        if (!durable &&
-            !statusChanged &&
-            _lastWrittenPayloads[targetPath] == payloadHash) {
-          return; // Skip redundant state write
+        final fingerprint = computeFingerprint(state);
+        if (!durable && !statusChanged && !stateSaveStrictDedup) {
+          if (_lastFingerprints[targetPath] == fingerprint) {
+            return; // Skip redundant state write without jsonEncode
+          }
         }
-        _lastWrittenPayloads[targetPath] = payloadHash;
+        _lastFingerprints[targetPath] = fingerprint;
+
+        String? payload;
+        if (stateSaveStrictDedup) {
+          payload = jsonEncode(state.toJson());
+          final payloadHash = sha256.convert(utf8.encode(payload)).toString();
+          if (!durable &&
+              !statusChanged &&
+              _lastWrittenPayloads[targetPath] == payloadHash) {
+            return; // Skip redundant state write
+          }
+          _lastWrittenPayloads[targetPath] = payloadHash;
+        }
+
         _lastSaveTimes[targetPath] = now;
         _lastWrittenStatus[targetPath] = state.status;
-        if (_lastWrittenPayloads.length > _maxCachedPayloads) {
-          final keysToRemove = _lastWrittenPayloads.keys
-              .take(_lastWrittenPayloads.length - _maxCachedPayloads)
+        if (_lastFingerprints.length > _maxCachedPayloads) {
+          final keysToRemove = _lastFingerprints.keys
+              .take(_lastFingerprints.length - _maxCachedPayloads)
               .toList();
           for (final key in keysToRemove) {
+            _lastFingerprints.remove(key);
             _lastWrittenPayloads.remove(key);
             _lastWrittenBytes.remove(key);
             _lastSaveTimes.remove(key);
@@ -584,6 +613,7 @@ class StateStore {
         }
         _lastWrittenBytes[targetPath] = state.downloadedBytes;
 
+        payload ??= jsonEncode(state.toJson());
         final tmp = File(tmpPath);
         await tmp.parent.create(recursive: true);
         if (durable) {

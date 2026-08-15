@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/crypto_utils.dart';
 
@@ -15,14 +16,30 @@ class AppLockService {
   static const String _lockoutDurationKey = 'xdm_app_lock_lockout_duration';
   static const String _lockoutStartElapsedKey = 'xdm_app_lock_start_elapsed';
 
+  static const MethodChannel _monotonicChannel =
+      MethodChannel('com.dmx.app/monotonic_clock');
+
   static final Stopwatch _lockoutStopwatch = Stopwatch()..start();
   static int? _monotonicLockoutStartMs;
   static int? _totalLockoutDurationMs;
 
   @visibleForTesting
+  static int? mockMonotonicTimeMs;
+
+  static Future<int> getMonotonicTimeMs() async {
+    if (mockMonotonicTimeMs != null) return mockMonotonicTimeMs!;
+    try {
+      final val = await _monotonicChannel.invokeMethod<int>('elapsedRealtime');
+      if (val != null && val > 0) return val;
+    } catch (_) {}
+    return _lockoutStopwatch.elapsedMilliseconds;
+  }
+
+  @visibleForTesting
   static void resetMonotonicState() {
     _monotonicLockoutStartMs = null;
     _totalLockoutDurationMs = null;
+    mockMonotonicTimeMs = null;
     _lockoutStopwatch.reset();
     _lockoutStopwatch.start();
   }
@@ -83,10 +100,11 @@ class AppLockService {
   }
 
   static Future<Duration> lockoutRemaining() async {
+    final currentMono = await getMonotonicTimeMs();
+
     // 1. Monotonic in-memory check (immune to clock changes during process runtime)
     if (_monotonicLockoutStartMs != null && _totalLockoutDurationMs != null) {
-      final elapsedSinceStart =
-          _lockoutStopwatch.elapsedMilliseconds - _monotonicLockoutStartMs!;
+      final elapsedSinceStart = currentMono - _monotonicLockoutStartMs!;
       final remainingMs = _totalLockoutDurationMs! - elapsedSinceStart;
       if (remainingMs <= 0) {
         await resetFailedAttempts();
@@ -98,11 +116,23 @@ class AppLockService {
     // 2. Storage check across process restarts
     final rawUntil = await _storage.read(key: _lockedUntilKey);
     final rawDuration = await _storage.read(key: _lockoutDurationKey);
+    final rawStartElapsed = await _storage.read(key: _lockoutStartElapsedKey);
     final lockedUntil = int.tryParse(rawUntil ?? '');
     final totalDurationMs = int.tryParse(rawDuration ?? '');
+    final startElapsed = int.tryParse(rawStartElapsed ?? '');
 
     if (lockedUntil == null || totalDurationMs == null) {
       return Duration.zero;
+    }
+
+    // If monotonic start was stored and current monotonic is available
+    if (startElapsed != null && currentMono >= startElapsed) {
+      final elapsedSinceStart = currentMono - startElapsed;
+      if (elapsedSinceStart < totalDurationMs) {
+        _monotonicLockoutStartMs = startElapsed;
+        _totalLockoutDurationMs = totalDurationMs;
+        return Duration(milliseconds: totalDurationMs - elapsedSinceStart);
+      }
     }
 
     final wallRemaining = DateTime.fromMillisecondsSinceEpoch(lockedUntil)
@@ -110,7 +140,7 @@ class AppLockService {
 
     // If wall clock was manipulated backwards, enforce full duration
     if (wallRemaining.inMilliseconds > totalDurationMs + 1000) {
-      _monotonicLockoutStartMs = _lockoutStopwatch.elapsedMilliseconds;
+      _monotonicLockoutStartMs = currentMono;
       _totalLockoutDurationMs = totalDurationMs;
       return Duration(milliseconds: totalDurationMs);
     }
@@ -120,7 +150,7 @@ class AppLockService {
       return Duration.zero;
     }
 
-    _monotonicLockoutStartMs = _lockoutStopwatch.elapsedMilliseconds;
+    _monotonicLockoutStartMs = currentMono;
     _totalLockoutDurationMs = wallRemaining.inMilliseconds;
     return wallRemaining;
   }
@@ -167,7 +197,8 @@ class AppLockService {
     final lockedUntil =
         DateTime.now().add(Duration(seconds: seconds)).millisecondsSinceEpoch;
 
-    _monotonicLockoutStartMs = _lockoutStopwatch.elapsedMilliseconds;
+    final monoNow = await getMonotonicTimeMs();
+    _monotonicLockoutStartMs = monoNow;
     _totalLockoutDurationMs = durationMs;
 
     await _storage.write(key: _failedAttemptsKey, value: '0');
@@ -182,7 +213,7 @@ class AppLockService {
     );
     await _storage.write(
       key: _lockoutStartElapsedKey,
-      value: _monotonicLockoutStartMs.toString(),
+      value: monoNow.toString(),
     );
   }
 

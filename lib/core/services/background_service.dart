@@ -68,10 +68,15 @@ class BackgroundService {
     }
   }
 
-  /// Returns true on Android and iOS (non-web). On Android, uses
+  static bool _testMode = false;
+
+  @visibleForTesting
+  static set testMode(bool val) => _testMode = val;
+
+  /// Returns true on Android and iOS (non-web) or in test mode. On Android, uses
   /// flutter_background_service; on iOS, uses native BGTaskScheduler & URLSession.
   static bool get isSupported =>
-      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+      _testMode || (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
 
   static Future<void> initialize() async {
     if (!isSupported) return;
@@ -158,17 +163,27 @@ class BackgroundService {
   }
 
   @pragma('vm:entry-point')
-  static bool _onIosBackground(ServiceInstance service) {
+  static Future<bool> _onIosBackground(ServiceInstance service) async {
     _log.info(
       'iOS background callback invoked. Bridging to native BackgroundDownloadController.',
     );
     const channel = MethodChannel('com.dmx.app/background_download');
-    channel.invokeMethod<bool>('scheduleDownload').catchError((e) {
+    try {
+      final result = await channel
+          .invokeMethod<bool>('scheduleDownload')
+          .timeout(const Duration(seconds: 5));
+      final success = result ?? false;
+      _log.info('iOS background schedule completed. Success: $success');
+      return success;
+    } catch (e) {
       _log.warning('Failed to bridge to iOS background download controller: $e');
       return false;
-    });
-    return true;
+    }
   }
+
+  @visibleForTesting
+  static Future<bool> onIosBackgroundForTesting(ServiceInstance service) =>
+      _onIosBackground(service);
 
   static Future<void> start() async {
     if (!isSupported) {

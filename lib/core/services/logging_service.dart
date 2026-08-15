@@ -53,18 +53,33 @@ class LoggingService {
   static Timer? _releaseFlushTimer;
   static const int _maxReleaseBufferSize = 500;
 
+  static Duration _adaptedInterval() {
+    return BackgroundGate.adaptInterval(const Duration(seconds: 30));
+  }
+
+  @visibleForTesting
+  static Duration adaptedIntervalForTesting() => _adaptedInterval();
+
+  @visibleForTesting
+  static void bufferReleaseLogForTesting(String entry) => _bufferReleaseLog(entry);
+
+  static void _onFlush() {
+    flushLogBuffer();
+    if (_releaseLogBuffer.isNotEmpty) {
+      _releaseFlushTimer = Timer(_adaptedInterval(), _onFlush);
+    } else {
+      _releaseFlushTimer = null;
+    }
+  }
+
   static void _bufferReleaseLog(String entry) {
     _releaseLogBuffer.add(entry);
     if (_releaseLogBuffer.length >= _maxReleaseBufferSize) {
       flushLogBuffer();
+      _releaseFlushTimer?.cancel();
+      _releaseFlushTimer = null;
     } else {
-      // FIX-2.1: Route timer through BackgroundGate.adaptInterval
-      _releaseFlushTimer ??= Timer.periodic(
-        BackgroundGate.adaptInterval(const Duration(seconds: 30)),
-        (_) {
-          flushLogBuffer();
-        },
-      );
+      _releaseFlushTimer ??= Timer(_adaptedInterval(), _onFlush);
     }
   }
 

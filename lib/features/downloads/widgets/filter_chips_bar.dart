@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../../../core/app_theme.dart';
 import '../../../../core/utils/localization.dart';
 import '../../../../core/utils/responsive.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
 import '../provider/download_provider.dart';
@@ -257,7 +256,7 @@ class _StatusFilterButtons extends StatelessWidget {
           ]
         : <BoxShadow>[];
 
-    Widget buttonContent = Container(
+    final Widget buttonContent = Container(
       constraints: const BoxConstraints(minHeight: 48),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -287,17 +286,6 @@ class _StatusFilterButtons extends StatelessWidget {
         ],
       ),
     );
-
-    if (!classicUi && !selected) {
-      buttonContent = ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: DmxBackdropFilter(
-          sigmaX: 10,
-          sigmaY: 10,
-          child: buttonContent,
-        ),
-      );
-    }
 
     return Semantics(
       button: true,
@@ -346,7 +334,7 @@ class _CategoryChip extends StatelessWidget {
 
     final borderColor = color.withValues(alpha: isDark ? 0.45 : 0.35);
 
-    Widget chip = Container(
+    final Widget chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: bgColor,
@@ -394,17 +382,6 @@ class _CategoryChip extends StatelessWidget {
         ],
       ),
     );
-
-    if (!classicUi) {
-      chip = ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: DmxBackdropFilter(
-          sigmaX: 8,
-          sigmaY: 8,
-          child: chip,
-        ),
-      );
-    }
 
     return Semantics(
       button: true,

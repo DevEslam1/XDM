@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/ios_background_service.dart';
 import 'package:dmx/core/services/ios_background_capability.dart';
@@ -52,6 +54,41 @@ void main() {
         !kIsWeb && (Platform.isAndroid || Platform.isIOS),
       );
     });
+
+    test('onIosBackground returns false when channel call fails or returns false',
+        () async {
+      const channel = MethodChannel('com.dmx.app/background_download');
+
+      // 1. When channel returns false
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (methodCall) async {
+        return false;
+      });
+      final resFalse = await BackgroundService.onIosBackgroundForTesting(
+        _DummyServiceInstance(),
+      );
+      expect(resFalse, isFalse);
+
+      // 2. When channel throws error
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (methodCall) async {
+        throw PlatformException(code: 'ERROR', message: 'Failed');
+      });
+      final resError = await BackgroundService.onIosBackgroundForTesting(
+        _DummyServiceInstance(),
+      );
+      expect(resError, isFalse);
+
+      // 3. When channel returns true
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (methodCall) async {
+        return true;
+      });
+      final resTrue = await BackgroundService.onIosBackgroundForTesting(
+        _DummyServiceInstance(),
+      );
+      expect(resTrue, isTrue);
+    });
   });
 
   group('CrashReportingService Enriched API', () {
@@ -66,3 +103,5 @@ void main() {
     });
   });
 }
+
+class _DummyServiceInstance extends Fake implements ServiceInstance {}

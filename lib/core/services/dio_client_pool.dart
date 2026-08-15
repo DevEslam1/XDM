@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/power_monitor.dart';
+import 'package:dmx/core/services/service_registry.dart';
 import 'package:dmx/core/services/engine/engine_utils.dart';
 
 /// Manages a bounded pool of Dio clients with LRU eviction and background-aware cleanup.
 /// Task 1.2: Specialized Service for Dio instance management.
-class DioClientPool {
-  static const int _maxActiveClients = 20;
+class DioClientPool implements DisposableService, MemoryPressureListener {
+  static final _log = LoggingService.logger('DioClientPool');
+  static const int _maxActiveClients = 8;
   final Map<Dio, DateTime> _clientCreationTimes = {};
   final Set<Dio> _activeClients = {};
   final Set<Dio> _reservedClients = {};
@@ -15,13 +19,51 @@ class DioClientPool {
 
   DioClientPool() {
     _startCleanupTimer();
+    ServiceRegistry.register(this);
+    ServiceRegistry.registerMemoryPressureListener(this);
   }
+
+  int get activeClientsCount => _activeClients.length;
+  int get reservedClientsCount => _reservedClients.length;
 
   void _startCleanupTimer() {
     _cleanupTimer?.cancel();
     _cleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       _performCleanup();
     });
+  }
+
+  @override
+  void onMemoryPressure() {
+    final initialCount = _activeClients.length;
+    final toRelease = <Dio>[];
+
+    for (final client in _activeClients) {
+      final hasActiveDownloads =
+          _activeDownloadsPerClient[client]?.isNotEmpty ?? false;
+      if (!hasActiveDownloads) {
+        toRelease.add(client);
+      }
+    }
+
+    for (final client in toRelease) {
+      releaseClient(client);
+    }
+
+    // Halve the reserved pool
+    final reservedToKeep = (_reservedClients.length / 2).floor();
+    final reservedList = _reservedClients.toList();
+    if (reservedList.length > reservedToKeep) {
+      final excess = reservedList.sublist(reservedToKeep);
+      for (final client in excess) {
+        _reservedClients.remove(client);
+      }
+    }
+
+    final evictedCount = initialCount - _activeClients.length;
+    _log.info(
+      '[DioClientPool] Memory pressure handled: evicted $evictedCount idle clients ($initialCount -> ${_activeClients.length})',
+    );
   }
 
   void _performCleanup() {
@@ -87,7 +129,7 @@ class DioClientPool {
       if (oldestClient != null) {
         releaseClient(oldestClient);
       } else {
-        // All clients are busy, break and allow growth (though strictly should not happen with 20 limit)
+        // All clients are busy, break and allow growth
         break;
       }
     }
@@ -108,27 +150,35 @@ class DioClientPool {
     return client;
   }
 
+  @visibleForTesting
+  Map<Dio, Set<String>> get activeDownloadsPerClient => _activeDownloadsPerClient;
+
   void releaseClient(Dio client) {
+    _activeDownloadsPerClient[client]?.clear();
+    _activeDownloadsPerClient.remove(client);
     _reservedClients.remove(client);
     _activeClients.remove(client);
     _clientCreationTimes.remove(client);
-    _activeDownloadsPerClient.remove(client);
     try {
       client.close(force: true);
     } catch (_) {}
   }
 
   void registerDownload(Dio client, String taskId) {
-    _activeDownloadsPerClient[client]?.add(taskId);
+    _activeDownloadsPerClient.putIfAbsent(client, () => <String>{}).add(taskId);
   }
 
   void unregisterDownload(Dio client, String taskId) {
-    _activeDownloadsPerClient[client]?.remove(taskId);
+    final set = _activeDownloadsPerClient[client];
+    set?.remove(taskId);
   }
 
-  void dispose() {
+  @override
+  Future<void> dispose() async {
+    ServiceRegistry.unregister(this);
+    ServiceRegistry.unregisterMemoryPressureListener(this);
     _cleanupTimer?.cancel();
-    for (final client in _activeClients) {
+    for (final client in List<Dio>.from(_activeClients)) {
       try {
         client.close(force: true);
       } catch (_) {}

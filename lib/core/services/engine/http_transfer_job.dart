@@ -277,7 +277,38 @@ class HttpTransferJob {
     }
   }
 
+  static final TimestampedLruMap<String, bool> _serverIdentityCache =
+      TimestampedLruMap<String, bool>(maxCapacity: 50);
+  static int probeSkipCount = 0;
+  static int probeRunCount = 0;
+
+  static void invalidateIdentityCacheForUrl(String url) {
+    for (final key in List<String>.from(_serverIdentityCache.keys)) {
+      if (key.startsWith('$url|')) {
+        _serverIdentityCache.remove(key);
+      }
+    }
+  }
+
+  static void clearIdentityCache() {
+    for (final key in List<String>.from(_serverIdentityCache.keys)) {
+      _serverIdentityCache.remove(key);
+    }
+  }
+
   Future<void> _verifyServerIdentity(Dio dio) async {
+    final cacheKey =
+        '${cmd.punyUrl}|${_state!.etag}|${_state!.lastModified}|${_state!.totalSize}';
+    _serverIdentityCache.removeStale(const Duration(minutes: 10));
+    if (_serverIdentityCache.containsKey(cacheKey)) {
+      probeSkipCount++;
+      debugPrint(
+        '[DMX-Job] _verifyServerIdentity cache hit (skips: $probeSkipCount, runs: $probeRunCount)',
+      );
+      return;
+    }
+    probeRunCount++;
+
     try {
       final response = await dio.get<ResponseBody>(
         cmd.punyUrl,
@@ -341,8 +372,10 @@ class HttpTransferJob {
           _state!.etag ??= newEtag;
           _state!.lastModified ??= newLm;
         }
+        _serverIdentityCache.put(cacheKey, true);
       }
     } on FileChangedOnServerException {
+      _serverIdentityCache.remove(cacheKey);
       rethrow;
     } on DioException catch (e) {
       final status = e.response?.statusCode;
@@ -353,6 +386,7 @@ class HttpTransferJob {
           cmd.url.contains('expire=') ||
           cmd.url.contains('signature=');
       if (isYtOrSigned && (status == 401 || status == 403)) {
+        _serverIdentityCache.remove(cacheKey);
         _emitProgress(0, statusMessage: 'Updating links (URL expired)…');
         throw UrlExpiredException(
           'YouTube / signed URL expired during identity probe (HTTP $status).',

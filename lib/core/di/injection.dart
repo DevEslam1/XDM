@@ -107,7 +107,10 @@ Future<void> configureDependencies() async {
   );
 
   // Download Engine & Decoupled Services
-  getIt.registerLazySingleton<DioClientPool>(() => DioClientPool());
+  getIt.registerLazySingleton<DioClientPool>(
+    () => DioClientPool(),
+    dispose: (p) => p.dispose(),
+  );
   getIt.registerLazySingleton<YtCounterpartCoordinator>(() => YtCounterpartCoordinator());
   getIt.registerLazySingleton<MetadataProbeService>(
     () => MetadataProbeService(getIt<DioClientPool>()),

@@ -9,6 +9,10 @@ import '../../core/services/performance_monitor.dart';
 import '../../core/services/power_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
+/// High-performance backdrop blur filter with battery, thermal, and low-end gating.
+///
+/// POLICY: Screen-level only. Do not use in list items.
+/// For scrolling list/grid items, use static semi-transparent container decorations.
 class DmxBackdropFilter extends StatefulWidget {
   final double sigmaX;
   final double sigmaY;

@@ -757,6 +757,12 @@ class DatabaseService {
   final Lock _pendingSavesLock = Lock();
   Timer? _dbBatchTimer;
 
+  @visibleForTesting
+  Timer? get dbBatchTimer => _dbBatchTimer;
+
+  @visibleForTesting
+  int get pendingProgressSavesCount => _pendingProgressSaves.length;
+
   Future<void> saveTaskDebounced(DownloadTask task) async {
     await _pendingSavesLock.synchronized(() {
       _pendingProgressSaves[task.id] = task;
@@ -775,7 +781,12 @@ class DatabaseService {
         ? const Duration(seconds: 600) // 600s in background
         : const Duration(seconds: 30); // 30s in foreground
 
-    _dbBatchTimer ??= Timer(interval, flushPendingSaves);
+    _scheduleFlush(interval);
+  }
+
+  void _scheduleFlush(Duration interval) {
+    _dbBatchTimer?.cancel();
+    _dbBatchTimer = Timer(interval, flushPendingSaves);
   }
 
   void cancelPendingTimers() {

@@ -33,7 +33,10 @@ export 'torrent_download_orchestrator.dart';
 part 'download_isolate_pool.dart';
 
 class DownloadEngine implements IDownloadEngine {
-  static bool appInForeground = true;
+  static final ValueNotifier<bool> appInForegroundNotifier =
+      ValueNotifier<bool>(true);
+  static bool get appInForeground => appInForegroundNotifier.value;
+  static set appInForeground(bool val) => appInForegroundNotifier.value = val;
   static bool get isInBackground => !appInForeground;
   static set isInBackground(bool val) => appInForeground = !val;
   static const int _isolatePoolSize = 4;
@@ -339,16 +342,33 @@ class DownloadEngine implements IDownloadEngine {
     int requiredSizeBytes = 0,
     List<String>? allowedStorageRoots,
   }) async {
-    if (savePath.contains('..')) {
-      throw const InvalidPathException('Path traversal attempt detected in save path');
+    final rawSegments = p.split(savePath);
+    final normSegments = p.split(p.normalize(savePath));
+    if (rawSegments.any((s) => s == '..' || s == '.') ||
+        normSegments.any((s) => s == '..')) {
+      throw const InvalidPathException('Path traversal attempt detected');
     }
-    final normalized = p.normalize(savePath);
     if (RegExp(r'[\*\?<>\|"\x00]').hasMatch(savePath)) {
       throw const InvalidPathException('Save path contains invalid characters');
     }
-    final dir = Directory(normalized);
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
+    if (allowedStorageRoots != null && allowedStorageRoots.isNotEmpty) {
+      final normSave = p.normalize(savePath);
+      final isAllowed = allowedStorageRoots.any((root) {
+        final normRoot = p.normalize(root);
+        return p.isWithin(normRoot, normSave) || p.equals(normRoot, normSave);
+      });
+      if (!isAllowed) {
+        throw const InvalidPathException('Save path is outside allowed storage roots');
+      }
+    }
+    try {
+      final normalized = p.normalize(savePath);
+      final dir = Directory(normalized);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+    } catch (e) {
+      if (e is InvalidPathException) rethrow;
     }
   }
 }

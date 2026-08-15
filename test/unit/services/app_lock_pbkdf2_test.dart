@@ -77,5 +77,37 @@ void main() {
       final verifiedAgain = await AppLockService.verifyPin('1111');
       expect(verifiedAgain, isTrue);
     });
+
+    test('lockout remains enforced when device clock is rolled back', () async {
+      await AppLockService.setPin('1234');
+
+      // Trigger 5 failed attempts to initiate lockout (level 1 = 30s = 30000ms)
+      for (int i = 0; i < 5; i++) {
+        await AppLockService.verifyPin('0000');
+      }
+
+      final remainingInitial = await AppLockService.lockoutRemaining();
+      expect(remainingInitial.inSeconds, greaterThan(0));
+      expect(remainingInitial.inSeconds, lessThanOrEqualTo(30));
+
+      // Simulate wall clock rollback by modifying stored locked_until far into future or past
+      final storedDuration = int.parse(storage['xdm_app_lock_lockout_duration']!);
+      expect(storedDuration, equals(30000));
+
+      // Simulate device clock rollback by setting lockedUntil 1 hour in future vs now
+      storage['xdm_app_lock_locked_until'] =
+          (DateTime.now().millisecondsSinceEpoch + 3600000).toString();
+
+      // Reset in-memory state to force re-reading from storage
+      AppLockService.resetMonotonicState();
+
+      // Lockout remaining should enforce full duration rather than allowing bypass
+      final remainingAfterRollback = await AppLockService.lockoutRemaining();
+      expect(remainingAfterRollback.inSeconds, greaterThan(0));
+      expect(remainingAfterRollback.inMilliseconds, equals(30000));
+
+      // Verification must be rejected while lockout is active
+      expect(await AppLockService.verifyPin('1234'), isFalse);
+    });
   });
 }
