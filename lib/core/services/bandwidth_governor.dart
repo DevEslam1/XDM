@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:math';
 
@@ -22,9 +23,36 @@ class BandwidthGovernor {
     double burstFactor = 1.5,
     double? throttleFactor,
   ])  : _burstFactor = burstFactor.clamp(1.0, 1.5),
-        throttleFactor = throttleFactor ?? PowerMonitor.throttleFactor;
+        throttleFactor = throttleFactor ?? PowerMonitor.throttleFactor {
+    _startDomainCleanup();
+  }
 
-  void dispose() {}
+  /// Periodically drops domain states that have been idle for > 10 min so the
+  /// in-memory map cannot grow unbounded on long-running jobs.
+  Timer? _domainCleanupTimer;
+
+  void _startDomainCleanup() {
+    _domainCleanupTimer?.cancel();
+    _domainCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      _cleanupStaleDomainStates();
+    });
+  }
+
+  void _cleanupStaleDomainStates() {
+    if (_domainStates.isEmpty) return;
+    final cutoff = DateTime.now().subtract(const Duration(minutes: 10));
+    _domainStates.removeWhere((_, state) => state.lastUpdated.isBefore(cutoff));
+  }
+
+  /// Releases all per-task and per-domain tracking state and cancels timers.
+  void dispose() {
+    _domainCleanupTimer?.cancel();
+    _domainCleanupTimer = null;
+    _taskLimits.clear();
+    _taskLastRefill.clear();
+    _taskTokens.clear();
+    _domainStates.clear();
+  }
 
   /// True when power monitoring is active and throttling bandwidth.
   bool get powerThrottleActive => throttleFactor < 1.0;
@@ -180,6 +208,7 @@ class BandwidthGovernor {
 
 class _DomainState {
   final Queue<double> _speedHistory = Queue<double>();
+  DateTime lastUpdated = DateTime.now();
 
   double get averageSpeed => _speedHistory.isEmpty
       ? 0
@@ -187,6 +216,7 @@ class _DomainState {
 
   void updateSpeed(double speed) {
     _speedHistory.add(speed);
+    lastUpdated = DateTime.now();
     if (_speedHistory.length > 20) {
       _speedHistory.removeFirst();
     }

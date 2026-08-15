@@ -19,7 +19,7 @@ class ConnectionManager {
         supportedProtocols: const ['h2', 'http/1.1'],
       );
       await socket.close();
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
 
   static Future<bool> detectHttp2(String url) async {

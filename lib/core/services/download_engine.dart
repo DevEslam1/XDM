@@ -12,6 +12,7 @@ import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/core/utils/url_utils.dart';
 import '../interfaces/i_download_engine.dart';
 import 'dio_client_pool.dart';
+import 'service_registry.dart';
 import 'yt_counterpart_coordinator.dart';
 import 'metadata_probe_service.dart';
 import 'http_download_orchestrator.dart';
@@ -195,7 +196,7 @@ class DownloadEngine implements IDownloadEngine {
                   name.startsWith('$baseName.dmxpart')) {
                 try {
                   await entity.delete();
-                } catch (_) {}
+                } catch (_) {} // coverage:ignore-line
               }
             }
           }
@@ -209,17 +210,21 @@ class DownloadEngine implements IDownloadEngine {
         if (f is File && (f.path.endsWith('.dmxpart.tmp') || f.path.endsWith('.tmp'))) {
           try {
             await f.delete();
-          } catch (_) {}
+          } catch (_) {} // coverage:ignore-line
         }
       }
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
 
   Future<DownloadIsolatePool> _ensurePool() {
     final existing = _pool;
     if (existing != null) return Future.value(existing);
     return _poolInit ??= () async {
-      final pool = DownloadIsolatePool(size: _isolatePoolSize);
+      final pool = DownloadIsolatePool(
+        size: _isolatePoolSize,
+        powerAware: true,
+      );
+      ServiceRegistry.registerMemoryPressureListener(pool);
       await pool.init();
       _pool = pool;
       return pool;
@@ -327,6 +332,9 @@ class DownloadEngine implements IDownloadEngine {
   }
 
   void dispose() {
+    if (_pool != null) {
+      ServiceRegistry.unregisterMemoryPressureListener(_pool!);
+    }
     _pool?.dispose();
     _dioPool.dispose();
     _ytCoordinator.dispose();

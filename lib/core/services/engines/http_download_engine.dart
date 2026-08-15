@@ -147,7 +147,7 @@ class HttpDownloadEngine {
 
   int recommendedThreads(String taskId, int fallback) {
     final t = _trackers[taskId];
-    if (t == null) return fallback;
+    if (t == null || t.recommendation == 0) return fallback;
     return t.recommendation.clamp(1, fallback);
   }
 

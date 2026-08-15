@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.PackageInfo
 import android.media.MediaScannerConnection
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -14,6 +15,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.StatFs
 import android.provider.MediaStore
+import android.provider.Settings
 import android.util.Log
 import android.view.WindowManager
 import java.io.File
@@ -389,6 +391,22 @@ class MainActivity : FlutterActivity() {
                     }
                 } else "none"
                 result.success(status)
+            } else {
+                result.notImplemented()
+            }
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.dmx.app/power").setMethodCallHandler { call, result ->
+            if (call.method == "requestIgnoreBatteryOptimizations") {
+                try {
+                    val intent = Intent(
+                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:$packageName")
+                    )
+                    startActivity(intent)
+                    result.success(true)
+                } catch (e: Exception) {
+                    result.error("IGNORE_BATTERY_OPTIMIZATIONS_FAILED", e.message, null)
+                }
             } else {
                 result.notImplemented()
             }

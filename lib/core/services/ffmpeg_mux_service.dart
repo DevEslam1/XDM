@@ -77,7 +77,7 @@ class FFmpegMuxService {
             if (sessionHolder.activeSession != null) {
               FFmpegKit.cancel(sessionHolder.activeSession!.getSessionId());
             }
-          } catch (_) {}
+          } catch (_) {} // coverage:ignore-line
           return false;
         },
       );
@@ -220,7 +220,7 @@ class FFmpegMuxService {
             '(video=$hasVideo audio=$hasAudio size=$sizeOk dur=$durationOk)');
         try {
           if (await file.exists()) await file.delete();
-        } catch (_) {}
+        } catch (_) {} // coverage:ignore-line
         return false;
       }
       return true;
@@ -228,7 +228,7 @@ class FFmpegMuxService {
       debugPrint('[FFmpeg] FFprobe validation exception: $e');
       try {
         if (await file.exists()) await file.delete();
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
       return false;
     }
   }

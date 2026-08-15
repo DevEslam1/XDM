@@ -124,6 +124,6 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     // Task 4.3: Flush database saves on backgrounding/detaching
     try {
       DatabaseService.instance.flushPendingSaves();
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
 }

@@ -3,19 +3,19 @@ part of 'download_engine.dart';
 class EngineMessage {
   EngineMessage._(this.type, this.taskId, this.data, this.seq);
   static const int protocolVersion = 1;
-  final String type;
+  final EngineMessageType type;
   final String taskId;
   final Map<String, dynamic> data;
   final int seq;
   static Map<String, dynamic> encode({
-    required String type,
+    required EngineMessageType type,
     required String taskId,
     int seq = 0,
     Map<String, dynamic>? data,
   }) =>
       {
         'proto': protocolVersion,
-        'type': type,
+        'type': type.name,
         'taskId': taskId,
         'seq': seq,
         if (data != null) 'data': data,
@@ -24,9 +24,9 @@ class EngineMessage {
     try {
       if (raw is! Map) return null;
       if (raw['proto'] != protocolVersion) return null;
-      final type = raw['type'];
+      final type = EngineMessageType.fromWire(raw['type']);
       final taskId = raw['taskId'];
-      if (type is! String || taskId is! String) return null;
+      if (type == null || taskId is! String) return null;
       final data = raw['data'];
       return EngineMessage._(
         type,
@@ -40,7 +40,7 @@ class EngineMessage {
   }
 }
 
-class DownloadIsolatePool {
+class DownloadIsolatePool implements MemoryPressureListener {
   DownloadIsolatePool({
     int size = 4,
     int? maxPoolSize,
@@ -153,7 +153,7 @@ class DownloadIsolatePool {
       _workers.remove(w);
       try {
         w.commandPort?.send({'t': 'shutdown'});
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
       w.inbox.close();
       w.errorPort.close();
       w.isolate.kill(priority: Isolate.beforeNextEvent);
@@ -404,6 +404,7 @@ class DownloadIsolatePool {
     return false;
   }
 
+  @override
   void onMemoryPressure() {
     // FIX-1.5: Clear _jobCrashCounts for completed / non-active jobs
     _jobCrashCounts.removeWhere((taskId, _) => !_isJobActiveOrQueued(taskId));
@@ -479,7 +480,7 @@ class PoolJob {
   void _deliverError(String type, String message, int? status) {
     if (_disposed) return;
     _incoming.sendPort.send(EngineMessage.encode(
-      type: 'error',
+      type: EngineMessageType.error,
       taskId: command.taskId,
       data: {'errorType': type, 'errorMessage': message, 'errorStatus': status},
     ));

@@ -61,19 +61,25 @@ class FilterChipsBar extends StatelessWidget {
 
         return Selector<DownloadProvider, _FilterState>(
           selector: (_, p) {
+            final activeFilters = p.categoryFilters;
+            // FIX-P3: Only tally per-category counts when a category filter is
+            // active (that is the only consumer). Avoids a full-task scan on
+            // every progress tick when the filter list is empty.
             final counts = <String, int>{};
-            for (final task in p.tasks) {
-              if (isHistory &&
-                  task.status != DownloadStatus.completed &&
-                  task.status != DownloadStatus.failed) {
-                continue;
+            if (activeFilters.isNotEmpty) {
+              for (final task in p.tasks) {
+                if (isHistory &&
+                    task.status != DownloadStatus.completed &&
+                    task.status != DownloadStatus.failed) {
+                  continue;
+                }
+                final cat = task.category.toLowerCase();
+                counts[cat] = (counts[cat] ?? 0) + 1;
               }
-              final cat = task.category.toLowerCase();
-              counts[cat] = (counts[cat] ?? 0) + 1;
             }
             return _FilterState(
               activeFilter: p.statusFilter,
-              categoryFilters: p.categoryFilters.toList(),
+              categoryFilters: activeFilters.toList(),
               categoryCounts: counts,
             );
           },

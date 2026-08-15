@@ -685,9 +685,17 @@ class _NavigationRailWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final downloadProvider = context.watch<DownloadProvider>();
-    final settingsProvider = context.watch<SettingsProvider>();
-    final activeColor = getActiveFilterColor(downloadProvider, isDark);
+    // FIX-P3: Read providers instead of watch()ing them — the rail already
+    // receives navState/settingsTuple as params, so progress-tick rebuilds
+    // would otherwise repaint the whole rail every second. Selectors scope
+    // rebuilds to the accent color inputs only.
+    final downloadProvider = context.read<DownloadProvider>();
+    final activeColor = context.select(
+      (DownloadProvider p) => getActiveFilterColor(p, isDark),
+    );
+    final settingsTabColor = context.select(
+      (SettingsProvider s) => getSettingsTabColor(s.activeSettingsTabIndex, isDark),
+    );
     final inactiveColor =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final navBg = isDark
@@ -797,8 +805,7 @@ class _NavigationRailWidget extends StatelessWidget {
                           selectedIcon: Icons.settings_rounded,
                           label: L10n.of(context, 'title_config'),
                           isSelected: currentIndex == 2,
-                          activeColor: getSettingsTabColor(
-                              settingsProvider.activeSettingsTabIndex, isDark),
+                          activeColor: settingsTabColor,
                           inactiveColor: inactiveColor,
                           onTap: () {
                             if (settingsTuple.vibration) {
@@ -990,13 +997,17 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSelected = currentIndex == index;
-    final downloadProvider = context.watch<DownloadProvider>();
-    final settingsProvider = context.watch<SettingsProvider>();
+    // FIX-P3: Select only the accent-color inputs instead of watch()ing the
+    // whole providers, so the nav bar does not rebuild on every progress tick.
     final activeColor = (index == 0)
-        ? getActiveFilterColor(downloadProvider, isDark)
+        ? context.select(
+            (DownloadProvider p) => getActiveFilterColor(p, isDark),
+          )
         : (index == 2)
-            ? getSettingsTabColor(
-                settingsProvider.activeSettingsTabIndex, isDark)
+            ? context.select(
+                (SettingsProvider s) =>
+                    getSettingsTabColor(s.activeSettingsTabIndex, isDark),
+              )
             : (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
     final inactiveColor =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;

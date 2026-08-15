@@ -48,3 +48,12 @@ class TorrentEnginePauseException implements Exception {
   @override
   String toString() => 'TorrentEnginePauseException: $message';
 }
+
+/// Raised when a server does not support byte-range requests.
+class RangeUnsupportedException implements Exception {}
+
+/// Raised when the remote file changed between resume attempts.
+class FileChangedOnServerException implements Exception {
+  @override
+  String toString() => 'File changed on server. Restart required.';
+}

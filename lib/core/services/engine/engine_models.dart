@@ -3,6 +3,30 @@ import '../download_journal.dart';
 
 typedef ValueChangedProgress = void Function(DownloadProgress progress);
 
+/// Typed kinds of engine IPC messages exchanged with the download worker.
+///
+/// Wire format stays as the string [name] for isolate compatibility; the enum
+/// gives compile-time checking on the host side.
+enum EngineMessageType {
+  progress,
+  done,
+  error,
+  hello,
+  idle,
+  limits,
+  job,
+  cancel,
+  shutdown;
+
+  static EngineMessageType? fromWire(Object? value) {
+    if (value is! String) return null;
+    for (final t in EngineMessageType.values) {
+      if (t.name == value) return t;
+    }
+    return null;
+  }
+}
+
 enum YtStreamKind { video, audio, combined }
 
 enum MergeFailureKind {
@@ -492,4 +516,11 @@ class DownloadCommand {
             (m['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
         ytCounterpartTaskId: m['ytCounterpartTaskId'] as String?,
       );
+}
+
+/// A single (timestamp, bytes) pair captured for speed measurement.
+class SpeedSample {
+  final int timestampMs;
+  final int bytes;
+  SpeedSample(this.timestampMs, this.bytes);
 }

@@ -317,16 +317,22 @@ class UpdateService {
         );
       }
 
-      final bytes = await apkFile.readAsBytes();
-      if (bytes.length < 4 ||
-          bytes[0] != 0x50 ||
-          bytes[1] != 0x4B ||
-          bytes[2] != 0x03 ||
-          bytes[3] != 0x04) {
-        return const ApkVerificationResult(
-          isValid: false,
-          failureReason: 'Invalid zip/APK file signature header',
-        );
+      // L4/H22: Stream the header check instead of buffering the whole APK.
+      final raf = await apkFile.open(mode: FileMode.read);
+      try {
+        final header = await raf.read(4);
+        if (header.length < 4 ||
+            header[0] != 0x50 ||
+            header[1] != 0x4B ||
+            header[2] != 0x03 ||
+            header[3] != 0x04) {
+          return const ApkVerificationResult(
+            isValid: false,
+            failureReason: 'Invalid zip/APK file signature header',
+          );
+        }
+      } finally {
+        await raf.close();
       }
 
       String? certFingerprint;
@@ -363,7 +369,7 @@ class UpdateService {
             expectedFingerprint.trim().toLowerCase()) {
           try {
             await apkFile.delete();
-          } catch (_) {}
+          } catch (_) {} // coverage:ignore-line
           return ApkVerificationResult(
             isValid: false,
             certificateFingerprint: certFingerprint,

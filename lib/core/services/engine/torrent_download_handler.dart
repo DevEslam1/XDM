@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
 import '../download_engine.dart';
 import '../logging_service.dart';
+import '../power_monitor.dart';
 import '../torrent_resume_store.dart';
 import '../torrent_service.dart';
 
@@ -171,7 +172,7 @@ class TorrentDownloadHandler {
               if (await tempTorrentFile.exists()) {
                 await tempTorrentFile.delete();
               }
-            } catch (_) {}
+            } catch (_) {} // coverage:ignore-line
           }
         } else {
           id = TorrentService.addTorrentFile(filePath, saveDir, sourceKey: url);
@@ -195,7 +196,7 @@ class TorrentDownloadHandler {
       if (torrentCompleted) return;
       try {
         TorrentService.pauseTorrent(id);
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
       await Future.delayed(const Duration(milliseconds: 200));
       List<Map<String, dynamic>>? pauseFiles = getTorrentFiles?.call();
       try {
@@ -216,7 +217,7 @@ class TorrentDownloadHandler {
                   })
               .toList();
         }
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
       final pauseSummary = normalizeTorrentFiles(pauseFiles);
       onProgress(DownloadProgress(
         downloadedBytes: pauseSummary.downloaded,
@@ -239,7 +240,7 @@ class TorrentDownloadHandler {
     if (cancelToken.isCancelled) {
       try {
         TorrentService.pauseTorrent(id);
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
       throw DioException(
         requestOptions: RequestOptions(path: url),
         type: DioExceptionType.cancel,
@@ -249,7 +250,7 @@ class TorrentDownloadHandler {
 
     try {
       TorrentService.resumeTorrent(id);
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
 
     await _listenForCompletion(
       id,
@@ -316,10 +317,16 @@ class TorrentDownloadHandler {
           !torrent.hasMetadata;
 
       List<Map<String, dynamic>>? resolvedFiles = getTorrentFiles?.call();
-      if (!isCheckingOrMetadata && torrent.hasMetadata) {
-        // FIX-P1-02 / FIX-BG-04: Throttle accurate file progress (4s foreground, 10s background)
+      final cachedFileCount = cachedAccurateFiles?.length ?? 0;
+      // FIX-BG-05: Large torrents skip expensive per-file progress queries.
+      final skipPerFileSync = cachedFileCount > 1000;
+      if (!isCheckingOrMetadata &&
+          torrent.hasMetadata &&
+          !PowerMonitor.screenOff &&
+          !skipPerFileSync) {
+        // FIX-P1-02 / FIX-BG-04: Throttle accurate file progress (4s foreground, 30s background)
         final syncInterval = DownloadEngine.isInBackground
-            ? const Duration(seconds: 10)
+            ? const Duration(seconds: 30)
             : const Duration(seconds: 4);
 
         if (now.difference(lastAccurateSync) >= syncInterval || cachedAccurateFiles == null) {
@@ -342,7 +349,7 @@ class TorrentDownloadHandler {
                       })
                   .toList();
             }
-          } catch (_) {}
+          } catch (_) {} // coverage:ignore-line
         }
         if (cachedAccurateFiles != null) {
           resolvedFiles = cachedAccurateFiles;

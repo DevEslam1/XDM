@@ -151,7 +151,7 @@ bool isLikelyHtmlResponse(Headers headers, {List<int>? firstChunk}) {
           sample.contains('<body')) {
         return true;
       }
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
   return false;
 }

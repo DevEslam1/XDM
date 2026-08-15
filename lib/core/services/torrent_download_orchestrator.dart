@@ -68,7 +68,7 @@ class TorrentDownloadOrchestrator {
     cancelToken.whenCancel.then((_) async {
       try {
         TorrentService.pauseTorrent(id);
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
     });
 
     try {

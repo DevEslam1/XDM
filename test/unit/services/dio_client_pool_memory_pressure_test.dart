@@ -16,18 +16,18 @@ void main() {
       await pool.dispose();
     });
 
-    test('caps pool at 8 max active clients when acquiring multiple clients', () {
+    test('caps pool at 6 max active clients when acquiring multiple clients', () {
       final clients = List.generate(12, (i) => pool.acquireClient());
       expect(clients.length, equals(12));
-      expect(pool.activeClientsCount, lessThanOrEqualTo(8));
+      expect(pool.activeClientsCount, lessThanOrEqualTo(6));
     });
 
     test('onMemoryPressure releases unbound clients and halves reserved pool', () {
       final clients = <dynamic>[];
-      for (int i = 0; i < 8; i++) {
+      for (int i = 0; i < 6; i++) {
         clients.add(pool.acquireClient());
       }
-      expect(pool.activeClientsCount, equals(8));
+      expect(pool.activeClientsCount, equals(6));
 
       // Bind 2 clients to active downloads
       pool.registerDownload(clients[0], 'task_1');

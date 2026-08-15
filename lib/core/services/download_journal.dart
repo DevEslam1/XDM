@@ -1,207 +1,15 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
+import '../constants/thresholds.dart';
 import 'download_engine.dart';
 import 'power_monitor.dart';
+import 'transfer_state.dart';
 
-enum DmxStateStatus { active, paused, complete, failed }
-
-class ChunkState {
-  ChunkState({required this.start, required this.end, this.downloaded = 0});
-
-  final int start;
-  int end;
-  int downloaded;
-
-  int get size => end < 0 ? -1 : end - start + 1;
-  bool get isComplete => end >= 0 && downloaded >= size;
-
-  double get ratio {
-    final s = size;
-    if (s < 0) return -1.0;
-    if (s == 0) return downloaded > 0 ? 1.0 : 0.0;
-    return (downloaded / s).clamp(0.0, 1.0);
-  }
-
-  Map<String, dynamic> toJson() =>
-      {'start': start, 'end': end, 'downloaded': downloaded};
-
-  static ChunkState fromJson(Map<String, dynamic> j) {
-    var d = (j['downloaded'] as num?)?.toInt() ?? 0;
-    if (d < 0) d = 0;
-    return ChunkState(
-      start: (j['start'] as num?)?.toInt() ?? 0,
-      end: (j['end'] as num?)?.toInt() ?? -1,
-      downloaded: d,
-    );
-  }
-}
-
-class TransferState {
-  TransferState({
-    required this.totalSize,
-    required this.threadCount,
-    required this.chunks,
-    this.url,
-    this.etag,
-    this.lastModified,
-    this.status = DmxStateStatus.active,
-    DateTime? updatedAt,
-    this.migrationNote,
-  }) : updatedAt = updatedAt ?? DateTime.now();
-
-  static const int currentVersion = 3;
-
-  int totalSize;
-  int threadCount;
-  List<ChunkState> chunks;
-  String? url;
-  String? etag;
-  String? lastModified;
-  DmxStateStatus status;
-  DateTime updatedAt;
-  String? migrationNote;
-
-  int get downloadedBytes {
-    var sum = 0;
-    for (final c in chunks) {
-      sum += c.downloaded;
-    }
-    if (totalSize > 0 && sum > totalSize) sum = totalSize;
-    return sum;
-  }
-
-  bool get isComplete => totalSize > 0 && downloadedBytes >= totalSize;
-  List<double> get chunkRatios => chunks.map((c) => c.ratio).toList();
-  List<int> get progressCompat => chunks.map((c) => c.downloaded).toList();
-
-  Map<String, dynamic> toJson() => {
-        'version': currentVersion,
-        'v': currentVersion,
-        'totalSize': totalSize,
-        'threadCount': threadCount,
-        'progress': progressCompat,
-        'etag': etag,
-        'lastModified': lastModified,
-        'url': url,
-        'status': status.name,
-        'updatedAt': updatedAt.millisecondsSinceEpoch,
-        'chunks': chunks.map((c) => c.toJson()).toList(),
-        if (migrationNote != null) 'migrationNote': migrationNote,
-      };
-
-  TransferState clone() => TransferState(
-        totalSize: totalSize,
-        threadCount: threadCount,
-        chunks: chunks
-            .map((c) => ChunkState(
-                start: c.start, end: c.end, downloaded: c.downloaded))
-            .toList(),
-        url: url,
-        etag: etag,
-        lastModified: lastModified,
-        status: status,
-        updatedAt: updatedAt,
-        migrationNote: migrationNote,
-      );
-
-  static TransferState? tryParseV3(Map<String, dynamic> json) {
-    try {
-      final v =
-          (json['v'] as num?)?.toInt() ?? (json['version'] as num?)?.toInt();
-      if (v != currentVersion) return null;
-      final rawChunks = json['chunks'];
-      if (rawChunks is! List || rawChunks.isEmpty) return null;
-      final chunks = rawChunks
-          .whereType<Map>()
-          .map((c) => ChunkState.fromJson(Map<String, dynamic>.from(c)))
-          .toList();
-      if (chunks.isEmpty) return null;
-      final statusName = json['status'] as String? ?? 'active';
-      return TransferState(
-        totalSize:
-            ((json['totalSize'] as num?)?.toInt() ?? 0).clamp(0, 1 << 62),
-        threadCount: ((json['threadCount'] as num?)?.toInt() ?? chunks.length)
-            .clamp(1, 64),
-        chunks: chunks,
-        url: json['url'] as String?,
-        etag: json['etag'] as String?,
-        lastModified: json['lastModified'] as String?,
-        status: DmxStateStatus.values.firstWhere(
-          (s) => s.name == statusName,
-          orElse: () => DmxStateStatus.active,
-        ),
-        updatedAt: json['updatedAt'] is int
-            ? DateTime.fromMillisecondsSinceEpoch(json['updatedAt'] as int)
-            : DateTime.now(),
-      );
-    } catch (e) {
-      debugPrint('[DmxState] v3 parse failed: $e');
-      return null;
-    }
-  }
-
-  static TransferState? tryParseV2(Map<String, dynamic> json) {
-    try {
-      final progress = json['progress'] as List?;
-      if (progress == null || progress.isEmpty) return null;
-      final totalSize = (json['totalSize'] as num?)?.toInt() ?? 0;
-      final storedThreadCount =
-          (json['threadCount'] as num?)?.toInt() ?? progress.length;
-      if (storedThreadCount != progress.length) {
-        debugPrint('[DmxState] V2 migration: threadCount mismatch '
-            '(stored=$storedThreadCount, progress.length=${progress.length}). '
-            'Using progress.length as authoritative count.');
-      }
-      final effectiveThreads = progress.length;
-      final partSize =
-          totalSize > 0 ? (totalSize / effectiveThreads).floor() : 0;
-      final chunks = <ChunkState>[];
-      for (int i = 0; i < effectiveThreads; i++) {
-        final downloaded = (progress[i] as num?)?.toInt() ?? 0;
-        final start = i * partSize;
-        final end = (i == effectiveThreads - 1 && totalSize > 0)
-            ? totalSize - 1
-            : (start + partSize - 1);
-        final size = end < 0 ? -1 : end - start + 1;
-        chunks.add(ChunkState(
-          start: start,
-          end: end,
-          downloaded: size < 0
-              ? downloaded.clamp(0, 1 << 62)
-              : downloaded.clamp(0, size),
-        ));
-      }
-      return TransferState(
-        totalSize: totalSize,
-        threadCount: effectiveThreads,
-        chunks: chunks,
-        url: json['url'] as String?,
-        etag: json['etag'] as String?,
-        lastModified: json['lastModified'] as String?,
-        migrationNote: 'v2',
-      );
-    } catch (e) {
-      return null;
-    }
-  }
-}
-
-class StateLoadResult {
-  const StateLoadResult({
-    required this.state,
-    this.created = false,
-    this.migratedFrom,
-    this.diskAdjusted = false,
-  });
-
-  final TransferState state;
-  final bool created;
-  final String? migratedFrom;
-  final bool diskAdjusted;
-}
+export 'transfer_state.dart' show ChunkState, DmxStateStatus, StateLoadResult, TransferState;
 
 class StateStore {
   StateStore._();
@@ -233,7 +41,7 @@ class StateStore {
             final json = Map<String, dynamic>.from(decoded);
             return TransferState.tryParseV3(json) ?? TransferState.tryParseV2(json);
           }
-        } catch (_) {}
+        } catch (_) {} // coverage:ignore-line
       }
       return null;
     }
@@ -243,7 +51,7 @@ class StateStore {
         final json = Map<String, dynamic>.from(decoded);
         return TransferState.tryParseV3(json) ?? TransferState.tryParseV2(json);
       }
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
     return null;
   }
 
@@ -289,7 +97,7 @@ class StateStore {
       } else {
         try {
           await tmpStale.delete();
-        } catch (_) {}
+        } catch (_) {} // coverage:ignore-line
       }
     }
 
@@ -357,7 +165,7 @@ class StateStore {
       if (await tmp.exists()) {
         try {
           await tmp.delete();
-        } catch (_) {}
+        } catch (_) {} // coverage:ignore-line
       }
     }
 
@@ -366,7 +174,7 @@ class StateStore {
       created = true;
       state = TransferState(
         totalSize: knownFileSize,
-        threadCount: threadCount.clamp(1, 64),
+        threadCount: threadCount.clamp(kMinTransferThreads, kMaxTransferThreads),
         chunks: const [],
         url: url,
       );
@@ -464,7 +272,7 @@ class StateStore {
         final raf = await f.open(mode: FileMode.append);
         await raf.truncate(state.totalSize);
         await raf.close();
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
       adjusted = true;
     }
 
@@ -502,7 +310,7 @@ class StateStore {
   static final Map<String, DateTime> _lastSaveTimes = {};
   // FIX-M1: Track last written status to write immediately on status changes
   static final Map<String, DmxStateStatus> _lastWrittenStatus = {};
-  static const int _maxCachedPayloads = 16;
+  static const int _maxCachedPayloads = kStateCacheMaxPayloads;
 
   static int computeFingerprint(TransferState state) {
     int chunksHash = 0;
@@ -557,13 +365,13 @@ class StateStore {
         // Rate-limit non-durable state saves in background (120s / 16MB) or foreground (30s / 5MB)
         if (!durable && !statusChanged && lastSave != null) {
           if (isBg) {
-            if (now.difference(lastSave) < const Duration(seconds: 120) &&
-                bytesSinceLastWrite < 16 * 1024 * 1024) {
+            if (now.difference(lastSave) < kStateSaveBgInterval &&
+                bytesSinceLastWrite < kStateSaveBgDelta) {
               return;
             }
           } else {
-            if (now.difference(lastSave) < const Duration(seconds: 30) &&
-                bytesSinceLastWrite < 5 * 1024 * 1024) {
+            if (now.difference(lastSave) < kStateSaveFgInterval &&
+                bytesSinceLastWrite < kStateSaveFgDelta) {
               return;
             }
           }
@@ -608,7 +416,7 @@ class StateStore {
         if (isScreenOff &&
             !durable &&
             !statusChanged &&
-            bytesSinceLastWrite < 5 * 1024 * 1024) {
+            bytesSinceLastWrite < kStateSaveFgDelta) {
           return; // skip small deltas when screen off
         }
         _lastWrittenBytes[targetPath] = state.downloadedBytes;
@@ -644,11 +452,11 @@ class StateStore {
     try {
       final f = File(targetPath);
       if (await f.exists()) await f.delete();
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
     try {
       final tmp = File(tmpPath);
       if (await tmp.exists()) await tmp.delete();
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
     if (taskId != null && taskId.isNotEmpty) {
       final legacyPath = _legacyPathFor(tempFilePath);
       _pathLocks.remove(legacyPath);
@@ -659,11 +467,11 @@ class StateStore {
       try {
         final f = File(legacyPath);
         if (await f.exists()) await f.delete();
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
       try {
         final tmp = File('$legacyPath.tmp');
         if (await tmp.exists()) await tmp.delete();
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
     }
   }
 }
@@ -680,7 +488,7 @@ class DownloadJournal {
   final int compactionThresholdBytes;
   final Lock _lock = Lock();
 
-  DownloadJournal(this.path, {this.compactionThresholdBytes = 512 * 1024});
+  DownloadJournal(this.path, {this.compactionThresholdBytes = kJournalCompactionThreshold});
 
   Future<void> open() async {
     await _lock.synchronized(() async {
@@ -719,7 +527,10 @@ class DownloadJournal {
     });
   }
 
-  final Map<int, int> _lastBgRecordedBytes = {};
+  /// Access-ordered LRU of the last recorded byte-count per chunk index,
+  /// capped at [maxBgRecordedEntries] (one entry per chunk across all jobs).
+  final LinkedHashMap<int, int> _lastBgRecordedBytes = LinkedHashMap();
+  static const int maxBgRecordedEntries = kJournalMaxBgRecordedEntries;
 
   Future<void> recordChunkProgress(int index, int bytes) async {
     final isBg = !DownloadEngine.appInForeground ||
@@ -727,18 +538,19 @@ class DownloadJournal {
         PowerMonitor.screenOff;
 
     final threshold = PowerMonitor.screenOff
-        ? 16 * 1024 * 1024 // 16MB when screen off (C-BG-02)
+        ? kJournalScreenOffWriteDelta // 16MB when screen off (C-BG-02)
         : isBg
-            ? 4 * 1024 * 1024 // 4MB when backgrounded (BG-04 / C-BG-02)
-            : 512 * 1024; // 512KB foreground (M-DL-08)
+            ? kJournalBackgroundWriteDelta // 4MB when backgrounded (BG-04 / C-BG-02)
+            : kJournalForegroundWriteDelta; // 512KB foreground (M-DL-08)
 
     final last = _lastBgRecordedBytes[index] ?? 0;
     if ((bytes - last).abs() < threshold) return;
-    if (_lastBgRecordedBytes.length >= 4 * 1024 &&
-        !_lastBgRecordedBytes.containsKey(index)) {
+    // Move to tail (most-recently-used) then evict overflow from the head.
+    _lastBgRecordedBytes.remove(index);
+    _lastBgRecordedBytes[index] = bytes;
+    while (_lastBgRecordedBytes.length > maxBgRecordedEntries) {
       _lastBgRecordedBytes.remove(_lastBgRecordedBytes.keys.first);
     }
-    _lastBgRecordedBytes[index] = bytes;
 
     await _lock.synchronized(() async {
       _ensureOpen();
@@ -869,6 +681,21 @@ class DownloadJournal {
     return lastCheckpoint;
   }
 
+  /// Best-effort synchronous close of the journal sink. Clears LRU state and
+  /// fires `flush()`/`close()` on the sink without awaiting them; safe to call
+  /// from a `finally` block or before deleting the journal file.
+  void dispose() {
+    _lastBgRecordedBytes.clear();
+    if (!_isOpen) return;
+    _isOpen = false;
+    final sink = _sink;
+    _sink = null;
+    try {
+      sink?.flush();
+      sink?.close();
+    } catch (_) {} // coverage:ignore-line
+  }
+
   /// Flushes and closes the underlying journal sink.
   Future<void> close() async {
     await _lock.synchronized(() async {
@@ -898,7 +725,7 @@ class DownloadJournal {
     try {
       await _sink?.flush();
       await _sink?.close();
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
     _sink = null;
   }
 
@@ -933,7 +760,7 @@ class DownloadJournal {
       debugPrint('[DownloadJournal] Compaction failed for $path: $e');
       try {
         await File('$path.tmp').delete();
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
       try {
         _sink = File(path).openWrite(mode: FileMode.append);
         _isOpen = true;

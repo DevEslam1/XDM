@@ -115,6 +115,7 @@ class MirrorParallelEngine {
   static final _log = Logger('MirrorParallelEngine');
   final List<String> _mirrorUrls;
   final Map<String, _MirrorState> _mirrorStates = {};
+  static const int maxMirrorStates = 50;
   MirrorFailover? failover;
 
   MirrorParallelEngine(this._mirrorUrls, {this.failover});
@@ -238,7 +239,15 @@ class MirrorParallelEngine {
   Timer? _cacheInvalidateDebounce;
 
   void reportMirrorSpeed(String mirrorUrl, double bytesPerSecond) {
-    final state = _mirrorStates.putIfAbsent(mirrorUrl, () => _MirrorState());
+    // Move the mirror to the tail (most-recently-used), evicting the LRU
+    // entry once the map exceeds the cap to keep memory bounded on jobs that
+    // probe many transient mirror URLs.
+    final existing = _mirrorStates.remove(mirrorUrl);
+    final state = existing ?? _MirrorState();
+    _mirrorStates[mirrorUrl] = state;
+    while (_mirrorStates.length > maxMirrorStates) {
+      _mirrorStates.remove(_mirrorStates.keys.first);
+    }
     state.updateSpeed(bytesPerSecond);
 
     _cacheInvalidateDebounce?.cancel();

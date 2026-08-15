@@ -118,7 +118,7 @@ class DesktopUpdateService {
           _log.severe('SHA-256 mismatch for desktop update file');
           try {
             await File(downloadPath).delete();
-          } catch (_) {}
+          } catch (_) {} // coverage:ignore-line
           return false;
         }
       }
@@ -130,7 +130,7 @@ class DesktopUpdateService {
         );
         try {
           await File(downloadPath).delete();
-        } catch (_) {}
+        } catch (_) {} // coverage:ignore-line
         return false;
       }
 
@@ -244,7 +244,7 @@ class DesktopUpdateService {
       // Clean up the downloaded DMG.
       try {
         await File(dmgPath).delete();
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
 
       return true;
     } catch (e) {

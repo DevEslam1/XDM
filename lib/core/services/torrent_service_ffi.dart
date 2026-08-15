@@ -183,7 +183,7 @@ class _CapabilityGate {
     try {
       // ignore: avoid_dynamic_calls
       (LibtorrentFlutter.instance as dynamic).forceReCheck(id);
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
 
   Uint8List? saveResumeData(int id) {
@@ -598,7 +598,7 @@ class TorrentService {
       if (hasVideo) {
         enableSequentialDownload(torrentId, true);
       }
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
 
   static void _configureSessionFromSettings() => configureSession();
@@ -743,7 +743,7 @@ class TorrentService {
       // ignore: avoid_dynamic_calls
       final numPieces = raw.numPieces;
       if (numPieces is int && numPieces > 0) return numPieces;
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
     const defaultPieceSize = 256 * 1024;
     try {
       final dynamic raw = torrentInfo;
@@ -752,7 +752,7 @@ class TorrentService {
       if (totalWanted > 0) {
         return (totalWanted / defaultPieceSize).ceil();
       }
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
     return 0;
   }
 
@@ -762,7 +762,7 @@ class TorrentService {
       // ignore: avoid_dynamic_calls
       final piecesDone = raw.piecesDone;
       if (piecesDone is int && piecesDone > 0) return piecesDone;
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
     final total = _estimatePiecesTotal(torrentInfo);
     try {
       final dynamic raw = torrentInfo;
@@ -771,7 +771,7 @@ class TorrentService {
       if (total > 0 && progress > 0) {
         return (progress * total).round();
       }
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
     return 0;
   }
 
@@ -1061,7 +1061,7 @@ class TorrentService {
                   stats.stateLabel.toLowerCase().contains('paused') ||
                   stats.stateLabel.toLowerCase().contains('stopped');
             }).timeout(const Duration(seconds: 2));
-          } catch (_) {}
+          } catch (_) {} // coverage:ignore-line
 
           // FIX T-9: Snapshot files AFTER pause-poll, not before
           List<Map<String, dynamic>>? torrentFiles;

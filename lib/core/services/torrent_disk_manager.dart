@@ -32,7 +32,7 @@ class TorrentDiskManager {
         if (Directory('/sys/block/mmcblk0').existsSync()) {
           return DiskIoMode.emmc;
         }
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
     }
     return DiskIoMode.ssd;
   }

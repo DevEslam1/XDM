@@ -83,7 +83,7 @@ class TorrentFilesConverter
             if (e is Map) {
               result.add(Map<String, dynamic>.from(e));
             }
-          } catch (_) {}
+          } catch (_) {} // coverage:ignore-line
         }
         return result;
       }
@@ -103,7 +103,7 @@ class TorrentFilesConverter
               if (obj is Map) {
                 result.add(Map<String, dynamic>.from(obj));
               }
-            } catch (_) {}
+            } catch (_) {} // coverage:ignore-line
           }
         }
         if (result.isNotEmpty) {

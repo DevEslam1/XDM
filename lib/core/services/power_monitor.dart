@@ -257,6 +257,21 @@ class PowerMonitor {
     _notifyThrottleFactor();
   }
 
+  static const _powerChannel = MethodChannel('com.dmx.app/power');
+
+  /// Prompts the user to exempt the app from battery optimizations (Android).
+  /// Silent no-op when unsupported or rejected by the platform.
+  static Future<void> requestIgnoreBatteryOptimizations() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _powerChannel.invokeMethod<void>(
+        'requestIgnoreBatteryOptimizations',
+      );
+    } catch (e) {
+      _log.info('[Power] ignore-battery-optimizations prompt skipped: $e');
+    }
+  }
+
   // FIX-1.3: Close StreamControllers and cancel timers on dispose
   static void dispose() {
     _sub?.cancel();

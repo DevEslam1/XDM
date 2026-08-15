@@ -10,7 +10,8 @@ import 'package:dmx/core/services/engine/engine_utils.dart';
 /// Task 1.2: Specialized Service for Dio instance management.
 class DioClientPool implements DisposableService, MemoryPressureListener {
   static final _log = LoggingService.logger('DioClientPool');
-  static const int _maxActiveClients = 8;
+  static const int _maxActiveClients = 6;
+  static const int _maxActiveClientsAggressive = 3;
   final Map<Dio, DateTime> _clientCreationTimes = {};
   final Set<Dio> _activeClients = {};
   final Set<Dio> _reservedClients = {};
@@ -25,6 +26,13 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
 
   int get activeClientsCount => _activeClients.length;
   int get reservedClientsCount => _reservedClients.length;
+
+  /// Effective client cap: drops to 3 while the aggressive battery-saver mode
+  /// is active to minimize memory/CPU during constrained background downloads.
+  int get _effectiveMaxClients =>
+      PowerMonitor.batterySaverMode == BatterySaverMode.aggressive
+          ? _maxActiveClientsAggressive
+          : _maxActiveClients;
 
   void _startCleanupTimer() {
     _cleanupTimer?.cancel();
@@ -111,7 +119,7 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
     String? oauthToken,
   }) {
     // Evict oldest if pool is full
-    while (_activeClients.length >= _maxActiveClients) {
+    while (_activeClients.length >= _effectiveMaxClients) {
       Dio? oldestClient;
       DateTime? oldestTime;
 
@@ -161,7 +169,7 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
     _clientCreationTimes.remove(client);
     try {
       client.close(force: true);
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
 
   void registerDownload(Dio client, String taskId) {
@@ -181,7 +189,7 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
     for (final client in List<Dio>.from(_activeClients)) {
       try {
         client.close(force: true);
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
     }
     _activeClients.clear();
     _reservedClients.clear();

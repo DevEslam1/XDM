@@ -34,7 +34,8 @@ Future<String> _runJob(
 
   final job = pool.submit(command, priority: priority);
   job.messages.listen((msg) {
-    if (msg.type == 'done' || msg.type == 'error') {
+    if (msg.type == EngineMessageType.done ||
+        msg.type == EngineMessageType.error) {
       if (!completer.isCompleted) completer.complete(url);
     }
   });
@@ -191,7 +192,8 @@ void main() {
     final completer = Completer<void>();
     final job = pool.submit(command);
     job.messages.listen((msg) {
-      if (msg.type == 'done' || msg.type == 'error') {
+      if (msg.type == EngineMessageType.done ||
+          msg.type == EngineMessageType.error) {
         if (!completer.isCompleted) completer.complete();
       }
     });

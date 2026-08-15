@@ -15,47 +15,58 @@ class ClipboardService {
   String? _lastCheckedUrl;
   DateTime? _lastCheckedTime;
   bool _initialized = false;
-  Future<void>? _initFuture;
-
+  bool _initStarted = false;
   int _initAttempts = 0;
 
-  Future<void> _initIfNeeded() async {
-    if (_initialized) return;
+  /// When true, secure-storage reads/writes are skipped entirely. Used by
+  /// tests where the flutter_secure_storage platform channel is unavailable.
+  @visibleForTesting
+  static bool bypassSecureStorage = false;
 
-    if (_initFuture != null) {
+  /// One-shot lazy init triggered only after a downloadable URL is detected.
+  ///
+  /// Never awaited from the synchronous clipboard-check path: the future is
+  /// scheduled in the background (fire-and-forget) so the UI thread can never
+  /// block on the secure-storage platform channel.
+  void _initIfNeeded() {
+    if (_initialized || _initStarted) return;
+    _initStarted = true;
+    unawaited(_initWithBackoff());
+  }
+
+  /// Initializes from secure storage with a single 1.5s timeout per attempt and
+  /// exponential backoff between attempts (max 3 attempts).
+  Future<void> _initWithBackoff() async {
+    while (!_initialized && _initAttempts < 3) {
+      _initAttempts++;
       try {
-        await _initFuture!.timeout(const Duration(seconds: 2));
-        return;
+        await _doInit().timeout(const Duration(milliseconds: 1500));
       } catch (e) {
-        LoggingService.logger('ClipboardService').info(
-          '[ClipboardService] previous init future failed or timed out: $e',
+        LoggingService.logger('ClipboardService').warning(
+          '[ClipboardService] initialization attempt $_initAttempts failed or timed out: $e',
         );
-        _initFuture = null;
+        if (!_initialized && _initAttempts < 3) {
+          await Future<void>.delayed(
+            Duration(milliseconds: 100 * (1 << _initAttempts)),
+          );
+        }
       }
     }
-
-    if (_initAttempts >= 3) {
+    if (!_initialized) {
       LoggingService.logger('ClipboardService').warning(
-        '[ClipboardService] Max initialization retries (3) reached. Halting init retries.',
+        '[ClipboardService] Max initialization attempts reached. Halting init retries.',
       );
+      // Mark as initialized to stop further attempts; dedupe uses memory state.
       _initialized = true;
-      return;
-    }
-
-    _initAttempts++;
-    _initFuture = _doInit();
-    try {
-      await _initFuture!.timeout(const Duration(seconds: 2));
-    } catch (e) {
-      _initFuture = null;
-      LoggingService.logger('ClipboardService').warning(
-        '[ClipboardService] initialization attempt $_initAttempts failed or timed out: $e',
-      );
     }
   }
 
   Future<void> _doInit() async {
     if (_initialized) return;
+    if (bypassSecureStorage) {
+      _initialized = true;
+      return;
+    }
     try {
       _lastCheckedUrl = await _secureStorage.read(key: 'clipboard_last_url');
       final timeMsStr = await _secureStorage.read(key: 'clipboard_last_time');
@@ -71,7 +82,6 @@ class ClipboardService {
 
   Future<String?> checkClipboardForUrl() async {
     try {
-      await _initIfNeeded();
       final prefs = await SharedPreferences.getInstance();
       final enabled = prefs.getBool('clipboard_monitoring_enabled') ?? false;
       if (!enabled) return null;
@@ -88,6 +98,9 @@ class ClipboardService {
           return null;
         }
 
+        // One-shot lazy init, triggered only after first URL detection.
+        _initIfNeeded();
+
         final now = DateTime.now();
         if (text == _lastCheckedUrl && _lastCheckedTime != null) {
           final elapsed = now.difference(_lastCheckedTime!);
@@ -95,32 +108,13 @@ class ClipboardService {
             return null;
           }
           _lastCheckedTime = now;
-          try {
-            await _secureStorage.write(
-              key: 'clipboard_last_time',
-              value: '${now.millisecondsSinceEpoch}',
-            );
-          } catch (e) {
-            LoggingService.logger('ClipboardService').info(
-              '[ClipboardService] rate-limit timestamp persist skipped: $e',
-            );
-          }
+          unawaited(_writeLastChecked(now, url: text));
           return text;
         }
 
         _lastCheckedUrl = text;
         _lastCheckedTime = now;
-        try {
-          await _secureStorage.write(key: 'clipboard_last_url', value: text);
-          await _secureStorage.write(
-            key: 'clipboard_last_time',
-            value: '${now.millisecondsSinceEpoch}',
-          );
-        } catch (e) {
-          LoggingService.logger('ClipboardService').info(
-            '[ClipboardService] last-checked URL persist skipped: $e',
-          );
-        }
+        unawaited(_writeLastChecked(now, url: text));
         return text;
       }
     } catch (e) {
@@ -142,13 +136,26 @@ class ClipboardService {
     _lastCheckedTime = DateTime.now();
 
     try {
-      await _secureStorage.write(key: 'clipboard_last_url', value: trimmed);
-      await _secureStorage.write(
-        key: 'clipboard_last_time',
-        value: '${_lastCheckedTime!.millisecondsSinceEpoch}',
-      );
+      await _writeLastChecked(_lastCheckedTime!, url: trimmed);
     } catch (e) {
       debugPrint('ClipboardService error saving last URL: $e');
+    }
+  }
+
+  Future<void> _writeLastChecked(DateTime now, {String? url}) async {
+    if (bypassSecureStorage) return;
+    try {
+      if (url != null) {
+        await _secureStorage.write(key: 'clipboard_last_url', value: url);
+      }
+      await _secureStorage.write(
+        key: 'clipboard_last_time',
+        value: '${now.millisecondsSinceEpoch}',
+      );
+    } catch (e) {
+      LoggingService.logger('ClipboardService').info(
+        '[ClipboardService] last-checked URL persist skipped: $e',
+      );
     }
   }
 }

@@ -8,6 +8,8 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'ios_background_service.dart';
 import 'logging_service.dart';
 import 'power_monitor.dart';
+import 'diagnostic_service.dart';
+import 'notification_service.dart';
 
 final _log = LoggingService.logger('BackgroundService');
 
@@ -35,6 +37,10 @@ class BackgroundService {
   static DateTime? _lastHeartbeatTime;
   static bool _hasActiveDownloads = false;
   static int Function()? _activeDownloadCountQuery;
+
+  /// Consecutive wake-lock renewal failures (escalate after 3).
+  static int _wakeLockRenewalFailures = 0;
+  static bool _wakeLockEscalated = false;
 
   /// Injected query callback to determine active download count from DownloadProvider
   static void setActiveDownloadCountQuery(int Function()? query) {
@@ -266,11 +272,13 @@ class BackgroundService {
         _log.fine('Wake lock skipped due to aggressive battery saver mode');
         return;
       }
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
 
     try {
       await _wakeLockChannel.invokeMethod<void>('acquire');
       _wakeLockHeld = true;
+      _wakeLockRenewalFailures = 0;
+      _wakeLockEscalated = false;
       _log.fine('Wake lock acquired');
 
       // Safety net: auto-release or renew if downloads still active
@@ -289,16 +297,57 @@ class BackgroundService {
             return;
           }
           await _wakeLockChannel.invokeMethod<void>('acquire');
+          _wakeLockHeld = true;
+          _wakeLockRenewalFailures = 0;
+          _wakeLockEscalated = false;
           _log.fine('Wake lock renewed');
         } catch (e) {
-          _log.warning('Failed to renew wake lock, resetting state', e);
+          _log.warning('Failed to renew wake lock', e);
           _wakeLockHeld = false;
-          _wakeLockRenewalTimer?.cancel();
-          _wakeLockRenewalTimer = null;
+          _wakeLockRenewalFailures++;
+          DiagnosticService.instance.record(
+            'WakeLock',
+            'renewal failed',
+            error: e,
+            details: 'Consecutive failures: $_wakeLockRenewalFailures',
+          );
+          if (_wakeLockRenewalFailures >= 3 && !_wakeLockEscalated) {
+            _wakeLockEscalated = true;
+            unawaited(_escalateWakeLockFailure());
+          }
         }
       });
     } catch (e) {
       _log.warning('Failed to acquire wake lock', e);
+      DiagnosticService.instance.record(
+        'WakeLock',
+        'acquire failed',
+        error: e,
+      );
+    }
+  }
+
+  /// Escalates a repeated wake-lock renewal failure to the user: a service
+  /// notification plus a battery-optimization exemption prompt (Android).
+  static Future<void> _escalateWakeLockFailure() async {
+    _log.warning(
+      '[BackgroundService] Wake lock renewal failed 3A consecutively — escalating',
+    );
+    try {
+      await NotificationService().showServiceNotification(
+        title: 'XDM',
+        content:
+            'Background downloads may pause: the system blocked wake-lock '
+            'renewal. Disable battery optimization for XDM to keep downloads '
+            'running.',
+      );
+    } catch (e) {
+      _log.warning('Failed to show wake-lock escalation notification', e);
+    }
+    try {
+      await PowerMonitor.requestIgnoreBatteryOptimizations();
+    } catch (e) {
+      _log.warning('Failed to prompt battery-optimization exemption', e);
     }
   }
 
@@ -311,7 +360,7 @@ class BackgroundService {
         _log.info('Wake lock safety timer fired but downloads active. Renewing.');
         try {
           await _wakeLockChannel.invokeMethod<void>('acquire');
-        } catch (_) {}
+        } catch (_) {} // coverage:ignore-line
         // Restart the safety timer for another cycle
         _scheduleWakeLockSafetyCheck();
         return;
@@ -330,6 +379,8 @@ class BackgroundService {
       _wakeLockSafetyTimer = null;
       await _wakeLockChannel.invokeMethod<void>('release');
       _wakeLockHeld = false;
+      _wakeLockRenewalFailures = 0;
+      _wakeLockEscalated = false;
       _log.fine('Wake lock released');
     } catch (e) {
       _log.warning('Failed to release wake lock', e);

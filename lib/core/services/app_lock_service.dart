@@ -31,7 +31,7 @@ class AppLockService {
     try {
       final val = await _monotonicChannel.invokeMethod<int>('elapsedRealtime');
       if (val != null && val > 0) return val;
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
     return _lockoutStopwatch.elapsedMilliseconds;
   }
 

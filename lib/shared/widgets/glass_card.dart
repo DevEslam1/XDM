@@ -153,7 +153,11 @@ class _GlassCardState extends State<GlassCard> {
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
-            onEnter: (_) => setState(() => _pressed = false),
+            onEnter: (_) {
+              // FIX-P3: Avoid redundant setState on hover — only reset when a
+              // press is actually in flight.
+              if (_pressed && mounted) setState(() => _pressed = false);
+            },
             child: GestureDetector(
               onTapDown: (_) => setState(() => _pressed = true),
               onTapUp: (_) => setState(() => _pressed = false),

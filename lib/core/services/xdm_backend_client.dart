@@ -599,7 +599,7 @@ class XdmBackendClient {
                       decoded['msg'])
                   ?.toString();
             }
-          } catch (_) {}
+          } catch (_) {} // coverage:ignore-line
         } else {
           backendMsg = responseData.toString();
         }

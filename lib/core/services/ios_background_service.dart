@@ -135,7 +135,7 @@ class IosBackgroundService {
     try {
       final prefs = await SharedPreferences.getInstance();
       _isRegistered = prefs.getBool(_prefKeyIsRegistered) ?? false;
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
     return _isRegistered;
   }
 
@@ -155,7 +155,7 @@ class IosBackgroundService {
         try {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool(_prefKeyIsRegistered, true);
-        } catch (_) {}
+        } catch (_) {} // coverage:ignore-line
       }
       return success;
     } catch (e) {
@@ -174,7 +174,7 @@ class IosBackgroundService {
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool(_prefKeyIsRegistered, false);
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
       return success;
     } catch (e) {
       debugPrint('Failed to cancel iOS background download: $e');

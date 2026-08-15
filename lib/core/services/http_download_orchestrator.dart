@@ -83,7 +83,7 @@ class HttpDownloadOrchestrator {
           knownFileSize: resolvedFileSize,
         );
         alreadyOnDisk = state.state.downloadedBytes;
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
     }
 
     final punyUrl = convertIdnToPunycode(url);
@@ -157,7 +157,7 @@ class HttpDownloadOrchestrator {
 
     final sub = job.messages.listen((message) {
       switch (message.type) {
-        case 'progress':
+        case EngineMessageType.progress:
           final data = message.data;
           int? ytCpOverride;
           if (ytStreamKind != null) {
@@ -173,16 +173,23 @@ class HttpDownloadOrchestrator {
             ytCounterpartDownloadedOverride: ytCpOverride,
           );
           break;
-        case 'done':
+        case EngineMessageType.done:
           if (ytStreamKind != null) _ytCoordinator.unregister(taskId);
           if (!completer.isCompleted) completer.complete();
           break;
-        case 'error':
+        case EngineMessageType.error:
           if (ytStreamKind != null) _ytCoordinator.unregister(taskId);
           final errData = message.data;
           if (!completer.isCompleted) {
             completer.completeError(_mapWorkerError(errData, punyUrl));
           }
+          break;
+        case EngineMessageType.hello:
+        case EngineMessageType.idle:
+        case EngineMessageType.limits:
+        case EngineMessageType.job:
+        case EngineMessageType.cancel:
+        case EngineMessageType.shutdown:
           break;
       }
     });

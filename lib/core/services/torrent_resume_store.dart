@@ -63,7 +63,7 @@ class TorrentResumeStore {
           return sha256.convert(utf8.encode(infoHash.toLowerCase())).toString();
         }
       }
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
 
     return sha256.convert(utf8.encode(sourceUrl)).toString();
   }
@@ -92,7 +92,7 @@ class TorrentResumeStore {
           : <String, String>{};
       index['$torrentId'] = fileName;
       await prefs.setString(_indexKey, jsonEncode(index));
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
 
   static Future<void> _removeFromIndex(int torrentId) async {
@@ -103,7 +103,7 @@ class TorrentResumeStore {
       final index = Map<String, String>.from(jsonDecode(raw));
       index.remove('$torrentId');
       await prefs.setString(_indexKey, jsonEncode(index));
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
 
   /// Durable save. Returns true only when the blob was written AND re-read
@@ -310,7 +310,7 @@ class TorrentResumeStore {
         final f = File('${dir.path}/$key$suffix');
         if (await f.exists()) await f.delete();
       }
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
 
   /// Validates that a resume blob is structurally valid and non-corrupt (Phase 4).

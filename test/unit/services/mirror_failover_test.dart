@@ -44,6 +44,9 @@ void main() {
       await MirrorHealthStore.instance.recordFailure('https://m1.com/x');
       await MirrorHealthStore.instance.recordSuccess('https://m2.com/x', speedBps: 42);
 
+      // Writes are coalesced; a durable flush persists them to prefs.
+      await MirrorHealthStore.instance.flushPending(durable: true);
+
       // Re-init simulates an app restart (same SharedPreferences backing).
       await MirrorHealthStore.instance.init();
       expect(MirrorHealthStore.instance.getFailureCount('https://m1.com/x'), 2);

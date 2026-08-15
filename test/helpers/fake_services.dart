@@ -28,6 +28,13 @@ class FakeDatabaseService extends DatabaseService {
   }
 
   @override
+  Future<void> saveTasks(Iterable<DownloadTask> tasks) async {
+    for (final task in tasks) {
+      await saveTask(task);
+    }
+  }
+
+  @override
   Future<void> deleteTask(String id) async {
     _tasks.removeWhere((t) => t.id == id);
   }

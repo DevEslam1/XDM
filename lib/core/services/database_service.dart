@@ -7,6 +7,7 @@ import 'package:synchronized/synchronized.dart';
 
 import 'database/app_database.dart';
 import 'download_engine.dart';
+import 'history_merger.dart';
 import 'logging_service.dart';
 import 'power_monitor.dart';
 import 'background_gate.dart';
@@ -135,7 +136,7 @@ class DatabaseService {
             await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
           }
         }
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
     }
     if (_maintenanceRuns % 12 == 0) {
       try {
@@ -153,7 +154,7 @@ class DatabaseService {
           // FIX: Only vacuum if checkpoint returned pages > 0
           try {
             await _db.customSelect('PRAGMA wal_checkpoint(PASSIVE)').get();
-          } catch (_) {}
+          } catch (_) {} // coverage:ignore-line
           final swVacuum = Stopwatch()..start();
           await _db.customStatement('PRAGMA incremental_vacuum(50)');
           swVacuum.stop();
@@ -427,47 +428,11 @@ class DatabaseService {
 
     final failedItems = <dynamic>[];
     // FIX-P4-29: Deduplicate Hive history items by URL before inserting into Drift
-    final Map<String, _MergedHistoryItem> mergedHistory = {};
+    final merged = mergeHistoryEntries(box.values);
+    final mergedHistory = merged.merged;
+    failedItems.addAll(merged.failed);
 
-    for (final key in box.keys) {
-      final val = box.get(key);
-      if (val is Map) {
-        try {
-          final url = val['url'] as String? ?? '';
-          if (url.isEmpty) continue;
-          final title = val['title'] as String? ?? url;
-          final visitedAt = (val['visitedAt'] as num?)?.toInt() ??
-              DateTime.now().millisecondsSinceEpoch;
-          final faviconUrl = val['faviconUrl'] as String?;
-
-          final existing = mergedHistory[url];
-          if (existing == null) {
-            mergedHistory[url] = _MergedHistoryItem(
-              url: url,
-              title: title,
-              visitedAt: visitedAt,
-              visitCount: 1,
-              faviconUrl: faviconUrl,
-            );
-          } else {
-            existing.visitCount += 1;
-            if (visitedAt > existing.visitedAt) {
-              existing.visitedAt = visitedAt;
-              existing.title = title;
-            }
-            if (faviconUrl != null) {
-              existing.faviconUrl = faviconUrl;
-            }
-          }
-        } catch (e) {
-          failedItems.add(val);
-        }
-      } else {
-        failedItems.add(val);
-      }
-    }
-
-    final hist = mergedHistory.values
+    final hist = mergedHistory
         .map(
           (item) => BrowserHistoryCompanion.insert(
             url: item.url,
@@ -562,11 +527,8 @@ class DatabaseService {
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File(p.join(dir.path, fileName));
-      final payload = <String, dynamic>{
-        'exportedAt': DateTime.now().toIso8601String(),
-        'count': failedItems.length,
-        'items': failedItems.map(_normalizeForJson).toList(),
-      };
+      // Offload JSON normalization + encoding to a background isolate (DB-02).
+      final payload = await compute(_buildExportPayload, failedItems);
       await file.writeAsString(
         const JsonEncoder.withIndent('  ').convert(payload),
       );
@@ -580,10 +542,18 @@ class DatabaseService {
     }
   }
 
+  static Map<String, dynamic> _buildExportPayload(List<dynamic> failedItems) {
+    return {
+      'exportedAt': DateTime.now().toIso8601String(),
+      'count': failedItems.length,
+      'items': failedItems.map(_normalizeForJson).toList(),
+    };
+  }
+
   /// Recursively converts [value] into a JSON-encodable structure. Hive maps
   /// use dynamic keys and may contain non-encodable values, so keys are
   /// stringified and unknown leaf types fall back to their `toString()`.
-  Object? _normalizeForJson(Object? value) {
+  static Object? _normalizeForJson(Object? value) {
     if (value == null || value is num || value is bool || value is String) {
       return value;
     }
@@ -1032,8 +1002,8 @@ class DatabaseService {
     _pendingHistoryEntries[url] = entry;
     _historyDebounceTimers[url]?.cancel();
 
-    // Cap debounce timers to 50 entries; flush the oldest pending entry on overflow
-    if (_historyDebounceTimers.length >= 50) {
+    // Cap debounce timers to 20 entries; flush the oldest pending entry on overflow
+    if (_historyDebounceTimers.length >= 20) {
       final oldestUrl = _historyDebounceTimers.keys.first;
       _historyDebounceTimers.remove(oldestUrl)?.cancel();
       final flushedEntry = _pendingHistoryEntries.remove(oldestUrl);
@@ -1201,20 +1171,4 @@ class DatabaseService {
     _dbBatchTimer = null;
     await _db.close();
   }
-}
-
-class _MergedHistoryItem {
-  final String url;
-  String title;
-  int visitedAt;
-  int visitCount;
-  String? faviconUrl;
-
-  _MergedHistoryItem({
-    required this.url,
-    required this.title,
-    required this.visitedAt,
-    required this.visitCount,
-    this.faviconUrl,
-  });
 }

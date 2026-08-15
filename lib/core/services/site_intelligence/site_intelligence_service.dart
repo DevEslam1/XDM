@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../logging_service.dart';
 import '../background_gate.dart';
+import '../power_monitor.dart';
 import 'url_patterns.dart';
 import 'site_registry.dart';
 
@@ -247,18 +248,26 @@ class SiteIntelligenceService {
 
   Future<void> _persist() async {
     if (_disposed) return;
+    // Skip persistence entirely while the screen is off and the app is
+    // backgrounded — no user-visible value in burning I/O in that state.
+    if (PowerMonitor.screenOff && !PowerMonitor.isAppForegrounded) return;
     _dirtyCount++;
-    // FIX-M4: Flush immediately if dirty count >= 5
-    if (_dirtyCount >= 5) {
+    // FIX-M4: Flush immediately once the dirty threshold is reached. Use a
+    // higher threshold (20) in the background to batch more records per write.
+    final isBackground =
+        PowerMonitor.screenOff || !PowerMonitor.isAppForegrounded;
+    final threshold = isBackground ? 20 : 5;
+    if (_dirtyCount >= threshold) {
       await flushPending();
       return;
     }
     if (_persistPending) return;
     _persistPending = true;
     _persistTimer?.cancel();
-    // FIX-2.1: Route persist debounce interval through BackgroundGate
+    // FIX-2.1: Route persist debounce interval through BackgroundGate.
+    // Batch reliability records into a single JSON write per minute max.
     _persistTimer = Timer(
-        BackgroundGate.adaptInterval(const Duration(seconds: 30)), () async {
+        BackgroundGate.adaptInterval(const Duration(seconds: 60)), () async {
       _persistPending = false;
       if (_disposed) return;
       await flushPending();

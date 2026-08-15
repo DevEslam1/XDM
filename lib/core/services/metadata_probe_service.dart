@@ -248,7 +248,7 @@ class MetadataProbeService {
         try {
           TorrentService.pauseTorrent(torrentId);
           TorrentService.removeTorrent(torrentId, deleteFiles: false);
-        } catch (_) {}
+        } catch (_) {} // coverage:ignore-line
       }
 
       cancelToken?.whenCancel.then((_) {

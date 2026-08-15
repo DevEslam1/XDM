@@ -96,7 +96,7 @@ class LoggingService {
       _logFile = File('${dir.path}/app_log.txt');
       _rotateLogsIfNeeded(dir);
       _fileSink = _logFile!.openWrite(mode: FileMode.append);
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
 
   static void _rotateLogsIfNeeded(Directory dir) {
@@ -111,13 +111,13 @@ class LoggingService {
           _logFile = File('${dir.path}/app_log.txt');
         }
       }
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
 
   static void _writeToFile(String text) {
     try {
       _fileSink?.write(text);
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
 
   @visibleForTesting
@@ -179,7 +179,7 @@ class LoggingService {
     try {
       _fileSink?.close();
       _fileSink = null;
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
     _initialized = false;
   }
 }

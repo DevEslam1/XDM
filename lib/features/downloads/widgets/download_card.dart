@@ -585,7 +585,8 @@ class _QueuedSubtext extends StatelessWidget {
     if (task.status != DownloadStatus.queued) return const SizedBox.shrink();
     final activeCount =
         context.select((DownloadProvider p) => p.downloadingTasksCount);
-    final maxCount = context.watch<SettingsProvider>().maxDownloads;
+    // FIX-P3: select() the single setting instead of watching the whole provider.
+    final maxCount = context.select((SettingsProvider s) => s.maxDownloads);
 
     return Padding(
       padding: const EdgeInsets.only(top: 3),

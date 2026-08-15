@@ -18,8 +18,12 @@ import 'engine_models.dart';
 import 'engine_utils.dart';
 import '../download_engine.dart' show DownloadEngine;
 import '../engines/http_download_engine.dart';
+import '../../constants/thresholds.dart';
 
-const Duration defaultTaskHardTimeout = Duration(hours: 24);
+export 'engine_exceptions.dart' show FileChangedOnServerException, RangeUnsupportedException;
+export 'engine_models.dart' show SpeedSample;
+
+const Duration defaultTaskHardTimeout = kTaskHardTimeout;
 
 int _workerGlobalLimitBps = 0;
 int _workerGlobalActive = 1;
@@ -65,13 +69,6 @@ Future<void> workerEntry(SendPort poolPort) async {
   }
 }
 
-class RangeUnsupportedException implements Exception {}
-
-class FileChangedOnServerException implements Exception {
-  @override
-  String toString() => 'File changed on server. Restart required.';
-}
-
 class HttpTransferJob {
   HttpTransferJob(this.cmd, this.out) {
     unawaited(_cancelToken.whenCancel.then((_) {
@@ -111,6 +108,12 @@ class HttpTransferJob {
   List<Map<String, dynamic>>? _cachedChunkDetails;
   final Stopwatch _stopwatch = Stopwatch();
   final Queue<SpeedSample> _speedSamples = Queue();
+
+  /// Watchdog bookkeeping for dynamic hard-timeout and stall detection.
+  int _watchdogCheckpointBytes = 0;
+  int _lastProgressBytes = 0;
+  int _lastProgressTimeMs = 0;
+  bool _stalledEmitted = false;
   
   void requestCancel() {
     _abortAllDelays();
@@ -185,14 +188,6 @@ class HttpTransferJob {
 
   Future<void> run() async {
     _stopwatch.start();
-    Timer? hardTimeout;
-    hardTimeout = Timer(const Duration(hours: 24), () {
-      _send('error', {
-        'errorType': 'timeout',
-        'errorMessage': 'Hard timeout: 24h exceeded',
-      });
-    });
-
     final dio = buildTransferDio(
       url: cmd.punyUrl,
       customUserAgent: cmd.customUserAgent,
@@ -201,6 +196,9 @@ class HttpTransferJob {
       oauthToken: cmd.oauthToken,
     );
     _send('ack');
+    Timer? hardTimeout;
+    Timer? progressWatchdog;
+    Timer? stallWatchdog;
     try {
       final load = await StateStore.loadOrCreate(
         cmd.tempFilePath,
@@ -209,6 +207,7 @@ class HttpTransferJob {
         knownFileSize: cmd.knownFileSize,
       );
       _state = load.state;
+      _watchdogCheckpointBytes = _state!.downloadedBytes;
       if (_state!.chunks.isNotEmpty &&
           _state!.chunks.length != cmd.threadCount &&
           _state!.downloadedBytes > 0) {
@@ -246,6 +245,42 @@ class HttpTransferJob {
       }
       _state!.status = DmxStateStatus.active;
       await StateStore.save(cmd.tempFilePath, _state!);
+
+      // Dynamic hard timeout based on worst-case 10 KB/s throughput, floored at 24h.
+      final hardTimeoutDuration = _computeHardTimeout();
+      void onHardTimeout() {
+        _send('error', {
+          'errorType': 'timeout',
+          'errorMessage': 'Hard timeout exceeded: $_formatDuration(hardTimeoutDuration)',
+        });
+      }
+
+      hardTimeout = Timer(hardTimeoutDuration, onHardTimeout);
+
+      // Progress watchdog: if average throughput over the last 60s exceeds
+      // 1 MB/s the job is healthy — reset the hard timeout.
+      progressWatchdog = Timer.periodic(const Duration(seconds: 60), (_) {
+        final st = _state;
+        if (st == null) return;
+        final nowBytes = st.downloadedBytes;
+        final delta = nowBytes - _watchdogCheckpointBytes;
+        _watchdogCheckpointBytes = nowBytes;
+        if (delta > 60 * 1024 * 1024) {
+          hardTimeout?.cancel();
+          hardTimeout = Timer(hardTimeoutDuration, onHardTimeout);
+        }
+      });
+
+      // Stall watchdog: emit a 'stalled' cycle state when no progress for 5 min.
+      stallWatchdog = Timer.periodic(const Duration(seconds: 60), (_) {
+        if (_state == null || _stalledEmitted || _lastProgressTimeMs == 0) return;
+        final elapsed = _stopwatch.elapsedMilliseconds - _lastProgressTimeMs;
+        if (elapsed >= 5 * 60 * 1000) {
+          _stalledEmitted = true;
+          _emitProgress(_stopwatch.elapsedMilliseconds, statusMessage: 'Stalled');
+        }
+      });
+
       if (_state!.downloadedBytes > 0 && cmd.supportsResume) {
         await _verifyServerIdentity(dio);
       }
@@ -267,14 +302,34 @@ class HttpTransferJob {
       await _finalize(dio);
       _send('done');
     } finally {
-      hardTimeout.cancel();
+      hardTimeout?.cancel();
+      progressWatchdog?.cancel();
+      stallWatchdog?.cancel();
       if (!_stateSavedInCatch && _state != null) {
         try {
           await StateStore.save(cmd.tempFilePath, _state!);
-        } catch (_) {}
+        } catch (_) {} // coverage:ignore-line
       }
       dio.close(force: true);
     }
+  }
+
+  /// Hard timeout scales with file size: floor 24h, worst-case 10 KB/s.
+  /// `max(Duration(hours: 24), Duration(seconds: totalSize / (10 * 1024)))`.
+  Duration _computeHardTimeout() {
+    final st = _state;
+    if (st == null || st.totalSize <= 0) return defaultTaskHardTimeout;
+    final sizeSeconds = Duration(seconds: st.totalSize ~/ (10 * 1024));
+    return sizeSeconds > defaultTaskHardTimeout
+        ? sizeSeconds
+        : defaultTaskHardTimeout;
+  }
+
+  static String _formatDuration(Duration d) {
+    if (d.inDays > 0) return '${d.inDays}d ${d.inHours % 24}h';
+    if (d.inHours > 0) return '${d.inHours}h ${d.inMinutes % 60}m';
+    if (d.inMinutes > 0) return '${d.inMinutes}m';
+    return '${d.inSeconds}s';
   }
 
   static final TimestampedLruMap<String, bool> _serverIdentityCache =
@@ -343,7 +398,7 @@ class HttpTransferJob {
             try {
               final f = File(cmd.tempFilePath);
               if (await f.exists()) await f.delete();
-            } catch (_) {}
+            } catch (_) {} // coverage:ignore-line
             await StateStore.save(cmd.tempFilePath, _state!);
             throw FileChangedOnServerException();
           }
@@ -360,7 +415,7 @@ class HttpTransferJob {
           try {
             final f = File(cmd.tempFilePath);
             if (await f.exists()) await f.delete();
-          } catch (_) {}
+          } catch (_) {} // coverage:ignore-line
           _state!.etag = newEtag;
           _state!.lastModified = newLm;
           _state!.migrationNote =
@@ -408,15 +463,15 @@ class HttpTransferJob {
     try {
       final f = File(cmd.tempFilePath);
       if (f.existsSync()) f.deleteSync();
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
 
     try {
       StateStore.remove(cmd.tempFilePath);
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
     try {
       final journal = File('${cmd.tempFilePath}.journal');
       if (journal.existsSync()) journal.deleteSync();
-    } catch (_) {}
+    } catch (_) {} // coverage:ignore-line
   }
 
   Future<void> _runMultiThreaded(Dio dio) async {
@@ -554,7 +609,7 @@ class HttpTransferJob {
         await writer.flushAll();
         _stateSavedInCatch = true;
         await StateStore.save(cmd.tempFilePath, st, durable: true);
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
       rethrow;
     } finally {
       governor.removeTaskLimit(cmd.taskId);
@@ -615,7 +670,7 @@ class HttpTransferJob {
             chunk.downloaded = 0;
             try {
               await StateStore.remove(cmd.tempFilePath);
-            } catch (_) {}
+            } catch (_) {} // coverage:ignore-line
             throw DioException(
               requestOptions: response.requestOptions,
               type: DioExceptionType.badResponse,
@@ -712,7 +767,7 @@ class HttpTransferJob {
             debugPrint('[DMX] H-2: chunk-boundary save failed: $e');
             try {
               await StateStore.save(cmd.tempFilePath, _state!);
-            } catch (_) {}
+            } catch (_) {} // coverage:ignore-line
           }
         }
       } on DioException catch (e) {
@@ -806,7 +861,7 @@ class HttpTransferJob {
           chunk.downloaded = 0;
           debugPrint('[DMX-Job] spot-check mismatch → chunk reset');
         }
-      } catch (_) {}
+      } catch (_) {} // coverage:ignore-line
     }
   }
 
@@ -837,7 +892,7 @@ class HttpTransferJob {
         await tempFile.delete();
         try {
           await StateStore.remove(cmd.tempFilePath);
-        } catch (_) {}
+        } catch (_) {} // coverage:ignore-line
         st.chunks = ChunkScheduler.singleStream(st.totalSize);
       } else if (cmd.supportsResume) {
         chunk.downloaded = st.totalSize > 0 ? len.clamp(0, st.totalSize) : len;
@@ -890,7 +945,7 @@ class HttpTransferJob {
               await tempFile.delete();
               try {
                 await StateStore.remove(cmd.tempFilePath);
-              } catch (_) {}
+              } catch (_) {} // coverage:ignore-line
               st.chunks = ChunkScheduler.singleStream(st.totalSize);
             }
           } else {
@@ -954,7 +1009,7 @@ class HttpTransferJob {
             try {
               final f = File(p);
               if (await f.exists()) await f.delete();
-            } catch (_) {}
+            } catch (_) {} // coverage:ignore-line
           }
           throw DioException(
             requestOptions: response.requestOptions,
@@ -1110,10 +1165,10 @@ class HttpTransferJob {
         try {
           await sink?.flush();
           await sink?.close();
-        } catch (_) {}
+        } catch (_) {} // coverage:ignore-line
         try {
           await StateStore.save(cmd.tempFilePath, _state!, durable: true);
-        } catch (_) {}
+        } catch (_) {} // coverage:ignore-line
       }
     }
 
@@ -1290,6 +1345,11 @@ class HttpTransferJob {
     final st = _state!;
     final downloaded = st.downloadedBytes;
     final total = st.totalSize;
+    if (downloaded != _lastProgressBytes) {
+      _lastProgressBytes = downloaded;
+      _lastProgressTimeMs = _stopwatch.elapsedMilliseconds;
+      _stalledEmitted = false;
+    }
     _speedSamples.add(SpeedSample(_stopwatch.elapsedMilliseconds, downloaded));
     while (_speedSamples.isNotEmpty &&
         _stopwatch.elapsedMilliseconds - _speedSamples.first.timestampMs >
@@ -1359,6 +1419,7 @@ class HttpTransferJob {
         return 'paused';
       case DmxStateStatus.active:
         final msg = statusMessage?.toLowerCase() ?? '';
+        if (msg.contains('stalled')) return 'stalled';
         if (msg.contains('updating links')) return 'updating_links';
         if (msg.contains('retrying')) return 'retrying';
         if (msg.contains('restarting') || msg.contains('source changed')) {
@@ -1423,10 +1484,4 @@ class HttpTransferJob {
       );
     }
   }
-}
-
-class SpeedSample {
-  final int timestampMs;
-  final int bytes;
-  SpeedSample(this.timestampMs, this.bytes);
 }
