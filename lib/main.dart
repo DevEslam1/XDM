@@ -89,7 +89,9 @@ Future<double> _getDeviceMemoryGB() async {
     } else if (Platform.isIOS) {
       return 4.0;
     }
-  } catch (_) {}
+  } catch (e, st) {
+    LoggingService.logger('main').warning('Failed to detect device memory', e, st);
+  }
   return 4.0;
 }
 
@@ -136,8 +138,8 @@ Future<void> main(List<String> args) async {
         } else {
           consecutiveJankWindows = 0;
         }
-      } catch (_) {
-        // SettingsProvider.instance not loaded yet, ignore
+      } catch (e, st) {
+        LoggingService.logger('main').warning('Failed to check jankAutoBatterySaver', e, st);
       }
     };
 

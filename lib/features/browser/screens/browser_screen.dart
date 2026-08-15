@@ -19,6 +19,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/services/logging_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/user_script_manager.dart' hide UserScript;
 import '../../../core/services/youtube_service.dart';

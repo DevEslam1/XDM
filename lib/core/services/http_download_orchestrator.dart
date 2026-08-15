@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -83,7 +84,9 @@ class HttpDownloadOrchestrator {
           knownFileSize: resolvedFileSize,
         );
         alreadyOnDisk = state.state.downloadedBytes;
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+      LoggingService.logger('HttpDownloadOrchestrator').warning('Operation failed', e, st);
+    }
     }
 
     final punyUrl = convertIdnToPunycode(url);

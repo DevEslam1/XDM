@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
@@ -151,7 +152,8 @@ class DownloadEngine implements IDownloadEngine {
         return 1;
       }
       return requestedThreads;
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('DownloadEngine').warning('Operation failed with fallback', e, st);
       return requestedThreads;
     }
   }
@@ -196,7 +198,9 @@ class DownloadEngine implements IDownloadEngine {
                   name.startsWith('$baseName.dmxpart')) {
                 try {
                   await entity.delete();
-                } catch (_) {} // coverage:ignore-line
+                } catch (e, st) {
+      LoggingService.logger('DownloadEngine').warning('Operation failed', e, st);
+    }
               }
             }
           }
@@ -210,10 +214,14 @@ class DownloadEngine implements IDownloadEngine {
         if (f is File && (f.path.endsWith('.dmxpart.tmp') || f.path.endsWith('.tmp'))) {
           try {
             await f.delete();
-          } catch (_) {} // coverage:ignore-line
+          } catch (e, st) {
+      LoggingService.logger('DownloadEngine').warning('Operation failed', e, st);
+    }
         }
       }
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('DownloadEngine').warning('Operation failed', e, st);
+    }
   }
 
   Future<DownloadIsolatePool> _ensurePool() {

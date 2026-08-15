@@ -169,7 +169,9 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
     _clientCreationTimes.remove(client);
     try {
       client.close(force: true);
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('DioClientPool').warning('Operation failed', e, st);
+    }
   }
 
   void registerDownload(Dio client, String taskId) {
@@ -189,7 +191,9 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
     for (final client in List<Dio>.from(_activeClients)) {
       try {
         client.close(force: true);
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+      LoggingService.logger('DioClientPool').warning('Operation failed', e, st);
+    }
     }
     _activeClients.clear();
     _reservedClients.clear();

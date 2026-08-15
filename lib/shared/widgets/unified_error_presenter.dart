@@ -32,7 +32,9 @@ class UnifiedErrorPresenter {
     try {
       DiagnosticService.instance
           .record(presenterType, error.toString(), error: error);
-    } catch (_) {}
+    } catch (e, st) {
+      _logger.warning('Failed to record diagnostic in presenter', e, st);
+    }
   }
 
   static Widget showInlineError(

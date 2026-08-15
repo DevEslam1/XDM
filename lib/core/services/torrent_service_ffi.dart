@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -153,7 +154,8 @@ class _CapabilityGate {
       // ignore: avoid_dynamic_calls
       return (LibtorrentFlutter.instance as dynamic).getFileProgress(id)
           as List<dynamic>?;
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -164,7 +166,8 @@ class _CapabilityGate {
       // ignore: avoid_dynamic_calls
       return (LibtorrentFlutter.instance as dynamic).getFilePriorities(id)
           as List<dynamic>?;
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -183,7 +186,9 @@ class _CapabilityGate {
     try {
       // ignore: avoid_dynamic_calls
       (LibtorrentFlutter.instance as dynamic).forceReCheck(id);
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
+    }
   }
 
   Uint8List? saveResumeData(int id) {
@@ -192,7 +197,8 @@ class _CapabilityGate {
       // ignore: avoid_dynamic_calls
       return (LibtorrentFlutter.instance as dynamic).saveResumeData(id)
           as Uint8List?;
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -203,7 +209,8 @@ class _CapabilityGate {
       // ignore: avoid_dynamic_calls
       (LibtorrentFlutter.instance as dynamic).loadResumeData(id, data);
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
       return false;
     }
   }
@@ -226,7 +233,8 @@ class _CapabilityGate {
           message: map['message'] as String? ?? '',
         );
       }).toList();
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -237,7 +245,8 @@ class _CapabilityGate {
       // ignore: avoid_dynamic_calls
       (LibtorrentFlutter.instance as dynamic).addTracker(id, trackerUrl, tier);
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
       return false;
     }
   }
@@ -248,7 +257,8 @@ class _CapabilityGate {
       // ignore: avoid_dynamic_calls
       (LibtorrentFlutter.instance as dynamic).removeTracker(id, trackerUrl);
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
       return false;
     }
   }
@@ -259,7 +269,8 @@ class _CapabilityGate {
       // ignore: avoid_dynamic_calls
       (LibtorrentFlutter.instance as dynamic).announceNow(id);
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
       return false;
     }
   }
@@ -421,7 +432,8 @@ class TorrentService {
     }
     try {
       return _CapabilityGate.instance.saveResumeData(id);
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -598,7 +610,9 @@ class TorrentService {
       if (hasVideo) {
         enableSequentialDownload(torrentId, true);
       }
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
+    }
   }
 
   static void _configureSessionFromSettings() => configureSession();
@@ -743,7 +757,9 @@ class TorrentService {
       // ignore: avoid_dynamic_calls
       final numPieces = raw.numPieces;
       if (numPieces is int && numPieces > 0) return numPieces;
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
+    }
     const defaultPieceSize = 256 * 1024;
     try {
       final dynamic raw = torrentInfo;
@@ -752,7 +768,9 @@ class TorrentService {
       if (totalWanted > 0) {
         return (totalWanted / defaultPieceSize).ceil();
       }
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
+    }
     return 0;
   }
 
@@ -762,7 +780,9 @@ class TorrentService {
       // ignore: avoid_dynamic_calls
       final piecesDone = raw.piecesDone;
       if (piecesDone is int && piecesDone > 0) return piecesDone;
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
+    }
     final total = _estimatePiecesTotal(torrentInfo);
     try {
       final dynamic raw = torrentInfo;
@@ -771,7 +791,9 @@ class TorrentService {
       if (total > 0 && progress > 0) {
         return (progress * total).round();
       }
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
+    }
     return 0;
   }
 
@@ -1061,7 +1083,9 @@ class TorrentService {
                   stats.stateLabel.toLowerCase().contains('paused') ||
                   stats.stateLabel.toLowerCase().contains('stopped');
             }).timeout(const Duration(seconds: 2));
-          } catch (_) {} // coverage:ignore-line
+          } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
+    }
 
           // FIX T-9: Snapshot files AFTER pause-poll, not before
           List<Map<String, dynamic>>? torrentFiles;

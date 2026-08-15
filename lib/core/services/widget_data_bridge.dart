@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -290,7 +291,8 @@ class WidgetDataBridge {
       if (test != null) return -1;
       final value = await channel.invokeMethod<int>('getFreeDiskSpace');
       return value ?? -1;
-    } catch (e) {
+    } catch (e, st) {
+      LoggingService.logger('WidgetDataBridge').warning('Operation failed with fallback', e, st);
       return -1;
     }
   }

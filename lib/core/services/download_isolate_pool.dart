@@ -34,7 +34,8 @@ class EngineMessage {
         data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{},
         (raw['seq'] as num?)?.toInt() ?? 0,
       );
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('DownloadIsolatePool').warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -153,7 +154,9 @@ class DownloadIsolatePool implements MemoryPressureListener {
       _workers.remove(w);
       try {
         w.commandPort?.send({'t': 'shutdown'});
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+      LoggingService.logger('DownloadIsolatePool').warning('Operation failed', e, st);
+    }
       w.inbox.close();
       w.errorPort.close();
       w.isolate.kill(priority: Isolate.beforeNextEvent);
@@ -196,8 +199,8 @@ class DownloadIsolatePool implements MemoryPressureListener {
         worker.errorPort.close();
         worker.isolate.kill(priority: Isolate.immediate);
       }
-    } catch (e) {
-      // spawn failed
+    } catch (e, st) {
+      LoggingService.logger('DownloadIsolatePool').warning('Operation failed', e, st);
     } finally {
       _isSpawning = false;
       _drain();

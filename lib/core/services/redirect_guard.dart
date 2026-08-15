@@ -351,7 +351,9 @@ class RedirectGuard {
       final bytes = base64.decode(padded);
       final out = utf8.decode(bytes, allowMalformed: true);
       if (out.contains('http')) return out;
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('RedirectGuard').warning('Operation failed', e, st);
+    }
     return null;
   }
 

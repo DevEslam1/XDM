@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -107,7 +108,9 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
       try {
         final settings = context.read<SettingsProvider>();
         lightPulse(settings);
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('SmartUrlBar').warning('Operation failed', e, st);
+    }
     }
     if (!widget.focusNode.hasFocus) {
       _removeOverlay();
@@ -182,7 +185,9 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
           ));
         }
       }
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('SmartUrlBar').warning('Operation failed', e, st);
+    }
 
     if (!mounted) return;
     final settings = Provider.of<SettingsProvider>(context, listen: false);

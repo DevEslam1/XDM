@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import '../data/task_repository.dart';
 import '../models/download_task.dart';
@@ -58,7 +59,8 @@ class DownloadListProvider extends ChangeNotifier {
   DownloadTask? findTask(String id) {
     try {
       return _tasks.firstWhere((t) => t.id == id);
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('DownloadListProvider').warning('Operation failed with fallback', e, st);
       return null;
     }
   }

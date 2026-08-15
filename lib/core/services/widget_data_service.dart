@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
@@ -28,8 +29,8 @@ class WidgetDataService {
         'speedBytesPerSec': speedBytesPerSec,
         'completedCount': completedCount,
       });
-    } catch (e) {
-      // Silent fail — widget updates are non-critical
+    } catch (e, st) {
+      LoggingService.logger('WidgetDataService').warning('Operation failed', e, st);
     }
   }
 

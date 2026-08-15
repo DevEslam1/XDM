@@ -39,6 +39,7 @@ import '../services/single_instance_service.dart';
 import '../services/tracker_manager.dart';
 import '../services/widget_data_bridge.dart';
 import '../services/site_intelligence/site_intelligence_service.dart';
+import '../services/download_journal.dart';
 import '../services/shared_prefs_batcher.dart';
 import '../services/torrent_service.dart';
 
@@ -48,6 +49,8 @@ T inject<T extends Object>() => getIt<T>();
 Future<void> configureDependencies() async {
   if (getIt.isRegistered<DatabaseService>()) return;
 
+  getIt.registerLazySingleton<StateStoreFactory>(() => StateStoreFactory());
+  getIt.registerLazySingleton<StateStoreInstance>(() => getIt<StateStoreFactory>().defaultStore);
   getIt.registerLazySingleton<SettingsProvider>(() => SettingsProvider.instance);
   getIt.registerLazySingleton<DatabaseService>(() => DatabaseService());
   getIt.registerLazySingleton<TaskRepository>(

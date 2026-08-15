@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -67,13 +68,17 @@ class AdBlockerService {
       try {
         final uri = Uri.parse(s);
         return (uri.host.toLowerCase(), uri.path);
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('AdBlockerService').warning('Operation failed', e, st);
+    }
     }
     if (s.startsWith('//')) {
       try {
         final uri = Uri.parse('https:$s');
         return (uri.host.toLowerCase(), uri.path);
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('AdBlockerService').warning('Operation failed', e, st);
+    }
     }
     final slashIdx = s.indexOf('/');
     if (slashIdx != -1) {
@@ -218,7 +223,8 @@ class AdBlockerService {
     try {
       final host = Uri.parse(url).host.toLowerCase();
       return host.contains('youtube.com') || host.contains('youtu.be');
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('AdBlockerService').warning('Operation failed with fallback', e, st);
       return false;
     }
   }
@@ -327,7 +333,9 @@ class AdBlockerService {
     for (final l in List.of(_listeners)) {
       try {
         l();
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('AdBlockerService').warning('Operation failed', e, st);
+    }
     }
   }
 
@@ -476,7 +484,9 @@ class AdBlockerService {
         _recordBlocked(host);
         return true;
       }
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('AdBlockerService').warning('Operation failed', e, st);
+    }
     return false;
   }
 
@@ -1410,7 +1420,8 @@ $customCss
       final cappedSelectors = safeSelectors.join(',\n');
       // Fix #13: Use display:none (consistent with _buildCssRules).
       return '$base\n$cappedSelectors {\n  display: none !important;\n}\n';
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('AdBlockerService').warning('Operation failed with fallback', e, st);
       return base;
     }
   }

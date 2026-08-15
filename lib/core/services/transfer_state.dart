@@ -3,6 +3,7 @@
 /// isolation and reused across persistence formats.
 library;
 
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 
 enum DmxStateStatus { active, paused, complete, failed }
@@ -182,7 +183,8 @@ class TransferState {
         lastModified: json['lastModified'] as String?,
         migrationNote: 'v2',
       );
-    } catch (e) {
+    } catch (e, st) {
+      LoggingService.logger('TransferState').warning('Operation failed with fallback', e, st);
       return null;
     }
   }

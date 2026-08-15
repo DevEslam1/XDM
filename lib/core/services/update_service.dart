@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -369,7 +370,9 @@ class UpdateService {
             expectedFingerprint.trim().toLowerCase()) {
           try {
             await apkFile.delete();
-          } catch (_) {} // coverage:ignore-line
+          } catch (e, st) {
+      LoggingService.logger('UpdateService').warning('Operation failed', e, st);
+    }
           return ApkVerificationResult(
             isValid: false,
             certificateFingerprint: certFingerprint,

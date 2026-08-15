@@ -66,9 +66,9 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     if (pullToRefresh != null) {
       try {
         await pullToRefresh.endRefreshing();
-      } catch (_) {
-        // The controller may be disposed during tab eviction.
-      }
+      } catch (e, st) {
+      LoggingService.logger('BrowserScreenWebview').warning('Operation failed', e, st);
+    }
     }
   }
 
@@ -601,7 +601,9 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
           if (window.__xdmScrollFixInterval) { clearInterval(window.__xdmScrollFixInterval); window.__xdmScrollFixInterval = null; }
           if (window.__xdmYtAdInterval) { clearInterval(window.__xdmYtAdInterval); window.__xdmYtAdInterval = null; }
         ''').catchError((_) => null);
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('BrowserScreenWebview').warning('Operation failed', e, st);
+    }
       // Cancel pending loading timeout to prevent setState on a suspended tab.
       _loadingTimeoutTimers[tab.id]?.cancel();
       _loadingTimeoutTimers.remove(tab.id);
@@ -625,7 +627,9 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
         settings: PullToRefreshSettings(color: AppTheme.neonBlue),
         onRefresh: () => _refreshTabForPull(tab),
       );
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('BrowserScreenWebview').warning('Operation failed', e, st);
+    }
 
     // E13: Tab Suspension/Resume Visual Feedback
     setState(() {
@@ -666,7 +670,9 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       if (favicons.isNotEmpty) {
         faviconUrl = favicons.first.url.toString();
       }
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('BrowserScreenWebview').warning('Operation failed', e, st);
+    }
     if (faviconUrl == null) {
       try {
         final res = await controller.evaluateJavascript(source: '''
@@ -691,7 +697,9 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
             faviconUrl = s;
           }
         }
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('BrowserScreenWebview').warning('Operation failed', e, st);
+    }
     }
     if (faviconUrl == null || faviconUrl.isEmpty) return;
     tab.faviconUrl = faviconUrl;
@@ -708,8 +716,8 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
           });
         }
       }
-    } catch (_) {
-      // Favicon download is best-effort; the tab falls back to the globe icon.
+    } catch (e, st) {
+      LoggingService.logger('BrowserScreenWebview').warning('Operation failed', e, st);
     }
   }
 

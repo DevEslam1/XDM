@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -69,7 +70,8 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
       var host = Uri.parse(url).host;
       if (host.startsWith('www.')) host = host.substring(4);
       return host.isNotEmpty ? host : url;
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('LinkOptionsSheet').warning('Operation failed with fallback', e, st);
       return url;
     }
   }

@@ -599,7 +599,9 @@ class XdmBackendClient {
                       decoded['msg'])
                   ?.toString();
             }
-          } catch (_) {} // coverage:ignore-line
+          } catch (e, st) {
+      LoggingService.logger('XdmBackendClient').warning('Operation failed', e, st);
+    }
         } else {
           backendMsg = responseData.toString();
         }

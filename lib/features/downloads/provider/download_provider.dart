@@ -300,7 +300,9 @@ class DownloadProvider extends ChangeNotifier
       if (!_disposed) {
         try {
           notifyListeners();
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
     }
   }
@@ -955,7 +957,9 @@ class DownloadProvider extends ChangeNotifier
           try {
             final f = File(p);
             if (await f.exists()) await f.delete();
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
         }
         return task.copyWith(audioProgress: 0.0, audioDownloadedBytes: 0);
       }
@@ -963,7 +967,9 @@ class DownloadProvider extends ChangeNotifier
     if (oldItag != null) {
       try {
         await itagFile.writeAsString(oldItag);
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
     }
 
     if (await audioStateFile.exists()) {
@@ -974,7 +980,9 @@ class DownloadProvider extends ChangeNotifier
         debugPrint('[DMX] Corrupt .audio.dmxstate detected, deleting.');
         try {
           await audioStateFile.delete();
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
     }
 
@@ -982,7 +990,9 @@ class DownloadProvider extends ChangeNotifier
       if (await audioStateFile.exists()) {
         try {
           await audioStateFile.delete();
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
       return task.copyWith(audioProgress: 0.0, audioDownloadedBytes: 0);
     }
@@ -995,7 +1005,9 @@ class DownloadProvider extends ChangeNotifier
         if (decoded is Map && decoded['threadCount'] is int) {
           audioThreads = decoded['threadCount'] as int;
         }
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
     }
     final audioBytes = await actualDownloadedBytes(
       audioFile.path,
@@ -1085,7 +1097,9 @@ class DownloadProvider extends ChangeNotifier
             if (await partFile.exists()) {
               videoBytes = await partFile.length();
             }
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
         }
       } else {
         // Multi-threaded: partial file may be pre-allocated to full size.
@@ -2207,7 +2221,9 @@ class DownloadProvider extends ChangeNotifier
             final k = suffix.isEmpty ? id : '$id$suffix';
             try {
               _cancelTokens[k]?.cancel('paused');
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
             _cancelTokens.remove(k);
           }
           final fut = _activeFutures[id];
@@ -2220,7 +2236,9 @@ class DownloadProvider extends ChangeNotifier
                 debugPrint(
                     '[FIX-P1] Engine future timed out on pause (${pauseTimeoutSecs}s)');
               });
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
           }
 
           _activeFutures.remove(id);
@@ -2238,7 +2256,9 @@ class DownloadProvider extends ChangeNotifier
           try {
             final latest = _findTask(id) ?? task;
             await File('${latest.tempFilePath}.dmxstate').delete();
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
         }
       }
 
@@ -2470,7 +2490,9 @@ class DownloadProvider extends ChangeNotifier
             parseOk = true;
             debugPrint('[DMX] M1: 250ms retry recovered valid .dmxstate parse');
           }
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
 
       if (!parseOk) {
@@ -2486,12 +2508,16 @@ class DownloadProvider extends ChangeNotifier
             debugPrint(
                 '[DMX] pauseTask: journal has data, preserving .dmxstate');
           }
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
 
         if (!recoveredFromJournal) {
           try {
             await stateFile.delete();
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
           debugPrint(
               '[DMX] pauseTask: deleted corrupt .dmxstate (no journal fallback)');
         }
@@ -2529,7 +2555,9 @@ class DownloadProvider extends ChangeNotifier
           if (decoded is Map && decoded['threadCount'] is int) {
             audioThreads = decoded['threadCount'] as int;
           }
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
       final audioDiskBytes = await actualDownloadedBytes(
         audioPath,
@@ -2566,7 +2594,9 @@ class DownloadProvider extends ChangeNotifier
           if (decoded is Map && decoded['threadCount'] is int) {
             actualAudioThreads = decoded['threadCount'] as int;
           }
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
       audioBytesOnDisk = await actualDownloadedBytes(
         audioStatePath,
@@ -2881,7 +2911,9 @@ class DownloadProvider extends ChangeNotifier
               );
             }
           }
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
     }
 
@@ -2984,11 +3016,15 @@ class DownloadProvider extends ChangeNotifier
       }
       // Pause every active download so state is saved cleanly.
       await pauseAllTasks();
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
     try {
       await BackgroundService.releaseWakeLock();
       await BackgroundService.stop();
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
     // Give the service a moment to clean up, then hard-exit.
     await Future<void>.delayed(const Duration(milliseconds: 400));
     exit(0);
@@ -3010,7 +3046,9 @@ class DownloadProvider extends ChangeNotifier
         final k = suffix.isEmpty ? id : '$id$suffix';
         try {
           _cancelTokens[k]?.cancel('cancelled');
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
         _cancelTokens.remove(k);
       }
 
@@ -3106,7 +3144,9 @@ class DownloadProvider extends ChangeNotifier
                 final f = File(p);
                 if (await f.exists()) await f.delete();
               }
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
             task = task.copyWith(
               url: newUrl,
               mergedAudioUrl: newAudioUrl,
@@ -3284,7 +3324,9 @@ class DownloadProvider extends ChangeNotifier
         try {
           final f = File(path);
           if (await f.exists()) await f.delete();
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
       // Reset progress to zero locally
       task = task.copyWith(
@@ -3334,7 +3376,9 @@ class DownloadProvider extends ChangeNotifier
         try {
           final f = File(path);
           if (await f.exists()) await f.delete();
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
 
       // FIX-YT-05 / FIX-6: Only clean audio sidecars when the audio file is
@@ -3362,7 +3406,9 @@ class DownloadProvider extends ChangeNotifier
             try {
               final f = File(p);
               if (await f.exists()) await f.delete();
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
           }
         }
       } else {
@@ -3373,7 +3419,9 @@ class DownloadProvider extends ChangeNotifier
           try {
             final f = File(p);
             if (await f.exists()) await f.delete();
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
         }
       }
 
@@ -3386,7 +3434,9 @@ class DownloadProvider extends ChangeNotifier
           try {
             TorrentService.pauseTorrent(staleTorrentId);
             TorrentService.removeTorrent(staleTorrentId, deleteFiles: false);
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
         }
         unawaited(TorrentResumeStore.deleteResumeDataForSource(task.url).catchError((e) {
           _log.warning('Failed to delete resume data for torrent source', e);
@@ -3431,7 +3481,9 @@ class DownloadProvider extends ChangeNotifier
         debugPrint('[DMX] H-7 FIX: Corrupted state file detected, deleting');
         try {
           await stateFile.delete();
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
         final idx = _tasks.indexWhere((t) => t.id == id);
         if (idx != -1) {
           _tasks[idx] = _tasks[idx].copyWith(
@@ -3610,7 +3662,9 @@ class DownloadProvider extends ChangeNotifier
     if (token != null && !token.isCancelled) {
       try {
         token.cancel('cleaned_up');
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
     }
     _taskLocks.remove(id);
     _lastTaskOpTimes.remove(id);
@@ -3658,9 +3712,9 @@ class DownloadProvider extends ChangeNotifier
       if (token != null && !token.isCancelled) {
         try {
           token.cancel('deleted');
-        } catch (e) {
-          // Ignore
-        }
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
 
       final activeFuture = _activeFutures[id];
@@ -3672,9 +3726,9 @@ class DownloadProvider extends ChangeNotifier
               debugPrint('[DMX] deleteTask: Future timeout for $id, proceeding');
             },
           );
-        } catch (_) {
-          // Swallow errors - deleting task anyway
-        }
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
       _activeFutures.remove(id);
 
@@ -4141,7 +4195,9 @@ class DownloadProvider extends ChangeNotifier
         if (token != null && !token.isCancelled) {
           try {
             token.cancel('failed');
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
         }
         _cancelTokens.remove(id);
       }
@@ -4621,7 +4677,9 @@ class DownloadProvider extends ChangeNotifier
             );
             continue;
           }
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
         _tasks[i] = task.copyWith(
           status: DownloadStatus.paused,
           speed: 0,
@@ -4760,7 +4818,9 @@ class DownloadProvider extends ChangeNotifier
         try {
           final f = File(p);
           if (await f.exists()) await f.delete();
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
     }
 
@@ -4780,7 +4840,9 @@ class DownloadProvider extends ChangeNotifier
             final fa = Uri.tryParse(a)?.toFilePath() ?? a;
             final fb = Uri.tryParse(b)?.toFilePath() ?? b;
             if (fa == fb) return true;
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
         }
         return false;
       }
@@ -4950,9 +5012,9 @@ class DownloadProvider extends ChangeNotifier
               return;
             }
           }
-        } catch (e) {
-          // Fall through to normal resolveMetadata path
-        }
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
 
       if (newFileSize == null && !isRefresh) {
@@ -5110,7 +5172,9 @@ class DownloadProvider extends ChangeNotifier
               try {
                 final dec = jsonDecode(await sf.readAsString());
                 if (dec is Map) storedEtag = dec['etag'] as String?;
-              } catch (_) {}
+              } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
             }
           }
           final etagMismatch = metadata?.etag != null &&
@@ -5170,7 +5234,9 @@ class DownloadProvider extends ChangeNotifier
             if (fut != null) {
               try {
                 await fut.timeout(const Duration(seconds: 3));
-              } catch (_) {}
+              } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
             }
           }
           // Stream identity changed on refresh -> delete state and part files
@@ -5182,7 +5248,9 @@ class DownloadProvider extends ChangeNotifier
             try {
               final f = File(path);
               if (await f.exists()) await f.delete();
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
           }
         } else {
           // Stream identity unchanged -> do NOT delete .dmxstate.
@@ -5223,7 +5291,9 @@ class DownloadProvider extends ChangeNotifier
           try {
             final f = File(path);
             if (await f.exists()) await f.delete();
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
         }
       }
 
@@ -5447,7 +5517,9 @@ class DownloadProvider extends ChangeNotifier
             try {
               final dec = jsonDecode(await sf.readAsString());
               if (dec is Map) storedEtag = dec['etag'] as String?;
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
           }
         }
         // FIX-C3: If Content-Length differs by >1% OR if ETag present and differs from stored etag, call startOverTask
@@ -5504,7 +5576,9 @@ class DownloadProvider extends ChangeNotifier
           try {
             final f = File(p);
             if (await f.exists()) await f.delete();
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
         }
         final fresh = _findTask(id);
         if (fresh != null) {
@@ -5594,7 +5668,9 @@ class DownloadProvider extends ChangeNotifier
         try {
           final f = File(p);
           if (await f.exists()) await f.delete();
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
       }
     }
 
@@ -5632,7 +5708,9 @@ class DownloadProvider extends ChangeNotifier
           try {
             final f = File(path);
             if (await f.exists()) await f.delete();
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+    }
         }
       } catch (e) {
         debugPrint('Failed to delete temp files: $e');
@@ -5918,7 +5996,8 @@ class DownloadProvider extends ChangeNotifier
       if (oldUri.host != newUri.host) return true;
 
       return false;
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('DownloadProvider').warning('Operation failed with fallback', e, st);
       return false;
     }
   }

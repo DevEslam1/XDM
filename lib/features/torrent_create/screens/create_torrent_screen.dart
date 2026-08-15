@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
 import '../../../core/app_theme.dart';
+import '../../../core/services/logging_service.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
@@ -152,7 +153,9 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
       bool fileExists = false;
       try {
         fileExists = File(output).existsSync();
-      } catch (_) {}
+      } catch (e, st) {
+        LoggingService.logger('CreateTorrentScreen').warning('Failed to check if torrent output exists', e, st);
+      }
 
       if (res != null || fileExists) {
         ThemedSnackbar.show(

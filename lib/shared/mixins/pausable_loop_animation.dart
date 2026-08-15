@@ -74,7 +74,12 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
   bool get loopWanted {
     try {
       if (SettingsProvider.instance.batterySaverMode) return false;
-    } catch (_) {}
+    } catch (e) {
+      assert(() {
+        debugPrint('[PausableLoopAnimation] SettingsProvider not ready: $e');
+        return true;
+      }());
+    }
     return true;
   }
 
@@ -105,7 +110,12 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
     bool batterySaver = false;
     try {
       batterySaver = SettingsProvider.instance.batterySaverMode;
-    } catch (_) {}
+    } catch (e) {
+      assert(() {
+        debugPrint('[PausableLoopAnimation] SettingsProvider not ready: $e');
+        return true;
+      }());
+    }
     final shouldRun = _foreground &&
         loopWanted &&
         !batterySaver &&
@@ -117,8 +127,11 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
       } else {
         if (loopController.isAnimating) loopController.stop();
       }
-    } catch (_) {
-      // Controller may have been disposed or ticker removed
+    } catch (e) {
+      assert(() {
+        debugPrint('[PausableLoopAnimation] Controller disposed or ticker removed: $e');
+        return true;
+      }());
     }
   }
 

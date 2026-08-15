@@ -237,7 +237,9 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                                 targetUrl = resolved.$1;
                                 typeOverride = resolved.$2;
                               }
-                            } catch (_) {}
+                            } catch (e, st) {
+      LoggingService.logger('BrowserTabView').warning('Operation failed', e, st);
+    }
                           }
                           if (targetUrl != null &&
                               targetUrl.trim().isNotEmpty) {

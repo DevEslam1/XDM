@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
@@ -66,7 +67,8 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
     try {
       final uri = Uri.parse(widget.currentUrl);
       return uri.host.isNotEmpty ? uri.host : widget.currentUrl;
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('BrowserShieldSheet').warning('Operation failed with fallback', e, st);
       return widget.currentUrl;
     }
   }

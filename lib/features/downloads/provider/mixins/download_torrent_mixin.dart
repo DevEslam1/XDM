@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 
@@ -73,7 +74,9 @@ mixin DownloadTorrentMixin {
           try {
             TorrentService.pauseTorrent(existingId);
             TorrentService.removeTorrent(existingId, deleteFiles: false);
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadTorrentMixin').warning('Operation failed', e, st);
+    }
           providerTorrentIds.remove(task.id);
           // Fall through to the add-new-handle path below
         } else {

@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'package:dio/dio.dart';
@@ -115,7 +116,8 @@ class DownloadInterceptor {
     try {
       final uri = Uri.parse(url);
       return '${uri.scheme}://${uri.host}${uri.path}';
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('DownloadInterceptor').warning('Operation failed with fallback', e, st);
       return url.split('?').first.split('#').first;
     }
   }
@@ -190,7 +192,9 @@ class DownloadInterceptor {
               (response.headers.value('content-disposition') ?? '')
                   .toLowerCase();
         }
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('DownloadInterceptor').warning('Operation failed', e, st);
+    }
 
       if (contentType.isEmpty || contentType.contains('text/html')) {
         try {
@@ -213,7 +217,9 @@ class DownloadInterceptor {
                   .toLowerCase();
 
           await response.data?.stream.drain<void>().catchError((_) {});
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadInterceptor').warning('Operation failed', e, st);
+    }
       }
 
       if (contentType.isEmpty && contentDisposition.isEmpty) {
@@ -262,9 +268,10 @@ class DownloadInterceptor {
     if (utf8Match != null) {
       try {
         return safeFileName(Uri.decodeComponent(utf8Match.group(1)!));
-      } catch (_) {
-        return safeFileName(utf8Match.group(1)!);
-      }
+      } catch (e, st) {
+      LoggingService.logger('DownloadInterceptor').warning('Operation failed with fallback', e, st);
+      return safeFileName(utf8Match.group(1)!);
+    }
     }
 
     final quotedMatch = RegExp(

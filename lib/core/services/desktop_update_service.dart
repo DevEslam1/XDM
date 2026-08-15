@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
@@ -118,7 +119,9 @@ class DesktopUpdateService {
           _log.severe('SHA-256 mismatch for desktop update file');
           try {
             await File(downloadPath).delete();
-          } catch (_) {} // coverage:ignore-line
+          } catch (e, st) {
+      LoggingService.logger('DesktopUpdateService').warning('Operation failed', e, st);
+    }
           return false;
         }
       }
@@ -130,7 +133,9 @@ class DesktopUpdateService {
         );
         try {
           await File(downloadPath).delete();
-        } catch (_) {} // coverage:ignore-line
+        } catch (e, st) {
+      LoggingService.logger('DesktopUpdateService').warning('Operation failed', e, st);
+    }
         return false;
       }
 
@@ -244,7 +249,9 @@ class DesktopUpdateService {
       // Clean up the downloaded DMG.
       try {
         await File(dmgPath).delete();
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+      LoggingService.logger('DesktopUpdateService').warning('Operation failed', e, st);
+    }
 
       return true;
     } catch (e) {

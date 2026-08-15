@@ -643,7 +643,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
       final tab = _tabs[_currentTabIndex];
       try {
         tab.findInteractionController?.clearMatches();
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
+    }
     }
     setState(() {
       _findPanelVisible = false;
@@ -660,7 +662,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     if (_findMatchCount <= 0) return;
     try {
       controller.findNext(forward: forward);
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
+    }
   }
 
   @override
@@ -670,7 +674,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     if (query.isEmpty) {
       try {
         controller?.clearMatches();
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
+    }
       setState(() {
         _findMatchCount = 0;
         _findActiveMatch = 0;
@@ -683,7 +689,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     });
     try {
       controller?.findAll(find: query);
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
+    }
   }
 
   /// UX 3.3: Toggles force-dark mode and applies it to every live tab.
@@ -725,7 +733,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
             currentSettings.incognito = tab.isIncognito;
             await controller.setSettings(settings: currentSettings);
           }
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
+    }
       }
       try {
         final css = forceDark ? ScriptInjector.buildForceDarkCss() : '';
@@ -744,7 +754,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
             }
           })();
         ''').catchError((_) => null);
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
+    }
     }
   }
 
@@ -792,9 +804,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
                 if (await file.exists()) {
                   await file.delete();
                 }
-              } catch (_) {
-                // File may be locked or already deleted — safe to ignore.
-              }
+              } catch (e, st) {
+      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
+    }
             }
             await db.deleteTask(task.id);
           }
@@ -874,7 +886,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
                           await activeTab.controller
                               ?.setSettings(settings: currentSettings);
                         }
-                      } catch (_) {}
+                      } catch (e, st) {
+      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
+    }
                     },
                   ),
                   Row(
@@ -927,7 +941,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
           currentSettings.textZoom = value.round();
           await activeTab.controller?.setSettings(settings: currentSettings);
         }
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
+    }
     }
   }
 
@@ -1180,7 +1196,8 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
         );
       }
       return launched;
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed with fallback', e, st);
       return false;
     }
   }

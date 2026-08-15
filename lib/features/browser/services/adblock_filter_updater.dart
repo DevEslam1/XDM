@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -599,7 +600,9 @@ class AdBlockFilterUpdater {
             _siteCosmeticRules[entry.key] = rules.toSet();
           }
           // ignore: empty_catches
-        } catch (e) {}
+        } catch (e, st) {
+      LoggingService.logger('AdblockFilterUpdater').warning('Operation failed', e, st);
+    }
       }
 
       final siteCosmeticExceptionsStr =
@@ -613,7 +616,9 @@ class AdBlockFilterUpdater {
             _cosmeticExceptions[entry.key] = rules.toSet();
           }
           // ignore: empty_catches
-        } catch (e) {}
+        } catch (e, st) {
+      LoggingService.logger('AdblockFilterUpdater').warning('Operation failed', e, st);
+    }
       }
     }
   }
@@ -814,7 +819,9 @@ class AdBlockFilterUpdater {
         final uri = Uri.parse(hostnameOrUrl);
         lower = uri.host.toLowerCase();
         path = uri.path;
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('AdblockFilterUpdater').warning('Operation failed', e, st);
+    }
     } else if (hostnameOrUrl.contains('/')) {
       final idx = hostnameOrUrl.indexOf('/');
       lower = hostnameOrUrl.substring(0, idx).toLowerCase();
@@ -831,7 +838,9 @@ class AdBlockFilterUpdater {
             if (RegExp(regexStr, caseSensitive: false).hasMatch(path)) {
               return true;
             }
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('AdblockFilterUpdater').warning('Operation failed', e, st);
+    }
         }
       }
       if (_urlPatternsTrie.searchSubstrings(path)) return true;

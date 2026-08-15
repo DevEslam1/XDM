@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 
 abstract class TaskRepository {
@@ -20,7 +21,8 @@ class InMemoryTaskRepository implements TaskRepository {
   Future<DownloadTask?> getById(String id) async {
     try {
       return _storage.firstWhere((t) => t.id == id);
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('TaskRepository').warning('Operation failed with fallback', e, st);
       return null;
     }
   }

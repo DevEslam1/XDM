@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -211,7 +212,9 @@ class TabManager extends ChangeNotifier {
           tab.pullToRefreshController != null) {
         try {
           tab.controller?.dispose();
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('TabManager').warning('Operation failed', e, st);
+    }
         tab.controller = null;
         tab.pullToRefreshController = null;
         tab.isSuspended = true;
@@ -307,7 +310,9 @@ class TabManager extends ChangeNotifier {
     // Dispose WebView controller BEFORE removing from list (PERF-6)
     try {
       closingTab.controller?.dispose();
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('TabManager').warning('Operation failed', e, st);
+    }
     closingTab.controller = null;
     closingTab.pullToRefreshController = null;
 
@@ -361,7 +366,9 @@ class TabManager extends ChangeNotifier {
         _recordDisposedTabId(tab.id);
         try {
           tab.dispose();
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('TabManager').warning('Operation failed', e, st);
+    }
       }
     }
     _tabs.clear();

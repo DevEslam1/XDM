@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'database_service.dart';
@@ -124,6 +125,8 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     // Task 4.3: Flush database saves on backgrounding/detaching
     try {
       DatabaseService.instance.flushPendingSaves();
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('AppLifecycleCoordinator').warning('Operation failed', e, st);
+    }
   }
 }

@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:collection';
 import 'dart:io';
 import 'dart:math' as math;
@@ -121,17 +122,19 @@ String? firstNonEmpty(String? a, String? b) {
   return null;
 }
 
-Future<int> actualDownloadedBytes(String tempFilePath, {int threadCount = 1}) async {
+Future<int> actualDownloadedBytes(String tempFilePath, {int threadCount = 1, StateStoreInstance? stateStore}) async {
   final file = File(tempFilePath);
   if (!await file.exists()) return 0;
   final fileLen = await file.length();
-  final state = await StateStore.load(tempFilePath);
+  final state = stateStore != null
+      ? await stateStore.load(tempFilePath)
+      : await StateStore.load(tempFilePath);
   if (state != null) {
     final stateBytes = state.downloadedBytes;
     if (state.totalSize > 0) {
-      return math.min(stateBytes, fileLen).clamp(0, state.totalSize);
+      return math.min<int>(stateBytes, fileLen).clamp(0, state.totalSize);
     }
-    return math.min(stateBytes, fileLen);
+    return math.min<int>(stateBytes, fileLen);
   }
   return fileLen;
 }
@@ -151,7 +154,9 @@ bool isLikelyHtmlResponse(Headers headers, {List<int>? firstChunk}) {
           sample.contains('<body')) {
         return true;
       }
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('EngineUtils').warning('Operation failed', e, st);
+    }
   }
   return false;
 }

@@ -165,7 +165,9 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
           _log.warning('Failed to delete cookies', e);
           return false;
         }));
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('BrowserScreenLifecycle').warning('Operation failed', e, st);
+    }
     }
 
     for (final tab in _tabs) {

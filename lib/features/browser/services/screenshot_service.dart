@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:typed_data';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -21,7 +22,9 @@ class ScreenshotService {
           document.documentElement.offsetHeight
         )
       ''');
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('ScreenshotService').warning('Operation failed', e, st);
+    }
 
     return await controller.takeScreenshot(
       screenshotConfiguration: ScreenshotConfiguration(

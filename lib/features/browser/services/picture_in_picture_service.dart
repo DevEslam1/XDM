@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
 
@@ -10,7 +11,8 @@ class PictureInPictureService {
         source: 'document.pictureInPictureEnabled === true;',
       );
       return result == true || result == 'true';
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('PictureInPictureService').warning('Operation failed with fallback', e, st);
       return false;
     }
   }

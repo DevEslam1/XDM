@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -77,7 +78,9 @@ class FFmpegMuxService {
             if (sessionHolder.activeSession != null) {
               FFmpegKit.cancel(sessionHolder.activeSession!.getSessionId());
             }
-          } catch (_) {} // coverage:ignore-line
+          } catch (e, st) {
+      LoggingService.logger('FfmpegMuxService').warning('Operation failed', e, st);
+    }
           return false;
         },
       );
@@ -220,7 +223,9 @@ class FFmpegMuxService {
             '(video=$hasVideo audio=$hasAudio size=$sizeOk dur=$durationOk)');
         try {
           if (await file.exists()) await file.delete();
-        } catch (_) {} // coverage:ignore-line
+        } catch (e, st) {
+      LoggingService.logger('FfmpegMuxService').warning('Operation failed', e, st);
+    }
         return false;
       }
       return true;
@@ -228,7 +233,9 @@ class FFmpegMuxService {
       debugPrint('[FFmpeg] FFprobe validation exception: $e');
       try {
         if (await file.exists()) await file.delete();
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+      LoggingService.logger('FfmpegMuxService').warning('Operation failed', e, st);
+    }
       return false;
     }
   }

@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -320,7 +321,9 @@ class DownloadOrchestrator {
             if (await stateFile.exists()) {
               try {
                 await stateFile.delete();
-              } catch (_) {}
+              } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
             }
           }
           await _host.setTaskState(task);
@@ -607,7 +610,9 @@ class DownloadOrchestrator {
                   try {
                     final f = File(p);
                     if (await f.exists()) await f.delete();
-                  } catch (_) {}
+                  } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
                 }
               }
 
@@ -820,7 +825,9 @@ class DownloadOrchestrator {
           );
           try {
             await mergedFile.delete();
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
         }
       }
 
@@ -1008,7 +1015,9 @@ class DownloadOrchestrator {
         try {
           final mergedFile = File(mergedPath);
           if (await mergedFile.exists()) await mergedFile.delete();
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
         return false;
       }
 
@@ -1024,7 +1033,9 @@ class DownloadOrchestrator {
                 '$mergedLen < $expectedMinSize. Deleting.');
             try {
               await mergedFile.delete();
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
             return false;
           }
           debugPrint('[DMX] Merge successful: $mergedPath ($mergedLen bytes)');
@@ -1068,13 +1079,19 @@ class DownloadOrchestrator {
               actualVideoPath != current.localFilePath) {
             try {
               await videoFile.delete();
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
             try {
               await File('${current.tempFilePath}.dmxstate').delete();
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
             try {
               await File('${current.tempFilePath}.journal').delete();
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
           }
         } else {
           throw Exception('Merged output file not found after FFmpeg success');
@@ -1115,7 +1132,9 @@ class DownloadOrchestrator {
           try {
             final f = File(mergedPath);
             if (await f.exists()) await f.delete();
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
         }
       }
     }
@@ -1150,7 +1169,9 @@ class DownloadOrchestrator {
         if (videoOnlyFile.existsSync()) {
           try {
             await videoOnlyFile.delete();
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
         }
         await mergedFile.rename(task.localFilePath);
         await _finalizeDownload(task.id, _host.notifications.idFor(task.id));
@@ -1270,7 +1291,9 @@ class DownloadOrchestrator {
         !File(current.localFilePath).existsSync()) {
       try {
         await videoOnlyFile.rename(current.localFilePath);
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
     }
 
     // FIX-AUDIT-D3: Verify output file exists before marking completed
@@ -1615,7 +1638,9 @@ class DownloadOrchestrator {
         debugPrint('[DMX] H-7 FIX: Corrupt .dmxstate detected, deleting.');
         try {
           await stateFile.delete();
-        } catch (_) {}
+        } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
         task = task.copyWith(
           downloadedBytes: 0,
           chunks: List<double>.filled(
@@ -1643,7 +1668,9 @@ class DownloadOrchestrator {
         !File(task.localFilePath).existsSync()) {
       try {
         await File(videoOnlyPath).rename(task.localFilePath);
-      } catch (_) {}
+      } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
     }
 
     int videoBytesFromDisk;
@@ -2031,7 +2058,9 @@ class DownloadOrchestrator {
                 // Delete the corrupted audio file so it's re-downloaded cleanly.
                 try {
                   await audioFile.delete();
-                } catch (_) {}
+                } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
               }
             }
 
@@ -2082,7 +2111,9 @@ class DownloadOrchestrator {
             if (audioItag != null) {
               try {
                 await File('$liveAudioTempPath.itag').writeAsString(audioItag);
-              } catch (_) {}
+              } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
             }
 
             await _host.downloadEngine.download(
@@ -2253,7 +2284,9 @@ class DownloadOrchestrator {
                       flush: true);
                 }
               }
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
 
             final currentTask = _host.findTaskById(task.id);
             if (currentTask != null &&
@@ -2900,9 +2933,9 @@ class DownloadOrchestrator {
                 await _host.setTaskState(task);
                 continue;
               }
-            } catch (e) {
-              // ignore
-            }
+            } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
           }
           // FIX I-1: Cancel progress notification on failure / merge failure
           _host.notifications.cancelForTask(task.id);
@@ -2951,7 +2984,9 @@ class DownloadOrchestrator {
                 try {
                   final f = File(path);
                   if (await f.exists()) await f.delete();
-                } catch (_) {}
+                } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
               }
               task = task.copyWith(
                 url: newUrl,
@@ -3119,7 +3154,9 @@ class DownloadOrchestrator {
               try {
                 final f = File(path);
                 if (await f.exists()) await f.delete();
-              } catch (_) {}
+              } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
             }
             await _host.setTaskState(task);
           }
@@ -3196,7 +3233,9 @@ class DownloadOrchestrator {
                   TorrentService.pauseTorrent(existingTorrentId);
                   TorrentService.removeTorrent(existingTorrentId,
                       deleteFiles: false);
-                } catch (_) {}
+                } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
                 _host.providerTorrentIds.remove(task.id);
                 torrentId = null;
               } else {
@@ -3370,7 +3409,9 @@ class DownloadOrchestrator {
                 return copy;
               }).toList();
             }
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
         }
         verifiedTorrentFiles ??= task.torrentFiles!.map((f) {
           final copy = Map<String, dynamic>.from(f);
@@ -3548,7 +3589,9 @@ class DownloadOrchestrator {
             try {
               final f = File(p);
               if (await f.exists()) await f.delete();
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
           }
         }
       }
@@ -3660,7 +3703,9 @@ class DownloadOrchestrator {
           try {
             final f = File(p);
             if (await f.exists()) await f.delete();
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
         }
       }
 
@@ -3732,7 +3777,9 @@ class DownloadOrchestrator {
             try {
               TorrentService.pauseTorrent(tid);
               TorrentService.removeTorrent(tid, deleteFiles: false);
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
             _host.providerTorrentIds.remove(task.id);
           }
         }
@@ -3740,7 +3787,9 @@ class DownloadOrchestrator {
         if (!cancelToken.isCancelled) {
           try {
             cancelToken.cancel('Task failed, cleaning up in-flight requests');
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
         }
 
         await _host.flushPendingProgress(task.id);
@@ -3829,7 +3878,9 @@ class DownloadOrchestrator {
           try {
             final f = File(path);
             if (await f.exists()) await f.delete();
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
         }
 
         // FIX F6: Preserve partial temp files if failure is retryable so manual retry can resume
@@ -4349,6 +4400,8 @@ class DownloadOrchestrator {
       final tmp = File(tmpPath);
       await tmp.writeAsString(jsonEncode(state), flush: true);
       await tmp.rename(statePath);
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+    }
   }
 }

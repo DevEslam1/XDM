@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
@@ -19,7 +20,9 @@ class ConnectionManager {
         supportedProtocols: const ['h2', 'http/1.1'],
       );
       await socket.close();
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('ConnectionManager').warning('Operation failed', e, st);
+    }
   }
 
   static Future<bool> detectHttp2(String url) async {

@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 
 // ignore_for_file: prefer_initializing_formals
@@ -108,7 +109,8 @@ class NetworkMonitor {
           (res.statusCode != null &&
               res.statusCode! >= 200 &&
               res.statusCode! < 300);
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('NetworkMonitor').warning('Operation failed with fallback', e, st);
       return false;
     }
   }
@@ -188,7 +190,9 @@ class NetworkMonitor {
         if (fut != null) {
           try {
             await fut.timeout(const Duration(seconds: 5));
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('NetworkMonitor').warning('Operation failed', e, st);
+    }
         }
         _cancelTokens().remove(task.id);
       }

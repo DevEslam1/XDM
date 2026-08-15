@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
@@ -269,7 +270,8 @@ class PermissionService {
     if (kIsWeb || !Platform.isAndroid) return true;
     try {
       return await Permission.ignoreBatteryOptimizations.status.isGranted;
-    } catch (e) {
+    } catch (e, st) {
+      LoggingService.logger('PermissionService').warning('Operation failed with fallback', e, st);
       return false;
     }
   }

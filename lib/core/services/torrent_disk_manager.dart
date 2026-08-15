@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'torrent_models.dart';
@@ -32,7 +33,9 @@ class TorrentDiskManager {
         if (Directory('/sys/block/mmcblk0').existsSync()) {
           return DiskIoMode.emmc;
         }
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+      LoggingService.logger('TorrentDiskManager').warning('Operation failed', e, st);
+    }
     }
     return DiskIoMode.ssd;
   }
@@ -95,7 +98,8 @@ class TorrentDiskManager {
         }
       }
       return 4096; // Fallback default: 4GB
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('TorrentDiskManager').warning('Operation failed with fallback', e, st);
       return 4096;
     }
   }

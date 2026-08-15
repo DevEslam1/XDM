@@ -137,12 +137,37 @@ void main() {
         chunks: [ChunkState(start: 0, end: 4999, downloaded: 1000)],
         url: 'https://example.com/remove',
       );
-      await StateStore.save(tempFilePath, state);
+      final store = StateStoreInstance();
+      await store.save(tempFilePath, state);
       final statePath = StateStore.pathFor(tempFilePath);
       expect(await File(statePath).exists(), isTrue);
 
-      await StateStore.remove(tempFilePath);
+      await store.remove(tempFilePath);
       expect(await File(statePath).exists(), isFalse);
+    });
+
+    test('8. StateStoreFactory creates and isolates instances', () async {
+      final factory = StateStoreFactory();
+      final defaultStore = factory.defaultStore;
+      final customStore = factory.getOrCreate(name: 'worker-1');
+
+      expect(defaultStore, isNotNull);
+      expect(customStore, isNotNull);
+      expect(identical(defaultStore, customStore), isFalse);
+      expect(identical(factory.getOrCreate(name: 'worker-1'), customStore), isTrue);
+
+      final tempFilePath = '${tempDir.path}/factory_test.tmp';
+      final state = TransferState(
+        totalSize: 3000,
+        threadCount: 1,
+        chunks: [ChunkState(start: 0, end: 2999, downloaded: 1500)],
+        url: 'https://example.com/factory',
+      );
+      await customStore.save(tempFilePath, state);
+      final loaded = await customStore.load(tempFilePath);
+      expect(loaded, isNotNull);
+      expect(loaded!.downloadedBytes, 1500);
+      await customStore.remove(tempFilePath);
     });
   });
 }

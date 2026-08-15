@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:dio/dio.dart';
@@ -248,7 +249,9 @@ class MetadataProbeService {
         try {
           TorrentService.pauseTorrent(torrentId);
           TorrentService.removeTorrent(torrentId, deleteFiles: false);
-        } catch (_) {} // coverage:ignore-line
+        } catch (e, st) {
+      LoggingService.logger('MetadataProbeService').warning('Operation failed', e, st);
+    }
       }
 
       cancelToken?.whenCancel.then((_) {

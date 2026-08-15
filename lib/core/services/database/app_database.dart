@@ -83,7 +83,9 @@ class TorrentFilesConverter
             if (e is Map) {
               result.add(Map<String, dynamic>.from(e));
             }
-          } catch (_) {} // coverage:ignore-line
+          } catch (e, st) {
+      LoggingService.logger('AppDatabase').warning('Operation failed', e, st);
+    }
         }
         return result;
       }
@@ -103,7 +105,9 @@ class TorrentFilesConverter
               if (obj is Map) {
                 result.add(Map<String, dynamic>.from(obj));
               }
-            } catch (_) {} // coverage:ignore-line
+            } catch (e, st) {
+      LoggingService.logger('AppDatabase').warning('Operation failed', e, st);
+    }
           }
         }
         if (result.isNotEmpty) {

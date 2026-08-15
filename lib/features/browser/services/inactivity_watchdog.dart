@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
@@ -94,7 +95,9 @@ class InactivityWatchdog {
                 ?.evaluateJavascript(
                     source: 'try { window.stop(); } catch(e){}')
                 .catchError((_) => null);
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('InactivityWatchdog').warning('Operation failed', e, st);
+    }
           tab.isSuspended = true;
         }
       }

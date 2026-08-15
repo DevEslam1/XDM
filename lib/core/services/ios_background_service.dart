@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -135,7 +136,9 @@ class IosBackgroundService {
     try {
       final prefs = await SharedPreferences.getInstance();
       _isRegistered = prefs.getBool(_prefKeyIsRegistered) ?? false;
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('IosBackgroundService').warning('Operation failed', e, st);
+    }
     return _isRegistered;
   }
 
@@ -155,7 +158,9 @@ class IosBackgroundService {
         try {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool(_prefKeyIsRegistered, true);
-        } catch (_) {} // coverage:ignore-line
+        } catch (e, st) {
+      LoggingService.logger('IosBackgroundService').warning('Operation failed', e, st);
+    }
       }
       return success;
     } catch (e) {
@@ -174,7 +179,9 @@ class IosBackgroundService {
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool(_prefKeyIsRegistered, false);
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+      LoggingService.logger('IosBackgroundService').warning('Operation failed', e, st);
+    }
       return success;
     } catch (e) {
       debugPrint('Failed to cancel iOS background download: $e');

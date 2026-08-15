@@ -322,9 +322,9 @@ mixin _TabsMixin on _BrowserScreenStateBase {
     if (adNotifier != null) {
       try {
         adNotifier.dispose();
-      } catch (_) {
-        // Already disposed — safe to ignore.
-      }
+      } catch (e, st) {
+      LoggingService.logger('BrowserScreenTabs').warning('Operation failed', e, st);
+    }
     }
 
     final tabIndex = _tabs.indexWhere((t) => t.id == tabId);
@@ -338,18 +338,24 @@ mixin _TabsMixin on _BrowserScreenStateBase {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           try {
             InAppWebViewController.clearAllCache();
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('BrowserScreenTabs').warning('Operation failed', e, st);
+    }
           try {
             tab.controller
                 ?.evaluateJavascript(
                     source:
                         'window.localStorage.clear(); window.sessionStorage.clear();')
                 .catchError((_) => null);
-          } catch (_) {}
+          } catch (e, st) {
+      LoggingService.logger('BrowserScreenTabs').warning('Operation failed', e, st);
+    }
           if (tab.url.isNotEmpty && tab.url != 'about:blank') {
             try {
               CookieManager.instance().deleteCookies(url: WebUri(tab.url));
-            } catch (_) {}
+            } catch (e, st) {
+      LoggingService.logger('BrowserScreenTabs').warning('Operation failed', e, st);
+    }
           }
         });
       }

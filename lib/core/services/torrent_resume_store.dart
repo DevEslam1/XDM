@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -63,7 +64,9 @@ class TorrentResumeStore {
           return sha256.convert(utf8.encode(infoHash.toLowerCase())).toString();
         }
       }
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('TorrentResumeStore').warning('Operation failed', e, st);
+    }
 
     return sha256.convert(utf8.encode(sourceUrl)).toString();
   }
@@ -92,7 +95,9 @@ class TorrentResumeStore {
           : <String, String>{};
       index['$torrentId'] = fileName;
       await prefs.setString(_indexKey, jsonEncode(index));
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('TorrentResumeStore').warning('Operation failed', e, st);
+    }
   }
 
   static Future<void> _removeFromIndex(int torrentId) async {
@@ -103,7 +108,9 @@ class TorrentResumeStore {
       final index = Map<String, String>.from(jsonDecode(raw));
       index.remove('$torrentId');
       await prefs.setString(_indexKey, jsonEncode(index));
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('TorrentResumeStore').warning('Operation failed', e, st);
+    }
   }
 
   /// Durable save. Returns true only when the blob was written AND re-read
@@ -289,7 +296,8 @@ class TorrentResumeStore {
           .whereType<Map>()
           .map((f) => Map<String, dynamic>.from(f))
           .toList();
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('TorrentResumeStore').warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -310,7 +318,9 @@ class TorrentResumeStore {
         final f = File('${dir.path}/$key$suffix');
         if (await f.exists()) await f.delete();
       }
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('TorrentResumeStore').warning('Operation failed', e, st);
+    }
   }
 
   /// Validates that a resume blob is structurally valid and non-corrupt (Phase 4).
@@ -320,7 +330,8 @@ class TorrentResumeStore {
     try {
       final decoded = BencodeDecoder(blob).decode();
       return decoded is Map;
-    } catch (_) {
+    } catch (e, st) {
+      LoggingService.logger('TorrentResumeStore').warning('Operation failed with fallback', e, st);
       return false;
     }
   }

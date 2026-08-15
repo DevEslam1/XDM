@@ -272,7 +272,9 @@ class BackgroundService {
         _log.fine('Wake lock skipped due to aggressive battery saver mode');
         return;
       }
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('BackgroundService').warning('Operation failed', e, st);
+    }
 
     try {
       await _wakeLockChannel.invokeMethod<void>('acquire');
@@ -360,7 +362,9 @@ class BackgroundService {
         _log.info('Wake lock safety timer fired but downloads active. Renewing.');
         try {
           await _wakeLockChannel.invokeMethod<void>('acquire');
-        } catch (_) {} // coverage:ignore-line
+        } catch (e, st) {
+      LoggingService.logger('BackgroundService').warning('Operation failed', e, st);
+    }
         // Restart the safety timer for another cycle
         _scheduleWakeLockSafetyCheck();
         return;

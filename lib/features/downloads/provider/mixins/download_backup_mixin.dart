@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -168,7 +169,8 @@ mixin DownloadBackupMixin {
       final encrypter = encrypt_lib.Encrypter(encrypt_lib.AES(key));
       final encrypted = encrypt_lib.Encrypted(Uint8List.fromList(cipherBytes));
       return encrypter.decrypt(encrypted, iv: iv);
-    } catch (e) {
+    } catch (e, st) {
+      LoggingService.logger('DownloadBackupMixin').warning('Operation failed with fallback', e, st);
       return null;
     }
   }

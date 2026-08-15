@@ -59,7 +59,12 @@ class ThemedSnackbar {
           onClose: () {
             try {
               messenger.hideCurrentSnackBar();
-            } catch (_) {}
+            } catch (e) {
+              assert(() {
+                debugPrint('[ThemedSnackbar] hideCurrentSnackBar expected: $e');
+                return true;
+              }());
+            }
           },
         ),
       ),

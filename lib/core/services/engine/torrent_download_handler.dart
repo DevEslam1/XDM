@@ -172,7 +172,9 @@ class TorrentDownloadHandler {
               if (await tempTorrentFile.exists()) {
                 await tempTorrentFile.delete();
               }
-            } catch (_) {} // coverage:ignore-line
+            } catch (e, st) {
+      LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
+    }
           }
         } else {
           id = TorrentService.addTorrentFile(filePath, saveDir, sourceKey: url);
@@ -196,7 +198,9 @@ class TorrentDownloadHandler {
       if (torrentCompleted) return;
       try {
         TorrentService.pauseTorrent(id);
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+      LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
+    }
       await Future.delayed(const Duration(milliseconds: 200));
       List<Map<String, dynamic>>? pauseFiles = getTorrentFiles?.call();
       try {
@@ -217,7 +221,9 @@ class TorrentDownloadHandler {
                   })
               .toList();
         }
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+      LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
+    }
       final pauseSummary = normalizeTorrentFiles(pauseFiles);
       onProgress(DownloadProgress(
         downloadedBytes: pauseSummary.downloaded,
@@ -240,7 +246,9 @@ class TorrentDownloadHandler {
     if (cancelToken.isCancelled) {
       try {
         TorrentService.pauseTorrent(id);
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+      LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
+    }
       throw DioException(
         requestOptions: RequestOptions(path: url),
         type: DioExceptionType.cancel,
@@ -250,7 +258,9 @@ class TorrentDownloadHandler {
 
     try {
       TorrentService.resumeTorrent(id);
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
+    }
 
     await _listenForCompletion(
       id,
@@ -349,7 +359,9 @@ class TorrentDownloadHandler {
                       })
                   .toList();
             }
-          } catch (_) {} // coverage:ignore-line
+          } catch (e, st) {
+      LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
+    }
         }
         if (cachedAccurateFiles != null) {
           resolvedFiles = cachedAccurateFiles;

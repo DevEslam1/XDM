@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -163,7 +164,8 @@ class MirrorHealthStore implements DisposableService {
       if (raw == null) return null;
       final list = jsonDecode(raw) as List<dynamic>;
       return list.cast<String>();
-    } catch (e) {
+    } catch (e, st) {
+      LoggingService.logger('MirrorRegistry').warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -379,7 +381,9 @@ class ServerProfile {
             if (diff > 0) {
               lastRetryAfter = Duration(seconds: diff.clamp(1, 3600));
             }
-          } catch (_) {} // coverage:ignore-line
+          } catch (e, st) {
+      LoggingService.logger('MirrorRegistry').warning('Operation failed', e, st);
+    }
         }
       }
     }

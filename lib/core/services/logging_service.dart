@@ -96,7 +96,9 @@ class LoggingService {
       _logFile = File('${dir.path}/app_log.txt');
       _rotateLogsIfNeeded(dir);
       _fileSink = _logFile!.openWrite(mode: FileMode.append);
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('LoggingService').warning('Operation failed', e, st);
+    }
   }
 
   static void _rotateLogsIfNeeded(Directory dir) {
@@ -111,13 +113,17 @@ class LoggingService {
           _logFile = File('${dir.path}/app_log.txt');
         }
       }
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('LoggingService').warning('Operation failed', e, st);
+    }
   }
 
   static void _writeToFile(String text) {
     try {
       _fileSink?.write(text);
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('LoggingService').warning('Operation failed', e, st);
+    }
   }
 
   @visibleForTesting
@@ -179,7 +185,9 @@ class LoggingService {
     try {
       _fileSink?.close();
       _fileSink = null;
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      LoggingService.logger('LoggingService').warning('Operation failed', e, st);
+    }
     _initialized = false;
   }
 }

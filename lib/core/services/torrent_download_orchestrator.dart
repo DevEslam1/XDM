@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/logging_service.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:dio/dio.dart';
@@ -68,7 +69,9 @@ class TorrentDownloadOrchestrator {
     cancelToken.whenCancel.then((_) async {
       try {
         TorrentService.pauseTorrent(id);
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+      LoggingService.logger('TorrentDownloadOrchestrator').warning('Operation failed', e, st);
+    }
     });
 
     try {

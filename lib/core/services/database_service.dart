@@ -136,7 +136,9 @@ class DatabaseService {
             await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
           }
         }
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+      LoggingService.logger('DatabaseService').warning('Operation failed', e, st);
+    }
     }
     if (_maintenanceRuns % 12 == 0) {
       try {
@@ -154,7 +156,9 @@ class DatabaseService {
           // FIX: Only vacuum if checkpoint returned pages > 0
           try {
             await _db.customSelect('PRAGMA wal_checkpoint(PASSIVE)').get();
-          } catch (_) {} // coverage:ignore-line
+          } catch (e, st) {
+      LoggingService.logger('DatabaseService').warning('Operation failed', e, st);
+    }
           final swVacuum = Stopwatch()..start();
           await _db.customStatement('PRAGMA incremental_vacuum(50)');
           swVacuum.stop();

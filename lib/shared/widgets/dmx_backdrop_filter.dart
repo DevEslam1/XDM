@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../core/services/background_gate.dart';
 import '../../core/services/performance_monitor.dart';
 import '../../core/services/power_monitor.dart';
+import '../../core/services/logging_service.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
 /// High-performance backdrop blur filter with battery, thermal, and low-end gating.
@@ -62,7 +63,11 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
       final logicalW = size.width / ratio;
       // Heuristic: very low resolution + low DPR = low-end
       return logicalW < 400 && ratio <= 2.0;
-    } catch (_) {
+    } catch (e) {
+      assert(() {
+        debugPrint('[DmxBackdropFilter] detectLowEnd error: $e');
+        return true;
+      }());
       return false;
     }
   }
@@ -129,11 +134,17 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
       final settings = Provider.of<SettingsProvider>(context, listen: false);
       reduceVisuals = settings.reduceVisuals;
       classicUi = settings.classicUi;
-    } catch (_) {
+    } catch (e) {
+      assert(() {
+        debugPrint('[DmxBackdropFilter] Provider lookup failed: $e');
+        return true;
+      }());
       try {
         reduceVisuals = SettingsProvider.instance.reduceVisuals;
         classicUi = SettingsProvider.instance.classicUi;
-      } catch (_) {}
+      } catch (e, st) {
+        LoggingService.logger('DmxBackdropFilter').warning('Failed to read fallback settings', e, st);
+      }
     }
     if (reduceVisuals || classicUi) {
       return Container(

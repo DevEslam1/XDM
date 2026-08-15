@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/di/injection.dart';
 import '../../core/app_theme.dart';
+import '../../core/services/logging_service.dart';
 import '../../core/services/background_gate.dart';
 import '../../core/services/download_engine.dart';
 import '../../core/services/performance_monitor.dart';
@@ -182,7 +183,11 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
       classicUi = context.select((SettingsProvider s) => s.classicUi);
       reduceVisuals = context.select((SettingsProvider s) => s.reduceVisuals);
       gridOpacity = context.select((SettingsProvider s) => s.gridOpacity);
-    } catch (_) {
+    } catch (e) {
+      assert(() {
+        debugPrint('[GeometricGridBackground] SettingsProvider not in context: $e');
+        return true;
+      }());
       try {
         final s = SettingsProvider.instance;
         isDark = s.isDarkMode;
@@ -190,14 +195,21 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
         classicUi = s.classicUi;
         reduceVisuals = s.reduceVisuals;
         gridOpacity = s.gridOpacity;
-      } catch (_) {}
+      } catch (e, st) {
+        LoggingService.logger('GeometricGridBackground').warning('Failed to read fallback settings', e, st);
+      }
     }
 
     try {
       hasActiveDownloads = context.select(
         (DownloadProvider p) => p.downloadingTasksCount > 0,
       );
-    } catch (_) {}
+    } catch (e) {
+      assert(() {
+        debugPrint('[GeometricGridBackground] DownloadProvider not in context: $e');
+        return true;
+      }());
+    }
 
     final bgColor = AppTheme.getBackground(isDark, isAmoled: isAmoled);
 
