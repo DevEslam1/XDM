@@ -12,18 +12,18 @@ import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:ffmpeg_kit_flutter_new_min/ffprobe_kit.dart';
 
 import '../../../core/services/background_service.dart';
 import '../../../core/services/checksum_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/diagnostic_service.dart';
 import '../../../core/services/download_engine.dart';
+import '../../../core/services/engine/engine_utils.dart';
 import '../../../core/services/download_journal.dart';
 import '../../../core/services/download_metrics.dart';
-
 import '../../../core/services/error_taxonomy.dart';
 import '../../../core/services/ffmpeg_mux_service.dart';
-import 'package:ffmpeg_kit_flutter_new_min/ffprobe_kit.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/power_monitor.dart';
 import '../../../core/services/torrent_resume_store.dart';
@@ -42,7 +42,6 @@ import 'notification_coordinator.dart';
 
 /// Contract the [DownloadOrchestrator] needs from its host
 /// (the `DownloadProvider`).
-///
 /// Follows the same abstract-contract idiom as the provider mixins: the
 /// orchestrator only sees this narrow interface, keeping it decoupled from
 /// the provider's public API and independently testable. Members that

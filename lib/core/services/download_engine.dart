@@ -24,13 +24,6 @@ import 'engine/http_transfer_job.dart';
 
 export 'engine/engine_exceptions.dart';
 export 'engine/engine_models.dart';
-export 'engine/engine_utils.dart';
-export 'engine/http_transfer_job.dart';
-export 'dio_client_pool.dart';
-export 'yt_counterpart_coordinator.dart';
-export 'metadata_probe_service.dart';
-export 'http_download_orchestrator.dart';
-export 'torrent_download_orchestrator.dart';
 
 part 'download_isolate_pool.dart';
 

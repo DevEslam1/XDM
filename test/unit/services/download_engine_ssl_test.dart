@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/io.dart';
-import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/engine/engine_utils.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 
 void main() {

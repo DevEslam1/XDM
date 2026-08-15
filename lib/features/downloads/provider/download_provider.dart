@@ -22,6 +22,7 @@ import '../../../core/services/background_gate.dart';
 import '../../../core/services/background_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/download_engine.dart';
+import '../../../core/services/engine/engine_utils.dart';
 import '../../../core/services/download_journal.dart';
 import '../../../core/services/frame_watchdog.dart';
 import '../../../core/services/ios_background_capability.dart';

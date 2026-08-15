@@ -140,15 +140,18 @@
 	</array>
 	<!--
 		ATS Justification for App Review:
-		XDM is a download manager. Users download files from arbitrary HTTP/HTTPS
-		servers that they provide. Many file hosting servers still use plain HTTP.
-		NSAllowsArbitraryLoads is required for the core download functionality.
-		Our own backend API (xdm-backend-*.run.app) enforces TLS 1.2+ via
-		NSExceptionDomains.
+		XDM is a download manager. Users download arbitrary files from user-supplied
+		HTTP and HTTPS endpoints across the internet, including legacy servers.
+		NSAllowsArbitraryLoads is an intentional requirement for the core download functionality.
+		NSAllowsLocalNetworking is enabled for local network transfers and debugging.
+		All sensitive backend API communications are strictly pinned and TLS 1.2+
+		enforced via NSExceptionDomains.
 	-->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
 		<true/>
 		<key>NSExceptionDomains</key>
 		<dict>

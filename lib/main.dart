@@ -33,7 +33,6 @@ import 'features/downloads/provider/download_queue_provider.dart';
 import 'features/downloads/provider/download_filter_provider.dart';
 import 'features/downloads/provider/torrent_provider.dart';
 import 'features/downloads/provider/download_coordinator.dart';
-import 'features/downloads/widgets/download_card.dart';
 import 'features/settings/provider/settings_provider.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
 import 'features/onboarding/screens/permission_request_screen.dart';
@@ -48,6 +47,8 @@ import 'core/services/widget_deep_link.dart';
 import 'core/services/app_lifecycle_coordinator.dart';
 import 'core/services/service_registry.dart';
 import 'core/di/injection.dart';
+import 'shared/animation/ambient_animation_coordinator.dart';
+import 'shared/animation/composite_ambient_animation_controller.dart';
 
 class _ScreenObserver with WidgetsBindingObserver {
   @override
@@ -60,14 +61,18 @@ class _ScreenObserver with WidgetsBindingObserver {
     if (isResumed) {
       FrameWatchdog.resume();
       PerformanceMonitor.instance.resume();
-      getIt<StatusChipPulseDriver>().restartIfActive();
+      if (getIt.isRegistered<AmbientAnimationController>()) {
+        getIt<AmbientAnimationController>().restartIfActive();
+      }
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
       FrameWatchdog.pause();
       PerformanceMonitor.instance.pause();
-      StatusChipPulseDriver.stopAll();
+      if (getIt.isRegistered<AmbientAnimationController>()) {
+        getIt<AmbientAnimationController>().stopAll();
+      }
     }
   }
 
@@ -200,6 +205,12 @@ Future<void> main(List<String> args) async {
       // No-op otherwise; errors before this point go to the console logger.
       await CrashReportingService.init();
       await configureDependencies();
+      if (getIt.isRegistered<AmbientAnimationController>()) {
+        getIt.unregister<AmbientAnimationController>();
+      }
+      getIt.registerSingleton<AmbientAnimationController>(
+        const CompositeAmbientAnimationController(),
+      );
 
       // ── PHASE 4: Build providers (no blocking I/O) and show UI immediately ──
       final databaseService = DatabaseService();

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import '../download_engine.dart';
 import '../logging_service.dart';
@@ -15,6 +16,10 @@ final _log = LoggingService.logger('TorrentDownloadHandler');
 
 class TorrentDownloadHandler {
   final Set<int> _activeTorrentIds = {};
+  static final Map<int, StreamSubscription> _activeSubs = {};
+
+  @visibleForTesting
+  static Map<int, StreamSubscription> get activeSubsForTesting => _activeSubs;
   DateTime lastProgressTick = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime lastAccurateSync = DateTime.fromMillisecondsSinceEpoch(0);
   List<Map<String, dynamic>>? cachedAccurateFiles;
@@ -247,34 +252,39 @@ class TorrentDownloadHandler {
       ));
     });
 
-    if (cancelToken.isCancelled) {
+    try {
+      if (cancelToken.isCancelled) {
+        try {
+          TorrentService.pauseTorrent(id);
+        } catch (e, st) {
+          LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
+        }
+        throw DioException(
+          requestOptions: RequestOptions(path: url),
+          type: DioExceptionType.cancel,
+          message: 'Download paused',
+        );
+      }
+
       try {
-        TorrentService.pauseTorrent(id);
+        TorrentService.resumeTorrent(id);
       } catch (e, st) {
         LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
       }
-      throw DioException(
-        requestOptions: RequestOptions(path: url),
-        type: DioExceptionType.cancel,
-        message: 'Download paused',
+
+      await _listenForCompletion(
+        id,
+        url,
+        currentLocalFilePath,
+        cancelToken,
+        onProgress,
+        getTorrentFiles: getTorrentFiles,
       );
+      torrentCompleted = true;
+    } finally {
+      _activeSubs.remove(id);
+      _activeTorrentIds.remove(id);
     }
-
-    try {
-      TorrentService.resumeTorrent(id);
-    } catch (e, st) {
-      LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
-    }
-
-    await _listenForCompletion(
-      id,
-      url,
-      currentLocalFilePath,
-      cancelToken,
-      onProgress,
-      getTorrentFiles: getTorrentFiles,
-    );
-    torrentCompleted = true;
   }
 
   Future<void> _listenForCompletion(
@@ -289,6 +299,10 @@ class TorrentDownloadHandler {
     StreamSubscription? sub;
     final saveDir = File(localFilePath).parent.path;
 
+    // Cancel any existing subscription for this torrent ID before attaching a new one
+    final existingSub = _activeSubs.remove(id);
+    await existingSub?.cancel();
+
     lastProgressTick = DateTime.fromMillisecondsSinceEpoch(0);
     lastAccurateSync = DateTime.fromMillisecondsSinceEpoch(0);
     cachedAccurateFiles = null;
@@ -300,6 +314,7 @@ class TorrentDownloadHandler {
         if (torrent == null) {
           if (!TorrentService.isTorrentAlive(id)) {
             sub?.cancel();
+            _activeSubs.remove(id);
             _activeTorrentIds.remove(id);
             if (!completer.isCompleted) {
               completer.completeError(DioException(
@@ -410,6 +425,7 @@ class TorrentDownloadHandler {
         if (stateLabel == 'seeding' ||
             (totalSize > 0 && downloadedBytes >= totalSize)) {
           sub?.cancel();
+          _activeSubs.remove(id);
           _activeTorrentIds.remove(id);
           if (!completer.isCompleted) {
             completer.complete();
@@ -417,8 +433,11 @@ class TorrentDownloadHandler {
         }
       });
 
+      _activeSubs[id] = sub;
+
       cancelToken.whenCancel.then((_) {
         sub?.cancel();
+        _activeSubs.remove(id);
         _activeTorrentIds.remove(id);
         if (!completer.isCompleted) {
           completer.completeError(DioException(
@@ -432,6 +451,7 @@ class TorrentDownloadHandler {
       await completer.future;
     } finally {
       await sub?.cancel();
+      _activeSubs.remove(id);
     }
   }
 }

@@ -3,8 +3,7 @@ import '../services/database_service.dart';
 import '../services/mirror/mirror_registry.dart';
 import '../services/app_lifecycle_coordinator.dart';
 import '../services/background_timer_manager.dart';
-import '../../features/downloads/widgets/download_card.dart';
-import '../../shared/widgets/geometric_grid_background.dart';
+import '../../shared/animation/ambient_animation_coordinator.dart';
 import '../../features/downloads/data/task_repository.dart';
 import '../../features/downloads/data/drift_task_repository.dart';
 import '../../features/downloads/provider/download_list_provider.dart';
@@ -20,6 +19,11 @@ import '../../features/downloads/usecases/retry_download_usecase.dart';
 import '../../features/downloads/usecases/delete_download_usecase.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../services/download_engine.dart';
+import '../services/dio_client_pool.dart';
+import '../services/yt_counterpart_coordinator.dart';
+import '../services/metadata_probe_service.dart';
+import '../services/http_download_orchestrator.dart';
+import '../services/torrent_download_orchestrator.dart';
 import '../services/engines/connection_warmer.dart';
 import '../services/network/cookie_cache.dart';
 import '../services/permission_service.dart';
@@ -185,13 +189,8 @@ Future<void> configureDependencies() async {
     () => TorrentSeedingManager(),
   );
 
-  getIt.registerLazySingleton<StatusChipPulseDriver>(
-    () => StatusChipPulseDriver(),
-    dispose: (s) => s.dispose(),
-  );
-
-  getIt.registerLazySingleton<AmbientProgress>(
-    () => AmbientProgress(),
+  getIt.registerLazySingleton<AmbientAnimationController>(
+    () => const NoOpAmbientAnimationController(),
   );
 
   getIt.registerLazySingleton<BackgroundTimerManager>(

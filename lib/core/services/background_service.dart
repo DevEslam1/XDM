@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -175,11 +174,18 @@ class BackgroundService {
         );
   }
 
+  static bool _iosBgCallInFlight = false;
+
   @pragma('vm:entry-point')
   static Future<bool> _onIosBackground(ServiceInstance service) async {
     _log.info(
       'iOS background callback invoked. Bridging to native BackgroundDownloadController.',
     );
+    if (_iosBgCallInFlight) {
+      _log.warning('iOS background callback already in flight, ignoring duplicate call');
+      return false;
+    }
+    _iosBgCallInFlight = true;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(
@@ -203,16 +209,12 @@ class BackgroundService {
       } catch (e) {
         _log.warning('Failed to bridge to iOS background download controller: $e');
         if (!completer.isCompleted) completer.complete(false);
+      } finally {
+        _iosBgCallInFlight = false;
       }
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => performCall());
-    WidgetsBinding.instance.scheduleFrame();
-    Future.microtask(() {
-      if (!completer.isCompleted) {
-        performCall();
-      }
-    });
+    Future.microtask(performCall);
     return completer.future;
   }
 

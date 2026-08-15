@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/metadata_probe_service.dart';
+import 'package:dmx/core/services/yt_counterpart_coordinator.dart';
 import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/core/services/engine/download_progress_handler.dart';
 import 'package:dmx/core/services/download_journal.dart';

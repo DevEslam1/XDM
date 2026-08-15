@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/engine/engine_utils.dart';
 import 'package:dmx/core/services/engine/download_progress_handler.dart';
 import 'package:dmx/core/services/app_lifecycle_coordinator.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';

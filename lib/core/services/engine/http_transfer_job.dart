@@ -189,6 +189,127 @@ class HttpTransferJob {
     return m.contains('enospc') || m.contains('no space left');
   }
 
+  Timer? _hardTimeoutTimer;
+  Timer? _progressWatchdogTimer;
+  Timer? _stallWatchdogTimer;
+
+  @visibleForTesting
+  void registerWatchdogs() {
+    final hardTimeoutDuration = _computeHardTimeout();
+    void onHardTimeout() {
+      _send('error', {
+        'errorType': 'timeout',
+        'errorMessage': 'Hard timeout exceeded: ${_formatDuration(hardTimeoutDuration)}',
+      });
+    }
+
+    _hardTimeoutTimer = Timer(hardTimeoutDuration, onHardTimeout);
+
+    _progressWatchdogTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      final st = _state;
+      if (st == null) return;
+      final nowBytes = st.downloadedBytes;
+      final delta = nowBytes - _watchdogCheckpointBytes;
+      _watchdogCheckpointBytes = nowBytes;
+      if (delta > 60 * 1024 * 1024) {
+        _hardTimeoutTimer?.cancel();
+        _hardTimeoutTimer = Timer(hardTimeoutDuration, onHardTimeout);
+      }
+    });
+
+    _stallWatchdogTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (_state == null || _stalledEmitted || _lastProgressTimeMs == 0) return;
+      final elapsed = _stopwatch.elapsedMilliseconds - _lastProgressTimeMs;
+      if (elapsed >= 5 * 60 * 1000) {
+        _stalledEmitted = true;
+        _emitProgress(_stopwatch.elapsedMilliseconds, statusMessage: 'Stalled');
+      }
+    });
+  }
+
+  @visibleForTesting
+  void cancelWatchdogs() {
+    _hardTimeoutTimer?.cancel();
+    _hardTimeoutTimer = null;
+    _progressWatchdogTimer?.cancel();
+    _progressWatchdogTimer = null;
+    _stallWatchdogTimer?.cancel();
+    _stallWatchdogTimer = null;
+  }
+
+  @visibleForTesting
+  Future<TransferState> loadAndReconcileState(Dio dio) async {
+    final load = await StateStore.loadOrCreate(
+      cmd.tempFilePath,
+      url: cmd.url,
+      threadCount: cmd.threadCount,
+      knownFileSize: cmd.knownFileSize,
+    );
+    _state = load.state;
+    _watchdogCheckpointBytes = _state!.downloadedBytes;
+    if (_state!.chunks.isNotEmpty &&
+        _state!.chunks.length != cmd.threadCount &&
+        _state!.downloadedBytes > 0) {
+      final savedBytes = _state!.downloadedBytes;
+      final total = _state!.totalSize;
+      final oldChunks = List<ChunkState>.from(_state!.chunks);
+      final newChunks = ChunkScheduler.plan(
+        totalSize: total,
+        threadCount: cmd.threadCount,
+      );
+      for (var ni = 0; ni < newChunks.length; ni++) {
+        final nc = newChunks[ni];
+        int overlap = 0;
+        for (final oc in oldChunks) {
+          final oStart = oc.start;
+          final oEnd = oc.isComplete
+              ? (oc.end >= 0 ? oc.end + 1 : oc.start + oc.size)
+              : oc.start + oc.downloaded;
+          final nStart = nc.start;
+          final nEnd = nc.end >= 0 ? nc.end + 1 : nc.start + nc.size;
+          final lo = max(oStart, nStart);
+          final hi = min(oEnd, nEnd);
+          if (hi > lo) overlap += (hi - lo);
+        }
+        nc.downloaded = overlap.clamp(0, nc.size >= 0 ? nc.size : overlap);
+      }
+      _state!.chunks = newChunks;
+      debugPrint(
+        '[FIX-4/H-R1] Redistributed $savedBytes bytes from '
+        '${load.state.chunks.length} → ${cmd.threadCount} chunks with range-overlap mapping',
+      );
+    }
+    if (_state!.totalSize <= 0 && cmd.knownFileSize > 0) {
+      _state!.totalSize = cmd.knownFileSize;
+    }
+    _state!.status = DmxStateStatus.active;
+    await StateStore.save(cmd.tempFilePath, _state!);
+
+    if (_state!.downloadedBytes > 0 && cmd.supportsResume) {
+      await _verifyServerIdentity(dio);
+    }
+    return _state!;
+  }
+
+  @visibleForTesting
+  Future<void> executeDownload(Dio dio) async {
+    final multiThread = _state!.totalSize > 0 &&
+        cmd.supportsResume &&
+        cmd.threadCount > 1 &&
+        _state!.totalSize >= ChunkScheduler.minSizeForMultithread;
+    if (multiThread) {
+      try {
+        await _runMultiThreaded(dio);
+      } on RangeUnsupportedException {
+        debugPrint('[DMX-Job] Range unsupported → single-stream fallback');
+        _resetToSingleStream();
+        await _runSingleStream(dio);
+      }
+    } else {
+      await _runSingleStream(dio);
+    }
+  }
+
   Future<void> run() async {
     _stopwatch.start();
     final dio = buildTransferDio(
@@ -199,115 +320,14 @@ class HttpTransferJob {
       oauthToken: cmd.oauthToken,
     );
     _send('ack');
-    Timer? hardTimeout;
-    Timer? progressWatchdog;
-    Timer? stallWatchdog;
     try {
-      final load = await StateStore.loadOrCreate(
-        cmd.tempFilePath,
-        url: cmd.url,
-        threadCount: cmd.threadCount,
-        knownFileSize: cmd.knownFileSize,
-      );
-      _state = load.state;
-      _watchdogCheckpointBytes = _state!.downloadedBytes;
-      if (_state!.chunks.isNotEmpty &&
-          _state!.chunks.length != cmd.threadCount &&
-          _state!.downloadedBytes > 0) {
-        final savedBytes = _state!.downloadedBytes;
-        final total = _state!.totalSize;
-        final oldChunks = List<ChunkState>.from(_state!.chunks);
-        final newChunks = ChunkScheduler.plan(
-          totalSize: total,
-          threadCount: cmd.threadCount,
-        );
-        for (var ni = 0; ni < newChunks.length; ni++) {
-          final nc = newChunks[ni];
-          int overlap = 0;
-          for (final oc in oldChunks) {
-            final oStart = oc.start;
-            final oEnd = oc.isComplete
-                ? (oc.end >= 0 ? oc.end + 1 : oc.start + oc.size)
-                : oc.start + oc.downloaded;
-            final nStart = nc.start;
-            final nEnd = nc.end >= 0 ? nc.end + 1 : nc.start + nc.size;
-            final lo = max(oStart, nStart);
-            final hi = min(oEnd, nEnd);
-            if (hi > lo) overlap += (hi - lo);
-          }
-          nc.downloaded = overlap.clamp(0, nc.size >= 0 ? nc.size : overlap);
-        }
-        _state!.chunks = newChunks;
-        debugPrint(
-          '[FIX-4/H-R1] Redistributed $savedBytes bytes from '
-          '${load.state.chunks.length} → ${cmd.threadCount} chunks with range-overlap mapping',
-        );
-      }
-      if (_state!.totalSize <= 0 && cmd.knownFileSize > 0) {
-        _state!.totalSize = cmd.knownFileSize;
-      }
-      _state!.status = DmxStateStatus.active;
-      await StateStore.save(cmd.tempFilePath, _state!);
-
-      // Dynamic hard timeout based on worst-case 10 KB/s throughput, floored at 24h.
-      final hardTimeoutDuration = _computeHardTimeout();
-      void onHardTimeout() {
-        _send('error', {
-          'errorType': 'timeout',
-          'errorMessage': 'Hard timeout exceeded: $_formatDuration(hardTimeoutDuration)',
-        });
-      }
-
-      hardTimeout = Timer(hardTimeoutDuration, onHardTimeout);
-
-      // Progress watchdog: if average throughput over the last 60s exceeds
-      // 1 MB/s the job is healthy — reset the hard timeout.
-      progressWatchdog = Timer.periodic(const Duration(seconds: 60), (_) {
-        final st = _state;
-        if (st == null) return;
-        final nowBytes = st.downloadedBytes;
-        final delta = nowBytes - _watchdogCheckpointBytes;
-        _watchdogCheckpointBytes = nowBytes;
-        if (delta > 60 * 1024 * 1024) {
-          hardTimeout?.cancel();
-          hardTimeout = Timer(hardTimeoutDuration, onHardTimeout);
-        }
-      });
-
-      // Stall watchdog: emit a 'stalled' cycle state when no progress for 5 min.
-      stallWatchdog = Timer.periodic(const Duration(seconds: 60), (_) {
-        if (_state == null || _stalledEmitted || _lastProgressTimeMs == 0) return;
-        final elapsed = _stopwatch.elapsedMilliseconds - _lastProgressTimeMs;
-        if (elapsed >= 5 * 60 * 1000) {
-          _stalledEmitted = true;
-          _emitProgress(_stopwatch.elapsedMilliseconds, statusMessage: 'Stalled');
-        }
-      });
-
-      if (_state!.downloadedBytes > 0 && cmd.supportsResume) {
-        await _verifyServerIdentity(dio);
-      }
-      final multiThread = _state!.totalSize > 0 &&
-          cmd.supportsResume &&
-          cmd.threadCount > 1 &&
-          _state!.totalSize >= ChunkScheduler.minSizeForMultithread;
-      if (multiThread) {
-        try {
-          await _runMultiThreaded(dio);
-        } on RangeUnsupportedException {
-          debugPrint('[DMX-Job] Range unsupported → single-stream fallback');
-          _resetToSingleStream();
-          await _runSingleStream(dio);
-        }
-      } else {
-        await _runSingleStream(dio);
-      }
+      await loadAndReconcileState(dio);
+      registerWatchdogs();
+      await executeDownload(dio);
       await _finalize(dio);
       _send('done');
     } finally {
-      hardTimeout?.cancel();
-      progressWatchdog?.cancel();
-      stallWatchdog?.cancel();
+      cancelWatchdogs();
       if (!_stateSavedInCatch && _state != null) {
         try {
           await StateStore.save(cmd.tempFilePath, _state!);
@@ -317,15 +337,24 @@ class HttpTransferJob {
     }
   }
 
-  /// Hard timeout scales with file size: floor 24h, worst-case 10 KB/s.
-  /// `max(Duration(hours: 24), Duration(seconds: totalSize / (10 * 1024)))`.
+  /// Hard timeout scales with file size: 100 KB/s baseline, min 30 min, max 24h.
+  @visibleForTesting
+  static Duration computeHardTimeoutForSize(
+    int totalSize, {
+    Duration minTimeout = const Duration(minutes: 30),
+    Duration maxTimeout = const Duration(hours: 24),
+  }) {
+    if (totalSize <= 0) return maxTimeout;
+    final computed = Duration(seconds: totalSize ~/ (100 * 1024));
+    if (computed < minTimeout) return minTimeout;
+    if (computed > maxTimeout) return maxTimeout;
+    return computed;
+  }
+
   Duration _computeHardTimeout() {
     final st = _state;
     if (st == null || st.totalSize <= 0) return defaultTaskHardTimeout;
-    final sizeSeconds = Duration(seconds: st.totalSize ~/ (10 * 1024));
-    return sizeSeconds > defaultTaskHardTimeout
-        ? sizeSeconds
-        : defaultTaskHardTimeout;
+    return computeHardTimeoutForSize(st.totalSize);
   }
 
   static String _formatDuration(Duration d) {

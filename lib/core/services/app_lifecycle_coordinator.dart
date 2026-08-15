@@ -9,8 +9,7 @@ import 'power_monitor.dart';
 import 'widget_data_bridge.dart';
 import 'background_timer_manager.dart';
 import '../di/injection.dart';
-import '../../shared/widgets/geometric_grid_background.dart';
-import '../../features/downloads/widgets/download_card.dart';
+import '../../shared/animation/ambient_animation_coordinator.dart';
 
 /// Central coordinator for application lifecycle events (BG-01/BG-02/BG-03/BG-08).
 /// Ensures that when the application is backgrounded or inactive, all ambient timers,
@@ -77,11 +76,10 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
       if (!PowerMonitor.screenOff) {
         FrameWatchdog.start();
         PerformanceMonitor.instance.start();
-        if (getIt.isRegistered<AmbientProgress>()) {
-          getIt<AmbientProgress>().restartIfMounted();
-        }
-        if (getIt.isRegistered<StatusChipPulseDriver>()) {
-          getIt<StatusChipPulseDriver>().restartIfActive();
+        if (getIt.isRegistered<AmbientAnimationController>()) {
+          final anim = getIt<AmbientAnimationController>();
+          anim.restartIfMounted();
+          anim.restartIfActive();
         }
       }
     } else if (state == AppLifecycleState.inactive) {
@@ -117,10 +115,9 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     // Suspend all ambient work
     FrameWatchdog.stop();
     PerformanceMonitor.instance.stop();
-    if (getIt.isRegistered<AmbientProgress>()) {
-      getIt<AmbientProgress>().stopAll();
+    if (getIt.isRegistered<AmbientAnimationController>()) {
+      getIt<AmbientAnimationController>().stopAll();
     }
-    StatusChipPulseDriver.stopAll();
 
     // Task 4.3: Flush database saves on backgrounding/detaching
     try {

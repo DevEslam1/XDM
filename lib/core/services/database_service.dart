@@ -6,8 +6,8 @@ import 'package:drift/native.dart';
 import 'package:synchronized/synchronized.dart';
 
 import 'database/app_database.dart';
+import 'database/hive_migration_service.dart';
 import 'download_engine.dart';
-import 'history_merger.dart';
 import 'logging_service.dart';
 import 'power_monitor.dart';
 import 'background_gate.dart';
@@ -15,7 +15,6 @@ import '../../features/downloads/models/download_task.dart';
 import '../../features/browser/models/bookmark.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
-import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -84,7 +83,7 @@ class DatabaseService {
     }
 
     final prefs = await SharedPreferences.getInstance();
-    await _migrateFromHivePerBox(prefs);
+    await HiveMigrationService(_db, prefs).migrate();
     _initialized = true;
 
     _scheduleMaintenanceTimer();
@@ -105,10 +104,31 @@ class DatabaseService {
     });
   }
 
+  @visibleForTesting
+  int get maintenanceRuns => _maintenanceRuns;
+
+  @visibleForTesting
+  set maintenanceRuns(int value) => _maintenanceRuns = value;
+
+  @visibleForTesting
+  Future<void> runPeriodicMaintenanceForTesting() => _runPeriodicMaintenance();
+
+  /// Periodic SQLite maintenance cadence:
+  /// - Every cycle (30m): PASSIVE WAL checkpoint
+  /// - Every 6th cycle (3h): Check WAL size, force TRUNCATE if > 1250 pages (~5MB)
+  /// - Every 12th cycle (6h): PRAGMA optimize, incremental_vacuum, foreign_key_check (when idle)
   Future<void> _runPeriodicMaintenance() async {
     final swCheckpoint = Stopwatch()..start();
+    int logPages = 0;
     try {
-      await _db.customStatement('PRAGMA wal_checkpoint(PASSIVE)');
+      final walRows = await _db.customSelect('PRAGMA wal_checkpoint(PASSIVE)').get();
+      if (walRows.isNotEmpty) {
+        final row = walRows.first.data;
+        final log = row['log'] ?? 0;
+        if (log is num) {
+          logPages = log.toInt();
+        }
+      }
       if (_maintenanceRuns % 12 == 0) {
         await _db.customStatement('PRAGMA optimize');
       }
@@ -124,21 +144,14 @@ class DatabaseService {
     _maintenanceRuns++;
     if (_maintenanceRuns % 6 == 0) {
       try {
-        final walRows = await _db.customSelect(
-          'PRAGMA wal_checkpoint(PASSIVE)',
-        ).get();
-        if (walRows.isNotEmpty) {
-          final row = walRows.first.data;
-          final log = row['log'] ?? 0;
-          if (log is num && log > 1250) {
-            // ~5MB in 4KB pages
-            _log.warning('WAL too large ($log pages), forcing TRUNCATE');
-            await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
-          }
+        if (logPages > 1250) {
+          // ~5MB in 4KB pages
+          _log.warning('WAL too large ($logPages pages), forcing TRUNCATE');
+          await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
         }
       } catch (e, st) {
-      LoggingService.logger('DatabaseService').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('DatabaseService').warning('Operation failed', e, st);
+      }
     }
     if (_maintenanceRuns % 12 == 0) {
       try {
@@ -153,12 +166,6 @@ class DatabaseService {
             'Skipping periodic DB incremental_vacuum because $activeCount active/paused/queued download(s) in progress',
           );
         } else {
-          // FIX: Only vacuum if checkpoint returned pages > 0
-          try {
-            await _db.customSelect('PRAGMA wal_checkpoint(PASSIVE)').get();
-          } catch (e, st) {
-      LoggingService.logger('DatabaseService').warning('Operation failed', e, st);
-    }
           final swVacuum = Stopwatch()..start();
           await _db.customStatement('PRAGMA incremental_vacuum(50)');
           try {
@@ -178,402 +185,7 @@ class DatabaseService {
     }
   }
 
-  /// Migrates Hive boxes using a single global completion flag (DB-03).
-  Future<void> _migrateFromHivePerBox(SharedPreferences prefs) async {
-    const String migrationKey = 'hive_migration_complete';
-    if (prefs.getBool(migrationKey) == true) return;
 
-    const boxes = [
-      downloadsBoxName,
-      bookmarksBoxName,
-      browserTabsBoxName,
-      browserHistoryBoxName,
-    ];
-
-    bool allSuccessful = true;
-    for (final boxName in boxes) {
-      final success = await _migrateSingleHiveBox(boxName);
-      if (!success) {
-        allSuccessful = false;
-        _log.warning(
-          'Migration had errors for box $boxName; will retry on next launch.',
-        );
-      }
-    }
-
-    if (allSuccessful) {
-      await prefs.setBool(migrationKey, true);
-    }
-  }
-
-  /// Migrates a single Hive box by name. Returns true on success.
-  Future<bool> _migrateSingleHiveBox(String boxName) async {
-    try {
-      switch (boxName) {
-        case downloadsBoxName:
-          return await _migrateDownloadsBox();
-        case bookmarksBoxName:
-          return await _migrateBookmarksBox();
-        case browserTabsBoxName:
-          return await _migrateBrowserTabsBox();
-        case browserHistoryBoxName:
-          return await _migrateBrowserHistoryBox();
-        default:
-          _log.warning('Unknown Hive box name for migration: $boxName');
-          return true;
-      }
-    } catch (e, stackTrace) {
-      _log.severe('Hive migration error for box $boxName', e, stackTrace);
-      return false;
-    }
-  }
-
-  Future<bool> _migrateDownloadsBox() async {
-    if (!await Hive.boxExists(downloadsBoxName)) return true;
-    final box = await Hive.openBox<dynamic>(downloadsBoxName);
-    if (box.isEmpty) {
-      box.deleteFromDisk();
-      return true;
-    }
-
-    final existingTasks = await _db.select(_db.downloadTasks).get();
-    final existingTaskIds = existingTasks.map((t) => t.id).toSet();
-
-    final tasks = <DownloadTasksCompanion>[];
-    final parsedValues = <dynamic>[];
-    final failedItems = <dynamic>[];
-    for (final value in box.values) {
-      if (value is Map) {
-        try {
-          final task = DownloadTask.fromMap(Map<String, dynamic>.from(value));
-          if (!existingTaskIds.contains(task.id)) {
-            tasks.add(_taskToCompanion(task));
-            parsedValues.add(value);
-          }
-        } catch (e) {
-          failedItems.add(value);
-        }
-      } else {
-        failedItems.add(value);
-      }
-    }
-    if (tasks.isNotEmpty) {
-      try {
-        await _db.batch(
-          (batch) => batch.insertAll(
-            _db.downloadTasks,
-            tasks,
-            mode: drift.InsertMode.insertOrReplace,
-          ),
-        );
-      } catch (e) {
-        failedItems.addAll(parsedValues);
-      }
-    }
-    if (failedItems.isNotEmpty) {
-      _log.warning(
-        '$downloadsBoxName: ${failedItems.length} corrupt '
-        'item(s) skipped. ${tasks.length} item(s) migrated successfully.',
-      );
-      final exportOk = await _exportFailedItems(
-        'migration_failed_downloads.json',
-        failedItems,
-      );
-      if (!exportOk) {
-        _log.severe(
-          'Failed to export corrupt downloads. '
-          'Preserving Hive box to prevent data loss.',
-        );
-        await _backupHiveBox(box, downloadsBoxName);
-        return false;
-      }
-    }
-    box.deleteFromDisk();
-    return true;
-  }
-
-  Future<bool> _migrateBookmarksBox() async {
-    if (!await Hive.boxExists(bookmarksBoxName)) return true;
-    final box = await Hive.openBox<dynamic>(bookmarksBoxName);
-    if (box.isEmpty) {
-      box.deleteFromDisk();
-      return true;
-    }
-
-    final existingBms = await _db.select(_db.bookmarks).get();
-    final existingBmIds = existingBms.map((b) => b.id).toSet();
-
-    final bms = <BookmarksCompanion>[];
-    final parsedValues = <dynamic>[];
-    final failedItems = <dynamic>[];
-    for (final value in box.values) {
-      if (value is Map) {
-        try {
-          final bm = Bookmark.fromMap(Map<String, dynamic>.from(value));
-          if (!existingBmIds.contains(bm.id)) {
-            bms.add(_bookmarkToCompanion(bm));
-            parsedValues.add(value);
-          }
-        } catch (e) {
-          failedItems.add(value);
-        }
-      } else {
-        failedItems.add(value);
-      }
-    }
-    if (bms.isNotEmpty) {
-      try {
-        await _db.batch(
-          (batch) => batch.insertAll(
-            _db.bookmarks,
-            bms,
-            mode: drift.InsertMode.insertOrReplace,
-          ),
-        );
-      } catch (e) {
-        failedItems.addAll(parsedValues);
-      }
-    }
-    if (failedItems.isNotEmpty) {
-      _log.warning(
-        '$bookmarksBoxName: ${failedItems.length} corrupt '
-        'item(s) skipped. ${bms.length} item(s) migrated successfully.',
-      );
-      final exportOk = await _exportFailedItems(
-        'migration_failed_bookmarks.json',
-        failedItems,
-      );
-      if (!exportOk) {
-        _log.severe(
-          'Failed to export corrupt bookmarks. '
-          'Preserving Hive box.',
-        );
-        await _backupHiveBox(box, bookmarksBoxName);
-        return false;
-      }
-    }
-    box.deleteFromDisk();
-    return true;
-  }
-
-  Future<bool> _migrateBrowserTabsBox() async {
-    if (!await Hive.boxExists(browserTabsBoxName)) return true;
-    final box = await Hive.openBox<dynamic>(browserTabsBoxName);
-    if (box.isEmpty) {
-      box.deleteFromDisk();
-      return true;
-    }
-
-    final tabs = <SavedBrowserTab>[];
-    final failedItems = <dynamic>[];
-    for (final key in box.keys) {
-      final val = box.get(key);
-      if (val is Map) {
-        try {
-          tabs.add(
-            SavedBrowserTab(
-              id: key.toString(),
-              url: val['url'] as String? ?? '',
-              title: val['title'] as String? ?? '',
-              isActive: val['isActive'] as bool? ?? false,
-              position: val['position'] as int? ?? 0,
-              // FIX-P4-28: Preserve original createdAt timestamp from Hive map if present
-              createdAt: (val['createdAt'] as num?)?.toInt() ??
-                  DateTime.now().millisecondsSinceEpoch,
-              lastVisitedAt: val['lastVisitedAt'] as int? ??
-                  DateTime.now().millisecondsSinceEpoch,
-              faviconUrl: val['faviconUrl'] as String?,
-            ),
-          );
-        } catch (e) {
-          failedItems.add(val);
-        }
-      } else {
-        failedItems.add(val);
-      }
-    }
-    if (tabs.isNotEmpty) {
-      try {
-        await _db.batch(
-          (batch) => batch.insertAll(
-            _db.browserTabs,
-            tabs,
-            mode: drift.InsertMode.insertOrReplace,
-          ),
-        );
-      } catch (e) {
-        failedItems.addAll(box.values);
-      }
-    }
-    if (failedItems.isNotEmpty) {
-      _log.warning(
-        '$browserTabsBoxName: ${failedItems.length} corrupt '
-        'item(s) skipped. ${tabs.length} item(s) migrated successfully.',
-      );
-      final exportOk = await _exportFailedItems(
-        'migration_failed_tabs.json',
-        failedItems,
-      );
-      if (!exportOk) {
-        _log.severe(
-          'Failed to export corrupt tabs. '
-          'Preserving Hive box.',
-        );
-        await _backupHiveBox(box, browserTabsBoxName);
-        return false;
-      }
-    }
-    box.deleteFromDisk();
-    return true;
-  }
-
-  Future<bool> _migrateBrowserHistoryBox() async {
-    if (!await Hive.boxExists(browserHistoryBoxName)) return true;
-    final box = await Hive.openBox<dynamic>(browserHistoryBoxName);
-    if (box.isEmpty) {
-      box.deleteFromDisk();
-      return true;
-    }
-
-    final failedItems = <dynamic>[];
-    // FIX-P4-29: Deduplicate Hive history items by URL before inserting into Drift
-    final merged = mergeHistoryEntries(box.values);
-    final mergedHistory = merged.merged;
-    failedItems.addAll(merged.failed);
-
-    final hist = mergedHistory
-        .map(
-          (item) => BrowserHistoryCompanion.insert(
-            url: item.url,
-            title: item.title,
-            visitedAt: item.visitedAt,
-            visitCount: drift.Value(item.visitCount),
-            faviconUrl: drift.Value(item.faviconUrl),
-          ),
-        )
-        .toList();
-    if (hist.isNotEmpty) {
-      try {
-        await _db.batch(
-          (batch) => batch.insertAll(
-            _db.browserHistory,
-            hist,
-            mode: drift.InsertMode.insertOrReplace,
-          ),
-        );
-      } catch (e) {
-        failedItems.addAll(box.values);
-      }
-    }
-    if (failedItems.isNotEmpty) {
-      _log.warning(
-        '$browserHistoryBoxName: ${failedItems.length} corrupt '
-        'item(s) skipped. ${hist.length} item(s) migrated successfully.',
-      );
-      final exportOk = await _exportFailedItems(
-        'migration_failed_history.json',
-        failedItems,
-      );
-      if (!exportOk) {
-        _log.severe(
-          'Failed to export corrupt history. '
-          'Preserving Hive box.',
-        );
-        await _backupHiveBox(box, browserHistoryBoxName);
-        return false;
-      }
-    }
-    box.deleteFromDisk();
-    return true;
-  }
-
-  /// Backs up a Hive box to a safe location instead of deleting it.
-  /// `box` is a Hive Box instance.
-  Future<void> _backupHiveBox(dynamic box, String boxName) async {
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final backupParentDir = Directory(p.join(dir.path, 'hive_backups'));
-      if (!await backupParentDir.exists()) {
-        await backupParentDir.create(recursive: true);
-      }
-      final backupPath = p.join(backupParentDir.path, '${boxName}_backup.hive');
-      // Hive Box.path is String?
-      final String? boxPath =
-          box is Box ? box.path : (box as dynamic).path as String?;
-      if (boxPath != null) {
-        final srcFile = File(boxPath);
-        final srcDir = Directory(boxPath);
-        if (await srcFile.exists()) {
-          final backupFile = File(backupPath);
-          if (await backupFile.exists()) {
-            await backupFile.delete();
-          }
-          await srcFile.copy(backupPath);
-          _log.info('Backed up Hive box file $boxName to $backupPath');
-        } else if (await srcDir.exists()) {
-          final backupDir = Directory(backupPath);
-          if (await backupDir.exists()) {
-            await backupDir.delete(recursive: true);
-          }
-          await srcDir.rename(backupPath);
-          _log.info('Backed up Hive box dir $boxName to $backupPath');
-        }
-      }
-    } catch (e) {
-      _log.severe('Failed to back up Hive box $boxName', e);
-    }
-  }
-
-  /// Writes [failedItems] that could not be migrated to a JSON file named
-  /// [fileName] in the application documents directory, so the user can
-  /// manually recover data that would otherwise be lost when the Hive box is
-  /// deleted. Returns true if export succeeded, false otherwise.
-  Future<bool> _exportFailedItems(
-    String fileName,
-    List<dynamic> failedItems,
-  ) async {
-    if (failedItems.isEmpty) return true;
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final file = File(p.join(dir.path, fileName));
-      // Offload JSON normalization + encoding to a background isolate (DB-02).
-      final payload = await compute(_buildExportPayload, failedItems);
-      await file.writeAsString(
-        const JsonEncoder.withIndent('  ').convert(payload),
-      );
-      _log.info(
-        'Exported ${failedItems.length} unmigrated item(s) to ${file.path}',
-      );
-      return true;
-    } catch (e) {
-      _log.severe('Failed to export unmigrated items to $fileName', e);
-      return false;
-    }
-  }
-
-  static Map<String, dynamic> _buildExportPayload(List<dynamic> failedItems) {
-    return {
-      'exportedAt': DateTime.now().toIso8601String(),
-      'count': failedItems.length,
-      'items': failedItems.map(_normalizeForJson).toList(),
-    };
-  }
-
-  /// Recursively converts [value] into a JSON-encodable structure. Hive maps
-  /// use dynamic keys and may contain non-encodable values, so keys are
-  /// stringified and unknown leaf types fall back to their `toString()`.
-  static Object? _normalizeForJson(Object? value) {
-    if (value == null || value is num || value is bool || value is String) {
-      return value;
-    }
-    if (value is Map) {
-      return value.map((k, v) => MapEntry(k.toString(), _normalizeForJson(v)));
-    }
-    if (value is Iterable) {
-      return value.map(_normalizeForJson).toList();
-    }
-    return value.toString();
-  }
 
   DownloadTasksCompanion _taskToCompanion(DownloadTask task) {
     return DownloadTasksCompanion.insert(

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../utils/bounded_lru_cache.dart';
 import '../logging_service.dart';
 import '../background_gate.dart';
 import '../power_monitor.dart';
@@ -207,7 +208,11 @@ class SiteIntelligenceService {
   SiteIntelligenceService();
 
   static const _reliabilityKey = 'site_reliability_data';
-  static final Map<String, UrlAnalysisResult> _fastPathCache = {};
+  static final BoundedLruCache<String, UrlAnalysisResult> _fastPathCache =
+      BoundedLruCache<String, UrlAnalysisResult>(
+    maxCapacity: 500,
+    ttl: const Duration(minutes: 30),
+  );
 
   @visibleForTesting
   static void clearFastPathCache() => _fastPathCache.clear();
@@ -297,6 +302,7 @@ class SiteIntelligenceService {
     _disposed = true;
     _persistTimer?.cancel();
     _persistTimer = null;
+    _fastPathCache.clear();
     await flushPending();
   }
 
