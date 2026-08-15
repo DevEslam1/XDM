@@ -17,7 +17,7 @@ import 'core/app_theme.dart';
 import 'core/services/crash_reporting_service.dart';
 import 'core/services/diagnostic_service.dart';
 import 'core/services/logging_service.dart';
-import 'core/services/mirror_health_store.dart';
+import 'core/services/mirror/mirror_registry.dart';
 import 'core/services/background_service.dart';
 import 'core/services/database_service.dart';
 import 'core/services/notification_service.dart';
@@ -329,7 +329,7 @@ Future<void> _initNonCriticalServices(
   NotificationService notificationService,
 ) async {
   try {
-    await MirrorHealthStore.init();
+    await MirrorHealthStore.instance.init();
   } catch (e) {
     debugPrint('Mirror health store init failed: $e');
   }

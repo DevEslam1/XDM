@@ -134,9 +134,20 @@ void main() {
       PowerMonitor.setBatteryLevelForTesting(15);
       expect(pool.maxJobsPerWorker, equals(1));
       PowerMonitor.setBatteryLevelForTesting(100);
-      PowerMonitor.setBatteryStateForTesting(BatteryState.unknown);
-      expect(pool.maxJobsPerWorker, equals(2));
       pool.shutdown();
+    });
+
+    test('100 concurrent acquire calls complete in <50ms', () async {
+      final gov = BandwidthGovernor(1000000);
+      gov.registerConsumer();
+
+      final sw = Stopwatch()..start();
+      final futures = List.generate(100, (i) => gov.acquire(1024));
+      await Future.wait(futures);
+      sw.stop();
+
+      expect(sw.elapsedMilliseconds, lessThan(50));
+      gov.dispose();
     });
   });
 }

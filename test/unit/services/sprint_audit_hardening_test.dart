@@ -1,8 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
 import 'package:dmx/core/services/background_service.dart';
-import 'package:dmx/core/services/engines/mirror_parallel_engine.dart';
-import 'package:dmx/core/services/engine/metadata_resolver.dart';
+import 'package:dmx/core/services/mirror/mirror_selector.dart';
+import 'package:dmx/core/services/metadata_probe_service.dart';
+import 'package:dmx/core/services/dio_client_pool.dart';
 import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -76,9 +77,9 @@ void main() {
       expect(dist3, isNotNull);
     });
 
-    test('MetadataResolver handles numeric length values gracefully', () {
-      const resolver = MetadataResolver();
-      expect(resolver, isNotNull);
+    test('MetadataProbeService initializes gracefully', () {
+      final probe = MetadataProbeService(DioClientPool());
+      expect(probe, isNotNull);
     });
 
     test(

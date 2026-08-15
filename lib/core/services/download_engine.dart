@@ -1,16 +1,11 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
-import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:dmx/core/services/bandwidth_governor.dart';
 import 'package:dmx/core/services/download_journal.dart';
-import 'package:dmx/core/services/mirror_failover.dart';
-import 'package:dmx/core/services/positional_file_writer.dart';
 import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/core/services/torrent_service.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
@@ -22,11 +17,13 @@ import 'metadata_probe_service.dart';
 import 'http_download_orchestrator.dart';
 import 'torrent_download_orchestrator.dart';
 import 'engine/engine_models.dart';
-import 'engine/engine_utils.dart';
-import 'engines/http_download_engine.dart';
+import 'engine/engine_exceptions.dart';
+import 'engine/http_transfer_job.dart';
 
+export 'engine/engine_exceptions.dart';
 export 'engine/engine_models.dart';
 export 'engine/engine_utils.dart';
+export 'engine/http_transfer_job.dart';
 export 'dio_client_pool.dart';
 export 'yt_counterpart_coordinator.dart';
 export 'metadata_probe_service.dart';
@@ -34,55 +31,6 @@ export 'http_download_orchestrator.dart';
 export 'torrent_download_orchestrator.dart';
 
 part 'download_isolate_pool.dart';
-
-class IsolateSpawnTimeoutException implements Exception {
-  final String message;
-  const IsolateSpawnTimeoutException([
-    this.message = 'Download engine failed to initialize. Please retry.',
-  ]);
-  @override
-  String toString() => 'IsolateSpawnTimeoutException: $message';
-}
-
-class InsufficientStorageException implements Exception {
-  final String message;
-  const InsufficientStorageException([
-    this.message =
-        'Not enough storage space to download this file. Please free up space and try again.',
-  ]);
-  @override
-  String toString() => 'InsufficientStorageException: $message';
-}
-
-class InvalidPathException implements Exception {
-  final String message;
-  const InvalidPathException(this.message);
-  @override
-  String toString() => 'InvalidPathException: $message';
-}
-
-class DownloadIntegrityException implements Exception {
-  final String message;
-  const DownloadIntegrityException(this.message);
-  @override
-  String toString() => 'DownloadIntegrityException: $message';
-}
-
-class UrlExpiredException implements Exception {
-  final String message;
-  final bool refreshAllMirrors;
-  const UrlExpiredException(this.message, {this.refreshAllMirrors = false});
-  @override
-  String toString() => 'UrlExpiredException: $message';
-}
-
-class TorrentEnginePauseException implements Exception {
-  final String message;
-  final String url;
-  const TorrentEnginePauseException(this.message, {required this.url});
-  @override
-  String toString() => 'TorrentEnginePauseException: $message';
-}
 
 class DownloadEngine implements IDownloadEngine {
   static bool appInForeground = true;

@@ -12,6 +12,12 @@ class PerformanceMonitor {
 
   static final PerformanceMonitor instance = PerformanceMonitor();
 
+  /// True when high frame jank or aggressive power saving requires reduced animations.
+  static bool get shouldReduceMotion =>
+      PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ||
+      PowerMonitor.throttleFactor < 0.7 ||
+      (instance._totalFrames > 10 && instance.jankRatio > 0.15);
+
   /// A build/raster time above this counts as a janky frame.
   static Duration get jankThreshold =>
       Duration(microseconds: (FrameWatchdog.frameBudgetMs * 1000).round());

@@ -60,7 +60,10 @@ class ConnectionManager {
     }
   }
 
-  static void invalidate(String host) => _probes.remove(host);
+  static void invalidate(String host) {
+    _probes.remove(host);
+    ProtocolCache.invalidate(host);
+  }
   static void clearCache() => _probes.clear();
   static Dio createDownloadDio() {
     final dio = Dio();

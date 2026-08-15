@@ -1,4 +1,3 @@
-// FIX: P0-02 — Gate ALL BackdropFilter usage behind BackgroundGate, device capability, and SettingsProvider.reduceVisuals
 import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -6,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/background_gate.dart';
+import '../../core/services/performance_monitor.dart';
 import '../../core/services/power_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
@@ -75,6 +75,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
         !_isLowEndDevice &&
         BackgroundGate.allowHeavyOps &&
         !PowerMonitor.screenOff &&
+        !PerformanceMonitor.shouldReduceMotion &&
         DmxBackdropFilter._activeCount < DmxBackdropFilter._maxConcurrent) {
       DmxBackdropFilter._activeCount++;
       _allocated = true;
@@ -95,10 +96,10 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_allocated && (kIsWeb || !BackgroundGate.allowHeavyOps || PowerMonitor.screenOff)) {
+    if (_allocated && (kIsWeb || !BackgroundGate.allowHeavyOps || PowerMonitor.screenOff || PerformanceMonitor.shouldReduceMotion)) {
       DmxBackdropFilter._activeCount = max(0, DmxBackdropFilter._activeCount - 1);
       _allocated = false;
-    } else if (!_allocated && !kIsWeb && BackgroundGate.allowHeavyOps && !PowerMonitor.screenOff) {
+    } else if (!_allocated && !kIsWeb && BackgroundGate.allowHeavyOps && !PowerMonitor.screenOff && !PerformanceMonitor.shouldReduceMotion) {
       _tryAllocate();
     }
   }
@@ -110,6 +111,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
         _isLowEndDevice ||
         widget.forceSolid ||
         PowerMonitor.screenOff ||
+        PerformanceMonitor.shouldReduceMotion ||
         !BackgroundGate.allowHeavyOps ||
         !_allocated) {
       return Container(
@@ -149,9 +151,11 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
       _lastSigmaY = effectiveSigmaY;
     }
 
-    return BackdropFilter(
-      filter: _cachedFilter!,
-      child: widget.child,
+    return RepaintBoundary(
+      child: BackdropFilter(
+        filter: _cachedFilter!,
+        child: widget.child,
+      ),
     );
   }
 }

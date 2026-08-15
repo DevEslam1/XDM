@@ -76,8 +76,12 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
       if (!PowerMonitor.screenOff) {
         FrameWatchdog.start();
         PerformanceMonitor.instance.start();
-        getIt<AmbientProgress>().restartIfMounted();
-        getIt<StatusChipPulseDriver>().restartIfActive();
+        if (getIt.isRegistered<AmbientProgress>()) {
+          getIt<AmbientProgress>().restartIfMounted();
+        }
+        if (getIt.isRegistered<StatusChipPulseDriver>()) {
+          getIt<StatusChipPulseDriver>().restartIfActive();
+        }
       }
     } else if (state == AppLifecycleState.inactive) {
       // 500ms delay timer before ambient suspension (NEW-04)
@@ -105,12 +109,16 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     WidgetDataBridge.instance.pauseWidgetUpdates();
 
     // STOP ALL TIMERS
-    getIt<BackgroundTimerManager>().cancelAll();
+    if (getIt.isRegistered<BackgroundTimerManager>()) {
+      getIt<BackgroundTimerManager>().cancelAll();
+    }
 
     // Suspend all ambient work
     FrameWatchdog.stop();
     PerformanceMonitor.instance.stop();
-    getIt<AmbientProgress>().stopAll();
+    if (getIt.isRegistered<AmbientProgress>()) {
+      getIt<AmbientProgress>().stopAll();
+    }
     StatusChipPulseDriver.stopAll();
 
     // Task 4.3: Flush database saves on backgrounding/detaching

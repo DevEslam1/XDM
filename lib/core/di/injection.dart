@@ -1,6 +1,6 @@
 import 'package:get_it/get_it.dart';
 import '../services/database_service.dart';
-import '../services/mirror_health_store.dart';
+import '../services/mirror/mirror_registry.dart';
 import '../services/app_lifecycle_coordinator.dart';
 import '../services/background_timer_manager.dart';
 import '../../features/downloads/widgets/download_card.dart';
@@ -48,6 +48,7 @@ T inject<T extends Object>() => getIt<T>();
 Future<void> configureDependencies() async {
   if (getIt.isRegistered<DatabaseService>()) return;
 
+  getIt.registerLazySingleton<SettingsProvider>(() => SettingsProvider.instance);
   getIt.registerLazySingleton<DatabaseService>(() => DatabaseService());
   getIt.registerLazySingleton<TaskRepository>(
     () => DriftTaskRepository(getIt<DatabaseService>()),
@@ -161,8 +162,12 @@ Future<void> configureDependencies() async {
       dispose: (cache) => cache.dispose());
 
   getIt.registerLazySingleton<MirrorHealthStore>(
-    () => MirrorHealthStore(),
+    () => MirrorHealthStore.instance,
     dispose: (s) => s.dispose(),
+  );
+  getIt.registerLazySingleton<MirrorRegistry>(
+    () => MirrorRegistry(),
+    dispose: (r) => r.dispose(),
   );
 
   getIt.registerLazySingleton<AppLifecycleCoordinator>(

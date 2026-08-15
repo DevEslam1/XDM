@@ -49,6 +49,11 @@ class ProtocolCache {
     return caps.support;
   }
 
+  static void invalidate(String host) {
+    _cache?.remove(host);
+    _persist();
+  }
+
   static const int _maxEntries = 500;
 
   static Future<void> record(String url, ProtocolSupport support) async {

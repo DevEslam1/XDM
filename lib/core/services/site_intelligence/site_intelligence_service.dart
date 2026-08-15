@@ -620,6 +620,9 @@ class SiteIntelligenceService {
       }
       if (oldestKey != null) {
         _reliability.remove(oldestKey);
+        _log.info(
+          'Evicted oldest reliability record for domain: $oldestKey (capacity: $maxReliabilityEntries)',
+        );
       }
     }
 

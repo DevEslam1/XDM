@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:synchronized/synchronized.dart';
 import '../engines/http_download_engine.dart';
 import 'engine_models.dart';
 import 'engine_utils.dart';
 
 /// Encapsulates progress state management and throttling for download tasks.
-/// Task 1.2: Decoupled progress handling.
+/// Non-locking throttle using plain timestamps and scheduled timers.
 class DownloadProgressHandler {
   final String taskId;
   final ValueChangedProgress onProgress;
@@ -19,7 +18,6 @@ class DownloadProgressHandler {
   final bool isTorrent;
   final int? torrentId;
   final int Function() getEffectiveIntervalMs;
-  final Lock _lock = Lock();
 
   int lastDownloadedBytes;
   int lastFileSize;
@@ -32,6 +30,9 @@ class DownloadProgressHandler {
   int? lastTotalFileBytes;
   int? lastDownloadedFileBytes;
   DateTime? lastProgressEmitTime;
+
+  Timer? _throttleTimer;
+  DownloadProgress? _pendingProgress;
 
   final List<Map<String, dynamic>>? Function()? getTorrentFiles;
 
@@ -58,6 +59,12 @@ class DownloadProgressHandler {
   void emit(DownloadProgress progress) {
     if (cancelToken.isCancelled) return;
     onProgress(progress);
+  }
+
+  void dispose() {
+    _throttleTimer?.cancel();
+    _throttleTimer = null;
+    _pendingProgress = null;
   }
 
   static String deriveCycleState(
@@ -115,95 +122,115 @@ class DownloadProgressHandler {
   }) async {
     if (cancelToken.isCancelled) return;
 
-    await _lock.synchronized(() {
-      if (cancelToken.isCancelled) return;
-
-      if (adaptiveThreads && httpEngine != null) {
-        final speed = (p['speed'] as num?)?.toDouble() ?? 0.0;
-        if (speed > 0) {
-          httpEngine.recordSample(taskId, speed, effectiveThreadCount);
-        }
+    if (adaptiveThreads && httpEngine != null) {
+      final speed = (p['speed'] as num?)?.toDouble() ?? 0.0;
+      if (speed > 0) {
+        httpEngine.recordSample(taskId, speed, effectiveThreadCount);
       }
+    }
 
-      // Chunk details mapping
-      List<ChunkDetail>? chunkDetails;
-      if (p['chunkDetails'] is List) {
-        chunkDetails = (p['chunkDetails'] as List)
-            .whereType<Map>()
-            .map((c) => ChunkDetail.fromMap(Map<String, dynamic>.from(c)))
-            .toList();
+    // Chunk details mapping
+    List<ChunkDetail>? chunkDetails;
+    if (p['chunkDetails'] is List) {
+      chunkDetails = (p['chunkDetails'] as List)
+          .whereType<Map>()
+          .map((c) => ChunkDetail.fromMap(Map<String, dynamic>.from(c)))
+          .toList();
+    }
+
+    lastDownloadedBytes = (p['downloadedBytes'] as num?)?.toInt() ?? lastDownloadedBytes;
+    lastFileSize = (p['fileSize'] as num?)?.toInt() ?? lastFileSize;
+
+    // Torrent file handling
+    final pTorrentFiles = p['torrentFiles'];
+    if (pTorrentFiles is List && pTorrentFiles.isNotEmpty) {
+      _handleTorrentFiles(pTorrentFiles);
+    }
+
+    final sm = p['statusMessage'] as String?;
+    var cycle = deriveCycleState(sm, cancelToken.isCancelled, isTorrent);
+
+    // YT Combined Sync Check
+    if (cycle == 'completed' && ytStreamKind != null && ytStreamKind != YtStreamKind.combined) {
+      final cpSize = (p['ytCounterpartSize'] as num?)?.toInt() ?? ytCounterpartSize;
+      final cpLive = ytCounterpartDownloadedOverride ?? ytCounterpartDownloadedBytes ?? 0;
+      
+      final bool counterpartResolved = cpSize != null && cpSize > 0;
+      final bool counterpartDone = counterpartResolved && cpLive >= cpSize;
+      final bool selfDone = lastFileSize > 0 && lastDownloadedBytes >= lastFileSize;
+
+      if (!counterpartResolved || !counterpartDone || !selfDone) {
+        cycle = 'downloading';
       }
+    }
 
-      lastDownloadedBytes = (p['downloadedBytes'] as num?)?.toInt() ?? lastDownloadedBytes;
-      lastFileSize = (p['fileSize'] as num?)?.toInt() ?? lastFileSize;
+    final chunkList = chunkDetails;
+    final totalParts = chunkList?.length ?? 0;
+    final isDone = cycle == 'completed';
+    final doneParts = chunkList == null
+        ? 0
+        : (isDone ? totalParts : chunkList.where((c) => c.isComplete).length);
 
-      // Torrent file handling
-      final pTorrentFiles = p['torrentFiles'];
-      if (pTorrentFiles is List && pTorrentFiles.isNotEmpty) {
-        _handleTorrentFiles(pTorrentFiles);
+    lastChunkDetails = chunkDetails ?? lastChunkDetails;
+    lastTotalChunks = (isTorrent || chunkDetails == null) ? lastTotalChunks : totalParts;
+    lastCompletedChunks = (isTorrent || chunkDetails == null) ? lastCompletedChunks : doneParts;
+
+    final progress = DownloadProgress(
+      downloadedBytes: lastDownloadedBytes,
+      fileSize: lastFileSize,
+      speed: (p['speed'] as num?)?.toDouble() ?? 0.0,
+      eta: (p['eta'] as num?)?.toInt(),
+      chunks: p['chunks'] != null ? List<double>.from(p['chunks'] as List) : null,
+      fileName: p['fileName'] as String? ?? resolvedFileName,
+      supportsResume: p['supportsResume'] as bool? ?? resolvedSupportsResume,
+      statusMessage: sm,
+      ytStreamKind: ytStreamKind,
+      ytCounterpartSize: (p['ytCounterpartSize'] as num?)?.toInt() ?? ytCounterpartSize,
+      ytDownloadedBytes: (p['ytDownloadedBytes'] as num?)?.toInt() ?? (ytStreamKind != null ? lastDownloadedBytes : null),
+      ytCounterpartDownloadedBytes: ytCounterpartDownloadedOverride ?? (p['ytCounterpartDownloadedBytes'] as num?)?.toInt() ?? ytCounterpartDownloadedBytes,
+      chunkDetails: lastChunkDetails,
+      cycleState: cycle,
+      totalChunks: (isTorrent || lastChunkDetails == null) ? null : lastTotalChunks,
+      completedChunks: (isTorrent || lastChunkDetails == null) ? null : lastCompletedChunks,
+      torrentFiles: lastTorrentFiles,
+      totalFiles: lastTotalFiles,
+      completedFiles: lastCompletedFiles,
+      totalFileBytes: lastTotalFileBytes,
+      downloadedFileBytes: lastDownloadedFileBytes,
+      torrentId: torrentId,
+    );
+
+    final intervalMs = getEffectiveIntervalMs();
+    final now = DateTime.now();
+    final bool canEmitNow = lastProgressEmitTime == null ||
+        now.difference(lastProgressEmitTime!) >= Duration(milliseconds: intervalMs);
+
+    if (canEmitNow) {
+      _throttleTimer?.cancel();
+      _throttleTimer = null;
+      _pendingProgress = null;
+      lastProgressEmitTime = now;
+      emit(progress);
+    } else {
+      _pendingProgress = progress;
+      if (_throttleTimer == null) {
+        final elapsed = now.difference(lastProgressEmitTime!).inMilliseconds;
+        final remainingMs = intervalMs - elapsed;
+        _throttleTimer = Timer(Duration(milliseconds: remainingMs.clamp(1, intervalMs)), () {
+          _throttleTimer = null;
+          if (cancelToken.isCancelled) {
+            _pendingProgress = null;
+            return;
+          }
+          final pending = _pendingProgress;
+          if (pending != null) {
+            _pendingProgress = null;
+            lastProgressEmitTime = DateTime.now();
+            emit(pending);
+          }
+        });
       }
-
-      final sm = p['statusMessage'] as String?;
-      var cycle = deriveCycleState(sm, cancelToken.isCancelled, isTorrent);
-
-      // YT Combined Sync Check
-      if (cycle == 'completed' && ytStreamKind != null && ytStreamKind != YtStreamKind.combined) {
-        final cpSize = (p['ytCounterpartSize'] as num?)?.toInt() ?? ytCounterpartSize;
-        final cpLive = ytCounterpartDownloadedOverride ?? ytCounterpartDownloadedBytes ?? 0;
-        
-        final bool counterpartResolved = cpSize != null && cpSize > 0;
-        final bool counterpartDone = counterpartResolved && cpLive >= cpSize;
-        final bool selfDone = lastFileSize > 0 && lastDownloadedBytes >= lastFileSize;
-
-        if (!counterpartResolved || !counterpartDone || !selfDone) {
-          cycle = 'downloading';
-        }
-      }
-
-      final chunkList = chunkDetails;
-      final totalParts = chunkList?.length ?? 0;
-      final isDone = cycle == 'completed';
-      final doneParts = chunkList == null
-          ? 0
-          : (isDone ? totalParts : chunkList.where((c) => c.isComplete).length);
-
-      lastChunkDetails = chunkDetails ?? lastChunkDetails;
-      lastTotalChunks = (isTorrent || chunkDetails == null) ? lastTotalChunks : totalParts;
-      lastCompletedChunks = (isTorrent || chunkDetails == null) ? lastCompletedChunks : doneParts;
-
-      final nowEmit = DateTime.now();
-      final shouldEmit = lastProgressEmitTime == null ||
-          nowEmit.difference(lastProgressEmitTime!) >=
-              Duration(milliseconds: getEffectiveIntervalMs());
-
-      if (shouldEmit) {
-        lastProgressEmitTime = nowEmit;
-        onProgress(DownloadProgress(
-          downloadedBytes: lastDownloadedBytes,
-          fileSize: lastFileSize,
-          speed: (p['speed'] as num?)?.toDouble() ?? 0.0,
-          eta: (p['eta'] as num?)?.toInt(),
-          chunks: p['chunks'] != null ? List<double>.from(p['chunks'] as List) : null,
-          fileName: p['fileName'] as String? ?? resolvedFileName,
-          supportsResume: p['supportsResume'] as bool? ?? resolvedSupportsResume,
-          statusMessage: sm,
-          ytStreamKind: ytStreamKind,
-          ytCounterpartSize: (p['ytCounterpartSize'] as num?)?.toInt() ?? ytCounterpartSize,
-          ytDownloadedBytes: (p['ytDownloadedBytes'] as num?)?.toInt() ?? (ytStreamKind != null ? lastDownloadedBytes : null),
-          ytCounterpartDownloadedBytes: ytCounterpartDownloadedOverride ?? (p['ytCounterpartDownloadedBytes'] as num?)?.toInt() ?? ytCounterpartDownloadedBytes,
-          chunkDetails: lastChunkDetails,
-          cycleState: cycle,
-          totalChunks: (isTorrent || lastChunkDetails == null) ? null : lastTotalChunks,
-          completedChunks: (isTorrent || lastChunkDetails == null) ? null : lastCompletedChunks,
-          torrentFiles: lastTorrentFiles,
-          totalFiles: lastTotalFiles,
-          completedFiles: lastCompletedFiles,
-          totalFileBytes: lastTotalFileBytes,
-          downloadedFileBytes: lastDownloadedFileBytes,
-          torrentId: torrentId,
-        ));
-      }
-    });
+    }
   }
 
   void _handleTorrentFiles(List pTorrentFiles) {

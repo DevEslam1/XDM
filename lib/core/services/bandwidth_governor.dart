@@ -1,7 +1,6 @@
 import 'dart:collection';
 import 'dart:math';
 
-import 'package:synchronized/synchronized.dart';
 import 'power_monitor.dart';
 
 /// A token-bucket bandwidth governor.
@@ -13,18 +12,9 @@ class BandwidthGovernor {
   int _globalBytesPerSecond;
   int _activeConsumers = 0;
 
-  /// FIX(13): how far above the per-consumer share the token bucket may burst.
-  /// 1.0 = strict (never exceeds the configured limit); higher values allow
-  /// short bursts. Configurable so users can trade strictness for speed.
   double _burstFactor;
-
   double _availableTokens = 0;
-  // FIX: Initialize _lastRefill to 1 second in the past so the first acquire()
-  // call gets a full second of tokens (up to the burst cap). Previously the
-  // bucket started empty, causing unnecessary latency on the first write.
   DateTime _lastRefill = DateTime.now().subtract(const Duration(seconds: 1));
-
-  final Lock _lock = Lock();
   double throttleFactor;
 
   BandwidthGovernor([
@@ -54,8 +44,6 @@ class BandwidthGovernor {
 
   int get perConsumerBytesPerSecond {
     if (_globalBytesPerSecond <= 0 || _activeConsumers <= 0) return 0;
-    // FIX-M6: Ensure at least 1 to avoid division by zero from a race
-    // where _activeConsumers is decremented to 0 between isUnlimited and here.
     final consumers = max(1, _activeConsumers);
     final baseShare = _globalBytesPerSecond ~/ consumers;
     return (baseShare * throttleFactor).round();
@@ -73,9 +61,6 @@ class BandwidthGovernor {
   void setLimit(int bytesPerSecond) => setGlobalLimit(bytesPerSecond);
 
   /// Registers a consumer.
-  ///
-  /// This is intentionally synchronous because in Dart isolates there is no
-  /// true shared-memory concurrency for this object instance.
   void registerConsumer() {
     _activeConsumers++;
   }
@@ -94,21 +79,16 @@ class BandwidthGovernor {
     _taskLimits[taskId] = limit;
   }
 
-  final Map<String, Lock> _taskLocks = {};
-
   void removeTaskLimit(String taskId) {
     _taskLimits.remove(taskId);
     _taskLastRefill.remove(taskId);
     _taskTokens.remove(taskId);
-    _taskLocks.remove(taskId);
   }
 
   int? getTaskLimit(String taskId) {
     return _taskLimits[taskId];
   }
 
-  // FIX: Per-task token buckets so tasks with different limits don't
-  // corrupt each other's rate-limiting through the shared _availableTokens.
   final Map<String, double> _taskTokens = {};
 
   /// Returns how many milliseconds the caller should sleep before writing
@@ -117,12 +97,11 @@ class BandwidthGovernor {
     if (bytes <= 0) return 0;
 
     if (taskId != null && _taskLimits.containsKey(taskId)) {
-      final taskLock = _taskLocks.putIfAbsent(taskId, () => Lock());
-      return taskLock.synchronized(() => _acquireTaskLimited(bytes, taskId));
+      return _acquireTaskLimited(bytes, taskId);
     }
 
     if (isUnlimited) return 0;
-    return _lock.synchronized(() => _acquireGlobal(bytes));
+    return _acquireGlobal(bytes);
   }
 
   int _acquireTaskLimited(int bytes, String taskId) {

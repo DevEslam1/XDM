@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
+import '../../core/services/performance_monitor.dart';
 
 /// A surface panel with an optional accent rail, tinted border, and a subtle
 /// press response.
@@ -140,7 +141,9 @@ class _GlassCardState extends State<GlassCard> {
 
     if (widget.onTap == null) return RepaintBoundary(child: withBorder);
 
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final reduceMotion =
+        MediaQuery.disableAnimationsOf(context) ||
+        PerformanceMonitor.shouldReduceMotion;
 
     return RepaintBoundary(
       child: Semantics(

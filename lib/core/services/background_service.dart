@@ -159,10 +159,15 @@ class BackgroundService {
 
   @pragma('vm:entry-point')
   static bool _onIosBackground(ServiceInstance service) {
-    _log.warning(
-      'iOS background callback invoked. Using native BGTaskScheduler / URLSession implementation.',
+    _log.info(
+      'iOS background callback invoked. Bridging to native BackgroundDownloadController.',
     );
-    return false;
+    const channel = MethodChannel('com.dmx.app/background_download');
+    channel.invokeMethod<bool>('scheduleDownload').catchError((e) {
+      _log.warning('Failed to bridge to iOS background download controller: $e');
+      return false;
+    });
+    return true;
   }
 
   static Future<void> start() async {

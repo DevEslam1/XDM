@@ -502,14 +502,14 @@ class StateStore {
   static final Map<String, DmxStateStatus> _lastWrittenStatus = {};
   static const int _maxCachedPayloads = 16;
 
-  static void removeCachedPayload(String taskId) {
-    _lastWrittenPayloads.removeWhere((key, _) => key.contains(taskId));
-    _lastWrittenBytes.removeWhere((key, _) => key.contains(taskId));
-    _lastSaveTimes.removeWhere((key, _) => key.contains(taskId));
-    _lastWrittenStatus.removeWhere((key, _) => key.contains(taskId));
+  static void removeCachedPayload(String targetPath) {
+    _lastWrittenPayloads.remove(targetPath);
+    _lastWrittenBytes.remove(targetPath);
+    _lastSaveTimes.remove(targetPath);
+    _lastWrittenStatus.remove(targetPath);
   }
 
-  static void removeTaskState(String taskId) => removeCachedPayload(taskId);
+  static void removeTaskState(String targetPath) => removeCachedPayload(targetPath);
 
   static final Map<String, Lock> _pathLocks = {};
 
@@ -704,6 +704,10 @@ class DownloadJournal {
 
     final last = _lastBgRecordedBytes[index] ?? 0;
     if ((bytes - last).abs() < threshold) return;
+    if (_lastBgRecordedBytes.length >= 4 * 1024 &&
+        !_lastBgRecordedBytes.containsKey(index)) {
+      _lastBgRecordedBytes.remove(_lastBgRecordedBytes.keys.first);
+    }
     _lastBgRecordedBytes[index] = bytes;
 
     await _lock.synchronized(() async {
@@ -838,12 +842,14 @@ class DownloadJournal {
   /// Flushes and closes the underlying journal sink.
   Future<void> close() async {
     await _lock.synchronized(() async {
+      _lastBgRecordedBytes.clear();
       await _closeLocked();
     });
   }
 
   Future<void> delete() async {
     await _lock.synchronized(() async {
+      _lastBgRecordedBytes.clear();
       await _closeLocked();
     });
     try {

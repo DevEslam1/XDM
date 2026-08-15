@@ -7,6 +7,7 @@ import '../../core/di/injection.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/background_gate.dart';
 import '../../core/services/download_engine.dart';
+import '../../core/services/performance_monitor.dart';
 import '../../core/services/power_monitor.dart';
 import '../../features/downloads/provider/download_provider.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -203,6 +204,8 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
     if (classicUi ||
         reduceVisuals ||
         !_isVisible ||
+        PerformanceMonitor.shouldReduceMotion ||
+        MediaQuery.disableAnimationsOf(context) ||
         DownloadEngine.isInBackground ||
         PowerMonitor.screenOff ||
         !BackgroundGate.allowHeavyOps ||

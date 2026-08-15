@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
+import '../../core/services/performance_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../mixins/pausable_loop_animation.dart';
 
@@ -44,27 +45,22 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
   AnimationController get loopController => _shimmer;
 
   @override
+  bool get loopWanted => widget.onPressed != null && !widget.isLoading;
+
+  @override
   void initState() {
     super.initState();
     _shimmer = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2600),
     );
-    final enabled = widget.onPressed != null && !widget.isLoading;
-    if (enabled) {
-      startPausableLoop();
-    }
+    startPausableLoop();
   }
 
   @override
   void didUpdateWidget(NeonGlowButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final enabled = widget.onPressed != null && !widget.isLoading;
-    if (!enabled && _shimmer.isAnimating) {
-      _shimmer.stop();
-    } else if (enabled && !_shimmer.isAnimating) {
-      startPausableLoop();
-    }
+    syncPausableLoop();
   }
 
   @override
@@ -119,8 +115,13 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
     );
     if (widget.isExpanded) content = Center(child: content);
 
+    final reduceMotion =
+        MediaQuery.disableAnimationsOf(context) ||
+        PerformanceMonitor.shouldReduceMotion;
+
     // Shimmer sweep across filled buttons
-    final label = (effectiveGlow &&
+    final label = (!reduceMotion &&
+            effectiveGlow &&
             widget.isFilled &&
             enabled &&
             !_shimmer.isDismissed)
@@ -168,20 +169,21 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
           )
         : content;
 
-    return Semantics(
-      button: true,
-      enabled: enabled,
-      label: widget.text,
-      child: GestureDetector(
-        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
-        onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
-        onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
-        child: AnimatedScale(
-        scale: _pressed ? 0.96 : 1.0,
-        duration: AppTheme.motionFast,
-        curve: AppTheme.motionSpring,
-        child: AnimatedOpacity(
-          opacity: enabled ? 1.0 : 0.55,
+    return RepaintBoundary(
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: widget.text,
+        child: GestureDetector(
+          onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+          onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+          child: AnimatedScale(
+            scale: (!reduceMotion && _pressed) ? 0.96 : 1.0,
+            duration: AppTheme.motionFast,
+            curve: AppTheme.motionSpring,
+            child: AnimatedOpacity(
+              opacity: enabled ? 1.0 : 0.55,
           duration: AppTheme.motionBase,
           child: widget.isFilled
               ? FilledButton(
@@ -262,6 +264,7 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
           ),
         ),
       ),
+    ),
     );
   }
 }

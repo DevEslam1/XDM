@@ -69,5 +69,14 @@ void main() {
       final proto = await ConnectionManager.detectBestProtocol(url);
       expect(proto, equals(ProtocolSupport.http2));
     });
+
+    test('invalidate clears both internal probes and ProtocolCache', () async {
+      const url = 'https://test-invalidate.com/file.bin';
+      await ProtocolCache.record(url, ProtocolSupport.http2);
+      expect(ProtocolCache.get(url), equals(ProtocolSupport.http2));
+
+      ConnectionManager.invalidate('test-invalidate.com');
+      expect(ProtocolCache.get(url), isNull);
+    });
   });
 }

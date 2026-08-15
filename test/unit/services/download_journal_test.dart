@@ -124,4 +124,57 @@ void main() {
     expect(result.state, isNotNull);
     expect(result.state.totalSize, equals(20 * 1024 * 1024));
   });
+
+  test('TransferState.tryParseV3 parses valid v3 map correctly', () {
+    final map = {
+      'v': 3,
+      'totalSize': 1000,
+      'threadCount': 2,
+      'url': 'https://example.com/test.bin',
+      'chunks': [
+        {'start': 0, 'end': 499, 'downloaded': 500},
+        {'start': 500, 'end': 999, 'downloaded': 250},
+      ],
+    };
+
+    final state = TransferState.tryParseV3(map);
+    expect(state, isNotNull);
+    expect(state!.totalSize, equals(1000));
+    expect(state.threadCount, equals(2));
+    expect(state.chunks.length, equals(2));
+    expect(state.chunks[0].isComplete, isTrue);
+    expect(state.chunks[1].downloaded, equals(250));
+  });
+
+  test('TransferState.tryParseV3 returns null on invalid or non-v3 payload', () {
+    expect(TransferState.tryParseV3({'v': 2, 'totalSize': 1000}), isNull);
+    expect(TransferState.tryParseV3({}), isNull);
+  });
+
+  test('StateStore reconciles with disk when file length is smaller than recorded chunk bytes', () async {
+    final tempFilePath = '${tempDir.path}/reconcile_test.dmxpart';
+    final tempFile = File(tempFilePath);
+    await tempFile.writeAsBytes(List.filled(300, 0)); // only 300 bytes on disk
+
+    final state = TransferState(
+      totalSize: 1000,
+      threadCount: 2,
+      chunks: [
+        ChunkState(start: 0, end: 499, downloaded: 400), // claims 400, but only 300 exist
+        ChunkState(start: 500, end: 999, downloaded: 0),
+      ],
+      url: 'https://example.com/file.bin',
+    );
+    await StateStore.save(tempFilePath, state);
+
+    final loaded = await StateStore.loadOrCreate(
+      tempFilePath,
+      url: 'https://example.com/file.bin',
+      threadCount: 2,
+      knownFileSize: 1000,
+    );
+
+    expect(loaded.diskAdjusted, isTrue);
+    expect(loaded.state.chunks[0].downloaded, equals(300));
+  });
 }

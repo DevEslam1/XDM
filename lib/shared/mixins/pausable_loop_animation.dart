@@ -101,6 +101,7 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
   }
 
   void _sync() {
+    if (!mounted) return;
     bool batterySaver = false;
     try {
       batterySaver = SettingsProvider.instance.batterySaverMode;
@@ -110,16 +111,21 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
         !batterySaver &&
         !PowerMonitor.screenOff &&
         BackgroundGate.allowHeavyOps;
-    if (shouldRun) {
-      if (!loopController.isAnimating) loopController.repeat();
-    } else {
-      if (loopController.isAnimating) loopController.stop();
+    try {
+      if (shouldRun) {
+        if (!loopController.isAnimating) loopController.repeat();
+      } else {
+        if (loopController.isAnimating) loopController.stop();
+      }
+    } catch (_) {
+      // Controller may have been disposed or ticker removed
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    if (!mounted) return;
     _foreground = state == AppLifecycleState.resumed;
     _sync();
   }

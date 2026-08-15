@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:dmx/core/services/mirror_failover.dart';
-import 'package:dmx/core/services/mirror_health_store.dart';
+import 'package:dmx/core/services/mirror/mirror_selector.dart';
+import 'package:dmx/core/services/mirror/mirror_registry.dart';
 import 'package:dmx/core/services/protocol_cache.dart';
 
 void main() {
@@ -10,7 +10,7 @@ void main() {
   group('MirrorFailover & orderMirrorUrls', () {
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
-      await MirrorHealthStore.init();
+      await MirrorHealthStore.instance.init();
       await ProtocolCache.init();
     });
 

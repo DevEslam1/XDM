@@ -2,9 +2,8 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:dmx/core/services/mirror_health_store.dart';
-import 'package:dmx/core/services/mirror_failover.dart';
-import 'package:dmx/core/services/engines/mirror_parallel_engine.dart';
+import 'package:dmx/core/services/mirror/mirror_registry.dart';
+import 'package:dmx/core/services/mirror/mirror_selector.dart';
 import 'package:dmx/core/services/protocol_cache.dart';
 import 'package:dmx/core/services/torrent_resume_store.dart';
 import 'package:dmx/core/services/background_service.dart';
@@ -26,14 +25,15 @@ void main() {
         () async {
       const url = 'https://mirror1.example.com/file.zip';
 
-      MirrorHealthStore.recordSpeed(url, 1000000);
-      MirrorHealthStore.recordSpeed(url, 2000000);
+      await MirrorHealthStore.instance.recordSpeed(url, 1000000);
+      await MirrorHealthStore.instance.recordSpeed(url, 2000000);
 
-      final ranking = MirrorHealthStore.getMirrorRanking();
+      final ranking = MirrorHealthStore.instance.getMirrorRanking();
       expect(ranking, isNotNull);
 
-      await MirrorHealthStore.persistMirrorRanking([url]);
-      final persisted = await MirrorHealthStore.getPersistedMirrorRanking();
+      await MirrorHealthStore.instance.persistMirrorRanking([url]);
+      final persisted =
+          await MirrorHealthStore.instance.getPersistedMirrorRanking();
       expect(persisted, contains(url));
     });
 
@@ -42,8 +42,8 @@ void main() {
         () async {
       final failover =
           MirrorFailover(['https://m1.com/file', 'https://m2.com/file']);
-      MirrorHealthStore.recordSpeed('https://m1.com/file', 500000);
-      MirrorHealthStore.recordSpeed('https://m2.com/file', 600000);
+      await MirrorHealthStore.instance.recordSpeed('https://m1.com/file', 500000);
+      await MirrorHealthStore.instance.recordSpeed('https://m2.com/file', 600000);
       ProtocolCache.record('https://m2.com/file', ProtocolSupport.http2);
 
       final current = failover.advance();
@@ -52,7 +52,7 @@ void main() {
 
     test(
         'MirrorParallelEngine reallocates slow mirror threads to fastest mirror',
-        () {
+        () async {
       final failover =
           MirrorFailover(['https://fast.com/file', 'https://slow.com/file']);
       final engine = MirrorParallelEngine(
@@ -60,8 +60,10 @@ void main() {
         failover: failover,
       );
 
-      MirrorHealthStore.recordSpeed('https://fast.com/file', 1000000);
-      MirrorHealthStore.recordSpeed('https://slow.com/file', 100000);
+      await MirrorHealthStore.instance
+          .recordSpeed('https://fast.com/file', 1000000);
+      await MirrorHealthStore.instance
+          .recordSpeed('https://slow.com/file', 100000);
 
       final allocations = engine.distributeThreads(4);
       expect(allocations.length, greaterThan(0));

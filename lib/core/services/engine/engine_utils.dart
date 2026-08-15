@@ -1,6 +1,7 @@
 import 'dart:collection';
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:dmx/core/services/retry_interceptor.dart';
@@ -88,21 +89,30 @@ Dio buildTransferDio({
   if (client.httpClientAdapter is IOHttpClientAdapter) {
     (client.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
       final client = HttpClient();
-      client.badCertificateCallback = null; // Use system default validation
-      assert(() {
-        // Debug-only: allow self-signed certs in dev
-        client.badCertificateCallback = (cert, host, port) {
-          final targetHost = Uri.tryParse(url ?? '')?.host.toLowerCase();
-          if (targetHost != null && host.toLowerCase().endsWith(targetHost)) return true;
-          return false;
-        };
-        return true;
-      }());
+      client.badCertificateCallback = DebugCertOverride.getCallback(url);
       return client;
     };
   }
 
   return client;
+}
+
+class DebugCertOverride {
+  static BadCertificateCallback? getCallback(String? url) {
+    if (kReleaseMode) return null;
+    bool isDebug = false;
+    assert(() {
+      isDebug = true;
+      return true;
+    }());
+    if (!isDebug) return null;
+
+    return (X509Certificate cert, String host, int port) {
+      final targetHost = Uri.tryParse(url ?? '')?.host.toLowerCase();
+      if (targetHost != null && host.toLowerCase().endsWith(targetHost)) return true;
+      return false;
+    };
+  }
 }
 
 String? firstNonEmpty(String? a, String? b) {

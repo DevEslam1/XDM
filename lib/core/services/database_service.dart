@@ -86,73 +86,86 @@ class DatabaseService {
     await _migrateFromHivePerBox(prefs);
     _initialized = true;
 
-    // FIX-2.1 / FIX-3.1: Periodic WAL checkpoint adapted via BackgroundGate
-    final interval = BackgroundGate.adaptInterval(const Duration(minutes: 30));
-    // FIX: Guard against multiple timer creations if init() is called repeatedly
+    _scheduleMaintenanceTimer();
+    _throttleFactorListener = () => _scheduleMaintenanceTimer();
+    PowerMonitor.throttleFactorNotifier.addListener(_throttleFactorListener!);
+    _screenStateSub = PowerMonitor.screenStateStream.listen((_) => _scheduleMaintenanceTimer());
+  }
+
+  StreamSubscription<bool>? _screenStateSub;
+  VoidCallback? _throttleFactorListener;
+
+  void _scheduleMaintenanceTimer() {
     _maintenanceTimer?.cancel();
+    if (!_initialized) return;
+    final interval = BackgroundGate.adaptInterval(const Duration(minutes: 30));
     _maintenanceTimer = Timer.periodic(interval, (_) async {
-      final swCheckpoint = Stopwatch()..start();
+      await _runPeriodicMaintenance();
+    });
+  }
+
+  Future<void> _runPeriodicMaintenance() async {
+    final swCheckpoint = Stopwatch()..start();
+    try {
+      await _db.customStatement('PRAGMA wal_checkpoint(PASSIVE)');
+      if (_maintenanceRuns % 12 == 0) {
+        await _db.customStatement('PRAGMA optimize');
+      }
+      swCheckpoint.stop();
+      if (swCheckpoint.elapsedMilliseconds > 500) {
+        _log.info(
+            'wal_checkpoint(PASSIVE) took ${swCheckpoint.elapsedMilliseconds}ms');
+      }
+    } catch (e) {
+      _log.warning('wal_checkpoint(PASSIVE) failed', e);
+    }
+
+    _maintenanceRuns++;
+    if (_maintenanceRuns % 6 == 0) {
       try {
-        await _db.customStatement('PRAGMA wal_checkpoint(PASSIVE)');
-        if (_maintenanceRuns % 12 == 0) {
-          await _db.customStatement('PRAGMA optimize');
+        final walRows = await _db.customSelect(
+          'PRAGMA wal_checkpoint(PASSIVE)',
+        ).get();
+        if (walRows.isNotEmpty) {
+          final row = walRows.first.data;
+          final log = row['log'] ?? 0;
+          if (log is num && log > 1250) {
+            // ~5MB in 4KB pages
+            _log.warning('WAL too large ($log pages), forcing TRUNCATE');
+            await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
+          }
         }
-        swCheckpoint.stop();
-        if (swCheckpoint.elapsedMilliseconds > 500) {
+      } catch (_) {}
+    }
+    if (_maintenanceRuns % 12 == 0) {
+      try {
+        final activeCountResult = await _db
+            .customSelect(
+              "SELECT COUNT(*) as cnt FROM download_tasks WHERE status IN ('downloading', 'paused', 'queued', 'seeding')",
+            )
+            .get();
+        final activeCount = activeCountResult.first.read<int>('cnt');
+        if (activeCount > 0) {
           _log.info(
-              'wal_checkpoint(PASSIVE) took ${swCheckpoint.elapsedMilliseconds}ms');
+            'Skipping periodic DB incremental_vacuum because $activeCount active/paused/queued download(s) in progress',
+          );
+        } else {
+          // FIX: Only vacuum if checkpoint returned pages > 0
+          try {
+            await _db.customSelect('PRAGMA wal_checkpoint(PASSIVE)').get();
+          } catch (_) {}
+          final swVacuum = Stopwatch()..start();
+          await _db.customStatement('PRAGMA incremental_vacuum(50)');
+          swVacuum.stop();
+          if (swVacuum.elapsedMilliseconds > 500) {
+            _log.info(
+                'incremental_vacuum took ${swVacuum.elapsedMilliseconds}ms');
+          }
         }
       } catch (e) {
-        _log.warning('wal_checkpoint(PASSIVE) failed', e);
+        _log.warning('incremental_vacuum failed', e);
       }
-
-      _maintenanceRuns++;
-      if (_maintenanceRuns % 6 == 0) {
-        try {
-          final walRows = await _db.customSelect(
-            'PRAGMA wal_checkpoint(PASSIVE)',
-          ).get();
-          if (walRows.isNotEmpty) {
-            final row = walRows.first.data;
-            final log = row['log'] ?? 0;
-            if (log is num && log > 1250) {
-              // ~5MB in 4KB pages
-              _log.warning('WAL too large ($log pages), forcing TRUNCATE');
-              await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
-            }
-          }
-        } catch (_) {}
-      }
-      if (_maintenanceRuns % 12 == 0) {
-        try {
-          final activeCountResult = await _db
-              .customSelect(
-                "SELECT COUNT(*) as cnt FROM download_tasks WHERE status IN ('downloading', 'paused', 'queued', 'seeding')",
-              )
-              .get();
-          final activeCount = activeCountResult.first.read<int>('cnt');
-          if (activeCount > 0) {
-            _log.info(
-              'Skipping periodic DB incremental_vacuum because $activeCount active/paused/queued download(s) in progress',
-            );
-          } else {
-            // FIX: Only vacuum if checkpoint returned pages > 0
-            try {
-              await _db.customSelect('PRAGMA wal_checkpoint(PASSIVE)').get();
-            } catch (_) {}
-            final swVacuum = Stopwatch()..start();
-            await _db.customStatement('PRAGMA incremental_vacuum(50)');
-            swVacuum.stop();
-            if (swVacuum.elapsedMilliseconds > 500) {
-              _log.info(
-                  'incremental_vacuum took ${swVacuum.elapsedMilliseconds}ms');
-            }
-          }
-        } catch (e) {
-          _log.warning('incremental_vacuum failed', e);
-        }
-      }
-    });
+    }
   }
 
   /// Migrates Hive boxes using a single global completion flag (DB-03).
@@ -793,9 +806,6 @@ class DatabaseService {
 
   Future<void> saveTask(DownloadTask task) async {
     _pendingProgressSaves.remove(task.id);
-    if (_pendingProgressSaves.length > 50) {
-      await flushPendingSaves();
-    }
     int retries = 3;
     int attempt = 0;
     while (true) {
@@ -1160,6 +1170,20 @@ class DatabaseService {
   Future<void> dispose() async {
     // FIX-M2: Force flush on dispose
     await flushPendingSaves();
+
+    if (_throttleFactorListener != null) {
+      PowerMonitor.throttleFactorNotifier.removeListener(_throttleFactorListener!);
+      _throttleFactorListener = null;
+    }
+    _screenStateSub?.cancel();
+    _screenStateSub = null;
+
+    for (final timer in _historyDebounceTimers.values) {
+      timer.cancel();
+    }
+    _historyDebounceTimers.clear();
+    _pendingHistoryEntries.clear();
+
     _maintenanceTimer?.cancel();
     _maintenanceTimer = null;
     _dbBatchTimer?.cancel();

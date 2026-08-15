@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/download_engine.dart';
+import '../../../core/services/performance_monitor.dart';
 import '../../../core/services/power_monitor.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/utils/localization.dart';
@@ -3513,11 +3514,17 @@ class _CardSparklineGraph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 24,
-      width: width,
-      child: CustomPaint(
-        painter: _SparklinePainter(history, color),
+    if (PerformanceMonitor.shouldReduceMotion ||
+        MediaQuery.disableAnimationsOf(context)) {
+      return SizedBox(height: 24, width: width);
+    }
+    return RepaintBoundary(
+      child: SizedBox(
+        height: 24,
+        width: width,
+        child: CustomPaint(
+          painter: _SparklinePainter(history, color),
+        ),
       ),
     );
   }

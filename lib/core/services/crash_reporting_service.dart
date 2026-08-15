@@ -96,6 +96,21 @@ class CrashReportingService {
         }
         return event;
       };
+      options.beforeBreadcrumb = (breadcrumb, hint) {
+        if (breadcrumb == null) return null;
+        if (breadcrumb.message != null) {
+          breadcrumb.message = _redactSensitive(breadcrumb.message!);
+        }
+        if (breadcrumb.data != null) {
+          breadcrumb.data = {
+            for (final entry in breadcrumb.data!.entries)
+              entry.key: entry.value is String
+                  ? _redactSensitive(entry.value as String)
+                  : entry.value,
+          };
+        }
+        return breadcrumb;
+      };
     });
     _reporter = SentryCrashReporter();
     _initialized = true;
