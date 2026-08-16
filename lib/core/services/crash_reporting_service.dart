@@ -50,6 +50,9 @@ class CrashReportingService {
   static CrashReporter? _reporter;
   static bool _initialized = false;
 
+  /// Cached no-op reporter so the default path never allocates per call.
+  static final NoOpCrashReporter _noOpReporter = NoOpCrashReporter();
+
   /// Initializes crash reporting. If [dsn] is null or empty, uses [NoOpCrashReporter].
   static Future<void> init({String? dsn}) async {
     if (_initialized) return;
@@ -158,7 +161,7 @@ class CrashReportingService {
   }
 
   /// Returns the current reporter (never null).
-  static CrashReporter get reporter => _reporter ?? NoOpCrashReporter();
+  static CrashReporter get reporter => _reporter ?? _noOpReporter;
 
   /// Records an error [e] with [stackTrace].
   static Future<void> recordError(

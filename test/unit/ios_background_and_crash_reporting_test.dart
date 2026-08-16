@@ -113,6 +113,13 @@ void main() {
       expect(CrashReportingService.reporter, isA<NoOpCrashReporter>());
     });
 
+    test('reporter getter returns the same cached no-op instance', () {
+      final first = CrashReportingService.reporter;
+      final second = CrashReportingService.reporter;
+      expect(identical(first, second), isTrue);
+      expect(first, isA<NoOpCrashReporter>());
+    });
+
     test('redactSensitive redacts api_key, access_token, password, and Bearer',
         () {
       expect(
