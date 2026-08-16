@@ -93,4 +93,19 @@ class TorrentFileNormalizer {
       normalizedFiles: normalized,
     );
   }
+
+  /// Computes a structural hash of a torrent file list for fast deduplication.
+  static int computeFileListHash(List<dynamic>? rawList) {
+    if (rawList == null || rawList.isEmpty) return 0;
+    int h = 17;
+    for (final item in rawList) {
+      if (item is! Map) continue;
+      h = 37 * h + (item['name']?.hashCode ?? 0);
+      h = 37 * h + ((item['downloadedBytes'] as num?)?.toInt() ?? 0);
+      h = 37 * h + ((item['length'] as num?)?.toInt() ?? 0);
+      h = 37 * h + ((item['selected'] as bool?) == false ? 0 : 1);
+      h = 37 * h + ((item['priority'] as num?)?.toInt() ?? 4);
+    }
+    return h;
+  }
 }
