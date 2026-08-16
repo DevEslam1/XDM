@@ -16,6 +16,9 @@ class ServiceRegistry {
   static final List<DisposableService> _services = [];
   static final List<MemoryPressureListener> _memoryListeners = [];
 
+  static int get activeServicesCount => _services.length;
+  static int get activeMemoryListenersCount => _memoryListeners.length;
+
   static void register(DisposableService service) {
     if (!_services.contains(service)) {
       _services.add(service);

@@ -371,7 +371,12 @@ class DownloadProgress {
     if (ytStreamKind == YtStreamKind.combined) {
       return progressRatio;
     }
-    if (ytCounterpartSize == null || ytCounterpartSize! <= 0) return null;
+    // If we don't have counterpart size yet, fall back to self-only ratio so
+    // the ring always shows meaningful progress even before the other stream
+    // has been resolved.
+    if (ytCounterpartSize == null || ytCounterpartSize! <= 0) {
+      return fileSize > 0 ? progressRatio : null;
+    }
     final cpSize = ytCounterpartSize!;
     final selfSize = fileSize > 0 ? fileSize : 0;
     final totalSize = selfSize + cpSize;

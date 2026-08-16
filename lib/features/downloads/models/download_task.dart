@@ -552,6 +552,7 @@ class DownloadTask {
 
   double get progress {
     if (status == DownloadStatus.completed) return 1.0;
+    if (isTorrent && hasTorrentFiles) return torrentOverallPercent;
     if (hasUnknownSize) return -1.0;
     final total = combinedTotalSize;
     if (total <= 0) return -1.0;
@@ -580,6 +581,9 @@ class DownloadTask {
 
   String get progressPercentString {
     if (status == DownloadStatus.completed) return '100.0%';
+    if (isTorrent && hasTorrentFiles) {
+      return '${(torrentOverallPercent * 100).toStringAsFixed(1)}%';
+    }
     final total = combinedTotalSize;
     if (total <= 0) {
       // Unknown total → show downloaded bytes as a byte-count badge

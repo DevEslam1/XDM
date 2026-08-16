@@ -28,16 +28,22 @@ class MirrorHealthStore implements DisposableService {
 
   final Logger _log = Logger('MirrorHealthStore');
   static const String _storeKey = 'mirror_health_data';
+  static const String _urlsIndexKey = 'mirror_health_urls_index';
+  static String _urlKey(String url) => 'mirror_health_url_$url';
   static const Duration _blacklistTtl = Duration(hours: 6);
   static const int maxEntries = 200;
+  static const Duration minFlushInterval = Duration(minutes: 5);
 
   /// Access-ordered cache: reads/writes move the entry to the tail, so the
   /// head is always the least-recently-used entry to evict.
   LinkedHashMap<String, PersistedMirrorState>? _cache;
+  final Set<String> _dirtyUrls = <String>{};
+  final Set<String> _removedUrls = <String>{};
+  DateTime? _lastFlushTime;
   Timer? _cleanupTimer;
 
   /// Single periodic write-coalescing flusher. All writes are batched and
-  /// flushed at most once per 30s (or when explicitly flushed durably).
+  /// flushed at most once per 5 minutes (or when explicitly flushed durably).
   Timer? _flushTimer;
   bool _dirty = false;
   bool _flushing = false;
@@ -45,15 +51,22 @@ class MirrorHealthStore implements DisposableService {
   @visibleForTesting
   bool get isDirtyForTesting => _dirty;
 
+  @visibleForTesting
+  Set<String> get dirtyUrlsForTesting => Set.unmodifiable(_dirtyUrls);
+
   static const String _rankingCacheKey = 'mirror_ranking_cache';
   static const String _rankingTtlKey = 'mirror_ranking_cache_ttl';
 
   /// Clean up expired entries from in-memory cache and mark for persistence.
   Future<void> cleanupStaleEntries() async {
     if (_cache == null) return;
-    final countBefore = _cache!.length;
-    _cache!.removeWhere((_, state) => state.isExpired);
-    if (_cache!.length != countBefore) {
+    final expired = <String>[];
+    _cache!.forEach((url, state) {
+      if (state.isExpired) expired.add(url);
+    });
+    for (final url in expired) {
+      _cache!.remove(url);
+      _removedUrls.add(url);
       _markDirty();
     }
   }
@@ -65,9 +78,27 @@ class MirrorHealthStore implements DisposableService {
       cleanupStaleEntries();
     });
     final prefs = await SharedPreferences.getInstance();
+    _cache = LinkedHashMap();
+    final urlList = prefs.getStringList(_urlsIndexKey);
+    if (urlList != null && urlList.isNotEmpty) {
+      for (final url in urlList) {
+        final raw = prefs.getString(_urlKey(url));
+        if (raw != null) {
+          try {
+            final map = jsonDecode(raw) as Map<String, dynamic>;
+            _cache![url] = PersistedMirrorState.fromJson(map);
+          } catch (e) {
+            _log.warning('Failed to decode mirror health entry for $url: $e');
+          }
+        }
+      }
+      await cleanupStaleEntries();
+      return;
+    }
+
+    // Legacy JSON dump fallback migration
     final raw = prefs.getString(_storeKey);
     if (raw == null) {
-      _cache = LinkedHashMap();
       return;
     }
     try {
@@ -77,7 +108,7 @@ class MirrorHealthStore implements DisposableService {
       );
       await cleanupStaleEntries();
     } catch (e) {
-      _log.warning('Failed to decode mirror health data: $e');
+      _log.warning('Failed to decode legacy mirror health data: $e');
       _cache = LinkedHashMap();
     }
   }
@@ -100,7 +131,7 @@ class MirrorHealthStore implements DisposableService {
       );
     }
     _evictLruIfNeeded();
-    _markDirty();
+    _markDirty(url);
   }
 
   /// Record a success — resets the failure count and clears blacklist.
@@ -113,7 +144,7 @@ class MirrorHealthStore implements DisposableService {
     state.blacklistedUntil = 0;
     _touch(url);
     _evictLruIfNeeded();
-    _markDirty();
+    _markDirty(url);
   }
 
   /// Record speed for a mirror URL using a rolling average of the last 10 samples.
@@ -128,7 +159,7 @@ class MirrorHealthStore implements DisposableService {
         state.speedSamples.reduce((a, b) => a + b) / state.speedSamples.length;
     _touch(url);
     _evictLruIfNeeded();
-    _markDirty();
+    _markDirty(url);
   }
 
   /// Get active mirror URLs ranked by average speed descending, excluding blacklisted mirrors.
@@ -216,13 +247,20 @@ class MirrorHealthStore implements DisposableService {
   void _evictLruIfNeeded() {
     if (_cache == null || _cache!.length <= maxEntries) return;
     // LinkedHashMap preserves insertion (and touch) order; head = LRU.
-    _cache!.remove(_cache!.keys.first);
+    final evictedKey = _cache!.keys.first;
+    _cache!.remove(evictedKey);
+    _removedUrls.add(evictedKey);
+    _dirtyUrls.remove(evictedKey);
   }
 
-  /// Marks state dirty and schedules a 30s flush if not already pending.
-  void _markDirty() {
+  /// Marks state dirty and schedules a 5-minute flush if not already pending.
+  void _markDirty([String? url]) {
     _dirty = true;
-    _flushTimer ??= Timer(const Duration(seconds: 30), () {
+    if (url != null) {
+      _dirtyUrls.add(url);
+      _removedUrls.remove(url);
+    }
+    _flushTimer ??= Timer(minFlushInterval, () {
       _flushTimer = null;
       if (_dirty) {
         flushPending();
@@ -234,6 +272,18 @@ class MirrorHealthStore implements DisposableService {
   /// screen is off unless [durable] is set (final explicit save).
   Future<void> flushPending({bool durable = false}) async {
     if (_cache == null || !_dirty || _flushing) return;
+    final now = DateTime.now();
+    if (!durable &&
+        _lastFlushTime != null &&
+        now.difference(_lastFlushTime!) < minFlushInterval) {
+      _flushTimer ??= Timer(minFlushInterval - now.difference(_lastFlushTime!), () {
+        _flushTimer = null;
+        if (_dirty) {
+          flushPending();
+        }
+      });
+      return;
+    }
     if (PowerMonitor.screenOff && !durable) {
       _log.fine(
           '[MirrorHealth] Skipping flush while screen is off (non-durable)');
@@ -241,32 +291,54 @@ class MirrorHealthStore implements DisposableService {
     }
     _flushing = true;
     try {
-      final raw = jsonEncode(_cache!.map((k, v) => MapEntry(k, v.toJson())));
-      SharedPrefsBatcher.instance.setString(_storeKey, raw);
+      for (final url in _removedUrls) {
+        SharedPrefsBatcher.instance.remove(_urlKey(url));
+      }
+      for (final url in _dirtyUrls) {
+        final state = _cache?[url];
+        if (state != null) {
+          SharedPrefsBatcher.instance
+              .setString(_urlKey(url), jsonEncode(state.toJson()));
+        }
+      }
+      SharedPrefsBatcher.instance
+          .setStringList(_urlsIndexKey, _cache!.keys.toList());
       if (durable) {
         await SharedPrefsBatcher.instance.flush();
       }
       _dirty = false;
+      _dirtyUrls.clear();
+      _removedUrls.clear();
+      _lastFlushTime = DateTime.now();
       _flushTimer?.cancel();
       _flushTimer = null;
-    } catch (e) {
-      _log.warning('Failed to persist mirror health data: $e');
+    } catch (e, st) {
+      _log.warning('Failed to persist mirror health data: $e', e, st);
     } finally {
       _flushing = false;
     }
   }
 
   Future<void> clear() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_cache != null) {
+      for (final url in _cache!.keys) {
+        await prefs.remove(_urlKey(url));
+      }
+    }
     _cache = LinkedHashMap();
     _dirty = false;
-    final prefs = await SharedPreferences.getInstance();
+    _dirtyUrls.clear();
+    _removedUrls.clear();
     await prefs.remove(_storeKey);
+    await prefs.remove(_urlsIndexKey);
     await prefs.remove(_rankingCacheKey);
     await prefs.remove(_rankingTtlKey);
   }
 
   @override
   Future<void> dispose() async {
+    ServiceRegistry.unregister(this);
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
     _flushTimer?.cancel();

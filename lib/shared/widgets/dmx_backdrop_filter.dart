@@ -91,7 +91,8 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   }
 
   void _tryAllocate() {
-    final blurEnabled = widget.enableBlur ?? BackgroundGate.shouldAnimate;
+    final blurEnabled =
+        (widget.enableBlur ?? true) && BackgroundGate.shouldAnimate;
     final isBatterySaver =
         PowerMonitor.batterySaverMode != BatterySaverMode.off;
     if (!kIsWeb &&
@@ -124,7 +125,8 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final blurEnabled = widget.enableBlur ?? BackgroundGate.shouldAnimate;
+    final blurEnabled =
+        (widget.enableBlur ?? true) && BackgroundGate.shouldAnimate;
     final isBatterySaver =
         PowerMonitor.batterySaverMode != BatterySaverMode.off;
     final isHighContrast = HighContrastDetector.isActive(context);
@@ -134,6 +136,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
             DmxBackdropFilter.disabled ||
             isBatterySaver ||
             !blurEnabled ||
+            _isLowEndDevice ||
             isHighContrast ||
             !BackgroundGate.allowHeavyOps ||
             PowerMonitor.screenOff ||
@@ -147,6 +150,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
         !DmxBackdropFilter.disabled &&
         !isBatterySaver &&
         blurEnabled &&
+        !_isLowEndDevice &&
         !isHighContrast &&
         BackgroundGate.allowHeavyOps &&
         !PowerMonitor.screenOff &&
@@ -157,7 +161,8 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
 
   @override
   Widget build(BuildContext context) {
-    final blurEnabled = widget.enableBlur ?? BackgroundGate.shouldAnimate;
+    final blurEnabled =
+        (widget.enableBlur ?? true) && BackgroundGate.shouldAnimate;
     final isBatterySaver =
         PowerMonitor.batterySaverMode != BatterySaverMode.off;
     final isAggressiveSaver =

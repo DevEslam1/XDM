@@ -367,10 +367,10 @@ class BackgroundService {
     }
     _iosBgCallInFlight = true;
     _iosBgWatchdogTimer?.cancel();
-    _iosBgWatchdogTimer = Timer(const Duration(seconds: 14), () {
+    _iosBgWatchdogTimer = Timer(const Duration(seconds: 25), () {
       if (_iosBgCallInFlight) {
         _log.warning(
-            '[iOS BG Watchdog] iOS background call wedged for 14s; force-resetting and applying 60s cooldown.');
+            '[iOS BG Watchdog] iOS background call wedged for 25s; force-resetting and allowing next schedule.');
         try {
           DownloadEngine.markBackground();
           DatabaseService.instance.flushPendingSaves();
@@ -381,11 +381,6 @@ class BackgroundService {
               st);
         }
         _iosBgCallInFlight = false;
-        final cooldown = DateTime.now().add(const Duration(seconds: 60));
-        _iosBgCooldownUntil = cooldown;
-        SharedPreferences.getInstance().then((prefs) {
-          prefs.setInt(_iosBgCooldownKey, cooldown.millisecondsSinceEpoch);
-        }).catchError((_) {});
       }
     });
 
@@ -405,7 +400,7 @@ class BackgroundService {
         final nativeStart = DateTime.now();
         final result = await channel
             .invokeMethod<bool>('scheduleDownload')
-            .timeout(const Duration(seconds: 12));
+            .timeout(const Duration(seconds: 20));
         final nativeDuration = DateTime.now().difference(nativeStart);
         if (nativeDuration.inSeconds > 10) {
           _log.warning(
@@ -416,11 +411,27 @@ class BackgroundService {
           await recordBackgroundSuccess();
         } else {
           await recordBackgroundFailure();
+          final cooldown = DateTime.now().add(const Duration(seconds: 60));
+          _iosBgCooldownUntil = cooldown;
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setInt(_iosBgCooldownKey, cooldown.millisecondsSinceEpoch);
+          } catch (e, st) {
+            _log.fine('Failed to persist iOS background failure cooldown', e, st);
+          }
         }
         _log.info('iOS background schedule completed. Success: $success');
         return success;
       } catch (e, st) {
         await recordBackgroundFailure();
+        final cooldown = DateTime.now().add(const Duration(seconds: 60));
+        _iosBgCooldownUntil = cooldown;
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt(_iosBgCooldownKey, cooldown.millisecondsSinceEpoch);
+        } catch (e, st) {
+          _log.fine('Failed to persist iOS background error cooldown', e, st);
+        }
         _log.fine(
             'Failed to bridge to iOS background download controller', e, st);
         return false;

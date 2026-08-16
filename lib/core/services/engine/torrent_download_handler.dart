@@ -198,6 +198,8 @@ class TorrentDownloadHandler {
     final sub = _activeSubs.remove(id);
     sub?.cancel();
     TorrentSubscriptionRegistry.instance.unregister(id, this);
+    cachedAccurateFiles = null;
+    lastStateLabel = '';
   }
 
   // Fix 2: Adaptive sync intervals for all file counts including >10,000 files
@@ -489,7 +491,8 @@ class TorrentDownloadHandler {
               ));
             },
           );
-        } catch (e) {
+        } catch (e, st) {
+          _log.fine('Metadata fetch probe failed', e, st);
           onProgress(DownloadProgress(
             downloadedBytes: 0,
             fileSize: knownFileSize,

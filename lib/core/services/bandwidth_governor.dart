@@ -33,7 +33,6 @@ class BandwidthGovernor {
     double burstFactor = 1.5,
     double? throttleFactor,
   ])  : _burstFactor = burstFactor.clamp(1.0, 1.5) {
-    _startDomainCleanup();
     PowerMonitor.throttleFactorNotifier.addListener(onPowerStateChanged);
   }
 
@@ -43,6 +42,9 @@ class BandwidthGovernor {
   /// Periodically drops domain states that have been idle for > 10 min so the
   /// in-memory map cannot grow unbounded on long-running jobs.
   Timer? _domainCleanupTimer;
+
+  @visibleForTesting
+  Timer? get domainCleanupTimerForTesting => _domainCleanupTimer;
 
   void _startDomainCleanup() {
     _domainCleanupTimer?.cancel();
@@ -108,12 +110,19 @@ class BandwidthGovernor {
   /// Registers a consumer.
   void registerConsumer() {
     _activeConsumers++;
+    if (_activeConsumers == 1) {
+      _startDomainCleanup();
+    }
   }
 
   /// Unregisters a consumer.
   void unregisterConsumer() {
     if (_activeConsumers > 0) {
       _activeConsumers--;
+      if (_activeConsumers == 0) {
+        _domainCleanupTimer?.cancel();
+        _domainCleanupTimer = null;
+      }
     }
   }
 

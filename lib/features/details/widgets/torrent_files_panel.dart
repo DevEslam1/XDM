@@ -65,10 +65,21 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
+    double calcFileProgress(Map<String, dynamic> f) {
+      final length = (f['length'] as num?)?.toInt() ?? 0;
+      final downloadedBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+      if (f['progress'] != null) {
+        return ((f['progress'] as num).toDouble()).clamp(0.0, 1.0);
+      } else if (length > 0 && downloadedBytes > 0) {
+        return (downloadedBytes / length).clamp(0.0, 1.0);
+      }
+      return 0.0;
+    }
+
     final files = widget.torrentFiles;
     final completedCount = files.where((f) {
-      final prog = (f['progress'] as num?)?.toDouble() ?? 0.0;
       final isComp = (f['isComplete'] as bool?) ?? false;
+      final prog = calcFileProgress(f);
       return isComp || prog >= 1.0;
     }).length;
 
@@ -174,15 +185,7 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                   final isEstimated = (f['progressEstimated'] as bool?) == true;
 
                   // Progress calculation: prefer explicit progress field, fallback to downloaded/length
-                  double progress;
-                  if (f['progress'] != null) {
-                    progress =
-                        ((f['progress'] as num).toDouble()).clamp(0.0, 1.0);
-                  } else if (length > 0) {
-                    progress = (downloadedBytes / length).clamp(0.0, 1.0);
-                  } else {
-                    progress = 0.0;
-                  }
+                  final progress = calcFileProgress(f);
 
                   final isComplete =
                       (f['isComplete'] as bool?) == true || progress >= 1.0;

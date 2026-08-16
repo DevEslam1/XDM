@@ -2585,13 +2585,21 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
       selector: (_, p) =>
           p.taskById(task.id)?.torrentFiles ?? task.torrentFiles,
       shouldRebuild: (prev, next) {
-        if (prev == null && next == null) return false;
-        if (prev == null || next == null) return true;
+        if (identical(prev, next)) return false;
+        if (prev == null || next == null) return prev != next;
         if (prev.length != next.length) return true;
-        if (prev.isEmpty) return false;
-        final prevBytes = (prev.first['downloadedBytes'] as num?)?.toInt();
-        final nextBytes = (next.first['downloadedBytes'] as num?)?.toInt();
-        return prevBytes != nextBytes;
+        for (int i = 0; i < prev.length; i++) {
+          final p = prev[i];
+          final n = next[i];
+          if (p['downloadedBytes'] != n['downloadedBytes'] ||
+              p['progressEstimated'] != n['progressEstimated'] ||
+              p['progress'] != n['progress'] ||
+              p['selected'] != n['selected'] ||
+              p['priority'] != n['priority']) {
+            return true;
+          }
+        }
+        return false;
       },
       builder: (context, dynamicTorrentFiles, _) {
         final currentTask = provider.taskById(task.id) ?? task;
@@ -3079,6 +3087,10 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
     final isRtl = L10n.isRtl(context);
 
     final textController = TextEditingController(text: task.url);
+    final hasAudio = task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty;
+    final audioTextController = hasAudio
+        ? TextEditingController(text: task.mergedAudioUrl)
+        : null;
 
     try {
       await showDialog(
@@ -3117,7 +3129,7 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
               const SizedBox(height: 12),
               TextField(
                 controller: textController,
-                maxLines: 3,
+                maxLines: hasAudio ? 2 : 3,
                 style: TextStyle(
                   color:
                       isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
@@ -3132,6 +3144,7 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
                     horizontal: 16,
                     vertical: 12,
                   ),
+                  hintText: hasAudio ? 'Video URL' : null,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(20),
                     borderSide: BorderSide(
@@ -3161,6 +3174,58 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
                   ),
                 ),
               ),
+              if (hasAudio && audioTextController != null) ...[
+                const SizedBox(height: 10),
+                TextField(
+                  controller: audioTextController,
+                  maxLines: 2,
+                  style: TextStyle(
+                    color: isDark
+                        ? AppTheme.textPrimary
+                        : AppTheme.lightTextPrimary,
+                    fontSize: 12,
+                  ),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: isDark
+                        ? const Color(0xFF0F0F16)
+                        : const Color(0xFFF1F5F9),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    hintText: 'Audio Stream URL (Optional)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide(
+                        color: isDark
+                            ? const Color(0x15FFFFFF)
+                            : const Color(0x0D000000),
+                        width: 0.8,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide(
+                        color: isDark
+                            ? const Color(0x15FFFFFF)
+                            : const Color(0x0D000000),
+                        width: 0.8,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide(
+                        color: (isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue)
+                            .withValues(alpha: 0.5),
+                        width: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
           actions: [
@@ -3193,13 +3258,20 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
                 triggerHaptic(settings);
 
                 final newUrl = textController.text.trim();
+                final newAudio = audioTextController?.text.trim();
 
                 if (newUrl.isEmpty) return;
 
                 Navigator.pop(dialogContext);
 
                 try {
-                  await provider.updateTaskUrl(task.id, newUrl);
+                  await provider.updateTaskUrl(
+                    task.id,
+                    newUrl,
+                    newAudioUrl: (newAudio != null && newAudio.isNotEmpty)
+                        ? newAudio
+                        : null,
+                  );
 
                   if (context.mounted) {
                     ThemedSnackbar.show(

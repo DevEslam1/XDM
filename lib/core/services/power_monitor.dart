@@ -77,6 +77,9 @@ class PowerMonitor {
   @visibleForTesting
   static set isLowEndDevice(bool val) => _isLowEndDeviceCache = val;
 
+  @visibleForTesting
+  static void setLowEndDevice(bool val) => _isLowEndDeviceCache = val;
+
   static BatterySaverMode? _lastSaverMode;
 
   static BatterySaverMode get batterySaverMode {

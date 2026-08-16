@@ -147,19 +147,41 @@ class _DownloadCardState extends State<DownloadCard>
                 }
                 return false;
               } else {
-                final taskCopy = task;
-                UndoService.instance.execute(
-                  context: context,
-                  message: '${task.fileName} deleted',
-                  action: () async =>
-                      provider.deleteTask(taskCopy.id, deleteFiles: false),
-                  undo: () async {},
+                // Completed downloads → instant soft-delete via UndoService
+                // (file is already fully written; no partial-file risk).
+                if (task.status == DownloadStatus.completed) {
+                  final taskCopy = task;
+                  UndoService.instance.execute(
+                    context: context,
+                    message: '${task.fileName} deleted',
+                    action: () async =>
+                        provider.deleteTask(taskCopy.id, deleteFiles: false),
+                    undo: () async {},
+                  );
+                  return true;
+                }
+
+                // Active / paused / queued / merging / failed → ask the user,
+                // because a partial file may be on disk.
+                final settings = context.read<SettingsProvider>();
+                final deleteFiles = await showDeleteConfirmationDialog(
+                  context,
+                  task,
+                  settings,
                 );
+
+                // User cancelled → snap the card back.
+                if (deleteFiles == null) return false;
+
+                // User confirmed → delete immediately (no UndoService; the
+                // dialog itself acts as the confirmation gate).
+                unawaited(provider.deleteTask(task.id, deleteFiles: deleteFiles));
                 return true;
               }
             },
             child: cardWidget,
           );
+
 
     final Widget wrappedCard = RepaintBoundary(
       child: Hero(
@@ -1086,19 +1108,11 @@ class _ProgressRow extends StatelessWidget {
             ],
           ),
         ],
-        // FIX(09 & FIX-17): Display status message / partial size indicator
+        // FIX(09 & FIX-17): Display partial size indicator when video size unknown
         if (task.isTotalSizePartial) ...[
           const SizedBox(height: 2),
           Text(
             'Video size unknown',
-            style: AppTheme.microLabel(isDark: isDark, color: color, size: 9),
-          ),
-        ] else if (task.statusMessage != null &&
-            task.statusMessage!.isNotEmpty &&
-            (task.hasUnknownSize || isDownloading)) ...[
-          const SizedBox(height: 2),
-          Text(
-            task.statusMessage!,
             style: AppTheme.microLabel(isDark: isDark, color: color, size: 9),
           ),
         ],
@@ -2344,13 +2358,20 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
       selector: (_, p) =>
           p.taskById(widget.task.id)?.torrentFiles ?? widget.task.torrentFiles,
       shouldRebuild: (prev, next) {
-        if (prev == null && next == null) return false;
-        if (prev == null || next == null) return true;
+        if (identical(prev, next)) return false;
+        if (prev == null || next == null) return prev != next;
         if (prev.length != next.length) return true;
-        if (prev.isEmpty) return false;
-        final prevBytes = (prev.first['downloadedBytes'] as num?)?.toInt();
-        final nextBytes = (next.first['downloadedBytes'] as num?)?.toInt();
-        return prevBytes != nextBytes;
+        for (int i = 0; i < prev.length; i++) {
+          final p = prev[i];
+          final n = next[i];
+          if (p['downloadedBytes'] != n['downloadedBytes'] ||
+              p['progressEstimated'] != n['progressEstimated'] ||
+              p['progress'] != n['progress'] ||
+              p['selected'] != n['selected']) {
+            return true;
+          }
+        }
+        return false;
       },
       builder: (context, dynamicTorrentFiles, _) {
         try {
@@ -3119,15 +3140,33 @@ void _showUpdateLinkDialog(
   DownloadProvider provider,
 ) {
   final urlController = TextEditingController(text: task.url);
+  final hasAudio = task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty;
+  final audioUrlController = hasAudio
+      ? TextEditingController(text: task.mergedAudioUrl)
+      : null;
+
   showDialog(
     context: context,
     builder: (dialogCtx) => DmxDialog(
       title: L10n.of(dialogCtx, 'update_link'),
       icon: Icons.link_rounded,
-      content: DmxTextField(
-        controller: urlController,
-        hintText: L10n.of(dialogCtx, 'enter_new_url'),
-        autofocus: true,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DmxTextField(
+            controller: urlController,
+            hintText: hasAudio ? 'Video URL' : L10n.of(dialogCtx, 'enter_new_url'),
+            autofocus: true,
+          ),
+          if (hasAudio && audioUrlController != null) ...[
+            const SizedBox(height: 12),
+            DmxTextField(
+              controller: audioUrlController,
+              hintText: 'Audio Stream URL (Optional)',
+            ),
+          ],
+        ],
       ),
       actions: [
         TextButton(
@@ -3142,9 +3181,12 @@ void _showUpdateLinkDialog(
           label: L10n.of(dialogCtx, 'update_btn'),
           onPressed: () async {
             Navigator.pop(dialogCtx);
+            final newUrl = urlController.text.trim();
+            final newAudio = audioUrlController?.text.trim();
             await provider.updateTaskUrlAndResume(
               task.id,
-              urlController.text.trim(),
+              newUrl,
+              newAudioUrl: (newAudio != null && newAudio.isNotEmpty) ? newAudio : null,
             );
           },
         ),

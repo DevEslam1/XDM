@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter/foundation.dart';
+import 'package:logging/logging.dart';
 
 import '../../constants/thresholds.dart';
 import '../bandwidth_governor.dart';
@@ -29,6 +30,7 @@ export 'engine_models.dart' show SpeedSample;
 
 const Duration defaultTaskHardTimeout = kTaskHardTimeout;
 
+final _log = Logger('HttpTransferJob');
 int _workerGlobalLimitBps = 0;
 int _workerGlobalActive = 1;
 final Map<String, HttpTransferJob> _runningJobs = {};
@@ -135,9 +137,11 @@ class HttpTransferJob {
     if (_cancelRequested || _cancelToken.isCancelled) return;
 
     if (_pendingDelays.length >= maxPendingDelays) {
-      throw const DelayQueueFullException(
-        'Cancellable delay queue capacity (16) reached.',
+      _log.warning(
+        'Cancellable delay queue capacity ($maxPendingDelays) reached; falling back to direct Future.delayed',
       );
+      await Future.delayed(duration);
+      return;
     }
 
     final id = _nextTimerId++;
@@ -455,7 +459,9 @@ class HttpTransferJob {
       if (!_stateSavedInCatch && _state != null) {
         try {
           await StateStore.save(cmd.tempFilePath, _state!);
-        } catch (_) {} // coverage:ignore-line
+        } catch (e, st) {
+          _log.fine('Failed to save state during job finalize', e, st);
+        }
       }
       _cachedChunkDetails = null;
       _lastChunkDetailsHash = 0;
@@ -549,7 +555,9 @@ class HttpTransferJob {
             try {
               final f = File(cmd.tempFilePath);
               if (await f.exists()) await f.delete();
-            } catch (_) {} // coverage:ignore-line
+            } catch (e, st) {
+              _log.fine('Failed to delete temp file on server size change', e, st);
+            }
             await StateStore.save(cmd.tempFilePath, _state!);
             throw FileChangedOnServerException();
           }
@@ -566,7 +574,9 @@ class HttpTransferJob {
           try {
             final f = File(cmd.tempFilePath);
             if (await f.exists()) await f.delete();
-          } catch (_) {} // coverage:ignore-line
+          } catch (e, st) {
+            _log.fine('Failed to delete temp file on identity change', e, st);
+          }
           _state!.etag = newEtag;
           _state!.lastModified = newLm;
           _state!.migrationNote =
@@ -596,7 +606,9 @@ class HttpTransferJob {
           _state!.cycleState = CycleState.updatingLinks.name;
           try {
             await StateStore.save(cmd.tempFilePath, _state!, durable: true);
-          } catch (_) {}
+          } catch (e, st) {
+            _log.fine('Failed to save state on expired URL', e, st);
+          }
         }
         await Future.delayed(const Duration(milliseconds: 10));
         throw UrlExpiredException(
@@ -626,15 +638,21 @@ class HttpTransferJob {
     try {
       final f = File(cmd.tempFilePath);
       if (f.existsSync()) f.deleteSync();
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      _log.fine('Failed to delete temp file on resetToSingleStream', e, st);
+    }
 
     try {
       StateStore.remove(cmd.tempFilePath);
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      _log.fine('Failed to remove state store on resetToSingleStream', e, st);
+    }
     try {
       final journal = File('${cmd.tempFilePath}.journal');
       if (journal.existsSync()) journal.deleteSync();
-    } catch (_) {} // coverage:ignore-line
+    } catch (e, st) {
+      _log.fine('Failed to delete journal on resetToSingleStream', e, st);
+    }
   }
 
   Future<void> _runMultiThreaded(Dio dio) async {
@@ -791,7 +809,9 @@ class HttpTransferJob {
         await writer.flushAll();
         _stateSavedInCatch = true;
         await StateStore.save(cmd.tempFilePath, st, durable: true);
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+        _log.fine('Failed to save state on job failure', e, st);
+      }
       rethrow;
     } finally {
       governor.removeTaskLimit(cmd.taskId);
@@ -855,7 +875,9 @@ class HttpTransferJob {
             chunk.downloaded = 0;
             try {
               await StateStore.remove(cmd.tempFilePath);
-            } catch (_) {} // coverage:ignore-line
+            } catch (e, st) {
+              _log.fine('Failed to remove state store on HTTP 200 resume reject', e, st);
+            }
             throw DioException(
               requestOptions: response.requestOptions,
               type: DioExceptionType.badResponse,
@@ -960,7 +982,9 @@ class HttpTransferJob {
             debugPrint('[DMX] H-2: chunk-boundary save failed: $e');
             try {
               await StateStore.save(cmd.tempFilePath, _state!);
-            } catch (_) {} // coverage:ignore-line
+            } catch (e, st) {
+              _log.fine('Failed backup state save at chunk boundary', e, st);
+            }
           }
         }
       } on DioException catch (e) {
@@ -1037,9 +1061,16 @@ class HttpTransferJob {
   @visibleForTesting
   Future<void> spotCheckResumedBytes(
       Dio dio, TransferState st, PositionalFileWriter writer) async {
+    if (cmd.threadCount > 16) return;
+    _throwIfCancelled();
     const sampleSize = 64 * 1024;
-    for (final chunk in st.chunks) {
-      if (chunk.downloaded <= 0 || chunk.isComplete) continue;
+    final candidateChunks = st.chunks
+        .where((chunk) => chunk.downloaded > 0 && !chunk.isComplete)
+        .take(4)
+        .toList();
+    if (candidateChunks.isEmpty) return;
+
+    Future<void> probeChunk(ChunkState chunk) async {
       _throwIfCancelled();
       final start = chunk.start;
       final len = min(sampleSize, chunk.downloaded);
@@ -1056,7 +1087,7 @@ class HttpTransferJob {
         );
         if (response.statusCode != 206 || response.data == null) {
           chunk.downloaded = 0;
-          continue;
+          return;
         }
         final builder = BytesBuilder(copy: false);
         await for (final b in response.data!.stream) {
@@ -1066,10 +1097,14 @@ class HttpTransferJob {
         if (netBytes.length != diskBytes.length ||
             !listEquals(netBytes, diskBytes)) {
           chunk.downloaded = 0;
-          debugPrint('[DMX-Job] spot-check mismatch → chunk reset');
+          _log.fine('[DMX-Job] spot-check mismatch → chunk reset');
         }
-      } catch (_) {} // coverage:ignore-line
+      } catch (e, st) {
+        _log.fine('[DMX-Job] spot-check probe failed for chunk: $e', e, st);
+      }
     }
+
+    await Future.wait(candidateChunks.map(probeChunk));
   }
 
   Future<void> _runSingleStream(Dio dio) async {
@@ -1099,7 +1134,9 @@ class HttpTransferJob {
         await tempFile.delete();
         try {
           await StateStore.remove(cmd.tempFilePath);
-        } catch (_) {} // coverage:ignore-line
+        } catch (e, st) {
+          _log.fine('Failed to remove state store on temp file overrun', e, st);
+        }
         st.chunks = ChunkScheduler.singleStream(st.totalSize);
       } else if (cmd.supportsResume) {
         chunk.downloaded = st.totalSize > 0 ? len.clamp(0, st.totalSize) : len;
@@ -1152,7 +1189,9 @@ class HttpTransferJob {
               await tempFile.delete();
               try {
                 await StateStore.remove(cmd.tempFilePath);
-              } catch (_) {} // coverage:ignore-line
+              } catch (e, st) {
+                _log.fine('Failed to remove state store on spot check mismatch', e, st);
+              }
               st.chunks = ChunkScheduler.singleStream(st.totalSize);
             }
           } else {
@@ -1219,12 +1258,16 @@ class HttpTransferJob {
             try {
               final f = File(p);
               if (await f.exists()) await f.delete();
-            } catch (_) {} // coverage:ignore-line
+            } catch (e, st) {
+              _log.fine('Failed to delete dmxstate file on single-stream restart', e, st);
+            }
           }
           if (await tempFile.exists()) {
             try {
               await tempFile.delete();
-            } catch (_) {} // coverage:ignore-line
+            } catch (e, st) {
+              _log.fine('Failed to delete temp file on single-stream restart', e, st);
+            }
           }
           chunk.downloaded = 0;
           st.chunks = ChunkScheduler.singleStream(st.totalSize);
@@ -1325,7 +1368,9 @@ class HttpTransferJob {
         try {
           await sink.flush();
           await sink.close();
-        } catch (_) {}
+        } catch (e, st) {
+          _log.fine('Failed to flush/close sink in single-stream', e, st);
+        }
         sink = null;
         failover.reportSuccess();
         attempts = 0;
@@ -1367,7 +1412,9 @@ class HttpTransferJob {
               _state!.cycleState = CycleState.updatingLinks.name;
               try {
                 await StateStore.save(cmd.tempFilePath, _state!, durable: true);
-              } catch (_) {}
+              } catch (e, st) {
+                _log.fine('Failed to save state on expired URL in single-stream', e, st);
+              }
             }
             await Future.delayed(const Duration(milliseconds: 10));
             throw UrlExpiredException(
@@ -1415,10 +1462,14 @@ class HttpTransferJob {
         try {
           await sink?.flush();
           await sink?.close();
-        } catch (_) {} // coverage:ignore-line
+        } catch (e, st) {
+          _log.fine('Failed to flush/close sink in single-stream finally', e, st);
+        }
         try {
           await StateStore.save(cmd.tempFilePath, _state!, durable: true);
-        } catch (_) {} // coverage:ignore-line
+        } catch (e, st) {
+          _log.fine('Failed to save state in single-stream finally', e, st);
+        }
       }
     }
 

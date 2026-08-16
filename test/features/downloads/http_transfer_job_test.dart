@@ -1,5 +1,4 @@
 import 'dart:isolate';
-import 'package:dmx/core/services/engine/engine_exceptions.dart';
 import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:dmx/core/services/engine/http_transfer_job.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,7 +7,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('HttpTransferJob Hardening (Sprint 1)', () {
-    test('cancellableDelay throws DelayQueueFullException when queue capacity is reached', () async {
+    test('cancellableDelay falls back to direct delay when queue capacity (16) is reached', () async {
       final receivePort = ReceivePort();
       const cmd = DownloadCommand(
         taskId: 'test-delay-cap',
@@ -30,10 +29,10 @@ void main() {
       }
       expect(job.pendingDelaysForTesting.length, equals(16));
 
-      // 17th delay must throw DelayQueueFullException
+      // 17th delay must coalesce to direct Future.delayed without throwing
       expect(
-        () => job.cancellableDelay(const Duration(seconds: 10)),
-        throwsA(isA<DelayQueueFullException>()),
+        job.cancellableDelay(const Duration(milliseconds: 10)),
+        completes,
       );
 
       job.requestCancel();

@@ -1,6 +1,5 @@
 import 'dart:isolate';
 
-import 'package:dmx/core/services/engine/engine_exceptions.dart';
 import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:dmx/core/services/engine/http_transfer_job.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,7 +9,7 @@ void main() {
 
   group('HttpTransferJob Delay Capping (FIX-02)', () {
     test(
-        'Stress test spawning 100 concurrent cancellable delays throws DelayQueueFullException once cap of 16 is reached',
+        'Stress test spawning concurrent cancellable delays coalesces to direct delay once cap of 16 is reached',
         () async {
       final port = ReceivePort();
       const cmd = DownloadCommand(
@@ -34,10 +33,10 @@ void main() {
 
       expect(job.pendingDelaysForTesting.length, equals(16));
 
-      // 17th onwards throws DelayQueueFullException
+      // 17th onwards coalesces to Future.delayed directly
       expect(
-        () => job.cancellableDelay(const Duration(seconds: 10)),
-        throwsA(isA<DelayQueueFullException>()),
+        job.cancellableDelay(const Duration(milliseconds: 10)),
+        completes,
       );
 
       job.requestCancel();

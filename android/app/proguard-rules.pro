@@ -24,3 +24,8 @@
 }
 -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
 -dontwarn kotlinx.serialization.**
+
+# Mozilla Rhino / NewPipeExtractor missing JVM runtime classes on Android
+-dontwarn org.mozilla.javascript.**
+-dontwarn java.beans.**
+-dontwarn javax.script.**

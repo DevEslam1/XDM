@@ -106,20 +106,37 @@ class HttpDownloadEngine {
   final Map<String, _AdaptiveTracker> _trackers = {};
   Timer? _monitorTimer;
   int _generation = 0;
+  Duration? _currentInterval;
+
+  @visibleForTesting
+  Duration? get currentIntervalForTesting => _currentInterval;
+
+  @visibleForTesting
+  int get generationForTesting => _generation;
+
+  @visibleForTesting
+  Timer? get monitorTimerForTesting => _monitorTimer;
 
   void _ensureTimerRunning() {
     if (_trackers.isEmpty) {
       _monitorTimer?.cancel();
       _monitorTimer = null;
+      _currentInterval = null;
       return;
     }
-    _monitorTimer?.cancel();
-    final gen = ++_generation;
     // FIX-2.4: HttpDownloadEngine._monitorTimer background awareness
     final baseInterval = PowerMonitor.screenOff
         ? const Duration(seconds: 30)
         : const Duration(seconds: 5);
     final adaptedInterval = BackgroundGate.adaptInterval(baseInterval);
+
+    if (_monitorTimer != null && _currentInterval == adaptedInterval) {
+      return;
+    }
+
+    _monitorTimer?.cancel();
+    _currentInterval = adaptedInterval;
+    final gen = ++_generation;
     _monitorTimer = Timer.periodic(
       adaptedInterval,
       (_) => _evaluate(gen),
@@ -162,6 +179,7 @@ class HttpDownloadEngine {
       _generation++;
       _monitorTimer?.cancel();
       _monitorTimer = null;
+      _currentInterval = null;
     }
   }
 
@@ -169,6 +187,7 @@ class HttpDownloadEngine {
     _generation++;
     _monitorTimer?.cancel();
     _monitorTimer = null;
+    _currentInterval = null;
   }
 
   void resumeAll() {
@@ -181,6 +200,7 @@ class HttpDownloadEngine {
     _generation++;
     _monitorTimer?.cancel();
     _monitorTimer = null;
+    _currentInterval = null;
     _trackers.clear();
   }
 

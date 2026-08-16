@@ -243,7 +243,7 @@ class SiteIntelligenceService
 
   Future<List<UrlAnalysisResult>> analyzeUrlsBatch(List<String> urls) async {
     if (urls.isEmpty) return [];
-    if (urls.length > 2) {
+    if (urls.length > 5) {
       return compute(_analyzeUrlsBatchWorker, urls);
     }
     return urls.map(analyzeUrl).toList();
