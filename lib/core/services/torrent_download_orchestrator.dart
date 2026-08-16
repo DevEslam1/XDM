@@ -3,15 +3,13 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/dio_client_pool.dart';
-import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/torrent_resume_store.dart';
 import 'package:dmx/core/services/torrent_service.dart';
 import 'package:path/path.dart' as p;
 
 /// Orchestrates Torrent downloads, managing libtorrent interaction and file priorities.
-/// Task 1.2: Specialized Service for Torrent download orchestration.
-/// Task 2.2: Optimized file reconciliation with O(1) map lookups and >=1000ms throttled ticks.
 class TorrentDownloadOrchestrator {
   final DioClientPool _dioPool;
 
@@ -30,7 +28,7 @@ class TorrentDownloadOrchestrator {
   }) async {
     final initialTorrentFiles = getTorrentFiles?.call();
     final initSummary = _normalizeTorrentFiles(initialTorrentFiles);
-    
+
     onProgress(DownloadProgress(
       downloadedBytes: initSummary.downloaded,
       fileSize: initSummary.bytes > 0 ? initSummary.bytes : knownFileSize,
@@ -38,13 +36,22 @@ class TorrentDownloadOrchestrator {
       eta: null,
       supportsResume: true,
       torrentFiles: initialTorrentFiles,
-      statusMessage: isRetry ? 'Retrying torrent…' : (initSummary.downloaded > 0 ? 'Resuming torrent…' : 'Starting torrent…'),
-      cycleState: isRetry ? 'retrying' : (initSummary.downloaded > 0 ? 'resuming' : 'starting'),
+      statusMessage: isRetry
+          ? 'Retrying torrent…'
+          : (initSummary.downloaded > 0
+              ? 'Resuming torrent…'
+              : 'Starting torrent…'),
+      cycleState: isRetry
+          ? CycleState.retrying
+          : (initSummary.downloaded > 0
+              ? CycleState.resuming
+              : CycleState.starting),
       torrentId: torrentId,
       totalFiles: initSummary.total > 0 ? initSummary.total : null,
       completedFiles: initSummary.done > 0 ? initSummary.done : null,
       totalFileBytes: initSummary.bytes > 0 ? initSummary.bytes : null,
-      downloadedFileBytes: initSummary.downloaded > 0 ? initSummary.downloaded : null,
+      downloadedFileBytes:
+          initSummary.downloaded > 0 ? initSummary.downloaded : null,
     ));
 
     int id = torrentId ?? -1;
@@ -67,21 +74,25 @@ class TorrentDownloadOrchestrator {
     }
 
     TorrentResumeStore.registerSource(id, url);
-    
+
     cancelToken.whenCancel.then((_) async {
       try {
         TorrentService.pauseTorrent(id);
       } catch (e, st) {
-      LoggingService.logger('TorrentDownloadOrchestrator').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('TorrentDownloadOrchestrator')
+            .warning('Operation failed', e, st);
+      }
     });
 
     try {
-      await _waitForMetadata(id, url, cancelToken, onProgress, initialFileSize: knownFileSize);
+      await _waitForMetadata(id, url, cancelToken, onProgress,
+          initialFileSize: knownFileSize);
       _applyFilePriorities(id, getTorrentFiles?.call());
 
-      final resumeBlob = await TorrentResumeStore.loadResumeDataForSource(url);
-      if (resumeBlob != null && TorrentService.loadResumeData(id, resumeBlob)) {
+      final resumeBlob =
+          await TorrentResumeStore.loadResumeDataForSource(url);
+      if (resumeBlob != null &&
+          TorrentService.loadResumeData(id, resumeBlob)) {
         // Fast resume data loaded
       } else {
         TorrentService.recheckTorrent(id);
@@ -90,7 +101,8 @@ class TorrentDownloadOrchestrator {
 
       if (cancelToken.isCancelled) return;
       TorrentService.resumeTorrent(id);
-      await _listenForCompletion(id, url, currentLocalFilePath, cancelToken, onProgress, getTorrentFiles, knownFileSize);
+      await _listenForCompletion(id, url, currentLocalFilePath, cancelToken,
+          onProgress, getTorrentFiles, knownFileSize);
     } finally {
       TorrentResumeStore.unregisterSource(url);
     }
@@ -100,12 +112,13 @@ class TorrentDownloadOrchestrator {
     if (url.startsWith('magnet:')) {
       return TorrentService.addMagnet(url, saveDir);
     }
-    
+
     String filePath = url;
     if (url.startsWith('file://')) {
       filePath = Uri.parse(url).toFilePath();
     } else if (url.startsWith('http://') || url.startsWith('https://')) {
-      final tempTorrentPath = p.join(Directory.systemTemp.path, 'temp_${DateTime.now().millisecondsSinceEpoch}.torrent');
+      final tempTorrentPath = p.join(Directory.systemTemp.path,
+          'temp_${DateTime.now().millisecondsSinceEpoch}.torrent');
       final dio = _dioPool.acquireClient(url: url);
       try {
         await dio.download(url, tempTorrentPath);
@@ -117,7 +130,13 @@ class TorrentDownloadOrchestrator {
     return TorrentService.addTorrentFile(filePath, saveDir, sourceKey: url);
   }
 
-  Future<void> _waitForMetadata(int id, String url, CancelToken cancelToken, ValueChangedProgress onProgress, {int initialFileSize = 0}) async {
+  Future<void> _waitForMetadata(
+    int id,
+    String url,
+    CancelToken cancelToken,
+    ValueChangedProgress onProgress, {
+    int initialFileSize = 0,
+  }) async {
     final completer = Completer<void>();
     final sub = TorrentService.torrentUpdates.listen((torrents) {
       if (torrents[id]?.hasMetadata == true) completer.complete();
@@ -130,7 +149,8 @@ class TorrentDownloadOrchestrator {
     }
   }
 
-  Future<void> _waitForCheck(int id, CancelToken cancelToken, ValueChangedProgress onProgress, int fileSize) async {
+  Future<void> _waitForCheck(int id, CancelToken cancelToken,
+      ValueChangedProgress onProgress, int fileSize) async {
     final completer = Completer<void>();
     final sub = TorrentService.torrentUpdates.listen((torrents) {
       final t = torrents[id];
@@ -145,14 +165,14 @@ class TorrentDownloadOrchestrator {
   /// O(1) file priority setting by pre-indexing files
   void _applyFilePriorities(int id, List<Map<String, dynamic>>? files) {
     if (files == null || files.isEmpty) return;
-    
+
     final priorities = List<int>.generate(files.length, (i) {
       final f = files[i];
       final isSelected = (f['selected'] as bool?) ?? true;
       if (!isSelected) return 0;
       return (f['priority'] as num?)?.toInt() ?? 4;
     });
-    
+
     TorrentService.setFilePriorities(id, priorities);
   }
 
@@ -197,8 +217,10 @@ class TorrentDownloadOrchestrator {
         eta: null,
         supportsResume: true,
         torrentFiles: files,
-        statusMessage: stateLabel,
-        cycleState: stateLabel,
+        statusMessage: torrent.stateLabel,
+        cycleState: CycleState.fromLibtorrent(torrent.stateLabel),
+        totalPieces: torrent.piecesTotal,
+        completedPieces: torrent.piecesHave,
         torrentId: id,
         totalFiles: summary.total > 0 ? summary.total : null,
         completedFiles: summary.done > 0 ? summary.done : null,
@@ -211,7 +233,6 @@ class TorrentDownloadOrchestrator {
       }
     });
 
-    // ADD TIMEOUT:
     final timeoutTimer = Timer(const Duration(minutes: 30), () {
       if (!completer.isCompleted) {
         sub.cancel();
@@ -229,8 +250,11 @@ class TorrentDownloadOrchestrator {
     }
   }
 
-  ({int downloaded, int bytes, int total, int done}) _normalizeTorrentFiles(List<Map<String, dynamic>>? files) {
-    if (files == null || files.isEmpty) return (downloaded: 0, bytes: 0, total: 0, done: 0);
+  ({int downloaded, int bytes, int total, int done}) _normalizeTorrentFiles(
+      List<Map<String, dynamic>>? files) {
+    if (files == null || files.isEmpty) {
+      return (downloaded: 0, bytes: 0, total: 0, done: 0);
+    }
     int d = 0, b = 0, t = 0, n = 0;
     for (final f in files) {
       final isSelected = (f['selected'] as bool?) ?? true;

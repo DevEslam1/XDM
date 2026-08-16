@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -493,9 +492,21 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   void enableSequentialDownload(int torrentId, bool enabled) => TorrentService.enableSequentialDownload(torrentId, enabled);
   @override
+  void setSequentialDownload(int torrentId, bool enabled) => TorrentService.setSequentialDownload(torrentId, enabled);
+  @override
+  void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) =>
+      TorrentService.prioritizeFile(torrentId, fileIndex, priority: priority);
+  @override
   void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) => TorrentService.setPieceDeadline(torrentId, pieceIndex, deadlineMs);
   @override
   void enableSuperSeeding(int torrentId, bool enabled) => TorrentService.enableSuperSeeding(torrentId, enabled);
+
+  @override
+  Stream<TorrentAlertEvent> get alertUpdates => TorrentService.alertUpdates;
+  @override
+  List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) => TorrentService.getRecentAlerts(torrentId);
+  @override
+  void applySettingsPack(TorrentSettingsPack pack) => TorrentService.applySettingsPack(pack);
 
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
@@ -503,6 +514,11 @@ class TorrentServiceImpl implements ITorrentService {
     String savePath,
   ) =>
       TorrentService.getAccurateFileProgress(torrentId, savePath);
+
+  @override
+  Future<Map<String, dynamic>?> getPieceProgress(int torrentId) =>
+      TorrentService.getPieceProgress(torrentId);
+
 
   @override
   bool shouldStopSeeding({
@@ -539,9 +555,46 @@ class TorrentService {
   static Set<int> _activeTorrentIds = {};
   static StreamSubscription? _updatesSub;
   static StreamController<Map<int, TorrentUpdateInfo>>? _updateController;
+  static StreamController<TorrentAlertEvent>? _alertController;
+  static final List<TorrentAlertEvent> _recentAlerts = [];
+
+  static Stream<TorrentAlertEvent> get alertUpdates {
+    _alertController ??= StreamController<TorrentAlertEvent>.broadcast();
+    return _alertController!.stream;
+  }
+
+  static List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) {
+    if (torrentId == null) return List.unmodifiable(_recentAlerts);
+    return List.unmodifiable(
+      _recentAlerts.where((a) => a.torrentId == torrentId || a.torrentId == -1),
+    );
+  }
+
+  static void _recordAlert({
+    required int type,
+    required int torrentId,
+    required String message,
+    String category = 'general',
+  }) {
+    final alert = TorrentAlertEvent(
+      type: type,
+      torrentId: torrentId,
+      message: message,
+      timestamp: DateTime.now(),
+      category: category,
+    );
+    _recentAlerts.add(alert);
+    if (_recentAlerts.length > 200) {
+      _recentAlerts.removeAt(0);
+    }
+    if (_alertController != null && !_alertController!.isClosed) {
+      _alertController!.add(alert);
+    }
+  }
 
   static bool get fileProgressSupported =>
       _CapabilityGate.instance.fileProgressSupported;
+
 
   static bool get filePrioritiesSupported =>
       _CapabilityGate.instance.filePrioritiesSupported;
@@ -1067,10 +1120,13 @@ class TorrentService {
     _updatesSub = null;
     await _updateController?.close();
     _updateController = null;
+    await _alertController?.close();
+    _alertController = null;
     _activeTorrentIds.clear();
     _torrentSources.clear();
     _latestProgress.clear();
     _cachedPrioritiesSnapshot.clear();
+    _recentAlerts.clear();
 
     try {
       await LibtorrentFlutter.instance.dispose();
@@ -1082,6 +1138,7 @@ class TorrentService {
     _disposeCompleter?.complete();
     _disposeCompleter = null;
   }
+
 
   static int addMagnet(String magnetUri, String savePath) {
     if (!isInitialized || isShuttingDown) return -1;
@@ -1532,8 +1589,56 @@ class TorrentService {
   }
 
   static void enableSequentialDownload(int torrentId, bool enabled) {
+    setSequentialDownload(torrentId, enabled);
+  }
+
+  static void setSequentialDownload(int torrentId, bool enabled) {
     if (!isInitialized || torrentId < 0) return;
     _CapabilityGate.instance.setSequentialDownload(torrentId, enabled);
+    _recordAlert(
+      type: 2,
+      torrentId: torrentId,
+      message: 'Sequential download ${enabled ? "enabled" : "disabled"}',
+      category: 'sequential',
+    );
+  }
+
+  static void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) {
+    if (!isInitialized || torrentId < 0) return;
+    try {
+      final files = getFiles(torrentId);
+      if (fileIndex < 0 || fileIndex >= files.length) return;
+      final priorities = files.map((f) {
+        if (f.index == fileIndex) return priority;
+        return f.priority;
+      }).toList();
+      setFilePriorities(torrentId, priorities);
+      _recordAlert(
+        type: 1,
+        torrentId: torrentId,
+        message: 'File "$fileIndex" prioritized to level $priority',
+        category: 'priority',
+      );
+    } catch (e, st) {
+      _log.warning('prioritizeFile failed for torrent $torrentId, index $fileIndex: $e', e, st);
+    }
+  }
+
+  static void applySettingsPack(TorrentSettingsPack pack) {
+    if (!isInitialized) return;
+    try {
+      final btConfig = TorrentSessionConfig.buildBtConfigFromPack(pack);
+      LibtorrentFlutter.instance.configureSession(btConfig);
+      _recordAlert(
+        type: 3,
+        torrentId: -1,
+        message:
+            'Settings applied: DHT=${pack.enableDht}, PEX=${pack.enablePex}, LSD=${pack.enableLsd}, UPnP=${pack.enableUpnp}',
+        category: 'settings',
+      );
+    } catch (e, st) {
+      _log.warning('applySettingsPack failed: $e', e, st);
+    }
   }
 
   static void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) {
@@ -1547,64 +1652,51 @@ class TorrentService {
     _CapabilityGate.instance.setSuperSeeding(torrentId, enabled);
   }
 
+  /// Returns accurate per-file progress directly from memory/native libtorrent stats.
+  /// Eliminates 4-second disk scans and expensive I/O byte probes.
   static Future<List<TorrentFileProgress>> getAccurateFileProgress(
     int torrentId,
     String savePath,
   ) async {
     if (!isInitialized || torrentId < 0) return [];
     try {
-      final nativeFiles = LibtorrentFlutter.instance.getFiles(torrentId);
-      final progress = <TorrentFileProgress>[];
+      final files = getFiles(torrentId);
+      final stats = _latestStats[torrentId];
+      final double progressRatio = stats?.progress ?? 0.0;
 
-      for (var i = 0; i < nativeFiles.length; i++) {
-        final native = nativeFiles[i];
-        final filePath = p.join(savePath, native.name);
-        final file = File(filePath);
-
-        int diskBytes = 0;
-        bool exists = false;
-        // FIX-M5: Pre-allocated file probe with head, tail, and mid check
-        if (await file.exists()) {
-          exists = true;
-          final diskLen = await file.length();
-          diskBytes = diskLen;
-          if (diskLen >= native.size && native.size > 0) {
-            final raf = await file.open(mode: FileMode.read);
-            final headProbe = await raf.read(math.min(4096, diskLen));
-            final headHasContent = headProbe.any((b) => b != 0);
-            bool tailHasContent = headHasContent;
-            bool midHasContent = headHasContent;
-            if (diskLen > 8192) {
-              await raf.setPosition(diskLen - 4096);
-              final tailProbe = await raf.read(4096);
-              tailHasContent = tailProbe.any((b) => b != 0);
-              await raf.setPosition(diskLen ~/ 2);
-              final midProbe = await raf.read(4096);
-              midHasContent = midProbe.any((b) => b != 0);
-            }
-            await raf.close();
-            if (!headHasContent && !tailHasContent && !midHasContent) {
-              diskBytes = 0; // truly pre-allocated
-            }
-          }
+      return List.generate(files.length, (i) {
+        final f = files[i];
+        int downloadedBytes = f.downloadedBytes;
+        if (downloadedBytes < 0) {
+          downloadedBytes = (f.size * progressRatio).clamp(0, f.size).toInt();
         }
+        final isComplete = f.size == 0 || downloadedBytes >= f.size;
+        final fileProg = f.size > 0 ? (downloadedBytes / f.size).clamp(0.0, 1.0) : 1.0;
 
-        progress.add(TorrentFileProgress(
-          index: i,
-          name: native.name,
-          size: native.size,
-          downloadedBytes: diskBytes,
-          progress:
-              native.size > 0 ? (diskBytes / native.size).clamp(0.0, 1.0) : 1.0,
-          exists: exists,
-          isComplete: diskBytes >= native.size,
-        ));
-      }
-      return progress;
+        return TorrentFileProgress(
+          index: f.index,
+          name: f.name,
+          size: f.size,
+          downloadedBytes: downloadedBytes,
+          progress: fileProg,
+          exists: downloadedBytes > 0,
+          isComplete: isComplete,
+        );
+      });
     } catch (e) {
       _log.warning('getAccurateFileProgress failed for torrent $torrentId: $e');
       return [];
     }
+  }
+
+
+  static Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async {
+    final stats = _latestStats[torrentId];
+    if (stats == null) return null;
+    return {
+      'piecesHave': stats.piecesHave,
+      'piecesTotal': stats.piecesTotal,
+    };
   }
 
   /// Pure function evaluator for seeding policy auto-stop.
@@ -1833,9 +1925,20 @@ class TorrentServiceStub implements ITorrentService {
   @override
   void enableSequentialDownload(int torrentId, bool enabled) {}
   @override
+  void setSequentialDownload(int torrentId, bool enabled) {}
+  @override
+  void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) {}
+  @override
   void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) {}
   @override
   void enableSuperSeeding(int torrentId, bool enabled) {}
+
+  @override
+  Stream<TorrentAlertEvent> get alertUpdates => const Stream.empty();
+  @override
+  List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) => const [];
+  @override
+  void applySettingsPack(TorrentSettingsPack pack) {}
 
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
@@ -1843,6 +1946,10 @@ class TorrentServiceStub implements ITorrentService {
     String savePath,
   ) async =>
       [];
+
+  @override
+  Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async => null;
+
 
   @override
   bool shouldStopSeeding({

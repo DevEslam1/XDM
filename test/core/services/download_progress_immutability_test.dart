@@ -12,7 +12,7 @@ void main() {
         speed: 500.0,
         eta: 18,
         statusMessage: 'Downloading',
-        cycleState: 'downloading',
+        cycleState: CycleState.downloading,
       );
 
       final modified = original.copyWith(
@@ -45,7 +45,7 @@ void main() {
               speed: 1024.0 * (currentStream + 1),
               eta: totalPerStream - i,
               statusMessage: 'Stream $currentStream Tick $i',
-              cycleState: 'downloading',
+              cycleState: CycleState.downloading,
             );
 
             // Verify progress ratio calculation remains purely deterministic

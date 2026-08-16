@@ -8,8 +8,33 @@ import '../provider/settings_provider.dart';
 import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';
 
-class TorrentSettingsPage extends StatelessWidget with HapticHelper {
+class TorrentSettingsPage extends StatefulWidget {
   const TorrentSettingsPage({super.key});
+
+  @override
+  State<TorrentSettingsPage> createState() => _TorrentSettingsPageState();
+}
+
+class _TorrentSettingsPageState extends State<TorrentSettingsPage>
+    with HapticHelper {
+  late TextEditingController _proxyHostController;
+  late TextEditingController _proxyPortController;
+
+  @override
+  void initState() {
+    super.initState();
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    _proxyHostController = TextEditingController(text: settings.proxyHost);
+    _proxyPortController =
+        TextEditingController(text: settings.proxyPort.toString());
+  }
+
+  @override
+  void dispose() {
+    _proxyHostController.dispose();
+    _proxyPortController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,10 +126,10 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
               ),
               SwitchTile(
                 accentColor: accent,
-                title: isRtl ? 'إجبار التشفير' : 'Force Encryption',
+                title: isRtl ? 'تشفير الاتصال الإجباري' : 'Force Encryption',
                 subtitle: isRtl
-                    ? 'تشفير الاتصالات لحماية الخصوصية وتجاوز حجب ISP'
-                    : 'Require protocol encryption to prevent ISP throttling',
+                    ? 'السماح فقط بالاتصالات المشفرة مع الأقران'
+                    : 'Enforce protocol encryption for all peer connections',
                 value: settings.forceEncrypt,
                 onChanged: (val) {
                   settings.setForceEncrypt(val);
@@ -115,8 +140,8 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                 accentColor: accent,
                 title: isRtl ? 'التحميل المتسلسل' : 'Sequential Download',
                 subtitle: isRtl
-                    ? 'تحميل القطع بترتيب متسلسل لمعاينة الفيديو أثناء التحميل'
-                    : 'Download pieces linearly start-to-end for video streaming',
+                    ? 'تحميل القطع بالترتيب (مفيد للمعاينة أثناء التحميل)'
+                    : 'Download pieces in order from first to last (ideal for streaming preview)',
                 value: settings.sequentialDownload,
                 onChanged: (val) {
                   settings.setSequentialDownload(val);
@@ -256,46 +281,51 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
                 ),
               SwitchTile(
                 accentColor: accent,
-                title: isRtl ? 'جدولة دور التورنت' : 'Queue Torrents',
+                title: isRtl ? 'نظام قائمة الانتظار' : 'Torrent Queue System',
                 subtitle: isRtl
-                    ? 'الالتزام بالحدود القصوى للتحميل والرفع المتزامن'
-                    : 'Enforce active torrent & seed concurrency limits',
+                    ? 'التحكم في عدد التورنتات النشطة في نفس الوقت'
+                    : 'Limit maximum active concurrent torrents to save network',
                 value: settings.queueTorrents,
                 onChanged: (val) {
                   settings.setQueueTorrents(val);
                   triggerHaptic(settings);
                 },
               ),
+              if (settings.queueTorrents) ...[
+                DropdownTile<int>(
+                  accentColor: accent,
+                  title: isRtl
+                      ? 'أقصى عدد تورنتات نشطة'
+                      : 'Max Active Torrents',
+                  subtitle: '${settings.maxActiveTorrents} active',
+                  value: settings.maxActiveTorrents,
+                  items: const [1, 2, 3, 5, 8, 10, 20],
+                  onChanged: (val) {
+                    if (val != null) {
+                      settings.setMaxActiveTorrents(val);
+                      triggerHaptic(settings);
+                    }
+                  },
+                ),
+                DropdownTile<int>(
+                  accentColor: accent,
+                  title: isRtl
+                      ? 'أقصى عدد تحميلات متزامنة'
+                      : 'Max Active Downloads',
+                  subtitle: '${settings.maxActiveDownloads} downloading',
+                  value: settings.maxActiveDownloads,
+                  items: const [1, 2, 3, 5, 8, 10],
+                  onChanged: (val) {
+                    if (val != null) {
+                      settings.setMaxActiveDownloads(val);
+                      triggerHaptic(settings);
+                    }
+                  },
+                ),
+              ],
               DropdownTile<int>(
                 accentColor: accent,
-                title: isRtl ? 'أقصى تورنت نشط' : 'Max Active Torrents',
-                subtitle: '${settings.maxActiveTorrents} active',
-                value: settings.maxActiveTorrents,
-                items: const [1, 2, 3, 5, 10, 20, 50],
-                onChanged: (val) {
-                  if (val != null) {
-                    settings.setMaxActiveTorrents(val);
-                    triggerHaptic(settings);
-                  }
-                },
-              ),
-              DropdownTile<int>(
-                accentColor: accent,
-                title:
-                    isRtl ? 'أقصى تحميلات تورنت نشطة' : 'Max Active Downloads',
-                subtitle: '${settings.maxActiveDownloads} downloading',
-                value: settings.maxActiveDownloads,
-                items: const [1, 2, 3, 5, 10, 20],
-                onChanged: (val) {
-                  if (val != null) {
-                    settings.setMaxActiveDownloads(val);
-                    triggerHaptic(settings);
-                  }
-                },
-              ),
-              DropdownTile<int>(
-                accentColor: accent,
-                title: isRtl ? 'أقصى عملية رفع نشطة' : 'Max Active Seeds',
+                title: isRtl ? 'أقصى عدد بذور نشطة' : 'Max Active Seeds',
                 subtitle: '${settings.maxActiveSeeds} seeding',
                 value: settings.maxActiveSeeds,
                 items: const [0, 1, 2, 3, 5, 10, 20],
@@ -349,7 +379,68 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
           ),
           const SizedBox(height: 12),
           SettingsSectionHeader(
-            title: 'Disk Cache & Privacy',
+            title: isRtl ? 'البروكسي والخصوصية (SOCKS5)' : 'SOCKS5 Proxy & Privacy',
+            accentColor: accent,
+            isDark: isDark,
+          ),
+          SettingsSectionGroup(
+            accentColor: accent,
+            children: [
+              SwitchTile(
+                accentColor: accent,
+                title: isRtl ? 'تفعيل بروكسي SOCKS5' : 'Enable SOCKS5 Proxy',
+                subtitle: isRtl
+                    ? 'توجيه حركة التورنت عبر سيرفر بروكسي مخصص'
+                    : 'Route BitTorrent traffic through a secure SOCKS5 proxy',
+                value: settings.enableProxy,
+                onChanged: (val) {
+                  settings.setEnableProxy(val);
+                  triggerHaptic(settings);
+                },
+              ),
+              if (settings.enableProxy) ...[
+                TextFieldTile(
+                  accentColor: accent,
+                  title: isRtl ? 'عنوان البروكسي' : 'Proxy Host / IP',
+                  subtitle: isRtl
+                      ? 'مثال: 127.0.0.1 أو proxy.example.com'
+                      : 'e.g. 127.0.0.1 or socks5.vpn.com',
+                  controller: _proxyHostController,
+                  onChanged: (val) {
+                    settings.setProxyHost(val.trim());
+                  },
+                ),
+                TextFieldTile(
+                  accentColor: accent,
+                  title: isRtl ? 'منفذ البروكسي' : 'Proxy Port',
+                  subtitle: isRtl ? 'المنفذ (الافتراضي 1080)' : 'Default: 1080',
+                  controller: _proxyPortController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (val) {
+                    final p = int.tryParse(val.trim());
+                    if (p != null) {
+                      settings.setProxyPort(p);
+                    }
+                  },
+                ),
+                SwitchTile(
+                  accentColor: accent,
+                  title: isRtl ? 'إجبار البروكسي (Kill Switch)' : 'Force Proxy Only',
+                  subtitle: isRtl
+                      ? 'حظر كل الاتصالات المباشرة إذا انقطع البروكسي'
+                      : 'Block peer traffic if proxy connection fails',
+                  value: settings.enforceProxy,
+                  onChanged: (val) {
+                    settings.setEnforceProxy(val);
+                    triggerHaptic(settings);
+                  },
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          SettingsSectionHeader(
+            title: 'Disk Cache & Security',
             accentColor: accent,
             isDark: isDark,
           ),

@@ -69,7 +69,7 @@ void main() {
         ytLiveBytes: liveBytesA,
       );
 
-      expect(emissions.last.cycleState, equals('downloading'));
+      expect(emissions.last.cycleState, equals(CycleState.downloading));
 
       // Scenario B: Counterpart size is known (500), but counterpart downloaded is 250 (< 500)
       final liveBytesB = TimestampedLruMap<String, int>()
@@ -89,7 +89,7 @@ void main() {
         ytLiveBytes: liveBytesB,
       );
 
-      expect(emissions.last.cycleState, equals('downloading'));
+      expect(emissions.last.cycleState, equals(CycleState.downloading));
 
       // Scenario C: Both streams 100% complete
       final liveBytesC = TimestampedLruMap<String, int>()
@@ -109,7 +109,7 @@ void main() {
         ytLiveBytes: liveBytesC,
       );
 
-      expect(emissions.last.cycleState, equals('completed'));
+      expect(emissions.last.cycleState, equals(CycleState.completed));
     });
 
     test('2. Configurable Torrent Metadata Timeout in SettingsProvider',

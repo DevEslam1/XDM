@@ -305,6 +305,30 @@ class $DownloadTasksTable extends DownloadTasks
               type: DriftSqlType.string, requiredDuringInsert: false)
           .withConverter<List<String>?>(
               $DownloadTasksTable.$convertermirrorUrls);
+  static const VerificationMeta _pauseReasonMeta =
+      const VerificationMeta('pauseReason');
+  @override
+  late final GeneratedColumn<String> pauseReason = GeneratedColumn<String>(
+      'pause_reason', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _completedPiecesMeta =
+      const VerificationMeta('completedPieces');
+  @override
+  late final GeneratedColumn<int> completedPieces = GeneratedColumn<int>(
+      'completed_pieces', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _ytCounterpartDownloadedBytesMeta =
+      const VerificationMeta('ytCounterpartDownloadedBytes');
+  @override
+  late final GeneratedColumn<int> ytCounterpartDownloadedBytes =
+      GeneratedColumn<int>('yt_counterpart_downloaded_bytes', aliasedName, true,
+          type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _cycleStateMeta =
+      const VerificationMeta('cycleState');
+  @override
+  late final GeneratedColumn<String> cycleState = GeneratedColumn<String>(
+      'cycle_state', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -349,7 +373,11 @@ class $DownloadTasksTable extends DownloadTasks
         priority,
         queueOrder,
         expectedSha256,
-        mirrorUrls
+        mirrorUrls,
+        pauseReason,
+        completedPieces,
+        ytCounterpartDownloadedBytes,
+        cycleState
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -594,6 +622,31 @@ class $DownloadTasksTable extends DownloadTasks
           expectedSha256.isAcceptableOrUnknown(
               data['expected_sha256']!, _expectedSha256Meta));
     }
+    if (data.containsKey('pause_reason')) {
+      context.handle(
+          _pauseReasonMeta,
+          pauseReason.isAcceptableOrUnknown(
+              data['pause_reason']!, _pauseReasonMeta));
+    }
+    if (data.containsKey('completed_pieces')) {
+      context.handle(
+          _completedPiecesMeta,
+          completedPieces.isAcceptableOrUnknown(
+              data['completed_pieces']!, _completedPiecesMeta));
+    }
+    if (data.containsKey('yt_counterpart_downloaded_bytes')) {
+      context.handle(
+          _ytCounterpartDownloadedBytesMeta,
+          ytCounterpartDownloadedBytes.isAcceptableOrUnknown(
+              data['yt_counterpart_downloaded_bytes']!,
+              _ytCounterpartDownloadedBytesMeta));
+    }
+    if (data.containsKey('cycle_state')) {
+      context.handle(
+          _cycleStateMeta,
+          cycleState.isAcceptableOrUnknown(
+              data['cycle_state']!, _cycleStateMeta));
+    }
     return context;
   }
 
@@ -693,6 +746,15 @@ class $DownloadTasksTable extends DownloadTasks
       mirrorUrls: $DownloadTasksTable.$convertermirrorUrls.fromSql(
           attachedDatabase.typeMapping.read(
               DriftSqlType.string, data['${effectivePrefix}mirror_urls'])),
+      pauseReason: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}pause_reason']),
+      completedPieces: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}completed_pieces']),
+      ytCounterpartDownloadedBytes: attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}yt_counterpart_downloaded_bytes']),
+      cycleState: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}cycle_state']),
     );
   }
 
@@ -754,6 +816,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final int queueOrder;
   final String? expectedSha256;
   final List<String>? mirrorUrls;
+  final String? pauseReason;
+  final int? completedPieces;
+  final int? ytCounterpartDownloadedBytes;
+  final String? cycleState;
   const DbDownloadTask(
       {required this.id,
       required this.fileName,
@@ -797,7 +863,11 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       required this.priority,
       required this.queueOrder,
       this.expectedSha256,
-      this.mirrorUrls});
+      this.mirrorUrls,
+      this.pauseReason,
+      this.completedPieces,
+      this.ytCounterpartDownloadedBytes,
+      this.cycleState});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -877,6 +947,19 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       map['mirror_urls'] = Variable<String>(
           $DownloadTasksTable.$convertermirrorUrls.toSql(mirrorUrls));
     }
+    if (!nullToAbsent || pauseReason != null) {
+      map['pause_reason'] = Variable<String>(pauseReason);
+    }
+    if (!nullToAbsent || completedPieces != null) {
+      map['completed_pieces'] = Variable<int>(completedPieces);
+    }
+    if (!nullToAbsent || ytCounterpartDownloadedBytes != null) {
+      map['yt_counterpart_downloaded_bytes'] =
+          Variable<int>(ytCounterpartDownloadedBytes);
+    }
+    if (!nullToAbsent || cycleState != null) {
+      map['cycle_state'] = Variable<String>(cycleState);
+    }
     return map;
   }
 
@@ -951,6 +1034,19 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       mirrorUrls: mirrorUrls == null && nullToAbsent
           ? const Value.absent()
           : Value(mirrorUrls),
+      pauseReason: pauseReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pauseReason),
+      completedPieces: completedPieces == null && nullToAbsent
+          ? const Value.absent()
+          : Value(completedPieces),
+      ytCounterpartDownloadedBytes:
+          ytCounterpartDownloadedBytes == null && nullToAbsent
+              ? const Value.absent()
+              : Value(ytCounterpartDownloadedBytes),
+      cycleState: cycleState == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cycleState),
     );
   }
 
@@ -1004,6 +1100,11 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       queueOrder: serializer.fromJson<int>(json['queueOrder']),
       expectedSha256: serializer.fromJson<String?>(json['expectedSha256']),
       mirrorUrls: serializer.fromJson<List<String>?>(json['mirrorUrls']),
+      pauseReason: serializer.fromJson<String?>(json['pauseReason']),
+      completedPieces: serializer.fromJson<int?>(json['completedPieces']),
+      ytCounterpartDownloadedBytes:
+          serializer.fromJson<int?>(json['ytCounterpartDownloadedBytes']),
+      cycleState: serializer.fromJson<String?>(json['cycleState']),
     );
   }
   @override
@@ -1054,6 +1155,11 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'queueOrder': serializer.toJson<int>(queueOrder),
       'expectedSha256': serializer.toJson<String?>(expectedSha256),
       'mirrorUrls': serializer.toJson<List<String>?>(mirrorUrls),
+      'pauseReason': serializer.toJson<String?>(pauseReason),
+      'completedPieces': serializer.toJson<int?>(completedPieces),
+      'ytCounterpartDownloadedBytes':
+          serializer.toJson<int?>(ytCounterpartDownloadedBytes),
+      'cycleState': serializer.toJson<String?>(cycleState),
     };
   }
 
@@ -1101,7 +1207,11 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           int? priority,
           int? queueOrder,
           Value<String?> expectedSha256 = const Value.absent(),
-          Value<List<String>?> mirrorUrls = const Value.absent()}) =>
+          Value<List<String>?> mirrorUrls = const Value.absent(),
+          Value<String?> pauseReason = const Value.absent(),
+          Value<int?> completedPieces = const Value.absent(),
+          Value<int?> ytCounterpartDownloadedBytes = const Value.absent(),
+          Value<String?> cycleState = const Value.absent()}) =>
       DbDownloadTask(
         id: id ?? this.id,
         fileName: fileName ?? this.fileName,
@@ -1156,6 +1266,14 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         expectedSha256:
             expectedSha256.present ? expectedSha256.value : this.expectedSha256,
         mirrorUrls: mirrorUrls.present ? mirrorUrls.value : this.mirrorUrls,
+        pauseReason: pauseReason.present ? pauseReason.value : this.pauseReason,
+        completedPieces: completedPieces.present
+            ? completedPieces.value
+            : this.completedPieces,
+        ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes.present
+            ? ytCounterpartDownloadedBytes.value
+            : this.ytCounterpartDownloadedBytes,
+        cycleState: cycleState.present ? cycleState.value : this.cycleState,
       );
   DbDownloadTask copyWithCompanion(DownloadTasksCompanion data) {
     return DbDownloadTask(
@@ -1251,6 +1369,16 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           : this.expectedSha256,
       mirrorUrls:
           data.mirrorUrls.present ? data.mirrorUrls.value : this.mirrorUrls,
+      pauseReason:
+          data.pauseReason.present ? data.pauseReason.value : this.pauseReason,
+      completedPieces: data.completedPieces.present
+          ? data.completedPieces.value
+          : this.completedPieces,
+      ytCounterpartDownloadedBytes: data.ytCounterpartDownloadedBytes.present
+          ? data.ytCounterpartDownloadedBytes.value
+          : this.ytCounterpartDownloadedBytes,
+      cycleState:
+          data.cycleState.present ? data.cycleState.value : this.cycleState,
     );
   }
 
@@ -1299,7 +1427,12 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('priority: $priority, ')
           ..write('queueOrder: $queueOrder, ')
           ..write('expectedSha256: $expectedSha256, ')
-          ..write('mirrorUrls: $mirrorUrls')
+          ..write('mirrorUrls: $mirrorUrls, ')
+          ..write('pauseReason: $pauseReason, ')
+          ..write('completedPieces: $completedPieces, ')
+          ..write(
+              'ytCounterpartDownloadedBytes: $ytCounterpartDownloadedBytes, ')
+          ..write('cycleState: $cycleState')
           ..write(')'))
         .toString();
   }
@@ -1348,7 +1481,11 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         priority,
         queueOrder,
         expectedSha256,
-        mirrorUrls
+        mirrorUrls,
+        pauseReason,
+        completedPieces,
+        ytCounterpartDownloadedBytes,
+        cycleState
       ]);
   @override
   bool operator ==(Object other) =>
@@ -1396,7 +1533,12 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.priority == this.priority &&
           other.queueOrder == this.queueOrder &&
           other.expectedSha256 == this.expectedSha256 &&
-          other.mirrorUrls == this.mirrorUrls);
+          other.mirrorUrls == this.mirrorUrls &&
+          other.pauseReason == this.pauseReason &&
+          other.completedPieces == this.completedPieces &&
+          other.ytCounterpartDownloadedBytes ==
+              this.ytCounterpartDownloadedBytes &&
+          other.cycleState == this.cycleState);
 }
 
 class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
@@ -1443,6 +1585,10 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<int> queueOrder;
   final Value<String?> expectedSha256;
   final Value<List<String>?> mirrorUrls;
+  final Value<String?> pauseReason;
+  final Value<int?> completedPieces;
+  final Value<int?> ytCounterpartDownloadedBytes;
+  final Value<String?> cycleState;
   final Value<int> rowid;
   const DownloadTasksCompanion({
     this.id = const Value.absent(),
@@ -1488,6 +1634,10 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.queueOrder = const Value.absent(),
     this.expectedSha256 = const Value.absent(),
     this.mirrorUrls = const Value.absent(),
+    this.pauseReason = const Value.absent(),
+    this.completedPieces = const Value.absent(),
+    this.ytCounterpartDownloadedBytes = const Value.absent(),
+    this.cycleState = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadTasksCompanion.insert({
@@ -1534,6 +1684,10 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.queueOrder = const Value.absent(),
     this.expectedSha256 = const Value.absent(),
     this.mirrorUrls = const Value.absent(),
+    this.pauseReason = const Value.absent(),
+    this.completedPieces = const Value.absent(),
+    this.ytCounterpartDownloadedBytes = const Value.absent(),
+    this.cycleState = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         fileName = Value(fileName),
@@ -1590,6 +1744,10 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<int>? queueOrder,
     Expression<String>? expectedSha256,
     Expression<String>? mirrorUrls,
+    Expression<String>? pauseReason,
+    Expression<int>? completedPieces,
+    Expression<int>? ytCounterpartDownloadedBytes,
+    Expression<String>? cycleState,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1638,6 +1796,11 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (queueOrder != null) 'queue_order': queueOrder,
       if (expectedSha256 != null) 'expected_sha256': expectedSha256,
       if (mirrorUrls != null) 'mirror_urls': mirrorUrls,
+      if (pauseReason != null) 'pause_reason': pauseReason,
+      if (completedPieces != null) 'completed_pieces': completedPieces,
+      if (ytCounterpartDownloadedBytes != null)
+        'yt_counterpart_downloaded_bytes': ytCounterpartDownloadedBytes,
+      if (cycleState != null) 'cycle_state': cycleState,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1686,6 +1849,10 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       Value<int>? queueOrder,
       Value<String?>? expectedSha256,
       Value<List<String>?>? mirrorUrls,
+      Value<String?>? pauseReason,
+      Value<int?>? completedPieces,
+      Value<int?>? ytCounterpartDownloadedBytes,
+      Value<String?>? cycleState,
       Value<int>? rowid}) {
     return DownloadTasksCompanion(
       id: id ?? this.id,
@@ -1731,6 +1898,11 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       queueOrder: queueOrder ?? this.queueOrder,
       expectedSha256: expectedSha256 ?? this.expectedSha256,
       mirrorUrls: mirrorUrls ?? this.mirrorUrls,
+      pauseReason: pauseReason ?? this.pauseReason,
+      completedPieces: completedPieces ?? this.completedPieces,
+      ytCounterpartDownloadedBytes:
+          ytCounterpartDownloadedBytes ?? this.ytCounterpartDownloadedBytes,
+      cycleState: cycleState ?? this.cycleState,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1871,6 +2043,19 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       map['mirror_urls'] = Variable<String>(
           $DownloadTasksTable.$convertermirrorUrls.toSql(mirrorUrls.value));
     }
+    if (pauseReason.present) {
+      map['pause_reason'] = Variable<String>(pauseReason.value);
+    }
+    if (completedPieces.present) {
+      map['completed_pieces'] = Variable<int>(completedPieces.value);
+    }
+    if (ytCounterpartDownloadedBytes.present) {
+      map['yt_counterpart_downloaded_bytes'] =
+          Variable<int>(ytCounterpartDownloadedBytes.value);
+    }
+    if (cycleState.present) {
+      map['cycle_state'] = Variable<String>(cycleState.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1923,6 +2108,11 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('queueOrder: $queueOrder, ')
           ..write('expectedSha256: $expectedSha256, ')
           ..write('mirrorUrls: $mirrorUrls, ')
+          ..write('pauseReason: $pauseReason, ')
+          ..write('completedPieces: $completedPieces, ')
+          ..write(
+              'ytCounterpartDownloadedBytes: $ytCounterpartDownloadedBytes, ')
+          ..write('cycleState: $cycleState, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3069,6 +3259,10 @@ typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
   Value<int> queueOrder,
   Value<String?> expectedSha256,
   Value<List<String>?> mirrorUrls,
+  Value<String?> pauseReason,
+  Value<int?> completedPieces,
+  Value<int?> ytCounterpartDownloadedBytes,
+  Value<String?> cycleState,
   Value<int> rowid,
 });
 typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
@@ -3116,6 +3310,10 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
   Value<int> queueOrder,
   Value<String?> expectedSha256,
   Value<List<String>?> mirrorUrls,
+  Value<String?> pauseReason,
+  Value<int?> completedPieces,
+  Value<int?> ytCounterpartDownloadedBytes,
+  Value<String?> cycleState,
   Value<int> rowid,
 });
 
@@ -3275,6 +3473,20 @@ class $$DownloadTasksTableFilterComposer
       get mirrorUrls => $composableBuilder(
           column: $table.mirrorUrls,
           builder: (column) => ColumnWithTypeConverterFilters(column));
+
+  ColumnFilters<String> get pauseReason => $composableBuilder(
+      column: $table.pauseReason, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get completedPieces => $composableBuilder(
+      column: $table.completedPieces,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get ytCounterpartDownloadedBytes => $composableBuilder(
+      column: $table.ytCounterpartDownloadedBytes,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get cycleState => $composableBuilder(
+      column: $table.cycleState, builder: (column) => ColumnFilters(column));
 }
 
 class $$DownloadTasksTableOrderingComposer
@@ -3435,6 +3647,20 @@ class $$DownloadTasksTableOrderingComposer
 
   ColumnOrderings<String> get mirrorUrls => $composableBuilder(
       column: $table.mirrorUrls, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get pauseReason => $composableBuilder(
+      column: $table.pauseReason, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get completedPieces => $composableBuilder(
+      column: $table.completedPieces,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get ytCounterpartDownloadedBytes => $composableBuilder(
+      column: $table.ytCounterpartDownloadedBytes,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get cycleState => $composableBuilder(
+      column: $table.cycleState, builder: (column) => ColumnOrderings(column));
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -3576,6 +3802,18 @@ class $$DownloadTasksTableAnnotationComposer
   GeneratedColumnWithTypeConverter<List<String>?, String> get mirrorUrls =>
       $composableBuilder(
           column: $table.mirrorUrls, builder: (column) => column);
+
+  GeneratedColumn<String> get pauseReason => $composableBuilder(
+      column: $table.pauseReason, builder: (column) => column);
+
+  GeneratedColumn<int> get completedPieces => $composableBuilder(
+      column: $table.completedPieces, builder: (column) => column);
+
+  GeneratedColumn<int> get ytCounterpartDownloadedBytes => $composableBuilder(
+      column: $table.ytCounterpartDownloadedBytes, builder: (column) => column);
+
+  GeneratedColumn<String> get cycleState => $composableBuilder(
+      column: $table.cycleState, builder: (column) => column);
 }
 
 class $$DownloadTasksTableTableManager extends RootTableManager<
@@ -3648,6 +3886,10 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<int> queueOrder = const Value.absent(),
             Value<String?> expectedSha256 = const Value.absent(),
             Value<List<String>?> mirrorUrls = const Value.absent(),
+            Value<String?> pauseReason = const Value.absent(),
+            Value<int?> completedPieces = const Value.absent(),
+            Value<int?> ytCounterpartDownloadedBytes = const Value.absent(),
+            Value<String?> cycleState = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               DownloadTasksCompanion(
@@ -3694,6 +3936,10 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             queueOrder: queueOrder,
             expectedSha256: expectedSha256,
             mirrorUrls: mirrorUrls,
+            pauseReason: pauseReason,
+            completedPieces: completedPieces,
+            ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
+            cycleState: cycleState,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -3741,6 +3987,10 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<int> queueOrder = const Value.absent(),
             Value<String?> expectedSha256 = const Value.absent(),
             Value<List<String>?> mirrorUrls = const Value.absent(),
+            Value<String?> pauseReason = const Value.absent(),
+            Value<int?> completedPieces = const Value.absent(),
+            Value<int?> ytCounterpartDownloadedBytes = const Value.absent(),
+            Value<String?> cycleState = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               DownloadTasksCompanion.insert(
@@ -3787,6 +4037,10 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             queueOrder: queueOrder,
             expectedSha256: expectedSha256,
             mirrorUrls: mirrorUrls,
+            pauseReason: pauseReason,
+            completedPieces: completedPieces,
+            ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
+            cycleState: cycleState,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

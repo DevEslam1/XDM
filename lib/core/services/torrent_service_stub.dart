@@ -137,9 +137,20 @@ class TorrentServiceStub implements ITorrentService {
   @override
   void enableSequentialDownload(int torrentId, bool enabled) {}
   @override
+  void setSequentialDownload(int torrentId, bool enabled) {}
+  @override
+  void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) {}
+  @override
   void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) {}
   @override
   void enableSuperSeeding(int torrentId, bool enabled) {}
+
+  @override
+  Stream<TorrentAlertEvent> get alertUpdates => const Stream.empty();
+  @override
+  List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) => const [];
+  @override
+  void applySettingsPack(TorrentSettingsPack pack) {}
 
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
@@ -147,6 +158,10 @@ class TorrentServiceStub implements ITorrentService {
     String savePath,
   ) async =>
       [];
+
+  @override
+  Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async => null;
+
 
   @override
   bool shouldStopSeeding({
@@ -296,10 +311,21 @@ class TorrentService {
 
   static void enableSequentialDownload(int torrentId, bool enabled) =>
       _activeService.enableSequentialDownload(torrentId, enabled);
+  static void setSequentialDownload(int torrentId, bool enabled) =>
+      _activeService.setSequentialDownload(torrentId, enabled);
+  static void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) =>
+      _activeService.prioritizeFile(torrentId, fileIndex, priority: priority);
   static void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) =>
       _activeService.setPieceDeadline(torrentId, pieceIndex, deadlineMs);
   static void enableSuperSeeding(int torrentId, bool enabled) =>
       _activeService.enableSuperSeeding(torrentId, enabled);
+
+  static Stream<TorrentAlertEvent> get alertUpdates => _activeService.alertUpdates;
+  static List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) =>
+      _activeService.getRecentAlerts(torrentId);
+  static void applySettingsPack(TorrentSettingsPack pack) =>
+      _activeService.applySettingsPack(pack);
+
 
   static Future<List<TorrentFileProgress>> getAccurateFileProgress(
     int torrentId,

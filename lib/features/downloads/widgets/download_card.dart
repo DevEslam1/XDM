@@ -62,8 +62,10 @@ class DownloadCard extends StatelessWidget with HapticHelper {
     final provider = context.read<DownloadProvider>();
 
     final statusLabel = task.status.name;
+    final effectiveProgress =
+        task.isTorrent ? task.torrentOverallPercent : task.progress;
     final semanticLabel = '${task.fileName}, status: $statusLabel, '
-        '${(task.progress * 100).toStringAsFixed(0)}% downloaded, '
+        '${(effectiveProgress * 100).toStringAsFixed(0)}% downloaded, '
         '${task.speedFormatted}';
 
     final Widget cardWidget = RepaintBoundary(
@@ -2114,11 +2116,10 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                           : (!hasTorrentFiles && widget.task.fileSize > 0
                               ? widget.task.fileSize
                               : 0);
-                      final overallProgress = effectiveTotalLen > 0
-                          ? (totalDl.clamp(0, effectiveTotalLen) /
-                                  effectiveTotalLen)
-                              .clamp(0.0, 1.0)
-                          : -1.0;
+                      final overallProgress =
+                          (effectiveTotalLen > 0 || widget.task.fileSize > 0)
+                              ? widget.task.torrentOverallPercent
+                              : -1.0;
                       final pctLabel = overallProgress < 0
                           ? (totalDl > 0
                               ? formatBytes(totalDl.toDouble())

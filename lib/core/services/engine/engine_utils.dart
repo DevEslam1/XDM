@@ -56,6 +56,8 @@ class TimestampedLruMap<K, V> {
     return entry?.value;
   }
 
+  DateTime? getLastAccessed(K key) => _map[key]?.lastAccessed;
+
   void removeStale(Duration threshold) {
     final now = DateTime.now();
     _map.removeWhere((key, entry) => now.difference(entry.lastAccessed) > threshold);
@@ -147,6 +149,11 @@ Future<int> actualDownloadedBytes(String tempFilePath, {int threadCount = 1, Sta
       return math.min<int>(stateBytes, fileLen).clamp(0, state.totalSize);
     }
     return math.min<int>(stateBytes, fileLen);
+  }
+  // For multi-threaded downloads, missing/corrupt .dmxstate must NOT fall back to
+  // file.length() because pre-allocated sparse files falsely show 100%.
+  if (threadCount > 1) {
+    return 0;
   }
   return fileLen;
 }

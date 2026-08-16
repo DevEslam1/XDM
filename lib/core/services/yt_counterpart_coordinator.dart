@@ -37,6 +37,17 @@ class YtCounterpartCoordinator {
 
   int? getLiveBytes(String taskId) => _ytLiveBytes.get(taskId);
 
+  bool isStreamFinished(String taskId) => _ytFinishedStreams.containsKey(taskId);
+
+  bool isCounterpartFinished(String taskId) {
+    final counterpartId = _ytCounterpartTaskIds.get(taskId);
+    return counterpartId != null && _ytFinishedStreams.containsKey(counterpartId);
+  }
+
+  void markFinished(String taskId) {
+    _ytFinishedStreams.put(taskId, true);
+  }
+
   void unregister(String taskId) {
     _ytFinishedStreams.put(taskId, true);
     final counterpartId = _ytCounterpartTaskIds.get(taskId);

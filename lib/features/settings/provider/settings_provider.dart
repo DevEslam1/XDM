@@ -8,7 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/power_monitor.dart';
 import '../../../core/services/quiet_hours.dart';
+import '../../../core/services/torrent_models.dart';
 import '../../../core/services/xdm_backend_client.dart';
+
 
 // FIX-P2-03: Modular settings mixin references
 export 'mixins/download_settings_mixin.dart';
@@ -103,7 +105,12 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _enableIpFilterKey = 'enableIpFilter';
   static const _ipFilterPathKey = 'ipFilterPath';
   static const _enableAnonymousModeKey = 'enableAnonymousMode';
+  static const _proxyHostKey = 'proxyHost';
+  static const _proxyPortKey = 'proxyPort';
+  static const _enableProxyKey = 'enableProxy';
+  static const _enforceProxyKey = 'enforceProxy';
   static const _defaultThreadCountKey = 'defaultThreadCount';
+
   static const _customDownloadPathKey = 'customDownloadPath';
   static const _incognitoEnabledKey = 'incognitoEnabled';
   static const _desktopModeKey = 'desktopMode';
@@ -285,6 +292,54 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool enableIpFilter = false;
   String ipFilterPath = '';
   bool enableAnonymousMode = false;
+  String proxyHost = '';
+  int proxyPort = 1080;
+  bool enableProxy = false;
+  bool enforceProxy = false;
+
+  TorrentSettingsPack get torrentSettingsPack => TorrentSettingsPack(
+        enableDht: enableDht,
+        enableLsd: enableLsd,
+        enablePex: enablePex,
+        enableUpnp: enableUpnp,
+        maxConnectionsGlobal: torrentConnectionsLimit,
+        maxDownloadRate: effectiveSpeedLimitBytesPerSecond,
+        maxUploadRate: globalTorrentSeedingLimited
+            ? globalTorrentSeedingLimitKbps * 1024
+            : null,
+        forceEncrypt: forceEncrypt,
+        enableUtp: enableUtp,
+        enableTcp: true,
+        socks5ProxyHost: (enableProxy && proxyHost.isNotEmpty) ? proxyHost : null,
+        socks5ProxyPort: (enableProxy && proxyPort > 0) ? proxyPort : null,
+        enforceProxy: enforceProxy,
+        cacheSize: diskCacheSizeMb * 1024 * 1024,
+      );
+
+  Future<void> setProxyHost(String value) async {
+    proxyHost = value;
+    await _prefs.setString(_proxyHostKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setProxyPort(int value) async {
+    proxyPort = value.clamp(1, 65535);
+    await _prefs.setInt(_proxyPortKey, proxyPort);
+    notifyListeners();
+  }
+
+  Future<void> setEnableProxy(bool value) async {
+    enableProxy = value;
+    await _prefs.setBool(_enableProxyKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setEnforceProxy(bool value) async {
+    enforceProxy = value;
+    await _prefs.setBool(_enforceProxyKey, value);
+    notifyListeners();
+  }
+
 
   Future<void> setEnableNatPmp(bool value) async {
     enableNatPmp = value;
@@ -503,7 +558,12 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       ipFilterPath = _prefs.getString(_ipFilterPathKey) ?? ipFilterPath;
       enableAnonymousMode =
           _prefs.getBool(_enableAnonymousModeKey) ?? enableAnonymousMode;
+      proxyHost = _prefs.getString(_proxyHostKey) ?? proxyHost;
+      proxyPort = _prefs.getInt(_proxyPortKey) ?? proxyPort;
+      enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
+      enforceProxy = _prefs.getBool(_enforceProxyKey) ?? enforceProxy;
       _defaultThreadCount =
+
           _prefs.getInt(_defaultThreadCountKey) ?? _defaultThreadCount;
       if (![1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16].contains(_defaultThreadCount)) {
         _defaultThreadCount = 16;

@@ -130,6 +130,14 @@ class DownloadStateMachine {
     return allowed != null && allowed.contains(to);
   }
 
+  /// Checks if a transition between [DownloadStatus] enum values is legal.
+  static bool canTransitionStatus(DownloadStatus from, DownloadStatus to) {
+    if (from == to) return true;
+    final fromState = fromStatus(from);
+    final toState = fromStatus(to);
+    return canTransition(fromState, toState);
+  }
+
   /// Attempts to transition the state machine to [targetState].
   /// Returns `true` if transition was valid and executed, `false` otherwise.
   bool transition(DownloadState targetState, {String? reason}) {

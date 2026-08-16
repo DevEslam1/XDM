@@ -154,13 +154,35 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
     return clean;
   }
 
-  // Try regex extraction first, as it's robust to unescaped query chars
-  final xtMatch = RegExp(
-    r'xt=urn:bt(?:ih|mh):([a-zA-Z0-9]+)',
+  // Try regex extraction for v1 (BTIH) and v2 (BTMH)
+  final btihMatch = RegExp(
+    r'xt=urn:btih:([a-zA-Z0-9]+)',
     caseSensitive: false,
   ).firstMatch(trimmed);
-  if (xtMatch != null) {
-    result['infoHash'] = normalizeHash(xtMatch.group(1)!);
+  if (btihMatch != null) {
+    final h1 = normalizeHash(btihMatch.group(1)!);
+    result['infoHashV1'] = h1;
+    result['infoHash'] = h1;
+  }
+
+  final btmhMatch = RegExp(
+    r'xt=urn:btmh:(?:1220)?([a-zA-Z0-9]{64})',
+    caseSensitive: false,
+  ).firstMatch(trimmed);
+  if (btmhMatch != null) {
+    final h2 = btmhMatch.group(1)!.toUpperCase();
+    result['infoHashV2'] = h2;
+    result['infoHash'] ??= h2;
+  }
+
+  if (!result.containsKey('infoHash')) {
+    final genericXt = RegExp(
+      r'xt=urn:bt(?:ih|mh):([a-zA-Z0-9]+)',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (genericXt != null) {
+      result['infoHash'] = normalizeHash(genericXt.group(1)!);
+    }
   }
 
   final dnMatch = RegExp(
@@ -185,13 +207,19 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
     final uri = Uri.parse(trimmed);
     final queryParams = uri.queryParametersAll;
 
-    if (!result.containsKey('infoHash')) {
-      final xtList = queryParams['xt'] ?? [];
-      for (final xt in xtList) {
-        if (xt.startsWith('urn:btih:') || xt.startsWith('urn:btmh:')) {
-          final rawHash = xt.substring(xt.indexOf(':', 9) + 1);
-          result['infoHash'] = normalizeHash(rawHash);
-        }
+    final xtList = queryParams['xt'] ?? [];
+    for (final xt in xtList) {
+      if (xt.startsWith('urn:btih:')) {
+        final rawHash = xt.substring('urn:btih:'.length);
+        final h1 = normalizeHash(rawHash);
+        result['infoHashV1'] = h1;
+        result['infoHash'] ??= h1;
+      } else if (xt.startsWith('urn:btmh:')) {
+        var rawHash = xt.substring('urn:btmh:'.length);
+        if (rawHash.startsWith('1220')) rawHash = rawHash.substring(4);
+        final h2 = rawHash.toUpperCase();
+        result['infoHashV2'] = h2;
+        result['infoHash'] ??= h2;
       }
     }
 
@@ -217,7 +245,17 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
     // Keep whatever regex was able to parse
   }
 
+  if (result.containsKey('infoHashV1') && result.containsKey('infoHashV2')) {
+    result['isHybrid'] = 'true';
+  } else if (result.containsKey('infoHashV2')) {
+    result['isV2Only'] = 'true';
+  } else if (result.containsKey('infoHashV1')) {
+    result['isV1Only'] = 'true';
+  }
+
   return result;
+
+
 }
 
 String _base32ToHex(String base32) {

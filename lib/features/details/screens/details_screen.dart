@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/services/torrent_service.dart';
 import '../../../core/services/tracker_manager.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/file_opener.dart';
@@ -31,6 +32,7 @@ import '../widgets/peer_panel.dart';
 import '../widgets/torrent_health_indicator.dart';
 import '../widgets/torrent_stats_dashboard.dart';
 import '../widgets/tracker_panel.dart';
+
 
 class DetailsScreen extends StatefulWidget {
   final String taskId;
@@ -2289,12 +2291,11 @@ class _TorrentFilesPanel extends StatefulWidget {
 class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
     with HapticHelper, WidgetsBindingObserver {
   List<int> _diskBytes = [];
-
   Timer? _refreshTimer;
-
   bool _loading = true;
-
   int _refreshGen = 0;
+  bool _sequentialMode = false;
+
 
   @override
   void initState() {
@@ -2595,6 +2596,44 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     _TorrentFileActionButton(
+                      label: isRtl ? 'تحميل متسلسل' : 'SEQUENTIAL',
+                      icon: _sequentialMode
+                          ? Icons.stream_rounded
+                          : Icons.queue_play_next_rounded,
+                      color: _sequentialMode ? greenClr : mutedClr,
+                      isDark: isDark,
+                      onPressed: () {
+                        triggerHaptic(settings);
+                        setState(() {
+                          _sequentialMode = !_sequentialMode;
+                        });
+                        final torrentId = int.tryParse(task.id);
+                        if (torrentId != null) {
+                          TorrentService.setSequentialDownload(
+                            torrentId,
+                            _sequentialMode,
+                          );
+                        }
+
+                        ThemedSnackbar.show(
+                          context,
+                          message: _sequentialMode
+                              ? (isRtl
+                                  ? 'تم تفعيل التحميل المتسلسل لمعاينة الفيديو'
+                                  : 'Sequential download enabled for streaming')
+                              : (isRtl
+                                  ? 'تم تعطيل التحميل المتسلسل'
+                                  : 'Sequential download disabled'),
+                          color: _sequentialMode ? greenClr : mutedClr,
+                          icon: _sequentialMode
+                              ? Icons.stream_rounded
+                              : Icons.info_outline,
+                          isDarkMode: isDark,
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    _TorrentFileActionButton(
                       label: isRtl ? 'تحديد الكل' : 'SELECT ALL',
                       icon: Icons.select_all_rounded,
                       color: blueClr,
@@ -2659,6 +2698,7 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 10),
                 if (_loading)
                   Center(
@@ -3386,8 +3426,18 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
                   );
                 },
               ),
+            if (task.isTorrent) ...[
+              _MetaRow(
+                label: isRtl ? 'بروتوكول التورنت' : 'BITTORRENT PROTOCOL',
+                value: (task.url.contains('urn:btmh') || (task.url.contains('urn:btih') && task.url.contains('urn:btmh')))
+                    ? 'BitTorrent v2 (BEP 52 / Hybrid)'
+                    : 'BitTorrent v1 / v2 Compatible',
+                isDark: isDark,
+              ),
+            ],
             if (task.mergedAudioUrl != null &&
                 task.mergedAudioUrl!.isNotEmpty) ...[
+
               _MetaRow(
                 label: L10n.isRtl(context) ? 'رابط الصوت' : 'AUDIO URL',
                 value: task.mergedAudioUrl!,

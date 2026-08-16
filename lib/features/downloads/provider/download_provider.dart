@@ -20,6 +20,7 @@ import '../../../core/services/download_engine.dart';
 import '../../../core/services/download_journal.dart';
 import '../../../core/services/download_metrics.dart';
 import '../../../core/services/engine/engine_utils.dart';
+import '../../../core/services/engine/torrent_download_handler.dart';
 import '../../../core/services/error_taxonomy.dart';
 import '../../../core/services/frame_watchdog.dart';
 import '../../../core/services/ios_background_capability.dart';
@@ -36,6 +37,7 @@ import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
 import '../../settings/provider/settings_provider.dart';
+import '../models/download_state_machine.dart';
 import '../models/download_task.dart';
 import '../services/download_execution_service.dart';
 import '../services/download_notification_bridge.dart';
@@ -1272,10 +1274,26 @@ class DownloadProvider extends ChangeNotifier
           clampedBytes = t.fileSize;
         }
         final clampedChunks = t.chunks.map((c) => c.clamp(0.0, 1.0)).toList();
-        final task = t.copyWith(
+        var task = t.copyWith(
           downloadedBytes: clampedBytes,
           chunks: clampedChunks,
         );
+
+        // Torrent initial load file progress estimation:
+        if (task.isTorrent &&
+            task.torrentFiles != null &&
+            task.torrentFiles!.isNotEmpty &&
+            task.downloadedBytes > 0) {
+          final hasZeroFiles = task.torrentFiles!.every((f) =>
+              ((f['downloadedBytes'] as num?)?.toInt() ?? 0) == 0);
+          if (hasZeroFiles) {
+            final modifiableFiles = List<Map<String, dynamic>>.from(
+                task.torrentFiles!.map((f) => Map<String, dynamic>.from(f)));
+            TorrentDownloadHandler.distributeEstimatedBytes(
+                modifiableFiles, task.downloadedBytes);
+            task = task.copyWith(torrentFiles: modifiableFiles);
+          }
+        }
 
         // When the app starts, mark any non-completed and non-failed download (downloading, queued, merging) as paused/queued depending on autoStart.
         final hasActiveStream = _cancelTokens.containsKey(task.id);
@@ -3385,6 +3403,37 @@ class DownloadProvider extends ChangeNotifier
               0.0,
             ),
           );
+        } else {
+          // Validate .dmxstate JSON integrity; if corrupted, wipe state
+          final statePath = '${task.tempFilePath}.dmxstate';
+          final stateFile = File(statePath);
+          if (await stateFile.exists()) {
+            bool isValid = false;
+            try {
+              final jsonStr = await stateFile.readAsString();
+              final decoded = jsonDecode(jsonStr);
+              if (decoded is Map<String, dynamic> &&
+                  decoded['downloadedBytes'] != null) {
+                isValid = true;
+              }
+            } catch (_) {
+              isValid = false;
+            }
+            if (!isValid) {
+              try {
+                await stateFile.delete();
+                final tmpState = File('$statePath.tmp');
+                if (await tmpState.exists()) await tmpState.delete();
+              } catch (_) {}
+              task = task.copyWith(
+                downloadedBytes: 0,
+                chunks: List<double>.filled(
+                  task.threadCount > 0 ? task.threadCount : 1,
+                  0.0,
+                ),
+              );
+            }
+          }
         }
       }
 
@@ -4163,6 +4212,16 @@ class DownloadProvider extends ChangeNotifier
     if (index == -1) return;
 
     final prev = _tasks[index];
+    if (prev.status != updated.status) {
+      if (!DownloadStateMachine.canTransitionStatus(
+          prev.status, updated.status)) {
+        _log.warning(
+          'Blocked illegal status transition for task ${updated.id}: '
+          '${prev.status} -> ${updated.status}. Retaining status ${prev.status}.',
+        );
+        updated = updated.copyWith(status: prev.status);
+      }
+    }
 
     // ERR-RESILIENCE-1.2: When a task transitions to failed, ensure it always
     // carries a FailureCategory + recovery hint so the UI can present a

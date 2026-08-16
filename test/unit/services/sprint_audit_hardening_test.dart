@@ -91,7 +91,7 @@ void main() {
         speed: 512.0,
         eta: 2,
         statusMessage: 'Downloading',
-        cycleState: 'downloading',
+        cycleState: CycleState.downloading,
       );
 
       const p2 = DownloadProgress(
@@ -100,7 +100,7 @@ void main() {
         speed: 512.0,
         eta: 2,
         statusMessage: 'Downloading',
-        cycleState: 'downloading',
+        cycleState: CycleState.downloading,
       );
 
       const p3 = DownloadProgress(
@@ -109,7 +109,7 @@ void main() {
         speed: 512.0,
         eta: 2,
         statusMessage: 'Downloading',
-        cycleState: 'downloading',
+        cycleState: CycleState.downloading,
       );
 
       expect(p1, equals(p2));

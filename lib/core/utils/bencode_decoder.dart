@@ -169,7 +169,48 @@ class BencodeDecoder {
     return obj;
   }
 
-  /// Parses torrent file bytes and extracts name, size, files, and info hash
+  /// Helper to recursively traverse BitTorrent v2 (BEP 52) file tree.
+  static int _parseFileTree(
+    Map tree,
+    List<String> currentPath,
+    List<Map<String, dynamic>> filesList,
+  ) {
+    int total = 0;
+    for (final entry in tree.entries) {
+      final keyStr = entry.key is Uint8List
+          ? utf8.decode(entry.key, allowMalformed: true)
+          : entry.key.toString();
+      final val = entry.value;
+
+      if (keyStr.isEmpty && val is Map) {
+        // Leaf file node
+        final len = (val['length'] as int?) ?? 0;
+        total += len;
+        final safeName = currentPath
+            .where((seg) =>
+                seg.isNotEmpty &&
+                seg != '.' &&
+                seg != '..' &&
+                !seg.contains('/') &&
+                !seg.contains('\\') &&
+                !seg.contains('\x00') &&
+                !seg.startsWith('/') &&
+                !seg.startsWith('\\') &&
+                !RegExp(r'^[A-Za-z]:').hasMatch(seg))
+            .join('/');
+        filesList.add({
+          'name': safeName.isNotEmpty ? safeName : 'file_$total',
+          'length': len,
+        });
+      } else if (val is Map) {
+        // Subtree
+        total += _parseFileTree(val, [...currentPath, keyStr], filesList);
+      }
+    }
+    return total;
+  }
+
+  /// Parses torrent file bytes and extracts name, size, files, and v1/v2/hybrid info hashes.
   static Map<String, dynamic>? parseTorrentBytes(Uint8List bytes) {
     try {
       final decoder = BencodeDecoder(bytes);
@@ -180,18 +221,29 @@ class BencodeDecoder {
       final infoBytes = decoded['info_bytes'];
       if (info is! Map) return null;
 
+
       String name = 'unknown_torrent';
       if (info['name.utf-8'] is Uint8List) {
         name = utf8.decode(info['name.utf-8']);
       } else if (info['name'] is Uint8List) {
         name = utf8.decode(info['name']);
+      } else if (info['name'] is String) {
+        name = info['name'] as String;
       }
 
       int totalLength = 0;
       final List<Map<String, dynamic>> filesList = [];
 
-      if (info.containsKey('files')) {
-        // Multi-file torrent
+      final hasV2FileTree = info.containsKey('file tree') && info['file tree'] is Map;
+      final hasV1Pieces = info.containsKey('pieces');
+      final hasV1Files = info.containsKey('files');
+      final hasV1Length = info.containsKey('length');
+
+      if (hasV2FileTree && (!hasV1Files && !hasV1Length)) {
+        // Pure v2 torrent
+        totalLength = _parseFileTree(info['file tree'] as Map, [], filesList);
+      } else if (info.containsKey('files')) {
+        // Multi-file torrent (v1 or hybrid)
         final files = info['files'];
         if (files is List) {
           for (final f in files) {
@@ -227,7 +279,7 @@ class BencodeDecoder {
             }
           }
         }
-      } else {
+      } else if (info.containsKey('length')) {
         // Single file torrent
         totalLength = info['length'] as int? ?? 0;
         final safeName = name
@@ -239,19 +291,40 @@ class BencodeDecoder {
           'name': safeName.isNotEmpty ? safeName : 'file',
           'length': totalLength
         });
+      } else if (hasV2FileTree) {
+        totalLength = _parseFileTree(info['file tree'] as Map, [], filesList);
       }
 
-      // Compute info hash
+      // Compute v1 (SHA-1) and v2 (SHA-256) info hashes
+      String? infoHashV1;
+      String? infoHashV2;
       String infoHash = '';
+
       if (infoBytes is Uint8List) {
-        final digest = sha1.convert(infoBytes);
-        infoHash = digest.toString().toUpperCase();
+        final isV2 = (info['meta version'] == 2) || hasV2FileTree;
+        final isV1 = hasV1Pieces || hasV1Files || hasV1Length || !isV2;
+
+        if (isV1) {
+          infoHashV1 = sha1.convert(infoBytes).toString().toUpperCase();
+        }
+        if (isV2) {
+          infoHashV2 = sha256.convert(infoBytes).toString().toUpperCase();
+        }
+
+        infoHash = infoHashV2 ?? infoHashV1 ?? sha1.convert(infoBytes).toString().toUpperCase();
       }
+
+      final isV2Only = infoHashV2 != null && (infoHashV1 == null || !hasV1Pieces);
+      final isHybrid = infoHashV1 != null && infoHashV2 != null;
 
       return {
         'name': name,
         'length': totalLength,
         'infoHash': infoHash,
+        'infoHashV1': infoHashV1,
+        'infoHashV2': infoHashV2,
+        'isV2Only': isV2Only,
+        'isHybrid': isHybrid,
         'files': filesList,
       };
     } catch (e) {
@@ -260,3 +333,4 @@ class BencodeDecoder {
     }
   }
 }
+

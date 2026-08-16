@@ -456,6 +456,7 @@ class HiveMigrationService {
       priority: drift.Value(task.priority),
       expectedSha256: drift.Value(task.expectedSha256),
       mirrorUrls: drift.Value(task.mirrorUrls),
+      cycleState: drift.Value(task.cycleState?.name),
     );
   }
 

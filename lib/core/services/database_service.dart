@@ -229,6 +229,11 @@ class DatabaseService {
       priority: drift.Value(task.priority),
       expectedSha256: drift.Value(task.expectedSha256),
       mirrorUrls: drift.Value(task.mirrorUrls),
+      pauseReason: drift.Value(task.pauseReason?.name),
+      completedPieces: drift.Value(task.completedPieces),
+      ytCounterpartDownloadedBytes:
+          drift.Value(task.ytCounterpartDownloadedBytes),
+      cycleState: drift.Value(task.cycleState?.name),
     );
   }
 
@@ -317,6 +322,14 @@ class DatabaseService {
       priority: row.priority,
       expectedSha256: row.expectedSha256,
       mirrorUrls: row.mirrorUrls,
+      pauseReason: row.pauseReason != null
+          ? PauseReason.fromName(row.pauseReason)
+          : null,
+      completedPieces: row.completedPieces,
+      ytCounterpartDownloadedBytes: row.ytCounterpartDownloadedBytes,
+      cycleState: row.cycleState != null
+          ? CycleState.fromName(row.cycleState)
+          : null,
     );
   }
 

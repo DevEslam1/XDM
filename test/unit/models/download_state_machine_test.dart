@@ -107,5 +107,21 @@ void main() {
         DownloadStatus.completed,
       );
     });
+
+    test('canTransitionStatus enforces valid status transitions and blocks illegal ones', () {
+      // Allowed transitions
+      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.queued, DownloadStatus.downloading), isTrue);
+      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.downloading, DownloadStatus.paused), isTrue);
+      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.downloading, DownloadStatus.merging), isTrue);
+      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.merging, DownloadStatus.completed), isTrue);
+      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.downloading, DownloadStatus.completed), isTrue);
+      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.paused, DownloadStatus.downloading), isTrue);
+
+      // Blocked / illegal transitions
+      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.completed, DownloadStatus.paused), isFalse);
+      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.completed, DownloadStatus.merging), isFalse);
+      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.failed, DownloadStatus.completed), isFalse);
+      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.merging, DownloadStatus.queued), isFalse);
+    });
   });
 }

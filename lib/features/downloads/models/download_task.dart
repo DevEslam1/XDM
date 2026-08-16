@@ -3,6 +3,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
+import 'cycle_state.dart';
+import 'download_state_machine.dart';
+import 'pause_reason.dart';
+
+
+export 'cycle_state.dart';
+export 'pause_reason.dart';
 
 /// Public status message constants used throughout the download pipeline.
 /// Extracted here for i18n readiness — replace with localized strings when
@@ -192,6 +199,11 @@ class DownloadTask {
   final String? siteDisplayName;
   final String? contentHint;
 
+  final PauseReason? pauseReason;
+  final int? completedPieces;
+  final int? ytCounterpartDownloadedBytes;
+  final CycleState? cycleState;
+
   final bool isMergeInProgress; // runtime only, not persisted
 
   DownloadTask({
@@ -248,6 +260,10 @@ class DownloadTask {
     this.siteType,
     this.siteDisplayName,
     this.contentHint,
+    this.pauseReason,
+    this.completedPieces,
+    this.ytCounterpartDownloadedBytes,
+    this.cycleState,
   });
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
@@ -608,6 +624,13 @@ class DownloadTask {
     String? siteDisplayName,
     String? contentHint,
     bool? isMergeInProgress,
+    PauseReason? pauseReason,
+    bool clearPauseReason = false,
+    int? completedPieces,
+    bool clearCompletedPieces = false,
+    int? ytCounterpartDownloadedBytes,
+    CycleState? cycleState,
+    bool clearCycleState = false,
   }) {
     final effectiveFileSize = clearFileSize
         ? 0
@@ -705,49 +728,24 @@ class DownloadTask {
       siteType: siteType ?? this.siteType,
       siteDisplayName: siteDisplayName ?? this.siteDisplayName,
       contentHint: contentHint ?? this.contentHint,
+      pauseReason: clearPauseReason ? null : (pauseReason ?? this.pauseReason),
+      completedPieces: clearCompletedPieces ? null : (completedPieces ?? this.completedPieces),
+      ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes ?? this.ytCounterpartDownloadedBytes,
+      cycleState: clearCycleState ? null : (cycleState ?? this.cycleState),
     );
   }
 
   /// D-01: Validates if transition from [from] to [to] is legally allowed.
   static bool isValidTransition(DownloadStatus from, DownloadStatus to) {
-    if (from == to) return true;
-    switch (from) {
-      case DownloadStatus.queued:
-        return to == DownloadStatus.downloading ||
-            to == DownloadStatus.paused ||
-            to == DownloadStatus.failed ||
-            to == DownloadStatus.merging ||
-            to == DownloadStatus.completed;
-      case DownloadStatus.downloading:
-        return to == DownloadStatus.paused ||
-            to == DownloadStatus.completed ||
-            to == DownloadStatus.failed ||
-            to == DownloadStatus.merging ||
-            to == DownloadStatus.queued;
-      case DownloadStatus.paused:
-        return to == DownloadStatus.queued ||
-            to == DownloadStatus.downloading ||
-            to == DownloadStatus.failed ||
-            to == DownloadStatus.merging;
-      case DownloadStatus.merging:
-        return to == DownloadStatus.completed ||
-            to == DownloadStatus.failed ||
-            to == DownloadStatus.paused;
-      case DownloadStatus.failed:
-        return to == DownloadStatus.queued ||
-            to == DownloadStatus.downloading ||
-            to == DownloadStatus.paused;
-      case DownloadStatus.completed:
-        return to == DownloadStatus.queued ||
-            to == DownloadStatus.downloading; // Explicit restart
-    }
+    return DownloadStateMachine.canTransitionStatus(from, to);
   }
 
   /// Transition to new status with validation
   DownloadTask transitionTo(DownloadStatus nextStatus) {
     if (!isValidTransition(status, nextStatus)) {
       debugPrint(
-          '[DownloadTask] Warning: Invalid status transition from $status to $nextStatus on task $id');
+          '[DownloadTask] Warning: Blocked illegal status transition from $status to $nextStatus on task $id');
+      return this;
     }
     return copyWith(status: nextStatus);
   }
@@ -806,6 +804,10 @@ class DownloadTask {
       'siteType': siteType,
       'siteDisplayName': siteDisplayName,
       'contentHint': contentHint,
+      'pauseReason': pauseReason?.name,
+      'completedPieces': completedPieces,
+      'ytCounterpartDownloadedBytes': ytCounterpartDownloadedBytes,
+      'cycleState': cycleState?.name,
     };
   }
 
@@ -880,6 +882,11 @@ class DownloadTask {
       errorMessage = 'Unknown status "$statusName" (recovered as paused)';
     }
 
+    final rawPauseReason = map['pauseReason'];
+    final pauseReason = rawPauseReason is String
+        ? PauseReason.fromName(rawPauseReason)
+        : (rawPauseReason is PauseReason ? rawPauseReason : null);
+
     return DownloadTask(
       id: map['id'] as String? ?? '',
       fileName: map['fileName'] as String? ?? '',
@@ -943,6 +950,12 @@ class DownloadTask {
       siteType: map['siteType'] as String?,
       siteDisplayName: map['siteDisplayName'] as String?,
       contentHint: map['contentHint'] as String?,
+      pauseReason: pauseReason,
+      completedPieces: (map['completedPieces'] as num?)?.toInt(),
+      ytCounterpartDownloadedBytes: (map['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
+      cycleState: map['cycleState'] is String
+          ? CycleState.fromName(map['cycleState'] as String)
+          : (map['cycleState'] is CycleState ? map['cycleState'] as CycleState : null),
     );
   }
 

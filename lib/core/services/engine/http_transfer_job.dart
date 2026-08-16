@@ -17,6 +17,7 @@ import '../engines/http_download_engine.dart';
 import '../mirror/mirror_selector.dart';
 import '../positional_file_writer.dart';
 import '../power_monitor.dart';
+import 'cycle_state_resolver.dart';
 import 'engine_exceptions.dart';
 import 'engine_models.dart';
 import 'engine_utils.dart';
@@ -159,7 +160,7 @@ class HttpTransferJob {
   int _lastProgressTimeMs = 0;
   bool _stalledEmitted = false;
   int? _lastProgressFingerprint;
-  String? _lastEmittedCycleState;
+  CycleState? _lastEmittedCycleState;
   int _currentWriterBufferSize = 256 * 1024;
   
   void requestCancel() {
@@ -329,6 +330,15 @@ class HttpTransferJob {
     }
     _state!.status = DmxStateStatus.active;
     await StateStore.save(cmd.tempFilePath, _state!);
+
+    if (_state!.downloadedBytes > 0) {
+      _emitProgress(0, statusMessage: 'Resuming…');
+    } else {
+      // Fix 1: Emit explicit starting state for fresh downloads
+      _emitProgress(0,
+          statusMessage: 'Starting…',
+          cycleStateOverride: CycleState.starting);
+    }
 
     // Task 3.2: Skip the identity probe round-trip when backgrounded.
     // The LRU cache ensures we still validate on the first foreground resume.
@@ -521,7 +531,10 @@ class HttpTransferJob {
           cmd.url.contains('signature=');
       if (isYtOrSigned && (status == 401 || status == 403)) {
         _serverIdentityCache.remove(cacheKey);
-        _emitProgress(0, statusMessage: 'Updating links (URL expired)…');
+        _emitProgress(0,
+            statusMessage: 'Updating links (URL expired)…',
+            cycleStateOverride: CycleState.updatingLinks);
+        await Future.delayed(const Duration(milliseconds: 10));
         throw UrlExpiredException(
           'YouTube / signed URL expired during identity probe (HTTP $status).',
         );
@@ -675,7 +688,9 @@ class HttpTransferJob {
     } catch (e) {
       if (e is DioException && e.type == DioExceptionType.cancel) {
         st.status = DmxStateStatus.paused;
-        _emitProgress(0, statusMessage: 'Paused');
+        // Fix 8: Populate pauseReason when emitting Paused
+        _emitProgress(0,
+            statusMessage: 'Paused', pauseReason: PauseReason.userRequested);
       } else if (e is! RangeUnsupportedException) {
         final anyProven = st.chunks.any((c) => c.downloaded > 0);
         st.status = DmxStateStatus.failed;
@@ -792,14 +807,19 @@ class HttpTransferJob {
             message: 'HTML_INSTEAD_OF_MEDIA',
           );
         }
-        validateContentRange(
-          response.headers.value('content-range'),
-          expectedStart: absStart,
-          expectedEnd: chunk.end,
-          expectedTotal: _state!.totalSize,
-          allowUnknown: chunk.downloaded == 0 && absStart == 0,
-          url: cmd.punyUrl,
-        );
+        try {
+          validateContentRange(
+            response.headers.value('content-range'),
+            expectedStart: absStart,
+            expectedEnd: chunk.end,
+            expectedTotal: _state!.totalSize,
+            allowUnknown: chunk.downloaded == 0 && absStart == 0,
+            url: cmd.punyUrl,
+          );
+        } on DioException {
+          chunk.downloaded = 0;
+          rethrow;
+        }
         _state!.etag ??= response.headers.value('etag');
         _state!.lastModified ??= response.headers.value('last-modified');
         final stream = response.data?.stream;
@@ -867,7 +887,10 @@ class HttpTransferJob {
               cmd.url.contains('expire=') ||
               cmd.url.contains('signature=');
           if (isLikelyExpired) {
-            _emitProgress(0, statusMessage: 'Updating links (URL expired)…');
+            _emitProgress(0,
+                statusMessage: 'Updating links (URL expired)…',
+                cycleStateOverride: CycleState.updatingLinks);
+            await Future.delayed(const Duration(milliseconds: 10));
             throw UrlExpiredException(
               'Download URL expired (HTTP $status). Refresh required.',
               refreshAllMirrors: true,
@@ -888,7 +911,8 @@ class HttpTransferJob {
             attempts = 0;
             debugPrint('[DMX-Job] failing over to mirror: $next');
             _emitProgress(_stopwatch.elapsedMilliseconds,
-                statusMessage: 'Retrying (mirror failover)…');
+                statusMessage: 'Retrying (mirror failover)…',
+                cycleStateOverride: CycleState.retrying);
             continue;
           }
           rethrow;
@@ -1121,14 +1145,19 @@ class HttpTransferJob {
         if (isPartial) {
           final contentRange = response.headers.value('content-range');
           if (contentRange != null) {
-            validateContentRange(
-              contentRange,
-              expectedStart: chunk.downloaded,
-              expectedEnd: st.totalSize > 0 ? st.totalSize - 1 : -1,
-              expectedTotal: st.totalSize,
-              allowUnknown: chunk.downloaded == 0,
-              url: cmd.punyUrl,
-            );
+            try {
+              validateContentRange(
+                contentRange,
+                expectedStart: chunk.downloaded,
+                expectedEnd: st.totalSize > 0 ? st.totalSize - 1 : -1,
+                expectedTotal: st.totalSize,
+                allowUnknown: chunk.downloaded == 0,
+                url: cmd.punyUrl,
+              );
+            } on DioException {
+              chunk.downloaded = 0;
+              rethrow;
+            }
           }
         }
         st.etag ??= response.headers.value('etag');
@@ -1187,14 +1216,18 @@ class HttpTransferJob {
         failover.reportSuccess();
         attempts = 0;
         if (st.totalSize <= 0) {
-          st.totalSize = chunk.downloaded;
-          chunk.end = chunk.downloaded - 1;
+          final actualDiskLen = await tempFile.length();
+          chunk.downloaded = actualDiskLen;
+          st.totalSize = actualDiskLen;
+          chunk.end = actualDiskLen > 0 ? actualDiskLen - 1 : 0;
         }
         break;
       } on DioException catch (e) {
         if (e.type == DioExceptionType.cancel) {
           _state!.status = DmxStateStatus.paused;
-          _emitProgress(0, statusMessage: 'Paused');
+          // Fix 8: Populate pauseReason when emitting Paused
+          _emitProgress(0,
+              statusMessage: 'Paused', pauseReason: PauseReason.userRequested);
           rethrow;
         }
         if (e.message == 'HTML_INSTEAD_OF_MEDIA') {
@@ -1208,6 +1241,25 @@ class HttpTransferJob {
           rethrow;
         }
         final status = e.response?.statusCode;
+
+        if (status == 401 || status == 403) {
+          final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
+          final isYtOrSigned = host.endsWith('.googlevideo.com') ||
+              host.contains('youtube.com') ||
+              host.contains('youtu.be') ||
+              cmd.url.contains('expire=') ||
+              cmd.url.contains('signature=');
+          if (isYtOrSigned) {
+            _emitProgress(0,
+                statusMessage: 'Updating links (URL expired)…',
+                cycleStateOverride: CycleState.updatingLinks);
+            await Future.delayed(const Duration(milliseconds: 10));
+            throw UrlExpiredException(
+              'Download URL expired (HTTP $status). Refresh required.',
+              refreshAllMirrors: true,
+            );
+          }
+        }
 
         if (status == 401 || status == 403 || status == 404 || status == 410) {
           _state!.status = DmxStateStatus.failed;
@@ -1232,7 +1284,8 @@ class HttpTransferJob {
             attempts = 0;
             _state!.status = DmxStateStatus.active;
             _emitProgress(_stopwatch.elapsedMilliseconds,
-                statusMessage: 'Retrying (mirror failover)…');
+                statusMessage: 'Retrying (mirror failover)…',
+                cycleStateOverride: CycleState.retrying);
             continue;
           }
           _emitProgress(0, statusMessage: 'Failed');
@@ -1424,7 +1477,10 @@ class HttpTransferJob {
   }
 
   void _emitProgress(int nowMs,
-      {String? statusMessage, PositionalFileWriter? writer}) {
+      {String? statusMessage,
+      CycleState? cycleStateOverride,
+      PauseReason? pauseReason,
+      PositionalFileWriter? writer}) {
     final st = _state!;
     final downloaded = st.downloadedBytes;
     final total = st.totalSize;
@@ -1469,8 +1525,13 @@ class HttpTransferJob {
     final completedChunks = st.chunks.isNotEmpty
         ? st.chunks.where((c) => c.isComplete).length
         : null;
-    final cycleState = _deriveCycleState(statusMessage, st.status);
+    final cycleState =
+        cycleStateOverride ?? _deriveCycleState(statusMessage, st.status);
     final isCycleStateChanged = cycleState != _lastEmittedCycleState;
+
+    // Fix 6: Folded hash of individual chunk downloaded bytes instead of chunkDetails?.length
+    final chunkDetailsHash =
+        st.chunks.fold<int>(0, (h, c) => h ^ c.downloaded.hashCode);
 
     final fingerprint = Object.hash(
       downloaded,
@@ -1479,7 +1540,7 @@ class HttpTransferJob {
       eta,
       cycleState,
       statusMessage,
-      chunkDetails?.length,
+      chunkDetailsHash,
       completedChunks,
     );
 
@@ -1495,7 +1556,7 @@ class HttpTransferJob {
       'fileSize': total,
       'speed': speed,
       'eta': eta,
-      'chunks': st.chunks.isNotEmpty ? st.chunkRatios : null,
+      'chunks': null,
       'chunkDetails': chunkDetails,
       'fileName': cmd.resolvedFileName,
       'supportsResume': cmd.supportsResume,
@@ -1506,42 +1567,24 @@ class HttpTransferJob {
         'ytCounterpartDownloadedBytes': ytLiveCounterpartBytes,
       'ytDownloadedBytes': downloaded,
       'statusMessage': statusMessage,
-      'cycleState': cycleState,
+      'cycleState': cycleState.name,
+      if (pauseReason != null) 'pauseReason': pauseReason.name,
       if (totalChunks != null) 'totalChunks': totalChunks,
       if (completedChunks != null) 'completedChunks': completedChunks,
     });
   }
 
-  static String _deriveCycleState(
+  static CycleState _deriveCycleState(
       String? statusMessage, DmxStateStatus status) {
     switch (status) {
       case DmxStateStatus.complete:
-        return 'completed';
+        return CycleState.completed;
       case DmxStateStatus.failed:
-        return 'failed';
+        return CycleState.failed;
       case DmxStateStatus.paused:
-        return 'paused';
+        return CycleState.paused;
       case DmxStateStatus.active:
-        final msg = statusMessage?.toLowerCase() ?? '';
-        if (msg.contains('stalled')) return 'stalled';
-        if (msg.contains('updating links')) return 'updating_links';
-        if (msg.contains('retrying')) return 'retrying';
-        if (msg.contains('restarting') || msg.contains('source changed')) {
-          return 'retrying';
-        }
-        if (msg.contains('checking') || msg.contains('verifying')) {
-          return 'checking';
-        }
-        if (msg.contains('seeding')) return 'seeding';
-        if (msg.contains('completed')) return 'completed';
-        if (msg.contains('starting') ||
-            msg.contains('allocating') ||
-            msg.contains('preparing')) {
-          return 'starting';
-        }
-        if (msg.contains('resuming')) return 'resuming';
-        if (msg.contains('fetching metadata')) return 'fetching_metadata';
-        return 'downloading';
+        return CycleStateResolver.resolve(statusMessage: statusMessage);
     }
   }
 

@@ -83,13 +83,21 @@ abstract class ITorrentService {
   Future<bool> downloadAndApplyBlocklist(String url);
 
   void enableSequentialDownload(int torrentId, bool enabled);
+  void setSequentialDownload(int torrentId, bool enabled);
+  void prioritizeFile(int torrentId, int fileIndex, {int priority = 7});
   void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs);
   void enableSuperSeeding(int torrentId, bool enabled);
+
+  Stream<TorrentAlertEvent> get alertUpdates;
+  List<TorrentAlertEvent> getRecentAlerts([int? torrentId]);
+  void applySettingsPack(TorrentSettingsPack pack);
 
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
     int torrentId,
     String savePath,
   );
+
+  Future<Map<String, dynamic>?> getPieceProgress(int torrentId);
 
   bool shouldStopSeeding({
     required double progress,
@@ -104,3 +112,4 @@ abstract class ITorrentService {
     DateTime? completedAt,
   });
 }
+

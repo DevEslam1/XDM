@@ -2115,12 +2115,44 @@ class DownloadOrchestrator {
     }
             }
 
+            int resolvedLiveAudioSize = liveAudioSize;
+            if (resolvedLiveAudioSize <= 0 && liveAudioTask.mergedAudioUrl != null) {
+              try {
+                final dioProbe = Dio();
+                final headResp = await dioProbe.head(
+                  liveAudioTask.mergedAudioUrl!,
+                  options: Options(
+                    headers: {
+                      if (cookieString != null) 'Cookie': cookieString,
+                      if (YoutubeService.oauthToken != null)
+                        'Authorization': 'Bearer ${YoutubeService.oauthToken}',
+                    },
+                    followRedirects: true,
+                    validateStatus: (s) => s != null && s < 400,
+                  ),
+                );
+                final lenStr = headResp.headers.value(Headers.contentLengthHeader);
+                final probedLen = int.tryParse(lenStr ?? '');
+                if (probedLen != null && probedLen > 0) {
+                  resolvedLiveAudioSize = probedLen;
+                  final idx = _host.providerTasks.indexWhere((x) => x.id == task.id);
+                  if (idx != -1) {
+                    final updated = _host.providerTasks[idx].copyWith(audioSize: probedLen);
+                    _host.providerTasks[idx] = updated;
+                    unawaited(_host.providerDatabaseService.saveTask(updated).catchError((_) {}));
+                  }
+                }
+              } catch (e) {
+                debugPrint('[DMX] Probing counterpart audio size failed: $e');
+              }
+            }
+
             await _host.downloadEngine.download(
               taskId: task.id,
               url: liveAudioTask.mergedAudioUrl!,
               tempFilePath: liveAudioTempPath,
               localFilePath: liveAudioTempPath,
-              knownFileSize: liveAudioSize,
+              knownFileSize: resolvedLiveAudioSize,
               supportsResume: true,
               cancelToken: audioCancelToken,
               cookies: cookieString,
@@ -2552,8 +2584,14 @@ class DownloadOrchestrator {
                     }).toList();
                   }
 
+                  final List<double>? computedChunks = progress.chunks ??
+                      (progress.chunkDetails != null &&
+                              progress.chunkDetails!.isNotEmpty
+                          ? progress.chunkDetails!.map((c) => c.ratio).toList()
+                          : null);
+
                   pushCombinedProgress(
-                    chunksOverride: progress.chunks ??
+                    chunksOverride: computedChunks ??
                         _host.buildChunks(
                           streamThreadCount,
                           videoSizeSoFar > 0
@@ -2569,6 +2607,13 @@ class DownloadOrchestrator {
                     categoryOverride: newCategory,
                     statusMessageOverride: progress.statusMessage,
                   );
+
+                  if (base.isTorrent &&
+                      progress.torrentId != null &&
+                      progress.torrentId! >= 0 &&
+                      _host.providerTorrentIds[task.id] != progress.torrentId) {
+                    _host.providerTorrentIds[task.id] = progress.torrentId!;
+                  }
 
                   // When the torrent metadata name update changes localFilePath,
                   // persist it to the database immediately so _finalizeDownload
@@ -2761,6 +2806,14 @@ class DownloadOrchestrator {
           }
 
           if (hasAudio) {
+            // Task 1: Verify both files exist on disk before merging
+            final vFile = File(task.tempFilePath);
+            final aFile = File(effectiveAudioPath);
+            if (!await vFile.exists() || !await aFile.exists()) {
+              debugPrint('[DMX] Cannot merge: files missing on disk');
+              return;
+            }
+
             // H-3 FIX: Check status before starting merge
             final preMergeCheck = _host.findTaskById(task.id);
             if (preMergeCheck == null ||

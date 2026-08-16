@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import '../engines/http_download_engine.dart';
+import 'cycle_state_resolver.dart';
 import 'engine_models.dart';
 import 'engine_utils.dart';
 
@@ -33,6 +34,7 @@ class DownloadProgressHandler {
 
   Timer? _throttleTimer;
   DownloadProgress? _pendingProgress;
+  CycleState? _lastEmittedCycleState;
 
   final List<Map<String, dynamic>>? Function()? getTorrentFiles;
 
@@ -58,6 +60,7 @@ class DownloadProgressHandler {
 
   void emit(DownloadProgress progress) {
     if (cancelToken.isCancelled) return;
+    _lastEmittedCycleState = progress.cycleState;
     onProgress(progress);
   }
 
@@ -67,25 +70,16 @@ class DownloadProgressHandler {
     _pendingProgress = null;
   }
 
-  static String deriveCycleState(
+  static CycleState deriveCycleState(
     String? statusMessage,
     bool isCancelled,
     bool isTorrent,
   ) {
-    if (isCancelled) return 'paused';
-    final sm = statusMessage?.toLowerCase() ?? '';
-    if (sm.contains('completed') || sm.contains('done')) return 'completed';
-    if (sm.contains('merg') || sm.contains('mux')) return 'merging';
-    if (sm.contains('verif') || sm.contains('check')) return 'verifying';
-    if (sm.contains('allocat')) return 'allocating';
-    if (sm.contains('paus') || sm.contains('stop')) return 'paused';
-    if (sm.contains('seed')) return 'seeding';
-    if (sm.contains('error') || sm.contains('fail')) return 'failed';
-    if (sm.contains('updating') || sm.contains('refresh')) return 'updating_links';
-    if (sm.contains('retry')) return 'retrying';
-    if (sm.contains('resum')) return 'resuming';
-    if (sm.contains('starting') || sm.contains('prepar')) return 'starting';
-    return 'downloading';
+    return CycleStateResolver.resolve(
+      statusMessage: statusMessage,
+      isCancelled: isCancelled,
+      isTorrent: isTorrent,
+    );
   }
 
   Future<void> handleProgress(
@@ -98,10 +92,17 @@ class DownloadProgressHandler {
     TimestampedLruMap<String, int>? ytLiveBytes,
   }) async {
     int? override = ytCounterpartDownloadedOverride;
+    bool isCounterpartUnregistered = false;
     if (override == null && ytLiveBytes != null && ytCounterpartTaskIds != null) {
       final cpId = ytCounterpartTaskIds[taskId];
       if (cpId != null) {
-        override = ytLiveBytes[cpId];
+        final lastAccess = ytLiveBytes.getLastAccessed(cpId);
+        if (lastAccess == null ||
+            DateTime.now().difference(lastAccess) <= const Duration(seconds: 15)) {
+          override = ytLiveBytes[cpId];
+        }
+      } else if (ytStreamKind != null) {
+        isCounterpartUnregistered = true;
       }
     }
     return handleWorkerProgress(
@@ -110,6 +111,7 @@ class DownloadProgressHandler {
       adaptiveThreads: adaptiveThreads,
       effectiveThreadCount: effectiveThreadCount,
       httpEngine: httpEngine,
+      isCounterpartUnregistered: isCounterpartUnregistered,
     );
   }
 
@@ -119,6 +121,7 @@ class DownloadProgressHandler {
     bool adaptiveThreads = false,
     int effectiveThreadCount = 1,
     HttpDownloadEngine? httpEngine,
+    bool isCounterpartUnregistered = false,
   }) async {
     if (cancelToken.isCancelled) return;
 
@@ -147,26 +150,54 @@ class DownloadProgressHandler {
       _handleTorrentFiles(pTorrentFiles);
     }
 
-    final sm = p['statusMessage'] as String?;
-    var cycle = deriveCycleState(sm, cancelToken.isCancelled, isTorrent);
+    var sm = p['statusMessage'] as String?;
+    CycleState? cycle;
+    if (cancelToken.isCancelled) {
+      cycle = CycleState.paused;
+    } else if (p['cycleState'] is CycleState) {
+      cycle = p['cycleState'] as CycleState;
+    } else if (p['cycleState'] is String) {
+      cycle = CycleState.fromName(p['cycleState'] as String);
+    }
+    cycle ??= deriveCycleState(sm, cancelToken.isCancelled, isTorrent);
+
+    // Fix 2: Dynamic YouTube counterpart size & downloaded resolution
+    final dynamicYtCounterpartSize =
+        (p['ytCounterpartSize'] as num?)?.toInt() ?? ytCounterpartSize;
+    final dynamicYtCounterpartDownloaded = ytCounterpartDownloadedOverride ??
+        (p['ytCounterpartDownloadedBytes'] as num?)?.toInt() ??
+        ytCounterpartDownloadedBytes;
+
+    if (isCounterpartUnregistered && ytStreamKind != null && cycle == CycleState.downloading) {
+      final cpSize = dynamicYtCounterpartSize;
+      final cpDone = cpSize != null && cpSize > 0 && 
+                     (dynamicYtCounterpartDownloaded ?? 0) >= cpSize;
+      if (cpDone) {
+        cycle = CycleState.merging;
+        sm = 'Merging audio + video…';
+      } else {
+        cycle = CycleState.starting;
+        sm = 'Waiting for counterpart stream…';
+      }
+    }
 
     // YT Combined Sync Check
-    if (cycle == 'completed' && ytStreamKind != null && ytStreamKind != YtStreamKind.combined) {
-      final cpSize = (p['ytCounterpartSize'] as num?)?.toInt() ?? ytCounterpartSize;
-      final cpLive = ytCounterpartDownloadedOverride ?? ytCounterpartDownloadedBytes ?? 0;
+    if (cycle == CycleState.completed && ytStreamKind != null && ytStreamKind != YtStreamKind.combined) {
+      final cpSize = dynamicYtCounterpartSize;
+      final cpLive = dynamicYtCounterpartDownloaded ?? 0;
       
       final bool counterpartResolved = cpSize != null && cpSize > 0;
       final bool counterpartDone = counterpartResolved && cpLive >= cpSize;
       final bool selfDone = lastFileSize > 0 && lastDownloadedBytes >= lastFileSize;
 
       if (!counterpartResolved || !counterpartDone || !selfDone) {
-        cycle = 'downloading';
+        cycle = CycleState.downloading;
       }
     }
 
     final chunkList = chunkDetails;
     final totalParts = chunkList?.length ?? 0;
-    final isDone = cycle == 'completed';
+    final isDone = cycle == CycleState.completed;
     final doneParts = chunkList == null
         ? 0
         : (isDone ? totalParts : chunkList.where((c) => c.isComplete).length);
@@ -174,6 +205,11 @@ class DownloadProgressHandler {
     lastChunkDetails = chunkDetails ?? lastChunkDetails;
     lastTotalChunks = (isTorrent || chunkDetails == null) ? lastTotalChunks : totalParts;
     lastCompletedChunks = (isTorrent || chunkDetails == null) ? lastCompletedChunks : doneParts;
+
+    final rawPauseReason = p['pauseReason'];
+    final PauseReason? pauseReason = rawPauseReason is PauseReason
+        ? rawPauseReason
+        : (rawPauseReason is String ? PauseReason.fromName(rawPauseReason) : null);
 
     final progress = DownloadProgress(
       downloadedBytes: lastDownloadedBytes,
@@ -185,11 +221,12 @@ class DownloadProgressHandler {
       supportsResume: p['supportsResume'] as bool? ?? resolvedSupportsResume,
       statusMessage: sm,
       ytStreamKind: ytStreamKind,
-      ytCounterpartSize: (p['ytCounterpartSize'] as num?)?.toInt() ?? ytCounterpartSize,
+      ytCounterpartSize: dynamicYtCounterpartSize,
       ytDownloadedBytes: (p['ytDownloadedBytes'] as num?)?.toInt() ?? (ytStreamKind != null ? lastDownloadedBytes : null),
-      ytCounterpartDownloadedBytes: ytCounterpartDownloadedOverride ?? (p['ytCounterpartDownloadedBytes'] as num?)?.toInt() ?? ytCounterpartDownloadedBytes,
+      ytCounterpartDownloadedBytes: dynamicYtCounterpartDownloaded,
       chunkDetails: lastChunkDetails,
       cycleState: cycle,
+      pauseReason: pauseReason,
       totalChunks: (isTorrent || lastChunkDetails == null) ? null : lastTotalChunks,
       completedChunks: (isTorrent || lastChunkDetails == null) ? null : lastCompletedChunks,
       torrentFiles: lastTorrentFiles,
@@ -204,8 +241,12 @@ class DownloadProgressHandler {
     final now = DateTime.now();
     final bool canEmitNow = lastProgressEmitTime == null ||
         now.difference(lastProgressEmitTime!) >= Duration(milliseconds: intervalMs);
+    final isTerminalChange = cycle == CycleState.failed ||
+        cycle == CycleState.completed ||
+        cycle == CycleState.paused;
+    final isCycleStateChange = cycle != _lastEmittedCycleState;
 
-    if (canEmitNow) {
+    if (canEmitNow || isTerminalChange || isCycleStateChange) {
       _throttleTimer?.cancel();
       _throttleTimer = null;
       _pendingProgress = null;
@@ -242,7 +283,6 @@ class DownloadProgressHandler {
       final progress = length > 0 ? (dl / length).clamp(0.0, 1.0) : 1.0;
       map['downloadedBytes'] = dl;
       map['progress'] = progress;
-      map['percent'] = progress;
       map['isComplete'] = length == 0 || dl >= length;
       return map;
     }).toList();

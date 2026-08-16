@@ -284,7 +284,7 @@ void main() {
         eta: null,
         torrentFiles: updatedFiles,
         statusMessage: 'Resuming from saved state…',
-        cycleState: 'resuming',
+        cycleState: CycleState.resuming,
       );
 
       expect(progress.downloadedBytes, equals(700));

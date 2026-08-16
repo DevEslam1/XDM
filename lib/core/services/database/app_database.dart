@@ -209,6 +209,10 @@ class DownloadTasks extends Table {
   TextColumn get mirrorUrls => text()
       .map(const NullAwareTypeConverter.wrap(StringListConverter()))
       .nullable()();
+  TextColumn get pauseReason => text().nullable()();
+  IntColumn get completedPieces => integer().nullable()();
+  IntColumn get ytCounterpartDownloadedBytes => integer().nullable()();
+  TextColumn get cycleState => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -272,7 +276,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -589,9 +593,38 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
                 'CREATE INDEX IF NOT EXISTS idx_browser_tabs_position ON browser_tabs (position)');
           }
-          if (to > 17) {
+          if (from < 18) {
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN pause_reason TEXT');
+            } catch (e) {
+              _dbLog.info('Column pause_reason may already exist: $e');
+            }
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN completed_pieces INTEGER');
+            } catch (e) {
+              _dbLog.info('Column completed_pieces may already exist: $e');
+            }
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN yt_counterpart_downloaded_bytes INTEGER');
+            } catch (e) {
+              _dbLog.info(
+                  'Column yt_counterpart_downloaded_bytes may already exist: $e');
+            }
+          }
+          if (from < 19) {
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN cycle_state TEXT');
+            } catch (e) {
+              _dbLog.info('Column cycle_state may already exist: $e');
+            }
+          }
+          if (to > 19) {
             _dbLog.warning(
-                'AppDatabase: Upgrade target version $to is higher than version 17, no specific migrations defined!');
+                'AppDatabase: Upgrade target version $to is higher than version 19, no specific migrations defined!');
           }
         },
       );

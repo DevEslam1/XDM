@@ -224,3 +224,193 @@ class TrackerInfo {
   });
 }
 
+/// BitTorrent Info Hash protocol version.
+enum TorrentHashVersion {
+  v1,
+  v2,
+  hybrid,
+  unknown,
+}
+
+/// Session settings pack model matching libtorrent settings_pack capabilities.
+class TorrentSettingsPack {
+  final bool enableDht;
+  final bool enableLsd;
+  final bool enablePex;
+  final bool enableUpnp;
+  final int? maxConnectionsGlobal;
+  final int? maxUploadRate; // bytes/sec
+  final int? maxDownloadRate; // bytes/sec
+  final String? socks5ProxyHost;
+  final int? socks5ProxyPort;
+  final bool enforceProxy;
+  final bool forceEncrypt;
+  final bool enableUtp;
+  final bool enableTcp;
+  final int? cacheSize;
+
+  const TorrentSettingsPack({
+    this.enableDht = true,
+    this.enableLsd = true,
+    this.enablePex = true,
+    this.enableUpnp = true,
+    this.maxConnectionsGlobal,
+    this.maxUploadRate,
+    this.maxDownloadRate,
+    this.socks5ProxyHost,
+    this.socks5ProxyPort,
+    this.enforceProxy = false,
+    this.forceEncrypt = false,
+    this.enableUtp = true,
+    this.enableTcp = true,
+    this.cacheSize,
+  });
+
+  TorrentSettingsPack copyWith({
+    bool? enableDht,
+    bool? enableLsd,
+    bool? enablePex,
+    bool? enableUpnp,
+    int? maxConnectionsGlobal,
+    int? maxUploadRate,
+    int? maxDownloadRate,
+    String? socks5ProxyHost,
+    int? socks5ProxyPort,
+    bool? enforceProxy,
+    bool? forceEncrypt,
+    bool? enableUtp,
+    bool? enableTcp,
+    int? cacheSize,
+  }) {
+    return TorrentSettingsPack(
+      enableDht: enableDht ?? this.enableDht,
+      enableLsd: enableLsd ?? this.enableLsd,
+      enablePex: enablePex ?? this.enablePex,
+      enableUpnp: enableUpnp ?? this.enableUpnp,
+      maxConnectionsGlobal: maxConnectionsGlobal ?? this.maxConnectionsGlobal,
+      maxUploadRate: maxUploadRate ?? this.maxUploadRate,
+      maxDownloadRate: maxDownloadRate ?? this.maxDownloadRate,
+      socks5ProxyHost: socks5ProxyHost ?? this.socks5ProxyHost,
+      socks5ProxyPort: socks5ProxyPort ?? this.socks5ProxyPort,
+      enforceProxy: enforceProxy ?? this.enforceProxy,
+      forceEncrypt: forceEncrypt ?? this.forceEncrypt,
+      enableUtp: enableUtp ?? this.enableUtp,
+      enableTcp: enableTcp ?? this.enableTcp,
+      cacheSize: cacheSize ?? this.cacheSize,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'enableDht': enableDht,
+        'enableLsd': enableLsd,
+        'enablePex': enablePex,
+        'enableUpnp': enableUpnp,
+        'maxConnectionsGlobal': maxConnectionsGlobal,
+        'maxUploadRate': maxUploadRate,
+        'maxDownloadRate': maxDownloadRate,
+        'socks5ProxyHost': socks5ProxyHost,
+        'socks5ProxyPort': socks5ProxyPort,
+        'enforceProxy': enforceProxy,
+        'forceEncrypt': forceEncrypt,
+        'enableUtp': enableUtp,
+        'enableTcp': enableTcp,
+        'cacheSize': cacheSize,
+      };
+
+  factory TorrentSettingsPack.fromMap(Map<String, dynamic> map) {
+    return TorrentSettingsPack(
+      enableDht: (map['enableDht'] as bool?) ?? true,
+      enableLsd: (map['enableLsd'] as bool?) ?? true,
+      enablePex: (map['enablePex'] as bool?) ?? true,
+      enableUpnp: (map['enableUpnp'] as bool?) ?? true,
+      maxConnectionsGlobal: (map['maxConnectionsGlobal'] as num?)?.toInt(),
+      maxUploadRate: (map['maxUploadRate'] as num?)?.toInt(),
+      maxDownloadRate: (map['maxDownloadRate'] as num?)?.toInt(),
+      socks5ProxyHost: map['socks5ProxyHost'] as String?,
+      socks5ProxyPort: (map['socks5ProxyPort'] as num?)?.toInt(),
+      enforceProxy: (map['enforceProxy'] as bool?) ?? false,
+      forceEncrypt: (map['forceEncrypt'] as bool?) ?? false,
+      enableUtp: (map['enableUtp'] as bool?) ?? true,
+      enableTcp: (map['enableTcp'] as bool?) ?? true,
+      cacheSize: (map['cacheSize'] as num?)?.toInt(),
+    );
+  }
+}
+
+/// Comprehensive torrent metadata model supporting BitTorrent v1, v2, and Hybrid.
+class TorrentMetadata {
+  final String name;
+  final int totalSize;
+  final String? infoHashV1;
+  final String? infoHashV2;
+  final List<TorrentFileItem> files;
+  final List<String> trackers;
+  final List<String> webSeeds;
+  final int pieceSize;
+  final int pieceCount;
+  final bool isPrivate;
+  final String? comment;
+  final String? createdBy;
+  final DateTime? creationDate;
+
+  const TorrentMetadata({
+    required this.name,
+    required this.totalSize,
+    this.infoHashV1,
+    this.infoHashV2,
+    this.files = const [],
+    this.trackers = const [],
+    this.webSeeds = const [],
+    this.pieceSize = 0,
+    this.pieceCount = 0,
+    this.isPrivate = false,
+    this.comment,
+    this.createdBy,
+    this.creationDate,
+  });
+
+  bool get isV2Only =>
+      (infoHashV2 != null && infoHashV2!.isNotEmpty) &&
+      (infoHashV1 == null || infoHashV1!.isEmpty);
+
+  bool get isHybrid =>
+      (infoHashV1 != null && infoHashV1!.isNotEmpty) &&
+      (infoHashV2 != null && infoHashV2!.isNotEmpty);
+
+  bool get isV1Only =>
+      (infoHashV1 != null && infoHashV1!.isNotEmpty) &&
+      (infoHashV2 == null || infoHashV2!.isEmpty);
+
+  TorrentHashVersion get version {
+    if (isHybrid) return TorrentHashVersion.hybrid;
+    if (isV2Only) return TorrentHashVersion.v2;
+    if (isV1Only) return TorrentHashVersion.v1;
+    return TorrentHashVersion.unknown;
+  }
+
+  String get primaryInfoHash =>
+      infoHashV2?.isNotEmpty == true ? infoHashV2! : (infoHashV1 ?? '');
+}
+
+/// Native engine alert event for deep diagnostics and UI live logging.
+class TorrentAlertEvent {
+  final int type;
+  final int torrentId;
+  final String message;
+  final DateTime timestamp;
+  final String category;
+
+  const TorrentAlertEvent({
+    required this.type,
+    required this.torrentId,
+    required this.message,
+    required this.timestamp,
+    this.category = 'general',
+  });
+
+  @override
+  String toString() =>
+      '[${timestamp.toIso8601String()}] [T$torrentId] ($category) $message';
+}
+
+

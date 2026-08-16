@@ -1,5 +1,10 @@
 import 'package:flutter/foundation.dart';
+import '../../../features/downloads/models/cycle_state.dart';
+import '../../../features/downloads/models/pause_reason.dart';
 import '../download_journal.dart';
+
+export '../../../features/downloads/models/cycle_state.dart';
+export '../../../features/downloads/models/pause_reason.dart';
 
 typedef ValueChangedProgress = void Function(DownloadProgress progress);
 
@@ -192,6 +197,7 @@ class DownloadProgress {
   final int fileSize;
   final double speed;
   final int? eta;
+  @Deprecated('Use chunkDetails instead')
   final List<double>? chunks;
   final String? fileName;
   final List<Map<String, dynamic>>? torrentFiles;
@@ -199,9 +205,12 @@ class DownloadProgress {
   final String? statusMessage;
   final int? torrentId;
   final List<ChunkDetail>? chunkDetails;
-  final String? cycleState;
+  final CycleState? cycleState;
+  final PauseReason? pauseReason;
   final int? totalChunks;
   final int? completedChunks;
+  final int? totalPieces;
+  final int? completedPieces;
   final int? totalFiles;
   final int? completedFiles;
   final int? totalFileBytes;
@@ -224,8 +233,11 @@ class DownloadProgress {
     this.torrentId,
     this.chunkDetails,
     this.cycleState,
+    this.pauseReason,
     this.totalChunks,
     this.completedChunks,
+    this.totalPieces,
+    this.completedPieces,
     this.totalFiles,
     this.completedFiles,
     this.totalFileBytes,
@@ -244,6 +256,16 @@ class DownloadProgress {
           .map((c) => ChunkDetail.fromMap(Map<String, dynamic>.from(c)))
           .toList();
     }
+    final rawCycleState = p['cycleState'];
+    final CycleState? cycleState = rawCycleState is CycleState
+        ? rawCycleState
+        : CycleState.fromName(rawCycleState as String?);
+
+    final rawPauseReason = p['pauseReason'];
+    final PauseReason? pauseReason = rawPauseReason is PauseReason
+        ? rawPauseReason
+        : PauseReason.fromName(rawPauseReason as String?);
+
     return DownloadProgress(
       downloadedBytes: (p['downloadedBytes'] as num?)?.toInt() ?? 0,
       fileSize: (p['fileSize'] as num?)?.toInt() ?? 0,
@@ -255,9 +277,12 @@ class DownloadProgress {
       statusMessage: p['statusMessage'] as String?,
       torrentId: (p['torrentId'] as num?)?.toInt(),
       chunkDetails: details,
-      cycleState: p['cycleState'] as String?,
+      cycleState: cycleState,
+      pauseReason: pauseReason,
       totalChunks: (p['totalChunks'] as num?)?.toInt(),
       completedChunks: (p['completedChunks'] as num?)?.toInt(),
+      totalPieces: (p['totalPieces'] as num?)?.toInt(),
+      completedPieces: (p['completedPieces'] as num?)?.toInt(),
       totalFiles: (p['totalFiles'] as num?)?.toInt(),
       completedFiles: (p['completedFiles'] as num?)?.toInt(),
       totalFileBytes: (p['totalFileBytes'] as num?)?.toInt(),
@@ -281,9 +306,12 @@ class DownloadProgress {
     String? statusMessage,
     int? torrentId,
     List<ChunkDetail>? chunkDetails,
-    String? cycleState,
+    CycleState? cycleState,
+    PauseReason? pauseReason,
     int? totalChunks,
     int? completedChunks,
+    int? totalPieces,
+    int? completedPieces,
     int? totalFiles,
     int? completedFiles,
     int? totalFileBytes,
@@ -306,8 +334,11 @@ class DownloadProgress {
       torrentId: torrentId ?? this.torrentId,
       chunkDetails: chunkDetails ?? this.chunkDetails,
       cycleState: cycleState ?? this.cycleState,
+      pauseReason: pauseReason ?? this.pauseReason,
       totalChunks: totalChunks ?? this.totalChunks,
       completedChunks: completedChunks ?? this.completedChunks,
+      totalPieces: totalPieces ?? this.totalPieces,
+      completedPieces: completedPieces ?? this.completedPieces,
       totalFiles: totalFiles ?? this.totalFiles,
       completedFiles: completedFiles ?? this.completedFiles,
       totalFileBytes: totalFileBytes ?? this.totalFileBytes,
@@ -321,9 +352,10 @@ class DownloadProgress {
 
   double? get ytCombinedProgress {
     if (ytStreamKind == null) return null;
-    if (ytCounterpartSize == null) return null;
-    final totalSize = fileSize + ytCounterpartSize!;
-    if (totalSize == 0) return null;
+    final cpSize = ytCounterpartSize;
+    if (cpSize == null || cpSize < 0) return null;
+    final totalSize = fileSize + cpSize;
+    if (totalSize <= 0) return null;
     final selfDownloaded = ytDownloadedBytes ?? downloadedBytes;
     final cpDownloaded = ytCounterpartDownloadedBytes ?? 0;
     return ((selfDownloaded + cpDownloaded) / totalSize).clamp(0.0, 1.0);
@@ -332,6 +364,34 @@ class DownloadProgress {
   double get progressRatio {
     if (fileSize <= 0) return 0.0;
     return (downloadedBytes / fileSize).clamp(0.0, 1.0);
+  }
+
+  static int _computeChunkDetailsHash(List<ChunkDetail>? details) {
+    if (details == null) return 0;
+    return details.fold<int>(details.length, (h, c) => h ^ c.downloaded.hashCode);
+  }
+
+  static int _computeTorrentFilesHash(List<Map<String, dynamic>>? files) {
+    if (files == null) return 0;
+    return files.fold<int>(
+      files.length,
+      (h, f) => h ^ ((f['downloadedBytes'] as num?)?.toInt() ?? 0).hashCode,
+    );
+  }
+
+  static bool _areChunkDetailsEqual(List<ChunkDetail>? a, List<ChunkDetail>? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return a == b;
+    if (a.length != b.length) return false;
+    return _computeChunkDetailsHash(a) == _computeChunkDetailsHash(b);
+  }
+
+  static bool _areTorrentFilesEqual(
+      List<Map<String, dynamic>>? a, List<Map<String, dynamic>>? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return a == b;
+    if (a.length != b.length) return false;
+    return _computeTorrentFilesHash(a) == _computeTorrentFilesHash(b);
   }
 
   @override
@@ -348,8 +408,11 @@ class DownloadProgress {
           statusMessage == other.statusMessage &&
           torrentId == other.torrentId &&
           cycleState == other.cycleState &&
+          pauseReason == other.pauseReason &&
           totalChunks == other.totalChunks &&
           completedChunks == other.completedChunks &&
+          totalPieces == other.totalPieces &&
+          completedPieces == other.completedPieces &&
           totalFiles == other.totalFiles &&
           completedFiles == other.completedFiles &&
           totalFileBytes == other.totalFileBytes &&
@@ -357,7 +420,9 @@ class DownloadProgress {
           ytStreamKind == other.ytStreamKind &&
           ytCounterpartSize == other.ytCounterpartSize &&
           ytCounterpartDownloadedBytes == other.ytCounterpartDownloadedBytes &&
-          ytDownloadedBytes == other.ytDownloadedBytes;
+          ytDownloadedBytes == other.ytDownloadedBytes &&
+          _areChunkDetailsEqual(chunkDetails, other.chunkDetails) &&
+          _areTorrentFilesEqual(torrentFiles, other.torrentFiles);
 
   @override
   int get hashCode => Object.hash(
@@ -368,15 +433,24 @@ class DownloadProgress {
         fileName,
         statusMessage,
         cycleState,
+        pauseReason,
         torrentId,
         totalChunks,
         completedChunks,
+        totalPieces,
+        completedPieces,
         totalFiles,
         completedFiles,
         totalFileBytes,
         downloadedFileBytes,
         ytStreamKind,
         ytCounterpartSize,
+        Object.hash(
+          ytCounterpartDownloadedBytes,
+          ytDownloadedBytes,
+          _computeChunkDetailsHash(chunkDetails),
+          _computeTorrentFilesHash(torrentFiles),
+        ),
       );
 }
 

@@ -121,7 +121,7 @@ class FakeDownloadEngine extends DownloadEngine {
         fileSize: knownFileSize,
         speed: 1000,
         eta: 1,
-        cycleState: 'downloading',
+        cycleState: CycleState.downloading,
       ));
     });
 
@@ -132,7 +132,7 @@ class FakeDownloadEngine extends DownloadEngine {
         fileSize: knownFileSize,
         speed: 1000,
         eta: 0,
-        cycleState: 'downloading',
+        cycleState: CycleState.downloading,
       ));
       writeOutput(tempFilePath, knownFileSize);
       writeOutput(localFilePath, knownFileSize);
