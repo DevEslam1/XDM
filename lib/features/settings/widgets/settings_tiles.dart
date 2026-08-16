@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../provider/settings_provider.dart';
@@ -33,7 +32,7 @@ class SettingsSectionGroup extends StatelessWidget {
             ? AppTheme.surface.withValues(alpha: 0.4)
             : AppTheme.lightSurface.withValues(alpha: 0.4));
 
-    Widget content = Material(
+    final Widget content = Material(
       color: backgroundColor,
       child: Column(
         children: List.generate(children.length, (index) {
@@ -57,14 +56,6 @@ class SettingsSectionGroup extends StatelessWidget {
         }),
       ),
     );
-
-    if (!classicUi) {
-      content = DmxBackdropFilter(
-        sigmaX: 12,
-        sigmaY: 12,
-        child: content,
-      );
-    }
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),

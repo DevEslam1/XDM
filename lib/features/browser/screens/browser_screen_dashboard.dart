@@ -326,7 +326,7 @@ mixin _DashboardMixin on _BrowserScreenStateBase {
     final textPrimary =
         isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
-    return GlassCard(
+    return GlassCard.listItem(
       borderRadius: 16,
       padding: EdgeInsets.zero,
       isDarkMode: isDark,

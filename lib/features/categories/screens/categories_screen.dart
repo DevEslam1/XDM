@@ -408,16 +408,13 @@ class CategoriesScreen extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
-      child: DmxBackdropFilter(
-        sigmaX: 10,
-        sigmaY: 10,
-        child: Container(
-          width: double.infinity,
-          height: 120,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration:
-              AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
-          child: Row(
+      child: Container(
+        width: double.infinity,
+        height: 120,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration:
+            AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
+        child: Row(
             children: [
               // 1. Donut PieChart
               SizedBox(
@@ -527,7 +524,6 @@ class CategoriesScreen extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
   }
 

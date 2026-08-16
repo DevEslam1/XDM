@@ -50,6 +50,23 @@ class GlassCard extends StatefulWidget {
     this.enableBlur = false,
   });
 
+  /// Non-blurred variant for scrolling list/grid items. Policy: blur filters
+  /// are screen-level only; list items must render static semi-transparent
+  /// surfaces so the GPU never allocates a per-item backdrop snapshot.
+  const GlassCard.listItem({
+    super.key,
+    required this.child,
+    this.borderRadius = 16.0,
+    this.padding,
+    this.isDarkMode = true,
+    this.border,
+    this.accentColor,
+    this.showRail = false,
+    this.elevated = false,
+    this.gradientBorder,
+    this.onTap,
+  }) : enableBlur = false;
+
   @override
   State<GlassCard> createState() => _GlassCardState();
 }

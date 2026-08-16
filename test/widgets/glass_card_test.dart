@@ -55,8 +55,8 @@ void main() {
     });
 
     testWidgets(
-        'renders BackdropFilter when blur is enabled and conditions are normal',
-        (tester) async {
+        'GlassCard renders solid surface and never allocates a BackdropFilter '
+        'even when blur is enabled under normal conditions', (tester) async {
       PowerMonitor.setBatteryForTesting(
         level: 100,
         state: BatteryState.discharging,
@@ -75,7 +75,27 @@ void main() {
       );
 
       expect(find.text('Card in Normal Power'), findsOneWidget);
-      expect(find.byType(BackdropFilter), findsOneWidget);
+      expect(find.byType(BackdropFilter), findsNothing);
+    });
+
+    testWidgets('GlassCard.listItem factory is non-blurred', (tester) async {
+      PowerMonitor.setBatteryForTesting(
+        level: 100,
+        state: BatteryState.discharging,
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: GlassCard.listItem(
+              child: Text('List Item Card'),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('List Item Card'), findsOneWidget);
+      expect(find.byType(BackdropFilter), findsNothing);
     });
   });
 }

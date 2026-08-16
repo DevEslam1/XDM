@@ -685,7 +685,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                 video['thumbnailUrl'] as String?;
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 6),
-                              child: GlassCard(
+                              child: GlassCard.listItem(
                                 borderRadius: 14,
                                 padding: EdgeInsets.zero,
                                 isDarkMode: isDark,

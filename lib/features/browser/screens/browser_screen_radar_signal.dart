@@ -150,7 +150,7 @@ class _SnifferRadarCard extends StatelessWidget {
         ? green
         : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted);
 
-    return GlassCard(
+    return GlassCard.listItem(
       borderRadius: 20,
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       isDarkMode: isDark,
