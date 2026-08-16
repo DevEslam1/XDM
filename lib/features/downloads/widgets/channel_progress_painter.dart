@@ -3,17 +3,21 @@ import 'package:dmx/core/app_theme.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/services/engine/engine_models.dart';
+
 /// Repaints in isolation — the parent widget never rebuilds on progress ticks.
 /// Pass a `ValueListenable<double>` and only the paint() call re-executes.
 class ChannelProgressPainter extends CustomPainter {
   final ValueListenable<double> progress;
   final bool isDark;
   final bool isTorrent;
+  final List<ChunkDetail> chunkDetails;
 
   ChannelProgressPainter({
     required this.progress,
     required this.isDark,
     required this.isTorrent,
+    this.chunkDetails = const [],
   }) : super(repaint: progress); // ← repaints ONLY when value changes
 
   @override
@@ -67,11 +71,18 @@ class ChannelProgressPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant ChannelProgressPainter old) {
-    // FIX-H7: Compare progress.value numerically with epsilon = 0.001
-    return (old.progress.value - progress.value).abs() > 0.001 ||
-        old.isDark != isDark ||
-        old.isTorrent != isTorrent;
+  bool shouldRepaint(covariant ChannelProgressPainter oldDelegate) {
+    if (oldDelegate.chunkDetails.length != chunkDetails.length) return true;
+    for (int i = 0; i < chunkDetails.length; i++) {
+      if (oldDelegate.chunkDetails[i].downloaded != chunkDetails[i].downloaded ||
+          oldDelegate.chunkDetails[i].isComplete != chunkDetails[i].isComplete) {
+        return true;
+      }
+    }
+    return (oldDelegate.progress.value - progress.value).abs() > 0.001 ||
+        oldDelegate.progress != progress ||
+        oldDelegate.isDark != isDark ||
+        oldDelegate.isTorrent != isTorrent;
   }
 }
 

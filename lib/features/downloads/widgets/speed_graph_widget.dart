@@ -145,11 +145,11 @@ class _SpeedGraphWidgetState extends State<SpeedGraphWidget> {
                 height: widget.height,
                 child: RepaintBoundary(
                   child: CustomPaint(
-                    painter: _SpeedGraphPainter(
-                      samples: _displayHistory,
+                    painter: SpeedGraphPainter(
+                      dataPoints: _displayHistory,
                       color: color,
                       isDark: isDark,
-                      maxY: _maxY,
+                      maxSpeed: _maxY,
                     ),
                     size: Size(double.infinity, widget.height),
                   ),
@@ -187,23 +187,25 @@ class _SpeedGraphWidgetState extends State<SpeedGraphWidget> {
   }
 }
 
-class _SpeedGraphPainter extends CustomPainter {
-  final List<int> samples;
+class SpeedGraphPainter extends CustomPainter {
+  final List<int> dataPoints;
   final Color color;
   final bool isDark;
-  final double maxY;
-  final int samplesHash;
+  final double maxSpeed;
 
-  _SpeedGraphPainter({
-    required this.samples,
+  SpeedGraphPainter({
+    required this.dataPoints,
     required this.color,
     required this.isDark,
-    required this.maxY,
-  }) : samplesHash = Object.hashAll(samples);
+    required this.maxSpeed,
+  });
+
+  List<int> get samples => dataPoints;
+  double get maxY => maxSpeed;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.width <= 0 || size.height <= 0 || samples.isEmpty) return;
+    if (size.width <= 0 || size.height <= 0 || dataPoints.isEmpty) return;
 
     final gridPaint = Paint()
       ..color = isDark ? Colors.white10 : Colors.black12
@@ -233,12 +235,12 @@ class _SpeedGraphPainter extends CustomPainter {
 
     final path = Path();
     final fillPath = Path();
-    final stepX = size.width / (samples.length - 1);
+    final stepX = size.width / (dataPoints.length - 1);
 
-    for (int i = 0; i < samples.length; i++) {
+    for (int i = 0; i < dataPoints.length; i++) {
       final x = i * stepX;
       final y =
-          size.height - ((samples[i] / maxY).clamp(0.0, 1.0) * (size.height - 4) + 2);
+          size.height - ((dataPoints[i] / maxSpeed).clamp(0.0, 1.0) * (size.height - 4) + 2);
       if (i == 0) {
         path.moveTo(x, y);
         fillPath.moveTo(x, size.height);
@@ -256,10 +258,12 @@ class _SpeedGraphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SpeedGraphPainter oldDelegate) {
-    return oldDelegate.samplesHash != samplesHash ||
+  bool shouldRepaint(covariant SpeedGraphPainter oldDelegate) {
+    if (oldDelegate.dataPoints.length != dataPoints.length) return true;
+    if (dataPoints.isNotEmpty && 
+        oldDelegate.dataPoints.last != dataPoints.last) return true;
+    return oldDelegate.maxSpeed != maxSpeed ||
         oldDelegate.color != color ||
-        oldDelegate.isDark != isDark ||
-        oldDelegate.maxY != maxY;
+        oldDelegate.isDark != isDark;
   }
 }
