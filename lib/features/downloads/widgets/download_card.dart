@@ -895,15 +895,17 @@ class _ChunkedProgressBar extends StatelessWidget {
           shouldRebuild: (prev, next) => !listEquals(prev, next),
           builder: (_, liveChunks, __) {
             final activeChunks = liveChunks.isNotEmpty ? liveChunks : chunks;
-            return SizedBox(
-              height: 8,
-              child: CustomPaint(
-                painter: _ChunkPainter(
-                  chunks: activeChunks,
-                  isDark: isDark,
-                  color: color,
+            return RepaintBoundary(
+              child: SizedBox(
+                height: 8,
+                child: CustomPaint(
+                  painter: _ChunkPainter(
+                    chunks: activeChunks,
+                    isDark: isDark,
+                    color: color,
+                  ),
+                  size: const Size(double.infinity, 8),
                 ),
-                size: const Size(double.infinity, 8),
               ),
             );
           },
