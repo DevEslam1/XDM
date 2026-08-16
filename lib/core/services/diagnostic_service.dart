@@ -115,4 +115,88 @@ class DiagnosticService {
     }
     return info;
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Telemetry Metrics (FIX-23)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  int _isolateBytesTransferred = 0;
+  int _isolateMessageCount = 0;
+  final List<double> _progressLatenciesMs = [];
+  static const int _maxLatencySamples = 1000;
+  int _currentDbWriteQueueDepth = 0;
+  int _maxDbWriteQueueDepth = 0;
+  int _mirrorHealthHits = 0;
+  int _mirrorHealthMisses = 0;
+
+  int get isolateBytesTransferred => _isolateBytesTransferred;
+  int get isolateMessageCount => _isolateMessageCount;
+  int get currentDbWriteQueueDepth => _currentDbWriteQueueDepth;
+  int get maxDbWriteQueueDepth => _maxDbWriteQueueDepth;
+  int get mirrorHealthHits => _mirrorHealthHits;
+  int get mirrorHealthMisses => _mirrorHealthMisses;
+
+  double get mirrorHealthCacheHitRate {
+    final total = _mirrorHealthHits + _mirrorHealthMisses;
+    if (total == 0) return 0.0;
+    return _mirrorHealthHits / total;
+  }
+
+  void recordIsolatePayloadSize(int bytes) {
+    _isolateBytesTransferred += bytes;
+    _isolateMessageCount++;
+  }
+
+  void recordProgressLatency(Duration latency) {
+    _progressLatenciesMs.add(latency.inMicroseconds / 1000.0);
+    if (_progressLatenciesMs.length > _maxLatencySamples) {
+      _progressLatenciesMs.removeAt(0);
+    }
+  }
+
+  double get p95ProgressLatencyMs {
+    if (_progressLatenciesMs.isEmpty) return 0.0;
+    final sorted = List<double>.from(_progressLatenciesMs)..sort();
+    final index = (sorted.length * 0.95).floor();
+    final clamped = index.clamp(0, sorted.length - 1);
+    return sorted[clamped];
+  }
+
+  void recordDbWriteQueueDepth(int depth) {
+    _currentDbWriteQueueDepth = depth;
+    if (depth > _maxDbWriteQueueDepth) {
+      _maxDbWriteQueueDepth = depth;
+    }
+  }
+
+  void recordMirrorHealthAccess({required bool isHit}) {
+    if (isHit) {
+      _mirrorHealthHits++;
+    } else {
+      _mirrorHealthMisses++;
+    }
+  }
+
+  void resetTelemetryMetrics() {
+    _isolateBytesTransferred = 0;
+    _isolateMessageCount = 0;
+    _progressLatenciesMs.clear();
+    _currentDbWriteQueueDepth = 0;
+    _maxDbWriteQueueDepth = 0;
+    _mirrorHealthHits = 0;
+    _mirrorHealthMisses = 0;
+  }
+
+  Map<String, dynamic> telemetryMetricsSnapshot() {
+    return {
+      'isolateMessageBytes': _isolateBytesTransferred,
+      'isolateMessageCount': _isolateMessageCount,
+      'p95ProgressLatencyMs': p95ProgressLatencyMs,
+      'currentDbWriteQueueDepth': _currentDbWriteQueueDepth,
+      'maxDbWriteQueueDepth': _maxDbWriteQueueDepth,
+      'mirrorHealthHits': _mirrorHealthHits,
+      'mirrorHealthMisses': _mirrorHealthMisses,
+      'mirrorHealthCacheHitRate': mirrorHealthCacheHitRate,
+    };
+  }
 }
