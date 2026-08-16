@@ -41,7 +41,7 @@ import 'filter_chips_bar.dart';
 /// Every variant exposes the same telemetry strip:
 ///   DOWNLOADED / TOTAL SIZE / ELAPSED / TIME REMAINING / SPEED
 /// plus a chunked progress bar and the total percentage readout.
-class DownloadCard extends StatelessWidget with HapticHelper {
+class DownloadCard extends StatefulWidget {
   final DownloadTask task;
   final bool compact;
   final bool showDragHandle;
@@ -56,7 +56,22 @@ class DownloadCard extends StatelessWidget with HapticHelper {
   });
 
   @override
+  State<DownloadCard> createState() => _DownloadCardState();
+}
+
+class _DownloadCardState extends State<DownloadCard>
+    with AutomaticKeepAliveClientMixin, HapticHelper {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
+    final task = widget.task;
+    final compact = widget.compact;
+    final showDragHandle = widget.showDragHandle;
+    final index = widget.index;
+
     final isSelectionMode =
         context.select((DownloadProvider p) => p.isSelectionMode);
     final provider = context.read<DownloadProvider>();
@@ -143,30 +158,31 @@ class DownloadCard extends StatelessWidget with HapticHelper {
             child: cardWidget,
           );
 
-    final Widget buildResult = Semantics(
+    final Widget wrappedCard = RepaintBoundary(
+      child: Hero(
+        tag: 'download_card_${task.id}',
+        createRectTween: (begin, end) => RectTween(begin: begin, end: end),
+        child: interactiveCard,
+      ),
+    );
+
+    final Widget sizedCard = (MediaQuery.sizeOf(context).width >= 600)
+        ? Align(
+            alignment: Alignment.center,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 450.0),
+              child: wrappedCard,
+            ),
+          )
+        : wrappedCard;
+
+    return Semantics(
       container: true,
       explicitChildNodes: true,
       label: semanticLabel,
       hint: L10n.of(context, 'double_tap_details_hint'),
-      child: RepaintBoundary(
-        child: Hero(
-          tag: 'download_card_${task.id}',
-          createRectTween: (begin, end) => RectTween(begin: begin, end: end),
-          child: interactiveCard,
-        ),
-      ),
+      child: sizedCard,
     );
-
-    if (MediaQuery.sizeOf(context).width >= 600) {
-      return Align(
-        alignment: Alignment.center,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 450.0),
-          child: buildResult,
-        ),
-      );
-    }
-    return buildResult;
   }
 }
 
