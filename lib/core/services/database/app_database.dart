@@ -7,7 +7,96 @@ import '../logging_service.dart';
 
 part 'app_database.g.dart';
 
-final _dbLog = LoggingService.logger('AppDatabase');
+/// Binary packed format converter for chunk and torrent file detail blobs (FIX-12).
+/// Format: [int32 count, [int64 start, int64 end, int64 size, int64 downloaded, int8 isComplete] * count]
+class BinaryChunkBlobConverter {
+  const BinaryChunkBlobConverter._();
+
+  static Uint8List pack(
+    List<({int start, int end, int size, int downloaded, bool isComplete})> items,
+  ) {
+    final count = items.length;
+    final byteData = ByteData(4 + count * 33);
+    byteData.setInt32(0, count, Endian.big);
+    int offset = 4;
+    for (final item in items) {
+      byteData.setInt64(offset, item.start, Endian.big);
+      byteData.setInt64(offset + 8, item.end, Endian.big);
+      byteData.setInt64(offset + 16, item.size, Endian.big);
+      byteData.setInt64(offset + 24, item.downloaded, Endian.big);
+      byteData.setUint8(offset + 32, item.isComplete ? 1 : 0);
+      offset += 33;
+    }
+    return byteData.buffer.asUint8List();
+  }
+
+  static List<({int start, int end, int size, int downloaded, bool isComplete})>
+      unpack(Uint8List bytes) {
+    if (bytes.length < 4) {
+      return _tryParseJson(bytes);
+    }
+    // Fallback detection: if first byte is '[' or '{' (ASCII 91 or 123), it is json text
+    if (bytes[0] == 0x5B || bytes[0] == 0x7B) {
+      return _tryParseJson(bytes);
+    }
+    try {
+      final byteData = ByteData.sublistView(bytes);
+      final count = byteData.getInt32(0, Endian.big);
+      if (count <= 0 || bytes.length < 4 + count * 33) {
+        return _tryParseJson(bytes);
+      }
+      final result = <({
+        int start,
+        int end,
+        int size,
+        int downloaded,
+        bool isComplete
+      })>[];
+      int offset = 4;
+      for (int i = 0; i < count; i++) {
+        final start = byteData.getInt64(offset, Endian.big);
+        final end = byteData.getInt64(offset + 8, Endian.big);
+        final size = byteData.getInt64(offset + 16, Endian.big);
+        final downloaded = byteData.getInt64(offset + 24, Endian.big);
+        final isComplete = byteData.getUint8(offset + 32) != 0;
+        offset += 33;
+        result.add((
+          start: start,
+          end: end,
+          size: size,
+          downloaded: downloaded,
+          isComplete: isComplete,
+        ));
+      }
+      return result;
+    } catch (_) {
+      return _tryParseJson(bytes);
+    }
+  }
+
+  static List<({int start, int end, int size, int downloaded, bool isComplete})>
+      _tryParseJson(Uint8List bytes) {
+    try {
+      final text = utf8.decode(bytes);
+      final decoded = jsonDecode(text);
+      if (decoded is List) {
+        return decoded.map((e) {
+          if (e is Map) {
+            return (
+              start: (e['start'] as num?)?.toInt() ?? 0,
+              end: (e['end'] as num?)?.toInt() ?? 0,
+              size: (e['size'] as num?)?.toInt() ?? 0,
+              downloaded: (e['downloaded'] as num?)?.toInt() ?? 0,
+              isComplete: (e['isComplete'] as bool?) ?? false,
+            );
+          }
+          return (start: 0, end: 0, size: 0, downloaded: 0, isComplete: false);
+        }).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+}
 
 List<double> _recoverDoubleList(String fromDb) {
   try {
@@ -333,7 +422,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e) : dbPath = null;
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -695,9 +784,12 @@ class AppDatabase extends _$AppDatabase {
           if (from < 21) {
             await _createTaskSummaryView();
           }
-          if (to > 21) {
+          if (from < 22) {
+            _dbLog.info('Migration v21→v22: binary packed format support for chunks and torrentFiles');
+          }
+          if (to > 22) {
             _dbLog.warning(
-                'AppDatabase: Upgrade target version $to is higher than version 21, no specific migrations defined!');
+                'AppDatabase: Upgrade target version $to is higher than version 22, no specific migrations defined!');
           }
         },
       );
