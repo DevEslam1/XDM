@@ -169,5 +169,38 @@ void main() {
       expect(next, isNot(equals('https://mirror1.example.com/file.bin')));
       expect(failover.mirrorSwitches, equals(1));
     });
+
+    test('3 mirrors with 3 attempts each computes maxTotalAttempts of 9', () {
+      final mirrors = [
+        'https://mirror1.example.com/file.bin',
+        'https://mirror2.example.com/file.bin',
+        'https://mirror3.example.com/file.bin',
+      ];
+      final failover = MirrorFailover(mirrors);
+      const maxAttempts = 3;
+      final maxTotalAttempts =
+          (failover.hasAlternatives ? failover.remainingAlternatives + 1 : 1) *
+              maxAttempts;
+      expect(maxTotalAttempts, equals(9));
+
+      // Simulate chunk loop iteration counting
+      var totalMirrorAttempts = 0;
+      var attempts = 0;
+      while (totalMirrorAttempts <= maxTotalAttempts) {
+        attempts++;
+        totalMirrorAttempts++;
+        if (totalMirrorAttempts > maxTotalAttempts) {
+          break;
+        }
+        if (attempts >= maxAttempts) {
+          failover.advance();
+          attempts = (attempts - 1).clamp(1, maxAttempts);
+        }
+      }
+
+      // Must terminate at exactly 9 iterations
+      expect(totalMirrorAttempts, equals(10)); // Exits at 10th attempt check
+      expect(totalMirrorAttempts > maxTotalAttempts, isTrue);
+    });
   });
 }

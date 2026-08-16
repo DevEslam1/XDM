@@ -153,5 +153,45 @@ void main() {
 
       handler.dispose();
     });
+
+    test(
+        'Counterpart wait timer resets when isCounterpartUnregistered becomes false or counterpart finishes',
+        () async {
+      final cancelToken = CancelToken();
+      final handler = DownloadProgressHandler(
+        taskId: 'yt_video_1',
+        onProgress: (_) {},
+        cancelToken: cancelToken,
+        resolvedFileName: 'video.mp4',
+        resolvedSupportsResume: true,
+        ytStreamKind: YtStreamKind.video,
+        ytCounterpartSize: 5000,
+        ytCounterpartDownloadedBytes: 1000,
+        isTorrent: false,
+        getEffectiveIntervalMs: () => 50,
+        lastDownloadedBytes: 1000,
+        lastFileSize: 5000,
+      );
+
+      // Trigger progress where counterpart is unregistered
+      await handler.handleWorkerProgress({
+        'downloadedBytes': 1000,
+        'fileSize': 5000,
+        'cycleState': 'downloading',
+      }, isCounterpartUnregistered: true);
+
+      expect(handler.counterpartWaitStartForTesting, isNotNull);
+
+      // Now next progress event arrives where counterpart is registered / not unregistered
+      await handler.handleWorkerProgress({
+        'downloadedBytes': 1500,
+        'fileSize': 5000,
+        'cycleState': 'downloading',
+      }, isCounterpartUnregistered: false);
+
+      expect(handler.counterpartWaitStartForTesting, isNull);
+
+      handler.dispose();
+    });
   });
 }

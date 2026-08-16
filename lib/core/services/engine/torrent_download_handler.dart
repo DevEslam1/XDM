@@ -9,7 +9,6 @@ import 'package:path/path.dart' as p;
 import '../../../features/downloads/provider/network_monitor.dart';
 import '../../di/injection.dart';
 import '../../interfaces/i_torrent_service.dart';
-import '../background_gate.dart';
 import '../download_engine.dart';
 import '../logging_service.dart';
 import '../power_monitor.dart';
@@ -525,8 +524,11 @@ class TorrentDownloadHandler {
       ));
     }
 
+    final cancelCompleter = Completer<void>();
     cancelToken.whenCancel.then((cancelReason) async {
       if (torrentCompleted) return;
+      if (cancelCompleter.isCompleted) return;
+      cancelCompleter.complete();
       try {
         TorrentService.pauseTorrent(id);
       } catch (e, st) {
@@ -689,8 +691,9 @@ class TorrentDownloadHandler {
     Timer? stallWatchdog;
 
     try {
-      stallWatchdog = Timer.periodic(
-          BackgroundGate.adaptInterval(const Duration(seconds: 30)), (_) {
+      // Stall watchdog uses an unadapted 30-second interval to ensure responsive
+      // detection of lost network and stalled peer connections across lifecycle states.
+      stallWatchdog = Timer.periodic(const Duration(seconds: 30), (_) {
         if (getIt.isRegistered<NetworkMonitor>()) {
           final networkMonitor = getIt<NetworkMonitor>();
           if (!networkMonitor.hasConnection) {

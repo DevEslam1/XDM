@@ -956,7 +956,7 @@ class HttpTransferJob {
           final next = failover.advance();
           if (next != null) {
             activeUrl = next;
-            attempts = 0;
+            attempts = max(1, attempts - 1);
             debugPrint('[DMX-Job] failing over to mirror: $next');
             _emitProgress(_stopwatch.elapsedMilliseconds,
                 statusMessage: 'Retrying (mirror failover)…',
@@ -972,7 +972,19 @@ class HttpTransferJob {
       } on PositionalFileWriterException {
         rethrow;
       } catch (e) {
-        if (attempts >= maxAttempts) rethrow;
+        if (attempts >= maxAttempts) {
+          final next = failover.advance();
+          if (next != null) {
+            activeUrl = next;
+            attempts = max(1, attempts - 1);
+            debugPrint('[DMX-Job] failing over to mirror: $next');
+            _emitProgress(_stopwatch.elapsedMilliseconds,
+                statusMessage: 'Retrying (mirror failover)…',
+                cycleStateOverride: CycleState.retrying);
+            continue;
+          }
+          rethrow;
+        }
         await _cancellableDelay(Duration(seconds: attempts * 2));
       }
     }
@@ -1165,6 +1177,8 @@ class HttpTransferJob {
               if (await f.exists()) await f.delete();
             } catch (_) {} // coverage:ignore-line
           }
+          chunk.downloaded = 0;
+          st.chunks = ChunkScheduler.singleStream(st.totalSize);
           throw DioException(
             requestOptions: response.requestOptions,
             type: DioExceptionType.badResponse,
@@ -1334,7 +1348,7 @@ class HttpTransferJob {
           final next = failover.advance();
           if (next != null) {
             activeUrl = next;
-            attempts = 0;
+            attempts = max(1, attempts - 1);
             _state!.status = DmxStateStatus.active;
             _emitProgress(_stopwatch.elapsedMilliseconds,
                 statusMessage: 'Retrying (mirror failover)…',

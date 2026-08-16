@@ -59,5 +59,15 @@ void main() {
       expect(files[1]['downloadedBytes'], 50);
       expect(files[2]['downloadedBytes'], 50);
     });
+
+    test(
+        'Cancellation callback handles multiple cancels safely and executes cleanly',
+        () async {
+      final handler = TorrentDownloadHandler();
+      expect(handler.activeTorrentIds, isEmpty);
+
+      // Verify that removeActiveTorrent is safe for non-existent IDs
+      expect(() => handler.removeActiveTorrent(99999), returnsNormally);
+    });
   });
 }

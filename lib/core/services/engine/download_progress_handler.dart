@@ -302,44 +302,48 @@ class DownloadProgressHandler {
         }
       } catch (_) {}
 
-      // Decouple slow-start: extend timeout to 5 minutes before throwing UrlExpiredException
-      if (waitDiff > const Duration(minutes: 5)) {
+      if (!isCounterpartUnregistered) {
         _counterpartWaitStart = null;
-        _handleUrlExpired();
-        emit(DownloadProgress(
-          downloadedBytes: lastDownloadedBytes,
-          fileSize: lastFileSize,
-          speed: 0,
-          eta: null,
-          cycleState: CycleState.updatingLinks,
-          statusMessage: 'Refreshing links…',
-        ));
-        throw const UrlExpiredException(
-          'Counterpart stream lost — refresh required',
-          refreshAllMirrors: true,
-        );
-      }
-      final cpSize = dynamicYtCounterpartSize;
-      final cpDone = cpSize != null &&
-          cpSize > 0 &&
-          (dynamicYtCounterpartDownloaded ?? 0) >= cpSize;
-      if (cpDone) {
-        _counterpartWaitStart = null;
-        final bool selfDone =
-            lastFileSize > 0 && lastDownloadedBytes >= lastFileSize;
-        if (selfDone) {
-          cycle = CycleState.merging;
-          sm = 'Merging audio + video…';
-        } else {
-          cycle = CycleState.downloading;
-          sm = 'Downloading (counterpart ready)…';
-        }
-      } else if (waitDiff > const Duration(seconds: 30)) {
-        cycle = CycleState.retrying;
-        sm = 'Waiting for counterpart stream…';
       } else {
-        cycle = CycleState.starting;
-        sm = 'Waiting for counterpart stream…';
+        // Decouple slow-start: extend timeout to 5 minutes before throwing UrlExpiredException
+        if (waitDiff > const Duration(minutes: 5)) {
+          _counterpartWaitStart = null;
+          _handleUrlExpired();
+          emit(DownloadProgress(
+            downloadedBytes: lastDownloadedBytes,
+            fileSize: lastFileSize,
+            speed: 0,
+            eta: null,
+            cycleState: CycleState.updatingLinks,
+            statusMessage: 'Refreshing links…',
+          ));
+          throw const UrlExpiredException(
+            'Counterpart stream lost — refresh required',
+            refreshAllMirrors: true,
+          );
+        }
+        final cpSize = dynamicYtCounterpartSize;
+        final cpDone = cpSize != null &&
+            cpSize > 0 &&
+            (dynamicYtCounterpartDownloaded ?? 0) >= cpSize;
+        if (cpDone) {
+          _counterpartWaitStart = null;
+          final bool selfDone =
+              lastFileSize > 0 && lastDownloadedBytes >= lastFileSize;
+          if (selfDone) {
+            cycle = CycleState.merging;
+            sm = 'Merging audio + video…';
+          } else {
+            cycle = CycleState.downloading;
+            sm = 'Downloading (counterpart ready)…';
+          }
+        } else if (waitDiff > const Duration(seconds: 30)) {
+          cycle = CycleState.retrying;
+          sm = 'Waiting for counterpart stream…';
+        } else {
+          cycle = CycleState.starting;
+          sm = 'Waiting for counterpart stream…';
+        }
       }
     } else {
       _counterpartWaitStart = null;
