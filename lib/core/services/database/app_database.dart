@@ -55,6 +55,19 @@ List<Map<String, dynamic>> _recoverTorrentFiles(String fromDb) {
 class DoubleListConverter extends TypeConverter<List<double>, String> {
   const DoubleListConverter();
 
+  /// Bounded cache of regex-recovered values so repeatedly reading the same
+  /// corrupted cell does not re-run the recovery pass on every query.
+  static final Map<String, List<double>> _recoveryCache = {};
+  static const int _recoveryCacheLimit = 64;
+
+  /// Clears the bounded recovery cache. Testing hook.
+  @visibleForTesting
+  static void clearRecoveryCache() => _recoveryCache.clear();
+
+  /// Current number of cached recovered values. Testing hook.
+  @visibleForTesting
+  static int get recoveryCacheLength => _recoveryCache.length;
+
   @override
   List<double> fromSql(String fromDb) {
     if (fromDb.trim().isEmpty) return [];
@@ -79,9 +92,15 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
           'DoubleListConverter: unexpected type ${decoded.runtimeType} for input');
       return [];
     } catch (e) {
+      final cached = _recoveryCache[fromDb];
+      if (cached != null) return cached;
       try {
         final result = _recoverDoubleList(fromDb);
         if (result.isNotEmpty) {
+          if (_recoveryCache.length >= _recoveryCacheLimit) {
+            _recoveryCache.clear();
+          }
+          _recoveryCache[fromDb] = result;
           _dbLog.info(
               'Successfully recovered ${result.length} double items from corrupted JSON');
           return result;
@@ -101,6 +120,19 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
 class TorrentFilesConverter
     extends TypeConverter<List<Map<String, dynamic>>, String> {
   const TorrentFilesConverter();
+
+  /// Bounded cache of regex-recovered values so repeatedly reading the same
+  /// corrupted cell does not re-run the recovery pass on every query.
+  static final Map<String, List<Map<String, dynamic>>> _recoveryCache = {};
+  static const int _recoveryCacheLimit = 64;
+
+  /// Clears the bounded recovery cache. Testing hook.
+  @visibleForTesting
+  static void clearRecoveryCache() => _recoveryCache.clear();
+
+  /// Current number of cached recovered values. Testing hook.
+  @visibleForTesting
+  static int get recoveryCacheLength => _recoveryCache.length;
 
   @override
   List<Map<String, dynamic>> fromSql(String fromDb) {
@@ -125,9 +157,15 @@ class TorrentFilesConverter
           'TorrentFilesConverter: unexpected type ${decoded.runtimeType} for input');
       return [];
     } catch (e) {
+      final cached = _recoveryCache[fromDb];
+      if (cached != null) return cached;
       try {
         final result = _recoverTorrentFiles(fromDb);
         if (result.isNotEmpty) {
+          if (_recoveryCache.length >= _recoveryCacheLimit) {
+            _recoveryCache.clear();
+          }
+          _recoveryCache[fromDb] = result;
           _dbLog.info(
               'Successfully recovered ${result.length} torrent file entries from corrupted JSON');
           return result;
