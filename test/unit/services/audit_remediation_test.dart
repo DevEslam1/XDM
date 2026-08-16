@@ -7,6 +7,7 @@ import 'package:dmx/features/downloads/data/task_repository.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_list_provider.dart';
 import 'package:dmx/features/downloads/provider/download_queue_provider.dart';
+import 'package:dmx/features/downloads/provider/torrent_provider.dart';
 import 'package:dmx/features/downloads/usecases/cancel_download_usecase.dart';
 import 'package:dmx/features/downloads/usecases/delete_download_usecase.dart';
 import 'package:dmx/features/downloads/usecases/pause_download_usecase.dart';
@@ -182,7 +183,8 @@ void main() {
         'PauseDownloadUseCase and ResumeDownloadUseCase transition task statuses',
         () async {
       final startUseCase = StartDownloadUseCase(listProvider, queueProvider);
-      final pauseUseCase = PauseDownloadUseCase(queueProvider);
+      final pauseUseCase =
+          PauseDownloadUseCase(queueProvider, TorrentProvider());
       final resumeUseCase = ResumeDownloadUseCase(queueProvider);
 
       final task = _makeTask(
@@ -253,7 +255,8 @@ void main() {
     test('DeleteDownloadUseCase removes task from repository and list',
         () async {
       final startUseCase = StartDownloadUseCase(listProvider, queueProvider);
-      final deleteUseCase = DeleteDownloadUseCase(listProvider);
+      final deleteUseCase =
+          DeleteDownloadUseCase(listProvider, TorrentProvider());
 
       final task = _makeTask(
         id: 'task-4',

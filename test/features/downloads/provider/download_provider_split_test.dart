@@ -94,9 +94,9 @@ void main() {
       final filter = DownloadFilterProvider(list);
       final queue = DownloadQueueProvider(listProvider: list);
       final torrent = TorrentProvider();
-      final pauseUseCase = PauseDownloadUseCase(queue);
+      final pauseUseCase = PauseDownloadUseCase(queue, torrent);
       final resumeUseCase = ResumeDownloadUseCase(queue);
-      final deleteUseCase = DeleteDownloadUseCase(list);
+      final deleteUseCase = DeleteDownloadUseCase(list, torrent);
       final coordinator = DownloadCoordinator(
         listProvider: list,
         filterProvider: filter,

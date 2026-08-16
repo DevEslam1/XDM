@@ -76,8 +76,11 @@ class TorrentDownloadOrchestrator {
     TorrentResumeStore.registerSource(id, url);
 
     cancelToken.whenCancel.then((_) async {
+      // FIX-C: Hard-stop the native torrent instead of a best-effort single
+      // pause. Verifies the engine stopped and releases the handle so a
+      // "paused"/"deleted" task cannot keep transferring.
       try {
-        TorrentService.pauseTorrent(id);
+        await TorrentService.forceStopTorrent(id);
       } catch (e, st) {
         LoggingService.logger('TorrentDownloadOrchestrator')
             .warning('Operation failed', e, st);

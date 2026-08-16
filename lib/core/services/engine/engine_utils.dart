@@ -8,7 +8,6 @@ import 'package:dio/io.dart';
 import 'package:dmx/core/services/download_journal.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/retry_interceptor.dart';
-import 'package:flutter/foundation.dart';
 
 /// Utility classes and functions for the Download Engine.
 /// Task 1.2: Decoupled utilities.
@@ -117,17 +116,14 @@ Dio buildTransferDio({
 
   if (client.httpClientAdapter is IOHttpClientAdapter) {
     final adapter = client.httpClientAdapter as IOHttpClientAdapter;
+    // FIX-A: validateCertificate conflicts with a custom createHttpClient
+    // (the adapter's default client creation consults it and can short-circuit
+    // the debug bypass). Null it out so only badCertificateCallback governs.
+    adapter.validateCertificate = null;
     adapter.createHttpClient = () {
-      final client = HttpClient();
-      client.badCertificateCallback = DebugCertOverride.getCallback(url);
-      return client;
-    };
-    adapter.validateCertificate = (cert, host, port) {
-      final cb = DebugCertOverride.getCallback(url);
-      if (cb != null && cert != null) {
-        return cb(cert, host, port);
-      }
-      return true; // Delegate to default validation when no debug override
+      final httpClient = HttpClient();
+      httpClient.badCertificateCallback = DebugCertOverride.getCallback(url);
+      return httpClient;
     };
   }
 
@@ -138,24 +134,27 @@ class DebugCertOverride {
   static const bool allowDebugCert =
       bool.fromEnvironment('ALLOW_DEBUG_CERT', defaultValue: false);
 
+  /// FIX-A: Debug-only SSL/TLS bypass.
+  ///
+  /// In debug builds (asserts active) — or when the `ALLOW_DEBUG_CERT`
+  /// dart-define is set — the returned callback accepts EVERY certificate for
+  /// every host, port and cert. Host matching was removed because it broke
+  /// legitimate CDN redirects (the callback receives the redirect target host,
+  /// which never matches the original URL's host).
+  ///
+  /// In release builds without the flag, asserts are stripped so `isDebug`
+  /// stays false and this returns `null`, letting Dart's default (secure)
+  /// certificate validation apply.
   static BadCertificateCallback? getCallback(String? url,
       {bool? allowDebugCertOverride}) {
     final enabled = allowDebugCertOverride ?? allowDebugCert;
-    if (kReleaseMode || !enabled) return null;
     bool isDebug = false;
     assert(() {
       isDebug = true;
       return true;
     }());
-    if (!isDebug) return null;
-
-    return (X509Certificate cert, String host, int port) {
-      final targetHost = Uri.tryParse(url ?? '')?.host.toLowerCase();
-      if (targetHost != null && host.toLowerCase().endsWith(targetHost)) {
-        return true;
-      }
-      return false;
-    };
+    if (!isDebug && !enabled) return null;
+    return (X509Certificate cert, String host, int port) => true;
   }
 }
 

@@ -118,7 +118,10 @@ Future<void> configureDependencies() async {
     ),
   );
   getIt.registerLazySingleton<PauseDownloadUseCase>(
-    () => PauseDownloadUseCase(getIt<DownloadQueueProvider>()),
+    () => PauseDownloadUseCase(
+      getIt<DownloadQueueProvider>(),
+      getIt<TorrentProvider>(),
+    ),
   );
   getIt.registerLazySingleton<ResumeDownloadUseCase>(
     () => ResumeDownloadUseCase(getIt<DownloadQueueProvider>()),
@@ -133,7 +136,10 @@ Future<void> configureDependencies() async {
     ),
   );
   getIt.registerLazySingleton<DeleteDownloadUseCase>(
-    () => DeleteDownloadUseCase(getIt<DownloadListProvider>()),
+    () => DeleteDownloadUseCase(
+      getIt<DownloadListProvider>(),
+      getIt<TorrentProvider>(),
+    ),
   );
 
   // Download Engine & Decoupled Services

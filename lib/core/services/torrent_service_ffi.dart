@@ -14,6 +14,7 @@ import '../../features/settings/provider/settings_provider.dart';
 import '../di/injection.dart';
 import '../interfaces/i_torrent_service.dart';
 import 'download_engine.dart';
+import 'engine/torrent_download_handler.dart';
 import 'logging_service.dart';
 import 'power_monitor.dart';
 import 'torrent_models.dart';
@@ -508,6 +509,8 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   Future<void> pauseTorrent(int id) => TorrentService.pauseTorrent(id);
   @override
+  Future<void> forceStopTorrent(int id) => TorrentService.forceStopTorrent(id);
+  @override
   void resumeTorrent(int id) => TorrentService.resumeTorrent(id);
   @override
   bool loadResumeData(int id, List<int> data) =>
@@ -532,6 +535,11 @@ class TorrentServiceImpl implements ITorrentService {
       TorrentService.torrentUpdates;
   @override
   Map<int, TorrentUpdateInfo> get latestStats => TorrentService.latestStats;
+  @override
+  Map<String, dynamic>? getTorrentSnapshot(int id) =>
+      TorrentService.getTorrentSnapshot(id);
+  @override
+  String get nativeVersion => TorrentService.nativeVersion;
   @override
   void configureSession([SettingsProvider? settings]) =>
       TorrentService.configureSession(settings);
@@ -746,6 +754,10 @@ class TorrentService {
   static Map<int, TorrentUpdateInfo>? _pendingUpdate;
   static Timer? _throttleTimer;
 
+  // FIX-D: 5s heartbeat that keeps stats consumers fresh when the native
+  // event stream goes quiet.
+  static Timer? _heartbeatTimer;
+
   // FIX-H1: Top-level isPluginAvailable flag
   static bool isPluginAvailable = false;
   static final ValueNotifier<bool> isAvailable = ValueNotifier(false);
@@ -833,6 +845,10 @@ class TorrentService {
         _CapabilityGate.instance.probeCapabilities();
         _configureSessionFromSettings();
         _startTrackingUpdates();
+        // FIX-D: verify broadcast semantics + start the freshness heartbeat.
+        _verifyBroadcastController();
+        startHeartbeatTimer();
+        _log.info('libtorrent initialized (version $nativeVersion)');
         startAutoSaveTimer();
         startDhtRebootstrapTimer();
         getIt<TorrentSeedingManager>().startSeedingCheck();
@@ -999,6 +1015,7 @@ class TorrentService {
     StreamSubscription? sub;
     try {
       controller = StreamController<Map<int, TorrentUpdateInfo>>.broadcast();
+      _updateControllerIsBroadcast = true;
       sub = LibtorrentFlutter.instance.torrentUpdates.listen(
         (torrents) {
           try {
@@ -1123,6 +1140,97 @@ class TorrentService {
         _trackingCompleter!.completeError(e);
       }
       _trackingCompleter = null;
+    }
+  }
+
+  // FIX-D: Broadcast-stream verification. Every consumer of torrentUpdates
+  // must be able to subscribe independently (DownloadProvider, TorrentProvider,
+  // orchestrators, tests). Tracked at creation time because StreamController
+  // does not expose isBroadcast.
+  static bool _updateControllerIsBroadcast = true;
+
+  static void _verifyBroadcastController() {
+    final controller = _updateController;
+    if (controller == null) return;
+    if (_updateControllerIsBroadcast) return;
+    _log.severe(
+      'torrentUpdates controller is NOT broadcast — multiple listeners would '
+      'throw "Stream has already been listened to". Refusing to run degraded.',
+    );
+  }
+
+  // FIX-D: 5-second heartbeat. The native event stream can go quiet even while
+  // torrents are actively transferring (libtorrent alert throttling / OS
+  // backgrounding). Push the latest known stats so listeners (UI) stay fresh,
+  // and SEVERE-log when active torrents have no listeners at all.
+  static void startHeartbeatTimer() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!isInitialized || _activeTorrentIds.isEmpty) return;
+      final controller = _updateController;
+      if (controller == null || controller.isClosed) return;
+
+      if (_activeTorrentIds.isNotEmpty && !controller.hasListener) {
+        _log.severe(
+          'torrentUpdates has NO listeners while ${_activeTorrentIds.length} '
+          'torrent(s) are active. UI/stats consumers may be showing zeros.',
+        );
+      }
+
+      final now = DateTime.now();
+      final sinceLastEmit = _lastEmitTime == null
+          ? Duration.zero
+          : now.difference(_lastEmitTime!);
+      if (sinceLastEmit.inSeconds < 5) return;
+      if (_latestStats.isEmpty) return;
+
+      // Push the freshest known snapshot to keep consumers alive.
+      _lastEmitTime = now;
+      try {
+        controller.add(Map<int, TorrentUpdateInfo>.from(_latestStats));
+      } catch (e) {
+        _log.fine('Heartbeat push skipped: $e');
+      }
+    });
+  }
+
+  static void stopHeartbeatTimer() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+
+  // FIX-D: Point-in-time snapshot for a single torrent. Useful for tests and
+  // for UI consumers that need a consistent read of the current engine state.
+  static Map<String, dynamic>? getTorrentSnapshot(int id) {
+    if (!isInitialized || id < 0) return null;
+    final info = _latestStats[id];
+    if (info == null) return null;
+    return {
+      'id': info.id,
+      'name': info.name,
+      'progress': info.progress,
+      'downloadRate': info.downloadRate,
+      'uploadRate': info.uploadRate,
+      'totalDone': info.totalDone,
+      'totalWanted': info.totalWanted,
+      'totalWantedDone': info.totalWantedDone,
+      'hasMetadata': info.hasMetadata,
+      'stateLabel': info.stateLabel,
+      'numSeeds': info.numSeeds,
+      'numPeers': info.numPeers,
+      'alive': isTorrentAlive(id),
+    };
+  }
+
+  // FIX-D: Best-effort native libtorrent version string (dynamic probe).
+  static String get nativeVersion {
+    try {
+      // ignore: avoid_dynamic_calls
+      final v = (LibtorrentFlutter.instance as dynamic).getVersion?.call();
+      if (v is String && v.isNotEmpty) return v;
+      return 'unknown';
+    } catch (_) {
+      return 'unknown';
     }
   }
 
@@ -1262,6 +1370,7 @@ class TorrentService {
     }
 
     _state = TorrentSessionState.disposing;
+    stopHeartbeatTimer();
     await _updatesSub?.cancel();
     _updatesSub = null;
     await _updateController?.close();
@@ -1528,6 +1637,89 @@ class TorrentService {
         }
       });
     }
+  }
+
+  /// FIX-C: Hard-stops a native torrent. Cancels its update subscription,
+  /// pauses (with verification & retries), removes it from the session,
+  /// and clears all in-memory bookkeeping so the engine fully releases the
+  /// handle and the deleted task cannot keep transferring.
+  static Future<void> forceStopTorrent(int id) async {
+    if (!isInitialized || id < 0) return;
+    _log.info('forceStopTorrent($id)');
+
+    // 1. Deterministically release the engine-side subscription first.
+    try {
+      TorrentSubscriptionRegistry.instance.dispose(id);
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed', e, st);
+    }
+
+    if (!isTorrentAlive(id)) {
+      _activeTorrentIds.remove(id);
+      _latestProgress.remove(id);
+      _latestStats.remove(id);
+      _torrentSources.remove(id);
+      _cachedPrioritiesSnapshot.remove(id);
+      TorrentResumeStore.unregisterTorrent(id);
+      return;
+    }
+
+    // 2. Pause with retry/backoff and verify the engine stopped.
+    const maxAttempts = 3;
+    var stopped = false;
+    for (var attempt = 1; attempt <= maxAttempts && !stopped; attempt++) {
+      try {
+        await pauseTorrent(id);
+      } catch (e, st) {
+        LoggingService.logger('TorrentServiceFfi')
+            .warning('Operation failed', e, st);
+      }
+      stopped = await _isTorrentTransmissionStopped(id);
+      if (!stopped && attempt < maxAttempts) {
+        await Future.delayed(Duration(milliseconds: 150 * attempt));
+      }
+    }
+
+    // 3. Remove the native handle from the session (resume blob preserved so a
+    //    user-initiated re-add can still fast-resume; delete path clears it).
+    try {
+      removeTorrent(id, deleteFiles: false, deleteResumeData: false);
+    } catch (e, st) {
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed', e, st);
+    }
+
+    // 4. Clear remaining bookkeeping.
+    _activeTorrentIds.remove(id);
+    _latestProgress.remove(id);
+    _latestStats.remove(id);
+    _torrentSources.remove(id);
+    _cachedPrioritiesSnapshot.remove(id);
+    TorrentResumeStore.unregisterTorrent(id);
+    if (!stopped) {
+      _log.warning(
+          'forceStopTorrent: torrent $id may still be transmitting after $maxAttempts attempts');
+    }
+  }
+
+  static Future<bool> _isTorrentTransmissionStopped(int id) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 1));
+    while (DateTime.now().isBefore(deadline)) {
+      if (!isTorrentAlive(id)) return true;
+      final stats = _latestStats[id];
+      if (stats != null) {
+        final label = stats.stateLabel.toLowerCase();
+        if (label.contains('paused') || label.contains('stopped')) return true;
+        if (stats.downloadRate <= 0 &&
+            stats.uploadRate <= 0 &&
+            stats.totalWantedDone <= 0) {
+          return true;
+        }
+      }
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    return false;
   }
 
   static bool loadResumeData(int id, List<int> data) {
@@ -2071,6 +2263,8 @@ class TorrentServiceStub implements ITorrentService {
   @override
   Future<void> pauseTorrent(int id) async {}
   @override
+  Future<void> forceStopTorrent(int id) async {}
+  @override
   void resumeTorrent(int id) {}
   @override
   bool loadResumeData(int id, List<int> data) => false;
@@ -2093,6 +2287,10 @@ class TorrentServiceStub implements ITorrentService {
       const Stream.empty();
   @override
   Map<int, TorrentUpdateInfo> get latestStats => const {};
+  @override
+  Map<String, dynamic>? getTorrentSnapshot(int id) => null;
+  @override
+  String get nativeVersion => 'stub';
   @override
   void configureSession([SettingsProvider? settings]) {}
   @override

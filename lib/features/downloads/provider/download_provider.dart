@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
 
+import '../../../core/di/injection.dart';
 import '../../../core/services/app_lifecycle_coordinator.dart';
 import '../../../core/services/background_gate.dart';
 import '../../../core/services/background_service.dart';
@@ -53,6 +54,7 @@ import 'mixins/download_torrent_mixin.dart';
 import 'network_monitor.dart';
 import 'notification_coordinator.dart';
 import 'schedule_manager.dart';
+import 'torrent_provider.dart';
 
 /// A compact description for a single download item that can be added in bulk.
 class DownloadAddSpec {
@@ -401,6 +403,15 @@ class DownloadProvider extends ChangeNotifier
           final tid = _torrentIds[task.id];
           if (tid == null) continue;
 
+          // FIX-E: Keep the coordinator TorrentProvider mapping in sync so
+          // Pause/Delete use cases can resolve the native handle.
+          final torrentProvider =
+              getIt.isRegistered<TorrentProvider>() ? getIt<TorrentProvider>() : null;
+          if (torrentProvider != null &&
+              torrentProvider.torrentIds[task.id] != tid) {
+            torrentProvider.registerTorrentId(task.id, tid);
+          }
+
           // Check if we need to force-pause a newly registered torrent
           if (_needsForcedPauseOnRegister.contains(task.id)) {
             _needsForcedPauseOnRegister.remove(task.id);
@@ -459,6 +470,39 @@ class DownloadProvider extends ChangeNotifier
                 _uploadSpeedHistories[taskId] ??= Queue<double>();
             uploadQueue.add(info.uploadRate.toDouble());
             if (uploadQueue.length > 20) uploadQueue.removeFirst();
+
+            // FIX-E: Push live metrics onto the task so the UI never shows
+            // zeros even though the engine is transferring.
+            final taskIdx = _tasks.indexWhere((t) => t.id == taskId);
+            if (taskIdx != -1) {
+              final task = _tasks[taskIdx];
+              final liveDone = info.totalWantedDone > 0
+                  ? info.totalWantedDone
+                  : (info.totalDone > 0
+                      ? info.totalDone
+                      : task.downloadedBytes);
+              final newSize = (info.totalWanted > 0 &&
+                      (task.fileSize <= 0 || task.fileSize < info.totalWanted))
+                  ? info.totalWanted
+                  : task.fileSize;
+              final newSpeed = (task.status == DownloadStatus.downloading ||
+                      task.status == DownloadStatus.merging)
+                  ? info.downloadRate.toDouble()
+                  : (task.status == DownloadStatus.completed &&
+                          task.seedingEnabled
+                      ? info.uploadRate.toDouble()
+                      : task.speed);
+              if (task.downloadedBytes != liveDone ||
+                  task.fileSize != newSize ||
+                  task.speed != newSpeed) {
+                _tasks[taskIdx] = task.copyWith(
+                  downloadedBytes: liveDone,
+                  fileSize: newSize,
+                  speed: newSpeed,
+                );
+                notifyListeners();
+              }
+            }
           }
 
           // FIX T-5: Sync uploadedBytes in real-time during seeding
@@ -2357,6 +2401,14 @@ class DownloadProvider extends ChangeNotifier
             debugPrint(
               '[DMX] B4 FIX: Torrent $torrentId did not confirm pause within 2s, proceeding anyway',
             );
+            // FIX-C: pause did not take effect — hard-stop the handle so the
+            // engine cannot keep transferring while the task shows "paused".
+            try {
+              await TorrentService.forceStopTorrent(torrentId);
+            } catch (e) {
+              _log.warning(
+                  'FIX-C: forceStopTorrent fallback failed on pause for $torrentId: $e');
+            }
           }
 
           // Snapshot per-file bytes AFTER engine has stopped
@@ -3873,7 +3925,9 @@ class DownloadProvider extends ChangeNotifier
         if (torrentId != null && TorrentService.isTorrentAlive(torrentId)) {
           // FIX-B10: Guard with alive check
           try {
-            TorrentService.pauseTorrent(torrentId);
+            // FIX-C: forceStopTorrent verifies the engine actually halted
+            // before we wipe the DB row.
+            await TorrentService.forceStopTorrent(torrentId);
             TorrentService.removeTorrent(torrentId,
                 deleteFiles: false, deleteResumeData: true);
           } catch (e) {

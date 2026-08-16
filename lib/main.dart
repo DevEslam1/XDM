@@ -217,6 +217,9 @@ Future<void> main(List<String> args) async {
       await configureDependencies();
       // 2.2: Register the AppLifecycleCoordinator as the sole WidgetsBinding observer.
       AppLifecycleCoordinator.init();
+      // FIX-E: TorrentProvider listens to engine torrentUpdates directly so the
+      // coordinator path always has live metrics + taskId→torrentId mapping.
+      getIt<TorrentProvider>().startListening();
       if (getIt.isRegistered<AmbientAnimationController>()) {
         getIt.unregister<AmbientAnimationController>();
       }

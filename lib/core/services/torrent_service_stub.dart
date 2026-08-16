@@ -78,6 +78,8 @@ class TorrentServiceStub implements ITorrentService {
   @override
   Future<void> pauseTorrent(int id) async {}
   @override
+  Future<void> forceStopTorrent(int id) async {}
+  @override
   void resumeTorrent(int id) {}
   @override
   bool loadResumeData(int id, List<int> data) => false;
@@ -100,6 +102,10 @@ class TorrentServiceStub implements ITorrentService {
       const Stream.empty();
   @override
   Map<int, TorrentUpdateInfo> get latestStats => const {};
+  @override
+  Map<String, dynamic>? getTorrentSnapshot(int id) => null;
+  @override
+  String get nativeVersion => 'stub';
   @override
   void configureSession([SettingsProvider? settings]) {}
   @override
@@ -290,6 +296,8 @@ class TorrentService {
       _activeService.removeTorrent(id,
           deleteFiles: deleteFiles, deleteResumeData: deleteResumeData);
   static Future<void> pauseTorrent(int id) => _activeService.pauseTorrent(id);
+  static Future<void> forceStopTorrent(int id) =>
+      _activeService.forceStopTorrent(id);
   static void resumeTorrent(int id) => _activeService.resumeTorrent(id);
   static bool loadResumeData(int id, List<int> data) =>
       _activeService.loadResumeData(id, data);
@@ -305,6 +313,9 @@ class TorrentService {
       _activeService.torrentUpdates;
   static Map<int, TorrentUpdateInfo> get latestStats =>
       _activeService.latestStats;
+  static Map<String, dynamic>? getTorrentSnapshot(int id) =>
+      _activeService.getTorrentSnapshot(id);
+  static String get nativeVersion => _activeService.nativeVersion;
   static void configureSession([SettingsProvider? settings]) =>
       _activeService.configureSession(settings);
   static void reconfigureSession() => _activeService.reconfigureSession();

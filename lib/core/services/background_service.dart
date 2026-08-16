@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
 
 import '../../features/downloads/models/download_task.dart';
+import '../../features/downloads/services/torrent_session_manager.dart';
+import '../di/injection.dart';
 import 'database_service.dart';
 import 'diagnostic_service.dart';
 import 'download_engine.dart';
@@ -16,6 +18,7 @@ import 'ios_background_service.dart';
 import 'logging_service.dart';
 import 'notification_service.dart';
 import 'power_monitor.dart';
+import 'torrent_service.dart';
 
 final _log = LoggingService.logger('BackgroundService');
 
@@ -672,6 +675,12 @@ class BackgroundService {
     try {
       final tasks = await dbService.loadTasks();
       final restored = <DownloadTask>[];
+      // FIX-F: Reconcile session torrent mappings before resuming torrent tasks.
+      try {
+        await getIt<TorrentSessionManager>().reconcileWithDatabase(dbService);
+      } catch (e) {
+        _log.warning('Failed to reconcile torrent session on restore: $e');
+      }
       for (final task in tasks) {
         if (task.pauseReason == PauseReason.appRestarted ||
             task.status == DownloadStatus.downloading ||
@@ -683,6 +692,19 @@ class BackgroundService {
             speed: 0.0,
             pauseReason: null,
           );
+          // FIX-F: For torrents, resume the live handle so the engine actually
+          // keeps transferring after the OS-kill/reboot restore.
+          if (resumingTask.isTorrent && TorrentService.isInitialized) {
+            final tid = getIt<TorrentSessionManager>()
+                .getTorrentId(resumingTask.id);
+            if (tid != null && TorrentService.isTorrentAlive(tid)) {
+              try {
+                TorrentService.resumeTorrent(tid);
+              } catch (e) {
+                _log.warning('Failed to resume restored torrent $tid: $e');
+              }
+            }
+          }
           await dbService.saveTask(resumingTask);
           restored.add(resumingTask);
         }

@@ -14,7 +14,7 @@ void main() {
   });
 
   group('TorrentSubscriptionRegistry & Handler Hardening (Sprint 1)', () {
-    test('Registry tracks handler weakly and cleans up subscription on unregister', () async {
+    test('Registry tracks handler strongly and cleans up subscription on unregister', () async {
       final controller = StreamController<int>();
       final sub = controller.stream.listen((_) {});
 

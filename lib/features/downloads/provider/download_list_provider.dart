@@ -1,4 +1,5 @@
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:dmx/core/services/torrent_service.dart';
 import 'package:flutter/foundation.dart';
 import '../data/task_repository.dart';
 import '../models/download_task.dart';
@@ -73,6 +74,49 @@ class DownloadListProvider extends ChangeNotifier {
     _speedNotifiers.remove(id)?.dispose();
     await _repository.delete(id);
     notifyListeners();
+  }
+
+  /// FIX-E: Re-syncs torrent tasks against the live engine stats so the UI
+  /// reflects real progress/speed even if the streaming progress path stalls.
+  /// [taskToTorrentIds] maps taskId → native torrentId (from the engine).
+  void forceRefreshTorrents([Map<String, int>? taskToTorrentIds]) {
+    var changed = false;
+    for (var i = 0; i < _tasks.length; i++) {
+      final task = _tasks[i];
+      if (!task.isTorrent) continue;
+      int? torrentId = taskToTorrentIds?[task.id];
+      if (torrentId == null) {
+        // Fallback: locate the live handle by file name.
+        for (final id in TorrentService.activeTorrentIds) {
+          final stats = TorrentService.latestStats[id];
+          if (stats != null && stats.name == task.fileName) {
+            torrentId = id;
+            break;
+          }
+        }
+      }
+      if (torrentId == null) continue;
+      final stats = TorrentService.latestStats[torrentId];
+      if (stats == null) continue;
+
+      final downloaded = stats.totalWantedDone > 0
+          ? stats.totalWantedDone
+          : (stats.totalDone > 0 ? stats.totalDone : task.downloadedBytes);
+      final updated = task.copyWith(
+        downloadedBytes: downloaded,
+        speed: task.status == DownloadStatus.downloading
+            ? stats.downloadRate.toDouble()
+            : (task.status == DownloadStatus.completed && task.seedingEnabled
+                ? stats.uploadRate.toDouble()
+                : task.speed),
+        torrentFiles: task.torrentFiles,
+      );
+      _tasks[i] = updated;
+      _progressNotifiers[task.id]?.value = updated.progressRatio;
+      _speedNotifiers[task.id]?.value = updated.speed;
+      changed = true;
+    }
+    if (changed) notifyListeners();
   }
 
   void removeTask(String id) {

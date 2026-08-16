@@ -1,8 +1,9 @@
 import 'dart:async';
 
 import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/power_monitor.dart';
-import 'package:dmx/core/services/torrent_models.dart';
+import 'package:dmx/core/services/torrent_service.dart';
 import 'package:flutter/foundation.dart';
 
 /// Single-responsibility provider for torrent session management and stats tracking.
@@ -11,6 +12,8 @@ class TorrentProvider extends ChangeNotifier {
   final Map<int, TorrentUpdateInfo> _latestStats = {};
   Timer? _notifyDebounceTimer;
   DateTime? _lastNotifyTime;
+  StreamSubscription<Map<int, TorrentUpdateInfo>>? _updatesSub;
+  Timer? _staleDetector;
 
   @override
   void notifyListeners() {
@@ -80,8 +83,43 @@ class TorrentProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// FIX-E: Subscribes directly to the engine's torrentUpdates broadcast
+  /// stream (200ms debounced) so the coordinator/UI always see live metrics
+  /// even when no other consumer is listening.
+  void startListening() {
+    if (_updatesSub != null) return;
+    _updatesSub = TorrentService.torrentUpdates.listen((torrents) {
+      for (final entry in torrents.entries) {
+        _latestStats[entry.key] = entry.value;
+      }
+      _debouncedNotify();
+    }, onError: (Object e) {
+      LoggingService.logger('TorrentProvider')
+          .warning('torrentUpdates error', e as Exception);
+    });
+    _startStaleDetector();
+  }
+
+  /// FIX-E: Every 30s, drop stats for torrents that no longer appear in the
+  /// engine's active set (and are not registered to any task), preventing a
+  /// stale "ghost" metric from keeping the UI stuck at a non-zero value.
+  void _startStaleDetector() {
+    _staleDetector?.cancel();
+    _staleDetector = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!TorrentService.isInitialized) return;
+      final active = TorrentService.activeTorrentIds;
+      final registeredToTasks = _torrentIds.values.toSet();
+      _latestStats.removeWhere((id, _) =>
+          !active.contains(id) && !registeredToTasks.contains(id));
+    });
+  }
+
   @override
   void dispose() {
+    _updatesSub?.cancel();
+    _updatesSub = null;
+    _staleDetector?.cancel();
+    _staleDetector = null;
     _notifyDebounceTimer?.cancel();
     _notifyDebounceTimer = null;
     super.dispose();

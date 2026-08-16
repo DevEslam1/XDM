@@ -21,14 +21,18 @@ import 'torrent_file_normalizer.dart';
 final _log = LoggingService.logger('TorrentDownloadHandler');
 
 class _TorrentSubEntry {
-  final WeakReference<TorrentDownloadHandler> handlerRef;
+  // FIX-A: Strong reference to the handler. A WeakReference here allowed the
+  // handler to be GC'd while its native torrent kept running — the registry
+  // entry then became a zombie that could never be deterministically disposed.
+  final TorrentDownloadHandler handler;
   final StreamSubscription subscription;
 
-  _TorrentSubEntry({required this.handlerRef, required this.subscription});
+  _TorrentSubEntry({required this.handler, required this.subscription});
 }
 
-/// Registry holding weak references to active TorrentDownloadHandlers
-/// allowing retries/lookups to find active subscriptions without leaking dead handlers.
+/// Registry holding active TorrentDownloadHandlers so retries/lookups find
+/// live subscriptions and deleted torrents release their subscriptions
+/// deterministically.
 class TorrentSubscriptionRegistry {
   TorrentSubscriptionRegistry._();
   static final TorrentSubscriptionRegistry instance =
@@ -36,64 +40,31 @@ class TorrentSubscriptionRegistry {
 
   final Map<int, _TorrentSubEntry> _registry = {};
 
-  void _cleanupDeadEntries() {
-    final deadKeys = <int>[];
-    for (final entry in _registry.entries) {
-      if (entry.value.handlerRef.target == null) {
-        deadKeys.add(entry.key);
-        try {
-          entry.value.subscription.cancel();
-        } catch (e, st) {
-          _log.fine('Failed to cancel dead entry sub: $e', e, st);
-        }
-      }
-    }
-    for (final k in deadKeys) {
-      _registry.remove(k);
-    }
-  }
-
   void register(
       int torrentId, TorrentDownloadHandler handler, StreamSubscription sub) {
-    _cleanupDeadEntries();
     _registry[torrentId] = _TorrentSubEntry(
-      handlerRef: WeakReference(handler),
+      handler: handler,
       subscription: sub,
     );
   }
 
   StreamSubscription? getSubscription(int torrentId) {
-    _cleanupDeadEntries();
     final entry = _registry[torrentId];
     if (entry == null) return null;
-    final handler = entry.handlerRef.target;
-    if (handler == null) {
-      try {
-        entry.subscription.cancel();
-      } catch (e, st) {
-        _log.fine('Failed to cancel subscription: $e', e, st);
-      }
-      _registry.remove(torrentId);
-      return null;
-    }
     return entry.subscription;
   }
 
   void unregister(int torrentId, TorrentDownloadHandler handler) {
-    _cleanupDeadEntries();
     final entry = _registry[torrentId];
-    if (entry != null) {
-      final target = entry.handlerRef.target;
-      if (target == null || identical(target, handler)) {
-        _registry.remove(torrentId);
-      }
+    if (entry != null && identical(entry.handler, handler)) {
+      _registry.remove(torrentId);
     }
   }
 
-  /// FIX-P2-02: Explicit disposal — cancels the subscription and removes the
-  /// entry immediately instead of waiting for WeakReference GC to trigger a
-  /// later cleanup. Called from the task-delete path so deleted torrents
-  /// release their stream subscriptions deterministically.
+  /// FIX-P2-02: Explicit disposal — cancels the subscription AND pauses the
+  /// native torrent deterministically instead of waiting for GC cleanup.
+  /// Called from the task-delete path so deleted torrents release their
+  /// stream subscriptions and stop transferring immediately.
   void dispose(int torrentId) {
     final entry = _registry.remove(torrentId);
     if (entry == null) return;
@@ -102,6 +73,11 @@ class TorrentSubscriptionRegistry {
     } catch (e, st) {
       _log.fine('Failed to cancel disposed subscription: $e', e, st);
     }
+    // FIX-A: Pause the native torrent even if no caller pauses it explicitly.
+    // Fire-and-forget so dispose() stays synchronous for the delete path.
+    entry.handler.haltTorrent(torrentId).catchError((Object e, StackTrace st) {
+      _log.warning('Failed to halt torrent $torrentId on dispose', e, st);
+    });
   }
 
   @visibleForTesting
@@ -118,13 +94,11 @@ class TorrentSubscriptionRegistry {
 
   @visibleForTesting
   int get activeCountForTesting {
-    _cleanupDeadEntries();
     return _registry.length;
   }
 
   @visibleForTesting
   Map<int, StreamSubscription> get subsMapForTesting {
-    _cleanupDeadEntries();
     return _registry.map((k, v) => MapEntry(k, v.subscription));
   }
 }
@@ -134,6 +108,7 @@ class TorrentDownloadHandler {
   final Set<int> _activeTorrentIds = {};
   final Map<int, StreamSubscription> _activeSubs = {};
   Timer? _stallWatchdog;
+  Timer? _alivenessWatchdog;
   Completer<void>? _completionGuard;
 
   @visibleForTesting
@@ -194,12 +169,64 @@ class TorrentDownloadHandler {
   void removeActiveTorrent(int id) {
     _stallWatchdog?.cancel();
     _stallWatchdog = null;
+    _alivenessWatchdog?.cancel();
+    _alivenessWatchdog = null;
     _activeTorrentIds.remove(id);
     final sub = _activeSubs.remove(id);
     sub?.cancel();
     TorrentSubscriptionRegistry.instance.unregister(id, this);
     cachedAccurateFiles = null;
     lastStateLabel = '';
+  }
+
+  /// FIX-A: Pauses a native torrent and verifies it actually stopped
+  /// transmitting, retrying with backoff up to 3 attempts. Called by the
+  /// registry's [TorrentSubscriptionRegistry.dispose] and the cancel path.
+  Future<void> haltTorrent(int id) async {
+    if (!_torrentService.isTorrentAlive(id)) {
+      _activeTorrentIds.remove(id);
+      return;
+    }
+    const maxAttempts = 3;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await _torrentService.pauseTorrent(id);
+      } catch (e, st) {
+        _log.warning('haltTorrent pause attempt $attempt failed for $id', e, st);
+      }
+      // Verify the native torrent actually stopped transmitting.
+      final verified = await _isTransmissionStopped(id);
+      if (verified) {
+        _activeTorrentIds.remove(id);
+        return;
+      }
+      if (attempt < maxAttempts) {
+        await Future.delayed(Duration(milliseconds: 150 * attempt));
+      }
+    }
+    _log.warning(
+        'haltTorrent: torrent $id still alive after $maxAttempts pause attempts; removing handle.');
+    _activeTorrentIds.remove(id);
+  }
+
+  /// FIX-A: Polls the latest stats (up to ~1s) to confirm the native torrent
+  /// has stopped transmitting or reached a paused/stopped state.
+  Future<bool> _isTransmissionStopped(int id) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 1));
+    while (DateTime.now().isBefore(deadline)) {
+      if (!_torrentService.isTorrentAlive(id)) return true;
+      final stats = _torrentService.latestStats[id];
+      if (stats != null) {
+        final label = stats.stateLabel.toLowerCase();
+        if (label.contains('paused') || label.contains('stopped')) return true;
+        if ((stats.downloadRate <= 0 && stats.uploadRate <= 0) &&
+            stats.totalWantedDone <= 0) {
+          return true;
+        }
+      }
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    return false;
   }
 
   // Fix 2: Adaptive sync intervals for all file counts including >10,000 files
@@ -623,7 +650,7 @@ class TorrentDownloadHandler {
       if (torrentCompleted || cancelCompleter.isCompleted) return;
       cancelCompleter.complete();
       try {
-        TorrentService.pauseTorrent(id);
+        await haltTorrent(id);
       } catch (e, st) {
         LoggingService.logger('TorrentDownloadHandler')
             .warning('Operation failed', e, st);
@@ -754,6 +781,10 @@ class TorrentDownloadHandler {
       }
       final sub = _activeSubs.remove(id);
       await sub?.cancel();
+      _stallWatchdog?.cancel();
+      _stallWatchdog = null;
+      _alivenessWatchdog?.cancel();
+      _alivenessWatchdog = null;
       _activeTorrentIds.remove(id);
       TorrentSubscriptionRegistry.instance.unregister(id, this);
       cachedAccurateFiles = null;
@@ -912,6 +943,28 @@ class TorrentDownloadHandler {
             ));
           } catch (e, st) {
             _log.warning('Force reannounce failed for $id', e, st);
+          }
+        }
+      });
+
+      // FIX-A: 10-second aliveness poll. The event-stream can go silent even
+      // though the native handle died (or was removed out-of-band). Detect that
+      // and surface a definite error instead of hanging forever.
+      _alivenessWatchdog?.cancel();
+      _alivenessWatchdog = Timer.periodic(const Duration(seconds: 10), (_) {
+        if (!_torrentService.isTorrentAlive(id)) {
+          _alivenessWatchdog?.cancel();
+          _alivenessWatchdog = null;
+          sub?.cancel();
+          _activeSubs.remove(id);
+          _activeTorrentIds.remove(id);
+          TorrentSubscriptionRegistry.instance.unregister(id, this);
+          if (!completer.isCompleted) {
+            completer.completeError(DioException(
+              requestOptions: RequestOptions(path: url),
+              type: DioExceptionType.unknown,
+              error: 'Torrent handle lost (aliveness poll).',
+            ));
           }
         }
       });
@@ -1215,6 +1268,8 @@ class TorrentDownloadHandler {
     } finally {
       _stallWatchdog?.cancel();
       _stallWatchdog = null;
+      _alivenessWatchdog?.cancel();
+      _alivenessWatchdog = null;
       _completionGuard = null;
       await sub?.cancel();
       _activeSubs.remove(id);

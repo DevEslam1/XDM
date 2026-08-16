@@ -1,13 +1,13 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import '../../di/injection.dart';
+import '../download_engine.dart';
 import '../engines/http_download_engine.dart';
 import '../yt_counterpart_coordinator.dart';
 import 'cycle_state_resolver.dart';
-import 'engine_exceptions.dart';
-import 'engine_models.dart';
 import 'engine_utils.dart';
 import 'torrent_file_normalizer.dart';
 
@@ -28,6 +28,17 @@ class DownloadProgressHandler {
 
   int lastDownloadedBytes;
   int lastFileSize;
+
+  // FIX-B: Delta-trigger tracking. The UI must update even when the cycleState
+  // is unchanged — torrents legitimately emit repeated "downloading" states
+  // while bytes accumulate. Emit on >=1% of size OR >=1MiB progress, plus any
+  // peer/seed/state-label change.
+  int _lastEmittedBytes = 0;
+  int _lastEmittedFileSize = 0;
+  String _lastEmittedStatusMessage = '';
+  int _lastEmittedPeerCount = 0;
+  int _lastEmittedSeedCount = 0;
+
   List<ChunkDetail>? lastChunkDetails;
   int? lastTotalChunks;
   int? lastCompletedChunks;
@@ -485,7 +496,11 @@ class DownloadProgressHandler {
       chunkFingerprint: _lastChunkDetailsHash,
     );
 
-    final intervalMs = getEffectiveIntervalMs();
+    // FIX-B: Torrents use 500ms foreground / 3s background intervals. HTTP
+    // keeps its injected (typically 500ms) interval.
+    final int intervalMs = isTorrent
+        ? (DownloadEngine.isInBackground ? 3000 : 500)
+        : getEffectiveIntervalMs();
     final now = DateTime.now();
     final bool canEmitNow = lastProgressEmitTime == null ||
         now.difference(lastProgressEmitTime!) >=
@@ -495,11 +510,32 @@ class DownloadProgressHandler {
         cycle == CycleState.paused;
     final isCycleStateChange = cycle != _lastEmittedCycleState;
 
-    if (canEmitNow || isTerminalChange || isCycleStateChange) {
+    // FIX-B: Substantial-delta trigger. Emits even when the cycleState and
+    // interval gate say "no" if real progress accumulated (>=1% of size or
+    // >=1MiB) or the peer/seed/state label changed.
+    bool isSubstantialDelta = false;
+    if (isTorrent) {
+      final size = progress.fileSize > 0 ? progress.fileSize : lastFileSize;
+      final deltaBytes = (progress.downloadedBytes - _lastEmittedBytes).abs();
+      final minTrigger = size > 0 ? (size * 0.01).ceil() : (1024 * 1024);
+      isSubstantialDelta =
+          deltaBytes >= math.max(minTrigger, 1024 * 1024) ||
+              (sm != _lastEmittedStatusMessage) ||
+              progress.fileSize != _lastEmittedFileSize ||
+              ((p['numPeers'] as num?)?.toInt() ?? 0) != _lastEmittedPeerCount ||
+              ((p['numSeeds'] as num?)?.toInt() ?? 0) != _lastEmittedSeedCount;
+    }
+
+    if (canEmitNow || isTerminalChange || isCycleStateChange || isSubstantialDelta) {
       _throttleTimer?.cancel();
       _throttleTimer = null;
       _pendingProgress = null;
       lastProgressEmitTime = now;
+      _lastEmittedBytes = progress.downloadedBytes;
+      _lastEmittedFileSize = progress.fileSize;
+      _lastEmittedStatusMessage = sm ?? '';
+      _lastEmittedPeerCount = (p['numPeers'] as num?)?.toInt() ?? 0;
+      _lastEmittedSeedCount = (p['numSeeds'] as num?)?.toInt() ?? 0;
       emit(progress);
     } else {
       _pendingProgress = progress;
@@ -517,6 +553,9 @@ class DownloadProgressHandler {
           if (pending != null) {
             _pendingProgress = null;
             lastProgressEmitTime = DateTime.now();
+            _lastEmittedBytes = pending.downloadedBytes;
+            _lastEmittedFileSize = pending.fileSize;
+            _lastEmittedStatusMessage = pending.statusMessage ?? '';
             emit(pending);
           }
         });
