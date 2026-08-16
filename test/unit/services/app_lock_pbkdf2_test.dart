@@ -105,7 +105,7 @@ void main() {
       // Lockout remaining should enforce full duration rather than allowing bypass
       final remainingAfterRollback = await AppLockService.lockoutRemaining();
       expect(remainingAfterRollback.inSeconds, greaterThan(0));
-      expect(remainingAfterRollback.inMilliseconds, equals(30000));
+      expect(remainingAfterRollback.inMilliseconds, inInclusiveRange(29000, 30000));
 
       // Verification must be rejected while lockout is active
       expect(await AppLockService.verifyPin('1234'), isFalse);

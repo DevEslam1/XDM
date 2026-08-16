@@ -1,4 +1,5 @@
 import 'package:dmx/core/services/app_lock_service.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -6,6 +7,14 @@ void main() {
 
   group('AppLockService Monotonic Stopwatch Reset Test (P2-12)', () {
     setUp(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.dmx.app/monotonic_clock'),
+        (methodCall) async {
+          if (methodCall.method == 'elapsedRealtime') return 500;
+          return null;
+        },
+      );
       AppLockService.resetMonotonicState();
     });
 

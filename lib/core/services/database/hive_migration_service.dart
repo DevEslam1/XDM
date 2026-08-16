@@ -452,12 +452,24 @@ class HiveMigrationService {
     return value.toString();
   }
 
-  DownloadTasksCompanion _taskToCompanion(DownloadTask task) =>
-      TaskCompanionConverter.taskToCompanion(task);
+  DownloadTasksCompanion _taskToCompanion(DownloadTask task) {
+    final isInterrupted = task.status == DownloadStatus.downloading ||
+        task.cycleState == CycleState.downloading ||
+        task.cycleState == CycleState.starting ||
+        task.cycleState == CycleState.resuming;
+    final migratedTask = isInterrupted
+        ? task.copyWith(
+            status: DownloadStatus.paused,
+            cycleState: CycleState.paused,
+            pauseReason: PauseReason.appRestarted,
+          )
+        : task;
+    return TaskCompanionConverter.taskToCompanion(migratedTask);
+  }
 
   @visibleForTesting
   DownloadTasksCompanion taskToCompanionForTesting(DownloadTask task) =>
-      TaskCompanionConverter.taskToCompanion(task);
+      _taskToCompanion(task);
 
   BookmarksCompanion _bookmarkToCompanion(Bookmark bm) {
     return BookmarksCompanion.insert(

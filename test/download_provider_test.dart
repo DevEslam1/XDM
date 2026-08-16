@@ -4,9 +4,11 @@ import 'dart:io';
 
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:dio/dio.dart';
+import 'package:dmx/core/interfaces/i_torrent_service.dart';
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/permission_service.dart';
+import 'package:dmx/core/services/torrent_service_stub.dart';
 import 'package:dmx/core/services/youtube_service.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
@@ -14,6 +16,7 @@ import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -126,11 +129,30 @@ void main() {
     Hive.init('build/test_hive_provider');
     ConnectivityPlatform.instance = MockConnectivityPlatform();
 
+    final getIt = GetIt.instance;
+    if (getIt.isRegistered<ITorrentService>()) {
+      getIt.unregister<ITorrentService>();
+    }
+    getIt.registerSingleton<ITorrentService>(TorrentServiceStub());
+
     // Register mock handlers for platform channels
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('com.xdm.downloadmanager/widget'),
       (methodCall) async => null,
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('com.dmx.app/widget_bridge'),
+      (methodCall) async => null,
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('com.dmx.app/torrent'),
+      (methodCall) async {
+        if (methodCall.method == 'init') return {'status': 'ok'};
+        return null;
+      },
     );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(

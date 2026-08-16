@@ -173,6 +173,7 @@ class ScheduleManager {
   }
 
   Future<void> _checkPeriodicAppUpdate() async {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     final now = DateTime.now();
     if (_lastUpdateCheckTime != null &&
         now.difference(_lastUpdateCheckTime!).inHours < 12) {

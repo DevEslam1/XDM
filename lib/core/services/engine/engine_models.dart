@@ -371,9 +371,8 @@ class DownloadProgress {
     if (ytStreamKind == YtStreamKind.combined) {
       return progressRatio;
     }
-    final cpSize = (ytCounterpartSize != null && ytCounterpartSize! > 0)
-        ? ytCounterpartSize!
-        : 0;
+    if (ytCounterpartSize == null || ytCounterpartSize! <= 0) return null;
+    final cpSize = ytCounterpartSize!;
     final selfSize = fileSize > 0 ? fileSize : 0;
     final totalSize = selfSize + cpSize;
     if (totalSize <= 0) return null;

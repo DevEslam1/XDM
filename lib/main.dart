@@ -128,10 +128,10 @@ Future<void> main(List<String> args) async {
 
     // FIX-0.4: Adaptive ImageCache sizing based on device RAM
     final deviceMemory = await _getDeviceMemoryGB();
-    final cacheMB = deviceMemory <= 2 ? 30 : (deviceMemory <= 4 ? 50 : 80);
+    final cacheMB = deviceMemory <= 2 ? 30 : 50;
     PaintingBinding.instance.imageCache
       ..maximumSizeBytes = cacheMB * 1024 * 1024
-      ..maximumSize = deviceMemory <= 2 ? 300 : 1000;
+      ..maximumSize = deviceMemory <= 2 ? 60 : 100;
 
     // ── Frame performance monitoring (UI-jank diagnostics) ──
     await FrameWatchdog.detectRefreshRate();

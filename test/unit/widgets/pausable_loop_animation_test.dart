@@ -45,7 +45,7 @@ void main() {
 
       expect(find.text('Backdrop Content'), findsOneWidget);
       expect(find.byType(BackdropFilter), findsNothing);
-      expect(find.byType(Container), findsWidgets);
+      expect(find.byType(ColoredBox), findsWidgets);
     });
   });
 }
