@@ -26,7 +26,8 @@ class MockTorrentService extends TorrentServiceStub {
   }
 
   @override
-  void removeTorrent(int id, {bool deleteFiles = false, bool deleteResumeData = false}) {
+  void removeTorrent(int id,
+      {bool deleteFiles = false, bool deleteResumeData = false}) {
     removedId = id;
     aliveMap.remove(id);
   }
@@ -61,7 +62,8 @@ void main() {
       expect(sessionManager.getTorrentId('task-1'), 42);
       expect(sessionManager.isTorrentAlive('task-1'), isTrue);
 
-      final paused = await sessionManager.pauseTorrentWithConfirmation('task-1');
+      final paused =
+          await sessionManager.pauseTorrentWithConfirmation('task-1');
       expect(paused, isTrue);
       expect(mock.pauseCalled, isTrue);
 

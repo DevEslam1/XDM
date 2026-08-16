@@ -22,7 +22,9 @@ void main() {
       }
     });
 
-    test('HTTP: StateStore._reconcileWithDisk clamps chunk downloaded bytes when file is truncated', () async {
+    test(
+        'HTTP: StateStore._reconcileWithDisk clamps chunk downloaded bytes when file is truncated',
+        () async {
       final targetFile = '${tempDir.path}/test_download.bin';
       // Create a file of only 250 bytes
       await File(targetFile).writeAsBytes(List.filled(250, 1));
@@ -54,7 +56,9 @@ void main() {
       expect(loadRes.diskAdjusted, isTrue);
     });
 
-    test('HTTP: actualDownloadedBytes returns 0 if target file does not exist on disk', () async {
+    test(
+        'HTTP: actualDownloadedBytes returns 0 if target file does not exist on disk',
+        () async {
       final targetFile = '${tempDir.path}/missing_file.bin';
       final state = TransferState(
         totalSize: 1000,
@@ -72,7 +76,8 @@ void main() {
       expect(bytes, equals(0));
     });
 
-    test('HTTP: actualDownloadedBytes caps state bytes to actual file length', () async {
+    test('HTTP: actualDownloadedBytes caps state bytes to actual file length',
+        () async {
       final targetFile = '${tempDir.path}/partial_file.bin';
       await File(targetFile).writeAsBytes(List.filled(200, 42));
 
@@ -92,7 +97,9 @@ void main() {
       expect(bytes, equals(200));
     });
 
-    test('HTTP: StateStore.remove deletes state files and temporary state files', () async {
+    test(
+        'HTTP: StateStore.remove deletes state files and temporary state files',
+        () async {
       final targetFile = '${tempDir.path}/target.bin';
       final stateFile = File('$targetFile.dmxstate');
       final tmpStateFile = File('$targetFile.dmxstate.tmp');
@@ -109,7 +116,9 @@ void main() {
       expect(await tmpStateFile.exists(), isFalse);
     });
 
-    test('YouTube: DownloadTask combinedTotalSize and combinedDownloadedBytes integrity', () {
+    test(
+        'YouTube: DownloadTask combinedTotalSize and combinedDownloadedBytes integrity',
+        () {
       final task = DownloadTask(
         id: 'yt-task-1',
         url: 'https://example.com/yt-stream',
@@ -136,7 +145,9 @@ void main() {
       expect(task.progress, closeTo(0.5, 0.001));
     });
 
-    test('Torrent: torrentOverallPercent is disk/data accurate and clamped to 1.0', () {
+    test(
+        'Torrent: torrentOverallPercent is disk/data accurate and clamped to 1.0',
+        () {
       final task = DownloadTask(
         id: 'torrent-task-1',
         url: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',

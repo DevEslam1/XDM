@@ -31,6 +31,7 @@ import '../services/database_service.dart';
 import '../services/dio_client_pool.dart';
 import '../services/download_engine.dart';
 import '../services/download_journal.dart';
+import '../services/engine/server_identity_cache.dart';
 import '../services/engines/connection_warmer.dart';
 import '../services/http_download_orchestrator.dart';
 import '../services/metadata_probe_service.dart';
@@ -58,8 +59,10 @@ Future<void> configureDependencies() async {
   if (getIt.isRegistered<DatabaseService>()) return;
 
   getIt.registerLazySingleton<StateStoreFactory>(() => StateStoreFactory());
-  getIt.registerLazySingleton<StateStoreInstance>(() => getIt<StateStoreFactory>().defaultStore);
-  getIt.registerLazySingleton<SettingsProvider>(() => SettingsProvider.instance);
+  getIt.registerLazySingleton<StateStoreInstance>(
+      () => getIt<StateStoreFactory>().defaultStore);
+  getIt
+      .registerLazySingleton<SettingsProvider>(() => SettingsProvider.instance);
   getIt.registerLazySingleton<DatabaseService>(() => DatabaseService());
   getIt.registerLazySingleton<TaskRepository>(
     () => DriftTaskRepository(getIt<DatabaseService>()),
@@ -122,7 +125,8 @@ Future<void> configureDependencies() async {
     () => DioClientPool(),
     dispose: (p) => p.dispose(),
   );
-  getIt.registerLazySingleton<YtCounterpartCoordinator>(() => YtCounterpartCoordinator());
+  getIt.registerLazySingleton<YtCounterpartCoordinator>(
+      () => YtCounterpartCoordinator());
   getIt.registerLazySingleton<MetadataProbeService>(
     () => MetadataProbeService(getIt<DioClientPool>()),
   );
@@ -149,7 +153,11 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<PowerMonitor>(() => PowerMonitor());
   getIt.registerLazySingleton<PermissionService>(() => PermissionService());
-  getIt.registerLazySingleton<ConnectionManager>(() => ConnectionManager());
+  getIt.registerLazySingleton<ConnectionManager>(() => ConnectionManager(),
+      dispose: (c) => c.dispose());
+  getIt.registerLazySingleton<ServerIdentityCache>(
+      () => ServerIdentityCache.instance,
+      dispose: (c) => c.dispose());
   getIt.registerLazySingleton<BandwidthGovernor>(() => BandwidthGovernor(0),
       dispose: (governor) => governor.dispose());
   getIt.registerLazySingleton<ChecksumService>(() => ChecksumService());
@@ -169,6 +177,15 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<SiteIntelligenceService>(
     () => SiteIntelligenceService()..init(),
     dispose: (service) => service.dispose(),
+  );
+
+  getIt.registerLazySingleton<ServerProfileManager>(
+    () => ServerProfileManager.instance,
+    dispose: (s) => s.dispose(),
+  );
+  getIt.registerLazySingleton<MirrorBenchmarkService>(
+    () => MirrorBenchmarkService.instance,
+    dispose: (s) => s.dispose(),
   );
 
   getIt.registerLazySingleton<ConnectionWarmer>(() => ConnectionWarmer(),
@@ -204,7 +221,8 @@ Future<void> configureDependencies() async {
     () => BackgroundTimerManager.instance,
   );
 
-  getIt.registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);
+  getIt
+      .registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);
 
   getIt.registerLazySingleton<SharedPrefsBatcher>(
     () => SharedPrefsBatcher.instance,

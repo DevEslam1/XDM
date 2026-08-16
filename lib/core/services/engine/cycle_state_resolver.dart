@@ -14,24 +14,20 @@ class CycleStateResolver {
       caseSensitive: false);
   static final _mergingRegex =
       RegExp(r'\b(merg\w*|mux\w*)\b', caseSensitive: false);
-  static final _seedingRegex =
-      RegExp(r'\b(seed\w*)\b', caseSensitive: false);
+  static final _seedingRegex = RegExp(r'\b(seed\w*)\b', caseSensitive: false);
   static final _completedRegex =
       RegExp(r'\b(completed|done|finished)\b', caseSensitive: false);
   static final _pausedRegex =
       RegExp(r'\b(paused|stopped)\b', caseSensitive: false);
-  static final _stalledRegex =
-      RegExp(r'\b(stall\w*)\b', caseSensitive: false);
+  static final _stalledRegex = RegExp(r'\b(stall\w*)\b', caseSensitive: false);
   static final _failedRegex =
       RegExp(r'\b(error|fail\w*)\b', caseSensitive: false);
   static final _updatingLinksRegex = RegExp(
     r'\b(?:updating\s+(?:links?|urls?|mirrors?)|refresh(?:ing)?\s+(?:links?|urls?|mirrors?))\b',
     caseSensitive: false,
   );
-  static final _retryingRegex =
-      RegExp(r'\bretry\w*\b', caseSensitive: false);
-  static final _resumingRegex =
-      RegExp(r'\bresum\w*\b', caseSensitive: false);
+  static final _retryingRegex = RegExp(r'\bretry\w*\b', caseSensitive: false);
+  static final _resumingRegex = RegExp(r'\bresum\w*\b', caseSensitive: false);
   static final _startingRegex = RegExp(
       r'\b(start\w*|prepar\w*|waiting for counterpart\w*)\b',
       caseSensitive: false);

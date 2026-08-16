@@ -11,7 +11,8 @@ void main() {
         'length': 1000,
         'downloadedBytes': -50,
       };
-      final normNegative = TorrentFileNormalizer.normalizeTorrentFile(negativeDl);
+      final normNegative =
+          TorrentFileNormalizer.normalizeTorrentFile(negativeDl);
       expect(normNegative['downloadedBytes'], equals(0));
       expect(normNegative['progress'], equals(0.0));
       expect(normNegative['isComplete'], isFalse);
@@ -21,7 +22,8 @@ void main() {
         'length': 1000,
         'downloadedBytes': 2500,
       };
-      final normExcessive = TorrentFileNormalizer.normalizeTorrentFile(excessiveDl);
+      final normExcessive =
+          TorrentFileNormalizer.normalizeTorrentFile(excessiveDl);
       expect(normExcessive['downloadedBytes'], equals(1000));
       expect(normExcessive['progress'], equals(1.0));
       expect(normExcessive['isComplete'], isTrue);
@@ -52,7 +54,9 @@ void main() {
       expect(norm['isComplete'], isFalse);
     });
 
-    test('normalizeTorrentFileList computes aggregates and detects progressEstimated', () {
+    test(
+        'normalizeTorrentFileList computes aggregates and detects progressEstimated',
+        () {
       final files = [
         {
           'name': 'file1.mp4',

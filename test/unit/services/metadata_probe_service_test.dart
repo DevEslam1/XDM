@@ -20,10 +20,13 @@ void main() {
       pool.dispose();
     });
 
-    test('resolveMetadata identifies torrent and resolves file metadata correctly', () async {
+    test(
+        'resolveMetadata identifies torrent and resolves file metadata correctly',
+        () async {
       final tempDir = await Directory.systemTemp.createTemp('meta_test_');
       final torrentFile = File('${tempDir.path}/test.torrent');
-      await torrentFile.writeAsBytes([0x64, 0x34, 0x3a, 0x6e, 0x61, 0x6d, 0x65, 0x65]); // basic bytes
+      await torrentFile.writeAsBytes(
+          [0x64, 0x34, 0x3a, 0x6e, 0x61, 0x6d, 0x65, 0x65]); // basic bytes
 
       final meta = await service.resolveMetadata(
         url: Uri.file(torrentFile.path).toString(),
@@ -39,7 +42,8 @@ void main() {
       }
     });
 
-    test('resolveMetadata handles generic torrent fallback gracefully', () async {
+    test('resolveMetadata handles generic torrent fallback gracefully',
+        () async {
       final meta = await service.resolveMetadata(
         url: 'file:///non_existent_path/video.torrent',
       );

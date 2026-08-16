@@ -44,7 +44,8 @@ enum CycleState {
   };
 
   /// Maps libtorrent state labels / strings to a canonical [CycleState].
-  static CycleState fromLibtorrent(String? stateLabel, {bool seedingEnabled = true}) {
+  static CycleState fromLibtorrent(String? stateLabel,
+      {bool seedingEnabled = true}) {
     if (stateLabel == null || stateLabel.trim().isEmpty) {
       return CycleState.downloading;
     }
@@ -75,17 +76,39 @@ enum CycleState {
         s.contains('metadata')) {
       return CycleState.fetchingMetadata;
     }
-    if (s.contains('allocating')) return CycleState.allocating;
-    if (s.contains('finished') || s.contains('completed')) return CycleState.completed;
-    if (s.contains('seeding')) return CycleState.seeding;
-    if (s.contains('paused') || s.contains('stopped')) return CycleState.paused;
-    if (s.contains('stalled')) return CycleState.stalled;
-    if (s.contains('error') || s.contains('failed')) return CycleState.failed;
-    if (s.contains('resuming')) return CycleState.resuming;
-    if (s.contains('retrying')) return CycleState.retrying;
-    if (s.contains('updating_links')) return CycleState.updatingLinks;
-    if (s.contains('merging') || s.contains('muxing')) return CycleState.merging;
-    if (s.contains('starting') || s.contains('queued')) return CycleState.starting;
+    if (s.contains('allocating')) {
+      return CycleState.allocating;
+    }
+    if (s.contains('finished') || s.contains('completed')) {
+      return CycleState.completed;
+    }
+    if (s.contains('seeding')) {
+      return CycleState.seeding;
+    }
+    if (s.contains('paused') || s.contains('stopped')) {
+      return CycleState.paused;
+    }
+    if (s.contains('stalled')) {
+      return CycleState.stalled;
+    }
+    if (s.contains('error') || s.contains('failed')) {
+      return CycleState.failed;
+    }
+    if (s.contains('resuming')) {
+      return CycleState.resuming;
+    }
+    if (s.contains('retrying')) {
+      return CycleState.retrying;
+    }
+    if (s.contains('updating_links')) {
+      return CycleState.updatingLinks;
+    }
+    if (s.contains('merging') || s.contains('muxing')) {
+      return CycleState.merging;
+    }
+    if (s.contains('starting') || s.contains('queued')) {
+      return CycleState.starting;
+    }
     return CycleState.downloading; // default
   }
 

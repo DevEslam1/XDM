@@ -32,7 +32,9 @@ void main() {
       expect(ranked.last.url, 'udp://tracker.low.com:6969/announce');
     });
 
-    test('calculatePeerRelevance rewards encrypted seeds and penalizes bad hashes', () {
+    test(
+        'calculatePeerRelevance rewards encrypted seeds and penalizes bad hashes',
+        () {
       final seedRelevance = TorrentTrackerOptimizer.calculatePeerRelevance(
         downloadSpeedBytesPerSec: 200 * 1024,
         isSeed: true,

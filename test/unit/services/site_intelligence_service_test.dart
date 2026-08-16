@@ -1,16 +1,24 @@
 import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('SiteIntelligenceService Tests', () {
+    late SiteIntelligenceService service;
+
     setUp(() {
-      SiteIntelligenceService.clearFastPathCache();
+      SharedPreferences.setMockInitialValues({});
+      service = SiteIntelligenceService();
+      service.clearFastPathCache();
+    });
+
+    tearDown(() async {
+      await service.dispose();
     });
 
     test('analyzeUrl uses fast path cache for matching host+extension', () {
-      final service = SiteIntelligenceService();
       const url1 = 'https://speed.hetzner.de/100MB.bin';
       final res1 = service.analyzeUrl(url1);
 

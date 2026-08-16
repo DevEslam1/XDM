@@ -32,8 +32,10 @@ void main() {
     });
 
     test('returns max timeout for unknown/zero size', () {
-      expect(HttpTransferJob.computeHardTimeoutForSize(0), const Duration(hours: 24));
-      expect(HttpTransferJob.computeHardTimeoutForSize(-1), const Duration(hours: 24));
+      expect(HttpTransferJob.computeHardTimeoutForSize(0),
+          const Duration(hours: 24));
+      expect(HttpTransferJob.computeHardTimeoutForSize(-1),
+          const Duration(hours: 24));
     });
   });
 }

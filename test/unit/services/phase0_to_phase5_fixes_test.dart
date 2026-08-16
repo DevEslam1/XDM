@@ -43,8 +43,10 @@ void main() {
         () async {
       final failover =
           MirrorFailover(['https://m1.com/file', 'https://m2.com/file']);
-      await MirrorHealthStore.instance.recordSpeed('https://m1.com/file', 500000);
-      await MirrorHealthStore.instance.recordSpeed('https://m2.com/file', 600000);
+      await MirrorHealthStore.instance
+          .recordSpeed('https://m1.com/file', 500000);
+      await MirrorHealthStore.instance
+          .recordSpeed('https://m2.com/file', 600000);
       ProtocolCache.record('https://m2.com/file', ProtocolSupport.http2);
 
       final current = failover.advance();

@@ -41,7 +41,8 @@ void main() {
     test('health data persists across restarts', () async {
       await MirrorHealthStore.instance.recordFailure('https://m1.com/x');
       await MirrorHealthStore.instance.recordFailure('https://m1.com/x');
-      await MirrorHealthStore.instance.recordSuccess('https://m2.com/x', speedBps: 42);
+      await MirrorHealthStore.instance
+          .recordSuccess('https://m2.com/x', speedBps: 42);
 
       // Writes are coalesced; a durable flush persists them to prefs.
       await MirrorHealthStore.instance.flushPending(durable: true);
@@ -49,7 +50,8 @@ void main() {
       // Re-init simulates an app restart (same SharedPreferences backing).
       await MirrorHealthStore.instance.init();
       expect(MirrorHealthStore.instance.getFailureCount('https://m1.com/x'), 2);
-      expect(MirrorHealthStore.instance.getPersistedSpeed('https://m2.com/x'), 42);
+      expect(
+          MirrorHealthStore.instance.getPersistedSpeed('https://m2.com/x'), 42);
     });
 
     test('clear removes all persisted data', () async {

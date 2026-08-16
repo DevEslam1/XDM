@@ -10,6 +10,7 @@ import '../../utils/bounded_lru_cache.dart';
 import '../background_gate.dart';
 import '../logging_service.dart';
 import '../power_monitor.dart';
+import '../service_registry.dart';
 import 'site_registry.dart';
 import 'url_patterns.dart';
 
@@ -207,20 +208,25 @@ class SiteReliability {
       );
 }
 
-class SiteIntelligenceService {
-  SiteIntelligenceService();
+class SiteIntelligenceService
+    implements DisposableService, MemoryPressureListener {
+  SiteIntelligenceService() {
+    ServiceRegistry.register(this);
+    ServiceRegistry.registerMemoryPressureListener(this);
+  }
 
   static const _reliabilityKey = 'site_reliability_data';
-  static final BoundedLruCache<String, UrlAnalysisResult> _fastPathCache =
+  final BoundedLruCache<String, UrlAnalysisResult> _fastPathCache =
       BoundedLruCache<String, UrlAnalysisResult>(
     maxCapacity: 500,
     ttl: const Duration(minutes: 30),
   );
 
   @visibleForTesting
-  static void clearFastPathCache() => _fastPathCache.clear();
+  void clearFastPathCache() => _fastPathCache.clear();
 
   /// Clears in-memory caches and flushes pending writes under memory pressure.
+  @override
   void onMemoryPressure() {
     _fastPathCache.clear();
     flushPending();
@@ -307,8 +313,11 @@ class SiteIntelligenceService {
     });
   }
 
+  @override
   Future<void> dispose() async {
     _disposed = true;
+    ServiceRegistry.unregister(this);
+    ServiceRegistry.unregisterMemoryPressureListener(this);
     _persistTimer?.cancel();
     _persistTimer = null;
     _fastPathCache.clear();

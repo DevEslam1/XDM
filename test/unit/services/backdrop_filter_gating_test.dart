@@ -16,7 +16,9 @@ void main() {
       DmxBackdropFilter.disabled = false;
     });
 
-    testWidgets('enableBlur: false renders static fallback without allocating filter', (tester) async {
+    testWidgets(
+        'enableBlur: false renders static fallback without allocating filter',
+        (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(

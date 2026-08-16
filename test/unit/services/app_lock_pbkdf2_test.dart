@@ -91,7 +91,8 @@ void main() {
       expect(remainingInitial.inSeconds, lessThanOrEqualTo(30));
 
       // Simulate wall clock rollback by modifying stored locked_until far into future or past
-      final storedDuration = int.parse(storage['xdm_app_lock_lockout_duration']!);
+      final storedDuration =
+          int.parse(storage['xdm_app_lock_lockout_duration']!);
       expect(storedDuration, equals(30000));
 
       // Simulate device clock rollback by setting lockedUntil 1 hour in future vs now

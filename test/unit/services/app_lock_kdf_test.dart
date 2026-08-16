@@ -74,8 +74,7 @@ void main() {
       expect(salt1, isNot(equals(salt2)));
     });
 
-    test('verification recomputes with the stored salt and succeeds',
-        () async {
+    test('verification recomputes with the stored salt and succeeds', () async {
       await AppLockService.setPin('5678');
       expect(await AppLockService.verifyPin('5678'), isTrue);
       expect(await AppLockService.verifyPin('0000'), isFalse);

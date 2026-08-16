@@ -42,13 +42,17 @@ void main() {
       expect(store.getPersistedSpeed(mirror), equals(5242880.0));
     });
 
-    test('enforces LRU cap of 200 entries with timestamp-based eviction', () async {
+    test('enforces LRU cap of 200 entries with timestamp-based eviction',
+        () async {
       for (int i = 0; i < 250; i++) {
-        await store.recordSuccess('https://mirror$i.example.com', speedBps: 1000.0 + i);
+        await store.recordSuccess('https://mirror$i.example.com',
+            speedBps: 1000.0 + i);
       }
       // Oldest entries (e.g. mirror0) should have been evicted
-      expect(store.getPersistedSpeed('https://mirror0.example.com'), equals(0.0));
-      expect(store.getPersistedSpeed('https://mirror249.example.com'), isNonZero);
+      expect(
+          store.getPersistedSpeed('https://mirror0.example.com'), equals(0.0));
+      expect(
+          store.getPersistedSpeed('https://mirror249.example.com'), isNonZero);
     });
   });
 }

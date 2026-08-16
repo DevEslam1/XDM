@@ -12,7 +12,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Fix 1: YouTube Counterpart Live Tracking Gap', () {
-    test('fetches live counterpart bytes via YtCounterpartCoordinator', () async {
+    test('fetches live counterpart bytes via YtCounterpartCoordinator',
+        () async {
       final coord = YtCounterpartCoordinator();
       if (getIt.isRegistered<YtCounterpartCoordinator>()) {
         getIt.unregister<YtCounterpartCoordinator>();
@@ -88,7 +89,9 @@ void main() {
       expect(StateStore.stateSaveStrictDedup, isTrue);
     });
 
-    test('stateSaveStrictDedup skips redundant saves but allows status changes and durable saves', () async {
+    test(
+        'stateSaveStrictDedup skips redundant saves but allows status changes and durable saves',
+        () async {
       final tempFile = File('test_state_dedup.tmp');
       try {
         final state1 = TransferState(

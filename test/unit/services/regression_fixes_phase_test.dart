@@ -14,7 +14,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Phase 2 & 3 Regression Tests', () {
-    test('DownloadEngine markForeground and markBackground toggle state correctly', () {
+    test(
+        'DownloadEngine markForeground and markBackground toggle state correctly',
+        () {
       DownloadEngine.markBackground();
       expect(DownloadEngine.isInBackground, isTrue);
       expect(DownloadEngine.appInForeground, isFalse);
@@ -57,7 +59,9 @@ void main() {
   });
 
   group('Phase 5 & 6 Hardening Tests', () {
-    test('DatabaseService _rowToTask handles invalid/unrecognized status by falling back to failed', () async {
+    test(
+        'DatabaseService _rowToTask handles invalid/unrecognized status by falling back to failed',
+        () async {
       final db = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(() async => await db.close());
 

@@ -18,9 +18,10 @@ class _CookieCacheEntry {
 
 /// Thread-safe bounded cache for HTTP cookies per origin with TTL.
 /// Task 2.1: Injectable singleton service with clear/dispose on background.
-class CookieCache implements DisposableService {
+class CookieCache implements DisposableService, MemoryPressureListener {
   CookieCache() {
     ServiceRegistry.register(this);
+    ServiceRegistry.registerMemoryPressureListener(this);
   }
 
   final Map<String, _CookieCacheEntry> _cache = {};
@@ -41,8 +42,9 @@ class CookieCache implements DisposableService {
     }
 
     // Check Expires
-    final expiresMatch = RegExp(r'(?:^|;\s*)Expires=([^;]+)', caseSensitive: false)
-        .firstMatch(cookie);
+    final expiresMatch =
+        RegExp(r'(?:^|;\s*)Expires=([^;]+)', caseSensitive: false)
+            .firstMatch(cookie);
     if (expiresMatch != null) {
       try {
         final expiresStr = expiresMatch.group(1)!.trim();
@@ -94,7 +96,14 @@ class CookieCache implements DisposableService {
   }
 
   @override
+  void onMemoryPressure() {
+    clear();
+  }
+
+  @override
   Future<void> dispose() async {
-    _cache.clear();
+    ServiceRegistry.unregister(this);
+    ServiceRegistry.unregisterMemoryPressureListener(this);
+    clear();
   }
 }

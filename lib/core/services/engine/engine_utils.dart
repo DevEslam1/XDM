@@ -60,7 +60,8 @@ class TimestampedLruMap<K, V> {
 
   void removeStale(Duration threshold) {
     final now = DateTime.now();
-    _map.removeWhere((key, entry) => now.difference(entry.lastAccessed) > threshold);
+    _map.removeWhere(
+        (key, entry) => now.difference(entry.lastAccessed) > threshold);
   }
 
   List<K> get keys => _map.keys.toList();
@@ -81,21 +82,30 @@ Dio buildTransferDio({
     client.options.sendTimeout = const Duration(seconds: 60);
     client.options.receiveTimeout = const Duration(seconds: 60);
   }
-  
+
   final uri = url != null ? Uri.tryParse(url) : null;
   final host = uri?.host.toLowerCase() ?? '';
-  final isYoutubeUrl = host.contains('youtube.com') || host == 'youtu.be' || host.endsWith('.googlevideo.com');
+  final isYoutubeUrl = host.contains('youtube.com') ||
+      host == 'youtu.be' ||
+      host.endsWith('.googlevideo.com');
 
   if (isYoutubeUrl) {
     client.options.headers['Origin'] = 'https://www.youtube.com';
-    client.options.headers['User-Agent'] = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36';
+    client.options.headers['User-Agent'] =
+        'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36';
   } else if (customUserAgent != null && customUserAgent.isNotEmpty) {
     client.options.headers['User-Agent'] = customUserAgent;
   }
-  
-  if (referer != null && referer.isNotEmpty) client.options.headers['Referer'] = referer;
-  if (cookies != null && cookies.isNotEmpty) client.options.headers['Cookie'] = cookies;
-  if (oauthToken != null && oauthToken.isNotEmpty) client.options.headers['Authorization'] = 'Bearer $oauthToken';
+
+  if (referer != null && referer.isNotEmpty) {
+    client.options.headers['Referer'] = referer;
+  }
+  if (cookies != null && cookies.isNotEmpty) {
+    client.options.headers['Cookie'] = cookies;
+  }
+  if (oauthToken != null && oauthToken.isNotEmpty) {
+    client.options.headers['Authorization'] = 'Bearer $oauthToken';
+  }
 
   if (client.httpClientAdapter is IOHttpClientAdapter) {
     (client.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
@@ -112,7 +122,8 @@ class DebugCertOverride {
   static const bool allowDebugCert =
       bool.fromEnvironment('ALLOW_DEBUG_CERT', defaultValue: false);
 
-  static BadCertificateCallback? getCallback(String? url, {bool? allowDebugCertOverride}) {
+  static BadCertificateCallback? getCallback(String? url,
+      {bool? allowDebugCertOverride}) {
     final enabled = allowDebugCertOverride ?? allowDebugCert;
     if (kReleaseMode || !enabled) return null;
     bool isDebug = false;
@@ -124,7 +135,9 @@ class DebugCertOverride {
 
     return (X509Certificate cert, String host, int port) {
       final targetHost = Uri.tryParse(url ?? '')?.host.toLowerCase();
-      if (targetHost != null && host.toLowerCase().endsWith(targetHost)) return true;
+      if (targetHost != null && host.toLowerCase().endsWith(targetHost)) {
+        return true;
+      }
       return false;
     };
   }
@@ -136,7 +149,8 @@ String? firstNonEmpty(String? a, String? b) {
   return null;
 }
 
-Future<int> actualDownloadedBytes(String tempFilePath, {int threadCount = 1, StateStoreInstance? stateStore}) async {
+Future<int> actualDownloadedBytes(String tempFilePath,
+    {int threadCount = 1, StateStoreInstance? stateStore}) async {
   final file = File(tempFilePath);
   if (!await file.exists()) return 0;
   final fileLen = await file.length();

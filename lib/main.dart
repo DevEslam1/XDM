@@ -19,11 +19,9 @@ import 'core/services/crash_reporting_service.dart';
 import 'core/services/database_service.dart';
 import 'core/services/diagnostic_service.dart';
 import 'core/services/download_engine.dart';
-import 'core/services/engine/http_transfer_job.dart';
 import 'core/services/frame_watchdog.dart';
 import 'core/services/logging_service.dart';
 import 'core/services/mirror/mirror_registry.dart';
-import 'core/services/network/cookie_cache.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/performance_monitor.dart';
 import 'core/services/power_monitor.dart';
@@ -84,11 +82,11 @@ class _ScreenObserver with WidgetsBindingObserver {
 
   @override
   void didHaveMemoryPressure() {
-    CookieCache().clear();
-    HttpTransferJob.clearIdentityCache();
+    ServiceRegistry.broadcastMemoryPressure();
     PaintingBinding.instance.imageCache.clear();
     PaintingBinding.instance.imageCache.clearLiveImages();
-    debugPrint('[MemoryPressure] Cleared non-essential caches and image memory');
+    debugPrint(
+        '[MemoryPressure] Cleared non-essential caches and image memory');
   }
 }
 
@@ -104,7 +102,8 @@ Future<double> _getDeviceMemoryGB() async {
       return 4.0;
     }
   } catch (e, st) {
-    LoggingService.logger('main').warning('Failed to detect device memory', e, st);
+    LoggingService.logger('main')
+        .warning('Failed to detect device memory', e, st);
   }
   return 4.0;
 }
@@ -154,7 +153,8 @@ Future<void> main(List<String> args) async {
           consecutiveJankWindows = 0;
         }
       } catch (e, st) {
-        LoggingService.logger('main').warning('Failed to check jankAutoBatterySaver', e, st);
+        LoggingService.logger('main')
+            .warning('Failed to check jankAutoBatterySaver', e, st);
       }
     };
 
@@ -303,7 +303,8 @@ Future<void> main(List<String> args) async {
                 await TorrentService.init().timeout(
                   const Duration(seconds: 15),
                   onTimeout: () {
-                    throw TimeoutException('TorrentService.init timed out after 15s');
+                    throw TimeoutException(
+                        'TorrentService.init timed out after 15s');
                   },
                 );
                 _mainLog.info('Torrent service initialized successfully');
@@ -562,7 +563,9 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(
-        NotificationService().processPendingBackgroundActions().catchError((e, st) {
+        NotificationService()
+            .processPendingBackgroundActions()
+            .catchError((e, st) {
           _mainLog.warning('processPendingBackgroundActions failed', e, st);
         }),
       );
@@ -582,18 +585,18 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
 
     switch (state) {
       case AppLifecycleState.paused:
-      unawaited(
-        _saveTorrentState().catchError((e, st) {
-          _mainLog.warning('_saveTorrentState failed', e, st);
-        }),
-      );
+        unawaited(
+          _saveTorrentState().catchError((e, st) {
+            _mainLog.warning('_saveTorrentState failed', e, st);
+          }),
+        );
         break;
       case AppLifecycleState.resumed:
-      unawaited(
-        _resumeTorrents().catchError((e, st) {
-          _mainLog.warning('_resumeTorrents failed', e, st);
-        }),
-      );
+        unawaited(
+          _resumeTorrents().catchError((e, st) {
+            _mainLog.warning('_resumeTorrents failed', e, st);
+          }),
+        );
         break;
       default:
         break;
@@ -879,9 +882,19 @@ class _FpsOverlayState extends State<_FpsOverlay> {
   }
 
   void _scheduleNextFrame() {
-    if (!_active || !mounted || PowerMonitor.screenOff || DownloadEngine.isInBackground) return;
+    if (!_active ||
+        !mounted ||
+        PowerMonitor.screenOff ||
+        DownloadEngine.isInBackground) {
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_active || !mounted || PowerMonitor.screenOff || DownloadEngine.isInBackground) return;
+      if (!_active ||
+          !mounted ||
+          PowerMonitor.screenOff ||
+          DownloadEngine.isInBackground) {
+        return;
+      }
       _frameCount++;
       _scheduleNextFrame();
     });

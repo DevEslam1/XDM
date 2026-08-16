@@ -63,14 +63,17 @@ void main() {
       expect(cb.consecutiveFailures, equals(0));
     });
 
-    test('CircuitBreaker.guard executes operation when closed and records success', () async {
+    test(
+        'CircuitBreaker.guard executes operation when closed and records success',
+        () async {
       final cb = CircuitBreaker(failureThreshold: 2);
       final val = await cb.guard(() async => 42);
       expect(val, equals(42));
       expect(cb.isClosed, isTrue);
     });
 
-    test('CircuitBreaker.guard throws CircuitOpenException when open', () async {
+    test('CircuitBreaker.guard throws CircuitOpenException when open',
+        () async {
       final cb = CircuitBreaker(failureThreshold: 1);
       cb.recordFailure();
       expect(cb.isOpen, isTrue);

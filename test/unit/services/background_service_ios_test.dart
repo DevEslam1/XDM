@@ -43,7 +43,8 @@ void main() {
       expect(invokeCount, 1);
     });
 
-    test('concurrent duplicate calls are rejected by in-flight guard', () async {
+    test('concurrent duplicate calls are rejected by in-flight guard',
+        () async {
       int invokeCount = 0;
       const channel = MethodChannel('com.dmx.app/background_download');
 

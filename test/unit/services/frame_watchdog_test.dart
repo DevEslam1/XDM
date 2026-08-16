@@ -93,7 +93,9 @@ void main() {
       expect(monitor.healthSummary, contains('60fps'));
     });
 
-    test('heavy downloads suppress jank alert by default but observe when alwaysObserveHeavyDownloads is true', () {
+    test(
+        'heavy downloads suppress jank alert by default but observe when alwaysObserveHeavyDownloads is true',
+        () {
       double? detectedRatio;
       FrameWatchdog.onJankDetected = (ratio) {
         detectedRatio = ratio;

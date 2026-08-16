@@ -67,8 +67,7 @@ class DownloadProgressHandler {
   bool get selfActuallyFinalizedForTesting => _selfActuallyFinalized;
 
   @visibleForTesting
-  set selfActuallyFinalizedForTesting(bool val) =>
-      _selfActuallyFinalized = val;
+  set selfActuallyFinalizedForTesting(bool val) => _selfActuallyFinalized = val;
 
   void markDone() {
     _selfActuallyFinalized = true;
@@ -245,7 +244,9 @@ class DownloadProgressHandler {
       cycle = CycleState.fromName(p['cycleState'] as String);
       if (cycle == CycleState.completed) _selfActuallyFinalized = true;
     }
-    if (p['done'] == true || p['isDone'] == true || p['selfActuallyFinalized'] == true) {
+    if (p['done'] == true ||
+        p['isDone'] == true ||
+        p['selfActuallyFinalized'] == true) {
       _selfActuallyFinalized = true;
     }
     cycle ??= deriveCycleState(sm, cancelToken.isCancelled, isTorrent);
@@ -282,9 +283,7 @@ class DownloadProgressHandler {
       lastHasEstimatedFileProgress = true;
     }
 
-    if (isCounterpartUnregistered &&
-        ytStreamKind != null &&
-        isWaitingCycle) {
+    if (isCounterpartUnregistered && ytStreamKind != null && isWaitingCycle) {
       _counterpartWaitStart ??= DateTime.now();
       final waitDiff = DateTime.now().difference(_counterpartWaitStart!);
 
@@ -355,26 +354,39 @@ class DownloadProgressHandler {
 
       final bool counterpartResolved = cpSize != null && cpSize > 0;
       final bool counterpartDone = counterpartResolved && cpLive >= cpSize;
-      final bool selfFinalized =
-          _selfActuallyFinalized || (lastFileSize > 0 && lastDownloadedBytes >= lastFileSize);
+      final bool selfFinalized = _selfActuallyFinalized ||
+          (lastFileSize > 0 && lastDownloadedBytes >= lastFileSize);
 
       if (!selfFinalized || !counterpartDone) {
         cycle = counterpartDone ? CycleState.merging : CycleState.downloading;
       }
     }
 
+    final pTotalChunks = (p['totalChunks'] as num?)?.toInt();
+    final pCompletedChunks = (p['completedChunks'] as num?)?.toInt();
+
     final chunkList = chunkDetails;
-    final totalParts = chunkList?.length ?? 0;
+    final totalParts =
+        chunkList?.length ?? pTotalChunks ?? lastTotalChunks ?? 0;
     final isDone = cycle == CycleState.completed;
-    final doneParts = chunkList == null
-        ? 0
-        : (isDone ? totalParts : chunkList.where((c) => c.isComplete).length);
+    final doneParts = chunkList != null
+        ? (isDone
+            ? chunkList.length
+            : chunkList.where((c) => c.isComplete).length)
+        : (pCompletedChunks ??
+            (isDone ? totalParts : lastCompletedChunks ?? 0));
 
     lastChunkDetails = chunkDetails ?? lastChunkDetails;
-    lastTotalChunks =
-        (isTorrent || chunkDetails == null) ? lastTotalChunks : totalParts;
-    lastCompletedChunks =
-        (isTorrent || chunkDetails == null) ? lastCompletedChunks : doneParts;
+    lastTotalChunks = isTorrent
+        ? lastTotalChunks
+        : (chunkDetails != null
+            ? chunkList?.length
+            : (pTotalChunks ?? lastTotalChunks));
+    lastCompletedChunks = isTorrent
+        ? lastCompletedChunks
+        : (chunkDetails != null
+            ? doneParts
+            : (pCompletedChunks ?? lastCompletedChunks));
 
     final rawPauseReason = p['pauseReason'];
     final PauseReason? pauseReason = rawPauseReason is PauseReason
@@ -409,6 +421,7 @@ class DownloadProgressHandler {
       totalFiles: lastTotalFiles,
       completedFiles: lastCompletedFiles,
       totalFileBytes: lastTotalFileBytes,
+      downloadedFileBytes: lastDownloadedFileBytes,
       hasEstimatedFileProgress: (p['hasEstimatedFileProgress'] as bool?) ??
           lastHasEstimatedFileProgress,
       torrentId: torrentId,

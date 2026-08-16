@@ -5,14 +5,34 @@ import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/protocol_cache.dart';
 import 'package:flutter/foundation.dart';
 
-class ConnectionManager {
-  ConnectionManager();
-  static final LinkedHashMap<String, _HostProbe> _probes =
+import 'service_registry.dart';
+
+class ConnectionManager implements DisposableService, MemoryPressureListener {
+  ConnectionManager() {
+    ServiceRegistry.register(this);
+    ServiceRegistry.registerMemoryPressureListener(this);
+  }
+
+  static final ConnectionManager instance = ConnectionManager();
+
+  final LinkedHashMap<String, _HostProbe> _probes =
       LinkedHashMap<String, _HostProbe>();
   static const Duration _cacheTtl = Duration(minutes: 10);
   static const Duration _probeTimeout = Duration(seconds: 4);
 
-  static Future<void> prewarm(String url) async {
+  @override
+  void onMemoryPressure() {
+    clearCache();
+  }
+
+  @override
+  Future<void> dispose() async {
+    ServiceRegistry.unregister(this);
+    ServiceRegistry.unregisterMemoryPressureListener(this);
+    clearCache();
+  }
+
+  Future<void> prewarm(String url) async {
     try {
       final uri = Uri.parse(url);
       if (uri.scheme != 'https') return;
@@ -24,11 +44,12 @@ class ConnectionManager {
       );
       await socket.close();
     } catch (e, st) {
-      LoggingService.logger('ConnectionManager').warning('Operation failed', e, st);
+      LoggingService.logger('ConnectionManager')
+          .warning('Operation failed', e, st);
     }
   }
 
-  static Future<bool> detectHttp2(String url) async {
+  Future<bool> detectHttp2(String url) async {
     try {
       final uri = Uri.parse(url);
       if (uri.scheme != 'https') return false;
@@ -69,12 +90,24 @@ class ConnectionManager {
     }
   }
 
-  static void invalidate(String host) {
+  void invalidate(String host) {
     _probes.remove(host);
     ProtocolCache.invalidate(host);
   }
 
-  static void clearCache() => _probes.clear();
+  void clearCache() => _probes.clear();
+
+  Future<ProtocolSupport> detectBestProtocol(String url) async {
+    final cached = ProtocolCache.get(url);
+    if (cached != null) return cached;
+    final isH2 = await detectHttp2(url);
+    if (isH2) {
+      await ProtocolCache.record(url, ProtocolSupport.http2);
+      return ProtocolSupport.http2;
+    }
+    await ProtocolCache.record(url, ProtocolSupport.http11);
+    return ProtocolSupport.http11;
+  }
 
   static Dio createDownloadDio() {
     final dio = Dio();
@@ -106,18 +139,6 @@ class ConnectionManager {
       return msg.contains('goaway') || msg.contains('reset');
     }
     return false;
-  }
-
-  static Future<ProtocolSupport> detectBestProtocol(String url) async {
-    final cached = ProtocolCache.get(url);
-    if (cached != null) return cached;
-    final isH2 = await detectHttp2(url);
-    if (isH2) {
-      await ProtocolCache.record(url, ProtocolSupport.http2);
-      return ProtocolSupport.http2;
-    }
-    await ProtocolCache.record(url, ProtocolSupport.http11);
-    return ProtocolSupport.http11;
   }
 }
 

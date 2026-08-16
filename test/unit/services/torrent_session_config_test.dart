@@ -12,29 +12,37 @@ void main() {
       final settings = SettingsProvider();
       settings.torrentConnectionsLimit = 150;
 
-      PowerMonitor.setBatteryForTesting(level: 80, state: BatteryState.discharging);
+      PowerMonitor.setBatteryForTesting(
+          level: 80, state: BatteryState.discharging);
       expect(TorrentSessionConfig.adaptiveConnectionsLimit(settings), 150);
 
-      PowerMonitor.setBatteryForTesting(level: 30, state: BatteryState.discharging);
+      PowerMonitor.setBatteryForTesting(
+          level: 30, state: BatteryState.discharging);
       expect(TorrentSessionConfig.adaptiveConnectionsLimit(settings), 100);
 
-      PowerMonitor.setBatteryForTesting(level: 10, state: BatteryState.discharging);
+      PowerMonitor.setBatteryForTesting(
+          level: 10, state: BatteryState.discharging);
       expect(TorrentSessionConfig.adaptiveConnectionsLimit(settings), 50);
 
-      PowerMonitor.setBatteryForTesting(level: 100, state: BatteryState.charging);
+      PowerMonitor.setBatteryForTesting(
+          level: 100, state: BatteryState.charging);
     });
 
     test('maxHalfOpenConnections adjusts to battery saver modes', () {
-      PowerMonitor.setBatteryForTesting(level: 80, state: BatteryState.discharging);
+      PowerMonitor.setBatteryForTesting(
+          level: 80, state: BatteryState.discharging);
       expect(TorrentSessionConfig.maxHalfOpenConnections(), 20);
 
-      PowerMonitor.setBatteryForTesting(level: 30, state: BatteryState.discharging);
+      PowerMonitor.setBatteryForTesting(
+          level: 30, state: BatteryState.discharging);
       expect(TorrentSessionConfig.maxHalfOpenConnections(), 8);
 
-      PowerMonitor.setBatteryForTesting(level: 10, state: BatteryState.discharging);
+      PowerMonitor.setBatteryForTesting(
+          level: 10, state: BatteryState.discharging);
       expect(TorrentSessionConfig.maxHalfOpenConnections(), 4);
 
-      PowerMonitor.setBatteryForTesting(level: 100, state: BatteryState.charging);
+      PowerMonitor.setBatteryForTesting(
+          level: 100, state: BatteryState.charging);
     });
   });
 }

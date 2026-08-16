@@ -13,7 +13,8 @@ void main() {
       AppLockService.resetMonotonicState();
     });
 
-    test('resetMonotonicState resets stopwatch elapsed time and mock state', () async {
+    test('resetMonotonicState resets stopwatch elapsed time and mock state',
+        () async {
       // Simulate time passing
       AppLockService.mockMonotonicTimeMs = 50000;
       final time1 = await AppLockService.getMonotonicTimeMs();

@@ -24,14 +24,17 @@ void main() {
       expect(map.length, 50);
     });
 
-    test('NoOpAmbientAnimationController behaves as pure no-op with zero allocations', () {
+    test(
+        'NoOpAmbientAnimationController behaves as pure no-op with zero allocations',
+        () {
       const controller = NoOpAmbientAnimationController();
       controller.stopAll();
       controller.restartIfMounted();
       controller.restartIfActive();
     });
 
-    test('SiteIntelligenceService onMemoryPressure clears fast path cache', () async {
+    test('SiteIntelligenceService onMemoryPressure clears fast path cache',
+        () async {
       final service = SiteIntelligenceService();
       service.analyzeUrl('https://example.org/download/test.mp4');
       service.onMemoryPressure();

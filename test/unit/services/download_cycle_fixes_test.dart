@@ -221,7 +221,9 @@ void main() {
       }
     });
 
-    test('TEST-T2: YouTube audio progress validation resets audioProgress when .audio.dmxstate missing', () async {
+    test(
+        'TEST-T2: YouTube audio progress validation resets audioProgress when .audio.dmxstate missing',
+        () async {
       final tempDir = await Directory.systemTemp.createTemp('t2_yt_audio_');
       try {
         final localPath = '${tempDir.path}/yt_video.mp4';
@@ -260,25 +262,41 @@ void main() {
       }
     });
 
-    test('TEST-T3: Torrent per-file bytes re-read after loadResumeData emitted', () {
+    test('TEST-T3: Torrent per-file bytes re-read after loadResumeData emitted',
+        () {
       final freshFiles = [
-        TorrentFileItem(index: 0, name: 'video.mp4', size: 1000, downloadedBytes: 500, priority: 4, selected: true),
-        TorrentFileItem(index: 1, name: 'subs.srt', size: 200, downloadedBytes: 200, priority: 4, selected: true),
+        TorrentFileItem(
+            index: 0,
+            name: 'video.mp4',
+            size: 1000,
+            downloadedBytes: 500,
+            priority: 4,
+            selected: true),
+        TorrentFileItem(
+            index: 1,
+            name: 'subs.srt',
+            size: 200,
+            downloadedBytes: 200,
+            priority: 4,
+            selected: true),
       ];
-      final updatedFiles = freshFiles.map((f) => {
-        'name': f.name,
-        'length': f.size,
-        'downloadedBytes': f.downloadedBytes >= 0 ? f.downloadedBytes : 0,
-        'selected': f.selected,
-        'priority': f.priority,
-        'progress': f.size > 0
-            ? (f.downloadedBytes / f.size).clamp(0.0, 1.0)
-            : 0.0,
-      }).toList();
+      final updatedFiles = freshFiles
+          .map((f) => {
+                'name': f.name,
+                'length': f.size,
+                'downloadedBytes':
+                    f.downloadedBytes >= 0 ? f.downloadedBytes : 0,
+                'selected': f.selected,
+                'priority': f.priority,
+                'progress': f.size > 0
+                    ? (f.downloadedBytes / f.size).clamp(0.0, 1.0)
+                    : 0.0,
+              })
+          .toList();
 
       final progress = DownloadProgress(
-        downloadedBytes: freshFiles.fold<int>(0, (s, f) =>
-            s + (f.downloadedBytes >= 0 ? f.downloadedBytes : 0)),
+        downloadedBytes: freshFiles.fold<int>(
+            0, (s, f) => s + (f.downloadedBytes >= 0 ? f.downloadedBytes : 0)),
         fileSize: freshFiles.fold<int>(0, (s, f) => s + f.size),
         speed: 0,
         eta: null,
@@ -293,7 +311,9 @@ void main() {
       expect(progress.torrentFiles![0]['downloadedBytes'], equals(500));
     });
 
-    test('TEST-T4: Merge retry skips FFmpeg when output exists and completes task', () async {
+    test(
+        'TEST-T4: Merge retry skips FFmpeg when output exists and completes task',
+        () async {
       final tempDir = await Directory.systemTemp.createTemp('t4_merge_');
       try {
         final localPath = '${tempDir.path}/merged_video.mp4';

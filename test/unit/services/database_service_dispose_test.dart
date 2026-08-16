@@ -11,7 +11,9 @@ void main() {
   });
 
   group('DatabaseService Dispose & Adaptive Maintenance Tests', () {
-    test('dispose cancels all debounce timers, pending entries, and maintenance timers', () async {
+    test(
+        'dispose cancels all debounce timers, pending entries, and maintenance timers',
+        () async {
       final dbService = DatabaseService();
       await dbService.init(testPath: 'test_db_dir');
 
@@ -28,7 +30,8 @@ void main() {
       expect(dbService.isInitialized, isTrue);
     });
 
-    test('PowerMonitor changes trigger adaptive maintenance interval rescaling', () async {
+    test('PowerMonitor changes trigger adaptive maintenance interval rescaling',
+        () async {
       final dbService = DatabaseService();
       await dbService.init(testPath: 'test_db_dir_2');
 

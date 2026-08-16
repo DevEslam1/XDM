@@ -57,7 +57,9 @@ void main() {
       );
     });
 
-    test('validateContentRange allows missing or malformed when allowUnknown is true', () {
+    test(
+        'validateContentRange allows missing or malformed when allowUnknown is true',
+        () {
       expect(
         () => HttpTransferJob.validateContentRange(
           null,
@@ -92,7 +94,9 @@ void main() {
       );
     });
 
-    test('validateContentRange rejects malformed range when allowUnknown is false', () {
+    test(
+        'validateContentRange rejects malformed range when allowUnknown is false',
+        () {
       expect(
         () => HttpTransferJob.validateContentRange(
           'invalid format string',
@@ -157,7 +161,8 @@ void main() {
         'https://mirror3.example.com/file.bin',
       ];
       final failover = MirrorFailover(mirrors);
-      expect(failover.activeUrl, equals('https://mirror1.example.com/file.bin'));
+      expect(
+          failover.activeUrl, equals('https://mirror1.example.com/file.bin'));
 
       final next = failover.advance();
       expect(next, isNotNull);

@@ -106,7 +106,9 @@ void main() {
     DownloadEngine.isInBackground = false;
   });
 
-  test('TEST-T1: StateStore corrupt file recovery recovers from journal or returns zero gracefully', () async {
+  test(
+      'TEST-T1: StateStore corrupt file recovery recovers from journal or returns zero gracefully',
+      () async {
     final tempFilePath = '${tempDir.path}/test_download.dmxpart';
     final stateFilePath = StateStore.pathFor(tempFilePath);
 
@@ -147,12 +149,15 @@ void main() {
     expect(state.chunks[1].downloaded, equals(250));
   });
 
-  test('TransferState.tryParseV3 returns null on invalid or non-v3 payload', () {
+  test('TransferState.tryParseV3 returns null on invalid or non-v3 payload',
+      () {
     expect(TransferState.tryParseV3({'v': 2, 'totalSize': 1000}), isNull);
     expect(TransferState.tryParseV3({}), isNull);
   });
 
-  test('StateStore reconciles with disk when file length is smaller than recorded chunk bytes', () async {
+  test(
+      'StateStore reconciles with disk when file length is smaller than recorded chunk bytes',
+      () async {
     final tempFilePath = '${tempDir.path}/reconcile_test.dmxpart';
     final tempFile = File(tempFilePath);
     await tempFile.writeAsBytes(List.filled(300, 0)); // only 300 bytes on disk
@@ -161,7 +166,10 @@ void main() {
       totalSize: 1000,
       threadCount: 2,
       chunks: [
-        ChunkState(start: 0, end: 499, downloaded: 400), // claims 400, but only 300 exist
+        ChunkState(
+            start: 0,
+            end: 499,
+            downloaded: 400), // claims 400, but only 300 exist
         ChunkState(start: 500, end: 999, downloaded: 0),
       ],
       url: 'https://example.com/file.bin',

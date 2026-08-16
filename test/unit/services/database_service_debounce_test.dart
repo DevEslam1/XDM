@@ -8,7 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  DownloadTask createTask(String id, String name, int downloadedBytes, Directory tempDir) {
+  DownloadTask createTask(
+      String id, String name, int downloadedBytes, Directory tempDir) {
     final now = DateTime.now();
     return DownloadTask(
       id: id,
@@ -46,7 +47,9 @@ void main() {
       }
     });
 
-    test('coalesces 100 rapid saveTaskDebounced calls with at most 1 active timer', () async {
+    test(
+        'coalesces 100 rapid saveTaskDebounced calls with at most 1 active timer',
+        () async {
       for (int i = 0; i < 100; i++) {
         final task = createTask('task_$i', 'file_$i.zip', 10 * i, tempDir);
         await service.saveTaskDebounced(task);
@@ -61,7 +64,9 @@ void main() {
       expect(service.pendingProgressSavesCount, equals(0));
     });
 
-    test('multiple rapid updates to the same task coalesce to 1 pending entry and 1 active timer', () async {
+    test(
+        'multiple rapid updates to the same task coalesce to 1 pending entry and 1 active timer',
+        () async {
       for (int i = 0; i < 10; i++) {
         final task = createTask('single_task', 'file.zip', i * 50, tempDir);
         await service.saveTaskDebounced(task);

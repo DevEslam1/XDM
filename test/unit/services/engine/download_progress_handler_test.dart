@@ -7,7 +7,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('DownloadProgressHandler Tests', () {
-    test('Immediate emission on first progress report and throttled subsequently', () async {
+    test(
+        'Immediate emission on first progress report and throttled subsequently',
+        () async {
       final emitted = <DownloadProgress>[];
       final cancelToken = CancelToken();
 
@@ -54,7 +56,8 @@ void main() {
       handler.dispose();
     });
 
-    test('Cancellation prevents queued throttle emission and suppresses emits', () async {
+    test('Cancellation prevents queued throttle emission and suppresses emits',
+        () async {
       final emitted = <DownloadProgress>[];
       final cancelToken = CancelToken();
 
@@ -93,7 +96,8 @@ void main() {
       handler.dispose();
     });
 
-    test('Torrent file diffing and progress aggregation calculations', () async {
+    test('Torrent file diffing and progress aggregation calculations',
+        () async {
       final emitted = <DownloadProgress>[];
       final cancelToken = CancelToken();
 

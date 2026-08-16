@@ -78,7 +78,8 @@ void main() {
       handler.dispose();
     });
 
-    test('overrides cycleState to starting when YT counterpart is unregistered', () async {
+    test('overrides cycleState to starting when YT counterpart is unregistered',
+        () async {
       final emittedEvents = <DownloadProgress>[];
       final cancelToken = CancelToken();
 
@@ -97,8 +98,10 @@ void main() {
         lastFileSize: 10000,
       );
 
-      final counterpartTaskIds = TimestampedLruMap<String, String>(maxCapacity: 10);
-      final counterpartLiveBytes = TimestampedLruMap<String, int>(maxCapacity: 10);
+      final counterpartTaskIds =
+          TimestampedLruMap<String, String>(maxCapacity: 10);
+      final counterpartLiveBytes =
+          TimestampedLruMap<String, int>(maxCapacity: 10);
 
       // Handle progress when cpId is NOT yet in counterpartTaskIds
       await handler.handleProgress(
@@ -114,7 +117,8 @@ void main() {
 
       expect(emittedEvents.isNotEmpty, true);
       expect(emittedEvents.last.cycleState, CycleState.starting);
-      expect(emittedEvents.last.statusMessage, 'Waiting for counterpart stream…');
+      expect(
+          emittedEvents.last.statusMessage, 'Waiting for counterpart stream…');
 
       handler.dispose();
     });

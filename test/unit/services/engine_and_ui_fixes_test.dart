@@ -39,7 +39,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Fix 1: TorrentFilesPanel Widget Tests', () {
-    testWidgets('renders file items, progress bar and estimated badge correctly', (tester) async {
+    testWidgets(
+        'renders file items, progress bar and estimated badge correctly',
+        (tester) async {
       final sampleFiles = [
         {
           'name': 'Ubuntu-Server-22.04.iso',
@@ -165,7 +167,8 @@ void main() {
   group('Fix 3 & Fix 4: SiteIntelligence & HTTP Failed Error Message', () {
     test('SiteIntelligenceService detects signed/expired URLs', () {
       final service = SiteIntelligenceService();
-      final signedResult = service.analyzeUrl('https://example-storage.com/file?token=123&expire=99999999');
+      final signedResult = service.analyzeUrl(
+          'https://example-storage.com/file?token=123&expire=99999999');
       expect(signedResult.isExpiredOrSigned, isTrue);
     });
   });
@@ -207,7 +210,9 @@ void main() {
   });
 
   group('Fix 7: YouTube Counterpart Slow-Start Decoupling', () {
-    test('DownloadProgressHandler emits retrying at 35s and extends timeout to 5min', () async {
+    test(
+        'DownloadProgressHandler emits retrying at 35s and extends timeout to 5min',
+        () async {
       DownloadProgress? lastEmitted;
       final handler = DownloadProgressHandler(
         taskId: 'yt_test',
@@ -225,7 +230,8 @@ void main() {
       );
 
       // 35s slow start -> retrying state with 'Waiting for counterpart stream…'
-      handler.counterpartWaitStartForTesting = DateTime.now().subtract(const Duration(seconds: 35));
+      handler.counterpartWaitStartForTesting =
+          DateTime.now().subtract(const Duration(seconds: 35));
       await handler.handleWorkerProgress(
         {
           'downloadedBytes': 100,
@@ -235,10 +241,12 @@ void main() {
         isCounterpartUnregistered: true,
       );
       expect(lastEmitted?.cycleState, equals(CycleState.retrying));
-      expect(lastEmitted?.statusMessage, equals('Waiting for counterpart stream…'));
+      expect(lastEmitted?.statusMessage,
+          equals('Waiting for counterpart stream…'));
 
       // 200s (under 5min) -> should still be retrying, NOT throwing UrlExpiredException
-      handler.counterpartWaitStartForTesting = DateTime.now().subtract(const Duration(seconds: 200));
+      handler.counterpartWaitStartForTesting =
+          DateTime.now().subtract(const Duration(seconds: 200));
       await handler.handleWorkerProgress(
         {
           'downloadedBytes': 100,
@@ -250,7 +258,8 @@ void main() {
       expect(lastEmitted?.cycleState, equals(CycleState.retrying));
 
       // 305s (> 5min) -> throws UrlExpiredException
-      handler.counterpartWaitStartForTesting = DateTime.now().subtract(const Duration(seconds: 305));
+      handler.counterpartWaitStartForTesting =
+          DateTime.now().subtract(const Duration(seconds: 305));
       expect(
         () => handler.handleWorkerProgress(
           {
@@ -284,16 +293,20 @@ void main() {
       handler.handleUrlExpired(); // 1
       handler.handleUrlExpired(); // 2
       expect(
-        () => handler.handleUrlExpired(), // 3 -> emits failed then throws DownloadIntegrityException
+        () => handler
+            .handleUrlExpired(), // 3 -> emits failed then throws DownloadIntegrityException
         throwsA(isA<DownloadIntegrityException>()),
       );
       expect(lastEmitted?.cycleState, equals(CycleState.failed));
-      expect(lastEmitted?.statusMessage, contains('Failed: Counterpart stream lost'));
+      expect(lastEmitted?.statusMessage,
+          contains('Failed: Counterpart stream lost'));
     });
   });
 
   group('Fix 2 (Widen updatingLinks Regex): CycleStateResolver', () {
-    test('resolves updating mirrors and refreshing links/urls/mirrors to updatingLinks', () {
+    test(
+        'resolves updating mirrors and refreshing links/urls/mirrors to updatingLinks',
+        () {
       expect(
         CycleStateResolver.resolve(statusMessage: 'Updating mirrors…'),
         equals(CycleState.updatingLinks),
@@ -325,8 +338,20 @@ void main() {
 
     test('distributeEstimatedBytes ignores zero-length files', () {
       final files = [
-        {'name': 'zero.txt', 'length': 0, 'downloadedBytes': 0, 'progressEstimated': true, 'priority': 4},
-        {'name': 'real.bin', 'length': 1000, 'downloadedBytes': 0, 'progressEstimated': true, 'priority': 4},
+        {
+          'name': 'zero.txt',
+          'length': 0,
+          'downloadedBytes': 0,
+          'progressEstimated': true,
+          'priority': 4
+        },
+        {
+          'name': 'real.bin',
+          'length': 1000,
+          'downloadedBytes': 0,
+          'progressEstimated': true,
+          'priority': 4
+        },
       ];
       TorrentDownloadHandler.distributeEstimatedBytes(files, 500);
       expect(files[0]['downloadedBytes'], equals(0));
@@ -384,4 +409,3 @@ void main() {
     });
   });
 }
-

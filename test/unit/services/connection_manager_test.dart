@@ -58,7 +58,8 @@ void main() {
     });
 
     test('detectHttp2 returns false for non-https URLs gracefully', () async {
-      final isH2 = await ConnectionManager.detectHttp2('http://example.com');
+      final isH2 =
+          await ConnectionManager.instance.detectHttp2('http://example.com');
       expect(isH2, isFalse);
     });
 
@@ -66,7 +67,7 @@ void main() {
       const url = 'https://cached-host.com/test.bin';
       await ProtocolCache.record(url, ProtocolSupport.http2);
 
-      final proto = await ConnectionManager.detectBestProtocol(url);
+      final proto = await ConnectionManager.instance.detectBestProtocol(url);
       expect(proto, equals(ProtocolSupport.http2));
     });
 
@@ -75,8 +76,15 @@ void main() {
       await ProtocolCache.record(url, ProtocolSupport.http2);
       expect(ProtocolCache.get(url), equals(ProtocolSupport.http2));
 
-      ConnectionManager.invalidate('test-invalidate.com');
+      final cm = ConnectionManager();
+      cm.invalidate('test-invalidate.com');
       expect(ProtocolCache.get(url), isNull);
+    });
+
+    test('onMemoryPressure clears probes cache', () async {
+      final cm = ConnectionManager();
+      cm.onMemoryPressure();
+      await cm.dispose();
     });
   });
 }

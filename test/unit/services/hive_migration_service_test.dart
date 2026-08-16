@@ -30,7 +30,8 @@ void main() {
   });
 
   group('HiveMigrationService', () {
-    test('migrate marks migration complete when boxes are empty or absent', () async {
+    test('migrate marks migration complete when boxes are empty or absent',
+        () async {
       final migration = HiveMigrationService(db, prefs);
       await migration.migrate();
 

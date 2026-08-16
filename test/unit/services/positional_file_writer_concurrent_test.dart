@@ -19,7 +19,9 @@ void main() {
     }
   });
 
-  test('PositionalFileWriter handles high-concurrency multi-threaded writes without corruption', () async {
+  test(
+      'PositionalFileWriter handles high-concurrency multi-threaded writes without corruption',
+      () async {
     final filePath = '${tempDir.path}/concurrent_test.bin';
     const chunkSize = 64 * 1024; // 64KB per thread
     const threadCount = 8;
@@ -35,7 +37,8 @@ void main() {
     // Prepare distinct data patterns per thread
     final threadPayloads = List.generate(threadCount, (threadIndex) {
       return Uint8List.fromList(
-        List.generate(chunkSize, (byteIndex) => (threadIndex * 31 + byteIndex) % 256),
+        List.generate(
+            chunkSize, (byteIndex) => (threadIndex * 31 + byteIndex) % 256),
       );
     });
 
@@ -48,7 +51,8 @@ void main() {
       futures.add(Future(() async {
         final threadStart = threadIdx * chunkSize;
         for (var offset = 0; offset < chunkSize; offset += sliceSize) {
-          final end = (offset + sliceSize > chunkSize) ? chunkSize : offset + sliceSize;
+          final end =
+              (offset + sliceSize > chunkSize) ? chunkSize : offset + sliceSize;
           final slice = payload.sublist(offset, end);
           await writer.write(threadIdx, threadStart + offset, slice);
         }
@@ -68,7 +72,8 @@ void main() {
       final threadStart = t * chunkSize;
       final expected = threadPayloads[t];
       final actual = writtenBytes.sublist(threadStart, threadStart + chunkSize);
-      expect(actual, equals(expected), reason: 'Thread $t data corrupted at chunk offset $threadStart');
+      expect(actual, equals(expected),
+          reason: 'Thread $t data corrupted at chunk offset $threadStart');
     }
   });
 }

@@ -67,7 +67,12 @@ class _DownloadCardState extends State<DownloadCard>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final task = widget.task;
+    // Performance Optimization: Granular select scoped strictly to this specific task ID
+    // so progress in other downloads does NOT trigger rebuilds for this card.
+    final task = context.select<DownloadProvider, DownloadTask?>(
+          (p) => p.findTaskById(widget.task.id),
+        ) ??
+        widget.task;
     final compact = widget.compact;
 
     final isSelectionMode =
@@ -291,7 +296,8 @@ class StatusChipPulseDriver with WidgetsBindingObserver {
     });
   }
 
-  static final StatusChipPulseDriver instance = StatusChipPulseDriver._internal();
+  static final StatusChipPulseDriver instance =
+      StatusChipPulseDriver._internal();
   factory StatusChipPulseDriver() => instance;
 
   static void stopAll() {
@@ -337,17 +343,25 @@ class StatusChipPulseDriver with WidgetsBindingObserver {
   }
 
   void restartIfActive() {
-    if (_refCount > 0 && !PowerMonitor.screenOff && !DownloadEngine.isInBackground) {
+    if (_refCount > 0 &&
+        !PowerMonitor.screenOff &&
+        !DownloadEngine.isInBackground) {
       _start();
     }
   }
 
   void _start() {
-    if (PowerMonitor.screenOff || DownloadEngine.isInBackground || _refCount <= 0) return;
+    if (PowerMonitor.screenOff ||
+        DownloadEngine.isInBackground ||
+        _refCount <= 0) {
+      return;
+    }
     _stop();
     _lastTick = DateTime.now();
     _ticker = Ticker((elapsed) {
-      if (PowerMonitor.screenOff || DownloadEngine.isInBackground || _refCount <= 0) {
+      if (PowerMonitor.screenOff ||
+          DownloadEngine.isInBackground ||
+          _refCount <= 0) {
         _stop();
         return;
       }
@@ -2336,9 +2350,10 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
       builder: (context, dynamicTorrentFiles, _) {
         try {
           final files = dynamicTorrentFiles ?? widget.task.torrentFiles ?? [];
-          final isChecking = widget.task.statusMessage?.contains('checking') ==
-                  true ||
-              widget.task.statusMessage?.contains('Checking') == true; // FIX-B10
+          final isChecking =
+              widget.task.statusMessage?.contains('checking') == true ||
+                  widget.task.statusMessage?.contains('Checking') ==
+                      true; // FIX-B10
           final displayFiles = files.map((f) {
             final selected = isTorrentFileSelected(f);
             final length = (f['length'] as num?)?.toInt() ?? 0;

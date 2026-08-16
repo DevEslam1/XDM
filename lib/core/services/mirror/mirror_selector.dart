@@ -358,14 +358,16 @@ class MirrorFailover {
 
   Future<void> reportSuccess({double speedBps = 0.0}) async {
     if (_urls.isEmpty) return;
-    await MirrorHealthStore.instance.recordSuccess(_urls[_index], speedBps: speedBps);
+    await MirrorHealthStore.instance
+        .recordSuccess(_urls[_index], speedBps: speedBps);
   }
 
   String? advance() {
     if (_urls.isEmpty) return null;
 
-    final validUrls =
-        _urls.where((u) => !MirrorHealthStore.instance.isBlacklisted(u)).toList();
+    final validUrls = _urls
+        .where((u) => !MirrorHealthStore.instance.isBlacklisted(u))
+        .toList();
     final candidates =
         validUrls.isNotEmpty ? validUrls : List<String>.from(_urls);
 
@@ -427,8 +429,9 @@ class MirrorFailover {
     Future<void> Function(String url) action, {
     double measuredBytesPerSec = 0.0,
   }) async {
-    final validUrls =
-        _urls.where((u) => !MirrorHealthStore.instance.isBlacklisted(u)).toList();
+    final validUrls = _urls
+        .where((u) => !MirrorHealthStore.instance.isBlacklisted(u))
+        .toList();
     final candidateUrls = validUrls.isNotEmpty
         ? List<String>.from(validUrls)
         : List<String>.from(_urls);
@@ -468,8 +471,8 @@ class MirrorFailover {
             );
           },
         );
-        await MirrorHealthStore.instance.recordSuccess(url,
-            speedBps: measuredBytesPerSec);
+        await MirrorHealthStore.instance
+            .recordSuccess(url, speedBps: measuredBytesPerSec);
         await MirrorHealthStore.instance.recordSpeed(url, measuredBytesPerSec);
         circuit.recordSuccess();
         _index = _urls.indexOf(url);

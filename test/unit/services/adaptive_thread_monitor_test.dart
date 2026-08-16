@@ -62,8 +62,7 @@ void main() {
       expect(engine.recommendedThreads('t2', 8), 8);
     });
 
-    test('plateau detection recommends fewer threads after stable speed',
-        () {
+    test('plateau detection recommends fewer threads after stable speed', () {
       fakeAsync((async) {
         engine.startAdaptiveMonitorForTask('t3', 8);
         for (var i = 0; i < 6; i++) {
@@ -109,7 +108,8 @@ void main() {
       });
     });
 
-    test('evaluate clears recommendation when samples count is less than 6', () {
+    test('evaluate clears recommendation when samples count is less than 6',
+        () {
       fakeAsync((async) {
         engine.startAdaptiveMonitorForTask('t6', 8);
         for (var i = 0; i < 3; i++) {

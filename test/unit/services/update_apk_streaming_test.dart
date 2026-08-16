@@ -86,8 +86,7 @@ void main() {
     });
 
     test('verifyApkIntegrity fails on SHA-256 mismatch', () async {
-      final apk = await writeApk(
-          List<int>.generate(1024, (i) => i % 251),
+      final apk = await writeApk(List<int>.generate(1024, (i) => i % 251),
           name: 'hash.apk');
       final ok = await service.verifyApkIntegrity(
         apk,
@@ -99,14 +98,14 @@ void main() {
 
     test('verifyApkIntegrity returns false for a missing file', () async {
       final missing = File('${tempDir.path}/does-not-exist.apk');
-      expect(await service.verifyApkIntegrity(missing, expectedSize: 1), isFalse);
+      expect(
+          await service.verifyApkIntegrity(missing, expectedSize: 1), isFalse);
     });
 
     test('large APK hash is verified without whole-file read', () async {
       // ~5 MB of deterministic data; verifies the streaming path handles
       // multi-chunk reads (chunk sizes are 64KB on most platforms).
-      final payload =
-          List<int>.generate(5 * 1024 * 1024, (i) => i % 251);
+      final payload = List<int>.generate(5 * 1024 * 1024, (i) => i % 251);
       final apk = await writeApk(payload, name: 'large.apk');
       final digest = sha256.convert(payload).toString();
 
@@ -126,7 +125,8 @@ void main() {
             '11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff',
       );
       expect(result.isValid, isFalse);
-      expect(result.failureReason, contains('Certificate fingerprint mismatch'));
+      expect(
+          result.failureReason, contains('Certificate fingerprint mismatch'));
       expect(await apk.exists(), isFalse);
     });
   });

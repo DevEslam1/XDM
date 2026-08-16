@@ -64,7 +64,8 @@ void main() {
   });
 
   group('TorrentService Proxy and SSL Invocation Tests', () {
-    test('setProxy and setSslCertificate complete safely without throwing', () async {
+    test('setProxy and setSslCertificate complete safely without throwing',
+        () async {
       await expectLater(
         TorrentService.setProxy(
           host: '127.0.0.1',
@@ -152,7 +153,8 @@ void main() {
       expect(find.text('Advanced Torrent Controls'), findsOneWidget);
       expect(find.text('Web Seeds (HTTP/FTP)'), findsOneWidget);
       expect(find.text('Proxy Configuration (Session-level)'), findsOneWidget);
-      expect(find.text('SSL / Private Trackers (Session-level)'), findsOneWidget);
+      expect(
+          find.text('SSL / Private Trackers (Session-level)'), findsOneWidget);
       expect(find.text('Add'), findsOneWidget);
       expect(find.text('Apply Proxy Settings'), findsOneWidget);
       expect(find.text('Apply SSL Certificates'), findsOneWidget);

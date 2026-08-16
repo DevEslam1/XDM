@@ -23,8 +23,10 @@ import 'cycle_state_resolver.dart';
 import 'engine_exceptions.dart';
 import 'engine_models.dart';
 import 'engine_utils.dart';
+import 'server_identity_cache.dart';
 
-export 'engine_exceptions.dart' show FileChangedOnServerException, RangeUnsupportedException;
+export 'engine_exceptions.dart'
+    show FileChangedOnServerException, RangeUnsupportedException;
 export 'engine_models.dart' show SpeedSample;
 
 const Duration defaultTaskHardTimeout = kTaskHardTimeout;
@@ -101,7 +103,8 @@ class HttpTransferJob {
   final List<Timer> _pendingDelayTimers = [];
 
   @visibleForTesting
-  List<Completer<void>> get pendingDelayCompletersForTesting => _pendingDelayCompleters;
+  List<Completer<void>> get pendingDelayCompletersForTesting =>
+      _pendingDelayCompleters;
 
   @visibleForTesting
   List<Timer> get pendingDelayTimersForTesting => _pendingDelayTimers;
@@ -166,7 +169,9 @@ class HttpTransferJob {
   int? _lastProgressFingerprint;
   CycleState? _lastEmittedCycleState;
   int _currentWriterBufferSize = 256 * 1024;
-  
+  int _lastChunkDetailsEmitMs = 0;
+  int _lastEmittedCompletedChunks = -1;
+
   PauseReason? _pendingPauseReason;
 
   PauseReason get effectivePauseReason =>
@@ -257,7 +262,8 @@ class HttpTransferJob {
       requestCancel();
       _send('error', {
         'errorType': 'timeout',
-        'errorMessage': 'Hard timeout exceeded: ${_formatDuration(hardTimeoutDuration)}',
+        'errorMessage':
+            'Hard timeout exceeded: ${_formatDuration(hardTimeoutDuration)}',
       });
     }
 
@@ -281,8 +287,7 @@ class HttpTransferJob {
       if (elapsed >= 5 * 60 * 1000) {
         _stalledEmitted = true;
         _emitProgress(_stopwatch.elapsedMilliseconds,
-            statusMessage: 'Stalled',
-            cycleStateOverride: CycleState.stalled);
+            statusMessage: 'Stalled', cycleStateOverride: CycleState.stalled);
       }
     });
   }
@@ -363,8 +368,7 @@ class HttpTransferJob {
     } else {
       // Fix 1: Emit explicit starting state for fresh downloads
       _emitProgress(0,
-          statusMessage: 'Starting…',
-          cycleStateOverride: CycleState.starting);
+          statusMessage: 'Starting…', cycleStateOverride: CycleState.starting);
     }
     return _state!;
   }
@@ -442,30 +446,23 @@ class HttpTransferJob {
     return '${d.inSeconds}s';
   }
 
-  static final TimestampedLruMap<String, bool> _serverIdentityCache =
-      TimestampedLruMap<String, bool>(maxCapacity: 25);
   static int probeSkipCount = 0;
   static int probeRunCount = 0;
 
   static void invalidateIdentityCacheForUrl(String url) {
-    for (final key in List<String>.from(_serverIdentityCache.keys)) {
-      if (key.startsWith('$url|')) {
-        _serverIdentityCache.remove(key);
-      }
-    }
+    ServerIdentityCache.instance.invalidateForUrl(url);
   }
 
   static void clearIdentityCache() {
-    for (final key in List<String>.from(_serverIdentityCache.keys)) {
-      _serverIdentityCache.remove(key);
-    }
+    ServerIdentityCache.instance.clear();
   }
 
   Future<void> _verifyServerIdentity(Dio dio) async {
     final cacheKey =
         '${Uri.tryParse(cmd.punyUrl)?.host}|${_state!.etag}|${_state!.lastModified}|${_state!.totalSize}';
-    _serverIdentityCache.removeStale(const Duration(minutes: 10));
-    if (_serverIdentityCache.containsKey(cacheKey)) {
+    final identityCache = ServerIdentityCache.instance;
+    identityCache.removeStale(const Duration(minutes: 10));
+    if (identityCache.containsKey(cacheKey)) {
       probeSkipCount++;
       debugPrint(
         '[DMX-Job] _verifyServerIdentity cache hit (skips: $probeSkipCount, runs: $probeRunCount)',
@@ -537,17 +534,17 @@ class HttpTransferJob {
           _state!.etag ??= newEtag;
           _state!.lastModified ??= newLm;
         }
-        _serverIdentityCache.put(cacheKey, true);
+        identityCache.put(cacheKey, true);
       }
     } on FileChangedOnServerException {
-      _serverIdentityCache.remove(cacheKey);
+      identityCache.remove(cacheKey);
       rethrow;
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
       final isYtOrSigned = _isExpiredUrlOrSite(cmd.url, host);
       if (isYtOrSigned && (status == 401 || status == 403)) {
-        _serverIdentityCache.remove(cacheKey);
+        identityCache.remove(cacheKey);
         _emitProgress(0,
             statusMessage: 'Refreshing links…',
             cycleStateOverride: CycleState.updatingLinks);
@@ -579,6 +576,8 @@ class HttpTransferJob {
     // Fix 3: Invalidate cached chunk details before first progress emit on fallback
     _cachedChunkDetails = null;
     _lastChunkDetailsHash = 0;
+    _lastChunkDetailsEmitMs = 0;
+    _lastEmittedCompletedChunks = -1;
 
     try {
       final f = File(cmd.tempFilePath);
@@ -735,8 +734,7 @@ class HttpTransferJob {
       if (e is DioException && e.type == DioExceptionType.cancel) {
         st.status = DmxStateStatus.paused;
         _emitProgress(0,
-            statusMessage: 'Paused',
-            pauseReason: effectivePauseReason);
+            statusMessage: 'Paused', pauseReason: effectivePauseReason);
       } else if (e is! RangeUnsupportedException) {
         final anyProven = st.chunks.any((c) => c.downloaded > 0);
         st.status = DmxStateStatus.failed;
@@ -770,8 +768,10 @@ class HttpTransferJob {
     var attempts = 0;
     var totalMirrorAttempts = 0;
     const maxAttempts = 3;
-    final maxTotalAttempts = (failover.hasAlternatives ? failover.remainingAlternatives + 1 : 1) * maxAttempts;
-    
+    final maxTotalAttempts =
+        (failover.hasAlternatives ? failover.remainingAlternatives + 1 : 1) *
+            maxAttempts;
+
     var activeUrl = failover.activeUrl;
     while (!chunk.isComplete) {
       _throwIfCancelled();
@@ -779,7 +779,8 @@ class HttpTransferJob {
       totalMirrorAttempts++;
 
       if (totalMirrorAttempts > maxTotalAttempts) {
-        throw DownloadIntegrityException('Max total mirror attempts ($maxTotalAttempts) exceeded for chunk $chunkIndex');
+        throw DownloadIntegrityException(
+            'Max total mirror attempts ($maxTotalAttempts) exceeded for chunk $chunkIndex');
       }
 
       try {
@@ -1112,7 +1113,9 @@ class HttpTransferJob {
     var attempts = 0;
     var totalMirrorAttempts = 0;
     const maxAttempts = 3;
-    final maxTotalAttempts = (failover.hasAlternatives ? failover.remainingAlternatives + 1 : 1) * maxAttempts;
+    final maxTotalAttempts =
+        (failover.hasAlternatives ? failover.remainingAlternatives + 1 : 1) *
+            maxAttempts;
 
     var activeUrl = failover.activeUrl;
     while (!st.isComplete || st.totalSize <= 0) {
@@ -1121,7 +1124,8 @@ class HttpTransferJob {
       totalMirrorAttempts++;
 
       if (totalMirrorAttempts > maxTotalAttempts) {
-        throw DownloadIntegrityException('Max total mirror attempts ($maxTotalAttempts) exceeded for single-stream job');
+        throw DownloadIntegrityException(
+            'Max total mirror attempts ($maxTotalAttempts) exceeded for single-stream job');
       }
 
       IOSink? sink;
@@ -1273,8 +1277,7 @@ class HttpTransferJob {
         if (e.type == DioExceptionType.cancel) {
           _state!.status = DmxStateStatus.paused;
           _emitProgress(0,
-              statusMessage: 'Paused',
-              pauseReason: effectivePauseReason);
+              statusMessage: 'Paused', pauseReason: effectivePauseReason);
           rethrow;
         }
         if (e.message == 'HTML_INSTEAD_OF_MEDIA') {
@@ -1469,9 +1472,8 @@ class HttpTransferJob {
     final saveInterval = isBackground
         ? const Duration(seconds: 120).inMilliseconds
         : const Duration(seconds: 15).inMilliseconds;
-    final saveByteThreshold = isBackground
-        ? 128 * 1024 * 1024
-        : 32 * 1024 * 1024;
+    final saveByteThreshold =
+        isBackground ? 128 * 1024 * 1024 : 32 * 1024 * 1024;
 
     final dueSave = nowMs - _lastStateSaveMs >= saveInterval ||
         _bytesSinceSave >= saveByteThreshold;
@@ -1551,7 +1553,8 @@ class HttpTransferJob {
           ? getIt<SiteIntelligenceService>()
           : SiteIntelligenceService();
       final analysis = siteService.analyzeUrl(rawUrl);
-      if (analysis.isExpiredOrSigned || (analysis.profile?.urlsExpire == true)) {
+      if (analysis.isExpiredOrSigned ||
+          (analysis.profile?.urlsExpire == true)) {
         return true;
       }
     } catch (e) {
@@ -1611,7 +1614,8 @@ class HttpTransferJob {
       if (_currentWriterBufferSize == 256 * 1024 && speed > 60 * 1024 * 1024) {
         _currentWriterBufferSize = 512 * 1024;
         writer.setBufferSize(512 * 1024);
-      } else if (_currentWriterBufferSize == 512 * 1024 && speed < 30 * 1024 * 1024) {
+      } else if (_currentWriterBufferSize == 512 * 1024 &&
+          speed < 30 * 1024 * 1024) {
         _currentWriterBufferSize = 256 * 1024;
         writer.setBufferSize(256 * 1024);
       }
@@ -1625,19 +1629,36 @@ class HttpTransferJob {
     } else {
       _lastEta = null;
     }
-    final chunkDetails = _getChunkDetails(st);
     final hasIndeterminate = st.chunks.any((c) => c.size < 0);
-    final totalChunks =
-        st.chunks.isNotEmpty ? st.chunks.length : null;
-    final completedChunks =
-        (st.chunks.isNotEmpty && !hasIndeterminate)
-            ? st.chunks.where((c) => c.isComplete).length
-            : null;
+    final totalChunks = st.chunks.isNotEmpty ? st.chunks.length : null;
+    final completedChunks = (st.chunks.isNotEmpty && !hasIndeterminate)
+        ? st.chunks.where((c) => c.isComplete).length
+        : null;
     final cycleState =
         cycleStateOverride ?? _deriveCycleState(statusMessage, st.status);
     final isCycleStateChanged = cycleState != _lastEmittedCycleState;
+    final isTerminalState = cycleState == CycleState.completed ||
+        cycleState == CycleState.failed ||
+        cycleState == CycleState.paused;
 
-    // Fix 6: Folded hash of chunk details
+    // Performance Optimization: Throttle chunkDetails emission to max once every 1.5s,
+    // or when chunk completion count changes, or on state transitions.
+    final bool chunkCompletionChanged =
+        completedChunks != _lastEmittedCompletedChunks;
+    final bool shouldEmitChunkDetails = _lastChunkDetailsEmitMs == 0 ||
+        chunkCompletionChanged ||
+        isCycleStateChanged ||
+        isTerminalState ||
+        (nowMs - _lastChunkDetailsEmitMs >= 1500);
+
+    List<Map<String, dynamic>>? chunkDetails;
+    if (shouldEmitChunkDetails) {
+      chunkDetails = _getChunkDetails(st);
+      _lastChunkDetailsEmitMs = nowMs;
+      _lastEmittedCompletedChunks = completedChunks ?? 0;
+    }
+
+    // Folded hash of chunk details for deduplication
     final chunkDetailsHash = st.chunks.fold<int>(
         0, (h, c) => h ^ Object.hash(c.start, c.end, c.size, c.downloaded));
 

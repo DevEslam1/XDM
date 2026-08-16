@@ -103,7 +103,8 @@ void main() {
       DownloadEngine.appInForeground = true;
     });
 
-    testWidgets('DmxBackdropFilter renders solid Container when appInForeground is false',
+    testWidgets(
+        'DmxBackdropFilter renders solid Container when appInForeground is false',
         (tester) async {
       DownloadEngine.appInForeground = false;
       expect(BackgroundGate.allowHeavyOps, isFalse);
@@ -128,7 +129,8 @@ void main() {
       expect(DmxBackdropFilter.activeCount, equals(0));
     });
 
-    testWidgets('modernAnimationsAllowed returns false when allowHeavyOps is false',
+    testWidgets(
+        'modernAnimationsAllowed returns false when allowHeavyOps is false',
         (tester) async {
       DownloadEngine.appInForeground = false;
       expect(BackgroundGate.allowHeavyOps, isFalse);
@@ -156,7 +158,8 @@ void main() {
     setUp(() async {
       repo = _MockTaskRepo();
       listProvider = DownloadListProvider(repo);
-      queueProvider = DownloadQueueProvider(listProvider: listProvider, maxConcurrentDownloads: 2);
+      queueProvider = DownloadQueueProvider(
+          listProvider: listProvider, maxConcurrentDownloads: 2);
     });
 
     test('StartDownloadUseCase adds task to list and queues it', () async {
@@ -175,7 +178,9 @@ void main() {
       expect(listProvider.tasks.first.id, equals('task-1'));
     });
 
-    test('PauseDownloadUseCase and ResumeDownloadUseCase transition task statuses', () async {
+    test(
+        'PauseDownloadUseCase and ResumeDownloadUseCase transition task statuses',
+        () async {
       final startUseCase = StartDownloadUseCase(listProvider, queueProvider);
       final pauseUseCase = PauseDownloadUseCase(queueProvider);
       final resumeUseCase = ResumeDownloadUseCase(queueProvider);
@@ -190,16 +195,20 @@ void main() {
       );
 
       await startUseCase(task);
-      expect(listProvider.findTask('task-2')?.status, equals(DownloadStatus.downloading));
+      expect(listProvider.findTask('task-2')?.status,
+          equals(DownloadStatus.downloading));
 
       await pauseUseCase('task-2');
-      expect(listProvider.findTask('task-2')?.status, equals(DownloadStatus.paused));
+      expect(listProvider.findTask('task-2')?.status,
+          equals(DownloadStatus.paused));
 
       await resumeUseCase('task-2');
-      expect(listProvider.findTask('task-2')?.status, isNot(equals(DownloadStatus.paused)));
+      expect(listProvider.findTask('task-2')?.status,
+          isNot(equals(DownloadStatus.paused)));
     });
 
-    test('CancelDownloadUseCase marks task failed with cancellation message', () async {
+    test('CancelDownloadUseCase marks task failed with cancellation message',
+        () async {
       final startUseCase = StartDownloadUseCase(listProvider, queueProvider);
       final cancelUseCase = CancelDownloadUseCase(listProvider);
 
@@ -241,7 +250,8 @@ void main() {
       expect(updated?.errorMessage, isNull);
     });
 
-    test('DeleteDownloadUseCase removes task from repository and list', () async {
+    test('DeleteDownloadUseCase removes task from repository and list',
+        () async {
       final startUseCase = StartDownloadUseCase(listProvider, queueProvider);
       final deleteUseCase = DeleteDownloadUseCase(listProvider);
 
@@ -262,7 +272,9 @@ void main() {
   });
 
   group('Audit Remediation: StateStore & Chunks Normalization', () {
-    test('TransferState.tryParseV3 normalizes threadCount to chunk array length safely', () {
+    test(
+        'TransferState.tryParseV3 normalizes threadCount to chunk array length safely',
+        () {
       final json = {
         'version': 3,
         'v': 3,

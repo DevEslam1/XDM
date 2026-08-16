@@ -18,7 +18,9 @@ void main() {
       PowerMonitor.setScreenOn(true);
     });
 
-    test('adapted interval scales up when screen is turned off or app backgrounded', () {
+    test(
+        'adapted interval scales up when screen is turned off or app backgrounded',
+        () {
       final foregroundInterval = LoggingService.adaptedIntervalForTesting();
       expect(foregroundInterval.inSeconds, equals(30));
 

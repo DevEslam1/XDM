@@ -86,7 +86,8 @@ class ActiveFakeEngine extends DownloadEngine {
 
 class GrantedPermissionService extends FakePermissionService {
   @override
-  Future<String> defaultDownloadDirectory() async => 'build/test_merge_downloads';
+  Future<String> defaultDownloadDirectory() async =>
+      'build/test_merge_downloads';
 
   @override
   Future<bool> ensureStorageAccess() async => true;
@@ -146,7 +147,8 @@ void main() {
       ]);
 
       // A stale incoming snapshot reports older progress with a paused status.
-      await provider.setTaskState(provider.taskById('merge-2')!
+      await provider.setTaskState(provider
+          .taskById('merge-2')!
           .copyWith(status: DownloadStatus.paused, downloadedBytes: 50));
 
       final task = provider.taskById('merge-2');
@@ -166,9 +168,9 @@ void main() {
       ]);
 
       // Incoming snapshot from the engine with a stale "downloading" status.
-      await provider
-          .setTaskState(provider.taskById('merge-3')!
-              .copyWith(status: DownloadStatus.downloading));
+      await provider.setTaskState(provider
+          .taskById('merge-3')!
+          .copyWith(status: DownloadStatus.downloading));
 
       final task = provider.taskById('merge-3');
       expect(task, isNotNull);
@@ -187,7 +189,8 @@ void main() {
         ),
       ]);
 
-      await provider.setTaskState(provider.taskById('merge-4')!
+      await provider.setTaskState(provider
+          .taskById('merge-4')!
           .copyWith(status: DownloadStatus.downloading));
 
       final task = provider.taskById('merge-4');
@@ -222,23 +225,21 @@ void main() {
       );
       await pumpEventQueue();
 
-      final live = provider.tasks
-          .singleWhere((t) => t.fileName == 'merge.bin');
+      final live = provider.tasks.singleWhere((t) => t.fileName == 'merge.bin');
       expect(live.status, DownloadStatus.downloading);
 
       // A stale tick reports fewer bytes than the live in-memory task.
-      await provider.setTaskState(
-          live.copyWith(downloadedBytes: 1024 * 1024));
+      await provider.setTaskState(live.copyWith(downloadedBytes: 1024 * 1024));
       await pumpEventQueue();
 
       final task = provider.taskById(live.id);
       expect(task, isNotNull);
-      expect(task!.downloadedBytes,
-          greaterThanOrEqualTo(live.downloadedBytes));
+      expect(task!.downloadedBytes, greaterThanOrEqualTo(live.downloadedBytes));
       expect(task.status, DownloadStatus.downloading);
     });
 
-    test('active download: downloadedBytes larger than fileSize is clamped (H-6)',
+    test(
+        'active download: downloadedBytes larger than fileSize is clamped (H-6)',
         () async {
       setupTestPluginMocks();
       SharedPreferences.setMockInitialValues({});
@@ -266,8 +267,8 @@ void main() {
       await pumpEventQueue();
 
       final live = provider.tasks.singleWhere((t) => t.fileName == 'merge.bin');
-      await provider.setTaskState(
-          live.copyWith(downloadedBytes: live.fileSize + 4096));
+      await provider
+          .setTaskState(live.copyWith(downloadedBytes: live.fileSize + 4096));
       await pumpEventQueue();
 
       final task = provider.taskById(live.id);
@@ -302,8 +303,8 @@ void main() {
       await pumpEventQueue();
 
       final live = provider.tasks.singleWhere((t) => t.fileName == 'merge.bin');
-      await provider.setTaskState(
-          live.copyWith(statusMessage: 'Connecting...'));
+      await provider
+          .setTaskState(live.copyWith(statusMessage: 'Connecting...'));
       await pumpEventQueue();
 
       final task = provider.taskById(live.id);

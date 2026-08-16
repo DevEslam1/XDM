@@ -273,7 +273,8 @@ class DownloadProgress {
       fileSize: (p['fileSize'] as num?)?.toInt() ?? 0,
       speed: (p['speed'] as num?)?.toDouble() ?? 0.0,
       eta: (p['eta'] as num?)?.toInt(),
-      chunks: p['chunks'] != null ? List<double>.from(p['chunks'] as List) : null,
+      chunks:
+          p['chunks'] != null ? List<double>.from(p['chunks'] as List) : null,
       fileName: p['fileName'] as String?,
       supportsResume: p['supportsResume'] as bool?,
       statusMessage: p['statusMessage'] as String?,
@@ -289,9 +290,12 @@ class DownloadProgress {
       completedFiles: (p['completedFiles'] as num?)?.toInt(),
       totalFileBytes: (p['totalFileBytes'] as num?)?.toInt(),
       downloadedFileBytes: (p['downloadedFileBytes'] as num?)?.toInt(),
-      ytStreamKind: p['ytStreamKind'] is YtStreamKind ? p['ytStreamKind'] as YtStreamKind : null,
+      ytStreamKind: p['ytStreamKind'] is YtStreamKind
+          ? p['ytStreamKind'] as YtStreamKind
+          : null,
       ytCounterpartSize: (p['ytCounterpartSize'] as num?)?.toInt(),
-      ytCounterpartDownloadedBytes: (p['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
+      ytCounterpartDownloadedBytes:
+          (p['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
       ytDownloadedBytes: (p['ytDownloadedBytes'] as num?)?.toInt(),
       hasEstimatedFileProgress: p['hasEstimatedFileProgress'] as bool?,
     );
@@ -349,9 +353,11 @@ class DownloadProgress {
       downloadedFileBytes: downloadedFileBytes ?? this.downloadedFileBytes,
       ytStreamKind: ytStreamKind ?? this.ytStreamKind,
       ytCounterpartSize: ytCounterpartSize ?? this.ytCounterpartSize,
-      ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes ?? this.ytCounterpartDownloadedBytes,
+      ytCounterpartDownloadedBytes:
+          ytCounterpartDownloadedBytes ?? this.ytCounterpartDownloadedBytes,
       ytDownloadedBytes: ytDownloadedBytes ?? this.ytDownloadedBytes,
-      hasEstimatedFileProgress: hasEstimatedFileProgress ?? this.hasEstimatedFileProgress,
+      hasEstimatedFileProgress:
+          hasEstimatedFileProgress ?? this.hasEstimatedFileProgress,
     );
   }
 
@@ -360,14 +366,17 @@ class DownloadProgress {
     if (ytStreamKind == YtStreamKind.combined) {
       return progressRatio;
     }
-    final cpSize = (ytCounterpartSize != null && ytCounterpartSize! > 0) ? ytCounterpartSize! : 0;
+    final cpSize = (ytCounterpartSize != null && ytCounterpartSize! > 0)
+        ? ytCounterpartSize!
+        : 0;
     final selfSize = fileSize > 0 ? fileSize : 0;
     final totalSize = selfSize + cpSize;
     if (totalSize <= 0) return null;
 
     final selfDownloaded = ytDownloadedBytes ?? downloadedBytes;
     final cpDownloaded = ytCounterpartDownloadedBytes ?? 0;
-    final totalDownloaded = (selfDownloaded > 0 ? selfDownloaded : 0) + (cpDownloaded > 0 ? cpDownloaded : 0);
+    final totalDownloaded = (selfDownloaded > 0 ? selfDownloaded : 0) +
+        (cpDownloaded > 0 ? cpDownloaded : 0);
     return (totalDownloaded / totalSize).clamp(0.0, 1.0);
   }
 
@@ -378,7 +387,8 @@ class DownloadProgress {
 
   static int _computeChunkDetailsHash(List<ChunkDetail>? details) {
     if (details == null) return 0;
-    return details.fold<int>(details.length, (h, c) => h ^ c.downloaded.hashCode);
+    return details.fold<int>(
+        details.length, (h, c) => h ^ c.downloaded.hashCode);
   }
 
   static int _computeTorrentFilesHash(List<Map<String, dynamic>>? files) {
@@ -389,7 +399,8 @@ class DownloadProgress {
     );
   }
 
-  static bool _areChunkDetailsEqual(List<ChunkDetail>? a, List<ChunkDetail>? b) {
+  static bool _areChunkDetailsEqual(
+      List<ChunkDetail>? a, List<ChunkDetail>? b) {
     if (identical(a, b)) return true;
     if (a == null || b == null) return a == b;
     if (a.length != b.length) return false;

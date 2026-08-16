@@ -137,10 +137,8 @@ class MirrorHealthStore implements DisposableService {
   List<String> getMirrorRanking() {
     if (_cache == null) return [];
     // Snapshot entries first: isBlacklisted() -> _touch() mutates the map.
-    final valid = _cache!.entries
-        .toList()
-        .where((e) => !isBlacklisted(e.key))
-        .toList();
+    final valid =
+        _cache!.entries.toList().where((e) => !isBlacklisted(e.key)).toList();
     valid.sort(
         (a, b) => b.value.averageSpeedBps.compareTo(a.value.averageSpeedBps));
     return valid.map((e) => e.key).toList();
@@ -155,6 +153,7 @@ class MirrorHealthStore implements DisposableService {
         _rankingTtlKey,
         DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
       );
+      await SharedPrefsBatcher.instance.flush();
     } catch (e) {
       _log.warning('Failed to persist mirror ranking: $e');
     }
@@ -173,7 +172,8 @@ class MirrorHealthStore implements DisposableService {
       final list = jsonDecode(raw) as List<dynamic>;
       return list.cast<String>();
     } catch (e, st) {
-      LoggingService.logger('MirrorRegistry').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('MirrorRegistry')
+          .warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -231,13 +231,17 @@ class MirrorHealthStore implements DisposableService {
   Future<void> flushPending({bool durable = false}) async {
     if (_cache == null || !_dirty || _flushing) return;
     if (PowerMonitor.screenOff && !durable) {
-      _log.fine('[MirrorHealth] Skipping flush while screen is off (non-durable)');
+      _log.fine(
+          '[MirrorHealth] Skipping flush while screen is off (non-durable)');
       return;
     }
     _flushing = true;
     try {
       final raw = jsonEncode(_cache!.map((k, v) => MapEntry(k, v.toJson())));
       SharedPrefsBatcher.instance.setString(_storeKey, raw);
+      if (durable) {
+        await SharedPrefsBatcher.instance.flush();
+      }
       _dirty = false;
     } catch (e) {
       _log.warning('Failed to persist mirror health data: $e');
@@ -268,13 +272,15 @@ class MirrorHealthStore implements DisposableService {
   static Future<void> staticInit() => instance.init();
   static Future<void> staticRecordFailure(String url, {int statusCode = 0}) =>
       instance.recordFailure(url, statusCode: statusCode);
-  static Future<void> staticRecordSuccess(String url, {double speedBps = 0.0}) =>
+  static Future<void> staticRecordSuccess(String url,
+          {double speedBps = 0.0}) =>
       instance.recordSuccess(url, speedBps: speedBps);
   static Future<void> staticRecordSpeed(String url, double bytesPerSec) =>
       instance.recordSpeed(url, bytesPerSec);
   static List<String> staticGetMirrorRanking() => instance.getMirrorRanking();
   static bool staticIsBlacklisted(String url) => instance.isBlacklisted(url);
-  static double staticGetPersistedSpeed(String url) => instance.getPersistedSpeed(url);
+  static double staticGetPersistedSpeed(String url) =>
+      instance.getPersistedSpeed(url);
   static int staticGetFailureCount(String url) => instance.getFailureCount(url);
   static Future<void> staticClear() => instance.clear();
 }
@@ -402,25 +408,34 @@ class ServerProfile {
               lastRetryAfter = Duration(seconds: diff.clamp(1, 3600));
             }
           } catch (e, st) {
-      LoggingService.logger('MirrorRegistry').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('MirrorRegistry')
+                .warning('Operation failed', e, st);
+          }
         }
       }
     }
   }
 }
 
-class ServerProfileManager {
-  static final Map<String, ServerProfile> _profiles = {};
+class ServerProfileManager
+    implements DisposableService, MemoryPressureListener {
+  ServerProfileManager() {
+    ServiceRegistry.register(this);
+    ServiceRegistry.registerMemoryPressureListener(this);
+  }
+
+  static final ServerProfileManager instance = ServerProfileManager();
+
+  final Map<String, ServerProfile> _profiles = {};
   static const _maxProfiles = 100;
 
-  static ServerProfile getProfile(String url) {
+  ServerProfile getProfile(String url) {
     _evictIfNeeded();
     final host = Uri.tryParse(url)?.host ?? url;
     return _profiles.putIfAbsent(host, () => ServerProfile(host: host));
   }
 
-  static ({double successRate, int avgResponseTimeMs, bool supportsRange})
+  ({double successRate, int avgResponseTimeMs, bool supportsRange})
       getProfileForMirrorSelection(String url) {
     final profile = getProfile(url);
     return (
@@ -430,13 +445,13 @@ class ServerProfileManager {
     );
   }
 
-  static void recordSuccess(String url, {required int responseTimeMs}) {
+  void recordSuccess(String url, {required int responseTimeMs}) {
     final profile = getProfile(url);
     profile.recordSuccess(responseTimeMs);
     _evictIfNeeded();
   }
 
-  static void recordFailure(
+  void recordFailure(
     String url, {
     required int statusCode,
     required String? retryAfter,
@@ -446,7 +461,7 @@ class ServerProfileManager {
     _evictIfNeeded();
   }
 
-  static Duration getRetryDelay(String url, int attemptNumber) {
+  Duration getRetryDelay(String url, int attemptNumber) {
     final profile = getProfile(url);
 
     if (profile.lastRetryAfter != null) {
@@ -465,10 +480,10 @@ class ServerProfileManager {
     return Duration(seconds: (pow(2, safeAttempt) * 5).toInt().clamp(5, 120));
   }
 
-  static void _evictIfNeeded() {
+  void _evictIfNeeded() {
     final now = DateTime.now();
-    _profiles.removeWhere(
-        (_, profile) => now.difference(profile.lastAccess) > ServerProfile.profileTtl);
+    _profiles.removeWhere((_, profile) =>
+        now.difference(profile.lastAccess) > ServerProfile.profileTtl);
     while (_profiles.length > _maxProfiles) {
       final toEvict = _profiles.entries.reduce((a, b) {
         final scoreA = a.value.lastAccess.millisecondsSinceEpoch +
@@ -481,7 +496,21 @@ class ServerProfileManager {
     }
   }
 
-  static void clear() {
+  void clear() {
+    _profiles.clear();
+  }
+
+  @override
+  void onMemoryPressure() {
+    _profiles.removeWhere((_, profile) =>
+        DateTime.now().difference(profile.lastAccess) >
+        const Duration(hours: 1));
+  }
+
+  @override
+  Future<void> dispose() async {
+    ServiceRegistry.unregister(this);
+    ServiceRegistry.unregisterMemoryPressureListener(this);
     _profiles.clear();
   }
 }
@@ -490,33 +519,56 @@ class ServerProfileManager {
 // Mirror Benchmark Service
 // ═══════════════════════════════════════════════════════════════════════════
 
-class MirrorBenchmarkService {
+class MirrorBenchmarkService
+    implements DisposableService, MemoryPressureListener {
+  MirrorBenchmarkService() {
+    ServiceRegistry.register(this);
+    ServiceRegistry.registerMemoryPressureListener(this);
+  }
+
+  static final MirrorBenchmarkService instance = MirrorBenchmarkService();
+
   static final _log = Logger('MirrorBenchmark');
-  static final Map<String, _BenchmarkResult> _results = {};
+  final Map<String, _BenchmarkResult> _results = {};
   static const _cacheTtl = Duration(hours: 1);
   static const _benchmarkBytes = 512 * 1024;
   static const _maxCacheSize = 50;
+  static const int _maxConcurrentBenchmarks = 3;
 
-  static Future<List<MirrorBenchmarkResult>> benchmarkAll(
+  Future<List<MirrorBenchmarkResult>> benchmarkAll(
     List<String> urls,
   ) async {
-    final results = await Future.wait(
-      urls.map((url) async {
+    if (urls.isEmpty) return [];
+
+    final results = List<MirrorBenchmarkResult?>.filled(urls.length, null);
+    var nextIndex = 0;
+
+    // Performance Optimization: Concurrency pool limiting concurrent benchmark
+    // requests to a maximum of 3 at a time to prevent OS socket exhaustion.
+    Future<void> worker() async {
+      while (true) {
+        final i = nextIndex++;
+        if (i >= urls.length) break;
+        final url = urls[i];
         try {
-          return await _benchmarkSingle(url);
+          results[i] = await _benchmarkSingle(url);
         } catch (e) {
           _log.warning('[Benchmark] Failed for $url: $e');
-          return MirrorBenchmarkResult(
+          results[i] = MirrorBenchmarkResult(
             url: url,
             latencyMs: 99999,
             speedBps: 0,
             success: false,
           );
         }
-      }),
-    );
+      }
+    }
 
-    final ranked = List<MirrorBenchmarkResult>.of(results)
+    final poolSize = min(_maxConcurrentBenchmarks, urls.length);
+    final workers = List.generate(poolSize, (_) => worker());
+    await Future.wait(workers);
+
+    final ranked = results.whereType<MirrorBenchmarkResult>().toList()
       ..sort((a, b) {
         if (a.success != b.success) return a.success ? -1 : 1;
         return a.latencyMs.compareTo(b.latencyMs);
@@ -524,9 +576,21 @@ class MirrorBenchmarkService {
     return ranked;
   }
 
-  static void clearCache() => _results.clear();
+  void clearCache() => _results.clear();
 
-  static Future<MirrorBenchmarkResult> _benchmarkSingle(String url) async {
+  @override
+  void onMemoryPressure() {
+    clearCache();
+  }
+
+  @override
+  Future<void> dispose() async {
+    ServiceRegistry.unregister(this);
+    ServiceRegistry.unregisterMemoryPressureListener(this);
+    clearCache();
+  }
+
+  Future<MirrorBenchmarkResult> _benchmarkSingle(String url) async {
     final cached = _results[url];
     if (cached != null && !cached.isExpired) {
       return cached.toResult(url);

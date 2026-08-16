@@ -122,7 +122,8 @@ void main() {
       engine.dispose();
     });
 
-    test('FIX-4: _resetToSingleStream cleans stale state and journal files', () {
+    test('FIX-4: _resetToSingleStream cleans stale state and journal files',
+        () {
       final tempDir = Directory.systemTemp.createTempSync('dmx_fix4_test');
       final tempFile = File('${tempDir.path}/test.dmxpart');
       final stateFile = File('${tempDir.path}/test.dmxpart.dmxstate');
@@ -161,8 +162,18 @@ void main() {
 
     test('FIX-6: Torrent per-file sum is authoritative total', () {
       final resolvedFiles = [
-        {'name': 'file1.mkv', 'length': 1000, 'downloadedBytes': 500, 'progressEstimated': false},
-        {'name': 'file2.mkv', 'length': 2000, 'downloadedBytes': 1000, 'progressEstimated': false},
+        {
+          'name': 'file1.mkv',
+          'length': 1000,
+          'downloadedBytes': 500,
+          'progressEstimated': false
+        },
+        {
+          'name': 'file2.mkv',
+          'length': 2000,
+          'downloadedBytes': 1000,
+          'progressEstimated': false
+        },
       ];
       const rawDownloaded = 1400; // aggregate divergence
 
@@ -170,7 +181,8 @@ void main() {
         0,
         (s, f) => s + ((f['downloadedBytes'] as num?)?.toInt() ?? 0),
       );
-      final authoritativeDownloaded = perFileSum > 0 ? perFileSum : rawDownloaded;
+      final authoritativeDownloaded =
+          perFileSum > 0 ? perFileSum : rawDownloaded;
 
       expect(authoritativeDownloaded, equals(1500));
     });
@@ -185,7 +197,8 @@ void main() {
       expect(formatProgress(fileProgress, false), equals('54.3%'));
     });
 
-    test('FIX-8: _distributeEstimatedBytes excludes already-complete files', () {
+    test('FIX-8: _distributeEstimatedBytes excludes already-complete files',
+        () {
       final files = [
         {
           'name': 'f1.mp4',
@@ -213,7 +226,9 @@ void main() {
       expect(needing.first['name'], equals('f2.mp4'));
     });
 
-    test('FIX-9: sanitizedChunks redistributes proportionally on thread reduction', () {
+    test(
+        'FIX-9: sanitizedChunks redistributes proportionally on thread reduction',
+        () {
       final task = makeTask(
         id: 'task_chunks_1',
         threadCount: 2,
@@ -344,10 +359,12 @@ void main() {
 
       expect(normalizeName(singleEncoded), equals('movie (2024)/file.mkv'));
       expect(normalizeName(doubleEncoded), equals('movie (2024)/file.mkv'));
-      expect(normalizeName(singleEncoded), equals(normalizeName(doubleEncoded)));
+      expect(
+          normalizeName(singleEncoded), equals(normalizeName(doubleEncoded)));
     });
 
-    test('FIX-15: audioSize == 0 falls back to fileSize in combinedTotalSize', () {
+    test('FIX-15: audioSize == 0 falls back to fileSize in combinedTotalSize',
+        () {
       final task = makeTask(
         id: 'yt_task_zero_audio',
         mergedAudioUrl: 'https://example.com/audio',
@@ -380,7 +397,8 @@ void main() {
       expect(resolvedFiles.first['speed'], closeTo(700000.0, 1.0));
     });
 
-    test('FIX-17: pauseTask immediately sets status to paused without waiting', () async {
+    test('FIX-17: pauseTask immediately sets status to paused without waiting',
+        () async {
       final task = makeTask(
         id: 'opt_pause_task',
         status: DownloadStatus.downloading,
@@ -398,7 +416,8 @@ void main() {
       expect(updated.speed, equals(0));
     });
 
-    test('FIX-18: forceCancelJob terminates worker isolate and delivers error', () async {
+    test('FIX-18: forceCancelJob terminates worker isolate and delivers error',
+        () async {
       final pool = DownloadIsolatePool(size: 1);
       await pool.init();
 
@@ -421,7 +440,8 @@ void main() {
       bool errorDelivered = false;
       final completer = Completer<void>();
       job.messages.listen((msg) {
-        if (msg.type == EngineMessageType.error && msg.data['errorType'] == 'forceCancelled') {
+        if (msg.type == EngineMessageType.error &&
+            msg.data['errorType'] == 'forceCancelled') {
           errorDelivered = true;
           if (!completer.isCompleted) completer.complete();
         }
@@ -429,7 +449,8 @@ void main() {
 
       pool.forceCancelJob('stuck_task');
 
-      await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {});
+      await completer.future
+          .timeout(const Duration(seconds: 5), onTimeout: () {});
 
       expect(errorDelivered, isTrue);
       await pool.shutdown();

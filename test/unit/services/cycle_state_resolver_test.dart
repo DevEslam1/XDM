@@ -63,7 +63,8 @@ void main() {
         CycleState.merging,
       );
       expect(
-        CycleStateResolver.resolve(statusMessage: 'Download completed successfully'),
+        CycleStateResolver.resolve(
+            statusMessage: 'Download completed successfully'),
         CycleState.completed,
       );
       expect(
@@ -99,7 +100,8 @@ void main() {
         CycleState.starting,
       );
       expect(
-        CycleStateResolver.resolve(statusMessage: 'Waiting for counterpart stream…'),
+        CycleStateResolver.resolve(
+            statusMessage: 'Waiting for counterpart stream…'),
         CycleState.starting,
       );
       expect(
@@ -111,7 +113,8 @@ void main() {
         CycleState.updatingLinks,
       );
       expect(
-        CycleStateResolver.resolve(statusMessage: 'Retrying (mirror failover)…'),
+        CycleStateResolver.resolve(
+            statusMessage: 'Retrying (mirror failover)…'),
         CycleState.retrying,
       );
       expect(

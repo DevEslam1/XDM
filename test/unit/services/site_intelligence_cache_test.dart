@@ -1,9 +1,14 @@
 import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
 import 'package:dmx/core/utils/bounded_lru_cache.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
 
   group('BoundedLruCache', () {
     test('evicts oldest entry when exceeding maxCapacity', () {
@@ -55,10 +60,6 @@ void main() {
   });
 
   group('SiteIntelligenceService FastPath Cache', () {
-    setUp(() {
-      SiteIntelligenceService.clearFastPathCache();
-    });
-
     test('analyzeUrl uses fast path cache and clears properly', () async {
       final service = SiteIntelligenceService();
       const url = 'https://customcdn.example.org/files/archive.zip';
@@ -70,7 +71,7 @@ void main() {
       final res2 = service.analyzeUrl(url);
       expect(res2.contentHint, ContentHint.archiveFile);
 
-      SiteIntelligenceService.clearFastPathCache();
+      service.clearFastPathCache();
       await service.dispose();
     });
 

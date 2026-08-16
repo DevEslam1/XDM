@@ -73,10 +73,12 @@ void main() {
         baseInterval: const Duration(seconds: 1),
         callback: () {},
       );
-      expect(BackgroundTimerManager.instance.getEffectiveInterval('t1'), isNotNull);
+      expect(BackgroundTimerManager.instance.getEffectiveInterval('t1'),
+          isNotNull);
 
       BackgroundTimerManager.instance.cancel('t1');
-      expect(BackgroundTimerManager.instance.getEffectiveInterval('t1'), isNull);
+      expect(
+          BackgroundTimerManager.instance.getEffectiveInterval('t1'), isNull);
     });
   });
 }
