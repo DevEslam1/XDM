@@ -61,7 +61,8 @@ void main() {
       );
     });
 
-    test('onIosBackground returns false when channel call fails or returns false',
+    test(
+        'onIosBackground returns false when channel call fails or returns false',
         () async {
       const channel = MethodChannel('com.dmx.app/background_download');
 
@@ -112,21 +113,26 @@ void main() {
       expect(CrashReportingService.reporter, isA<NoOpCrashReporter>());
     });
 
-    test('redactSensitive redacts api_key, access_token, password, and Bearer', () {
+    test('redactSensitive redacts api_key, access_token, password, and Bearer',
+        () {
       expect(
-        CrashReportingService.redactSensitive('https://example.com/api?api_key=secret123&user=john'),
+        CrashReportingService.redactSensitive(
+            'https://example.com/api?api_key=secret123&user=john'),
         equals('https://example.com/api?api_key=***&user=john'),
       );
       expect(
-        CrashReportingService.redactSensitive('https://example.com/download?access_token=token456&file=movie.mp4'),
+        CrashReportingService.redactSensitive(
+            'https://example.com/download?access_token=token456&file=movie.mp4'),
         equals('https://example.com/download?access_token=***&file=movie.mp4'),
       );
       expect(
-        CrashReportingService.redactSensitive('https://example.com/login?password=myPassword99&user=admin'),
+        CrashReportingService.redactSensitive(
+            'https://example.com/login?password=myPassword99&user=admin'),
         equals('https://example.com/login?password=***&user=admin'),
       );
       expect(
-        CrashReportingService.redactSensitive('Authorization: Bearer mySecretJwtToken12345'),
+        CrashReportingService.redactSensitive(
+            'Authorization: Bearer mySecretJwtToken12345'),
         equals('Authorization: Bearer ***'),
       );
     });

@@ -74,8 +74,10 @@ class ChannelProgressPainter extends CustomPainter {
   bool shouldRepaint(covariant ChannelProgressPainter oldDelegate) {
     if (oldDelegate.chunkDetails.length != chunkDetails.length) return true;
     for (int i = 0; i < chunkDetails.length; i++) {
-      if (oldDelegate.chunkDetails[i].downloaded != chunkDetails[i].downloaded ||
-          oldDelegate.chunkDetails[i].isComplete != chunkDetails[i].isComplete) {
+      if (oldDelegate.chunkDetails[i].downloaded !=
+              chunkDetails[i].downloaded ||
+          oldDelegate.chunkDetails[i].isComplete !=
+              chunkDetails[i].isComplete) {
         return true;
       }
     }

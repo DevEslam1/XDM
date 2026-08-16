@@ -24,7 +24,8 @@ class ScreenshotService {
         )
       ''');
     } catch (e, st) {
-      LoggingService.logger('ScreenshotService').warning('Operation failed', e, st);
+      LoggingService.logger('ScreenshotService')
+          .warning('Operation failed', e, st);
     }
 
     return await controller.takeScreenshot(

@@ -89,10 +89,8 @@ class TorrentDownloadOrchestrator {
           initialFileSize: knownFileSize);
       _applyFilePriorities(id, getTorrentFiles?.call());
 
-      final resumeBlob =
-          await TorrentResumeStore.loadResumeDataForSource(url);
-      if (resumeBlob != null &&
-          TorrentService.loadResumeData(id, resumeBlob)) {
+      final resumeBlob = await TorrentResumeStore.loadResumeDataForSource(url);
+      if (resumeBlob != null && TorrentService.loadResumeData(id, resumeBlob)) {
         // Fast resume data loaded
       } else {
         TorrentService.recheckTorrent(id);
@@ -207,8 +205,8 @@ class TorrentDownloadOrchestrator {
           : (summary.downloaded > 0 ? summary.downloaded : torrent.totalDone);
 
       final stateLabel = torrent.stateLabel.toLowerCase();
-      final isComplete =
-          stateLabel == 'seeding' || (totalWanted > 0 && downloaded >= totalWanted);
+      final isComplete = stateLabel == 'seeding' ||
+          (totalWanted > 0 && downloaded >= totalWanted);
 
       onProgress(DownloadProgress(
         downloadedBytes: downloaded,

@@ -261,7 +261,8 @@ class WidgetDataBridge {
       final wait = effectiveInterval - now.difference(_lastPush!);
       _pendingTimer = Timer(wait, () {
         _pendingTimer = null;
-        unawaited(_doPush(dashboard).catchError((e) => _log.warning('Failed to push widget data', e)));
+        unawaited(_doPush(dashboard)
+            .catchError((e) => _log.warning('Failed to push widget data', e)));
       });
       return;
     }
@@ -294,7 +295,8 @@ class WidgetDataBridge {
       final value = await channel.invokeMethod<int>('getFreeDiskSpace');
       return value ?? -1;
     } catch (e, st) {
-      LoggingService.logger('WidgetDataBridge').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('WidgetDataBridge')
+          .warning('Operation failed with fallback', e, st);
       return -1;
     }
   }

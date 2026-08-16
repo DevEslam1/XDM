@@ -78,11 +78,13 @@ void main() {
       );
       service.add(task);
 
-      final updated = task.copyWith(status: DownloadStatus.downloading, speed: 500);
+      final updated =
+          task.copyWith(status: DownloadStatus.downloading, speed: 500);
       final ok = service.update(updated);
 
       expect(ok, true);
-      expect(service.getById('task-update')!.status, DownloadStatus.downloading);
+      expect(
+          service.getById('task-update')!.status, DownloadStatus.downloading);
       expect(service.getById('task-update')!.speed, 500);
     });
 

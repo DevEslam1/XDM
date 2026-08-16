@@ -129,7 +129,8 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
       }
     } catch (e) {
       assert(() {
-        debugPrint('[PausableLoopAnimation] Controller disposed or ticker removed: $e');
+        debugPrint(
+            '[PausableLoopAnimation] Controller disposed or ticker removed: $e');
         return true;
       }());
     }

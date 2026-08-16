@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('YouTube Merge Pipeline Integration Test (FIX-35)', () {
-    test('YouTube dual-stream task calculates combined size and progress correctly', () {
+    test(
+        'YouTube dual-stream task calculates combined size and progress correctly',
+        () {
       final task = DownloadTask(
         id: 'yt_test_1',
         fileName: 'Sample Video.mp4',
@@ -11,7 +13,8 @@ void main() {
         fileSize: 100 * 1024 * 1024, // 100 MB video
         videoStreamSize: 100 * 1024 * 1024,
         downloadedBytes: 50 * 1024 * 1024,
-        mergedAudioUrl: 'https://rr1---sn-abc.googlevideo.com/videoplayback?itag=140',
+        mergedAudioUrl:
+            'https://rr1---sn-abc.googlevideo.com/videoplayback?itag=140',
         audioSize: 20 * 1024 * 1024, // 20 MB audio
         audioDownloadedBytes: 10 * 1024 * 1024,
         audioProgress: 0.5,
@@ -28,7 +31,8 @@ void main() {
 
       expect(task.hasMergedAudio, isTrue);
       expect(task.combinedTotalSize, equals(120 * 1024 * 1024)); // 100MB + 20MB
-      expect(task.combinedDownloadedBytes, equals(60 * 1024 * 1024)); // 50MB + 10MB
+      expect(task.combinedDownloadedBytes,
+          equals(60 * 1024 * 1024)); // 50MB + 10MB
       expect(task.progress, closeTo(0.5, 0.01));
     });
 
@@ -40,7 +44,8 @@ void main() {
         fileSize: 50 * 1024 * 1024,
         videoStreamSize: 50 * 1024 * 1024,
         downloadedBytes: 50 * 1024 * 1024,
-        mergedAudioUrl: 'https://rr1---sn-abc.googlevideo.com/videoplayback?itag=140',
+        mergedAudioUrl:
+            'https://rr1---sn-abc.googlevideo.com/videoplayback?itag=140',
         audioSize: 10 * 1024 * 1024,
         audioDownloadedBytes: 10 * 1024 * 1024,
         audioProgress: 1.0,
@@ -64,7 +69,10 @@ void main() {
 
       expect(task.status, equals(DownloadStatus.merging));
       expect(task.isMergeInProgress, isTrue);
-      expect(DownloadTask.isValidTransition(DownloadStatus.downloading, DownloadStatus.merging), isTrue);
+      expect(
+          DownloadTask.isValidTransition(
+              DownloadStatus.downloading, DownloadStatus.merging),
+          isTrue);
 
       // Merge complete -> transitions to completed
       task = task.copyWith(
@@ -76,7 +84,10 @@ void main() {
 
       expect(task.status, equals(DownloadStatus.completed));
       expect(task.progress, equals(1.0));
-      expect(DownloadTask.isValidTransition(DownloadStatus.merging, DownloadStatus.completed), isTrue);
+      expect(
+          DownloadTask.isValidTransition(
+              DownloadStatus.merging, DownloadStatus.completed),
+          isTrue);
     });
 
     test('YouTube merge failure allows retrying or resuming', () {
@@ -87,7 +98,8 @@ void main() {
         fileSize: 40 * 1024 * 1024,
         videoStreamSize: 40 * 1024 * 1024,
         downloadedBytes: 40 * 1024 * 1024,
-        mergedAudioUrl: 'https://rr1---sn-abc.googlevideo.com/videoplayback?itag=140',
+        mergedAudioUrl:
+            'https://rr1---sn-abc.googlevideo.com/videoplayback?itag=140',
         audioSize: 10 * 1024 * 1024,
         audioDownloadedBytes: 10 * 1024 * 1024,
         category: 'Videos',
@@ -109,7 +121,10 @@ void main() {
 
       expect(task.status, equals(DownloadStatus.failed));
       expect(task.failureCategory, equals(FailureCategory.mergeFailed));
-      expect(DownloadTask.isValidTransition(DownloadStatus.merging, DownloadStatus.failed), isTrue);
+      expect(
+          DownloadTask.isValidTransition(
+              DownloadStatus.merging, DownloadStatus.failed),
+          isTrue);
     });
   });
 }

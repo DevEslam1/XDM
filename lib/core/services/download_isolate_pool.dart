@@ -35,7 +35,8 @@ class EngineMessage {
         (raw['seq'] as num?)?.toInt() ?? 0,
       );
     } catch (e, st) {
-      LoggingService.logger('DownloadIsolatePool').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('DownloadIsolatePool')
+          .warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -199,7 +200,8 @@ class DownloadIsolatePool implements MemoryPressureListener {
       try {
         w.commandPort?.send({'t': 'shutdown'});
       } catch (e, st) {
-        LoggingService.logger('DownloadIsolatePool').warning('Operation failed', e, st);
+        LoggingService.logger('DownloadIsolatePool')
+            .warning('Operation failed', e, st);
       }
       w.inbox.close();
       w.errorPort.close();
@@ -251,7 +253,8 @@ class DownloadIsolatePool implements MemoryPressureListener {
       try {
         w.commandPort?.send({'t': 'shutdown'});
       } catch (e, st) {
-        LoggingService.logger('DownloadIsolatePool').warning('Operation failed', e, st);
+        LoggingService.logger('DownloadIsolatePool')
+            .warning('Operation failed', e, st);
       }
       w.inbox.close();
       w.errorPort.close();
@@ -296,7 +299,8 @@ class DownloadIsolatePool implements MemoryPressureListener {
         worker.isolate.kill(priority: Isolate.immediate);
       }
     } catch (e, st) {
-      LoggingService.logger('DownloadIsolatePool').warning('Operation failed', e, st);
+      LoggingService.logger('DownloadIsolatePool')
+          .warning('Operation failed', e, st);
     } finally {
       _isSpawning = false;
       _drain();
@@ -482,7 +486,8 @@ class DownloadIsolatePool implements MemoryPressureListener {
       }
     }
     if (worker != null) {
-      debugPrint('[DMX-Pool] forceCancelJob: killing worker isolate for task $taskId');
+      debugPrint(
+          '[DMX-Pool] forceCancelJob: killing worker isolate for task $taskId');
       worker.dead = true;
       final jobs = List<PoolJob>.from(worker.pending);
       worker.pending.clear();
@@ -507,8 +512,8 @@ class DownloadIsolatePool implements MemoryPressureListener {
               _workers.add(w);
               _drain();
             } catch (e, st) {
-              LoggingService.logger('DownloadIsolatePool')
-                  .warning('Failed to respawn worker after force cancel', e, st);
+              LoggingService.logger('DownloadIsolatePool').warning(
+                  'Failed to respawn worker after force cancel', e, st);
             }
           } else {
             _drain();
@@ -525,7 +530,6 @@ class DownloadIsolatePool implements MemoryPressureListener {
       });
     }
   }
-
 
   void updateSpeedLimit(int bytesPerSecond, int activeCount) {
     for (final w in _workers) {

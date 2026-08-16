@@ -9,6 +9,49 @@ part 'app_database.g.dart';
 
 final _dbLog = LoggingService.logger('AppDatabase');
 
+List<double> _recoverDoubleList(String fromDb) {
+  try {
+    final arrayMatch = RegExp(r'\[([\s\S]*)\]').firstMatch(fromDb);
+    final targetText = arrayMatch != null ? arrayMatch.group(1)! : fromDb;
+    final matches = RegExp(r'[0-9]+(?:\.[0-9]+)?').allMatches(targetText);
+    final result = <double>[];
+    for (final match in matches) {
+      final valStr = match.group(0);
+      if (valStr != null) {
+        final val = double.tryParse(valStr);
+        if (val != null) {
+          result.add(val);
+        }
+      }
+    }
+    return result;
+  } catch (_) {
+    return [];
+  }
+}
+
+List<Map<String, dynamic>> _recoverTorrentFiles(String fromDb) {
+  try {
+    final result = <Map<String, dynamic>>[];
+    final regex = RegExp(r'\{[^{}]*\}');
+    final matches = regex.allMatches(fromDb);
+    for (final match in matches) {
+      final objStr = match.group(0);
+      if (objStr != null) {
+        try {
+          final obj = jsonDecode(objStr);
+          if (obj is Map) {
+            result.add(Map<String, dynamic>.from(obj));
+          }
+        } catch (_) {}
+      }
+    }
+    return result;
+  } catch (_) {
+    return [];
+  }
+}
+
 class DoubleListConverter extends TypeConverter<List<double>, String> {
   const DoubleListConverter();
 
@@ -37,19 +80,7 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
       return [];
     } catch (e) {
       try {
-        final arrayMatch = RegExp(r'\[([\s\S]*)\]').firstMatch(fromDb);
-        final targetText = arrayMatch != null ? arrayMatch.group(1)! : fromDb;
-        final matches = RegExp(r'[0-9]+(?:\.[0-9]+)?').allMatches(targetText);
-        final result = <double>[];
-        for (final match in matches) {
-          final valStr = match.group(0);
-          if (valStr != null) {
-            final val = double.tryParse(valStr);
-            if (val != null) {
-              result.add(val);
-            }
-          }
-        }
+        final result = _recoverDoubleList(fromDb);
         if (result.isNotEmpty) {
           _dbLog.info(
               'Successfully recovered ${result.length} double items from corrupted JSON');
@@ -84,8 +115,9 @@ class TorrentFilesConverter
               result.add(Map<String, dynamic>.from(e));
             }
           } catch (e, st) {
-      LoggingService.logger('AppDatabase').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('AppDatabase')
+                .warning('Operation failed', e, st);
+          }
         }
         return result;
       }
@@ -94,22 +126,7 @@ class TorrentFilesConverter
       return [];
     } catch (e) {
       try {
-        final result = <Map<String, dynamic>>[];
-        final regex = RegExp(r'\{[^{}]*\}');
-        final matches = regex.allMatches(fromDb);
-        for (final match in matches) {
-          final objStr = match.group(0);
-          if (objStr != null) {
-            try {
-              final obj = jsonDecode(objStr);
-              if (obj is Map) {
-                result.add(Map<String, dynamic>.from(obj));
-              }
-            } catch (e, st) {
-      LoggingService.logger('AppDatabase').warning('Operation failed', e, st);
-    }
-          }
-        }
+        final result = _recoverTorrentFiles(fromDb);
         if (result.isNotEmpty) {
           _dbLog.info(
               'Successfully recovered ${result.length} torrent file entries from corrupted JSON');
@@ -367,7 +384,8 @@ class AppDatabase extends _$AppDatabase {
               final recoveredFromNow = await customSelect(
                 'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0',
               ).get();
-              final recoverFromNowCount = recoveredFromNow.first.read<int>('cnt');
+              final recoverFromNowCount =
+                  recoveredFromNow.first.read<int>('cnt');
               if (recoverFromNowCount > 0) {
                 await customStatement(
                   "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0",
@@ -551,7 +569,8 @@ class AppDatabase extends _$AppDatabase {
               await customStatement(
                   'ALTER TABLE download_tasks ADD COLUMN audio_downloaded_bytes INTEGER NOT NULL DEFAULT 0');
             } catch (e) {
-              _dbLog.info('Column audio_downloaded_bytes may already exist: $e');
+              _dbLog
+                  .info('Column audio_downloaded_bytes may already exist: $e');
             }
           }
           if (from < 16) {
@@ -573,7 +592,8 @@ class AppDatabase extends _$AppDatabase {
               await customStatement(
                   'ALTER TABLE browser_history ADD COLUMN favicon_url TEXT');
             } catch (e) {
-              _dbLog.info('Column favicon_url on browser_history may already exist: $e');
+              _dbLog.info(
+                  'Column favicon_url on browser_history may already exist: $e');
             }
             try {
               await customStatement(
@@ -585,7 +605,8 @@ class AppDatabase extends _$AppDatabase {
               await customStatement(
                   'ALTER TABLE browser_tabs ADD COLUMN favicon_url TEXT');
             } catch (e) {
-              _dbLog.info('Column favicon_url on browser_tabs may already exist: $e');
+              _dbLog.info(
+                  'Column favicon_url on browser_tabs may already exist: $e');
             }
             await customStatement(
                 'CREATE INDEX IF NOT EXISTS idx_browser_history_url ON browser_history (url)');

@@ -7,7 +7,8 @@ class PauseDownloadUseCase {
 
   const PauseDownloadUseCase(this._queueProvider);
 
-  Future<void> call(String taskId, {PauseReason reason = PauseReason.userRequested}) async {
+  Future<void> call(String taskId,
+      {PauseReason reason = PauseReason.userRequested}) async {
     await _queueProvider.pauseTask(taskId, reason: reason);
   }
 }

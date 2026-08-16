@@ -87,4 +87,3 @@ class TorrentProvider extends ChangeNotifier {
     super.dispose();
   }
 }
-

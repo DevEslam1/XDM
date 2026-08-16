@@ -59,6 +59,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
   bool get _isLowEndDevice {
     return PowerMonitor.isLowEndDevice || (_cachedIsLowEnd ??= _detectLowEnd());
   }
+
   static bool? _cachedIsLowEnd;
 
   static bool _detectLowEnd() {
@@ -190,7 +191,8 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
         reduceVisuals = SettingsProvider.instance.reduceVisuals;
         classicUi = SettingsProvider.instance.classicUi;
       } catch (e, st) {
-        LoggingService.logger('DmxBackdropFilter').warning('Failed to read fallback settings', e, st);
+        LoggingService.logger('DmxBackdropFilter')
+            .warning('Failed to read fallback settings', e, st);
       }
     }
     if (reduceVisuals || classicUi) {

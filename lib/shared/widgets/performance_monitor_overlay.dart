@@ -34,7 +34,8 @@ class _PerformanceMonitorOverlayState extends State<PerformanceMonitorOverlay> {
     try {
       _reduceMotion = SettingsProvider.instance.reduceVisuals;
     } catch (e, st) {
-      LoggingService.logger('PerformanceOverlay').fine('Failed to read reduceVisuals setting', e, st);
+      LoggingService.logger('PerformanceOverlay')
+          .fine('Failed to read reduceVisuals setting', e, st);
     }
     _timer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (mounted) {
@@ -60,13 +61,17 @@ class _PerformanceMonitorOverlayState extends State<PerformanceMonitorOverlay> {
     try {
       SettingsProvider.instance.setReduceVisuals(_reduceMotion);
     } catch (e, st) {
-      LoggingService.logger('PerformanceOverlay').fine('Failed to save reduceVisuals setting', e, st);
+      LoggingService.logger('PerformanceOverlay')
+          .fine('Failed to save reduceVisuals setting', e, st);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!kDebugMode) return widget.child;
+    assert(() {
+      return true;
+    }());
+    if (!kDebugMode || !PerformanceMonitorOverlay.enabled) return widget.child;
 
     return Stack(
       fit: StackFit.passthrough,
@@ -96,9 +101,8 @@ class _PerformanceMonitorOverlayState extends State<PerformanceMonitorOverlay> {
                 Text(
                   'Screen: ${_screenOff ? "OFF" : "ON"}',
                   style: TextStyle(
-                      color: _screenOff
-                          ? Colors.orangeAccent
-                          : Colors.greenAccent,
+                      color:
+                          _screenOff ? Colors.orangeAccent : Colors.greenAccent,
                       fontSize: 11,
                       fontFamily: 'monospace'),
                 ),
@@ -122,9 +126,8 @@ class _PerformanceMonitorOverlayState extends State<PerformanceMonitorOverlay> {
                             ? Icons.check_box_rounded
                             : Icons.check_box_outline_blank_rounded,
                         size: 14,
-                        color: _reduceMotion
-                            ? Colors.cyanAccent
-                            : Colors.white70,
+                        color:
+                            _reduceMotion ? Colors.cyanAccent : Colors.white70,
                       ),
                       const SizedBox(width: 4),
                       Text(

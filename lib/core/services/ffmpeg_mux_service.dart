@@ -82,7 +82,8 @@ class FFmpegMuxService {
               FFmpegKit.cancel(sessionHolder.activeSession!.getSessionId());
             }
           } catch (e, st) {
-            LoggingService.logger('FfmpegMuxService').warning('Operation failed', e, st);
+            LoggingService.logger('FfmpegMuxService')
+                .warning('Operation failed', e, st);
           }
           return false;
         },
@@ -227,7 +228,8 @@ class FFmpegMuxService {
         try {
           if (await file.exists()) await file.delete();
         } catch (e, st) {
-          LoggingService.logger('FfmpegMuxService').warning('Operation failed', e, st);
+          LoggingService.logger('FfmpegMuxService')
+              .warning('Operation failed', e, st);
         }
         return false;
       }
@@ -237,7 +239,8 @@ class FFmpegMuxService {
       try {
         if (await file.exists()) await file.delete();
       } catch (e, st) {
-        LoggingService.logger('FfmpegMuxService').warning('Operation failed', e, st);
+        LoggingService.logger('FfmpegMuxService')
+            .warning('Operation failed', e, st);
       }
       return false;
     }
@@ -321,7 +324,9 @@ class FFmpegMuxService {
       // FFmpegKitConfig.enableStatisticsCallback, which can bleed across
       // concurrent sessions and requires manual cleanup on success/failure.
       StatisticsCallback? sessionStatsCallback;
-      if (onProgress != null && totalDuration != null && totalDuration.inMilliseconds > 0) {
+      if (onProgress != null &&
+          totalDuration != null &&
+          totalDuration.inMilliseconds > 0) {
         sessionStatsCallback = (statistics) {
           final now = DateTime.now();
           // Cap statistics progress updates at 4 Hz (250 ms)

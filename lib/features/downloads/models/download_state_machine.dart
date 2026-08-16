@@ -190,7 +190,8 @@ class DownloadStateMachine {
         DownloadStatus.downloading,
       DownloadState.paused => DownloadStatus.paused,
       DownloadState.merging => DownloadStatus.merging,
-      DownloadState.completing || DownloadState.completed =>
+      DownloadState.completing ||
+      DownloadState.completed =>
         DownloadStatus.completed,
       DownloadState.failed => DownloadStatus.failed,
     };

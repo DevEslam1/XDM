@@ -34,7 +34,8 @@ class BackgroundTimerManager {
     _foregroundListener = _onStateChanged;
     PowerMonitor.throttleFactorNotifier.addListener(_throttleListener!);
     DownloadEngine.appInForegroundNotifier.addListener(_foregroundListener!);
-    _screenSub = PowerMonitor.screenStateStream.listen((_) => _onStateChanged());
+    _screenSub =
+        PowerMonitor.screenStateStream.listen((_) => _onStateChanged());
   }
 
   void _onStateChanged() {
@@ -141,7 +142,8 @@ class BackgroundTimerManager {
       _throttleListener = null;
     }
     if (_foregroundListener != null) {
-      DownloadEngine.appInForegroundNotifier.removeListener(_foregroundListener!);
+      DownloadEngine.appInForegroundNotifier
+          .removeListener(_foregroundListener!);
       _foregroundListener = null;
     }
     _screenSub?.cancel();

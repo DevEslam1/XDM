@@ -60,12 +60,6 @@ class MirrorHealthStore implements DisposableService {
     _cleanupTimer = Timer.periodic(const Duration(hours: 6), (_) {
       cleanupStaleEntries();
     });
-    _flushTimer?.cancel();
-    _flushTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (_dirty) {
-        flushPending();
-      }
-    });
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_storeKey);
     if (raw == null) {
@@ -221,9 +215,15 @@ class MirrorHealthStore implements DisposableService {
     _cache!.remove(_cache!.keys.first);
   }
 
-  /// Marks state dirty. The 30s periodic flusher running since init() will flush.
+  /// Marks state dirty and schedules a 30s flush if not already pending.
   void _markDirty() {
     _dirty = true;
+    _flushTimer ??= Timer(const Duration(seconds: 30), () {
+      _flushTimer = null;
+      if (_dirty) {
+        flushPending();
+      }
+    });
   }
 
   /// Flushes the coalesced state to SharedPreferences. Skipped while the
@@ -243,6 +243,8 @@ class MirrorHealthStore implements DisposableService {
         await SharedPrefsBatcher.instance.flush();
       }
       _dirty = false;
+      _flushTimer?.cancel();
+      _flushTimer = null;
     } catch (e) {
       _log.warning('Failed to persist mirror health data: $e');
     } finally {
@@ -531,7 +533,9 @@ class MirrorBenchmarkService
   static final _log = Logger('MirrorBenchmark');
   final Map<String, _BenchmarkResult> _results = {};
   static const _cacheTtl = Duration(hours: 1);
-  static const _benchmarkBytes = 512 * 1024;
+  static const _benchmarkBytes = 128 * 1024;
+  static const _earlyAbortBytes = 64 * 1024;
+  static const double _fastSpeedThreshold = 5 * 1024 * 1024.0;
   static const _maxCacheSize = 50;
   static const int _maxConcurrentBenchmarks = 3;
 
@@ -624,6 +628,15 @@ class MirrorBenchmarkService
       try {
         await for (final chunk in response.data!.stream) {
           bytesReceived += chunk.length;
+          if (bytesReceived >= _earlyAbortBytes) {
+            final elapsed = stopwatch.elapsedMilliseconds;
+            if (elapsed > 0) {
+              final currentSpeed = bytesReceived * 1000.0 / elapsed;
+              if (currentSpeed > _fastSpeedThreshold) {
+                break;
+              }
+            }
+          }
           if (bytesReceived >= _benchmarkBytes) {
             break;
           }

@@ -12,7 +12,8 @@ class PictureInPictureService {
       );
       return result == true || result == 'true';
     } catch (e, st) {
-      LoggingService.logger('PictureInPictureService').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('PictureInPictureService')
+          .warning('Operation failed with fallback', e, st);
       return false;
     }
   }

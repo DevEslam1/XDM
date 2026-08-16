@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/background_gate.dart';
@@ -36,6 +35,21 @@ class GlassCard extends StatefulWidget {
     this.enableBlur = true,
   });
 
+  const GlassCard.placeholder({
+    super.key,
+    required this.child,
+    this.borderRadius = 16.0,
+    this.padding,
+    this.isDarkMode = true,
+    this.border,
+    this.accentColor,
+    this.showRail = false,
+    this.elevated = false,
+    this.gradientBorder,
+    this.onTap,
+    this.enableBlur = false,
+  });
+
   @override
   State<GlassCard> createState() => _GlassCardState();
 }
@@ -45,16 +59,22 @@ class _GlassCardState extends State<GlassCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isLowEnd = PowerMonitor.isLowEndDevice;
     final shouldBlur = widget.enableBlur &&
+        !isLowEnd &&
         !PowerMonitor.batterySaverMode.isAggressive &&
         !HighContrastDetector.isActive(context) &&
         BackgroundGate.shouldAnimate;
 
-    if (!shouldBlur) {
+    if (!shouldBlur || isLowEnd) {
       return Container(
+        padding: widget.padding,
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
+          color: widget.isDarkMode
+              ? Colors.black.withValues(alpha: 0.70)
+              : Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
           borderRadius: BorderRadius.circular(widget.borderRadius),
+          border: widget.border,
         ),
         child: widget.child,
       );
@@ -64,29 +84,25 @@ class _GlassCardState extends State<GlassCard> {
     final accent = widget.accentColor ??
         (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
 
-    final blurredBase = RepaintBoundary(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(widget.borderRadius),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            padding: widget.padding,
-            decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.black.withValues(alpha: 0.3)
-                  : Colors.white.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(widget.borderRadius),
-              border: widget.border ??
-                  Border.all(
-                    color: widget.accentColor != null
-                        ? accent.withValues(alpha: 0.30)
-                        : (isDark ? AppTheme.border : AppTheme.lightBorder),
-                    width: widget.accentColor != null ? 1.0 : 0.5,
-                  ),
-            ),
-            child: widget.child,
-          ),
+    // Performance Optimization: Replace expensive BackdropFilter with semi-transparent
+    // solid fallback background to maintain 60/120fps during list scrolling.
+    final baseCard = RepaintBoundary(
+      child: Container(
+        padding: widget.padding,
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.black.withValues(alpha: 0.70)
+              : Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(widget.borderRadius),
+          border: widget.border ??
+              Border.all(
+                color: widget.accentColor != null
+                    ? accent.withValues(alpha: 0.30)
+                    : (isDark ? AppTheme.border : AppTheme.lightBorder),
+                width: widget.accentColor != null ? 1.0 : 0.5,
+              ),
         ),
+        child: widget.child,
       ),
     );
 
@@ -95,7 +111,7 @@ class _GlassCardState extends State<GlassCard> {
             borderRadius: BorderRadius.circular(widget.borderRadius),
             child: Stack(
               children: [
-                blurredBase,
+                baseCard,
                 PositionedDirectional(
                   start: 0,
                   top: 10,
@@ -114,7 +130,7 @@ class _GlassCardState extends State<GlassCard> {
               ],
             ),
           )
-        : blurredBase;
+        : baseCard;
 
     final withBorder = widget.gradientBorder != null
         ? Container(
@@ -132,8 +148,7 @@ class _GlassCardState extends State<GlassCard> {
 
     if (widget.onTap == null) return RepaintBoundary(child: withBorder);
 
-    final reduceMotion =
-        MediaQuery.disableAnimationsOf(context) ||
+    final reduceMotion = MediaQuery.disableAnimationsOf(context) ||
         PerformanceMonitor.shouldReduceMotion;
 
     return RepaintBoundary(

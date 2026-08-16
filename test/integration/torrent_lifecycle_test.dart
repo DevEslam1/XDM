@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Torrent Lifecycle Integration Test (FIX-35)', () {
-    test('Torrent task correctly parses multi-file structure and aggregates', () {
+    test('Torrent task correctly parses multi-file structure and aggregates',
+        () {
       final task = DownloadTask(
         id: 'torrent_test_1',
         fileName: 'Ubuntu 24.04.iso',
@@ -104,16 +105,25 @@ void main() {
         updatedAt: DateTime.now(),
       );
 
-      expect(DownloadTask.isValidTransition(task.status, DownloadStatus.downloading), isTrue);
+      expect(
+          DownloadTask.isValidTransition(
+              task.status, DownloadStatus.downloading),
+          isTrue);
       task = task.copyWith(status: DownloadStatus.downloading);
 
-      expect(DownloadTask.isValidTransition(task.status, DownloadStatus.paused), isTrue);
+      expect(DownloadTask.isValidTransition(task.status, DownloadStatus.paused),
+          isTrue);
       task = task.copyWith(status: DownloadStatus.paused);
 
-      expect(DownloadTask.isValidTransition(task.status, DownloadStatus.downloading), isTrue);
+      expect(
+          DownloadTask.isValidTransition(
+              task.status, DownloadStatus.downloading),
+          isTrue);
       task = task.copyWith(status: DownloadStatus.downloading);
 
-      expect(DownloadTask.isValidTransition(task.status, DownloadStatus.completed), isTrue);
+      expect(
+          DownloadTask.isValidTransition(task.status, DownloadStatus.completed),
+          isTrue);
       task = task.copyWith(
         status: DownloadStatus.completed,
         downloadedBytes: 1000000000,

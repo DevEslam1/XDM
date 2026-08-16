@@ -68,7 +68,8 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
       final uri = Uri.parse(widget.currentUrl);
       return uri.host.isNotEmpty ? uri.host : widget.currentUrl;
     } catch (e, st) {
-      LoggingService.logger('BrowserShieldSheet').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('BrowserShieldSheet')
+          .warning('Operation failed with fallback', e, st);
       return widget.currentUrl;
     }
   }

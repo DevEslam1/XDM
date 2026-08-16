@@ -16,4 +16,3 @@ class HighContrastDetector extends StatelessWidget {
     return builder(context, isHighContrast);
   }
 }
-

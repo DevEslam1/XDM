@@ -157,8 +157,10 @@ void registerTestServices() {
   final getIt = GetIt.instance;
   getIt.reset();
   getIt.registerLazySingleton<DatabaseService>(() => FakeDatabaseService());
-  getIt.registerLazySingleton<SettingsProvider>(() => createMockSettingsProvider());
-  getIt.registerLazySingleton<DownloadProvider>(() => createMockDownloadProvider());
+  getIt.registerLazySingleton<SettingsProvider>(
+      () => createMockSettingsProvider());
+  getIt.registerLazySingleton<DownloadProvider>(
+      () => createMockDownloadProvider());
 }
 
 /// Creates a list of mixed-status tasks for testing.

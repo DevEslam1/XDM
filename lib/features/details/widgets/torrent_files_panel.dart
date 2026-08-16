@@ -44,7 +44,8 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
       return const SizedBox.shrink();
     }
 
-    final isDark = widget.isDark ?? (Theme.of(context).brightness == Brightness.dark);
+    final isDark =
+        widget.isDark ?? (Theme.of(context).brightness == Brightness.dark);
     final bool isRtl;
     if (widget.isRtl != null) {
       isRtl = widget.isRtl!;
@@ -88,12 +89,15 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      isRtl ? 'ملفات التورنت (${files.length})' : 'TORRENT FILES (${files.length})',
+                      isRtl
+                          ? 'ملفات التورنت (${files.length})'
+                          : 'TORRENT FILES (${files.length})',
                       style: AppTheme.microLabel(isDark: isDark, size: 11),
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: blueClr.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(6),
@@ -109,7 +113,9 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                   ),
                   const SizedBox(width: 8),
                   Icon(
-                    _isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                    _isExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
                     color: mutedClr,
                     size: 20,
                   ),
@@ -119,7 +125,8 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
 
             if (_isExpanded) ...[
               // Action buttons (Select All / Deselect All) if callbacks provided
-              if (widget.onSelectAll != null || widget.onDeselectAll != null) ...[
+              if (widget.onSelectAll != null ||
+                  widget.onDeselectAll != null) ...[
                 const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -131,13 +138,15 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                         color: blueClr,
                         onPressed: widget.onSelectAll!,
                       ),
-                    if (widget.onSelectAll != null && widget.onDeselectAll != null)
+                    if (widget.onSelectAll != null &&
+                        widget.onDeselectAll != null)
                       const SizedBox(width: 8),
                     if (widget.onDeselectAll != null)
                       _PanelActionButton(
                         label: isRtl ? 'إلغاء تحديد الكل' : 'DESELECT ALL',
                         icon: Icons.deselect_rounded,
-                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                        color:
+                            isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                         onPressed: widget.onDeselectAll!,
                       ),
                   ],
@@ -151,27 +160,32 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                 separatorBuilder: (context, index) => Divider(
                   height: 16,
                   thickness: 0.3,
-                  color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+                  color: isDark
+                      ? AppTheme.borderSubtle
+                      : AppTheme.lightBorderSubtle,
                 ),
                 itemBuilder: (context, index) {
                   final f = files[index];
                   final name = f['name'] as String? ?? 'file_${index + 1}';
                   final length = (f['length'] as num?)?.toInt() ?? 0;
-                  final downloadedBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                  final downloadedBytes =
+                      (f['downloadedBytes'] as num?)?.toInt() ?? 0;
                   final selected = (f['selected'] as bool?) ?? true;
                   final isEstimated = (f['progressEstimated'] as bool?) == true;
 
                   // Progress calculation: prefer explicit progress field, fallback to downloaded/length
                   double progress;
                   if (f['progress'] != null) {
-                    progress = ((f['progress'] as num).toDouble()).clamp(0.0, 1.0);
+                    progress =
+                        ((f['progress'] as num).toDouble()).clamp(0.0, 1.0);
                   } else if (length > 0) {
                     progress = (downloadedBytes / length).clamp(0.0, 1.0);
                   } else {
                     progress = 0.0;
                   }
 
-                  final isComplete = (f['isComplete'] as bool?) == true || progress >= 1.0;
+                  final isComplete =
+                      (f['isComplete'] as bool?) == true || progress >= 1.0;
                   final progressPercent = (progress * 100).clamp(0.0, 100.0);
                   final progressText = isEstimated
                       ? '≈${progressPercent.toStringAsFixed(0)}%'
@@ -188,7 +202,9 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                             value: selected,
                             activeColor: blueClr,
                             side: BorderSide(
-                              color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                              color: isDark
+                                  ? AppTheme.border
+                                  : AppTheme.lightBorder,
                               width: 1.0,
                             ),
                             onChanged: (val) {
@@ -270,21 +286,23 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                                     ),
                                   ),
                                 ],
-                                if (widget.onPriorityChanged != null && selected) ...[
+                                if (widget.onPriorityChanged != null &&
+                                    selected) ...[
                                   const SizedBox(width: 6),
                                   _PriorityBadge(
                                     priority: (f['priority'] as int?) ?? 4,
                                     isDark: isDark,
                                     isRtl: isRtl,
                                     isCompleted: isComplete,
-                                    onChanged: (newPriority) =>
-                                        widget.onPriorityChanged!(index, newPriority),
+                                    onChanged: (newPriority) => widget
+                                        .onPriorityChanged!(index, newPriority),
                                   ),
                                 ],
                                 if (widget.onDeleteFile != null) ...[
                                   const SizedBox(width: 4),
                                   InkWell(
-                                    onTap: () => widget.onDeleteFile!(index, name),
+                                    onTap: () =>
+                                        widget.onDeleteFile!(index, name),
                                     borderRadius: BorderRadius.circular(6),
                                     child: Padding(
                                       padding: const EdgeInsets.all(2.0),
@@ -308,7 +326,8 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                                   Container(
                                     height: 4,
                                     width: double.infinity,
-                                    decoration: AppTheme.progressTrack(isDark: isDark),
+                                    decoration:
+                                        AppTheme.progressTrack(isDark: isDark),
                                   ),
                                   FractionallySizedBox(
                                     widthFactor: progress,
@@ -317,7 +336,9 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                                       decoration: AppTheme.progressFill(
                                         isComplete
                                             ? greenClr
-                                            : (widget.isDownloading ? blueClr : mutedClr),
+                                            : (widget.isDownloading
+                                                ? blueClr
+                                                : mutedClr),
                                       ),
                                     ),
                                   ),
@@ -325,7 +346,8 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                               ),
                               const SizedBox(height: 6),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     '${formatBytes(downloadedBytes)} / ${formatBytes(length)}',

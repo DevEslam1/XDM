@@ -125,7 +125,8 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     try {
       DatabaseService.instance.flushPendingSaves();
     } catch (e, st) {
-      LoggingService.logger('AppLifecycleCoordinator').warning('Operation failed', e, st);
+      LoggingService.logger('AppLifecycleCoordinator')
+          .warning('Operation failed', e, st);
     }
   }
 }

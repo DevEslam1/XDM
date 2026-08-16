@@ -32,7 +32,9 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
     _checkOnboardingTooltip();
 
     _dashboardScrollController.addListener(_onDashboardScroll);
-    unawaited(_adBlocker.init().catchError((e) => _log.warning('Failed to init ad blocker', e)));
+    unawaited(_adBlocker
+        .init()
+        .catchError((e) => _log.warning('Failed to init ad blocker', e)));
   }
 
   Future<void> _updateAdBlockSettings() async {
@@ -138,7 +140,9 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
 
     if (!_quitPersisted && _tabs.isNotEmpty) {
       try {
-        unawaited(_tabManager.saveTabsImmediately().catchError((e) => _log.warning('Failed to save tabs', e)));
+        unawaited(_tabManager
+            .saveTabsImmediately()
+            .catchError((e) => _log.warning('Failed to save tabs', e)));
       } catch (e, st) {
         Logger('browser_screen')
             .warning('[browser_screen] operation failed', e, st);
@@ -166,8 +170,9 @@ mixin _LifecycleMixin on _BrowserScreenStateBase {
           return false;
         }));
       } catch (e, st) {
-      LoggingService.logger('BrowserScreenLifecycle').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('BrowserScreenLifecycle')
+            .warning('Operation failed', e, st);
+      }
     }
 
     for (final tab in _tabs) {

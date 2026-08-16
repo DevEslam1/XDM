@@ -68,13 +68,16 @@ void main() {
       }
     });
 
-    testWidgets('ListView containing download list items has no BackdropFilter descendants',
+    testWidgets(
+        'ListView containing download list items has no BackdropFilter descendants',
         (tester) async {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
-            ChangeNotifierProvider<SettingsProvider>.value(value: settingsProvider),
-            ChangeNotifierProvider<DownloadProvider>.value(value: downloadProvider),
+            ChangeNotifierProvider<SettingsProvider>.value(
+                value: settingsProvider),
+            ChangeNotifierProvider<DownloadProvider>.value(
+                value: downloadProvider),
           ],
           child: MaterialApp(
             home: Scaffold(

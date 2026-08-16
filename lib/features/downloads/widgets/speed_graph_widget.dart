@@ -79,13 +79,18 @@ class _SpeedGraphWidgetState extends State<SpeedGraphWidget> {
     _maxY = max(100 * 1024, (_lastPeakSpeed * 1.2).toDouble());
   }
 
+  DateTime _lastRenderTime = DateTime.fromMillisecondsSinceEpoch(0);
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final now = DateTime.now();
 
     if (_lastIsDark != isDark ||
         _lastStatus != widget.status ||
-        !listEquals(_lastSpeedHistory, widget.speedHistory)) {
+        (!listEquals(_lastSpeedHistory, widget.speedHistory) &&
+            now.difference(_lastRenderTime).inMilliseconds >= 250)) {
+      _lastRenderTime = now;
       _updateCache(isDark);
     }
 
@@ -192,13 +197,19 @@ class SpeedGraphPainter extends CustomPainter {
   final Color color;
   final bool isDark;
   final double maxSpeed;
+  final int dataHash;
 
   SpeedGraphPainter({
     required this.dataPoints,
     required this.color,
     required this.isDark,
     required this.maxSpeed,
-  });
+  }) : dataHash = Object.hash(
+          Object.hashAll(dataPoints),
+          color,
+          isDark,
+          maxSpeed,
+        );
 
   List<int> get samples => dataPoints;
   double get maxY => maxSpeed;
@@ -259,13 +270,6 @@ class SpeedGraphPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant SpeedGraphPainter oldDelegate) {
-    if (oldDelegate.dataPoints.length != dataPoints.length) return true;
-    if (dataPoints.isNotEmpty &&
-        oldDelegate.dataPoints.last != dataPoints.last) {
-      return true;
-    }
-    return oldDelegate.maxSpeed != maxSpeed ||
-        oldDelegate.color != color ||
-        oldDelegate.isDark != isDark;
+    return oldDelegate.dataHash != dataHash;
   }
 }

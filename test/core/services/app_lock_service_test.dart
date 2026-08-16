@@ -10,7 +10,11 @@ void main() {
     AppLockService.resetMonotonicState();
   });
 
-  group('AppLockService', () {
+  tearDown(() {
+    AppLockService.resetMonotonicState();
+  });
+
+  group('AppLockService (FIX-08)', () {
     test('Lockout triggers after 5 failed attempts', () async {
       await AppLockService.setPin('1234');
 
@@ -40,22 +44,54 @@ void main() {
       expect(level1Remaining.inSeconds, lessThanOrEqualTo(30));
     });
 
-    test('Lockout cannot be bypassed by clock change', () async {
+    test('Reboot scenario re-derives lockout from persisted lockedUntil', () async {
       await AppLockService.setPin('1234');
-
       for (var i = 0; i < 5; i++) {
         await AppLockService.verifyPin('9999');
       }
 
-      final remainingBefore = await AppLockService.lockoutRemaining();
-      expect(remainingBefore.inSeconds, greaterThan(0));
+      // Simulate process reboot by clearing in-memory monotonic state
+      AppLockService.resetMonotonicState();
 
-      // Attempting to verify immediately still blocked despite wall clock
-      final blocked = await AppLockService.verifyPin('1234');
-      expect(blocked, isFalse);
+      // Lockout remaining should still be active from storage
+      final remainingAfterReboot = await AppLockService.lockoutRemaining();
+      expect(remainingAfterReboot.inSeconds, greaterThan(0));
+      expect(remainingAfterReboot.inSeconds, lessThanOrEqualTo(30));
+    });
 
-      final remainingAfter = await AppLockService.lockoutRemaining();
-      expect(remainingAfter.inSeconds, greaterThan(0));
+    test('Clock skew backward jump > 60s detected by validateMonotonicConsistency', () async {
+      await AppLockService.setPin('1234');
+      for (var i = 0; i < 5; i++) {
+        await AppLockService.verifyPin('9999');
+      }
+
+      // Record future observed time to simulate backwards clock jump
+      AppLockService.lastObservedTimeMs =
+          DateTime.now().millisecondsSinceEpoch + 120000;
+
+      await AppLockService.validateMonotonicConsistency();
+
+      // Lockout should remain active and guarded
+      final remaining = await AppLockService.lockoutRemaining();
+      expect(remaining.inSeconds, greaterThan(0));
+    });
+
+    test('Lockout expiry resets failed attempts and permits verification', () async {
+      await AppLockService.setPin('1234');
+      for (var i = 0; i < 5; i++) {
+        await AppLockService.verifyPin('9999');
+      }
+
+      // Mock monotonic time past the 30s lockout (e.g. +35s)
+      final nowMono = await AppLockService.getMonotonicTimeMs();
+      AppLockService.mockMonotonicTimeMs = nowMono + 35000;
+
+      final remaining = await AppLockService.lockoutRemaining();
+      expect(remaining, equals(Duration.zero));
+
+      // After lockout expiry, correct PIN is accepted
+      final success = await AppLockService.verifyPin('1234');
+      expect(success, isTrue);
     });
 
     test('Successful unlock resets lockout', () async {

@@ -22,13 +22,20 @@ class AppLockService {
 
   static const MethodChannel _monotonicChannel =
       MethodChannel('com.dmx.app/monotonic_clock');
+  static final _log = LoggingService.logger('AppLockService');
 
-  static final Stopwatch _lockoutStopwatch = Stopwatch()..start();
   static int? _monotonicLockoutStartMs;
   static int? _totalLockoutDurationMs;
+  static int _lastObservedTimeMs = 0;
 
   @visibleForTesting
   static int? mockMonotonicTimeMs;
+
+  @visibleForTesting
+  static int get lastObservedTimeMs => _lastObservedTimeMs;
+
+  @visibleForTesting
+  static set lastObservedTimeMs(int v) => _lastObservedTimeMs = v;
 
   static Future<int> getMonotonicTimeMs() async {
     if (mockMonotonicTimeMs != null) return mockMonotonicTimeMs!;
@@ -36,10 +43,34 @@ class AppLockService {
       final val = await _monotonicChannel.invokeMethod<int>('elapsedRealtime');
       if (val != null && val > 0) return val;
     } catch (e, st) {
-      LoggingService.logger('AppLockService')
-          .warning('Operation failed', e, st);
+      _log.warning('Operation failed', e, st);
     }
-    return _lockoutStopwatch.elapsedMilliseconds;
+    return DateTime.now().millisecondsSinceEpoch;
+  }
+
+  /// Detects clock jumps > 60s backward and re-derives lockout from persisted `lockedUntil`.
+  static Future<void> validateMonotonicConsistency() async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (_lastObservedTimeMs > 0 && (_lastObservedTimeMs - nowMs) > 60000) {
+      _log.warning(
+        'Detected backwards clock jump of ${_lastObservedTimeMs - nowMs}ms. '
+        'Re-deriving lockout from persisted lockedUntil.',
+      );
+      final rawUntil = await _storage.read(key: _lockedUntilKey);
+      final rawDuration = await _storage.read(key: _lockoutDurationKey);
+      final lockedUntil = int.tryParse(rawUntil ?? '');
+      final totalDurationMs = int.tryParse(rawDuration ?? '');
+      if (lockedUntil != null && totalDurationMs != null) {
+        final remainingMs = lockedUntil - nowMs;
+        if (remainingMs > 0) {
+          _monotonicLockoutStartMs = await getMonotonicTimeMs();
+          _totalLockoutDurationMs = min(remainingMs, totalDurationMs);
+        } else {
+          await resetFailedAttempts();
+        }
+      }
+    }
+    _lastObservedTimeMs = nowMs;
   }
 
   @visibleForTesting
@@ -47,8 +78,7 @@ class AppLockService {
     _monotonicLockoutStartMs = null;
     _totalLockoutDurationMs = null;
     mockMonotonicTimeMs = null;
-    _lockoutStopwatch.reset();
-    _lockoutStopwatch.start();
+    _lastObservedTimeMs = 0;
   }
 
   static Future<bool> isLockEnabled() async {
@@ -107,6 +137,7 @@ class AppLockService {
   }
 
   static Future<Duration> lockoutRemaining() async {
+    await validateMonotonicConsistency();
     final currentMono = await getMonotonicTimeMs();
 
     // 1. Monotonic in-memory check (immune to clock changes during process runtime)

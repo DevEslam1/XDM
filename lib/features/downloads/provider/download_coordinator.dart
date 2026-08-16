@@ -42,7 +42,7 @@ class DownloadCoordinator extends ChangeNotifier {
 
   List<DownloadTask> get tasks => listProvider.tasks;
   List<DownloadTask> get filteredTasks => filterProvider.filteredTasks;
-  
+
   int get downloadingTasksCount => listProvider.tasks
       .where((t) => t.status == DownloadStatus.downloading)
       .length;
@@ -57,7 +57,8 @@ class DownloadCoordinator extends ChangeNotifier {
 
   DownloadTask? findTask(String id) => listProvider.findTask(id);
 
-  Future<void> pauseTask(String id, {PauseReason reason = PauseReason.userRequested}) =>
+  Future<void> pauseTask(String id,
+          {PauseReason reason = PauseReason.userRequested}) =>
       _pauseUseCase(id, reason: reason);
   Future<void> resumeTask(String id) => _resumeUseCase(id);
   Future<void> deleteTask(String id) => _deleteUseCase(id);

@@ -14,10 +14,13 @@ void main() {
       DownloadEngine.isInBackground = false;
     });
 
-    test('BackgroundGate allows heavy operations in foreground with screen on and charging', () {
+    test(
+        'BackgroundGate allows heavy operations in foreground with screen on and charging',
+        () {
       expect(BackgroundGate.allowHeavyOps, isTrue);
       expect(BackgroundGate.allowLightOps, isTrue);
-      expect(BackgroundGate.scaleInterval(const Duration(seconds: 1)), equals(const Duration(seconds: 1)));
+      expect(BackgroundGate.scaleInterval(const Duration(seconds: 1)),
+          equals(const Duration(seconds: 1)));
     });
 
     test('BackgroundGate scales interval when screen is off', () {
@@ -35,9 +38,11 @@ void main() {
     test('BackgroundGate scales interval under aggressive battery saver', () {
       PowerMonitor.setScreenOn(true);
       PowerMonitor.setBatteryStateForTesting(BatteryState.discharging);
-      PowerMonitor.setBatteryLevelForTesting(15); // < 20 triggers aggressive battery saver
+      PowerMonitor.setBatteryLevelForTesting(
+          15); // < 20 triggers aggressive battery saver
 
-      expect(PowerMonitor.batterySaverMode, equals(BatterySaverMode.aggressive));
+      expect(
+          PowerMonitor.batterySaverMode, equals(BatterySaverMode.aggressive));
       expect(BackgroundGate.allowHeavyOps, isFalse);
       // Aggressive battery saver scales base interval by 8x
       expect(

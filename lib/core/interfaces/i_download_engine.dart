@@ -47,4 +47,3 @@ abstract class IDownloadEngine {
 
   void forceCancelJob(String taskId);
 }
-

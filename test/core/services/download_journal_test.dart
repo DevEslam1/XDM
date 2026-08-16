@@ -28,7 +28,9 @@ void main() {
       expect(fullChunk.ratio, 1.0);
     });
 
-    test('TransferState serialization round-trip V3 preserves chunks and totals', () {
+    test(
+        'TransferState serialization round-trip V3 preserves chunks and totals',
+        () {
       final state = TransferState(
         totalSize: 1000,
         threadCount: 2,
@@ -87,7 +89,8 @@ void main() {
     });
 
     test('DownloadJournal recovery when file is missing', () async {
-      final recovered = await DownloadJournal.recover('${tempDir.path}/nonexistent.journal');
+      final recovered =
+          await DownloadJournal.recover('${tempDir.path}/nonexistent.journal');
       expect(recovered, isNull);
     });
   });

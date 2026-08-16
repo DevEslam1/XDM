@@ -669,7 +669,8 @@ class YoutubeService {
       String url) async {
     if (!Platform.isAndroid) return null;
     try {
-      const channel = MethodChannel('com.xdm.downloadmanager/youtube_extractor');
+      const channel =
+          MethodChannel('com.xdm.downloadmanager/youtube_extractor');
       final res =
           await channel.invokeMethod<List<dynamic>>('getStreams', {'url': url});
       if (res != null && res.isNotEmpty) {

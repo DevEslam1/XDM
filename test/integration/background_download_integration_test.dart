@@ -48,7 +48,9 @@ void main() {
       expect(DownloadEngine.isInBackground, isFalse);
     });
 
-    test('BackgroundService handles foreground and background power state queries safely', () {
+    test(
+        'BackgroundService handles foreground and background power state queries safely',
+        () {
       final power = PowerMonitor();
       expect(power, isNotNull);
       expect(PowerMonitor.batteryLevel, greaterThanOrEqualTo(0));

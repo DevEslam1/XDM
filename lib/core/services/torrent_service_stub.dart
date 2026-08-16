@@ -200,13 +200,15 @@ class TorrentServiceStub implements ITorrentService {
   }) {
     final effectiveDownloaded = totalBytes ?? downloadedBytes ?? 0;
     if (progress < 1.0 && effectiveDownloaded <= 0) return false;
-    final ratioLimit = customRatioLimit ?? shareRatioLimit ?? this.shareRatioLimit;
+    final ratioLimit =
+        customRatioLimit ?? shareRatioLimit ?? this.shareRatioLimit;
     if (ratioLimit > 0) {
       final effectiveTotal = effectiveDownloaded > 0 ? effectiveDownloaded : 1;
       final ratio = uploadedBytes / effectiveTotal;
       if (ratio >= ratioLimit) return true;
     }
-    final maxMins = customMaxTimeMinutes ?? maxSeedingMinutes ?? maxSeedingTimeMinutes;
+    final maxMins =
+        customMaxTimeMinutes ?? maxSeedingMinutes ?? maxSeedingTimeMinutes;
     if (maxMins > 0) {
       if (seedingDuration != null) {
         if (seedingDuration.inMinutes >= maxMins) return true;
@@ -224,7 +226,9 @@ typedef TorrentServiceImpl = TorrentServiceStub;
 class TorrentService {
   static final ITorrentService _defaultStub = TorrentServiceStub();
   static ITorrentService get _activeService =>
-      getIt.isRegistered<ITorrentService>() ? getIt<ITorrentService>() : _defaultStub;
+      getIt.isRegistered<ITorrentService>()
+          ? getIt<ITorrentService>()
+          : _defaultStub;
 
   static bool get isSupported => _activeService.isSupported;
   static bool get isInitialized => _activeService.isInitialized;
@@ -232,20 +236,25 @@ class TorrentService {
   static ValueNotifier<bool> get isAvailable => _activeService.isAvailable;
   static Set<int> get activeTorrentIds => _activeService.activeTorrentIds;
   static double progressFor(int id) => _activeService.progressFor(id);
-  static Uint8List? fetchResumeBytes(int id) => _activeService.fetchResumeBytes(id);
+  static Uint8List? fetchResumeBytes(int id) =>
+      _activeService.fetchResumeBytes(id);
   static Uint8List? resumeBlobFor(int id) => _activeService.resumeBlobFor(id);
   static bool get fileProgressSupported => _activeService.fileProgressSupported;
-  static bool get filePrioritiesSupported => _activeService.filePrioritiesSupported;
-  static bool get sequentialDownloadEnabled => _activeService.sequentialDownloadEnabled;
+  static bool get filePrioritiesSupported =>
+      _activeService.filePrioritiesSupported;
+  static bool get sequentialDownloadEnabled =>
+      _activeService.sequentialDownloadEnabled;
   static bool _seedingEnabled = true;
   static bool get seedingEnabled => _seedingEnabled;
   static void setSeedingEnabled(bool enabled) => _seedingEnabled = enabled;
   static double get shareRatioLimit => _activeService.shareRatioLimit;
   static int get maxSeedingTimeMinutes => _activeService.maxSeedingTimeMinutes;
 
-  static Future<bool> hasResumeData(String source) => _activeService.hasResumeData(source);
+  static Future<bool> hasResumeData(String source) =>
+      _activeService.hasResumeData(source);
   static Future<void> init() => _activeService.init();
-  static Future<void> saveResumeData(int torrentId) => _activeService.saveResumeData(torrentId);
+  static Future<void> saveResumeData(int torrentId) =>
+      _activeService.saveResumeData(torrentId);
   static Future<void> saveAllResumeData() => _activeService.saveAllResumeData();
   static Future<void> dispose() => _activeService.dispose();
 
@@ -310,7 +319,8 @@ class TorrentService {
       _activeService.addTracker(torrentId, trackerUrl, tier: tier);
   static void removeTracker(int torrentId, String trackerUrl) =>
       _activeService.removeTracker(torrentId, trackerUrl);
-  static void announceNow(int torrentId) => _activeService.announceNow(torrentId);
+  static void announceNow(int torrentId) =>
+      _activeService.announceNow(torrentId);
 
   static Future<String?> createTorrent({
     required String sourcePath,
@@ -338,19 +348,20 @@ class TorrentService {
       _activeService.enableSequentialDownload(torrentId, enabled);
   static void setSequentialDownload(int torrentId, bool enabled) =>
       _activeService.setSequentialDownload(torrentId, enabled);
-  static void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) =>
+  static void prioritizeFile(int torrentId, int fileIndex,
+          {int priority = 7}) =>
       _activeService.prioritizeFile(torrentId, fileIndex, priority: priority);
   static void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) =>
       _activeService.setPieceDeadline(torrentId, pieceIndex, deadlineMs);
   static void enableSuperSeeding(int torrentId, bool enabled) =>
       _activeService.enableSuperSeeding(torrentId, enabled);
 
-  static Stream<TorrentAlertEvent> get alertUpdates => _activeService.alertUpdates;
+  static Stream<TorrentAlertEvent> get alertUpdates =>
+      _activeService.alertUpdates;
   static List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) =>
       _activeService.getRecentAlerts(torrentId);
   static void applySettingsPack(TorrentSettingsPack pack) =>
       _activeService.applySettingsPack(pack);
-
 
   static Future<List<TorrentFileProgress>> getAccurateFileProgress(
     int torrentId,

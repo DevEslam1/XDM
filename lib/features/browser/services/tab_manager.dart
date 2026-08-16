@@ -213,8 +213,9 @@ class TabManager extends ChangeNotifier {
         try {
           tab.controller?.dispose();
         } catch (e, st) {
-      LoggingService.logger('TabManager').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('TabManager')
+              .warning('Operation failed', e, st);
+        }
         tab.controller = null;
         tab.pullToRefreshController = null;
         tab.isSuspended = true;
@@ -367,8 +368,9 @@ class TabManager extends ChangeNotifier {
         try {
           tab.dispose();
         } catch (e, st) {
-      LoggingService.logger('TabManager').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('TabManager')
+              .warning('Operation failed', e, st);
+        }
       }
     }
     _tabs.clear();

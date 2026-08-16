@@ -13,7 +13,9 @@ void main() {
       expect(progress.ytCombinedProgress, isNull);
     });
 
-    test('computes ratio from known side when ytCounterpartSize is null or non-positive', () {
+    test(
+        'computes ratio from known side when ytCounterpartSize is null or non-positive',
+        () {
       const progress1 = DownloadProgress(
         downloadedBytes: 100,
         fileSize: 1000,

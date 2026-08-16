@@ -72,7 +72,8 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
       if (host.startsWith('www.')) host = host.substring(4);
       return host.isNotEmpty ? host : url;
     } catch (e, st) {
-      LoggingService.logger('LinkOptionsSheet').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('LinkOptionsSheet')
+          .warning('Operation failed with fallback', e, st);
       return url;
     }
   }

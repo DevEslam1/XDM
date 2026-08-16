@@ -18,22 +18,29 @@ void main() {
       expect(sm.transition(DownloadState.queued, reason: 'user added'), isTrue);
       expect(sm.currentState, DownloadState.queued);
 
-      expect(sm.transition(DownloadState.starting, reason: 'engine picked up'), isTrue);
+      expect(sm.transition(DownloadState.starting, reason: 'engine picked up'),
+          isTrue);
       expect(sm.currentState, DownloadState.starting);
 
-      expect(sm.transition(DownloadState.downloading, reason: 'data stream open'), isTrue);
+      expect(
+          sm.transition(DownloadState.downloading, reason: 'data stream open'),
+          isTrue);
       expect(sm.currentState, DownloadState.downloading);
 
-      expect(sm.transition(DownloadState.paused, reason: 'user paused'), isTrue);
+      expect(
+          sm.transition(DownloadState.paused, reason: 'user paused'), isTrue);
       expect(sm.currentState, DownloadState.paused);
 
-      expect(sm.transition(DownloadState.downloading, reason: 'user resumed'), isTrue);
+      expect(sm.transition(DownloadState.downloading, reason: 'user resumed'),
+          isTrue);
       expect(sm.currentState, DownloadState.downloading);
 
-      expect(sm.transition(DownloadState.completing, reason: 'bytes finished'), isTrue);
+      expect(sm.transition(DownloadState.completing, reason: 'bytes finished'),
+          isTrue);
       expect(sm.currentState, DownloadState.completing);
 
-      expect(sm.transition(DownloadState.completed, reason: 'file finalized'), isTrue);
+      expect(sm.transition(DownloadState.completed, reason: 'file finalized'),
+          isTrue);
       expect(sm.currentState, DownloadState.completed);
 
       await Future.delayed(const Duration(milliseconds: 10));
@@ -108,20 +115,52 @@ void main() {
       );
     });
 
-    test('canTransitionStatus enforces valid status transitions and blocks illegal ones', () {
+    test(
+        'canTransitionStatus enforces valid status transitions and blocks illegal ones',
+        () {
       // Allowed transitions
-      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.queued, DownloadStatus.downloading), isTrue);
-      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.downloading, DownloadStatus.paused), isTrue);
-      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.downloading, DownloadStatus.merging), isTrue);
-      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.merging, DownloadStatus.completed), isTrue);
-      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.downloading, DownloadStatus.completed), isTrue);
-      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.paused, DownloadStatus.downloading), isTrue);
+      expect(
+          DownloadStateMachine.canTransitionStatus(
+              DownloadStatus.queued, DownloadStatus.downloading),
+          isTrue);
+      expect(
+          DownloadStateMachine.canTransitionStatus(
+              DownloadStatus.downloading, DownloadStatus.paused),
+          isTrue);
+      expect(
+          DownloadStateMachine.canTransitionStatus(
+              DownloadStatus.downloading, DownloadStatus.merging),
+          isTrue);
+      expect(
+          DownloadStateMachine.canTransitionStatus(
+              DownloadStatus.merging, DownloadStatus.completed),
+          isTrue);
+      expect(
+          DownloadStateMachine.canTransitionStatus(
+              DownloadStatus.downloading, DownloadStatus.completed),
+          isTrue);
+      expect(
+          DownloadStateMachine.canTransitionStatus(
+              DownloadStatus.paused, DownloadStatus.downloading),
+          isTrue);
 
       // Blocked / illegal transitions
-      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.completed, DownloadStatus.paused), isFalse);
-      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.completed, DownloadStatus.merging), isFalse);
-      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.failed, DownloadStatus.completed), isFalse);
-      expect(DownloadStateMachine.canTransitionStatus(DownloadStatus.merging, DownloadStatus.queued), isFalse);
+      expect(
+          DownloadStateMachine.canTransitionStatus(
+              DownloadStatus.completed, DownloadStatus.paused),
+          isFalse);
+      expect(
+          DownloadStateMachine.canTransitionStatus(
+              DownloadStatus.completed, DownloadStatus.merging),
+          isFalse);
+      expect(
+          DownloadStateMachine.canTransitionStatus(
+              DownloadStatus.failed, DownloadStatus.completed),
+          isFalse);
+      expect(
+          DownloadStateMachine.canTransitionStatus(
+              DownloadStatus.merging, DownloadStatus.queued),
+          isFalse);
     });
   });
 }

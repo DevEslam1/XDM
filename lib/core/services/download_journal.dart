@@ -1,7 +1,6 @@
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'package:synchronized/synchronized.dart';
@@ -11,7 +10,8 @@ import 'logging_service.dart';
 import 'power_monitor.dart';
 import 'transfer_state.dart';
 
-export 'transfer_state.dart' show ChunkState, DmxStateStatus, StateLoadResult, TransferState;
+export 'transfer_state.dart'
+    show ChunkState, DmxStateStatus, StateLoadResult, TransferState;
 
 /// Factory for managing named or isolated [StateStoreInstance] instances without static mutable state.
 class StateStoreFactory {
@@ -65,10 +65,12 @@ class StateStoreInstance {
           final decoded = jsonDecode(await tmpFile.readAsString());
           if (decoded is Map) {
             final json = Map<String, dynamic>.from(decoded);
-            return TransferState.tryParseV3(json) ?? TransferState.tryParseV2(json);
+            return TransferState.tryParseV3(json) ??
+                TransferState.tryParseV2(json);
           }
         } catch (e, st) {
-          LoggingService.logger('DownloadJournal').warning('Failed to load tmp state file', e, st);
+          LoggingService.logger('DownloadJournal')
+              .warning('Failed to load tmp state file', e, st);
         }
       }
       return null;
@@ -80,7 +82,8 @@ class StateStoreInstance {
         return TransferState.tryParseV3(json) ?? TransferState.tryParseV2(json);
       }
     } catch (e, st) {
-      LoggingService.logger('DownloadJournal').warning('Failed to load state file', e, st);
+      LoggingService.logger('DownloadJournal')
+          .warning('Failed to load state file', e, st);
     }
     return null;
   }
@@ -128,7 +131,8 @@ class StateStoreInstance {
         try {
           await tmpStale.delete();
         } catch (e, st) {
-          LoggingService.logger('DownloadJournal').warning('Failed to delete unreadable tmp state file', e, st);
+          LoggingService.logger('DownloadJournal')
+              .warning('Failed to delete unreadable tmp state file', e, st);
         }
       }
     }
@@ -198,7 +202,8 @@ class StateStoreInstance {
         try {
           await tmp.delete();
         } catch (e, st) {
-          LoggingService.logger('DownloadJournal').warning('Failed to delete temp file during loadOrCreate', e, st);
+          LoggingService.logger('DownloadJournal')
+              .warning('Failed to delete temp file during loadOrCreate', e, st);
         }
       }
     }
@@ -208,7 +213,8 @@ class StateStoreInstance {
       created = true;
       state = TransferState(
         totalSize: knownFileSize,
-        threadCount: threadCount.clamp(kMinTransferThreads, kMaxTransferThreads),
+        threadCount:
+            threadCount.clamp(kMinTransferThreads, kMaxTransferThreads),
         chunks: const [],
         url: url,
       );
@@ -307,7 +313,8 @@ class StateStoreInstance {
         await raf.truncate(state.totalSize);
         await raf.close();
       } catch (e, st) {
-        LoggingService.logger('DownloadJournal').warning('Failed to truncate oversized disk file', e, st);
+        LoggingService.logger('DownloadJournal')
+            .warning('Failed to truncate oversized disk file', e, st);
       }
       adjusted = true;
     }
@@ -338,15 +345,19 @@ class StateStoreInstance {
     return adjusted;
   }
 
+  /// Computes a lightweight structural fingerprint of [TransferState] in O(N) time
+  /// without allocating memory or serializing to JSON.
   int computeFingerprint(TransferState state) {
     int chunksHash = 0;
-    for (final c in state.chunks) {
-      chunksHash ^= (c.downloaded * 31 + c.start);
+    for (var i = 0; i < state.chunks.length; i++) {
+      final c = state.chunks[i];
+      chunksHash ^= (c.downloaded * 31 + c.start + i);
     }
     return Object.hash(
-      state.status,
+      state.status.index,
       state.downloadedBytes,
       state.totalSize,
+      state.threadCount,
       chunksHash,
     );
   }
@@ -371,7 +382,8 @@ class StateStoreInstance {
     String? taskId,
   }) async {
     final targetPath = pathFor(tempFilePath, taskId: taskId);
-    final pathLock = await _lock.synchronized(() => _pathLocks.putIfAbsent(targetPath, () => Lock()));
+    final pathLock = await _lock
+        .synchronized(() => _pathLocks.putIfAbsent(targetPath, () => Lock()));
 
     return pathLock.synchronized(() async {
       state.updatedAt = DateTime.now();
@@ -386,14 +398,12 @@ class StateStoreInstance {
         int? lastWrittenByte;
         DmxStateStatus? lastStatus;
         int? lastFp;
-        String? lastPayload;
 
         _lock.synchronized(() {
           lastSave = _lastSaveTimes[targetPath];
           lastWrittenByte = _lastWrittenBytes[targetPath];
           lastStatus = _lastWrittenStatus[targetPath];
           lastFp = _lastFingerprints[targetPath];
-          lastPayload = _lastWrittenPayloads[targetPath];
         });
 
         final bytesSinceLastWrite =
@@ -415,25 +425,12 @@ class StateStoreInstance {
           }
         }
 
+        // Lightweight structural deduplication: skips redundant writes in O(N) without jsonEncode or SHA-256
         final fingerprint = computeFingerprint(state);
-        if (!durable && !statusChanged && !stateSaveStrictDedup) {
+        if (!durable && !statusChanged) {
           if (lastFp == fingerprint) {
-            return; // Skip redundant state write without jsonEncode
+            return; // Skip redundant state write without JSON serialization
           }
-        }
-
-        String? payload;
-        if (stateSaveStrictDedup) {
-          payload = jsonEncode(state.toJson());
-          final payloadHash = sha256.convert(utf8.encode(payload)).toString();
-          if (!durable &&
-              !statusChanged &&
-              lastPayload == payloadHash) {
-            return; // Skip redundant state write
-          }
-          _lock.synchronized(() {
-            _lastWrittenPayloads[targetPath] = payloadHash;
-          });
         }
 
         _lock.synchronized(() {
@@ -466,7 +463,7 @@ class StateStoreInstance {
           _lastWrittenBytes[targetPath] = state.downloadedBytes;
         });
 
-        payload ??= jsonEncode(state.toJson());
+        final payload = jsonEncode(state.toJson());
         final tmp = File(tmpPath);
         await tmp.parent.create(recursive: true);
         if (durable) {
@@ -500,13 +497,15 @@ class StateStoreInstance {
       final f = File(targetPath);
       if (await f.exists()) await f.delete();
     } catch (e, st) {
-      LoggingService.logger('DownloadJournal').warning('Failed to delete state file on remove', e, st);
+      LoggingService.logger('DownloadJournal')
+          .warning('Failed to delete state file on remove', e, st);
     }
     try {
       final tmp = File(tmpPath);
       if (await tmp.exists()) await tmp.delete();
     } catch (e, st) {
-      LoggingService.logger('DownloadJournal').warning('Failed to delete tmp state file on remove', e, st);
+      LoggingService.logger('DownloadJournal')
+          .warning('Failed to delete tmp state file on remove', e, st);
     }
     if (taskId != null && taskId.isNotEmpty) {
       final legacyPath = _legacyPathFor(tempFilePath);
@@ -521,13 +520,15 @@ class StateStoreInstance {
         final f = File(legacyPath);
         if (await f.exists()) await f.delete();
       } catch (e, st) {
-        LoggingService.logger('DownloadJournal').warning('Failed to delete legacy state file on remove', e, st);
+        LoggingService.logger('DownloadJournal')
+            .warning('Failed to delete legacy state file on remove', e, st);
       }
       try {
         final tmp = File('$legacyPath.tmp');
         if (await tmp.exists()) await tmp.delete();
       } catch (e, st) {
-        LoggingService.logger('DownloadJournal').warning('Failed to delete legacy tmp state file on remove', e, st);
+        LoggingService.logger('DownloadJournal')
+            .warning('Failed to delete legacy tmp state file on remove', e, st);
       }
     }
   }
@@ -548,7 +549,8 @@ abstract class StateStore {
   }
 
   static bool get stateSaveStrictDedup => instance.stateSaveStrictDedup;
-  static set stateSaveStrictDedup(bool val) => instance.stateSaveStrictDedup = val;
+  static set stateSaveStrictDedup(bool val) =>
+      instance.stateSaveStrictDedup = val;
 
   static String pathFor(String tempFilePath, {String? taskId}) =>
       instance.pathFor(tempFilePath, taskId: taskId);
@@ -611,7 +613,8 @@ class DownloadJournal {
   final int compactionThresholdBytes;
   final Lock _lock = Lock();
 
-  DownloadJournal(this.path, {this.compactionThresholdBytes = kJournalCompactionThreshold});
+  DownloadJournal(this.path,
+      {this.compactionThresholdBytes = kJournalCompactionThreshold});
 
   Future<void> open() async {
     await _lock.synchronized(() async {
@@ -672,9 +675,12 @@ class DownloadJournal {
       _lastBgRecordedBytes.remove(_lastBgRecordedBytes.keys.first);
     }
 
-    final totalWritten = _lastBgRecordedBytes.values.fold<int>(0, (sum, b) => sum + b);
-    final chunkCount = _lastBgRecordedBytes.isNotEmpty ? _lastBgRecordedBytes.length : 1;
-    final totalBytesSinceLastWrite = (totalWritten - _lastGlobalWriteBytes).abs();
+    final totalWritten =
+        _lastBgRecordedBytes.values.fold<int>(0, (sum, b) => sum + b);
+    final chunkCount =
+        _lastBgRecordedBytes.isNotEmpty ? _lastBgRecordedBytes.length : 1;
+    final totalBytesSinceLastWrite =
+        (totalWritten - _lastGlobalWriteBytes).abs();
 
     if (totalBytesSinceLastWrite < threshold * chunkCount) return;
     _lastGlobalWriteBytes = totalWritten;
@@ -821,7 +827,8 @@ class DownloadJournal {
       sink?.flush();
       sink?.close();
     } catch (e, st) {
-      LoggingService.logger('DownloadJournal').warning('Operation failed', e, st);
+      LoggingService.logger('DownloadJournal')
+          .warning('Operation failed', e, st);
     }
   }
 
@@ -855,7 +862,8 @@ class DownloadJournal {
       await _sink?.flush();
       await _sink?.close();
     } catch (e, st) {
-      LoggingService.logger('DownloadJournal').warning('Operation failed', e, st);
+      LoggingService.logger('DownloadJournal')
+          .warning('Operation failed', e, st);
     }
     _sink = null;
   }
@@ -892,7 +900,8 @@ class DownloadJournal {
       try {
         await File('$path.tmp').delete();
       } catch (e, st) {
-        LoggingService.logger('DownloadJournal').warning('Operation failed', e, st);
+        LoggingService.logger('DownloadJournal')
+            .warning('Operation failed', e, st);
       }
       try {
         _sink = File(path).openWrite(mode: FileMode.append);

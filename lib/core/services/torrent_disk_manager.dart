@@ -12,10 +12,10 @@ class TorrentDiskManager {
   /// Adaptive disk cache size in MB based on available platform memory.
   static int optimalCacheSizeMb() {
     final totalRam = getTotalRamMb();
-    if (totalRam <= 2048) return 64;   // 2GB RAM -> 64MB cache
-    if (totalRam <= 4096) return 128;  // 4GB RAM -> 128MB cache
-    if (totalRam <= 6144) return 256;  // 6GB RAM -> 256MB cache
-    return 512;                        // 8GB+ RAM -> 512MB cache
+    if (totalRam <= 2048) return 64; // 2GB RAM -> 64MB cache
+    if (totalRam <= 4096) return 128; // 4GB RAM -> 128MB cache
+    if (totalRam <= 6144) return 256; // 6GB RAM -> 256MB cache
+    return 512; // 8GB+ RAM -> 512MB cache
   }
 
   /// Per-torrent disk I/O mode based on storage heuristics.
@@ -36,8 +36,9 @@ class TorrentDiskManager {
           return DiskIoMode.emmc;
         }
       } catch (e, st) {
-      LoggingService.logger('TorrentDiskManager').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('TorrentDiskManager')
+            .warning('Operation failed', e, st);
+      }
     }
     return DiskIoMode.ssd;
   }
@@ -46,11 +47,11 @@ class TorrentDiskManager {
   static int coalesceWriteBytes(DiskIoMode mode) {
     switch (mode) {
       case DiskIoMode.ssd:
-        return 64 * 1024;   // 64KB coalesce
+        return 64 * 1024; // 64KB coalesce
       case DiskIoMode.emmc:
-        return 256 * 1024;  // 256KB coalesce (crucial for budget Android eMMC)
+        return 256 * 1024; // 256KB coalesce (crucial for budget Android eMMC)
       case DiskIoMode.hdd:
-        return 512 * 1024;  // 512KB coalesce
+        return 512 * 1024; // 512KB coalesce
     }
   }
 
@@ -58,15 +59,15 @@ class TorrentDiskManager {
   static int readCacheSizeMb(int fileSizeMb) {
     if (fileSizeMb > 4096) return 64; // Large > 4GB: 64MB
     if (fileSizeMb > 1024) return 32; // Medium > 1GB: 32MB
-    return 16;                        // Small: 16MB
+    return 16; // Small: 16MB
   }
 
   /// Auto-select optimal piece size in bytes based on file size (Phase 8).
   static int optimalPieceSize(int fileSize) {
-    if (fileSize < 100 * 1024 * 1024) return 256 * 1024;        // < 100MB: 256KB
-    if (fileSize < 1024 * 1024 * 1024) return 512 * 1024;       // < 1GB: 512KB
-    if (fileSize < 5 * 1024 * 1024 * 1024) return 1024 * 1024;  // < 5GB: 1MB
-    return 2 * 1024 * 1024;                                     // > 5GB: 2MB
+    if (fileSize < 100 * 1024 * 1024) return 256 * 1024; // < 100MB: 256KB
+    if (fileSize < 1024 * 1024 * 1024) return 512 * 1024; // < 1GB: 512KB
+    if (fileSize < 5 * 1024 * 1024 * 1024) return 1024 * 1024; // < 5GB: 1MB
+    return 2 * 1024 * 1024; // > 5GB: 2MB
   }
 
   /// Checks whether files in a torrent contain streaming video candidates.
@@ -101,7 +102,8 @@ class TorrentDiskManager {
       }
       return 4096; // Fallback default: 4GB
     } catch (e, st) {
-      LoggingService.logger('TorrentDiskManager').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TorrentDiskManager')
+          .warning('Operation failed with fallback', e, st);
       return 4096;
     }
   }

@@ -81,10 +81,14 @@ void main() {
     });
 
     test('RecoveryHints provides actionable hints for FailureCategory', () {
-      expect(RecoveryHints.hintFor(FailureCategory.network), contains('internet connection'));
-      expect(RecoveryHints.hintFor(FailureCategory.diskFull), contains('storage space'));
-      expect(RecoveryHints.hintFor(FailureCategory.authError), contains('URL expired'));
-      expect(RecoveryHints.hintFor(FailureCategory.integrityError), contains('Restart download'));
+      expect(RecoveryHints.hintFor(FailureCategory.network),
+          contains('internet connection'));
+      expect(RecoveryHints.hintFor(FailureCategory.diskFull),
+          contains('storage space'));
+      expect(RecoveryHints.hintFor(FailureCategory.authError),
+          contains('URL expired'));
+      expect(RecoveryHints.hintFor(FailureCategory.integrityError),
+          contains('Restart download'));
     });
 
     test('RecoveryHints maps string error family names correctly', () {

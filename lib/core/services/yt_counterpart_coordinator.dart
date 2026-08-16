@@ -4,7 +4,8 @@ import 'package:dmx/core/services/engine/engine_utils.dart';
 /// Coordinates YouTube audio/video stream pairs for synchronization.
 /// Task 1.2: Specialized Service for YT sync logic.
 class YtCounterpartCoordinator {
-  final _ytCounterpartTaskIds = TimestampedLruMap<String, String>(maxCapacity: 50);
+  final _ytCounterpartTaskIds =
+      TimestampedLruMap<String, String>(maxCapacity: 50);
   final _ytLiveBytes = TimestampedLruMap<String, int>(maxCapacity: 50);
   final _ytFinishedStreams = TimestampedLruMap<String, bool>(maxCapacity: 50);
   final Set<Timer> _cleanupTimers = {};
@@ -37,17 +38,20 @@ class YtCounterpartCoordinator {
 
   int? getLiveBytes(String taskId) => _ytLiveBytes.get(taskId);
 
-  bool isLiveBytesStale(String taskId, {Duration threshold = const Duration(seconds: 15)}) {
+  bool isLiveBytesStale(String taskId,
+      {Duration threshold = const Duration(seconds: 15)}) {
     final lastAccessed = _ytLiveBytes.getLastAccessed(taskId);
     if (lastAccessed == null) return false;
     return DateTime.now().difference(lastAccessed) > threshold;
   }
 
-  bool isStreamFinished(String taskId) => _ytFinishedStreams.containsKey(taskId);
+  bool isStreamFinished(String taskId) =>
+      _ytFinishedStreams.containsKey(taskId);
 
   bool isCounterpartFinished(String taskId) {
     final counterpartId = _ytCounterpartTaskIds.get(taskId);
-    return counterpartId != null && _ytFinishedStreams.containsKey(counterpartId);
+    return counterpartId != null &&
+        _ytFinishedStreams.containsKey(counterpartId);
   }
 
   void markFinished(String taskId) {
@@ -58,7 +62,8 @@ class YtCounterpartCoordinator {
     _ytFinishedStreams.put(taskId, true);
     final counterpartId = _ytCounterpartTaskIds.get(taskId);
 
-    if (counterpartId != null && _ytFinishedStreams.containsKey(counterpartId)) {
+    if (counterpartId != null &&
+        _ytFinishedStreams.containsKey(counterpartId)) {
       _ytCounterpartTaskIds.remove(taskId);
       _ytCounterpartTaskIds.remove(counterpartId);
       _ytLiveBytes.remove(taskId);

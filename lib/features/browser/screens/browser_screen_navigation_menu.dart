@@ -80,7 +80,8 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
       _homeReturnUrl = null;
       final currentTabId = activeTab.id;
       _navigatingBackForwardTabIds[currentTabId] = true;
-      unawaited((activeTab.controller?.goBack() ?? Future.value()).catchError((e) => _log.warning('Failed to go back', e)));
+      unawaited((activeTab.controller?.goBack() ?? Future.value())
+          .catchError((e) => _log.warning('Failed to go back', e)));
       Future.delayed(const Duration(seconds: 30), () {
         if (mounted) {
           _navigatingBackForwardTabIds[currentTabId] = false;
@@ -190,7 +191,8 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
 
     final currentTabId = activeTab.id;
     _navigatingBackForwardTabIds[currentTabId] = true;
-    unawaited((activeTab.controller?.goForward() ?? Future.value()).catchError((e) => _log.warning('Failed to go forward', e)));
+    unawaited((activeTab.controller?.goForward() ?? Future.value())
+        .catchError((e) => _log.warning('Failed to go forward', e)));
     Future.delayed(const Duration(seconds: 30), () {
       if (mounted) {
         _navigatingBackForwardTabIds[currentTabId] = false;
@@ -644,8 +646,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
       try {
         tab.findInteractionController?.clearMatches();
       } catch (e, st) {
-      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('BrowserScreenNavigationMenu')
+            .warning('Operation failed', e, st);
+      }
     }
     setState(() {
       _findPanelVisible = false;
@@ -663,7 +666,8 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     try {
       controller.findNext(forward: forward);
     } catch (e, st) {
-      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
+      LoggingService.logger('BrowserScreenNavigationMenu')
+          .warning('Operation failed', e, st);
     }
   }
 
@@ -675,8 +679,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
       try {
         controller?.clearMatches();
       } catch (e, st) {
-      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('BrowserScreenNavigationMenu')
+            .warning('Operation failed', e, st);
+      }
       setState(() {
         _findMatchCount = 0;
         _findActiveMatch = 0;
@@ -690,7 +695,8 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     try {
       controller?.findAll(find: query);
     } catch (e, st) {
-      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
+      LoggingService.logger('BrowserScreenNavigationMenu')
+          .warning('Operation failed', e, st);
     }
   }
 
@@ -734,8 +740,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
             await controller.setSettings(settings: currentSettings);
           }
         } catch (e, st) {
-      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('BrowserScreenNavigationMenu')
+              .warning('Operation failed', e, st);
+        }
       }
       try {
         final css = forceDark ? ScriptInjector.buildForceDarkCss() : '';
@@ -755,8 +762,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
           })();
         ''').catchError((_) => null);
       } catch (e, st) {
-      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('BrowserScreenNavigationMenu')
+            .warning('Operation failed', e, st);
+      }
     }
   }
 
@@ -805,8 +813,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
                   await file.delete();
                 }
               } catch (e, st) {
-      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
-    }
+                LoggingService.logger('BrowserScreenNavigationMenu')
+                    .warning('Operation failed', e, st);
+              }
             }
             await db.deleteTask(task.id);
           }
@@ -887,8 +896,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
                               ?.setSettings(settings: currentSettings);
                         }
                       } catch (e, st) {
-      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
-    }
+                        LoggingService.logger('BrowserScreenNavigationMenu')
+                            .warning('Operation failed', e, st);
+                      }
                     },
                   ),
                   Row(
@@ -942,8 +952,9 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
           await activeTab.controller?.setSettings(settings: currentSettings);
         }
       } catch (e, st) {
-      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('BrowserScreenNavigationMenu')
+            .warning('Operation failed', e, st);
+      }
     }
   }
 
@@ -1197,7 +1208,8 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
       }
       return launched;
     } catch (e, st) {
-      LoggingService.logger('BrowserScreenNavigationMenu').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('BrowserScreenNavigationMenu')
+          .warning('Operation failed with fallback', e, st);
       return false;
     }
   }

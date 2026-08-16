@@ -156,7 +156,8 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
       try {
         fileExists = File(output).existsSync();
       } catch (e, st) {
-        LoggingService.logger('CreateTorrentScreen').warning('Failed to check if torrent output exists', e, st);
+        LoggingService.logger('CreateTorrentScreen')
+            .warning('Failed to check if torrent output exists', e, st);
       }
 
       if (res != null || fileExists) {

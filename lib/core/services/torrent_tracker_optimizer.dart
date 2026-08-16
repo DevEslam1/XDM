@@ -7,8 +7,10 @@ class TorrentTrackerOptimizer {
   static List<TorrentTrackerInfo> getRankedHealthyTrackers(
     List<TorrentTrackerInfo> trackers,
   ) {
-    final healthy = trackers.where((t) =>
-        t.status == TrackerStatus.working && (t.seeds > 0 || t.peers > 0)).toList();
+    final healthy = trackers
+        .where((t) =>
+            t.status == TrackerStatus.working && (t.seeds > 0 || t.peers > 0))
+        .toList();
 
     healthy.sort((a, b) {
       final scoreB = (b.seeds * 2) + b.peers;
@@ -46,7 +48,8 @@ class TorrentTrackerOptimizer {
     // Prefer high speed peers (> 100 KB/s)
     if (downloadSpeedBytesPerSec > 100 * 1024) {
       score *= 1.3;
-    } else if (downloadSpeedBytesPerSec < 10 * 1024 && downloadSpeedBytesPerSec > 0) {
+    } else if (downloadSpeedBytesPerSec < 10 * 1024 &&
+        downloadSpeedBytesPerSec > 0) {
       // Penalize very slow peers
       score *= 0.7;
     }

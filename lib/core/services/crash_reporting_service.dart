@@ -133,7 +133,8 @@ class CrashReportingService {
   static String redactSensitive(String input) => _redactSensitive(input);
 
   static String _redactSensitive(String input) {
-    var result = input.replaceAllMapped(_bearerPattern, (match) => 'Bearer ***');
+    var result =
+        input.replaceAllMapped(_bearerPattern, (match) => 'Bearer ***');
     result = result.replaceAllMapped(_sensitiveKeyValuePattern, (match) {
       final regExpMatch = match as RegExpMatch;
       final key = regExpMatch.namedGroup('key') ?? '';

@@ -152,10 +152,14 @@ class ErrorTaxonomy {
 
     if (error is PositionalFileWriterException) {
       final msg = error.message.toLowerCase();
-      final isSpace = msg.contains('enospc') || msg.contains('space') || msg.contains('disk');
+      final isSpace = msg.contains('enospc') ||
+          msg.contains('space') ||
+          msg.contains('disk');
       return ErrorClassification(
         family: ErrorFamily.disk,
-        message: isSpace ? 'Not enough storage space' : 'Disk write error: ${error.message}',
+        message: isSpace
+            ? 'Not enough storage space'
+            : 'Disk write error: ${error.message}',
         severe: true,
         recoveryAction: RecoveryAction.showSettings,
       );

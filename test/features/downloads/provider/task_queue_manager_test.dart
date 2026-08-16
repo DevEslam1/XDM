@@ -56,9 +56,21 @@ void main() {
       orchestrator = MockDownloadOrchestrator();
       pumpCalled = false;
       tasks = [
-        createTestTask(id: 'task-1', fileName: '1', url: 'https://example.com/1', queueOrder: 0),
-        createTestTask(id: 'task-2', fileName: '2', url: 'https://example.com/2', queueOrder: 1),
-        createTestTask(id: 'task-3', fileName: '3', url: 'https://example.com/3', queueOrder: 2),
+        createTestTask(
+            id: 'task-1',
+            fileName: '1',
+            url: 'https://example.com/1',
+            queueOrder: 0),
+        createTestTask(
+            id: 'task-2',
+            fileName: '2',
+            url: 'https://example.com/2',
+            queueOrder: 1),
+        createTestTask(
+            id: 'task-3',
+            fileName: '3',
+            url: 'https://example.com/3',
+            queueOrder: 2),
       ];
 
       queueManager = TaskQueueManager(
@@ -68,7 +80,8 @@ void main() {
       );
     });
 
-    test('reorderTasks moves task to target index and recalculates queueOrder', () {
+    test('reorderTasks moves task to target index and recalculates queueOrder',
+        () {
       queueManager.reorderTasks(2, 0);
 
       expect(tasks[0].id, 'task-3');
@@ -101,7 +114,8 @@ void main() {
       expect(pumpCalled, false);
     });
 
-    test('delegates isTaskPendingStart and pendingStartCount to orchestrator', () {
+    test('delegates isTaskPendingStart and pendingStartCount to orchestrator',
+        () {
       when(() => orchestrator.pendingStartCount).thenReturn(2);
       when(() => orchestrator.isTaskPendingStart('task-1')).thenReturn(true);
 

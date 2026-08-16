@@ -6,7 +6,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('BackgroundTimerManager Debounce & Flapping Guard (P0-9)', () {
-    test('State changes are debounced by 500ms and flapping count is tracked', () async {
+    test('State changes are debounced by 500ms and flapping count is tracked',
+        () async {
       final manager = BackgroundTimerManager.instance;
 
       int callCount = 0;

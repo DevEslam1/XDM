@@ -98,55 +98,68 @@ class HttpTransferJob {
   final CancelToken _cancelToken = CancelToken();
   int _seq = 0;
   bool _cancelRequested = false;
-  static const int maxPendingDelays = 32;
-  final List<Completer<void>> _pendingDelayCompleters = [];
-  final List<Timer> _pendingDelayTimers = [];
+  static const int maxPendingDelays = 16;
+  int _nextTimerId = 0;
+  final Map<int, Completer<void>> _pendingDelays = <int, Completer<void>>{};
+  final Map<int, Timer> _pendingTimers = <int, Timer>{};
+  int _chunkFingerprint = 0;
+
+  @visibleForTesting
+  int get chunkFingerprintForTesting => _chunkFingerprint;
+
+  @visibleForTesting
+  Map<int, Completer<void>> get pendingDelaysForTesting => _pendingDelays;
 
   @visibleForTesting
   List<Completer<void>> get pendingDelayCompletersForTesting =>
-      _pendingDelayCompleters;
+      _pendingDelays.values.toList();
 
   @visibleForTesting
-  List<Timer> get pendingDelayTimersForTesting => _pendingDelayTimers;
+  List<Timer> get pendingDelayTimersForTesting => _pendingTimers.values.toList();
 
   @visibleForTesting
-  Future<void> cancellableDelay(Duration duration) {
-    if (_cancelRequested || _cancelToken.isCancelled) return Future.value();
+  Future<void> cancellableDelay(Duration duration) async {
+    if (_cancelRequested || _cancelToken.isCancelled) return;
 
-    while (_pendingDelayCompleters.length >= maxPendingDelays) {
-      final oldCompleter = _pendingDelayCompleters.removeAt(0);
-      if (!oldCompleter.isCompleted) oldCompleter.complete();
-    }
-    while (_pendingDelayTimers.length >= maxPendingDelays) {
-      final oldTimer = _pendingDelayTimers.removeAt(0);
-      oldTimer.cancel();
+    if (_pendingDelays.length >= maxPendingDelays) {
+      throw const DelayQueueFullException(
+        'Cancellable delay queue capacity (16) reached.',
+      );
     }
 
+    final id = _nextTimerId++;
     final completer = Completer<void>();
-    _pendingDelayCompleters.add(completer);
+    _pendingDelays[id] = completer;
 
     final timer = Timer(duration, () {
-      _pendingDelayTimers.removeWhere((t) => !t.isActive);
-      _pendingDelayCompleters.remove(completer);
-      if (!completer.isCompleted) {
-        completer.complete();
+      _pendingTimers.remove(id);
+      final c = _pendingDelays.remove(id);
+      if (c != null && !c.isCompleted) {
+        c.complete();
       }
     });
-    _pendingDelayTimers.add(timer);
+    _pendingTimers[id] = timer;
 
-    return completer.future;
+    try {
+      await completer.future;
+    } finally {
+      timer.cancel();
+      _pendingTimers.remove(id);
+      _pendingDelays.remove(id);
+    }
   }
 
   void _abortAllDelays() {
     _cancelRequested = true;
-    for (final t in _pendingDelayTimers) {
+    for (final t in _pendingTimers.values) {
       t.cancel();
     }
-    _pendingDelayTimers.clear();
-    for (final c in _pendingDelayCompleters) {
+    _pendingTimers.clear();
+    final completers = _pendingDelays.values.toList();
+    _pendingDelays.clear();
+    for (final c in completers) {
       if (!c.isCompleted) c.complete();
     }
-    _pendingDelayCompleters.clear();
   }
 
   TransferState? _state;
@@ -252,8 +265,10 @@ class HttpTransferJob {
   }
 
   Timer? _hardTimeoutTimer;
-  Timer? _progressWatchdogTimer;
-  Timer? _stallWatchdogTimer;
+  Timer? _jobHealthTimer;
+
+  @visibleForTesting
+  Timer? get jobHealthTimerForTesting => _jobHealthTimer;
 
   @visibleForTesting
   void registerWatchdogs() {
@@ -269,9 +284,11 @@ class HttpTransferJob {
 
     _hardTimeoutTimer = Timer(hardTimeoutDuration, onHardTimeout);
 
-    _progressWatchdogTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+    _jobHealthTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       final st = _state;
       if (st == null) return;
+
+      // 1. Progress / hard-timeout reset check
       final nowBytes = st.downloadedBytes;
       final delta = nowBytes - _watchdogCheckpointBytes;
       _watchdogCheckpointBytes = nowBytes;
@@ -279,15 +296,15 @@ class HttpTransferJob {
         _hardTimeoutTimer?.cancel();
         _hardTimeoutTimer = Timer(hardTimeoutDuration, onHardTimeout);
       }
-    });
 
-    _stallWatchdogTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-      if (_state == null || _stalledEmitted || _lastProgressTimeMs == 0) return;
-      final elapsed = _stopwatch.elapsedMilliseconds - _lastProgressTimeMs;
-      if (elapsed >= 5 * 60 * 1000) {
-        _stalledEmitted = true;
-        _emitProgress(_stopwatch.elapsedMilliseconds,
-            statusMessage: 'Stalled', cycleStateOverride: CycleState.stalled);
+      // 2. Stall check
+      if (!_stalledEmitted && _lastProgressTimeMs != 0) {
+        final elapsed = _stopwatch.elapsedMilliseconds - _lastProgressTimeMs;
+        if (elapsed >= 5 * 60 * 1000) {
+          _stalledEmitted = true;
+          _emitProgress(_stopwatch.elapsedMilliseconds,
+              statusMessage: 'Stalled', cycleStateOverride: CycleState.stalled);
+        }
       }
     });
   }
@@ -296,10 +313,8 @@ class HttpTransferJob {
   void cancelWatchdogs() {
     _hardTimeoutTimer?.cancel();
     _hardTimeoutTimer = null;
-    _progressWatchdogTimer?.cancel();
-    _progressWatchdogTimer = null;
-    _stallWatchdogTimer?.cancel();
-    _stallWatchdogTimer = null;
+    _jobHealthTimer?.cancel();
+    _jobHealthTimer = null;
   }
 
   @visibleForTesting
@@ -1177,6 +1192,11 @@ class HttpTransferJob {
               if (await f.exists()) await f.delete();
             } catch (_) {} // coverage:ignore-line
           }
+          if (await tempFile.exists()) {
+            try {
+              await tempFile.delete();
+            } catch (_) {} // coverage:ignore-line
+          }
           chunk.downloaded = 0;
           st.chunks = ChunkScheduler.singleStream(st.totalSize);
           throw DioException(
@@ -1457,22 +1477,8 @@ class HttpTransferJob {
     }
   }
 
-  Future<void> _cancellableDelay(Duration duration) async {
-    if (_cancelRequested || _cancelToken.isCancelled) return;
-    final completer = Completer<void>();
-    _pendingDelayCompleters.add(completer);
-    final timer = Timer(duration, () {
-      if (!completer.isCompleted) completer.complete();
-    });
-    _pendingDelayTimers.add(timer);
-    try {
-      await completer.future;
-    } finally {
-      timer.cancel();
-      _pendingDelayTimers.remove(timer);
-      _pendingDelayCompleters.remove(completer);
-    }
-  }
+  Future<void> _cancellableDelay(Duration duration) =>
+      cancellableDelay(duration);
 
   Future<void> _throttledSaveAndReport(
     PositionalFileWriter? writer, {
@@ -1486,14 +1492,20 @@ class HttpTransferJob {
     final saveInterval = isBackground
         ? const Duration(seconds: 120).inMilliseconds
         : const Duration(seconds: 15).inMilliseconds;
-    final saveByteThreshold =
-        isBackground ? 128 * 1024 * 1024 : 32 * 1024 * 1024;
+    const saveByteThreshold = 32 * 1024 * 1024;
 
     final dueSave = nowMs - _lastStateSaveMs >= saveInterval ||
         _bytesSinceSave >= saveByteThreshold;
 
     final reportInterval = isBackground ? 15000 : 750;
     final dueReport = nowMs - _lastReportMs >= reportInterval;
+
+    if (st.chunks.isNotEmpty) {
+      _chunkFingerprint = st.chunks.fold<int>(
+        0,
+        (h, c) => h ^ Object.hash(c.start, c.end, c.size, c.downloaded),
+      );
+    }
 
     if (dueSave && !_stateSavePending) {
       _stateSavePending = true;
@@ -1655,6 +1667,26 @@ class HttpTransferJob {
         cycleState == CycleState.failed ||
         cycleState == CycleState.paused;
 
+    final ytLiveCounterpartBytes = cmd.ytCounterpartDownloadedBytes;
+    final fingerprint = Object.hash(
+      downloaded,
+      total,
+      (speed / 1024).round(),
+      eta,
+      cycleState,
+      statusMessage,
+      _chunkFingerprint,
+      completedChunks,
+      pauseReason?.name,
+      ytLiveCounterpartBytes,
+    );
+
+    if (!isCycleStateChanged && fingerprint == _lastProgressFingerprint) {
+      return;
+    }
+    _lastProgressFingerprint = fingerprint;
+    _lastEmittedCycleState = cycleState;
+
     // Performance Optimization: Throttle chunkDetails emission to max once every 1.5s,
     // or when chunk completion count changes, or on state transitions.
     final bool chunkCompletionChanged =
@@ -1671,30 +1703,6 @@ class HttpTransferJob {
       _lastChunkDetailsEmitMs = nowMs;
       _lastEmittedCompletedChunks = completedChunks ?? 0;
     }
-
-    // Folded hash of chunk details for deduplication
-    final chunkDetailsHash = st.chunks.fold<int>(
-        0, (h, c) => h ^ Object.hash(c.start, c.end, c.size, c.downloaded));
-
-    final ytLiveCounterpartBytes = cmd.ytCounterpartDownloadedBytes;
-    final fingerprint = Object.hash(
-      downloaded,
-      total,
-      (speed / 1024).round(),
-      eta,
-      cycleState,
-      statusMessage,
-      chunkDetailsHash,
-      completedChunks,
-      pauseReason?.name,
-      ytLiveCounterpartBytes,
-    );
-
-    if (!isCycleStateChanged && fingerprint == _lastProgressFingerprint) {
-      return;
-    }
-    _lastProgressFingerprint = fingerprint;
-    _lastEmittedCycleState = cycleState;
     _send('progress', {
       'downloadedBytes': downloaded,
       'fileSize': total,
@@ -1702,6 +1710,7 @@ class HttpTransferJob {
       'eta': eta,
       'chunks': null,
       'chunkDetails': chunkDetails,
+      'chunkFingerprint': _chunkFingerprint,
       'fileName': cmd.resolvedFileName,
       'supportsResume': cmd.supportsResume,
       if (cmd.ytStreamKind != null) 'ytStreamKind': cmd.ytStreamKind!.name,

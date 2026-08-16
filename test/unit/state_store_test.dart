@@ -155,7 +155,8 @@ void main() {
       expect(defaultStore, isNotNull);
       expect(customStore, isNotNull);
       expect(identical(defaultStore, customStore), isFalse);
-      expect(identical(factory.getOrCreate(name: 'worker-1'), customStore), isTrue);
+      expect(identical(factory.getOrCreate(name: 'worker-1'), customStore),
+          isTrue);
 
       final tempFilePath = '${tempDir.path}/factory_test.tmp';
       final state = TransferState(

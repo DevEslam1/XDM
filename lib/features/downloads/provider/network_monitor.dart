@@ -113,7 +113,8 @@ class NetworkMonitor {
               res.statusCode! >= 200 &&
               res.statusCode! < 300);
     } catch (e, st) {
-      LoggingService.logger('NetworkMonitor').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('NetworkMonitor')
+          .warning('Operation failed with fallback', e, st);
       return false;
     }
   }
@@ -194,8 +195,9 @@ class NetworkMonitor {
           try {
             await fut.timeout(const Duration(seconds: 5));
           } catch (e, st) {
-      LoggingService.logger('NetworkMonitor').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('NetworkMonitor')
+                .warning('Operation failed', e, st);
+          }
         }
         _cancelTokens().remove(task.id);
       }

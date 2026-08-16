@@ -67,8 +67,9 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       try {
         await pullToRefresh.endRefreshing();
       } catch (e, st) {
-      LoggingService.logger('BrowserScreenWebview').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('BrowserScreenWebview')
+            .warning('Operation failed', e, st);
+      }
     }
   }
 
@@ -363,13 +364,15 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
       } catch (e, st) {
         _log.warning('[Browser] Failed to apply Google accounts UA: $e', e, st);
       }
-      unawaited(_hideWebViewFingerprints(tab).catchError((e) => _log.warning('Failed to hide fingerprints', e)));
+      unawaited(_hideWebViewFingerprints(tab)
+          .catchError((e) => _log.warning('Failed to hide fingerprints', e)));
     } else {
       // Fix #20: Restore the correct UA when navigating away from Google login
       // pages. Without this, the Pixel 8 UA set for accounts.google.com
       // persisted permanently for all subsequent pages in the same tab.
       final settings = _settings;
-      unawaited(_applyUserAgent(tab, settings).catchError((e) => _log.warning('Failed to apply user agent', e)));
+      unawaited(_applyUserAgent(tab, settings)
+          .catchError((e) => _log.warning('Failed to apply user agent', e)));
     }
 
     if (mounted) {
@@ -407,7 +410,8 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     // Fix #4: Re-apply per-site settings on every navigation so that
     // site-specific desktop mode and ad-blocker overrides take effect
     // when the user navigates to a different domain within the same tab.
-    unawaited(_applySiteSettings(tab, url).catchError((e) => _log.warning('Failed to apply site settings', e)));
+    unawaited(_applySiteSettings(tab, url)
+        .catchError((e) => _log.warning('Failed to apply site settings', e)));
 
     _updateNavState();
     _delayed(const Duration(milliseconds: 500), _updateNavState);
@@ -422,11 +426,14 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
     _loadingTimeoutTimers[tab.id]?.cancel();
     _navigatingBackForwardTabIds[tab.id] = false;
     final settings = _settings;
-    unawaited(_injectAllScripts(tab, url).catchError((e) => _log.warning('Failed to inject scripts', e)));
+    unawaited(_injectAllScripts(tab, url)
+        .catchError((e) => _log.warning('Failed to inject scripts', e)));
     // UX 3.6: Tab favicons — fetch after page load.
-    unawaited(_fetchFavicon(tab).catchError((e) => _log.warning('Failed to fetch favicon', e)));
+    unawaited(_fetchFavicon(tab)
+        .catchError((e) => _log.warning('Failed to fetch favicon', e)));
     // UX 3.19: Autofill saved form data for this host.
-    unawaited(_autofillFormFields(tab).catchError((e) => _log.warning('Failed to autofill form fields', e)));
+    unawaited(_autofillFormFields(tab)
+        .catchError((e) => _log.warning('Failed to autofill form fields', e)));
 
     // Fix #6: Corrected operator precedence — previously evaluated as
     // (mounted && _customJs.isNotEmpty) || _customCss.isNotEmpty, which
@@ -602,8 +609,9 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
           if (window.__xdmYtAdInterval) { clearInterval(window.__xdmYtAdInterval); window.__xdmYtAdInterval = null; }
         ''').catchError((_) => null);
       } catch (e, st) {
-      LoggingService.logger('BrowserScreenWebview').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('BrowserScreenWebview')
+            .warning('Operation failed', e, st);
+      }
       // Cancel pending loading timeout to prevent setState on a suspended tab.
       _loadingTimeoutTimers[tab.id]?.cancel();
       _loadingTimeoutTimers.remove(tab.id);
@@ -628,7 +636,8 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
         onRefresh: () => _refreshTabForPull(tab),
       );
     } catch (e, st) {
-      LoggingService.logger('BrowserScreenWebview').warning('Operation failed', e, st);
+      LoggingService.logger('BrowserScreenWebview')
+          .warning('Operation failed', e, st);
     }
 
     // E13: Tab Suspension/Resume Visual Feedback
@@ -671,7 +680,8 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
         faviconUrl = favicons.first.url.toString();
       }
     } catch (e, st) {
-      LoggingService.logger('BrowserScreenWebview').warning('Operation failed', e, st);
+      LoggingService.logger('BrowserScreenWebview')
+          .warning('Operation failed', e, st);
     }
     if (faviconUrl == null) {
       try {
@@ -698,8 +708,9 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
           }
         }
       } catch (e, st) {
-      LoggingService.logger('BrowserScreenWebview').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('BrowserScreenWebview')
+            .warning('Operation failed', e, st);
+      }
     }
     if (faviconUrl == null || faviconUrl.isEmpty) return;
     tab.faviconUrl = faviconUrl;
@@ -717,7 +728,8 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
         }
       }
     } catch (e, st) {
-      LoggingService.logger('BrowserScreenWebview').warning('Operation failed', e, st);
+      LoggingService.logger('BrowserScreenWebview')
+          .warning('Operation failed', e, st);
     }
   }
 

@@ -3,7 +3,7 @@ import 'package:dmx/features/downloads/models/cycle_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('CycleStateResolver Tests', () {
+  group('CycleStateResolver Tests (FIX-05 & PERF-01)', () {
     test('resolves cancelled state to paused regardless of message', () {
       expect(
         CycleStateResolver.resolve(
@@ -21,27 +21,67 @@ void main() {
       );
     });
 
-    test('resolves torrent messages via libtorrent mappings', () {
+    test('exhaustive libtorrent state labels mapping', () {
+      final libtorrentLabels = {
+        'checking_files': CycleState.verifying,
+        'checking_resume_data': CycleState.verifying,
+        'queued_for_checking': CycleState.verifying,
+        'checking': CycleState.verifying,
+        'verifying': CycleState.verifying,
+        'downloading_metadata': CycleState.fetchingMetadata,
+        'fetching_metadata': CycleState.fetchingMetadata,
+        'metadata': CycleState.fetchingMetadata,
+        'allocating': CycleState.allocating,
+        'downloading': CycleState.downloading,
+        'seeding': CycleState.seeding,
+        'finished': CycleState.completed,
+        'completed': CycleState.completed,
+        'paused': CycleState.paused,
+        'stopped': CycleState.paused,
+        'stalled': CycleState.stalled,
+        'error': CycleState.failed,
+        'failed': CycleState.failed,
+        'resuming': CycleState.resuming,
+        'retrying': CycleState.retrying,
+        'updating_links': CycleState.updatingLinks,
+        'merging': CycleState.merging,
+        'muxing': CycleState.merging,
+        'starting': CycleState.starting,
+        'queued': CycleState.starting,
+      };
+
+      for (final entry in libtorrentLabels.entries) {
+        expect(
+          CycleStateResolver.resolve(
+            statusMessage: entry.key,
+            isTorrent: true,
+          ),
+          equals(entry.value),
+          reason: 'Failed for libtorrent label: ${entry.key}',
+        );
+      }
+    });
+
+    test('word boundary matching prevents false positives for HTTP messages', () {
+      // "unfailing" or "counterpart" should not match \bfail\b or \berror\b
       expect(
-        CycleStateResolver.resolve(
-          statusMessage: 'downloading_metadata',
-          isTorrent: true,
-        ),
-        CycleState.fetchingMetadata,
+        CycleStateResolver.resolve(statusMessage: 'Transferring with unfailing speed'),
+        CycleState.downloading,
       );
+      // Word boundary match for error
       expect(
-        CycleStateResolver.resolve(
-          statusMessage: 'seeding',
-          isTorrent: true,
-        ),
-        CycleState.seeding,
+        CycleStateResolver.resolve(statusMessage: 'Fatal error occurred'),
+        CycleState.failed,
       );
+      // Word boundary match for fail
       expect(
-        CycleStateResolver.resolve(
-          statusMessage: 'checking_files',
-          isTorrent: true,
-        ),
-        CycleState.verifying,
+        CycleStateResolver.resolve(statusMessage: 'Connection fail on endpoint'),
+        CycleState.failed,
+      );
+      // Unknown state returns downloading
+      expect(
+        CycleStateResolver.resolve(statusMessage: 'Some completely custom message 1234'),
+        CycleState.downloading,
       );
     });
 
@@ -132,7 +172,7 @@ void main() {
     });
 
     test(
-        'Benchmark: fast string resolution achieves high throughput (>100k ops/sec)',
+        'Benchmark: fast string resolution achieves high throughput with cache',
         () {
       final messages = [
         'Fetching metadata…',
@@ -156,7 +196,6 @@ void main() {
       }
       sw.stop();
 
-      // 50,000 iterations without regex overhead should easily finish under 200ms
       expect(sw.elapsedMilliseconds, lessThan(500));
     });
   });

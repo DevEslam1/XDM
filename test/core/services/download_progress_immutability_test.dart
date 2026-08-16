@@ -4,8 +4,12 @@ import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('DownloadProgress Immutability & Concurrency Stress Tests (Task 2.4 / Task 5.3)', () {
-    test('DownloadProgress is strictly immutable and supports copyWith without state pollution', () {
+  group(
+      'DownloadProgress Immutability & Concurrency Stress Tests (Task 2.4 / Task 5.3)',
+      () {
+    test(
+        'DownloadProgress is strictly immutable and supports copyWith without state pollution',
+        () {
       const original = DownloadProgress(
         downloadedBytes: 1000,
         fileSize: 10000,
@@ -28,7 +32,9 @@ void main() {
       expect(modified.statusMessage, 'Downloading');
     });
 
-    test('Stress test: emits 10,000 progress events across 4 concurrent async streams without race conditions', () async {
+    test(
+        'Stress test: emits 10,000 progress events across 4 concurrent async streams without race conditions',
+        () async {
       final receivedEvents = <DownloadProgress>[];
       final completer = Completer<void>();
       const totalPerStream = 2500;

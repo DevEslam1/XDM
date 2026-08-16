@@ -110,8 +110,8 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
         final settings = context.read<SettingsProvider>();
         lightPulse(settings);
       } catch (e, st) {
-      LoggingService.logger('SmartUrlBar').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('SmartUrlBar').warning('Operation failed', e, st);
+      }
     }
     if (!widget.focusNode.hasFocus) {
       _removeOverlay();

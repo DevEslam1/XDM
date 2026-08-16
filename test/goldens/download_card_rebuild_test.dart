@@ -46,7 +46,8 @@ void main() {
       }
     });
 
-    testWidgets('pumping card 60 times with new progress minimizes dirty element rebuilds',
+    testWidgets(
+        'pumping card 60 times with new progress minimizes dirty element rebuilds',
         (tester) async {
       final taskNotifier = ValueNotifier<DownloadTask>(
         DownloadTask(
@@ -72,8 +73,10 @@ void main() {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
-            ChangeNotifierProvider<SettingsProvider>.value(value: settingsProvider),
-            ChangeNotifierProvider<DownloadProvider>.value(value: downloadProvider),
+            ChangeNotifierProvider<SettingsProvider>.value(
+                value: settingsProvider),
+            ChangeNotifierProvider<DownloadProvider>.value(
+                value: downloadProvider),
           ],
           child: MaterialApp(
             home: Scaffold(

@@ -49,13 +49,16 @@ class DownloadQueueProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> pauseTask(String id, {PauseReason reason = PauseReason.userRequested}) async {
+  Future<void> pauseTask(String id,
+      {PauseReason reason = PauseReason.userRequested}) async {
     final list = _listProvider;
     if (list == null) return;
     final task = list.findTask(id);
     if (task != null && task.status == DownloadStatus.downloading) {
       await list.updateTask(
-        task.copyWith(status: DownloadStatus.paused, pausedByUser: reason == PauseReason.userRequested),
+        task.copyWith(
+            status: DownloadStatus.paused,
+            pausedByUser: reason == PauseReason.userRequested),
       );
       pumpQueue();
     }

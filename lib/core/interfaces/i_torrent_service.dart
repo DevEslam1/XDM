@@ -130,4 +130,3 @@ abstract class ITorrentService {
     DateTime? completedAt,
   });
 }
-

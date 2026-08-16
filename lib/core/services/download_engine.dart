@@ -35,7 +35,8 @@ class DownloadEngine implements IDownloadEngine {
   static bool get appInForeground => appInForegroundNotifier.value;
   static set appInForeground(bool val) => appInForegroundNotifier.value = val;
   static bool get isInBackground => !appInForeground;
-  @Deprecated('Use markForeground() / markBackground() instead — the setter was semantically inverted.')
+  @Deprecated(
+      'Use markForeground() / markBackground() instead — the setter was semantically inverted.')
   static set isInBackground(bool val) => appInForeground = !val;
 
   /// Explicitly mark the engine as foreground. Prefer over `isInBackground = false`.
@@ -379,7 +380,6 @@ class DownloadEngine implements IDownloadEngine {
   void forceCancelJob(String taskId) {
     _pool?.forceCancelJob(taskId);
   }
-
 
   static Future<void> validateSavePath(
     String savePath, {

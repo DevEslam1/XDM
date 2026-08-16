@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/engine/engine_utils.dart';
@@ -13,18 +14,15 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
   static final _log = LoggingService.logger('DioClientPool');
   static const int _maxActiveClients = 6;
   static const int _maxActiveClientsAggressive = 3;
+  static const int _maxIdleHosts = 10;
   final Map<Dio, DateTime> _clientCreationTimes = {};
   final Set<Dio> _activeClients = {};
   final Set<Dio> _reservedClients = {};
   final Map<Dio, Set<String>> _activeDownloadsPerClient = {};
-  final Map<String, Dio> _idleClientsByHost = {};
+  final LinkedHashMap<String, Dio> _idleClientsByHost = LinkedHashMap<String, Dio>();
   final Map<Dio, String> _clientHosts = {};
-  Timer? _cleanupTimer;
 
-  DioClientPool({bool enableCleanupTimer = true}) {
-    if (enableCleanupTimer) {
-      _startCleanupTimer();
-    }
+  DioClientPool({bool enableCleanupTimer = false}) {
     ServiceRegistry.register(this);
     ServiceRegistry.registerMemoryPressureListener(this);
   }
@@ -38,13 +36,6 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
       PowerMonitor.batterySaverMode == BatterySaverMode.aggressive
           ? _maxActiveClientsAggressive
           : _maxActiveClients;
-
-  void _startCleanupTimer() {
-    _cleanupTimer?.cancel();
-    _cleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      _performCleanup();
-    });
-  }
 
   @override
   void onMemoryPressure() {
@@ -85,38 +76,29 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
         PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ||
             PowerMonitor.screenOff;
 
-    final reservedMaxAge = isPowerConstrained
-        ? const Duration(minutes: 2)
-        : const Duration(minutes: 10);
-    final normalMaxAge = isPowerConstrained
+    final maxAge = isPowerConstrained
         ? const Duration(minutes: 1)
         : const Duration(minutes: 5);
 
-    final toRelease = <Dio>[];
-    for (final client in _activeClients) {
-      final hasActiveDownloads =
-          _activeDownloadsPerClient[client]?.isNotEmpty ?? false;
-      if (hasActiveDownloads) continue;
-
+    final staleHosts = <String>[];
+    for (final entry in _idleClientsByHost.entries) {
+      final client = entry.value;
       final creationTime = _clientCreationTimes[client] ?? now;
       final age = now.difference(creationTime);
-      final isReserved = _reservedClients.contains(client);
-
-      final isStale = isReserved
-          ? age > reservedMaxAge
-          : age > normalMaxAge;
-
-      if (isStale) {
-        toRelease.add(client);
+      if (age > maxAge) {
+        staleHosts.add(entry.key);
       }
     }
 
-    for (final client in toRelease) {
-      releaseClient(client);
+    for (final host in staleHosts) {
+      final client = _idleClientsByHost.remove(host);
+      if (client != null) {
+        _closeClient(client);
+      }
     }
-    if (toRelease.isNotEmpty) {
+    if (staleHosts.isNotEmpty) {
       _log.fine(
-        '[DioClientPool] Periodic cleanup evicted ${toRelease.length} stale client(s).',
+        '[DioClientPool] Cleanup evicted ${staleHosts.length} stale idle client(s).',
       );
     }
   }
@@ -192,7 +174,8 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
   }
 
   @visibleForTesting
-  Map<Dio, Set<String>> get activeDownloadsPerClient => _activeDownloadsPerClient;
+  Map<Dio, Set<String>> get activeDownloadsPerClient =>
+      _activeDownloadsPerClient;
 
   @visibleForTesting
   Map<String, Dio> get idleClientsByHostForTesting => _idleClientsByHost;
@@ -205,14 +188,29 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
       );
       return;
     }
+    _activeClients.remove(client);
     final host = _clientHosts[client];
-    if (host != null &&
-        host.isNotEmpty &&
-        !_idleClientsByHost.containsKey(host) &&
-        _activeClients.contains(client)) {
+    if (host != null && host.isNotEmpty) {
+      final existing = _idleClientsByHost.remove(host);
+      if (existing != null && !identical(existing, client)) {
+        _closeClient(existing);
+      }
+      if (_idleClientsByHost.length >= _maxIdleHosts) {
+        final oldestHost = _idleClientsByHost.keys.first;
+        final evicted = _idleClientsByHost.remove(oldestHost);
+        if (evicted != null) {
+          _closeClient(evicted);
+        }
+      }
       _idleClientsByHost[host] = client;
+      _performCleanup();
       return;
     }
+    _closeClient(client);
+    _performCleanup();
+  }
+
+  void _closeClient(Dio client) {
     _clientHosts.remove(client);
     _activeDownloadsPerClient.remove(client);
     _reservedClients.remove(client);
@@ -238,13 +236,13 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
   Future<void> dispose() async {
     ServiceRegistry.unregister(this);
     ServiceRegistry.unregisterMemoryPressureListener(this);
-    _cleanupTimer?.cancel();
     for (final client in List<Dio>.from(_activeClients)) {
       try {
         client.close(force: true);
       } catch (e, st) {
-      LoggingService.logger('DioClientPool').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('DioClientPool')
+            .warning('Operation failed', e, st);
+      }
     }
     _activeClients.clear();
     _reservedClients.clear();

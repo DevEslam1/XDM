@@ -18,7 +18,9 @@ void main() {
       expect(callback, isNull);
     });
 
-    test('When allowDebugCertOverride is true in non-release mode, callback returns matcher', () {
+    test(
+        'When allowDebugCertOverride is true in non-release mode, callback returns matcher',
+        () {
       final callback = DebugCertOverride.getCallback(
         'https://example.com',
         allowDebugCertOverride: true,

@@ -20,7 +20,8 @@ class TaskLifecycleService {
     if (id.isEmpty) return;
 
     if (_inFlightOps.containsKey(id)) {
-      debugPrint('[TaskLifecycleService] $opName for $id already in flight, joining.');
+      debugPrint(
+          '[TaskLifecycleService] $opName for $id already in flight, joining.');
       return _inFlightOps[id];
     }
 

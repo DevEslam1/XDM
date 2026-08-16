@@ -62,7 +62,8 @@ class TaskStateService {
   }
 
   bool update(DownloadTask updated) {
-    final idx = _indexMap[updated.id] ?? _tasks.indexWhere((t) => t.id == updated.id);
+    final idx =
+        _indexMap[updated.id] ?? _tasks.indexWhere((t) => t.id == updated.id);
     if (idx != -1 && idx < _tasks.length) {
       _tasks[idx] = updated;
       _indexMap[updated.id] = idx;

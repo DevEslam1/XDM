@@ -344,7 +344,8 @@ class UpdateService {
           {'path': apkFile.path},
         );
       } on MissingPluginException {
-        _log.warning('Security channel unavailable for APK signature verification');
+        _log.warning(
+            'Security channel unavailable for APK signature verification');
       } catch (e) {
         _log.warning('Security channel verification exception: $e');
       }
@@ -372,8 +373,9 @@ class UpdateService {
           try {
             await apkFile.delete();
           } catch (e, st) {
-      LoggingService.logger('UpdateService').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('UpdateService')
+                .warning('Operation failed', e, st);
+          }
           return ApkVerificationResult(
             isValid: false,
             certificateFingerprint: certFingerprint,

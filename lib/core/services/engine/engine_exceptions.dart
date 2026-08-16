@@ -57,3 +57,21 @@ class FileChangedOnServerException implements Exception {
   @override
   String toString() => 'File changed on server. Restart required.';
 }
+
+class TorrentStallException implements Exception {
+  final String message;
+  const TorrentStallException([
+    this.message = 'Torrent download stalled with no updates.',
+  ]);
+  @override
+  String toString() => 'TorrentStallException: $message';
+}
+
+class DelayQueueFullException implements Exception {
+  final String message;
+  const DelayQueueFullException([
+    this.message = 'Cancellable delay queue capacity exceeded.',
+  ]);
+  @override
+  String toString() => 'DelayQueueFullException: $message';
+}

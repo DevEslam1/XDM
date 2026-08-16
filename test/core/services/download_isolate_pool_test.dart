@@ -2,8 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Mirror Retry Engine & Failover Tests (Task 1.1 / Task 5.2)', () {
-    test('verifies mirror failover caps attempts globally across all failing mirrors', () {
-      final mirrors = ['https://mirror1.example.com', 'https://mirror2.example.com', 'https://mirror3.example.com'];
+    test(
+        'verifies mirror failover caps attempts globally across all failing mirrors',
+        () {
+      final mirrors = [
+        'https://mirror1.example.com',
+        'https://mirror2.example.com',
+        'https://mirror3.example.com'
+      ];
       const maxAttemptsPerMirror = 3;
       final maxTotalAttempts = mirrors.length * maxAttemptsPerMirror;
 
@@ -30,7 +36,9 @@ void main() {
       expect(totalAttempts, 3); // 1 on mirror 1, 1 on mirror 2, 1 on mirror 3
     });
 
-    test('terminates when all mirrors continuously fail without entering infinite loop', () {
+    test(
+        'terminates when all mirrors continuously fail without entering infinite loop',
+        () {
       final mirrors = ['https://m1.com', 'https://m2.com', 'https://m3.com'];
       const maxAttemptsPerMirror = 2;
       final maxTotalAttempts = mirrors.length * maxAttemptsPerMirror;

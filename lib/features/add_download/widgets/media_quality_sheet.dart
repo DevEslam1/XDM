@@ -628,15 +628,14 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                                 trailing: _recommendBadge(isDark),
                               ),
                               // FIX-P2-06: Paginate video streams (first 20, load more)
-                              ...videoList
-                                  .take(_displayedVideoCount)
-                                  .map(
+                              ...videoList.take(_displayedVideoCount).map(
                                     (s) => _streamTile(
                                         context, s, isDark, settings),
                                   ),
                               if (videoList.length > _displayedVideoCount)
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 8),
                                   child: Center(
                                     child: OutlinedButton.icon(
                                       onPressed: () {
@@ -644,7 +643,9 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                                           _displayedVideoCount += 20;
                                         });
                                       },
-                                      icon: const Icon(Icons.expand_more_rounded, size: 18),
+                                      icon: const Icon(
+                                          Icons.expand_more_rounded,
+                                          size: 18),
                                       label: Text(
                                         'Load more (${videoList.length - _displayedVideoCount} remaining)',
                                         style: const TextStyle(fontSize: 12),
@@ -677,15 +678,14 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                                 isDark,
                               ),
                               // FIX-P2-06: Paginate audio streams (first 20, load more)
-                              ...audio
-                                  .take(_displayedAudioCount)
-                                  .map(
+                              ...audio.take(_displayedAudioCount).map(
                                     (s) => _streamTile(
                                         context, s, isDark, settings),
                                   ),
                               if (audio.length > _displayedAudioCount)
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 8),
                                   child: Center(
                                     child: OutlinedButton.icon(
                                       onPressed: () {
@@ -693,7 +693,9 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                                           _displayedAudioCount += 20;
                                         });
                                       },
-                                      icon: const Icon(Icons.expand_more_rounded, size: 18),
+                                      icon: const Icon(
+                                          Icons.expand_more_rounded,
+                                          size: 18),
                                       label: Text(
                                         'Load more (${audio.length - _displayedAudioCount} remaining)',
                                         style: const TextStyle(fontSize: 12),

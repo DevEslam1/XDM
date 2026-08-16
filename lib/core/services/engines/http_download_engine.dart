@@ -60,7 +60,8 @@ class ChunkScheduler {
     required int threadCount,
   }) {
     // FIX M-DL-05: Guard totalSize against invalid negative or overflowing ranges (2^53 - 1 safe limit)
-    assert(totalSize >= 0 && totalSize <= 9007199254740991, 'totalSize exceeds safe integer limits');
+    assert(totalSize >= 0 && totalSize <= 9007199254740991,
+        'totalSize exceeds safe integer limits');
     if (totalSize <= 0 || totalSize > 9007199254740991) {
       return [ChunkState(start: 0, end: -1)];
     }

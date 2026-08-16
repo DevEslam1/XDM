@@ -7,7 +7,6 @@ import 'cycle_state.dart';
 import 'download_state_machine.dart';
 import 'pause_reason.dart';
 
-
 export 'cycle_state.dart';
 export 'pause_reason.dart';
 
@@ -144,6 +143,72 @@ enum DownloadStatus {
 
 enum SortOption { dateAdded, fileSize, fileName, status, manual } // FIX(13)
 
+@immutable
+class DownloadTaskCore {
+  final String id;
+  final String fileName;
+  final String url;
+  final int fileSize;
+  final String category;
+  final String savePath;
+  final String localFilePath;
+  final String tempFilePath;
+  final DateTime createdAt;
+  final bool supportsResume;
+  final bool isAppUpdate;
+  final int priority;
+  final String? playlistId;
+  final String? playlistTitle;
+  final String? expectedSha256;
+
+  const DownloadTaskCore({
+    required this.id,
+    required this.fileName,
+    required this.url,
+    required this.fileSize,
+    required this.category,
+    required this.savePath,
+    required this.localFilePath,
+    required this.tempFilePath,
+    required this.createdAt,
+    this.supportsResume = false,
+    this.isAppUpdate = false,
+    this.priority = 0,
+    this.playlistId,
+    this.playlistTitle,
+    this.expectedSha256,
+  });
+}
+
+@immutable
+class DownloadTaskProgress {
+  final int downloadedBytes;
+  final double speed;
+  final int? eta;
+  final DownloadStatus status;
+  final CycleState? cycleState;
+  final PauseReason? pauseReason;
+  final String? statusMessage;
+  final String? errorMessage;
+  final int totalChunks;
+  final int completedChunks;
+  final double progressRatio;
+
+  const DownloadTaskProgress({
+    required this.downloadedBytes,
+    required this.speed,
+    this.eta,
+    required this.status,
+    this.cycleState,
+    this.pauseReason,
+    this.statusMessage,
+    this.errorMessage,
+    this.totalChunks = 0,
+    this.completedChunks = 0,
+    this.progressRatio = 0.0,
+  });
+}
+
 class DownloadTask {
   final String id;
   final String fileName;
@@ -277,6 +342,40 @@ class DownloadTask {
     this.totalFileBytes,
     this.downloadedFileBytes,
   });
+
+  DownloadTaskCore get core => DownloadTaskCore(
+        id: id,
+        fileName: fileName,
+        url: url,
+        fileSize: fileSize,
+        category: category,
+        savePath: savePath,
+        localFilePath: localFilePath,
+        tempFilePath: tempFilePath,
+        createdAt: createdAt,
+        supportsResume: supportsResume,
+        isAppUpdate: isAppUpdate,
+        priority: priority,
+        playlistId: playlistId,
+        playlistTitle: playlistTitle,
+        expectedSha256: expectedSha256,
+      );
+
+  double get progressRatio => progress < 0 ? 0.0 : progress;
+
+  DownloadTaskProgress get progressSnapshot => DownloadTaskProgress(
+        downloadedBytes: downloadedBytes,
+        speed: speed,
+        eta: eta,
+        status: status,
+        cycleState: cycleState,
+        pauseReason: pauseReason,
+        statusMessage: statusMessage,
+        errorMessage: errorMessage,
+        totalChunks: chunks.length,
+        completedChunks: chunks.where((c) => c >= 1.0).length,
+        progressRatio: progressRatio,
+      );
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
 
@@ -673,8 +772,7 @@ class DownloadTask {
     final effectiveFileSize = clearFileSize
         ? 0
         : (fileSize != null ? max(0, fileSize) : this.fileSize);
-    final rawDownloadedBytes =
-        max(0, downloadedBytes ?? this.downloadedBytes);
+    final rawDownloadedBytes = max(0, downloadedBytes ?? this.downloadedBytes);
 
     return DownloadTask(
       id: id,
@@ -728,8 +826,9 @@ class DownloadTask {
               ? List<Map<String, dynamic>>.from(
                   torrentFiles.map((m) => Map<String, dynamic>.from(m)))
               : (this.torrentFiles != null
-                  ? List<Map<String, dynamic>>.from(
-                      this.torrentFiles!.map((m) => Map<String, dynamic>.from(m)))
+                  ? List<Map<String, dynamic>>.from(this
+                      .torrentFiles!
+                      .map((m) => Map<String, dynamic>.from(m)))
                   : null)),
       downloadPageUrl: clearDownloadPageUrl
           ? null
@@ -762,14 +861,19 @@ class DownloadTask {
       expectedSha256: expectedSha256 ?? this.expectedSha256,
       mirrorUrls: mirrorUrls != null
           ? List<String>.from(mirrorUrls)
-          : (this.mirrorUrls != null ? List<String>.from(this.mirrorUrls!) : null),
+          : (this.mirrorUrls != null
+              ? List<String>.from(this.mirrorUrls!)
+              : null),
       siteType: siteType ?? this.siteType,
       siteDisplayName: siteDisplayName ?? this.siteDisplayName,
       contentHint: contentHint ?? this.contentHint,
       pauseReason: clearPauseReason ? null : (pauseReason ?? this.pauseReason),
       totalPieces: clearTotalPieces ? null : (totalPieces ?? this.totalPieces),
-      completedPieces: clearCompletedPieces ? null : (completedPieces ?? this.completedPieces),
-      ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes ?? this.ytCounterpartDownloadedBytes,
+      completedPieces: clearCompletedPieces
+          ? null
+          : (completedPieces ?? this.completedPieces),
+      ytCounterpartDownloadedBytes:
+          ytCounterpartDownloadedBytes ?? this.ytCounterpartDownloadedBytes,
       cycleState: clearCycleState ? null : (cycleState ?? this.cycleState),
       previousCycleState: clearPreviousCycleState
           ? null
@@ -950,8 +1054,9 @@ class DownloadTask {
 
     // Fix 4: Compute torrent file aggregates directly from torrentFiles JSON array
     if (rawTorrentFiles != null && rawTorrentFiles.isNotEmpty) {
-      final selected =
-          rawTorrentFiles.where((f) => (f['selected'] as bool?) ?? true).toList();
+      final selected = rawTorrentFiles
+          .where((f) => (f['selected'] as bool?) ?? true)
+          .toList();
       totalFiles ??= selected.length;
       completedFiles ??= selected.where((f) {
         final len = (f['length'] as num?)?.toInt() ?? 0;
@@ -1031,10 +1136,13 @@ class DownloadTask {
       pauseReason: pauseReason,
       totalPieces: (map['totalPieces'] as num?)?.toInt(),
       completedPieces: (map['completedPieces'] as num?)?.toInt(),
-      ytCounterpartDownloadedBytes: (map['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
+      ytCounterpartDownloadedBytes:
+          (map['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
       cycleState: map['cycleState'] is String
           ? CycleState.fromName(map['cycleState'] as String)
-          : (map['cycleState'] is CycleState ? map['cycleState'] as CycleState : null),
+          : (map['cycleState'] is CycleState
+              ? map['cycleState'] as CycleState
+              : null),
       previousCycleState: map['previousCycleState'] is String
           ? CycleState.fromName(map['previousCycleState'] as String)
           : (map['previousCycleState'] is CycleState

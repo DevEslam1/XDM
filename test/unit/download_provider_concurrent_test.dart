@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Download Provider Concurrent Operations Unit Test (FIX-35)', () {
-    test('Concurrent pause and resume transitions maintain valid state invariants', () async {
+    test(
+        'Concurrent pause and resume transitions maintain valid state invariants',
+        () async {
       var task = DownloadTask(
         id: 'concurrent_task_1',
         fileName: 'LargeDataset.zip',
@@ -23,8 +25,10 @@ void main() {
 
       // Simulate simultaneous pause actions
       final futures = <Future<DownloadTask>>[
-        Future(() => task.copyWith(status: DownloadStatus.paused, pausedByUser: true)),
-        Future(() => task.copyWith(status: DownloadStatus.paused, pausedByUser: true)),
+        Future(() =>
+            task.copyWith(status: DownloadStatus.paused, pausedByUser: true)),
+        Future(() =>
+            task.copyWith(status: DownloadStatus.paused, pausedByUser: true)),
       ];
 
       final results = await Future.wait(futures);
@@ -37,8 +41,10 @@ void main() {
 
       // Simulate simultaneous resume actions
       final resumeFutures = <Future<DownloadTask>>[
-        Future(() => task.copyWith(status: DownloadStatus.downloading, pausedByUser: false)),
-        Future(() => task.copyWith(status: DownloadStatus.downloading, pausedByUser: false)),
+        Future(() => task.copyWith(
+            status: DownloadStatus.downloading, pausedByUser: false)),
+        Future(() => task.copyWith(
+            status: DownloadStatus.downloading, pausedByUser: false)),
       ];
 
       final resumeResults = await Future.wait(resumeFutures);
@@ -67,10 +73,12 @@ void main() {
       );
 
       // Concurrent cancellation
-      final cancelOps = List.generate(5, (_) => Future(() => task.copyWith(
-        status: DownloadStatus.paused,
-        isCancelled: true,
-      )));
+      final cancelOps = List.generate(
+          5,
+          (_) => Future(() => task.copyWith(
+                status: DownloadStatus.paused,
+                isCancelled: true,
+              )));
 
       final results = await Future.wait(cancelOps);
       for (final cancelledTask in results) {

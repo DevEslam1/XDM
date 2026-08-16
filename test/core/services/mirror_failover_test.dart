@@ -28,7 +28,9 @@ void main() {
       expect(failover.mirrorSwitches, 0);
     });
 
-    test('advance switches to next available mirror and increments switches count', () {
+    test(
+        'advance switches to next available mirror and increments switches count',
+        () {
       final mirrors = [
         'https://mirror1.example.com/file.zip',
         'https://mirror2.example.com/file.zip',
@@ -46,7 +48,8 @@ void main() {
         'https://mirror1.example.com',
         'https://mirror3.example.com',
       ];
-      final ordered = orderMirrorUrls(mirrors, primary: 'https://mirror1.example.com');
+      final ordered =
+          orderMirrorUrls(mirrors, primary: 'https://mirror1.example.com');
       expect(ordered.first, 'https://mirror1.example.com');
     });
 

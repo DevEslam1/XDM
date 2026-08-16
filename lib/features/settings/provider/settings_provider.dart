@@ -11,7 +11,6 @@ import '../../../core/services/quiet_hours.dart';
 import '../../../core/services/torrent_models.dart';
 import '../../../core/services/xdm_backend_client.dart';
 
-
 import 'mixins/torrent_settings_mixin.dart';
 
 // FIX-P2-03: Modular settings mixin references
@@ -345,7 +344,8 @@ class SettingsProvider extends ChangeNotifier
         forceEncrypt: forceEncrypt,
         enableUtp: enableUtp,
         enableTcp: true,
-        socks5ProxyHost: (enableProxy && proxyHost.isNotEmpty) ? proxyHost : null,
+        socks5ProxyHost:
+            (enableProxy && proxyHost.isNotEmpty) ? proxyHost : null,
         socks5ProxyPort: (enableProxy && proxyPort > 0) ? proxyPort : null,
         enforceProxy: enforceProxy,
         cacheSize: diskCacheSizeMb * 1024 * 1024,
@@ -430,7 +430,6 @@ class SettingsProvider extends ChangeNotifier
     }
     notifyListeners();
   }
-
 
   Future<void> setEnableNatPmp(bool value) async {
     enableNatPmp = value;
@@ -661,7 +660,6 @@ class SettingsProvider extends ChangeNotifier
       sslKeyPath = _prefs.getString(_torrentSslKeyPathKey);
       sslDhParamsPath = _prefs.getString(_torrentSslDhParamsPathKey);
       _defaultThreadCount =
-
           _prefs.getInt(_defaultThreadCountKey) ?? _defaultThreadCount;
       if (![1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16].contains(_defaultThreadCount)) {
         _defaultThreadCount = 16;

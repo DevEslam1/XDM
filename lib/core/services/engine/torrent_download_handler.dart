@@ -20,44 +20,92 @@ import 'torrent_file_normalizer.dart';
 
 final _log = LoggingService.logger('TorrentDownloadHandler');
 
+class _TorrentSubEntry {
+  final WeakReference<TorrentDownloadHandler> handlerRef;
+  final StreamSubscription subscription;
+
+  _TorrentSubEntry({required this.handlerRef, required this.subscription});
+}
+
 /// Registry holding weak references to active TorrentDownloadHandlers
-/// allowing retries/lookups to find active subscriptions without mutable static state.
+/// allowing retries/lookups to find active subscriptions without leaking dead handlers.
 class TorrentSubscriptionRegistry {
   TorrentSubscriptionRegistry._();
   static final TorrentSubscriptionRegistry instance =
       TorrentSubscriptionRegistry._();
 
-  final Map<int, WeakReference<TorrentDownloadHandler>> _handlers = {};
-  final Map<int, StreamSubscription> _subs = {};
+  final Map<int, _TorrentSubEntry> _registry = {};
+
+  void _cleanupDeadEntries() {
+    final deadKeys = <int>[];
+    for (final entry in _registry.entries) {
+      if (entry.value.handlerRef.target == null) {
+        deadKeys.add(entry.key);
+        try {
+          entry.value.subscription.cancel();
+        } catch (_) {}
+      }
+    }
+    for (final k in deadKeys) {
+      _registry.remove(k);
+    }
+  }
 
   void register(
       int torrentId, TorrentDownloadHandler handler, StreamSubscription sub) {
-    _handlers[torrentId] = WeakReference(handler);
-    _subs[torrentId] = sub;
+    _cleanupDeadEntries();
+    _registry[torrentId] = _TorrentSubEntry(
+      handlerRef: WeakReference(handler),
+      subscription: sub,
+    );
   }
 
   StreamSubscription? getSubscription(int torrentId) {
-    final handler = _handlers[torrentId]?.target;
+    _cleanupDeadEntries();
+    final entry = _registry[torrentId];
+    if (entry == null) return null;
+    final handler = entry.handlerRef.target;
     if (handler == null) {
-      _handlers.remove(torrentId);
-      _subs.remove(torrentId);
+      try {
+        entry.subscription.cancel();
+      } catch (_) {}
+      _registry.remove(torrentId);
       return null;
     }
-    return _subs[torrentId];
+    return entry.subscription;
   }
 
   void unregister(int torrentId, TorrentDownloadHandler handler) {
-    final target = _handlers[torrentId]?.target;
-    if (target == null || identical(target, handler)) {
-      _handlers.remove(torrentId);
-      _subs.remove(torrentId);
+    _cleanupDeadEntries();
+    final entry = _registry[torrentId];
+    if (entry != null) {
+      final target = entry.handlerRef.target;
+      if (target == null || identical(target, handler)) {
+        _registry.remove(torrentId);
+      }
     }
   }
 
   @visibleForTesting
   void clear() {
-    _handlers.clear();
-    _subs.clear();
+    for (final entry in _registry.values) {
+      try {
+        entry.subscription.cancel();
+      } catch (_) {}
+    }
+    _registry.clear();
+  }
+
+  @visibleForTesting
+  int get activeCountForTesting {
+    _cleanupDeadEntries();
+    return _registry.length;
+  }
+
+  @visibleForTesting
+  Map<int, StreamSubscription> get subsMapForTesting {
+    _cleanupDeadEntries();
+    return _registry.map((k, v) => MapEntry(k, v.subscription));
   }
 }
 
@@ -65,13 +113,22 @@ class TorrentDownloadHandler {
   final ITorrentService _torrentService;
   final Set<int> _activeTorrentIds = {};
   final Map<int, StreamSubscription> _activeSubs = {};
+  Timer? _stallWatchdog;
+  Completer<void>? _completionGuard;
 
   @visibleForTesting
   Map<int, StreamSubscription> get activeSubsForTesting => _activeSubs;
 
   @visibleForTesting
   static Map<int, StreamSubscription> get globalActiveSubsForTesting =>
-      TorrentSubscriptionRegistry.instance._subs;
+      TorrentSubscriptionRegistry.instance.subsMapForTesting;
+
+  @visibleForTesting
+  Timer? get stallWatchdogForTesting => _stallWatchdog;
+
+  @visibleForTesting
+  Completer<void>? get completionGuardForTesting => _completionGuard;
+
   DateTime lastProgressTick = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime lastAccurateSync = DateTime.fromMillisecondsSinceEpoch(0);
   List<Map<String, dynamic>>? cachedAccurateFiles;
@@ -111,6 +168,8 @@ class TorrentDownloadHandler {
   Set<int> get activeTorrentIds => Set.unmodifiable(_activeTorrentIds);
 
   void removeActiveTorrent(int id) {
+    _stallWatchdog?.cancel();
+    _stallWatchdog = null;
     _activeTorrentIds.remove(id);
     final sub = _activeSubs.remove(id);
     sub?.cancel();
@@ -121,7 +180,11 @@ class TorrentDownloadHandler {
   @visibleForTesting
   static Duration computeAdaptiveSyncInterval(int fileCount,
       {bool inBackground = false}) {
-    if (inBackground) return const Duration(seconds: 60);
+    if (inBackground) {
+      if (fileCount > 5000) return const Duration(minutes: 5);
+      if (fileCount > 1000) return const Duration(minutes: 3);
+      return const Duration(seconds: 90);
+    }
     if (fileCount > 10000) return const Duration(seconds: 120);
     if (fileCount > 5000) return const Duration(seconds: 45);
     if (fileCount > 1000) return const Duration(seconds: 30);
@@ -130,7 +193,11 @@ class TorrentDownloadHandler {
   }
 
   @visibleForTesting
-  static bool shouldSkipPerFileSync(int fileCount) => false;
+  static bool shouldSkipPerFileSync(int fileCount,
+      {bool inBackground = false}) {
+    if (inBackground && fileCount > 5000) return true;
+    return false;
+  }
 
   static Map<String, dynamic> normalizeTorrentFile(Map<String, dynamic> f) =>
       TorrentFileNormalizer.normalizeTorrentFile(f);
@@ -686,14 +753,21 @@ class TorrentDownloadHandler {
     DateTime lastTorrentProgressTime = DateTime.now();
     int lastTorrentDownloadedBytes = 0;
     double lastTorrentSpeed = 0.0;
+    int lastTorrentPeerCount = 0;
     int currentTotalSize = 0;
     DateTime? lastRecoveryEmit;
-    Timer? stallWatchdog;
+
+    final initialFiles = getTorrentFiles?.call();
+    final initialFileCount = initialFiles?.length ?? 0;
+    final watchdogInterval = initialFileCount < 1000
+        ? const Duration(seconds: 30)
+        : const Duration(seconds: 120);
+
+    _completionGuard = completer;
 
     try {
-      // Stall watchdog uses an unadapted 30-second interval to ensure responsive
-      // detection of lost network and stalled peer connections across lifecycle states.
-      stallWatchdog = Timer.periodic(const Duration(seconds: 30), (_) {
+      _stallWatchdog?.cancel();
+      _stallWatchdog = Timer.periodic(watchdogInterval, (_) {
         if (getIt.isRegistered<NetworkMonitor>()) {
           final networkMonitor = getIt<NetworkMonitor>();
           if (!networkMonitor.hasConnection) {
@@ -719,17 +793,30 @@ class TorrentDownloadHandler {
             lastStateLabel == 'error';
         if (isTerminal) return;
 
+        final isNonDownloadPhase = lastStateLabel.contains('checking') ||
+            lastStateLabel.contains('downloading_metadata') ||
+            lastStateLabel.contains('allocating');
+        if (isNonDownloadPhase) return;
+
         if (elapsed >= const Duration(minutes: 5)) {
-          onProgress(DownloadProgress(
-            downloadedBytes: lastTorrentDownloadedBytes,
-            fileSize: currentTotalSize,
-            speed: 0,
-            eta: null,
-            torrentFiles: cachedAccurateFiles,
-            cycleState: CycleState.stalled,
-            statusMessage: 'Stalled (no peers)',
-            torrentId: id,
-          ));
+          if (lastStateLabel == 'downloading' && lastTorrentPeerCount == 0) {
+            onProgress(DownloadProgress(
+              downloadedBytes: lastTorrentDownloadedBytes,
+              fileSize: currentTotalSize,
+              speed: 0,
+              eta: null,
+              torrentFiles: cachedAccurateFiles,
+              cycleState: CycleState.stalled,
+              statusMessage: 'Stalled (no peers)',
+              torrentId: id,
+            ));
+          }
+          if (_completionGuard != null && !_completionGuard!.isCompleted) {
+            _completionGuard!.completeError(const TorrentStallException(
+              'Torrent download stalled for > 5 minutes with no updates',
+            ));
+            return;
+          }
         } else if (elapsed >= const Duration(seconds: 60) &&
             lastTorrentSpeed == 0) {
           onProgress(DownloadProgress(
@@ -800,6 +887,9 @@ class TorrentDownloadHandler {
         final previousState = lastStateLabel;
         lastProgressTick = now;
         lastStateLabel = stateLabel;
+        if (isStateChange) {
+          lastTorrentProgressTime = now;
+        }
 
         List<Map<String, dynamic>>? resolvedFiles = getTorrentFiles?.call();
         if ((resolvedFiles == null || resolvedFiles.isEmpty) &&
@@ -850,9 +940,10 @@ class TorrentDownloadHandler {
 
         final fileCount =
             resolvedFiles?.length ?? (cachedAccurateFiles?.length ?? 0);
-        if (fileCount > 0) {
+        final inBg = DownloadEngine.isInBackground;
+        if (fileCount > 0 && !shouldSkipPerFileSync(fileCount, inBackground: inBg)) {
           final syncInterval = computeAdaptiveSyncInterval(fileCount,
-              inBackground: DownloadEngine.isInBackground);
+              inBackground: inBg);
           if (now.difference(lastAccurateSync) >= syncInterval) {
             lastAccurateSync = now;
             try {
@@ -930,6 +1021,7 @@ class TorrentDownloadHandler {
         final downloadedBytes = rawDownloaded;
         final speed = torrent.downloadPayloadRate.toDouble();
         lastTorrentSpeed = speed;
+        lastTorrentPeerCount = torrent.numPeers;
 
         var resolvedCycleState = CycleState.fromLibtorrent(
           torrent.stateLabel,
@@ -942,13 +1034,19 @@ class TorrentDownloadHandler {
           lastTorrentProgressTime = DateTime.now();
         } else if (speed == 0) {
           final elapsed = DateTime.now().difference(lastTorrentProgressTime);
+          final isNonDownloadPhase = stateLabel.contains('checking') ||
+              stateLabel.contains('downloading_metadata') ||
+              stateLabel.contains('allocating');
           if (stateLabel != 'seeding' &&
               stateLabel != 'paused' &&
               stateLabel != 'stopped' &&
-              stateLabel != 'error') {
+              stateLabel != 'error' &&
+              !isNonDownloadPhase) {
             if (elapsed >= const Duration(minutes: 5)) {
-              resolvedStatusMessage = 'Stalled (no peers)';
-              resolvedCycleState = CycleState.stalled;
+              if (stateLabel == 'downloading' && torrent.peerCount == 0) {
+                resolvedStatusMessage = 'Stalled (no peers)';
+                resolvedCycleState = CycleState.stalled;
+              }
             } else if (elapsed >= const Duration(seconds: 60)) {
               resolvedStatusMessage = 'Looking for peers…';
               resolvedCycleState = CycleState.stalled;
@@ -1049,7 +1147,9 @@ class TorrentDownloadHandler {
 
       await completer.future;
     } finally {
-      stallWatchdog?.cancel();
+      _stallWatchdog?.cancel();
+      _stallWatchdog = null;
+      _completionGuard = null;
       await sub?.cancel();
       _activeSubs.remove(id);
       TorrentSubscriptionRegistry.instance.unregister(id, this);

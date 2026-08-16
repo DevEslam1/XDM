@@ -32,13 +32,16 @@ class ServiceRegistry {
     }
   }
 
-  static void unregisterMemoryPressureListener(MemoryPressureListener listener) {
+  static void unregisterMemoryPressureListener(
+      MemoryPressureListener listener) {
     _memoryListeners.remove(listener);
   }
 
   static void broadcastMemoryPressure() {
-    _log.info('Broadcasting memory pressure event to ${_memoryListeners.length} listeners');
-    for (final listener in List<MemoryPressureListener>.from(_memoryListeners)) {
+    _log.info(
+        'Broadcasting memory pressure event to ${_memoryListeners.length} listeners');
+    for (final listener
+        in List<MemoryPressureListener>.from(_memoryListeners)) {
       try {
         listener.onMemoryPressure();
       } catch (e, st) {

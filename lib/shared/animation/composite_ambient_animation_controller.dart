@@ -3,7 +3,8 @@ import '../widgets/geometric_grid_background.dart';
 import 'ambient_animation_coordinator.dart';
 
 /// Production implementation coordinating AmbientProgress and StatusChipPulseDriver.
-class CompositeAmbientAnimationController implements AmbientAnimationController {
+class CompositeAmbientAnimationController
+    implements AmbientAnimationController {
   const CompositeAmbientAnimationController();
 
   @override

@@ -9,7 +9,7 @@ void main() {
     test('buildTransferDio reuses passed pooled Dio instance', () {
       final pool = DioClientPool();
       final client1 = pool.acquireClient(url: 'https://example.com/file1.zip');
-      
+
       final clientReconfigured = buildTransferDio(
         url: 'https://example.com/file2.zip',
         customUserAgent: 'TestAgent/1.0',
@@ -17,22 +17,26 @@ void main() {
       );
 
       expect(identical(client1, clientReconfigured), isTrue);
-      expect(clientReconfigured.options.headers['User-Agent'], equals('TestAgent/1.0'));
+      expect(clientReconfigured.options.headers['User-Agent'],
+          equals('TestAgent/1.0'));
 
       pool.dispose();
     });
 
-    test('DioClientPool reuses idle Dio instance across requests to same host', () {
+    test('DioClientPool reuses idle Dio instance across requests to same host',
+        () {
       final pool = DioClientPool();
 
-      final client1 = pool.acquireClient(url: 'https://cdn.example.org/downloads/a.iso');
+      final client1 =
+          pool.acquireClient(url: 'https://cdn.example.org/downloads/a.iso');
       expect(client1, isNotNull);
 
       // Release client back to pool
       pool.releaseClient(client1);
 
       // Acquire next client for the same host
-      final client2 = pool.acquireClient(url: 'https://cdn.example.org/downloads/b.iso');
+      final client2 =
+          pool.acquireClient(url: 'https://cdn.example.org/downloads/b.iso');
 
       // Assert identical Dio instance is reused from pool
       expect(identical(client1, client2), isTrue);

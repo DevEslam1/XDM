@@ -58,7 +58,9 @@ void main() {
       expect(attempts, 1); // Does not retry cancel
     });
 
-    test('getDelayForAttempt increases with attempt count and clamps to maxDelay', () {
+    test(
+        'getDelayForAttempt increases with attempt count and clamps to maxDelay',
+        () {
       final engine = RetryEngine(
         baseDelay: const Duration(seconds: 1),
         backoffMultiplier: 2.0,

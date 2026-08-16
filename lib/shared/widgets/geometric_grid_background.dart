@@ -243,6 +243,7 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
         DownloadEngine.isInBackground ||
         PowerMonitor.screenOff ||
         !BackgroundGate.allowHeavyOps ||
+        !BackgroundGate.shouldAnimate ||
         hasActiveDownloads) {
       return RepaintBoundary(
         child: Container(color: bgColor, child: widget.child),

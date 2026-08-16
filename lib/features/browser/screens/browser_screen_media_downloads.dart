@@ -779,8 +779,9 @@ mixin _MediaDownloadsMixin on _BrowserScreenStateBase {
             webArchiveSavedPath = res;
           }
         } catch (e, st) {
-      LoggingService.logger('BrowserScreenMediaDownloads').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('BrowserScreenMediaDownloads')
+              .warning('Operation failed', e, st);
+        }
       }
 
       String fileName;
@@ -809,8 +810,9 @@ mixin _MediaDownloadsMixin on _BrowserScreenStateBase {
                   rawHtml = decoded;
                 }
               } catch (e, st) {
-      LoggingService.logger('BrowserScreenMediaDownloads').warning('Operation failed', e, st);
-    }
+                LoggingService.logger('BrowserScreenMediaDownloads')
+                    .warning('Operation failed', e, st);
+              }
             }
           }
         } catch (e) {

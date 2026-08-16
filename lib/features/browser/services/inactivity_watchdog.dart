@@ -98,8 +98,9 @@ class InactivityWatchdog {
                     source: 'try { window.stop(); } catch(e){}')
                 .catchError((_) => null);
           } catch (e, st) {
-      LoggingService.logger('InactivityWatchdog').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('InactivityWatchdog')
+                .warning('Operation failed', e, st);
+          }
           tab.isSuspended = true;
         }
       }

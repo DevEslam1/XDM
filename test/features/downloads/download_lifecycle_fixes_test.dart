@@ -445,6 +445,7 @@ void main() {
         fileSize: 200,
         speed: 10,
         eta: 10,
+        chunkFingerprint: 1,
         chunkDetails: [
           ChunkDetail(
               index: 0,
@@ -466,6 +467,7 @@ void main() {
         fileSize: 200,
         speed: 10,
         eta: 10,
+        chunkFingerprint: 10,
         torrentFiles: [
           {'name': 'f1.mp4', 'length': 100, 'downloadedBytes': 50},
         ],
@@ -476,6 +478,7 @@ void main() {
         fileSize: 200,
         speed: 10,
         eta: 10,
+        chunkFingerprint: 10,
         torrentFiles: [
           {'name': 'f1.mp4', 'length': 100, 'downloadedBytes': 50},
         ],
@@ -486,6 +489,7 @@ void main() {
         fileSize: 200,
         speed: 10,
         eta: 10,
+        chunkFingerprint: 11,
         torrentFiles: [
           {'name': 'f1.mp4', 'length': 100, 'downloadedBytes': 70},
         ],
@@ -616,9 +620,24 @@ void main() {
         'fileName': 'movie.torrent',
         'url': 'magnet:?xt=urn:btih:abc',
         'torrentFiles': [
-          {'name': 'f1.mp4', 'length': 100, 'downloadedBytes': 100, 'selected': true},
-          {'name': 'f2.mp4', 'length': 200, 'downloadedBytes': 50, 'selected': true},
-          {'name': 'f3.txt', 'length': 50, 'downloadedBytes': 0, 'selected': false},
+          {
+            'name': 'f1.mp4',
+            'length': 100,
+            'downloadedBytes': 100,
+            'selected': true
+          },
+          {
+            'name': 'f2.mp4',
+            'length': 200,
+            'downloadedBytes': 50,
+            'selected': true
+          },
+          {
+            'name': 'f3.txt',
+            'length': 50,
+            'downloadedBytes': 0,
+            'selected': false
+          },
         ],
         'totalPieces': 42,
       };
@@ -633,7 +652,9 @@ void main() {
     });
 
     // 17. Unregistered YouTube Counterpart Timeout & Warning
-    test('17. Unregistered YouTube Counterpart retries at 30s and throws UrlExpiredException after 90s', () async {
+    test(
+        '17. Unregistered YouTube Counterpart retries at 30s and throws UrlExpiredException after 90s',
+        () async {
       DownloadProgress? lastEmitted;
       final handler = DownloadProgressHandler(
         taskId: 'yt_timeout',
@@ -661,7 +682,8 @@ void main() {
       );
 
       // Set wait start to 35 seconds ago -> should emit retrying state
-      handler.counterpartWaitStartForTesting = DateTime.now().subtract(const Duration(seconds: 35));
+      handler.counterpartWaitStartForTesting =
+          DateTime.now().subtract(const Duration(seconds: 35));
       await handler.handleWorkerProgress(
         {
           'downloadedBytes': 100,
@@ -671,10 +693,12 @@ void main() {
         isCounterpartUnregistered: true,
       );
       expect(lastEmitted?.cycleState, equals(CycleState.retrying));
-      expect(lastEmitted?.statusMessage, contains('Waiting for counterpart stream'));
+      expect(lastEmitted?.statusMessage,
+          contains('Waiting for counterpart stream'));
 
       // Set wait start to 305 seconds ago (> 5 min) -> should throw UrlExpiredException
-      handler.counterpartWaitStartForTesting = DateTime.now().subtract(const Duration(seconds: 305));
+      handler.counterpartWaitStartForTesting =
+          DateTime.now().subtract(const Duration(seconds: 305));
       expect(
         () => handler.handleWorkerProgress(
           {
@@ -689,7 +713,9 @@ void main() {
     });
 
     // 18. URL Expiration Limit & Window Reset
-    test('18. DownloadProgressHandler throws after 3 URL expirations in 5min and resets window', () {
+    test(
+        '18. DownloadProgressHandler throws after 3 URL expirations in 5min and resets window',
+        () {
       final handler = DownloadProgressHandler(
         taskId: 'expire_test',
         onProgress: (_) {},
@@ -709,23 +735,38 @@ void main() {
       handler.urlExpireCountForTesting = 2;
 
       // 3rd expiration in window should throw DownloadIntegrityException
-      expect(() => handler.handleUrlExpired(), throwsA(isA<DownloadIntegrityException>()));
+      expect(() => handler.handleUrlExpired(),
+          throwsA(isA<DownloadIntegrityException>()));
 
       // Counter should be reset after throwing
       expect(handler.urlExpireCountForTesting, equals(0));
 
       // 5 minutes later, new expiration starts new window
-      handler.urlExpireWindowStartForTesting = DateTime.now().subtract(const Duration(minutes: 6));
+      handler.urlExpireWindowStartForTesting =
+          DateTime.now().subtract(const Duration(minutes: 6));
       handler.urlExpireCountForTesting = 5;
       handler.handleUrlExpired();
       expect(handler.urlExpireCountForTesting, equals(1));
     });
 
     // 19. distributeEstimatedBytes respects priority weights
-    test('19. distributeEstimatedBytes allocates more to higher priority files', () {
+    test('19. distributeEstimatedBytes allocates more to higher priority files',
+        () {
       final files = [
-        {'name': 'high.mp4', 'length': 1000, 'downloadedBytes': -1, 'selected': true, 'priority': 7},
-        {'name': 'low.mp4', 'length': 1000, 'downloadedBytes': -1, 'selected': true, 'priority': 1},
+        {
+          'name': 'high.mp4',
+          'length': 1000,
+          'downloadedBytes': -1,
+          'selected': true,
+          'priority': 7
+        },
+        {
+          'name': 'low.mp4',
+          'length': 1000,
+          'downloadedBytes': -1,
+          'selected': true,
+          'priority': 1
+        },
       ];
       TorrentDownloadHandler.distributeEstimatedBytes(files, 1000);
       final highDl = (files[0]['downloadedBytes'] as num).toInt();
@@ -736,7 +777,9 @@ void main() {
     });
 
     // 20. DownloadTask previousCycleState field
-    test('20. DownloadTask preserves previousCycleState on copyWith and fromMap', () {
+    test(
+        '20. DownloadTask preserves previousCycleState on copyWith and fromMap',
+        () {
       final task = DownloadTask(
         id: 'task_1',
         fileName: 'file.mp4',
@@ -784,7 +827,9 @@ void main() {
     });
 
     // 21. DownloadProgress hasEstimatedFileProgress (Refactor 4)
-    test('21. DownloadProgress hasEstimatedFileProgress is preserved across equality & copyWith', () {
+    test(
+        '21. DownloadProgress hasEstimatedFileProgress is preserved across equality & copyWith',
+        () {
       const p1 = DownloadProgress(
         downloadedBytes: 100,
         fileSize: 200,
@@ -805,6 +850,7 @@ void main() {
         speed: 50.0,
         eta: 2,
         hasEstimatedFileProgress: false,
+        chunkFingerprint: 1,
       );
 
       expect(p1, equals(p2));
@@ -825,7 +871,8 @@ void main() {
     });
 
     // 22. HttpTransferJob structured PauseReason cancellation (Refactor 2)
-    test('22. HttpTransferJob stores and uses structured PauseReason on cancel', () {
+    test('22. HttpTransferJob stores and uses structured PauseReason on cancel',
+        () {
       const cmd = DownloadCommand(
         taskId: 'test_pause_reason',
         url: 'http://example.com/file.zip',
@@ -852,19 +899,28 @@ void main() {
 
     // 23. PauseReason.urlExpired parsing & mapping (Refactor 3)
     test('23. PauseReason.urlExpired parses from string variants', () {
-      expect(PauseReason.fromName('urlExpired'), equals(PauseReason.urlExpired));
-      expect(PauseReason.fromName('url_expired'), equals(PauseReason.urlExpired));
-      expect(PauseReason.fromName('URLEXPIRED'), equals(PauseReason.urlExpired));
+      expect(
+          PauseReason.fromName('urlExpired'), equals(PauseReason.urlExpired));
+      expect(
+          PauseReason.fromName('url_expired'), equals(PauseReason.urlExpired));
+      expect(
+          PauseReason.fromName('URLEXPIRED'), equals(PauseReason.urlExpired));
     });
 
     // 24. CycleState.fromLibtorrent seeding translation when seeding is disabled
-    test('24. CycleState.fromLibtorrent translates seeding to completed when seedingEnabled is false', () {
-      expect(CycleState.fromLibtorrent('seeding', seedingEnabled: true), equals(CycleState.seeding));
-      expect(CycleState.fromLibtorrent('seeding', seedingEnabled: false), equals(CycleState.completed));
+    test(
+        '24. CycleState.fromLibtorrent translates seeding to completed when seedingEnabled is false',
+        () {
+      expect(CycleState.fromLibtorrent('seeding', seedingEnabled: true),
+          equals(CycleState.seeding));
+      expect(CycleState.fromLibtorrent('seeding', seedingEnabled: false),
+          equals(CycleState.completed));
     });
 
     // 25. ytCombinedProgress single known side calculation
-    test('25. ytCombinedProgress computes ratio when one side is known and other is 0', () {
+    test(
+        '25. ytCombinedProgress computes ratio when one side is known and other is 0',
+        () {
       const pVideoOnly = DownloadProgress(
         downloadedBytes: 50,
         fileSize: 100,
@@ -891,10 +947,24 @@ void main() {
     });
 
     // 26. distributeEstimatedBytesSequential preserves prior partial downloaded bytes
-    test('26. distributeEstimatedBytesSequential preserves prior partial downloaded bytes', () {
+    test(
+        '26. distributeEstimatedBytesSequential preserves prior partial downloaded bytes',
+        () {
       final files = [
-        {'name': 'f1.mp4', 'length': 100, 'downloadedBytes': 80, 'selected': true, 'progressEstimated': true},
-        {'name': 'f2.mp4', 'length': 100, 'downloadedBytes': 40, 'selected': true, 'progressEstimated': true},
+        {
+          'name': 'f1.mp4',
+          'length': 100,
+          'downloadedBytes': 80,
+          'selected': true,
+          'progressEstimated': true
+        },
+        {
+          'name': 'f2.mp4',
+          'length': 100,
+          'downloadedBytes': 40,
+          'selected': true,
+          'progressEstimated': true
+        },
       ];
       TorrentDownloadHandler.distributeEstimatedBytesSequential(files, 50);
       // f1 should be max(80, 50) = 80

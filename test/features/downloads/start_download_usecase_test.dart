@@ -64,7 +64,9 @@ void main() {
       expect(all.any((t) => t.id == 'test-1'), isTrue);
     });
 
-    test('pumps queue and transitions queued task to downloading when concurrency allows', () async {
+    test(
+        'pumps queue and transitions queued task to downloading when concurrency allows',
+        () async {
       final task = createTestTask(
         id: 'test-2',
         url: 'https://example.com/video.mp4',
@@ -78,7 +80,8 @@ void main() {
       expect(current.status, DownloadStatus.downloading);
     });
 
-    test('handles multiple task additions respecting concurrency limits', () async {
+    test('handles multiple task additions respecting concurrency limits',
+        () async {
       final task1 = createTestTask(
         id: 't-1',
         url: 'https://example.com/1.iso',
@@ -102,8 +105,12 @@ void main() {
       await startDownloadUseCase(task2);
       await startDownloadUseCase(task3);
 
-      final downloadingCount = listProvider.tasks.where((t) => t.status == DownloadStatus.downloading).length;
-      final queuedCount = listProvider.tasks.where((t) => t.status == DownloadStatus.queued).length;
+      final downloadingCount = listProvider.tasks
+          .where((t) => t.status == DownloadStatus.downloading)
+          .length;
+      final queuedCount = listProvider.tasks
+          .where((t) => t.status == DownloadStatus.queued)
+          .length;
 
       expect(downloadingCount, 2);
       expect(queuedCount, 1);

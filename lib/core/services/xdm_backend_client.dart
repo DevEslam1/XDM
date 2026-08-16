@@ -600,8 +600,9 @@ class XdmBackendClient {
                   ?.toString();
             }
           } catch (e, st) {
-      LoggingService.logger('XdmBackendClient').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('XdmBackendClient')
+                .warning('Operation failed', e, st);
+          }
         } else {
           backendMsg = responseData.toString();
         }

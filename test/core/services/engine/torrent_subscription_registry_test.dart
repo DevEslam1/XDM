@@ -11,7 +11,9 @@ void main() {
       TorrentSubscriptionRegistry.instance.clear();
     });
 
-    test('Two handler instances maintain isolated subscriptions and do not trample each other', () async {
+    test(
+        'Two handler instances maintain isolated subscriptions and do not trample each other',
+        () async {
       final handler1 = TorrentDownloadHandler();
       final handler2 = TorrentDownloadHandler();
 
@@ -26,17 +28,21 @@ void main() {
       // Register sub2 to handler2 for torrent 202
       TorrentSubscriptionRegistry.instance.register(202, handler2, sub2);
 
-      expect(TorrentSubscriptionRegistry.instance.getSubscription(101), equals(sub1));
-      expect(TorrentSubscriptionRegistry.instance.getSubscription(202), equals(sub2));
+      expect(TorrentSubscriptionRegistry.instance.getSubscription(101),
+          equals(sub1));
+      expect(TorrentSubscriptionRegistry.instance.getSubscription(202),
+          equals(sub2));
 
       // Unregister handler1 should not affect handler2
       TorrentSubscriptionRegistry.instance.unregister(101, handler1);
       expect(TorrentSubscriptionRegistry.instance.getSubscription(101), isNull);
-      expect(TorrentSubscriptionRegistry.instance.getSubscription(202), equals(sub2));
+      expect(TorrentSubscriptionRegistry.instance.getSubscription(202),
+          equals(sub2));
 
       // Attempting to unregister 202 using wrong handler (handler1) must not remove handler2 sub
       TorrentSubscriptionRegistry.instance.unregister(202, handler1);
-      expect(TorrentSubscriptionRegistry.instance.getSubscription(202), equals(sub2));
+      expect(TorrentSubscriptionRegistry.instance.getSubscription(202),
+          equals(sub2));
 
       // Correct unregister
       TorrentSubscriptionRegistry.instance.unregister(202, handler2);
@@ -48,7 +54,9 @@ void main() {
       await controller2.close();
     });
 
-    test('Removing active torrent from one handler does not mutate another handler state', () {
+    test(
+        'Removing active torrent from one handler does not mutate another handler state',
+        () {
       final handlerA = TorrentDownloadHandler();
       final handlerB = TorrentDownloadHandler();
 

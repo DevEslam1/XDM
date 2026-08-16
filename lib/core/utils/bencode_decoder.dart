@@ -221,7 +221,6 @@ class BencodeDecoder {
       final infoBytes = decoded['info_bytes'];
       if (info is! Map) return null;
 
-
       String name = 'unknown_torrent';
       if (info['name.utf-8'] is Uint8List) {
         name = utf8.decode(info['name.utf-8']);
@@ -234,7 +233,8 @@ class BencodeDecoder {
       int totalLength = 0;
       final List<Map<String, dynamic>> filesList = [];
 
-      final hasV2FileTree = info.containsKey('file tree') && info['file tree'] is Map;
+      final hasV2FileTree =
+          info.containsKey('file tree') && info['file tree'] is Map;
       final hasV1Pieces = info.containsKey('pieces');
       final hasV1Files = info.containsKey('files');
       final hasV1Length = info.containsKey('length');
@@ -311,10 +311,13 @@ class BencodeDecoder {
           infoHashV2 = sha256.convert(infoBytes).toString().toUpperCase();
         }
 
-        infoHash = infoHashV2 ?? infoHashV1 ?? sha1.convert(infoBytes).toString().toUpperCase();
+        infoHash = infoHashV2 ??
+            infoHashV1 ??
+            sha1.convert(infoBytes).toString().toUpperCase();
       }
 
-      final isV2Only = infoHashV2 != null && (infoHashV1 == null || !hasV1Pieces);
+      final isV2Only =
+          infoHashV2 != null && (infoHashV1 == null || !hasV1Pieces);
       final isHybrid = infoHashV1 != null && infoHashV2 != null;
 
       return {
@@ -333,4 +336,3 @@ class BencodeDecoder {
     }
   }
 }
-

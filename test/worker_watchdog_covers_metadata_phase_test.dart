@@ -9,10 +9,11 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('HttpTransferJob Watchdog - Metadata Phase Coverage (P0-1)', () {
-    test('registerWatchdogs is called before metadata probe and arms watchdog', () async {
+    test('registerWatchdogs is called before metadata probe and arms watchdog',
+        () async {
       final receivePort = ReceivePort();
       final messages = <Map<String, dynamic>>[];
-      
+
       final sub = receivePort.listen((msg) {
         if (msg is Map<String, dynamic>) {
           messages.add(msg);
@@ -44,7 +45,9 @@ void main() {
       receivePort.close();
     });
 
-    test('Hard timeout handler emits timeout error and aborts delays during stalled probe', () async {
+    test(
+        'Hard timeout handler emits timeout error and aborts delays during stalled probe',
+        () async {
       final receivePort = ReceivePort();
       final completer = Completer<Map<String, dynamic>>();
 
@@ -52,7 +55,9 @@ void main() {
         if (raw is Map) {
           final data = Map<String, dynamic>.from(raw);
           final eventData = data['data'];
-          if (data['type'] == 'error' && eventData is Map && eventData['errorType'] == 'timeout') {
+          if (data['type'] == 'error' &&
+              eventData is Map &&
+              eventData['errorType'] == 'timeout') {
             if (!completer.isCompleted) completer.complete(data);
           }
         }

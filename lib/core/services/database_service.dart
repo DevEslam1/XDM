@@ -277,14 +277,14 @@ class DatabaseService {
       orElse: () {
         debugPrint(
           '[DMX] _rowToTask: unrecognised status "$statusName" for task '
-          '${row.id} — reporting and defaulting to error.',
+          '${row.id} — reporting and defaulting to paused.',
         );
         CrashReportingService.recordError(
           FormatException('Unrecognised download task status: "$statusName"'),
           StackTrace.current,
-          hint: 'Task ${row.id} has invalid status "$statusName" in SQLite',
+          hint: 'recoverable',
         );
-        return DownloadStatus.failed;
+        return DownloadStatus.paused;
       },
     );
 
@@ -475,8 +475,8 @@ class DatabaseService {
     bool shouldFlushImmediately = false;
     await _pendingSavesLock.synchronized(() {
       _pendingProgressSaves[task.id] = task;
-      // Strict threshold: if pending items reach 25, force an immediate flush bypassing the timer
-      if (_pendingProgressSaves.length >= 25) {
+      // Strict threshold: if pending items reach 100, force an immediate flush bypassing the timer
+      if (_pendingProgressSaves.length >= 100) {
         shouldFlushImmediately = true;
       }
     });
@@ -491,7 +491,7 @@ class DatabaseService {
         PowerMonitor.screenOff;
     final interval = isBackground
         ? const Duration(seconds: 120) // 120s in background
-        : const Duration(seconds: 30); // 30s in foreground
+        : const Duration(seconds: 10); // 10s in foreground
 
     _scheduleFlush(interval);
   }
@@ -503,6 +503,33 @@ class DatabaseService {
     }
     _dbBatchTimer?.cancel();
     _dbBatchTimer = Timer(interval, flushPendingSaves);
+  }
+
+  bool _completedTaskPendingCheckpoint = false;
+
+  @visibleForTesting
+  bool get completedTaskPendingCheckpoint => _completedTaskPendingCheckpoint;
+
+  void _scheduleCompletedTaskCheckpoint() {
+    if (_completedTaskPendingCheckpoint) return;
+    _completedTaskPendingCheckpoint = true;
+    scheduleMicrotask(() async {
+      try {
+        final activeRows = await _db
+            .customSelect(
+                "SELECT COUNT(*) as cnt FROM download_tasks WHERE status = 'downloading'")
+            .get();
+        final hasActive = activeRows.isNotEmpty &&
+            (activeRows.first.read<int>('cnt')) > 0;
+        if (!hasActive) {
+          await _db.customStatement('PRAGMA wal_checkpoint(FULL)');
+        }
+      } catch (e, st) {
+        _log.warning('Checkpoint after task completion failed: $e', e, st);
+      } finally {
+        _completedTaskPendingCheckpoint = false;
+      }
+    });
   }
 
   void cancelPendingTimers() {
@@ -537,21 +564,12 @@ class DatabaseService {
     int attempt = 0;
     while (true) {
       try {
+        await _db.into(_db.downloadTasks).insert(
+              _taskToCompanion(task),
+              mode: drift.InsertMode.insertOrReplace,
+            );
         if (task.status == DownloadStatus.completed) {
-          // Task 5.2: Durable completion writes with PRAGMA synchronous = FULL
-          try {
-            await _db.customStatement('PRAGMA synchronous = FULL');
-          } catch (_) {}
-          await _db.into(_db.downloadTasks).insert(
-                _taskToCompanion(task),
-                mode: drift.InsertMode.insertOrReplace,
-              );
-          try {
-            await _db.customStatement('PRAGMA synchronous = NORMAL');
-          } catch (_) {}
-        } else {
-          await _db.into(_db.downloadTasks).insert(_taskToCompanion(task),
-              mode: drift.InsertMode.insertOrReplace);
+          _scheduleCompletedTaskCheckpoint();
         }
         return;
       } catch (e) {

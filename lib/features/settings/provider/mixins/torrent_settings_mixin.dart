@@ -71,5 +71,3 @@ mixin TorrentSettingsMixin on ChangeNotifier {
     String? dhParamsPath,
   });
 }
-
-

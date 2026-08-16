@@ -319,18 +319,16 @@ class _TorrentAdvancedSettingsSheetState
                               Expanded(
                                 child: TextField(
                                   controller: _webSeedController,
-                                  style: TextStyle(
-                                      fontSize: 13, color: textClr),
+                                  style:
+                                      TextStyle(fontSize: 13, color: textClr),
                                   decoration: InputDecoration(
-                                    hintText:
-                                        'https://example.com/file.iso',
+                                    hintText: 'https://example.com/file.iso',
                                     hintStyle: TextStyle(
                                       fontSize: 12,
                                       color: mutedClr.withValues(alpha: 0.6),
                                     ),
                                     isDense: true,
-                                    contentPadding:
-                                        const EdgeInsets.symmetric(
+                                    contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 12,
                                       vertical: 10,
                                     ),
@@ -348,8 +346,8 @@ class _TorrentAdvancedSettingsSheetState
                                 icon: const Icon(Icons.add, size: 16),
                                 label: const Text('Add'),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.neonCyan
-                                      .withValues(alpha: 0.2),
+                                  backgroundColor:
+                                      AppTheme.neonCyan.withValues(alpha: 0.2),
                                   foregroundColor: AppTheme.neonCyan,
                                   elevation: 0,
                                   padding: const EdgeInsets.symmetric(
@@ -379,8 +377,7 @@ class _TorrentAdvancedSettingsSheetState
                           const SizedBox(height: 6),
                           if (webSeeds.isEmpty)
                             Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 8),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
                               child: Text(
                                 'No web seeds currently attached to this torrent.',
                                 style: TextStyle(
@@ -393,8 +390,7 @@ class _TorrentAdvancedSettingsSheetState
                           else
                             ListView.separated(
                               shrinkWrap: true,
-                              physics:
-                                  const NeverScrollableScrollPhysics(),
+                              physics: const NeverScrollableScrollPhysics(),
                               itemCount: webSeeds.length,
                               separatorBuilder: (_, __) =>
                                   const Divider(height: 1),
@@ -469,8 +465,7 @@ class _TorrentAdvancedSettingsSheetState
                           DropdownButtonFormField<ProxyType>(
                             initialValue: _selectedProxyType,
                             dropdownColor: bgClr,
-                            style:
-                                TextStyle(fontSize: 13, color: textClr),
+                            style: TextStyle(fontSize: 13, color: textClr),
                             decoration: InputDecoration(
                               labelText: 'Proxy Protocol',
                               isDense: true,
@@ -507,8 +502,7 @@ class _TorrentAdvancedSettingsSheetState
                                       hintText: '127.0.0.1',
                                       isDense: true,
                                       border: OutlineInputBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
                                     ),
                                   ),
@@ -528,8 +522,7 @@ class _TorrentAdvancedSettingsSheetState
                                       hintText: '1080',
                                       isDense: true,
                                       border: OutlineInputBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
                                     ),
                                   ),
@@ -550,8 +543,7 @@ class _TorrentAdvancedSettingsSheetState
                                       labelText: 'Username (optional)',
                                       isDense: true,
                                       border: OutlineInputBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
                                     ),
                                   ),
@@ -583,8 +575,7 @@ class _TorrentAdvancedSettingsSheetState
                                         },
                                       ),
                                       border: OutlineInputBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
                                     ),
                                   ),
@@ -610,8 +601,8 @@ class _TorrentAdvancedSettingsSheetState
                                   : const Icon(Icons.check, size: 18),
                               label: const Text('Apply Proxy Settings'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.neonAmber
-                                    .withValues(alpha: 0.2),
+                                backgroundColor:
+                                    AppTheme.neonAmber.withValues(alpha: 0.2),
                                 foregroundColor: AppTheme.neonAmber,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
@@ -645,12 +636,12 @@ class _TorrentAdvancedSettingsSheetState
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: AppTheme.neonGreen
-                                    .withValues(alpha: 0.15),
+                                color:
+                                    AppTheme.neonGreen.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: AppTheme.neonGreen
-                                      .withValues(alpha: 0.4),
+                                  color:
+                                      AppTheme.neonGreen.withValues(alpha: 0.4),
                                 ),
                               ),
                               child: const Row(
@@ -734,8 +725,8 @@ class _TorrentAdvancedSettingsSheetState
                                   : const Icon(Icons.security, size: 18),
                               label: const Text('Apply SSL Certificates'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.neonGreen
-                                    .withValues(alpha: 0.2),
+                                backgroundColor:
+                                    AppTheme.neonGreen.withValues(alpha: 0.2),
                                 foregroundColor: AppTheme.neonGreen,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
@@ -822,9 +813,8 @@ class _TorrentAdvancedSettingsSheetState
                       : 'None selected',
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight: filePath != null
-                        ? FontWeight.w600
-                        : FontWeight.normal,
+                    fontWeight:
+                        filePath != null ? FontWeight.w600 : FontWeight.normal,
                     color: filePath != null
                         ? textClr
                         : mutedClr.withValues(alpha: 0.6),
@@ -846,8 +836,7 @@ class _TorrentAdvancedSettingsSheetState
           OutlinedButton(
             onPressed: onPick,
             style: OutlinedButton.styleFrom(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),

@@ -19,6 +19,14 @@ class ConnectionManager implements DisposableService, MemoryPressureListener {
       LinkedHashMap<String, _HostProbe>();
   static const Duration _cacheTtl = Duration(minutes: 10);
   static const Duration _probeTimeout = Duration(seconds: 4);
+  static const int _maxProbesCap = 150;
+
+  @visibleForTesting
+  int get probesCountForTesting => _probes.length;
+
+  @visibleForTesting
+  void recordProbeForTesting(String host, bool isHttp2) =>
+      _recordProbe(host, isHttp2);
 
   @override
   void onMemoryPressure() {
@@ -42,10 +50,23 @@ class ConnectionManager implements DisposableService, MemoryPressureListener {
         timeout: _probeTimeout,
         supportedProtocols: const ['h2', 'http/1.1'],
       );
+      final isH2 = socket.selectedProtocol == 'h2';
       await socket.close();
+      _recordProbe(uri.host, isH2);
     } catch (e, st) {
       LoggingService.logger('ConnectionManager')
           .warning('Operation failed', e, st);
+    }
+  }
+
+  void _recordProbe(String host, bool isHttp2) {
+    final now = DateTime.now();
+    _probes[host] = _HostProbe(isHttp2: isHttp2, at: now);
+    if (_probes.length > _maxProbesCap) {
+      _probes.removeWhere((_, probe) => now.difference(probe.at) >= _cacheTtl);
+      while (_probes.length > _maxProbesCap) {
+        _probes.remove(_probes.keys.first);
+      }
     }
   }
 
@@ -75,14 +96,7 @@ class ConnectionManager implements DisposableService, MemoryPressureListener {
       } catch (_) {
         result = false;
       }
-      _probes[host] = _HostProbe(isHttp2: result, at: now);
-      if (_probes.length > 500) {
-        _probes
-            .removeWhere((_, probe) => now.difference(probe.at) >= _cacheTtl);
-        while (_probes.length > 500) {
-          _probes.remove(_probes.keys.first);
-        }
-      }
+      _recordProbe(host, result);
       return result;
     } catch (e) {
       debugPrint('[ConnectionManager] detectHttp2 failed: $e');

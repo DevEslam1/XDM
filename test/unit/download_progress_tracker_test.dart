@@ -24,7 +24,8 @@ void main() {
       expect(tracker.getSpeed('task-1').value, equals(250.0));
     });
 
-    test('updateProgress does not notify listeners when progress is unchanged', () {
+    test('updateProgress does not notify listeners when progress is unchanged',
+        () {
       final tracker = DownloadProgressTracker();
       int notifyCount = 0;
       tracker.addListener(() => notifyCount++);

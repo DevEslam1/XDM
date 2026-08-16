@@ -123,8 +123,10 @@ class MetadataProbeService {
       supportsResume = acceptRanges != null
           ? acceptRanges == 'bytes'
           : (isYoutube || response.statusCode == 206);
-      
-      if (_isLikelyHtmlResponse(response.headers.value(Headers.contentTypeHeader)) && fileSize < 1024 * 1024) {
+
+      if (_isLikelyHtmlResponse(
+              response.headers.value(Headers.contentTypeHeader)) &&
+          fileSize < 1024 * 1024) {
         fileSize = 0;
       }
       if (response.statusCode != null && response.statusCode! >= 400) {
@@ -192,7 +194,9 @@ class MetadataProbeService {
                       '') ??
               0;
         }
-        if (_isLikelyHtmlResponse(getResponse.headers.value(Headers.contentTypeHeader)) && fileSize < 1024 * 1024) {
+        if (_isLikelyHtmlResponse(
+                getResponse.headers.value(Headers.contentTypeHeader)) &&
+            fileSize < 1024 * 1024) {
           fileSize = 0;
         }
         supportsResume = isYoutube ||
@@ -237,7 +241,7 @@ class MetadataProbeService {
       final torrentId = TorrentService.addMagnet(url, tempDir);
       TorrentService.resumeTorrent(torrentId);
       TorrentResumeStore.registerSource(torrentId, url);
-      
+
       final completer = Completer<DownloadMetadata>();
       StreamSubscription? sub;
       Timer? metadataTimer;
@@ -252,8 +256,9 @@ class MetadataProbeService {
           TorrentService.pauseTorrent(torrentId);
           TorrentService.removeTorrent(torrentId, deleteFiles: false);
         } catch (e, st) {
-      LoggingService.logger('MetadataProbeService').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('MetadataProbeService')
+              .warning('Operation failed', e, st);
+        }
       }
 
       cancelToken?.whenCancel.then((_) {
@@ -271,16 +276,19 @@ class MetadataProbeService {
         final torrent = torrents[torrentId];
         if (torrent != null && torrent.hasMetadata && !completer.isCompleted) {
           final files = TorrentService.getFiles(torrentId);
-          final resolvedFiles = files.map((f) => {
-            'name': f.name,
-            'length': f.size,
-            'selected': true,
-            'priority': 4,
-            'downloadedBytes': 0,
-          }).toList();
-          
-          final totalSize = resolvedFiles.fold<int>(0, (sum, f) => sum + (f['length'] as int));
-          
+          final resolvedFiles = files
+              .map((f) => {
+                    'name': f.name,
+                    'length': f.size,
+                    'selected': true,
+                    'priority': 4,
+                    'downloadedBytes': 0,
+                  })
+              .toList();
+
+          final totalSize = resolvedFiles.fold<int>(
+              0, (sum, f) => sum + (f['length'] as int));
+
           cleanup();
           completer.complete(DownloadMetadata(
             fileName: torrent.name,
@@ -330,7 +338,8 @@ class MetadataProbeService {
               'priority': 4,
             };
           }).toList();
-          fileSize = meta['length'] ?? torrentFiles.fold<int>(0, (s, f) => s + (f['length'] as int));
+          fileSize = meta['length'] ??
+              torrentFiles.fold<int>(0, (s, f) => s + (f['length'] as int));
         }
       }
     }

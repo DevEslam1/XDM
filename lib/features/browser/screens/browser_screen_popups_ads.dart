@@ -124,7 +124,8 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
         return (url, (unquoted['type'] as String?) ?? 'link');
       }
     } catch (e, st) {
-      LoggingService.logger('BrowserScreenPopupsAds').warning('Operation failed', e, st);
+      LoggingService.logger('BrowserScreenPopupsAds')
+          .warning('Operation failed', e, st);
     }
     return null;
   }

@@ -44,7 +44,8 @@ void main() {
       }
     });
 
-    test('fingerprint computation is >= 5x faster than jsonEncode + sha256', () {
+    test('fingerprint computation is >= 5x faster than jsonEncode + sha256',
+        () {
       // 1. Measure strict SHA-256 + jsonEncode path
       final swStrict = Stopwatch()..start();
       for (int i = 0; i < 1000; i++) {
@@ -63,7 +64,8 @@ void main() {
       final fastElapsedUs = swFast.elapsedMicroseconds;
 
       expect(fastElapsedUs, lessThan(strictElapsedUs));
-      final speedup = strictElapsedUs / (fastElapsedUs == 0 ? 1 : fastElapsedUs);
+      final speedup =
+          strictElapsedUs / (fastElapsedUs == 0 ? 1 : fastElapsedUs);
       expect(speedup, greaterThanOrEqualTo(5.0));
     });
   });

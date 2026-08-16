@@ -8,7 +8,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Widget Dispose & Teardown Audit (P3-15)', () {
-    testWidgets('SpeedGraphWidget mounts and disposes cleanly without leaking controllers',
+    testWidgets(
+        'SpeedGraphWidget mounts and disposes cleanly without leaking controllers',
         (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -21,7 +22,8 @@ void main() {
       expect(find.byType(SpeedGraphWidget), findsOneWidget);
 
       // Unmount widget to trigger dispose()
-      await tester.pumpWidget(const MaterialApp(home: Scaffold(body: SizedBox())));
+      await tester
+          .pumpWidget(const MaterialApp(home: Scaffold(body: SizedBox())));
       await tester.pumpAndSettle();
 
       expect(find.byType(SpeedGraphWidget), findsNothing);
@@ -43,7 +45,8 @@ void main() {
 
       expect(find.byType(GlassCard), findsOneWidget);
 
-      await tester.pumpWidget(const MaterialApp(home: Scaffold(body: SizedBox())));
+      await tester
+          .pumpWidget(const MaterialApp(home: Scaffold(body: SizedBox())));
       await tester.pumpAndSettle();
 
       expect(find.byType(GlassCard), findsNothing);
@@ -66,7 +69,8 @@ void main() {
 
       expect(find.byType(IsolatedProgressBar), findsOneWidget);
 
-      await tester.pumpWidget(const MaterialApp(home: Scaffold(body: SizedBox())));
+      await tester
+          .pumpWidget(const MaterialApp(home: Scaffold(body: SizedBox())));
       await tester.pumpAndSettle();
 
       expect(find.byType(IsolatedProgressBar), findsNothing);

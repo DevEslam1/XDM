@@ -191,7 +191,8 @@ class TransferState {
         migrationNote: 'v2',
       );
     } catch (e, st) {
-      LoggingService.logger('TransferState').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TransferState')
+          .warning('Operation failed with fallback', e, st);
       return null;
     }
   }

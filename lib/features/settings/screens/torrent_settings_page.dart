@@ -294,9 +294,8 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage>
               if (settings.queueTorrents) ...[
                 DropdownTile<int>(
                   accentColor: accent,
-                  title: isRtl
-                      ? 'أقصى عدد تورنتات نشطة'
-                      : 'Max Active Torrents',
+                  title:
+                      isRtl ? 'أقصى عدد تورنتات نشطة' : 'Max Active Torrents',
                   subtitle: '${settings.maxActiveTorrents} active',
                   value: settings.maxActiveTorrents,
                   items: const [1, 2, 3, 5, 8, 10, 20],
@@ -379,7 +378,9 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage>
           ),
           const SizedBox(height: 12),
           SettingsSectionHeader(
-            title: isRtl ? 'البروكسي والخصوصية (SOCKS5)' : 'SOCKS5 Proxy & Privacy',
+            title: isRtl
+                ? 'البروكسي والخصوصية (SOCKS5)'
+                : 'SOCKS5 Proxy & Privacy',
             accentColor: accent,
             isDark: isDark,
           ),
@@ -425,7 +426,9 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage>
                 ),
                 SwitchTile(
                   accentColor: accent,
-                  title: isRtl ? 'إجبار البروكسي (Kill Switch)' : 'Force Proxy Only',
+                  title: isRtl
+                      ? 'إجبار البروكسي (Kill Switch)'
+                      : 'Force Proxy Only',
                   subtitle: isRtl
                       ? 'حظر كل الاتصالات المباشرة إذا انقطع البروكسي'
                       : 'Block peer traffic if proxy connection fails',

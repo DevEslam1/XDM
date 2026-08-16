@@ -183,23 +183,30 @@ class NotificationCoordinator {
         }),
       );
     }
-    unawaited(_handlesLock.synchronized(() {
-      final handle = _taskToHandle.remove(taskId);
-      if (handle != null) {
-        _opaqueHandles.remove(handle);
-      }
-    }).then((_) => _persistHandles()).catchError((e) => debugPrint('[Notifications] persistHandles failed: $e')));
+    unawaited(_handlesLock
+        .synchronized(() {
+          final handle = _taskToHandle.remove(taskId);
+          if (handle != null) {
+            _opaqueHandles.remove(handle);
+          }
+        })
+        .then((_) => _persistHandles())
+        .catchError(
+            (e) => debugPrint('[Notifications] persistHandles failed: $e')));
   }
 
   /// Drops the ID mapping for [taskId] and returns the removed ID (used by
   /// delete flows that cancel the notification after file cleanup).
   int? removeId(String taskId) {
-    unawaited(_handlesLock.synchronized(() {
-      final handle = _taskToHandle.remove(taskId);
-      if (handle != null) {
-        _opaqueHandles.remove(handle);
-      }
-    }).then((_) => _persistHandles()).catchError((e) => debugPrint('[DMX] persistHandles failed: $e')));
+    unawaited(_handlesLock
+        .synchronized(() {
+          final handle = _taskToHandle.remove(taskId);
+          if (handle != null) {
+            _opaqueHandles.remove(handle);
+          }
+        })
+        .then((_) => _persistHandles())
+        .catchError((e) => debugPrint('[DMX] persistHandles failed: $e')));
     return _notificationIds.remove(taskId);
   }
 
@@ -482,12 +489,16 @@ class NotificationCoordinator {
       unawaited(
           _notificationService.cancelNotification(notifId).catchError((_) {}));
     }
-    unawaited(_handlesLock.synchronized(() {
-      final handle = _taskToHandle.remove(taskId);
-      if (handle != null) {
-        _opaqueHandles.remove(handle);
-      }
-    }).then((_) => _persistHandles()).catchError((e) => debugPrint('[Notifications] persistHandles failed: $e')));
+    unawaited(_handlesLock
+        .synchronized(() {
+          final handle = _taskToHandle.remove(taskId);
+          if (handle != null) {
+            _opaqueHandles.remove(handle);
+          }
+        })
+        .then((_) => _persistHandles())
+        .catchError(
+            (e) => debugPrint('[Notifications] persistHandles failed: $e')));
   }
 
   void dispose() {

@@ -341,8 +341,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   PreferredSizeWidget _buildSelectionAppBar(
       BuildContext context, bool isDark, Color textClr, Color accentClr) {
-    final count = context.select<DownloadProvider, int>(
-        (p) => p.selectedTaskIds.length);
+    final count =
+        context.select<DownloadProvider, int>((p) => p.selectedTaskIds.length);
     final provider = context.read<DownloadProvider>();
     final settings = context.watch<SettingsProvider>();
     final isAmoled = settings.isAmoledMode;
@@ -1043,8 +1043,8 @@ class _HomeScreenState extends State<HomeScreen>
     final downloadProvider = context.read<DownloadProvider>();
     final accentClr = getActiveFilterColor(downloadProvider, isDark);
     final screenType = getScreenType(context);
-    final isNavbarVisible = context.select<DownloadProvider, bool>(
-        (p) => p.isNavbarVisible);
+    final isNavbarVisible =
+        context.select<DownloadProvider, bool>((p) => p.isNavbarVisible);
     final safeAreaBottom = MediaQuery.paddingOf(context).bottom;
     final double bottomPadding;
     switch (screenType) {
@@ -1597,8 +1597,8 @@ class _DownloadTaskList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final isLoading = context.select<DownloadProvider, bool>(
-        (p) => p.isLoadingTasks);
+    final isLoading =
+        context.select<DownloadProvider, bool>((p) => p.isLoadingTasks);
 
     Widget child;
     if (isLoading) {

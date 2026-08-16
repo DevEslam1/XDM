@@ -55,9 +55,7 @@ class FilterChipsBar extends StatelessWidget {
         final classicUi = settings.classicUi;
         final glow = settings.glow;
 
-        final filters = isHistory
-            ? _historyFilters
-            : _downloadFilters;
+        final filters = isHistory ? _historyFilters : _downloadFilters;
 
         return Selector<DownloadProvider, _FilterState>(
           selector: (_, p) {

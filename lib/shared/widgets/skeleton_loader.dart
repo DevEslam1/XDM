@@ -42,7 +42,10 @@ class SkeletonCard extends StatefulWidget {
 }
 
 class _SkeletonCardState extends State<SkeletonCard>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver, PausableLoopAnimation<SkeletonCard> {
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        PausableLoopAnimation<SkeletonCard> {
   AnimationController? _localController;
   Animation<double>? _localAnimation;
 
@@ -91,7 +94,9 @@ class _SkeletonCardState extends State<SkeletonCard>
 
     final borderColor = isDark ? AppTheme.border : AppTheme.lightBorder;
 
-    if (animation == null || PowerMonitor.screenOff || DownloadEngine.isInBackground) {
+    if (animation == null ||
+        PowerMonitor.screenOff ||
+        DownloadEngine.isInBackground) {
       return Container(
         height: widget.height,
         decoration: BoxDecoration(
@@ -141,7 +146,10 @@ class SkeletonList extends StatefulWidget {
 }
 
 class _SkeletonListState extends State<SkeletonList>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver, PausableLoopAnimation<SkeletonList> {
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        PausableLoopAnimation<SkeletonList> {
   late AnimationController _controller;
   late Animation<double> _animation;
 

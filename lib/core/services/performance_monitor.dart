@@ -1,8 +1,22 @@
-// FIX-H10: PerformanceMonitor — Screen-off lifecycle
+import 'dart:async';
 import 'package:flutter/scheduler.dart';
 import 'download_engine.dart';
 import 'frame_watchdog.dart';
 import 'power_monitor.dart';
+
+class FrameMetrics {
+  final double fps;
+  final double jankRatio;
+  final double averageBuildMillis;
+  final double averageRasterMillis;
+
+  const FrameMetrics({
+    required this.fps,
+    required this.jankRatio,
+    required this.averageBuildMillis,
+    required this.averageRasterMillis,
+  });
+}
 
 /// Collects lightweight UI-frame statistics (build/raster durations, jank
 /// ratio) via [SchedulerBinding.addTimingsCallback]. Used for the performance
@@ -11,6 +25,16 @@ class PerformanceMonitor {
   PerformanceMonitor();
 
   static final PerformanceMonitor instance = PerformanceMonitor();
+
+  final StreamController<FrameMetrics> _metricsController =
+      StreamController<FrameMetrics>.broadcast();
+
+  Stream<FrameMetrics> get metricsStream => _metricsController.stream;
+
+  static void Function()? onAutoDegradeTriggered;
+
+  int _consecutiveJankCount = 0;
+  DateTime? _lastAutoDegradeTime;
 
   /// True when high frame jank or aggressive power saving requires reduced animations.
   static bool get shouldReduceMotion =>
@@ -32,7 +56,8 @@ class PerformanceMonitor {
   bool _listening = true;
 
   bool get isListening => _listening;
-  bool get isActive => _listening && !PowerMonitor.screenOff && DownloadEngine.appInForeground;
+  bool get isActive =>
+      _listening && !PowerMonitor.screenOff && DownloadEngine.appInForeground;
 
   int get totalFrames => _totalFrames;
   int get jankyFrameCount => _jankyFrames;
@@ -106,7 +131,20 @@ class PerformanceMonitor {
       final build = timing.buildDuration;
       final raster = timing.rasterDuration;
 
-      if (build > jankThreshold) _jankyFrames++;
+      if (build > jankThreshold) {
+        _jankyFrames++;
+        _consecutiveJankCount++;
+        if (_consecutiveJankCount >= 5) {
+          final now = DateTime.now();
+          if (_lastAutoDegradeTime == null ||
+              now.difference(_lastAutoDegradeTime!) >= const Duration(seconds: 30)) {
+            _lastAutoDegradeTime = now;
+            onAutoDegradeTriggered?.call();
+          }
+        }
+      } else {
+        _consecutiveJankCount = 0;
+      }
       _buildSamples.add(build);
       _rasterSamples.add(raster);
     }
@@ -115,6 +153,14 @@ class PerformanceMonitor {
       onSustainedJank?.call(true);
     }
     _trim();
+    if (_metricsController.hasListener) {
+      _metricsController.add(FrameMetrics(
+        fps: currentFps,
+        jankRatio: jankRatio,
+        averageBuildMillis: averageBuildMillis ?? 0.0,
+        averageRasterMillis: averageRasterMillis ?? 0.0,
+      ));
+    }
   }
 
   /// Feeds timings from [FrameWatchdog] or test suites.

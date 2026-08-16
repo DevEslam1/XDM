@@ -22,7 +22,8 @@ class InMemoryTaskRepository implements TaskRepository {
     try {
       return _storage.firstWhere((t) => t.id == id);
     } catch (e, st) {
-      LoggingService.logger('TaskRepository').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TaskRepository')
+          .warning('Operation failed with fallback', e, st);
       return null;
     }
   }

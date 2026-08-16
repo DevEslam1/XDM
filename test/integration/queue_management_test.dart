@@ -68,7 +68,8 @@ void main() {
       await repo.saveAll([reorderedT1, reorderedT2]);
 
       final all = await repo.loadAll();
-      final sorted = List.of(all)..sort((a, b) => a.queueOrder.compareTo(b.queueOrder));
+      final sorted = List.of(all)
+        ..sort((a, b) => a.queueOrder.compareTo(b.queueOrder));
       expect(sorted.first.id, equals('q2'));
       expect(sorted.last.id, equals('q1'));
     });

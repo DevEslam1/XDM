@@ -20,7 +20,10 @@ enum PauseReason {
     }
     return switch (normalized.toLowerCase()) {
       'user' || 'userrequested' || 'user_requested' => PauseReason.user,
-      'batterysaver' || 'battery_saver' || 'batterylow' || 'battery_low' =>
+      'batterysaver' ||
+      'battery_saver' ||
+      'batterylow' ||
+      'battery_low' =>
         PauseReason.batterySaver,
       'diskfull' || 'disk_full' => PauseReason.diskFull,
       'networklost' || 'network_lost' => PauseReason.networkLost,

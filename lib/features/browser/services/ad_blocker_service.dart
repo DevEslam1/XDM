@@ -71,16 +71,18 @@ class AdBlockerService {
         final uri = Uri.parse(s);
         return (uri.host.toLowerCase(), uri.path);
       } catch (e, st) {
-      LoggingService.logger('AdBlockerService').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('AdBlockerService')
+            .warning('Operation failed', e, st);
+      }
     }
     if (s.startsWith('//')) {
       try {
         final uri = Uri.parse('https:$s');
         return (uri.host.toLowerCase(), uri.path);
       } catch (e, st) {
-      LoggingService.logger('AdBlockerService').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('AdBlockerService')
+            .warning('Operation failed', e, st);
+      }
     }
     final slashIdx = s.indexOf('/');
     if (slashIdx != -1) {
@@ -226,7 +228,8 @@ class AdBlockerService {
       final host = Uri.parse(url).host.toLowerCase();
       return host.contains('youtube.com') || host.contains('youtu.be');
     } catch (e, st) {
-      LoggingService.logger('AdBlockerService').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('AdBlockerService')
+          .warning('Operation failed with fallback', e, st);
       return false;
     }
   }
@@ -336,8 +339,9 @@ class AdBlockerService {
       try {
         l();
       } catch (e, st) {
-      LoggingService.logger('AdBlockerService').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('AdBlockerService')
+            .warning('Operation failed', e, st);
+      }
     }
   }
 
@@ -487,7 +491,8 @@ class AdBlockerService {
         return true;
       }
     } catch (e, st) {
-      LoggingService.logger('AdBlockerService').warning('Operation failed', e, st);
+      LoggingService.logger('AdBlockerService')
+          .warning('Operation failed', e, st);
     }
     return false;
   }
@@ -1423,7 +1428,8 @@ $customCss
       // Fix #13: Use display:none (consistent with _buildCssRules).
       return '$base\n$cappedSelectors {\n  display: none !important;\n}\n';
     } catch (e, st) {
-      LoggingService.logger('AdBlockerService').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('AdBlockerService')
+          .warning('Operation failed with fallback', e, st);
       return base;
     }
   }

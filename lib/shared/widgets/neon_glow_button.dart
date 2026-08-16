@@ -75,8 +75,8 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
 
   @override
   Widget build(BuildContext context) {
-    final (:isDark, :enableGlow) = context.select<SettingsProvider,
-        ({bool isDark, bool enableGlow})>(
+    final (:isDark, :enableGlow) =
+        context.select<SettingsProvider, ({bool isDark, bool enableGlow})>(
       (s) => (isDark: s.isDarkMode, enableGlow: s.enableGlow),
     );
     final filledContentColor =
@@ -120,8 +120,7 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
     );
     if (widget.isExpanded) content = Center(child: content);
 
-    final reduceMotion =
-        MediaQuery.disableAnimationsOf(context) ||
+    final reduceMotion = MediaQuery.disableAnimationsOf(context) ||
         PerformanceMonitor.shouldReduceMotion;
 
     // Shimmer sweep across filled buttons

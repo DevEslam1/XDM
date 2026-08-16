@@ -1012,20 +1012,22 @@ class _ProgressRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
-              child: SizedBox(
-                width: double.infinity,
-                height: 6.0,
-                child: showIndeterminate
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          minHeight: 6.0,
-                          color: color,
-                          backgroundColor: color.withValues(alpha: 0.15),
-                        ),
-                      )
-                    : _ChunkedProgressBar(
-                        task: task, isDark: isDark, color: color),
+              child: RepaintBoundary(
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 6.0,
+                  child: showIndeterminate
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            minHeight: 6.0,
+                            color: color,
+                            backgroundColor: color.withValues(alpha: 0.15),
+                          ),
+                        )
+                      : _ChunkedProgressBar(
+                          task: task, isDark: isDark, color: color),
+                ),
               ),
             ),
             const SizedBox(width: 10),

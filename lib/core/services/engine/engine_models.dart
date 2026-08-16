@@ -220,6 +220,7 @@ class DownloadProgress {
   final int? ytCounterpartDownloadedBytes;
   final int? ytDownloadedBytes;
   final bool? hasEstimatedFileProgress;
+  final int chunkFingerprint;
 
   const DownloadProgress({
     required this.downloadedBytes,
@@ -248,6 +249,7 @@ class DownloadProgress {
     this.ytCounterpartDownloadedBytes,
     this.ytDownloadedBytes,
     this.hasEstimatedFileProgress,
+    this.chunkFingerprint = 0,
   });
 
   factory DownloadProgress.fromWorkerMap(Map<String, dynamic> p) {
@@ -298,6 +300,7 @@ class DownloadProgress {
           (p['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
       ytDownloadedBytes: (p['ytDownloadedBytes'] as num?)?.toInt(),
       hasEstimatedFileProgress: p['hasEstimatedFileProgress'] as bool?,
+      chunkFingerprint: (p['chunkFingerprint'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -328,6 +331,7 @@ class DownloadProgress {
     int? ytCounterpartDownloadedBytes,
     int? ytDownloadedBytes,
     bool? hasEstimatedFileProgress,
+    int? chunkFingerprint,
   }) {
     return DownloadProgress(
       downloadedBytes: downloadedBytes ?? this.downloadedBytes,
@@ -358,6 +362,7 @@ class DownloadProgress {
       ytDownloadedBytes: ytDownloadedBytes ?? this.ytDownloadedBytes,
       hasEstimatedFileProgress:
           hasEstimatedFileProgress ?? this.hasEstimatedFileProgress,
+      chunkFingerprint: chunkFingerprint ?? this.chunkFingerprint,
     );
   }
 
@@ -385,36 +390,6 @@ class DownloadProgress {
     return (downloadedBytes / fileSize).clamp(0.0, 1.0);
   }
 
-  static int _computeChunkDetailsHash(List<ChunkDetail>? details) {
-    if (details == null) return 0;
-    return details.fold<int>(
-        details.length, (h, c) => h ^ c.downloaded.hashCode);
-  }
-
-  static int _computeTorrentFilesHash(List<Map<String, dynamic>>? files) {
-    if (files == null) return 0;
-    return files.fold<int>(
-      files.length,
-      (h, f) => h ^ ((f['downloadedBytes'] as num?)?.toInt() ?? 0).hashCode,
-    );
-  }
-
-  static bool _areChunkDetailsEqual(
-      List<ChunkDetail>? a, List<ChunkDetail>? b) {
-    if (identical(a, b)) return true;
-    if (a == null || b == null) return a == b;
-    if (a.length != b.length) return false;
-    return _computeChunkDetailsHash(a) == _computeChunkDetailsHash(b);
-  }
-
-  static bool _areTorrentFilesEqual(
-      List<Map<String, dynamic>>? a, List<Map<String, dynamic>>? b) {
-    if (identical(a, b)) return true;
-    if (a == null || b == null) return a == b;
-    if (a.length != b.length) return false;
-    return _computeTorrentFilesHash(a) == _computeTorrentFilesHash(b);
-  }
-
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -422,58 +397,23 @@ class DownloadProgress {
           runtimeType == other.runtimeType &&
           downloadedBytes == other.downloadedBytes &&
           fileSize == other.fileSize &&
-          speed == other.speed &&
-          eta == other.eta &&
-          fileName == other.fileName &&
-          supportsResume == other.supportsResume &&
-          statusMessage == other.statusMessage &&
-          torrentId == other.torrentId &&
+          speed.round() == other.speed.round() &&
           cycleState == other.cycleState &&
           pauseReason == other.pauseReason &&
           totalChunks == other.totalChunks &&
           completedChunks == other.completedChunks &&
-          totalPieces == other.totalPieces &&
-          completedPieces == other.completedPieces &&
-          totalFiles == other.totalFiles &&
-          completedFiles == other.completedFiles &&
-          totalFileBytes == other.totalFileBytes &&
-          downloadedFileBytes == other.downloadedFileBytes &&
-          ytStreamKind == other.ytStreamKind &&
-          ytCounterpartSize == other.ytCounterpartSize &&
-          ytCounterpartDownloadedBytes == other.ytCounterpartDownloadedBytes &&
-          ytDownloadedBytes == other.ytDownloadedBytes &&
-          hasEstimatedFileProgress == other.hasEstimatedFileProgress &&
-          _areChunkDetailsEqual(chunkDetails, other.chunkDetails) &&
-          _areTorrentFilesEqual(torrentFiles, other.torrentFiles);
+          chunkFingerprint == other.chunkFingerprint;
 
   @override
   int get hashCode => Object.hash(
         downloadedBytes,
         fileSize,
-        speed,
-        eta,
-        fileName,
-        statusMessage,
+        speed.round(),
         cycleState,
         pauseReason,
-        torrentId,
         totalChunks,
         completedChunks,
-        totalPieces,
-        completedPieces,
-        totalFiles,
-        completedFiles,
-        totalFileBytes,
-        downloadedFileBytes,
-        ytStreamKind,
-        ytCounterpartSize,
-        Object.hash(
-          ytCounterpartDownloadedBytes,
-          ytDownloadedBytes,
-          hasEstimatedFileProgress,
-          _computeChunkDetailsHash(chunkDetails),
-          _computeTorrentFilesHash(torrentFiles),
-        ),
+        chunkFingerprint,
       );
 }
 

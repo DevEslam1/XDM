@@ -14,22 +14,27 @@ void main() {
       BackgroundService.iosBgCallInFlightForTesting = false;
     });
 
-    test('Flag resets to false on normal completion or error inside try/finally', () async {
+    test(
+        'Flag resets to false on normal completion or error inside try/finally',
+        () async {
       expect(BackgroundService.iosBgCallInFlightForTesting, isFalse);
 
       final fakeService = _FakeServiceInstance();
-      final result = await BackgroundService.onIosBackgroundForTesting(fakeService);
+      final result =
+          await BackgroundService.onIosBackgroundForTesting(fakeService);
 
       // Method channel call returns false in test environment, but flag must be safely reset
       expect(result, isFalse);
       expect(BackgroundService.iosBgCallInFlightForTesting, isFalse);
     });
 
-    test('Duplicate concurrent invocation is ignored when in-flight is true', () async {
+    test('Duplicate concurrent invocation is ignored when in-flight is true',
+        () async {
       BackgroundService.iosBgCallInFlightForTesting = true;
 
       final fakeService = _FakeServiceInstance();
-      final result = await BackgroundService.onIosBackgroundForTesting(fakeService);
+      final result =
+          await BackgroundService.onIosBackgroundForTesting(fakeService);
 
       expect(result, isFalse);
       expect(BackgroundService.iosBgCallInFlightForTesting, isTrue);

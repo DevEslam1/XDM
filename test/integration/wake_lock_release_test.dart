@@ -40,7 +40,9 @@ void main() {
       BackgroundService.testMode = false;
     });
 
-    test('wake-lock is held while active > 0 and released when active drops to 0', () async {
+    test(
+        'wake-lock is held while active > 0 and released when active drops to 0',
+        () async {
       // 1. Start 2 downloads
       activeDownloads = 2;
       await BackgroundService.setDownloadActive(true);
@@ -57,7 +59,8 @@ void main() {
       expect(releaseCount, equals(1));
     });
 
-    test('wake-lock counter releases only when internal count reaches 0', () async {
+    test('wake-lock counter releases only when internal count reaches 0',
+        () async {
       BackgroundService.setActiveDownloadCountQuery(null);
       BackgroundService.resetActiveDownloadCountForTesting();
 

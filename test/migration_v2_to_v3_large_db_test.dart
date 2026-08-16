@@ -16,7 +16,9 @@ void main() {
       await db.close();
     });
 
-    test('Migration v2 to v3 successfully migrates 5000 rows incrementally within transaction', () async {
+    test(
+        'Migration v2 to v3 successfully migrates 5000 rows incrementally within transaction',
+        () async {
       // 1. Setup table structure simulating v2 schema
       await db.customStatement('''
         CREATE TABLE IF NOT EXISTS download_tasks_test (
@@ -71,9 +73,11 @@ void main() {
       }
       await db.customStatement('COMMIT');
 
-      final initialCountResult = await db.customSelect(
-        'SELECT COUNT(*) as cnt FROM download_tasks_test',
-      ).get();
+      final initialCountResult = await db
+          .customSelect(
+            'SELECT COUNT(*) as cnt FROM download_tasks_test',
+          )
+          .get();
       expect(initialCountResult.first.read<int>('cnt'), equals(5000));
 
       // 3. Execute the incremental v2->v3 migration logic
@@ -102,15 +106,20 @@ void main() {
       await db.customStatement('COMMIT');
 
       // 4. Validate all 5000 rows are converted to valid epoch timestamps
-      final postMigrationCount = await db.customSelect(
-        'SELECT COUNT(*) as cnt FROM download_tasks_test WHERE CAST(created_at AS INTEGER) > 0',
-      ).get();
+      final postMigrationCount = await db
+          .customSelect(
+            'SELECT COUNT(*) as cnt FROM download_tasks_test WHERE CAST(created_at AS INTEGER) > 0',
+          )
+          .get();
       expect(postMigrationCount.first.read<int>('cnt'), equals(5000));
 
-      final sampleRow = await db.customSelect(
-        "SELECT created_at, updated_at FROM download_tasks_test WHERE id = 'task_0'",
-      ).get();
-      final createdEpoch = int.parse(sampleRow.first.read<String>('created_at'));
+      final sampleRow = await db
+          .customSelect(
+            "SELECT created_at, updated_at FROM download_tasks_test WHERE id = 'task_0'",
+          )
+          .get();
+      final createdEpoch =
+          int.parse(sampleRow.first.read<String>('created_at'));
       expect(createdEpoch, greaterThan(1600000000000));
     });
   });

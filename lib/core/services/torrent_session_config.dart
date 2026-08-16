@@ -83,4 +83,3 @@ class TorrentSessionConfig {
     return 20;
   }
 }
-

@@ -12,7 +12,8 @@ void main() {
   const testFileSize = 256 * 1024; // 256 KB
 
   setUp(() async {
-    tempDir = await Directory.systemTemp.createTemp('http_download_integration_');
+    tempDir =
+        await Directory.systemTemp.createTemp('http_download_integration_');
     testPayload = Uint8List.fromList(
       List.generate(testFileSize, (i) => (i * 17 + 5) % 256),
     );
@@ -33,7 +34,8 @@ void main() {
 
           final slice = testPayload.sublist(start, end + 1);
           request.response.statusCode = HttpStatus.partialContent;
-          request.response.headers.set('Content-Range', 'bytes $start-$end/$testFileSize');
+          request.response.headers
+              .set('Content-Range', 'bytes $start-$end/$testFileSize');
           request.response.headers.set('Content-Length', slice.length);
           request.response.headers.set('Accept-Ranges', 'bytes');
           request.response.add(slice);
@@ -57,9 +59,12 @@ void main() {
     }
   });
 
-  test('Local HttpServer integration test: download -> pause/cancel -> resume with Range verification', () async {
+  test(
+      'Local HttpServer integration test: download -> pause/cancel -> resume with Range verification',
+      () async {
     final dio = Dio();
-    final fileUrl = 'http://${server.address.host}:${server.port}/test_file.bin';
+    final fileUrl =
+        'http://${server.address.host}:${server.port}/test_file.bin';
     final targetPath = '${tempDir.path}/downloaded_output.bin';
     final targetFile = File(targetPath);
 

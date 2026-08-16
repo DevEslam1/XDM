@@ -17,18 +17,22 @@ void main() {
 
     test('BGTaskSchedulerPermittedIdentifiers contains required task IDs', () {
       if (content.isEmpty) {
-        markTestSkipped('ios/Runner/Info.plist not found; skipping on non-iOS builds');
+        markTestSkipped(
+            'ios/Runner/Info.plist not found; skipping on non-iOS builds');
         return;
       }
       expect(content, contains('com.dmx.app.download'),
-          reason: 'BGTaskSchedulerPermittedIdentifiers must include com.dmx.app.download');
+          reason:
+              'BGTaskSchedulerPermittedIdentifiers must include com.dmx.app.download');
       expect(content, contains('com.dmx.app.torrent.refresh'),
-          reason: 'BGTaskSchedulerPermittedIdentifiers must include com.dmx.app.torrent.refresh');
+          reason:
+              'BGTaskSchedulerPermittedIdentifiers must include com.dmx.app.torrent.refresh');
     });
 
     test('NSAllowsArbitraryLoads is false (ATS compliant)', () {
       if (content.isEmpty) {
-        markTestSkipped('ios/Runner/Info.plist not found; skipping on non-iOS builds');
+        markTestSkipped(
+            'ios/Runner/Info.plist not found; skipping on non-iOS builds');
         return;
       }
       // Verify NSAllowsArbitraryLoads is immediately followed by <false/>
@@ -37,7 +41,8 @@ void main() {
         dotAll: true,
       );
       final match = pattern.firstMatch(content);
-      expect(match, isNotNull, reason: 'NSAllowsArbitraryLoads must be declared');
+      expect(match, isNotNull,
+          reason: 'NSAllowsArbitraryLoads must be declared');
       expect(
         match!.group(1),
         equals('false'),
@@ -45,21 +50,26 @@ void main() {
       );
     });
 
-    test('NSAllowsArbitraryLoadsWebContentOnly is true (in-app browser allowed)', () {
+    test(
+        'NSAllowsArbitraryLoadsWebContentOnly is true (in-app browser allowed)',
+        () {
       if (content.isEmpty) {
-        markTestSkipped('ios/Runner/Info.plist not found; skipping on non-iOS builds');
+        markTestSkipped(
+            'ios/Runner/Info.plist not found; skipping on non-iOS builds');
         return;
       }
       expect(
         content,
         contains('<key>NSAllowsArbitraryLoadsWebContentOnly</key>'),
-        reason: 'NSAllowsArbitraryLoadsWebContentOnly must be declared for in-app browser',
+        reason:
+            'NSAllowsArbitraryLoadsWebContentOnly must be declared for in-app browser',
       );
     });
 
     test('UIBackgroundModes includes fetch and processing', () {
       if (content.isEmpty) {
-        markTestSkipped('ios/Runner/Info.plist not found; skipping on non-iOS builds');
+        markTestSkipped(
+            'ios/Runner/Info.plist not found; skipping on non-iOS builds');
         return;
       }
       expect(content, contains('<string>fetch</string>'),
@@ -70,7 +80,8 @@ void main() {
 
     test('NSExceptionDomains covers the XDM backend domain', () {
       if (content.isEmpty) {
-        markTestSkipped('ios/Runner/Info.plist not found; skipping on non-iOS builds');
+        markTestSkipped(
+            'ios/Runner/Info.plist not found; skipping on non-iOS builds');
         return;
       }
       expect(

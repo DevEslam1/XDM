@@ -5,7 +5,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Huge Torrent Sync Skip & Adaptive Sync Intervals (P0-7)', () {
-    test('Torrents with >10000 files do not skip per-file sync but use adaptive interval', () {
+    test(
+        'Torrents with >10000 files do not skip per-file sync but use adaptive interval',
+        () {
       expect(TorrentDownloadHandler.shouldSkipPerFileSync(100), isFalse);
       expect(TorrentDownloadHandler.shouldSkipPerFileSync(1000), isFalse);
       expect(TorrentDownloadHandler.shouldSkipPerFileSync(5000), isFalse);
@@ -13,36 +15,52 @@ void main() {
       expect(TorrentDownloadHandler.shouldSkipPerFileSync(10001), isFalse);
     });
 
-    test('Sync interval is adaptive based on file count', () {
-      // <= 100 files: 5s
+    test('Sync interval is adaptive based on file count and background state', () {
+      // Foreground: <= 100 files: 5s
       expect(
         TorrentDownloadHandler.computeAdaptiveSyncInterval(100),
         equals(const Duration(seconds: 5)),
       );
 
-      // 1500 files (>1000 files): 30s
+      // Foreground: 1500 files (>1000 files): 30s
       expect(
         TorrentDownloadHandler.computeAdaptiveSyncInterval(1500),
         equals(const Duration(seconds: 30)),
       );
 
-      // 6000 files (>5000 files): 45s
+      // Foreground: 6000 files (>5000 files): 45s
       expect(
         TorrentDownloadHandler.computeAdaptiveSyncInterval(6000),
         equals(const Duration(seconds: 45)),
       );
 
-      // 12000 files (>10000 files): 120s
+      // Foreground: 12000 files (>10000 files): 120s
       expect(
         TorrentDownloadHandler.computeAdaptiveSyncInterval(12000),
         equals(const Duration(seconds: 120)),
       );
 
-      // In background: fixed 60s
+      // In background:
+      // <= 1000 files: 90s
+      expect(
+        TorrentDownloadHandler.computeAdaptiveSyncInterval(500, inBackground: true),
+        equals(const Duration(seconds: 90)),
+      );
+      // > 1000 files: 3 min
       expect(
         TorrentDownloadHandler.computeAdaptiveSyncInterval(1500, inBackground: true),
-        equals(const Duration(seconds: 60)),
+        equals(const Duration(minutes: 3)),
       );
+      // > 5000 files: 5 min
+      expect(
+        TorrentDownloadHandler.computeAdaptiveSyncInterval(6000, inBackground: true),
+        equals(const Duration(minutes: 5)),
+      );
+
+      // Skip per file sync in background when > 5000 files
+      expect(TorrentDownloadHandler.shouldSkipPerFileSync(6000, inBackground: true), isTrue);
+      expect(TorrentDownloadHandler.shouldSkipPerFileSync(1500, inBackground: true), isFalse);
+      expect(TorrentDownloadHandler.shouldSkipPerFileSync(6000, inBackground: false), isFalse);
     });
   });
 }

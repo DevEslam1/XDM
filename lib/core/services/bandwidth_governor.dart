@@ -16,16 +16,18 @@ class BandwidthGovernor {
   double _burstFactor;
   double _availableTokens = 0;
   DateTime _lastRefill = DateTime.now().subtract(const Duration(seconds: 1));
-  double throttleFactor;
 
   BandwidthGovernor([
     this._globalBytesPerSecond = 0,
     double burstFactor = 1.5,
     double? throttleFactor,
-  ])  : _burstFactor = burstFactor.clamp(1.0, 1.5),
-        throttleFactor = throttleFactor ?? PowerMonitor.throttleFactor {
+  ])  : _burstFactor = burstFactor.clamp(1.0, 1.5) {
     _startDomainCleanup();
+    PowerMonitor.throttleFactorNotifier.addListener(onPowerStateChanged);
   }
+
+  /// Refills tokens whenever power/battery throttling state changes.
+  void onPowerStateChanged() => _refill();
 
   /// Periodically drops domain states that have been idle for > 10 min so the
   /// in-memory map cannot grow unbounded on long-running jobs.
@@ -46,6 +48,7 @@ class BandwidthGovernor {
 
   /// Releases all per-task and per-domain tracking state and cancels timers.
   void dispose() {
+    PowerMonitor.throttleFactorNotifier.removeListener(onPowerStateChanged);
     _domainCleanupTimer?.cancel();
     _domainCleanupTimer = null;
     _taskLimits.clear();
@@ -53,6 +56,9 @@ class BandwidthGovernor {
     _taskTokens.clear();
     _domainStates.clear();
   }
+
+  /// Live throttle factor derived from current battery and power policy.
+  double get throttleFactor => PowerMonitor.throttleFactor;
 
   /// True when power monitoring is active and throttling bandwidth.
   bool get powerThrottleActive => throttleFactor < 1.0;
@@ -105,6 +111,8 @@ class BandwidthGovernor {
 
   void setTaskLimit(String taskId, int limit) {
     _taskLimits[taskId] = limit;
+    _taskLastRefill[taskId] ??=
+        DateTime.now().subtract(const Duration(seconds: 1));
   }
 
   void removeTaskLimit(String taskId) {
@@ -122,6 +130,12 @@ class BandwidthGovernor {
   /// Returns how many milliseconds the caller should sleep before writing
   /// [bytes] to stay within the configured limit.
   Future<int> acquire(int bytes, {String? taskId}) async {
+    return acquireNonBlocking(bytes, taskId: taskId);
+  }
+
+  /// Non-blocking variant of [acquire] for probe requests. Returns the required wait
+  /// in milliseconds without suspending execution.
+  int acquireNonBlocking(int bytes, {String? taskId}) {
     if (bytes <= 0) return 0;
 
     if (taskId != null && _taskLimits.containsKey(taskId)) {
@@ -139,23 +153,28 @@ class BandwidthGovernor {
     final taskLimit = (rawLimit * throttleFactor).round();
     if (taskLimit <= 0) return _maxThrottleWaitMs;
     final now = DateTime.now();
-    final last = _taskLastRefill[taskId] ?? now;
+    final last = _taskLastRefill[taskId] ??
+        now.subtract(const Duration(seconds: 1));
     final elapsedMs = now.difference(last).inMilliseconds;
     final tokens = _taskTokens[taskId] ?? 0.0;
+    var currentTokens = tokens;
     if (elapsedMs > 0) {
       final newTokens = taskLimit * elapsedMs / 1000.0;
-      _taskTokens[taskId] = min(tokens + newTokens, taskLimit * _burstFactor);
-      _taskLastRefill[taskId] = now;
+      currentTokens = min(tokens + newTokens, taskLimit * _burstFactor);
     }
-    final currentTokens = (_taskTokens[taskId] ?? 0) - bytes;
+    currentTokens -= bytes;
     _taskTokens[taskId] = currentTokens;
+
+    int waitMs = 0;
     if (currentTokens < 0) {
       final deficit = -currentTokens;
-      final waitMs = (deficit / taskLimit * 1000.0).ceil();
+      final burstAllowance = taskLimit * (_burstFactor - 1.0);
+      final effectiveDeficit = max(0.0, deficit - burstAllowance);
+      waitMs = (effectiveDeficit / taskLimit * 1000.0).ceil();
       _taskTokens[taskId] = 0;
-      return waitMs.clamp(0, _maxThrottleWaitMs);
     }
-    return 0;
+    _taskLastRefill[taskId] = now;
+    return waitMs.clamp(0, _maxThrottleWaitMs);
   }
 
   int _acquireGlobal(int bytes) {
@@ -166,7 +185,6 @@ class BandwidthGovernor {
     if (_availableTokens < 0) {
       final deficit = -_availableTokens;
       final waitMs = (deficit / share * 1000.0).ceil();
-      _availableTokens = 0;
       return waitMs.clamp(0, _maxThrottleWaitMs);
     }
     return 0;

@@ -15,6 +15,7 @@ import 'site_registry.dart';
 import 'url_patterns.dart';
 
 final _log = LoggingService.logger('SiteIntelligenceService');
+final RegExp _topLevelUrlSchemeRegex = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://');
 
 List<UrlAnalysisResult> _analyzeUrlsBatchWorker(List<String> urls) {
   final service = SiteIntelligenceService();
@@ -242,7 +243,7 @@ class SiteIntelligenceService
 
   Future<List<UrlAnalysisResult>> analyzeUrlsBatch(List<String> urls) async {
     if (urls.isEmpty) return [];
-    if (urls.length > 5) {
+    if (urls.length > 2) {
       return compute(_analyzeUrlsBatchWorker, urls);
     }
     return urls.map(analyzeUrl).toList();
@@ -251,7 +252,7 @@ class SiteIntelligenceService
   // FIX: Regex to detect any valid URL scheme (e.g. http, https, ftp, file).
   // Previously only http:// and https:// were checked, causing URLs with
   // other schemes to be mangled by prepending 'https://'.
-  static final _urlSchemeRegex = RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://');
+  static final _urlSchemeRegex = _topLevelUrlSchemeRegex;
 
   Future<void>? _initFuture;
 
@@ -307,7 +308,6 @@ class SiteIntelligenceService
     // Batch reliability records into a single JSON write per minute max.
     _persistTimer = Timer(
         BackgroundGate.adaptInterval(const Duration(seconds: 60)), () async {
-      _persistPending = false;
       if (_disposed) return;
       await flushPending();
     });
@@ -326,15 +326,20 @@ class SiteIntelligenceService
 
   Future<void> flushPending() async {
     _persistTimer?.cancel();
-    _persistPending = false;
+    _persistTimer = null;
     _dirtyCount = 0;
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw =
           jsonEncode(_reliability.map((k, v) => MapEntry(k, v.toJson())));
       await prefs.setString(_reliabilityKey, raw);
+      _persistPending = false;
     } catch (e) {
+      _persistPending = false;
       _log.warning('Failed to flush reliability data: $e');
+    }
+    if (_dirtyCount > 0 && !_disposed) {
+      _persist();
     }
   }
 
@@ -359,6 +364,29 @@ class SiteIntelligenceService
     final uri = Uri.tryParse(hasScheme ? cleanUrl : 'https://$cleanUrl');
     if (uri == null) return _fallbackResult();
     final host = uri.host.toLowerCase();
+
+    // Fast path: Host-level cache lookup before regex / extension analysis (PERF-05)
+    final cachedHost = _fastPathCache[host];
+    if (cachedHost != null && !cleanUrl.contains('?')) {
+      final rawFileName = p.basename(uri.path);
+      final validFileName =
+          (rawFileName == '/' || rawFileName.isEmpty) ? null : rawFileName;
+      final extension =
+          validFileName != null ? p.extension(validFileName) : null;
+      return UrlAnalysisResult(
+        siteType: cachedHost.siteType,
+        profile: cachedHost.profile,
+        contentHint: cachedHost.contentHint,
+        recommendedStrategy: cachedHost.recommendedStrategy,
+        detectedFileName: validFileName,
+        detectedExtension: extension,
+        detectedQuality: null,
+        isExpiredOrSigned: cachedHost.isExpiredOrSigned,
+        recommendedHeaders: cachedHost.recommendedHeaders,
+        inferredCategory: cachedHost.inferredCategory,
+        confidence: cachedHost.confidence,
+      );
+    }
 
     SiteProfile? profile;
     String? matchedDomain;
@@ -463,6 +491,7 @@ class SiteIntelligenceService
     );
 
     if (profile == null && quality == null && !cleanUrl.contains('?')) {
+      _fastPathCache[host] = result;
       _fastPathCache[cacheKey] = result;
     }
 

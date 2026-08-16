@@ -67,7 +67,8 @@ class TorrentResumeStore {
         }
       }
     } catch (e, st) {
-      LoggingService.logger('TorrentResumeStore').warning('Operation failed', e, st);
+      LoggingService.logger('TorrentResumeStore')
+          .warning('Operation failed', e, st);
     }
 
     return sha256.convert(utf8.encode(sourceUrl)).toString();
@@ -99,7 +100,8 @@ class TorrentResumeStore {
       index['$torrentId'] = fileName;
       await prefs.setString(_indexKey, jsonEncode(index));
     } catch (e, st) {
-      LoggingService.logger('TorrentResumeStore').warning('Operation failed', e, st);
+      LoggingService.logger('TorrentResumeStore')
+          .warning('Operation failed', e, st);
     }
   }
 
@@ -112,7 +114,8 @@ class TorrentResumeStore {
       index.remove('$torrentId');
       await prefs.setString(_indexKey, jsonEncode(index));
     } catch (e, st) {
-      LoggingService.logger('TorrentResumeStore').warning('Operation failed', e, st);
+      LoggingService.logger('TorrentResumeStore')
+          .warning('Operation failed', e, st);
     }
   }
 
@@ -305,7 +308,8 @@ class TorrentResumeStore {
           .map((f) => Map<String, dynamic>.from(f))
           .toList();
     } catch (e, st) {
-      LoggingService.logger('TorrentResumeStore').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TorrentResumeStore')
+          .warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -328,7 +332,8 @@ class TorrentResumeStore {
         if (await f.exists()) await f.delete();
       }
     } catch (e, st) {
-      LoggingService.logger('TorrentResumeStore').warning('Operation failed', e, st);
+      LoggingService.logger('TorrentResumeStore')
+          .warning('Operation failed', e, st);
     }
   }
 
@@ -340,7 +345,8 @@ class TorrentResumeStore {
       final decoded = BencodeDecoder(blob).decode();
       return decoded is Map;
     } catch (e, st) {
-      LoggingService.logger('TorrentResumeStore').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TorrentResumeStore')
+          .warning('Operation failed with fallback', e, st);
       return false;
     }
   }

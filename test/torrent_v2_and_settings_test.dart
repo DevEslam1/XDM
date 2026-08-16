@@ -8,7 +8,6 @@ import 'package:dmx/core/utils/url_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:libtorrent_flutter/libtorrent_flutter.dart';
 
-
 void main() {
   group('BitTorrent v2 and Hybrid Metadata Parsing', () {
     test('parses BitTorrent v2 file tree and calculates SHA-256 hash', () {
@@ -26,7 +25,6 @@ void main() {
       expect(hashV2!.length, 64);
     });
 
-
     test('extracts both BTIH (v1) and BTMH (v2) from Hybrid magnet URI', () {
       const magnet =
           'magnet:?xt=urn:btih:1111111111111111111111111111111111111111&xt=urn:btmh:12202222222222222222222222222222222222222222222222222222222222222222&dn=Ubuntu+Hybrid';
@@ -34,12 +32,14 @@ void main() {
 
       expect(parsed['name'], 'Ubuntu Hybrid');
       expect(parsed['infoHashV1'], '1111111111111111111111111111111111111111');
-      expect(parsed['infoHashV2'], '2222222222222222222222222222222222222222222222222222222222222222');
+      expect(parsed['infoHashV2'],
+          '2222222222222222222222222222222222222222222222222222222222222222');
       expect(parsed['isHybrid'], 'true');
     });
 
     test('extracts standard v1 magnet URI with BTIH', () {
-      const magnet = 'magnet:?xt=urn:btih:da39a3ee5e6b4b0d3255bfef95601890afd80709&dn=Test';
+      const magnet =
+          'magnet:?xt=urn:btih:da39a3ee5e6b4b0d3255bfef95601890afd80709&dn=Test';
       final parsed = parseMagnetUrl(magnet);
 
       expect(parsed['name'], 'Test');
@@ -67,9 +67,8 @@ void main() {
       );
 
       const baseConfig = BtConfig();
-      final btConfig =
-          TorrentSessionConfig.buildBtConfigFromPack(pack, baseConfig: baseConfig);
-
+      final btConfig = TorrentSessionConfig.buildBtConfigFromPack(pack,
+          baseConfig: baseConfig);
 
       expect(btConfig.disableDht, isFalse);
       expect(btConfig.disableUpnp, isFalse);
@@ -80,7 +79,6 @@ void main() {
       expect(btConfig.uploadRateLimit, 512);
       expect(btConfig.cacheSize, 1073741824);
     });
-
 
     test('validates TorrentSettingsPack direct construction', () {
       const pack = TorrentSettingsPack(
@@ -124,4 +122,3 @@ void main() {
     });
   });
 }
-

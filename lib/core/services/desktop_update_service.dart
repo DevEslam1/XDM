@@ -121,8 +121,9 @@ class DesktopUpdateService {
           try {
             await File(downloadPath).delete();
           } catch (e, st) {
-      LoggingService.logger('DesktopUpdateService').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DesktopUpdateService')
+                .warning('Operation failed', e, st);
+          }
           return false;
         }
       }
@@ -135,8 +136,9 @@ class DesktopUpdateService {
         try {
           await File(downloadPath).delete();
         } catch (e, st) {
-      LoggingService.logger('DesktopUpdateService').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DesktopUpdateService')
+              .warning('Operation failed', e, st);
+        }
         return false;
       }
 
@@ -251,8 +253,9 @@ class DesktopUpdateService {
       try {
         await File(dmgPath).delete();
       } catch (e, st) {
-      LoggingService.logger('DesktopUpdateService').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('DesktopUpdateService')
+            .warning('Operation failed', e, st);
+      }
 
       return true;
     } catch (e) {

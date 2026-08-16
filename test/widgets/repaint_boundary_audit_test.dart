@@ -5,7 +5,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('RepaintBoundary Architecture Audit Test (P3-13)', () {
-    testWidgets('CustomPaint widgets have an ancestor RepaintBoundary within hierarchy',
+    testWidgets(
+        'CustomPaint widgets have an ancestor RepaintBoundary within hierarchy',
         (tester) async {
       final customPainterKey = UniqueKey();
 
@@ -33,7 +34,8 @@ void main() {
       expect(ancestorBoundaryFinder, findsAtLeastNWidgets(1));
     });
 
-    testWidgets('Audits ListView with itemExtent or children wrapped in RepaintBoundary',
+    testWidgets(
+        'Audits ListView with itemExtent or children wrapped in RepaintBoundary',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -41,7 +43,8 @@ void main() {
             body: ListView.builder(
               itemExtent: 60,
               itemCount: 5,
-              itemBuilder: (context, index) => ListTile(title: Text('Item $index')),
+              itemBuilder: (context, index) =>
+                  ListTile(title: Text('Item $index')),
             ),
           ),
         ),
@@ -51,7 +54,8 @@ void main() {
       expect(listElements.isNotEmpty, isTrue);
       for (final listElement in listElements) {
         final listWidget = listElement.widget as ListView;
-        final hasExtent = listWidget.itemExtent != null || listWidget.prototypeItem != null;
+        final hasExtent =
+            listWidget.itemExtent != null || listWidget.prototypeItem != null;
         expect(hasExtent, isTrue);
       }
     });

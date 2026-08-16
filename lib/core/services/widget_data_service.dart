@@ -31,7 +31,8 @@ class WidgetDataService {
         'completedCount': completedCount,
       });
     } catch (e, st) {
-      LoggingService.logger('WidgetDataService').warning('Operation failed', e, st);
+      LoggingService.logger('WidgetDataService')
+          .warning('Operation failed', e, st);
     }
   }
 

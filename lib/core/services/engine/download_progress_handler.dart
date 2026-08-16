@@ -45,6 +45,9 @@ class DownloadProgressHandler {
   int _urlExpireCount = 0;
   DateTime? _urlExpireWindowStart;
   bool _selfActuallyFinalized = false;
+  int _lastChunkDetailsHash = 0;
+
+  int get chunkFingerprint => _lastChunkDetailsHash;
 
   @visibleForTesting
   DateTime? get counterpartWaitStartForTesting => _counterpartWaitStart;
@@ -116,6 +119,21 @@ class DownloadProgressHandler {
 
   final List<Map<String, dynamic>>? Function()? getTorrentFiles;
 
+  YtCounterpartCoordinator? _cachedYtCoordinator;
+  bool _ytCoordinatorResolved = false;
+
+  YtCounterpartCoordinator? get _ytCoordinator {
+    if (!_ytCoordinatorResolved) {
+      _ytCoordinatorResolved = true;
+      try {
+        if (getIt.isRegistered<YtCounterpartCoordinator>()) {
+          _cachedYtCoordinator = getIt<YtCounterpartCoordinator>();
+        }
+      } catch (_) {}
+    }
+    return _cachedYtCoordinator;
+  }
+
   DownloadProgressHandler({
     required this.taskId,
     required this.onProgress,
@@ -134,7 +152,14 @@ class DownloadProgressHandler {
     this.lastTotalChunks,
     this.lastCompletedChunks,
     this.getTorrentFiles,
-  });
+  }) {
+    try {
+      if (getIt.isRegistered<YtCounterpartCoordinator>()) {
+        _cachedYtCoordinator = getIt<YtCounterpartCoordinator>();
+        _ytCoordinatorResolved = true;
+      }
+    } catch (_) {}
+  }
 
   void emit(DownloadProgress progress) {
     if (cancelToken.isCancelled) return;
@@ -254,8 +279,8 @@ class DownloadProgressHandler {
     // Fix 1: Live lookup for YouTube counterpart downloaded bytes regardless of registration status
     if (ytStreamKind != null && ytStreamKind != YtStreamKind.combined) {
       try {
-        if (getIt.isRegistered<YtCounterpartCoordinator>()) {
-          final coord = getIt<YtCounterpartCoordinator>();
+        final coord = _ytCoordinator;
+        if (coord != null) {
           final cpId = coord.getCounterpartId(taskId);
           if (cpId != null) {
             final live = coord.getLiveBytes(cpId);
@@ -289,8 +314,8 @@ class DownloadProgressHandler {
 
       // Trigger re-check of counterpart task ID via YtCounterpartCoordinator if accessible
       try {
-        if (getIt.isRegistered<YtCounterpartCoordinator>()) {
-          final coord = getIt<YtCounterpartCoordinator>();
+        final coord = _ytCoordinator;
+        if (coord != null) {
           final cpId = coord.getCounterpartId(taskId);
           if (cpId != null) {
             final live = coord.getLiveBytes(cpId);
@@ -381,6 +406,12 @@ class DownloadProgressHandler {
             (isDone ? totalParts : lastCompletedChunks ?? 0));
 
     lastChunkDetails = chunkDetails ?? lastChunkDetails;
+    if (chunkDetails != null) {
+      _lastChunkDetailsHash = chunkDetails.fold<int>(
+        0,
+        (h, c) => h ^ Object.hash(c.start, c.end, c.size, c.downloaded),
+      );
+    }
     lastTotalChunks = isTorrent
         ? lastTotalChunks
         : (chunkDetails != null
@@ -429,6 +460,7 @@ class DownloadProgressHandler {
       hasEstimatedFileProgress: (p['hasEstimatedFileProgress'] as bool?) ??
           lastHasEstimatedFileProgress,
       torrentId: torrentId,
+      chunkFingerprint: _lastChunkDetailsHash,
     );
 
     final intervalMs = getEffectiveIntervalMs();

@@ -113,10 +113,12 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
                                         width: 48,
                                         height: 48,
                                         decoration: BoxDecoration(
-                                          color:
-                                              (data.hasActive ? redClr : greenClr)
-                                                  .withValues(alpha: 0.08),
-                                          borderRadius: BorderRadius.circular(14),
+                                          color: (data.hasActive
+                                                  ? redClr
+                                                  : greenClr)
+                                              .withValues(alpha: 0.08),
+                                          borderRadius:
+                                              BorderRadius.circular(14),
                                           border: Border.all(
                                             color: (data.hasActive
                                                     ? redClr
@@ -129,8 +131,9 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
                                           data.hasActive
                                               ? Icons.pause_rounded
                                               : Icons.play_arrow_rounded,
-                                          color:
-                                              data.hasActive ? redClr : greenClr,
+                                          color: data.hasActive
+                                              ? redClr
+                                              : greenClr,
                                           size: 20,
                                         ),
                                       ),

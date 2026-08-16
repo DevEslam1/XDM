@@ -16,11 +16,11 @@ class TorrentSpeedGraph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cappedDownload = downloadSpeeds.length > 30
-        ? downloadSpeeds.sublist(downloadSpeeds.length - 30)
+    final cappedDownload = downloadSpeeds.length > 60
+        ? downloadSpeeds.sublist(downloadSpeeds.length - 60)
         : downloadSpeeds;
-    final cappedUpload = uploadSpeeds.length > 30
-        ? uploadSpeeds.sublist(uploadSpeeds.length - 30)
+    final cappedUpload = uploadSpeeds.length > 60
+        ? uploadSpeeds.sublist(uploadSpeeds.length - 60)
         : uploadSpeeds;
 
     return RepaintBoundary(

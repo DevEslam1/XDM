@@ -6,7 +6,8 @@ import '../mixins/pausable_loop_animation.dart';
 /// based on app lifecycle and power state.
 class PausableLoopBuilder extends StatefulWidget {
   final Duration duration;
-  final Widget Function(BuildContext context, double value, Widget? child) builder;
+  final Widget Function(BuildContext context, double value, Widget? child)
+      builder;
   final Widget? child;
 
   const PausableLoopBuilder({
@@ -21,7 +22,10 @@ class PausableLoopBuilder extends StatefulWidget {
 }
 
 class _PausableLoopBuilderState extends State<PausableLoopBuilder>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver, PausableLoopAnimation<PausableLoopBuilder> {
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        PausableLoopAnimation<PausableLoopBuilder> {
   late final AnimationController _controller;
 
   @override
@@ -48,7 +52,8 @@ class _PausableLoopBuilderState extends State<PausableLoopBuilder>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _controller,
-      builder: (context, child) => widget.builder(context, _controller.value, child),
+      builder: (context, child) =>
+          widget.builder(context, _controller.value, child),
       child: widget.child,
     );
   }

@@ -170,7 +170,8 @@ mixin DownloadBackupMixin {
       final encrypted = encrypt_lib.Encrypted(Uint8List.fromList(cipherBytes));
       return encrypter.decrypt(encrypted, iv: iv);
     } catch (e, st) {
-      LoggingService.logger('DownloadBackupMixin').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('DownloadBackupMixin')
+          .warning('Operation failed with fallback', e, st);
       return null;
     }
   }

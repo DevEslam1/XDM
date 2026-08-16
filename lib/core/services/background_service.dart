@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../../features/downloads/models/download_task.dart';
 import 'database_service.dart';
@@ -39,8 +40,10 @@ class BackgroundService {
   static Timer? _wakeLockSafetyTimer;
   static Timer? _heartbeatTimer;
   static Duration get _maxWakeLockHold =>
-      Platform.isIOS ? const Duration(seconds: 30) : const Duration(hours: 4);
+      Platform.isIOS ? const Duration(seconds: 30) : const Duration(minutes: 30);
   static DateTime? _lastHeartbeatTime;
+  static final Lock _activeLock = Lock();
+  static final Set<String> _activeTaskIds = <String>{};
   static int _activeDownloadCount = 0;
   static int Function()? _activeDownloadCountQuery;
 
@@ -48,11 +51,15 @@ class BackgroundService {
   static int get activeDownloadCountForTesting => _activeDownloadCount;
 
   @visibleForTesting
+  static Set<String> get activeTaskIdsForTesting => Set.unmodifiable(_activeTaskIds);
+
+  @visibleForTesting
   static void resetActiveDownloadCountForTesting() {
     _activeDownloadCount = 0;
+    _activeTaskIds.clear();
   }
 
-  /// Consecutive wake-lock renewal failures (escalate after 3).
+  /// Consecutive wake-lock renewal failures (escalate after 2).
   static int _wakeLockRenewalFailures = 0;
   static bool _wakeLockEscalated = false;
 
@@ -71,31 +78,48 @@ class BackgroundService {
   /// Callback invoked when background execution is requested on iOS where it is unsupported.
   static VoidCallback? onIosBackgroundUnavailable;
 
-  static Future<void> setDownloadActive(bool active) async {
-    if (active) {
-      _activeDownloadCount++;
-    } else {
-      _activeDownloadCount = (_activeDownloadCount - 1).clamp(0, 1 << 30);
-    }
-    if (_activeDownloadCount <= 0) {
-      final queryCount = _activeDownloadCountQuery?.call() ?? 0;
-      if (queryCount <= 0) {
-        _heartbeatTimer?.cancel();
-        _heartbeatTimer = null;
-        await releaseWakeLock();
-      }
-    } else {
-      if (!kIsWeb && Platform.isAndroid) {
-        final isRunning =
-            _testMode || await FlutterBackgroundService().isRunning();
-        if (isRunning) {
-          _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
-            sendHeartbeat();
-          });
+  static Future<void> setDownloadActive(bool active, [String? taskId]) async {
+    await _activeLock.synchronized(() async {
+      if (taskId != null) {
+        if (active) {
+          if (_activeTaskIds.add(taskId)) {
+            _activeDownloadCount = _activeTaskIds.length;
+          }
+        } else {
+          if (_activeTaskIds.remove(taskId)) {
+            _activeDownloadCount = _activeTaskIds.length;
+          }
+        }
+      } else {
+        if (active) {
+          _activeDownloadCount++;
+        } else {
+          _activeDownloadCount = (_activeDownloadCount - 1).clamp(0, 1 << 30);
+          if (_activeDownloadCount == 0) {
+            _activeTaskIds.clear();
+          }
         }
       }
-      await acquireWakeLock();
-    }
+      if (_activeDownloadCount <= 0) {
+        final queryCount = _activeDownloadCountQuery?.call() ?? 0;
+        if (queryCount <= 0) {
+          _heartbeatTimer?.cancel();
+          _heartbeatTimer = null;
+          await releaseWakeLock();
+        }
+      } else {
+        if (!kIsWeb && Platform.isAndroid) {
+          final isRunning =
+              _testMode || await FlutterBackgroundService().isRunning();
+          if (isRunning) {
+            _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+              sendHeartbeat();
+            });
+          }
+        }
+        await acquireWakeLock();
+      }
+    });
   }
 
   static bool _testMode = false;
@@ -212,6 +236,64 @@ class BackgroundService {
 
   static bool _iosBgCallInFlight = false;
   static Timer? _iosBgWatchdogTimer;
+  static DateTime? _iosBgCooldownUntil;
+
+  static const List<Duration> _bgBackoffSchedule = [
+    Duration(seconds: 30),
+    Duration(minutes: 2),
+    Duration(minutes: 10),
+    Duration(hours: 1),
+  ];
+
+  static const String _bgFailuresKey = 'bg_consecutive_failures';
+  static const String _bgNextAllowedTimeKey = 'bg_next_allowed_attempt_ms';
+
+  /// Returns true if background attempts should be throttled due to repeated failures.
+  static Future<bool> shouldThrottleForBackoff() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final nextAllowedMs = prefs.getInt(_bgNextAllowedTimeKey) ?? 0;
+      return DateTime.now().millisecondsSinceEpoch < nextAllowedMs;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Records a background failure and advances exponential backoff schedule.
+  static Future<void> recordBackgroundFailure() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final failures = (prefs.getInt(_bgFailuresKey) ?? 0) + 1;
+      await prefs.setInt(_bgFailuresKey, failures);
+      final idx = (failures - 1).clamp(0, _bgBackoffSchedule.length - 1);
+      final backoff = _bgBackoffSchedule[idx];
+      final nextAllowed = DateTime.now().add(backoff).millisecondsSinceEpoch;
+      await prefs.setInt(_bgNextAllowedTimeKey, nextAllowed);
+      _log.warning(
+        'Recorded background failure #$failures. Backoff for ${backoff.inSeconds}s.',
+      );
+    } catch (e, st) {
+      _log.fine('Failed to persist background failure backoff', e, st);
+    }
+  }
+
+  /// Clears consecutive background failure count after a successful execution.
+  static Future<void> recordBackgroundSuccess() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_bgFailuresKey);
+      await prefs.remove(_bgNextAllowedTimeKey);
+    } catch (e, st) {
+      _log.fine('Failed to reset background failure backoff', e, st);
+    }
+  }
+
+  @visibleForTesting
+  static DateTime? get iosBgCooldownUntilForTesting => _iosBgCooldownUntil;
+
+  @visibleForTesting
+  static set iosBgCooldownUntilForTesting(DateTime? val) =>
+      _iosBgCooldownUntil = val;
 
   @visibleForTesting
   static bool get iosBgCallInFlightForTesting => _iosBgCallInFlight;
@@ -223,10 +305,17 @@ class BackgroundService {
   static Timer? get iosBgWatchdogTimerForTesting => _iosBgWatchdogTimer;
 
   @pragma('vm:entry-point')
-  static Future<bool> _onIosBackground(ServiceInstance service) async {
+  static Future<bool> _onIosBackground([ServiceInstance? service]) async {
     _log.info(
       'iOS background callback invoked. Bridging to native BackgroundDownloadController.',
     );
+    if (_iosBgCooldownUntil != null &&
+        DateTime.now().isBefore(_iosBgCooldownUntil!)) {
+      _log.warning(
+        'iOS background callback invoked during 60s cooldown; skipping execution.',
+      );
+      return false;
+    }
     if (_iosBgCallInFlight) {
       _log.warning(
           'iOS background callback already in flight, ignoring duplicate call');
@@ -234,10 +323,10 @@ class BackgroundService {
     }
     _iosBgCallInFlight = true;
     _iosBgWatchdogTimer?.cancel();
-    _iosBgWatchdogTimer = Timer(const Duration(seconds: 20), () {
+    _iosBgWatchdogTimer = Timer(const Duration(seconds: 14), () {
       if (_iosBgCallInFlight) {
         _log.warning(
-            '[iOS BG Watchdog] iOS background call wedged for 20s; force-resetting.');
+            '[iOS BG Watchdog] iOS background call wedged for 14s; force-resetting and applying 60s cooldown.');
         try {
           DownloadEngine.markBackground();
           DatabaseService.instance.flushPendingSaves();
@@ -248,6 +337,7 @@ class BackgroundService {
               st);
         }
         _iosBgCallInFlight = false;
+        _iosBgCooldownUntil = DateTime.now().add(const Duration(seconds: 60));
       }
     });
 
@@ -267,16 +357,22 @@ class BackgroundService {
         final nativeStart = DateTime.now();
         final result = await channel
             .invokeMethod<bool>('scheduleDownload')
-            .timeout(const Duration(seconds: 18));
+            .timeout(const Duration(seconds: 12));
         final nativeDuration = DateTime.now().difference(nativeStart);
-        if (nativeDuration.inSeconds > 15) {
+        if (nativeDuration.inSeconds > 10) {
           _log.warning(
               '[iOS BG] Native scheduleDownload took ${nativeDuration.inSeconds}s — approaching limit');
         }
         final success = result ?? false;
+        if (success) {
+          await recordBackgroundSuccess();
+        } else {
+          await recordBackgroundFailure();
+        }
         _log.info('iOS background schedule completed. Success: $success');
         return success;
       } catch (e, st) {
+        await recordBackgroundFailure();
         _log.fine(
             'Failed to bridge to iOS background download controller', e, st);
         return false;
@@ -289,7 +385,7 @@ class BackgroundService {
   }
 
   @visibleForTesting
-  static Future<bool> onIosBackgroundForTesting(ServiceInstance service) =>
+  static Future<bool> onIosBackgroundForTesting([ServiceInstance? service]) =>
       _onIosBackground(service);
 
   static Future<void> start() async {
@@ -388,9 +484,9 @@ class BackgroundService {
       // Safety net: auto-release or renew if downloads still active
       _scheduleWakeLockSafetyCheck();
 
-      // Start periodic renewal every 30 minutes to prevent native timeout expiry.
+      // Start periodic renewal every 15 minutes to prevent native timeout expiry.
       _wakeLockRenewalTimer?.cancel();
-      _wakeLockRenewalTimer = Timer.periodic(const Duration(minutes: 30), (
+      _wakeLockRenewalTimer = Timer.periodic(const Duration(minutes: 15), (
         _,
       ) async {
         if (!isSupported) return;
@@ -422,7 +518,7 @@ class BackgroundService {
             error: e,
             details: 'Consecutive failures: $_wakeLockRenewalFailures',
           );
-          if (_wakeLockRenewalFailures >= 3 && !_wakeLockEscalated) {
+          if (_wakeLockRenewalFailures >= 2 && !_wakeLockEscalated) {
             _wakeLockEscalated = true;
             unawaited(_escalateWakeLockFailure());
           }
@@ -442,7 +538,7 @@ class BackgroundService {
   /// notification plus a battery-optimization exemption prompt (Android).
   static Future<void> _escalateWakeLockFailure() async {
     _log.warning(
-      '[BackgroundService] Wake lock renewal failed 3× consecutively — escalating',
+      '[BackgroundService] Wake lock renewal failed 2× consecutively — escalating',
     );
     try {
       await NotificationService().showServiceNotification(

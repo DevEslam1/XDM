@@ -32,7 +32,9 @@ void main() {
       expect(reportedJank, isNull);
     });
 
-    test('Heavy download state detects jank when dropped frame ratio exceeds 15%', () {
+    test(
+        'Heavy download state detects jank when dropped frame ratio exceeds 15%',
+        () {
       double? reportedJank;
       FrameWatchdog.onJankDetected = (rate) {
         reportedJank = rate;

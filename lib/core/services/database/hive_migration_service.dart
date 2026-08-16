@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart' as drift;
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 import 'package:hive/hive.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -452,6 +452,22 @@ class HiveMigrationService {
   }
 
   DownloadTasksCompanion _taskToCompanion(DownloadTask task) {
+    final isInterrupted = task.status == DownloadStatus.downloading ||
+        task.cycleState == CycleState.downloading ||
+        task.cycleState == CycleState.starting ||
+        task.cycleState == CycleState.resuming;
+
+    final pauseReason =
+        (task.status == DownloadStatus.downloading && task.supportsResume)
+            ? PauseReason.appRestarted.name
+            : task.pauseReason?.name;
+
+    final cycleState =
+        isInterrupted ? CycleState.paused.name : task.cycleState?.name;
+
+    final status =
+        isInterrupted ? DownloadStatus.paused.name : task.status.name;
+
     return DownloadTasksCompanion.insert(
       id: task.id,
       fileName: task.fileName,
@@ -461,7 +477,7 @@ class HiveMigrationService {
       speed: drift.Value(task.speed),
       eta: drift.Value(task.eta),
       category: task.category,
-      status: task.status.name,
+      status: status,
       savePath: task.savePath,
       localFilePath: task.localFilePath,
       tempFilePath: task.tempFilePath,
@@ -495,9 +511,14 @@ class HiveMigrationService {
       priority: drift.Value(task.priority),
       expectedSha256: drift.Value(task.expectedSha256),
       mirrorUrls: drift.Value(task.mirrorUrls),
-      cycleState: drift.Value(task.cycleState?.name),
+      pauseReason: drift.Value(pauseReason),
+      cycleState: drift.Value(cycleState),
     );
   }
+
+  @visibleForTesting
+  DownloadTasksCompanion taskToCompanionForTesting(DownloadTask task) =>
+      _taskToCompanion(task);
 
   BookmarksCompanion _bookmarkToCompanion(Bookmark bm) {
     return BookmarksCompanion.insert(

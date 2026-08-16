@@ -1,5 +1,6 @@
 import 'dart:isolate';
 
+import 'package:dmx/core/services/engine/engine_exceptions.dart';
 import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:dmx/core/services/engine/http_transfer_job.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,8 +8,10 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('HttpTransferJob Delay Capping (P0-6)', () {
-    test('Stress test spawning 100 concurrent cancellable delays never exceeds 32 capacity', () async {
+  group('HttpTransferJob Delay Capping (FIX-02)', () {
+    test(
+        'Stress test spawning 100 concurrent cancellable delays throws DelayQueueFullException once cap of 16 is reached',
+        () async {
       final port = ReceivePort();
       const cmd = DownloadCommand(
         taskId: 'stress-delay-test',
@@ -23,17 +26,19 @@ void main() {
 
       final job = HttpTransferJob(cmd, port.sendPort);
 
-      // Spawn 100 concurrent cancellable delays
+      // Spawn 16 delays successfully
       final futures = <Future<void>>[];
-      for (var i = 0; i < 100; i++) {
+      for (var i = 0; i < 16; i++) {
         futures.add(job.cancellableDelay(const Duration(seconds: 10)));
       }
 
-      // Assert lists never grow beyond 32 entries
-      expect(job.pendingDelayCompletersForTesting.length, lessThanOrEqualTo(32));
-      expect(job.pendingDelayTimersForTesting.length, lessThanOrEqualTo(32));
-      expect(job.pendingDelayCompletersForTesting.length, equals(32));
-      expect(job.pendingDelayTimersForTesting.length, equals(32));
+      expect(job.pendingDelaysForTesting.length, equals(16));
+
+      // 17th onwards throws DelayQueueFullException
+      expect(
+        () => job.cancellableDelay(const Duration(seconds: 10)),
+        throwsA(isA<DelayQueueFullException>()),
+      );
 
       job.requestCancel();
       expect(job.pendingDelayCompletersForTesting, isEmpty);

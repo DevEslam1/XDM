@@ -18,7 +18,8 @@ void main() {
     });
 
     test('pathFor constructs standard .dmxstate filepath', () {
-      expect(StateStore.pathFor('/tmp/download.bin'), '/tmp/download.bin.dmxstate');
+      expect(StateStore.pathFor('/tmp/download.bin'),
+          '/tmp/download.bin.dmxstate');
     });
 
     test('load returns null if state file does not exist', () async {

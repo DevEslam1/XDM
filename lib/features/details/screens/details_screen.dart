@@ -34,7 +34,6 @@ import '../widgets/torrent_health_indicator.dart';
 import '../widgets/torrent_stats_dashboard.dart';
 import '../widgets/tracker_panel.dart';
 
-
 class DetailsScreen extends StatefulWidget {
   final String taskId;
 
@@ -1171,8 +1170,9 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
         ? task.audioDownloadedBytes
         : (task.ytCounterpartDownloadedBytes ?? 0);
     final audioSize = task.audioSize;
-    final audioProgress =
-        audioSize > 0 ? (audioDl / audioSize).clamp(0.0, 1.0) : task.audioProgressPercent;
+    final audioProgress = audioSize > 0
+        ? (audioDl / audioSize).clamp(0.0, 1.0)
+        : task.audioProgressPercent;
 
     return DmxCardShell(
       accent: statusColor,
@@ -1189,7 +1189,9 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
                       color: statusColor, size: 16),
                   const SizedBox(width: 8),
                   Text(
-                    isRtl ? 'مسارات يوتيوب (فيديو + صوت)' : 'YOUTUBE DUAL STREAMS',
+                    isRtl
+                        ? 'مسارات يوتيوب (فيديو + صوت)'
+                        : 'YOUTUBE DUAL STREAMS',
                     style: AppTheme.microLabel(isDark: isDark, size: 10),
                   ),
                 ],
@@ -1226,9 +1228,8 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
               Divider(
                 height: 1,
                 thickness: 0.4,
-                color: isDark
-                    ? AppTheme.borderSubtle
-                    : AppTheme.lightBorderSubtle,
+                color:
+                    isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
               ),
               const SizedBox(height: 14),
             ],
@@ -2361,13 +2362,18 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
               child: OutlinedButton.icon(
                 onPressed: () =>
                     TorrentAdvancedSettingsSheet.show(context, torrentId),
-                icon: const Icon(Icons.tune, size: 14, color: AppTheme.neonCyan),
+                icon:
+                    const Icon(Icons.tune, size: 14, color: AppTheme.neonCyan),
                 label: Text(
-                  isRtl ? 'إعدادات متقدمة (Web Seeds / Proxy / SSL)' : 'Advanced Controls (Web Seeds / Proxy / SSL)',
-                  style: const TextStyle(fontSize: 11, color: AppTheme.neonCyan),
+                  isRtl
+                      ? 'إعدادات متقدمة (Web Seeds / Proxy / SSL)'
+                      : 'Advanced Controls (Web Seeds / Proxy / SSL)',
+                  style:
+                      const TextStyle(fontSize: 11, color: AppTheme.neonCyan),
                 ),
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: AppTheme.neonCyan.withValues(alpha: 0.3)),
+                  side: BorderSide(
+                      color: AppTheme.neonCyan.withValues(alpha: 0.3)),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -2508,8 +2514,7 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
     if (confirm != true) return;
 
     try {
-      final relPath =
-          task.torrentFiles![fileIndex]['name'] as String? ?? '';
+      final relPath = task.torrentFiles![fileIndex]['name'] as String? ?? '';
 
       if (relPath.isNotEmpty) {
         final normalizedSave = p.normalize(p.absolute(task.savePath));
@@ -2618,7 +2623,9 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
               };
             }
             unawaited(
-              provider.updateTorrentTaskFiles(currentTask.id, updatedFiles).catchError((e) {
+              provider
+                  .updateTorrentTaskFiles(currentTask.id, updatedFiles)
+                  .catchError((e) {
                 LoggingService.logger('DetailsScreen').warning(
                   '[DetailsScreen] selecting all torrent files failed',
                   e,
@@ -2637,7 +2644,9 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
               };
             }
             unawaited(
-              provider.updateTorrentTaskFiles(currentTask.id, updatedFiles).catchError((e) {
+              provider
+                  .updateTorrentTaskFiles(currentTask.id, updatedFiles)
+                  .catchError((e) {
                 LoggingService.logger('DetailsScreen').warning(
                   '[DetailsScreen] deselecting all torrent files failed',
                   e,
@@ -2892,7 +2901,9 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
             if (task.isTorrent) ...[
               _MetaRow(
                 label: isRtl ? 'بروتوكول التورنت' : 'BITTORRENT PROTOCOL',
-                value: (task.url.contains('urn:btmh') || (task.url.contains('urn:btih') && task.url.contains('urn:btmh')))
+                value: (task.url.contains('urn:btmh') ||
+                        (task.url.contains('urn:btih') &&
+                            task.url.contains('urn:btmh')))
                     ? 'BitTorrent v2 (BEP 52 / Hybrid)'
                     : 'BitTorrent v1 / v2 Compatible',
                 isDark: isDark,
@@ -2900,7 +2911,6 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
             ],
             if (task.mergedAudioUrl != null &&
                 task.mergedAudioUrl!.isNotEmpty) ...[
-
               _MetaRow(
                 label: L10n.isRtl(context) ? 'رابط الصوت' : 'AUDIO URL',
                 value: task.mergedAudioUrl!,

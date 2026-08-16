@@ -149,7 +149,8 @@ class UserScriptManager extends ChangeNotifier {
     if (script.isCss) return;
     final code = script.code;
     if (code.length > 50000) {
-      _log.warning('Security Rejection: Script "${script.name}" exceeds 50,000 characters');
+      _log.warning(
+          'Security Rejection: Script "${script.name}" exceeds 50,000 characters');
       throw Exception('Script too large (max 50,000 characters)');
     }
 
@@ -179,26 +180,31 @@ class UserScriptManager extends ChangeNotifier {
     }
 
     if (stripped.contains('document.cookie') ||
-        RegExp(r'document\s*\[\s*["\x27]cookie["\x27]\s*\]').hasMatch(stripped)) {
+        RegExp(r'document\s*\[\s*["\x27]cookie["\x27]\s*\]')
+            .hasMatch(stripped)) {
       _log.warning(
           'Security Violation: Cookie access in script "${script.name}"');
       throw Exception('Cookie access is prohibited in UserScripts.');
     }
 
-    if (stripped.contains('window.open(') || stripped.contains('window.open ')) {
-      _log.warning('Security Violation: window.open in script "${script.name}"');
+    if (stripped.contains('window.open(') ||
+        stripped.contains('window.open ')) {
+      _log.warning(
+          'Security Violation: window.open in script "${script.name}"');
       throw Exception('Opening new windows is prohibited in UserScripts.');
     }
 
     if (stripped.contains('Symbol.toPrimitive') ||
         stripped.contains('Symbol.iterator') ||
         stripped.contains('Symbol.hasInstance')) {
-      _log.warning('Security Violation: Symbol-based sandbox escape in script "${script.name}"');
+      _log.warning(
+          'Security Violation: Symbol-based sandbox escape in script "${script.name}"');
       throw Exception('Symbol-based sandbox escape blocked.');
     }
 
     if (RegExp(r'\bwith\s*\(').hasMatch(stripped)) {
-      _log.warning('Security Violation: "with" statement in script "${script.name}"');
+      _log.warning(
+          'Security Violation: "with" statement in script "${script.name}"');
       throw Exception('"with" statement is prohibited.');
     }
 
@@ -206,7 +212,8 @@ class UserScriptManager extends ChangeNotifier {
         stripped.contains('constructor.prototype') ||
         stripped.contains('Object.prototype') ||
         stripped.contains('Function.prototype')) {
-      _log.warning('Security Violation: Prototype pollution in script "${script.name}"');
+      _log.warning(
+          'Security Violation: Prototype pollution in script "${script.name}"');
       throw Exception('Prototype access or pollution is prohibited.');
     }
 
@@ -222,7 +229,8 @@ class UserScriptManager extends ChangeNotifier {
       throw Exception('Dynamic imports are prohibited in UserScripts.');
     }
 
-    final hasObfuscatedEval = RegExp(r'window\s*\[\s*["\x27]ev').hasMatch(stripped);
+    final hasObfuscatedEval =
+        RegExp(r'window\s*\[\s*["\x27]ev').hasMatch(stripped);
     final hasObfuscatedFunction =
         RegExp(r'window\s*\[\s*["\x27]Function').hasMatch(stripped);
     final hasGlobalThis = RegExp(r'globalThis\s*\[').hasMatch(stripped);
@@ -230,9 +238,12 @@ class UserScriptManager extends ChangeNotifier {
     final hasCharCode = stripped.contains('String.fromCharCode');
     final hasAtob = stripped.contains('atob(');
     final hasBtoa = stripped.contains('btoa(');
-    final hasReflect = stripped.contains('Reflect.') || stripped.contains('Reflect[');
-    final hasProxy = stripped.contains('Proxy(') || stripped.contains('new Proxy');
-    final hasProtoGetSet = stripped.contains('getPrototypeOf') || stripped.contains('setPrototypeOf');
+    final hasReflect =
+        stripped.contains('Reflect.') || stripped.contains('Reflect[');
+    final hasProxy =
+        stripped.contains('Proxy(') || stripped.contains('new Proxy');
+    final hasProtoGetSet = stripped.contains('getPrototypeOf') ||
+        stripped.contains('setPrototypeOf');
 
     if (hasObfuscatedEval ||
         hasObfuscatedFunction ||

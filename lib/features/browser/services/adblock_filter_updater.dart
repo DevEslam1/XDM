@@ -602,8 +602,9 @@ class AdBlockFilterUpdater {
           }
           // ignore: empty_catches
         } catch (e, st) {
-      LoggingService.logger('AdblockFilterUpdater').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('AdblockFilterUpdater')
+              .warning('Operation failed', e, st);
+        }
       }
 
       final siteCosmeticExceptionsStr =
@@ -618,8 +619,9 @@ class AdBlockFilterUpdater {
           }
           // ignore: empty_catches
         } catch (e, st) {
-      LoggingService.logger('AdblockFilterUpdater').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('AdblockFilterUpdater')
+              .warning('Operation failed', e, st);
+        }
       }
     }
   }
@@ -821,8 +823,9 @@ class AdBlockFilterUpdater {
         lower = uri.host.toLowerCase();
         path = uri.path;
       } catch (e, st) {
-      LoggingService.logger('AdblockFilterUpdater').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('AdblockFilterUpdater')
+            .warning('Operation failed', e, st);
+      }
     } else if (hostnameOrUrl.contains('/')) {
       final idx = hostnameOrUrl.indexOf('/');
       lower = hostnameOrUrl.substring(0, idx).toLowerCase();
@@ -840,8 +843,9 @@ class AdBlockFilterUpdater {
               return true;
             }
           } catch (e, st) {
-      LoggingService.logger('AdblockFilterUpdater').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('AdblockFilterUpdater')
+                .warning('Operation failed', e, st);
+          }
         }
       }
       if (_urlPatternsTrie.searchSubstrings(path)) return true;

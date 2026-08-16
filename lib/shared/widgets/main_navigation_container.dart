@@ -124,7 +124,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         }
       }
     } catch (e, st) {
-      LoggingService.logger('MainNavigationContainer').warning('Update check error', e, st);
+      LoggingService.logger('MainNavigationContainer')
+          .warning('Update check error', e, st);
     }
   }
 
@@ -445,87 +446,88 @@ class _PhoneBottomNavBar extends StatelessWidget {
           top: false,
           child: Container(
             margin: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
-          alignment: Alignment.bottomCenter,
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 480),
-            decoration: settingsTuple.classicUi
-                ? BoxDecoration(
-                    color: navBg,
-                    borderRadius: BorderRadius.circular(32),
-                    border: Border.all(
-                      color: isDark
-                          ? (settingsTuple.isAmoled
-                              ? AppTheme.amoledBorder
-                              : AppTheme.border)
-                          : AppTheme.lightBorder,
-                      width: 1.0,
-                    ),
-                  )
-                : BoxDecoration(
-                    color: navBg.withValues(
-                      alpha: settingsTuple.isAmoled ? 0.95 : 0.7,
-                    ),
-                    borderRadius: BorderRadius.circular(32),
-                    border: Border.all(
-                      color: isDark
-                          ? (settingsTuple.isAmoled
-                              ? AppTheme.amoledBorder
-                              : AppTheme.glassBorder)
-                          : AppTheme.lightGlassBorder,
-                      width: 0.8,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(
-                          alpha: isDark ? 0.4 : 0.12,
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 480),
+              decoration: settingsTuple.classicUi
+                  ? BoxDecoration(
+                      color: navBg,
+                      borderRadius: BorderRadius.circular(32),
+                      border: Border.all(
+                        color: isDark
+                            ? (settingsTuple.isAmoled
+                                ? AppTheme.amoledBorder
+                                : AppTheme.border)
+                            : AppTheme.lightBorder,
+                        width: 1.0,
+                      ),
+                    )
+                  : BoxDecoration(
+                      color: navBg.withValues(
+                        alpha: settingsTuple.isAmoled ? 0.95 : 0.7,
+                      ),
+                      borderRadius: BorderRadius.circular(32),
+                      border: Border.all(
+                        color: isDark
+                            ? (settingsTuple.isAmoled
+                                ? AppTheme.amoledBorder
+                                : AppTheme.glassBorder)
+                            : AppTheme.lightGlassBorder,
+                        width: 0.8,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(
+                            alpha: isDark ? 0.4 : 0.12,
+                          ),
+                          blurRadius: 20,
+                          spreadRadius: 1,
+                          offset: const Offset(0, 6),
                         ),
-                        blurRadius: 20,
-                        spreadRadius: 1,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(32),
-              child: Directionality(
-                textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 64),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12.0,
-                    vertical: 6.0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _NavItem(
-                        index: 0,
-                        icon: Icons.file_download_outlined,
-                        activeIcon: Icons.file_download,
-                        label: L10n.of(context, 'title_transmissions'),
-                        settingsTuple: settingsTuple,
-                        isDark: isDark,
-                        currentIndex: currentIndex,
-                      ),
-                      _NavItem(
-                        index: 1,
-                        icon: Icons.language_outlined,
-                        activeIcon: Icons.language,
-                        label: L10n.of(context, 'title_browser'),
-                        settingsTuple: settingsTuple,
-                        isDark: isDark,
-                        currentIndex: currentIndex,
-                      ),
-                      _NavItem(
-                        index: 2,
-                        icon: Icons.settings_outlined,
-                        activeIcon: Icons.settings_rounded,
-                        label: L10n.of(context, 'title_config'),
-                        settingsTuple: settingsTuple,
-                        isDark: isDark,
-                        currentIndex: currentIndex,
-                      ),
-                    ],
+                      ],
+                    ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(32),
+                child: Directionality(
+                  textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 64),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12.0,
+                      vertical: 6.0,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _NavItem(
+                          index: 0,
+                          icon: Icons.file_download_outlined,
+                          activeIcon: Icons.file_download,
+                          label: L10n.of(context, 'title_transmissions'),
+                          settingsTuple: settingsTuple,
+                          isDark: isDark,
+                          currentIndex: currentIndex,
+                        ),
+                        _NavItem(
+                          index: 1,
+                          icon: Icons.language_outlined,
+                          activeIcon: Icons.language,
+                          label: L10n.of(context, 'title_browser'),
+                          settingsTuple: settingsTuple,
+                          isDark: isDark,
+                          currentIndex: currentIndex,
+                        ),
+                        _NavItem(
+                          index: 2,
+                          icon: Icons.settings_outlined,
+                          activeIcon: Icons.settings_rounded,
+                          label: L10n.of(context, 'title_config'),
+                          settingsTuple: settingsTuple,
+                          isDark: isDark,
+                          currentIndex: currentIndex,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -533,9 +535,8 @@ class _PhoneBottomNavBar extends StatelessWidget {
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
 class _TabletFloatingNavBar extends StatelessWidget {
@@ -692,7 +693,8 @@ class _NavigationRailWidget extends StatelessWidget {
       (DownloadProvider p) => getActiveFilterColor(p, isDark),
     );
     final settingsTabColor = context.select(
-      (SettingsProvider s) => getSettingsTabColor(s.activeSettingsTabIndex, isDark),
+      (SettingsProvider s) =>
+          getSettingsTabColor(s.activeSettingsTabIndex, isDark),
     );
     final inactiveColor =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;

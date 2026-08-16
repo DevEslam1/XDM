@@ -158,10 +158,12 @@ class DownloadOrchestrator {
               if (matching.isEmpty) return null;
               return matching.first.torrentFiles;
             },
-          ).catchError((e) => debugPrint('[DMX] Periodic resume save failed: $e')));
+          ).catchError(
+              (e) => debugPrint('[DMX] Periodic resume save failed: $e')));
           // FIX-C4: Save fast resume data for all active torrents
           for (final tid in TorrentService.activeTorrentIds) {
-            unawaited(TorrentService.saveResumeData(tid).catchError((e) => debugPrint('[DMX] saveResumeData failed: $e')));
+            unawaited(TorrentService.saveResumeData(tid).catchError(
+                (e) => debugPrint('[DMX] saveResumeData failed: $e')));
           }
         }
       },
@@ -321,8 +323,9 @@ class DownloadOrchestrator {
               try {
                 await stateFile.delete();
               } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+                LoggingService.logger('DownloadOrchestrator')
+                    .warning('Operation failed', e, st);
+              }
             }
           }
           await _host.setTaskState(task);
@@ -381,7 +384,8 @@ class DownloadOrchestrator {
     if (_host.cancelTokens.containsKey(task.id)) return false;
     if (!_startingTaskIds.add(task.id)) return false; // atomic
     try {
-      unawaited(_runStartTaskBody(task).catchError((e) => debugPrint('[DMX] startTaskBody failed: $e')));
+      unawaited(_runStartTaskBody(task)
+          .catchError((e) => debugPrint('[DMX] startTaskBody failed: $e')));
     } catch (_) {
       _startingTaskIds.remove(task.id);
       rethrow;
@@ -610,8 +614,9 @@ class DownloadOrchestrator {
                     final f = File(p);
                     if (await f.exists()) await f.delete();
                   } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+                    LoggingService.logger('DownloadOrchestrator')
+                        .warning('Operation failed', e, st);
+                  }
                 }
               }
 
@@ -825,8 +830,9 @@ class DownloadOrchestrator {
           try {
             await mergedFile.delete();
           } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadOrchestrator')
+                .warning('Operation failed', e, st);
+          }
         }
       }
 
@@ -1015,8 +1021,9 @@ class DownloadOrchestrator {
           final mergedFile = File(mergedPath);
           if (await mergedFile.exists()) await mergedFile.delete();
         } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadOrchestrator')
+              .warning('Operation failed', e, st);
+        }
         return false;
       }
 
@@ -1033,8 +1040,9 @@ class DownloadOrchestrator {
             try {
               await mergedFile.delete();
             } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadOrchestrator')
+                  .warning('Operation failed', e, st);
+            }
             return false;
           }
           debugPrint('[DMX] Merge successful: $mergedPath ($mergedLen bytes)');
@@ -1079,18 +1087,21 @@ class DownloadOrchestrator {
             try {
               await videoFile.delete();
             } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadOrchestrator')
+                  .warning('Operation failed', e, st);
+            }
             try {
               await File('${current.tempFilePath}.dmxstate').delete();
             } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadOrchestrator')
+                  .warning('Operation failed', e, st);
+            }
             try {
               await File('${current.tempFilePath}.journal').delete();
             } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadOrchestrator')
+                  .warning('Operation failed', e, st);
+            }
           }
         } else {
           throw Exception('Merged output file not found after FFmpeg success');
@@ -1132,8 +1143,9 @@ class DownloadOrchestrator {
             final f = File(mergedPath);
             if (await f.exists()) await f.delete();
           } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadOrchestrator')
+                .warning('Operation failed', e, st);
+          }
         }
       }
     }
@@ -1169,8 +1181,9 @@ class DownloadOrchestrator {
           try {
             await videoOnlyFile.delete();
           } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadOrchestrator')
+                .warning('Operation failed', e, st);
+          }
         }
         await mergedFile.rename(task.localFilePath);
         await _finalizeDownload(task.id, _host.notifications.idFor(task.id));
@@ -1291,8 +1304,9 @@ class DownloadOrchestrator {
       try {
         await videoOnlyFile.rename(current.localFilePath);
       } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('DownloadOrchestrator')
+            .warning('Operation failed', e, st);
+      }
     }
 
     // FIX-AUDIT-D3: Verify output file exists before marking completed
@@ -1517,7 +1531,8 @@ class DownloadOrchestrator {
                 unawaited(
                   _mediaChannel.invokeMethod('scanMedia', {
                     'path': entity.path,
-                  }).catchError((e) => debugPrint('[DMX] scanMedia failed: $e')),
+                  }).catchError(
+                      (e) => debugPrint('[DMX] scanMedia failed: $e')),
                 );
               } catch (e) {
                 debugPrint('Failed to scan media: $e');
@@ -1569,7 +1584,9 @@ class DownloadOrchestrator {
         if (mediaResult == null) {
           try {
             unawaited(
-              _mediaChannel.invokeMethod('scanMedia', {'path': actualFilePath}).catchError((e) => debugPrint('[DMX] scanMedia failed: $e')),
+              _mediaChannel.invokeMethod('scanMedia', {
+                'path': actualFilePath
+              }).catchError((e) => debugPrint('[DMX] scanMedia failed: $e')),
             );
           } catch (e) {
             debugPrint('Failed to scan media: $e');
@@ -1586,7 +1603,9 @@ class DownloadOrchestrator {
         if (mediaResult == null) {
           try {
             unawaited(
-              _mediaChannel.invokeMethod('scanMedia', {'path': finalPath}).catchError((e) => debugPrint('[DMX] scanMedia failed: $e')),
+              _mediaChannel
+                  .invokeMethod('scanMedia', {'path': finalPath}).catchError(
+                      (e) => debugPrint('[DMX] scanMedia failed: $e')),
             );
           } catch (e) {
             debugPrint('Failed to scan media: $e');
@@ -1638,8 +1657,9 @@ class DownloadOrchestrator {
         try {
           await stateFile.delete();
         } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadOrchestrator')
+              .warning('Operation failed', e, st);
+        }
         task = task.copyWith(
           downloadedBytes: 0,
           chunks: List<double>.filled(
@@ -1668,8 +1688,9 @@ class DownloadOrchestrator {
       try {
         await File(videoOnlyPath).rename(task.localFilePath);
       } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('DownloadOrchestrator')
+            .warning('Operation failed', e, st);
+      }
     }
 
     int videoBytesFromDisk;
@@ -1879,11 +1900,13 @@ class DownloadOrchestrator {
             eta: updated.etaFormatted,
             payload: _host.notifications.opaqueHandleFor(task.id),
           );
-          unawaited(BackgroundService.sendHeartbeat().catchError((e) => debugPrint('[DMX] sendHeartbeat failed: $e')));
+          unawaited(BackgroundService.sendHeartbeat()
+              .catchError((e) => debugPrint('[DMX] sendHeartbeat failed: $e')));
         } else {
           _host.providerTasks[index] = updated;
           if (base.fileSize == 0 && updated.fileSize > 0) {
-            unawaited(_host.setTaskState(updated).catchError((e) => debugPrint('[DMX] setTaskState failed: $e')));
+            unawaited(_host.setTaskState(updated).catchError(
+                (e) => debugPrint('[DMX] setTaskState failed: $e')));
           }
           _host.pushProgressTick(task.id, updated.progress, updated.speed);
           _host.pendingProgressUpdates.add(task.id);
@@ -2058,8 +2081,9 @@ class DownloadOrchestrator {
                 try {
                   await audioFile.delete();
                 } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+                  LoggingService.logger('DownloadOrchestrator')
+                      .warning('Operation failed', e, st);
+                }
               }
             }
 
@@ -2111,12 +2135,14 @@ class DownloadOrchestrator {
               try {
                 await File('$liveAudioTempPath.itag').writeAsString(audioItag);
               } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+                LoggingService.logger('DownloadOrchestrator')
+                    .warning('Operation failed', e, st);
+              }
             }
 
             int resolvedLiveAudioSize = liveAudioSize;
-            if (resolvedLiveAudioSize <= 0 && liveAudioTask.mergedAudioUrl != null) {
+            if (resolvedLiveAudioSize <= 0 &&
+                liveAudioTask.mergedAudioUrl != null) {
               try {
                 final dioProbe = Dio();
                 final headResp = await dioProbe.head(
@@ -2131,15 +2157,20 @@ class DownloadOrchestrator {
                     validateStatus: (s) => s != null && s < 400,
                   ),
                 );
-                final lenStr = headResp.headers.value(Headers.contentLengthHeader);
+                final lenStr =
+                    headResp.headers.value(Headers.contentLengthHeader);
                 final probedLen = int.tryParse(lenStr ?? '');
                 if (probedLen != null && probedLen > 0) {
                   resolvedLiveAudioSize = probedLen;
-                  final idx = _host.providerTasks.indexWhere((x) => x.id == task.id);
+                  final idx =
+                      _host.providerTasks.indexWhere((x) => x.id == task.id);
                   if (idx != -1) {
-                    final updated = _host.providerTasks[idx].copyWith(audioSize: probedLen);
+                    final updated =
+                        _host.providerTasks[idx].copyWith(audioSize: probedLen);
                     _host.providerTasks[idx] = updated;
-                    unawaited(_host.providerDatabaseService.saveTask(updated).catchError((_) {}));
+                    unawaited(_host.providerDatabaseService
+                        .saveTask(updated)
+                        .catchError((_) {}));
                   }
                 }
               } catch (e) {
@@ -2194,7 +2225,8 @@ class DownloadOrchestrator {
                     unawaited(
                       _host.providerDatabaseService
                           .saveTask(updated)
-                          .catchError((e) => debugPrint('[DMX] saveTask failed on audio size discovery: $e')),
+                          .catchError((e) => debugPrint(
+                              '[DMX] saveTask failed on audio size discovery: $e')),
                     );
                   }
                 }
@@ -2223,14 +2255,18 @@ class DownloadOrchestrator {
                 if (audioNow - lastSave >= 2000) {
                   _lastAudioStateSaveMs[task.id] = audioNow;
                   unawaited(_persistAudioState(
-                      liveAudioTempPath, progress.downloadedBytes, size).catchError((e) => debugPrint('[DMX] persistAudioState failed: $e')));
+                          liveAudioTempPath, progress.downloadedBytes, size)
+                      .catchError((e) =>
+                          debugPrint('[DMX] persistAudioState failed: $e')));
                   // FIX-AUDIO-DB: also persist the task row so a crash does not
                   // lose audioDownloadedBytes/audioProgress in the DB.
                   final audioDbIdx =
                       _host.providerTasks.indexWhere((x) => x.id == task.id);
                   if (audioDbIdx != -1) {
-                    unawaited(
-                        _host.setTaskState(_host.providerTasks[audioDbIdx]).catchError((e) => debugPrint('[DMX] setTaskState failed for audio: $e')));
+                    unawaited(_host
+                        .setTaskState(_host.providerTasks[audioDbIdx])
+                        .catchError((e) => debugPrint(
+                            '[DMX] setTaskState failed for audio: $e')));
                   }
                 }
               },
@@ -2316,8 +2352,9 @@ class DownloadOrchestrator {
                 }
               }
             } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadOrchestrator')
+                  .warning('Operation failed', e, st);
+            }
 
             final currentTask = _host.findTaskById(task.id);
             if (currentTask != null &&
@@ -2384,8 +2421,8 @@ class DownloadOrchestrator {
                 ytStreamKind: YtStreamKind.video,
                 ytCounterpartSize: liveAudioSize,
                 ytCounterpartDownloadedBytes: audioBytesSoFar,
-                metadataTimeoutSeconds:
-                    _host.providerSettingsProvider.torrentMetadataTimeoutSeconds,
+                metadataTimeoutSeconds: _host
+                    .providerSettingsProvider.torrentMetadataTimeoutSeconds,
                 onProgress: (progress) {
                   if (progress.torrentId != null) {
                     _host.providerTorrentIds[task.id] = progress.torrentId!;
@@ -2619,10 +2656,12 @@ class DownloadOrchestrator {
                   // persist it to the database immediately so _finalizeDownload
                   // can locate the file without relying on throttled saves.
                   if (newLocalPath != base.localFilePath) {
-                    unawaited(
-                      _host.providerDatabaseService.saveTask(
-                        _host.providerTasks[index],
-                      ).catchError((e) => debugPrint('[DMX] saveTask failed on localPath change: $e')));
+                    unawaited(_host.providerDatabaseService
+                        .saveTask(
+                          _host.providerTasks[index],
+                        )
+                        .catchError((e) => debugPrint(
+                            '[DMX] saveTask failed on localPath change: $e')));
                   }
                 },
                 speedLimitBytesPerSecond: () {
@@ -2769,7 +2808,8 @@ class DownloadOrchestrator {
                   if (current != null) {
                     await _host.setTaskState(current.copyWith(
                       statusMessage: 'MERGE_FAILED',
-                      errorMessage: 'Audio download failed but both files exist. '
+                      errorMessage:
+                          'Audio download failed but both files exist. '
                           'Tap retry to attempt merge.',
                     ));
                   }
@@ -2986,8 +3026,9 @@ class DownloadOrchestrator {
                 continue;
               }
             } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadOrchestrator')
+                  .warning('Operation failed', e, st);
+            }
           }
           // FIX I-1: Cancel progress notification on failure / merge failure
           _host.notifications.cancelForTask(task.id);
@@ -3037,8 +3078,9 @@ class DownloadOrchestrator {
                   final f = File(path);
                   if (await f.exists()) await f.delete();
                 } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+                  LoggingService.logger('DownloadOrchestrator')
+                      .warning('Operation failed', e, st);
+                }
               }
               task = task.copyWith(
                 url: newUrl,
@@ -3207,8 +3249,9 @@ class DownloadOrchestrator {
                 final f = File(path);
                 if (await f.exists()) await f.delete();
               } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+                LoggingService.logger('DownloadOrchestrator')
+                    .warning('Operation failed', e, st);
+              }
             }
             await _host.setTaskState(task);
           }
@@ -3286,8 +3329,9 @@ class DownloadOrchestrator {
                   TorrentService.removeTorrent(existingTorrentId,
                       deleteFiles: false);
                 } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+                  LoggingService.logger('DownloadOrchestrator')
+                      .warning('Operation failed', e, st);
+                }
                 _host.providerTorrentIds.remove(task.id);
                 torrentId = null;
               } else {
@@ -3343,7 +3387,9 @@ class DownloadOrchestrator {
               _host.providerTorrentIds[task.id] = torrentId;
               // FIX-C4: Save resume data for magnet links so resume works across app restarts
               if (task.url.startsWith('magnet:')) {
-                unawaited(TorrentService.saveResumeData(torrentId).catchError((e) => debugPrint('[DMX] saveResumeData failed for magnet: $e')));
+                unawaited(TorrentService.saveResumeData(torrentId).catchError(
+                    (e) => debugPrint(
+                        '[DMX] saveResumeData failed for magnet: $e')));
               }
             }
 
@@ -3462,8 +3508,9 @@ class DownloadOrchestrator {
               }).toList();
             }
           } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadOrchestrator')
+                .warning('Operation failed', e, st);
+          }
         }
         verifiedTorrentFiles ??= task.torrentFiles!.map((f) {
           final copy = Map<String, dynamic>.from(f);
@@ -3642,8 +3689,9 @@ class DownloadOrchestrator {
               final f = File(p);
               if (await f.exists()) await f.delete();
             } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadOrchestrator')
+                  .warning('Operation failed', e, st);
+            }
           }
         }
       }
@@ -3756,8 +3804,9 @@ class DownloadOrchestrator {
             final f = File(p);
             if (await f.exists()) await f.delete();
           } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadOrchestrator')
+                .warning('Operation failed', e, st);
+          }
         }
       }
 
@@ -3830,8 +3879,9 @@ class DownloadOrchestrator {
               TorrentService.pauseTorrent(tid);
               TorrentService.removeTorrent(tid, deleteFiles: false);
             } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadOrchestrator')
+                  .warning('Operation failed', e, st);
+            }
             _host.providerTorrentIds.remove(task.id);
           }
         }
@@ -3840,8 +3890,9 @@ class DownloadOrchestrator {
           try {
             cancelToken.cancel('Task failed, cleaning up in-flight requests');
           } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadOrchestrator')
+                .warning('Operation failed', e, st);
+          }
         }
 
         await _host.flushPendingProgress(task.id);
@@ -3931,8 +3982,9 @@ class DownloadOrchestrator {
             final f = File(path);
             if (await f.exists()) await f.delete();
           } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadOrchestrator')
+                .warning('Operation failed', e, st);
+          }
         }
 
         // FIX F6: Preserve partial temp files if failure is retryable so manual retry can resume
@@ -4453,7 +4505,8 @@ class DownloadOrchestrator {
       await tmp.writeAsString(jsonEncode(state), flush: true);
       await tmp.rename(statePath);
     } catch (e, st) {
-      LoggingService.logger('DownloadOrchestrator').warning('Operation failed', e, st);
+      LoggingService.logger('DownloadOrchestrator')
+          .warning('Operation failed', e, st);
     }
   }
 }

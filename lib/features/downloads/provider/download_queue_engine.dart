@@ -5,7 +5,8 @@ import '../models/download_task.dart';
 class DownloadQueueEngine {
   int maxConcurrent = 3;
 
-  void pumpQueue(List<DownloadTask> tasks, Future<void> Function(DownloadTask) onStart) {
+  void pumpQueue(
+      List<DownloadTask> tasks, Future<void> Function(DownloadTask) onStart) {
     // Logic to start tasks from queue based on concurrency limits
   }
 }

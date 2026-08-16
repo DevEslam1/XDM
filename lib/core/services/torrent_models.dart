@@ -35,6 +35,7 @@ class TorrentUpdateInfo {
   final String stateLabel;
   final int numSeeds;
   final int numPeers;
+  int get peerCount => numPeers;
   final int piecesHave;
   final int piecesTotal;
   final int downloadPayloadRate;
@@ -443,5 +444,3 @@ enum ProxyType {
     }
   }
 }
-
-

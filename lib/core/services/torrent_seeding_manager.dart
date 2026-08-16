@@ -97,7 +97,8 @@ class TorrentSeedingManager {
       );
 
       if (shouldStop) {
-        _log.info('Stopping seeding for torrent $id (seeding policy conditions met)');
+        _log.info(
+            'Stopping seeding for torrent $id (seeding policy conditions met)');
         TorrentService.pauseTorrent(id);
         clearSeedStart(id);
       }

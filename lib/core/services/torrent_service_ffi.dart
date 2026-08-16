@@ -157,7 +157,8 @@ class _CapabilityGate {
       return (LibtorrentFlutter.instance as dynamic).getFileProgress(id)
           as List<dynamic>?;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -169,7 +170,8 @@ class _CapabilityGate {
       return (LibtorrentFlutter.instance as dynamic).getFilePriorities(id)
           as List<dynamic>?;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -189,7 +191,8 @@ class _CapabilityGate {
       // ignore: avoid_dynamic_calls
       (LibtorrentFlutter.instance as dynamic).forceReCheck(id);
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed', e, st);
     }
   }
 
@@ -200,7 +203,8 @@ class _CapabilityGate {
       return (LibtorrentFlutter.instance as dynamic).saveResumeData(id)
           as Uint8List?;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -212,7 +216,8 @@ class _CapabilityGate {
       (LibtorrentFlutter.instance as dynamic).loadResumeData(id, data);
       return true;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed with fallback', e, st);
       return false;
     }
   }
@@ -236,7 +241,8 @@ class _CapabilityGate {
         );
       }).toList();
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -248,7 +254,8 @@ class _CapabilityGate {
       (LibtorrentFlutter.instance as dynamic).addTracker(id, trackerUrl, tier);
       return true;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed with fallback', e, st);
       return false;
     }
   }
@@ -260,7 +267,8 @@ class _CapabilityGate {
       (LibtorrentFlutter.instance as dynamic).removeTracker(id, trackerUrl);
       return true;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed with fallback', e, st);
       return false;
     }
   }
@@ -272,7 +280,8 @@ class _CapabilityGate {
       (LibtorrentFlutter.instance as dynamic).announceNow(id);
       return true;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed with fallback', e, st);
       return false;
     }
   }
@@ -447,25 +456,29 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   bool get filePrioritiesSupported => TorrentService.filePrioritiesSupported;
   @override
-  bool get sequentialDownloadEnabled => TorrentService.sequentialDownloadEnabled;
+  bool get sequentialDownloadEnabled =>
+      TorrentService.sequentialDownloadEnabled;
   @override
   double get shareRatioLimit => TorrentService.shareRatioLimit;
   @override
   int get maxSeedingTimeMinutes => TorrentService.maxSeedingTimeMinutes;
 
   @override
-  Future<bool> hasResumeData(String source) => TorrentService.hasResumeData(source);
+  Future<bool> hasResumeData(String source) =>
+      TorrentService.hasResumeData(source);
   @override
   Future<void> init() => TorrentService.init();
   @override
-  Future<void> saveResumeData(int torrentId) => TorrentService.saveResumeData(torrentId);
+  Future<void> saveResumeData(int torrentId) =>
+      TorrentService.saveResumeData(torrentId);
   @override
   Future<void> saveAllResumeData() => TorrentService.saveAllResumeData();
   @override
   Future<void> dispose() => TorrentService.dispose();
 
   @override
-  int addMagnet(String magnetUri, String savePath) => TorrentService.addMagnet(magnetUri, savePath);
+  int addMagnet(String magnetUri, String savePath) =>
+      TorrentService.addMagnet(magnetUri, savePath);
   @override
   Future<int> addMagnetWithMetadataTimeout(
     String magnetUri,
@@ -488,20 +501,24 @@ class TorrentServiceImpl implements ITorrentService {
       TorrentService.addTorrentFile(filePath, savePath, sourceKey: sourceKey);
 
   @override
-  void removeTorrent(int id, {bool deleteFiles = false, bool deleteResumeData = false}) =>
-      TorrentService.removeTorrent(id, deleteFiles: deleteFiles, deleteResumeData: deleteResumeData);
+  void removeTorrent(int id,
+          {bool deleteFiles = false, bool deleteResumeData = false}) =>
+      TorrentService.removeTorrent(id,
+          deleteFiles: deleteFiles, deleteResumeData: deleteResumeData);
   @override
   Future<void> pauseTorrent(int id) => TorrentService.pauseTorrent(id);
   @override
   void resumeTorrent(int id) => TorrentService.resumeTorrent(id);
   @override
-  bool loadResumeData(int id, List<int> data) => TorrentService.loadResumeData(id, data);
+  bool loadResumeData(int id, List<int> data) =>
+      TorrentService.loadResumeData(id, data);
   @override
   bool isTorrentAlive(int id) => TorrentService.isTorrentAlive(id);
   @override
   void recheckTorrent(int id) => TorrentService.recheckTorrent(id);
   @override
-  void setFilePriorities(int id, List<int> priorities) => TorrentService.setFilePriorities(id, priorities);
+  void setFilePriorities(int id, List<int> priorities) =>
+      TorrentService.setFilePriorities(id, priorities);
   @override
   int getFileCount(int id) => TorrentService.getFileCount(id);
   @override
@@ -511,24 +528,30 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   List<TorrentFileItem> getFiles(int id) => TorrentService.getFiles(id);
   @override
-  Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates => TorrentService.torrentUpdates;
+  Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
+      TorrentService.torrentUpdates;
   @override
   Map<int, TorrentUpdateInfo> get latestStats => TorrentService.latestStats;
   @override
-  void configureSession([SettingsProvider? settings]) => TorrentService.configureSession(settings);
+  void configureSession([SettingsProvider? settings]) =>
+      TorrentService.configureSession(settings);
   @override
   void reconfigureSession() => TorrentService.reconfigureSession();
   @override
-  void autoEnableSequentialForVideo(int torrentId) => TorrentService.autoEnableSequentialForVideo(torrentId);
+  void autoEnableSequentialForVideo(int torrentId) =>
+      TorrentService.autoEnableSequentialForVideo(torrentId);
   @override
   Future<void> autoSaveResumeData() => TorrentService.autoSaveResumeData();
 
   @override
-  List<TrackerInfo> getTrackers(int torrentId) => TorrentService.getTrackers(torrentId);
+  List<TrackerInfo> getTrackers(int torrentId) =>
+      TorrentService.getTrackers(torrentId);
   @override
-  void addTracker(int torrentId, String trackerUrl, {int tier = 0}) => TorrentService.addTracker(torrentId, trackerUrl, tier: tier);
+  void addTracker(int torrentId, String trackerUrl, {int tier = 0}) =>
+      TorrentService.addTracker(torrentId, trackerUrl, tier: tier);
   @override
-  void removeTracker(int torrentId, String trackerUrl) => TorrentService.removeTracker(torrentId, trackerUrl);
+  void removeTracker(int torrentId, String trackerUrl) =>
+      TorrentService.removeTracker(torrentId, trackerUrl);
   @override
   void announceNow(int torrentId) => TorrentService.announceNow(torrentId);
 
@@ -551,28 +574,36 @@ class TorrentServiceImpl implements ITorrentService {
       );
 
   @override
-  Future<bool> loadIpFilter(String filePath) => TorrentService.loadIpFilter(filePath);
+  Future<bool> loadIpFilter(String filePath) =>
+      TorrentService.loadIpFilter(filePath);
   @override
-  Future<bool> downloadAndApplyBlocklist(String url) => TorrentService.downloadAndApplyBlocklist(url);
+  Future<bool> downloadAndApplyBlocklist(String url) =>
+      TorrentService.downloadAndApplyBlocklist(url);
 
   @override
-  void enableSequentialDownload(int torrentId, bool enabled) => TorrentService.enableSequentialDownload(torrentId, enabled);
+  void enableSequentialDownload(int torrentId, bool enabled) =>
+      TorrentService.enableSequentialDownload(torrentId, enabled);
   @override
-  void setSequentialDownload(int torrentId, bool enabled) => TorrentService.setSequentialDownload(torrentId, enabled);
+  void setSequentialDownload(int torrentId, bool enabled) =>
+      TorrentService.setSequentialDownload(torrentId, enabled);
   @override
   void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) =>
       TorrentService.prioritizeFile(torrentId, fileIndex, priority: priority);
   @override
-  void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) => TorrentService.setPieceDeadline(torrentId, pieceIndex, deadlineMs);
+  void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) =>
+      TorrentService.setPieceDeadline(torrentId, pieceIndex, deadlineMs);
   @override
-  void enableSuperSeeding(int torrentId, bool enabled) => TorrentService.enableSuperSeeding(torrentId, enabled);
+  void enableSuperSeeding(int torrentId, bool enabled) =>
+      TorrentService.enableSuperSeeding(torrentId, enabled);
 
   @override
   Stream<TorrentAlertEvent> get alertUpdates => TorrentService.alertUpdates;
   @override
-  List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) => TorrentService.getRecentAlerts(torrentId);
+  List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) =>
+      TorrentService.getRecentAlerts(torrentId);
   @override
-  void applySettingsPack(TorrentSettingsPack pack) => TorrentService.applySettingsPack(pack);
+  void applySettingsPack(TorrentSettingsPack pack) =>
+      TorrentService.applySettingsPack(pack);
 
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
@@ -624,7 +655,6 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   List<String> getWebSeeds(int torrentId) =>
       TorrentService.getWebSeeds(torrentId);
-
 
   @override
   bool shouldStopSeeding({
@@ -701,7 +731,6 @@ class TorrentService {
   static bool get fileProgressSupported =>
       _CapabilityGate.instance.fileProgressSupported;
 
-
   static bool get filePrioritiesSupported =>
       _CapabilityGate.instance.filePrioritiesSupported;
 
@@ -768,7 +797,8 @@ class TorrentService {
     try {
       return _CapabilityGate.instance.saveResumeData(id);
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed with fallback', e, st);
       return null;
     }
   }
@@ -881,7 +911,9 @@ class TorrentService {
     for (final id in _activeTorrentIds) {
       try {
         final blob = _CapabilityGate.instance.saveResumeData(id);
-        if (blob != null && blob.isNotEmpty && TorrentResumeStore.validateResumeData(blob)) {
+        if (blob != null &&
+            blob.isNotEmpty &&
+            TorrentResumeStore.validateResumeData(blob)) {
           final source = _torrentSources[id];
           if (source != null) {
             await TorrentResumeStore.saveAndWait(
@@ -949,7 +981,8 @@ class TorrentService {
         enableSequentialDownload(torrentId, true);
       }
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed', e, st);
     }
   }
 
@@ -1100,7 +1133,8 @@ class TorrentService {
       final numPieces = raw.numPieces;
       if (numPieces is int && numPieces > 0) return numPieces;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed', e, st);
     }
     const defaultPieceSize = 256 * 1024;
     try {
@@ -1111,7 +1145,8 @@ class TorrentService {
         return (totalWanted / defaultPieceSize).ceil();
       }
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed', e, st);
     }
     return 0;
   }
@@ -1123,7 +1158,8 @@ class TorrentService {
       final piecesDone = raw.piecesDone;
       if (piecesDone is int && piecesDone > 0) return piecesDone;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed', e, st);
     }
     final total = _estimatePiecesTotal(torrentInfo);
     try {
@@ -1134,7 +1170,8 @@ class TorrentService {
         return (progress * total).round();
       }
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
+      LoggingService.logger('TorrentServiceFfi')
+          .warning('Operation failed', e, st);
     }
     return 0;
   }
@@ -1248,7 +1285,6 @@ class TorrentService {
     _disposeCompleter = null;
   }
 
-
   static int addMagnet(String magnetUri, String savePath) {
     if (!isInitialized || isShuttingDown) return -1;
     _startTrackingUpdates();
@@ -1257,8 +1293,9 @@ class TorrentService {
       if (id >= 0) {
         _activeTorrentIds.add(id);
         _torrentSources[id] = magnetUri;
-        unawaited(
-            _tryLoadFastResumeForSource(id, magnetUri).catchError((e) => debugPrint('[Torrent] Failed to load fast resume: $e'))); // FIX-02: kept async
+        unawaited(_tryLoadFastResumeForSource(id, magnetUri).catchError((e) =>
+            debugPrint(
+                '[Torrent] Failed to load fast resume: $e'))); // FIX-02: kept async
       }
       return id;
     } catch (e) {
@@ -1351,8 +1388,9 @@ class TorrentService {
       if (id >= 0) {
         _activeTorrentIds.add(id);
         _torrentSources[id] = source;
-        unawaited(
-            _tryLoadFastResumeForSource(id, source).catchError((e) => debugPrint('[Torrent] Failed to load fast resume: $e'))); // FIX-02: kept async
+        unawaited(_tryLoadFastResumeForSource(id, source).catchError((e) =>
+            debugPrint(
+                '[Torrent] Failed to load fast resume: $e'))); // FIX-02: kept async
       }
       return id;
     } catch (e) {
@@ -1397,10 +1435,13 @@ class TorrentService {
       try {
         LibtorrentFlutter.instance.removeTorrent(id, deleteFiles: deleteFiles);
         if (deleteResumeData) {
-          unawaited(TorrentResumeStore.delete(id).catchError((e) => debugPrint('[Torrent] Failed to delete resume data: $e')));
+          unawaited(TorrentResumeStore.delete(id).catchError(
+              (e) => debugPrint('[Torrent] Failed to delete resume data: $e')));
           final source = _torrentSources.remove(id);
           if (source != null) {
-            unawaited(TorrentResumeStore.deleteResumeDataForSource(source).catchError((e) => debugPrint('[Torrent] Failed to delete source resume data: $e')));
+            unawaited(TorrentResumeStore.deleteResumeDataForSource(source)
+                .catchError((e) => debugPrint(
+                    '[Torrent] Failed to delete source resume data: $e')));
           }
         } else {
           // Just remove from the in-memory source map; the blob stays on disk.
@@ -1430,8 +1471,9 @@ class TorrentService {
                   stats.stateLabel.toLowerCase().contains('stopped');
             }).timeout(const Duration(seconds: 2));
           } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('TorrentServiceFfi')
+                .warning('Operation failed', e, st);
+          }
 
           // FIX T-9: Snapshot files AFTER pause-poll, not before
           List<Map<String, dynamic>>? torrentFiles;
@@ -1729,7 +1771,10 @@ class TorrentService {
         category: 'priority',
       );
     } catch (e, st) {
-      _log.warning('prioritizeFile failed for torrent $torrentId, index $fileIndex: $e', e, st);
+      _log.warning(
+          'prioritizeFile failed for torrent $torrentId, index $fileIndex: $e',
+          e,
+          st);
     }
   }
 
@@ -1780,7 +1825,8 @@ class TorrentService {
           downloadedBytes = (f.size * progressRatio).clamp(0, f.size).toInt();
         }
         final isComplete = f.size == 0 || downloadedBytes >= f.size;
-        final fileProg = f.size > 0 ? (downloadedBytes / f.size).clamp(0.0, 1.0) : 1.0;
+        final fileProg =
+            f.size > 0 ? (downloadedBytes / f.size).clamp(0.0, 1.0) : 1.0;
 
         return TorrentFileProgress(
           index: f.index,
@@ -1797,7 +1843,6 @@ class TorrentService {
       return [];
     }
   }
-
 
   static Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async {
     final stats = _latestStats[torrentId];
@@ -1823,13 +1868,16 @@ class TorrentService {
   }) {
     final effectiveDownloaded = totalBytes ?? downloadedBytes ?? 0;
     if (progress < 1.0 && effectiveDownloaded <= 0) return false;
-    final ratioLimit = customRatioLimit ?? shareRatioLimit ?? TorrentService.shareRatioLimit;
+    final ratioLimit =
+        customRatioLimit ?? shareRatioLimit ?? TorrentService.shareRatioLimit;
     if (ratioLimit > 0) {
       final effectiveTotal = effectiveDownloaded > 0 ? effectiveDownloaded : 1;
       final ratio = uploadedBytes / effectiveTotal;
       if (ratio >= ratioLimit) return true;
     }
-    final maxMins = customMaxTimeMinutes ?? maxSeedingMinutes ?? TorrentService.maxSeedingTimeMinutes;
+    final maxMins = customMaxTimeMinutes ??
+        maxSeedingMinutes ??
+        TorrentService.maxSeedingTimeMinutes;
     if (maxMins > 0) {
       if (seedingDuration != null) {
         if (seedingDuration.inMinutes >= maxMins) return true;
@@ -2014,10 +2062,12 @@ class TorrentServiceStub implements ITorrentService {
   }) async =>
       -1;
   @override
-  int addTorrentFile(String filePath, String savePath, {String? sourceKey}) => -1;
+  int addTorrentFile(String filePath, String savePath, {String? sourceKey}) =>
+      -1;
 
   @override
-  void removeTorrent(int id, {bool deleteFiles = false, bool deleteResumeData = false}) {}
+  void removeTorrent(int id,
+      {bool deleteFiles = false, bool deleteResumeData = false}) {}
   @override
   Future<void> pauseTorrent(int id) async {}
   @override
@@ -2039,7 +2089,8 @@ class TorrentServiceStub implements ITorrentService {
   @override
   List<TorrentFileItem> getFiles(int id) => [];
   @override
-  Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates => const Stream.empty();
+  Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
+      const Stream.empty();
   @override
   Map<int, TorrentUpdateInfo> get latestStats => const {};
   @override
@@ -2142,4 +2193,3 @@ class TorrentServiceStub implements ITorrentService {
   }) =>
       false;
 }
-

@@ -271,7 +271,8 @@ class PermissionService {
     try {
       return await Permission.ignoreBatteryOptimizations.status.isGranted;
     } catch (e, st) {
-      LoggingService.logger('PermissionService').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('PermissionService')
+          .warning('Operation failed with fallback', e, st);
       return false;
     }
   }

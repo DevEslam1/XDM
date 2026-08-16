@@ -83,8 +83,9 @@ mixin DownloadTorrentMixin {
             TorrentService.pauseTorrent(existingId);
             TorrentService.removeTorrent(existingId, deleteFiles: false);
           } catch (e, st) {
-      LoggingService.logger('DownloadTorrentMixin').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadTorrentMixin')
+                .warning('Operation failed', e, st);
+          }
           providerTorrentIds.remove(task.id);
           // Fall through to the add-new-handle path below
         } else {
@@ -357,7 +358,8 @@ mixin DownloadTorrentMixin {
             }
 
             if (shouldStopSeeding) {
-              unawaited(updateTaskSeeding(task.id, enabled: false).catchError((e) => debugPrint('[DMX] updateTaskSeeding failed: $e')));
+              unawaited(updateTaskSeeding(task.id, enabled: false).catchError(
+                  (e) => debugPrint('[DMX] updateTaskSeeding failed: $e')));
               filteredTasksDirty = true;
               changed = true;
             }
@@ -402,7 +404,8 @@ mixin DownloadTorrentMixin {
         if (torrentId != null) {
           TorrentService.resumeTorrent(torrentId);
         } else {
-          unawaited(startSeedingTorrent(providerTasks[index]).catchError((e) => debugPrint('[DMX] startSeedingTorrent failed: $e')));
+          unawaited(startSeedingTorrent(providerTasks[index]).catchError(
+              (e) => debugPrint('[DMX] startSeedingTorrent failed: $e')));
         }
       } else {
         // Only pause/remove the torrent session if the task has already
@@ -613,9 +616,9 @@ mixin DownloadTorrentMixin {
             );
             pausedAny = true;
             unawaited(
-              providerDatabaseService
-                  .saveTask(providerTasks[idx])
-                  .catchError((e) => debugPrint('[DMX] saveTask failed on network change: $e')),
+              providerDatabaseService.saveTask(providerTasks[idx]).catchError(
+                  (e) => debugPrint(
+                      '[DMX] saveTask failed on network change: $e')),
             );
           }
         }
