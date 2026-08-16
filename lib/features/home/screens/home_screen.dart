@@ -798,8 +798,9 @@ class _HomeScreenState extends State<HomeScreen>
     final secClr =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
-    final activeColor =
-        getActiveFilterColor(context.watch<DownloadProvider>(), isDark);
+    final activeColor = context.select<DownloadProvider, Color>(
+      (p) => getActiveFilterColor(p, isDark),
+    );
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
       child: Row(

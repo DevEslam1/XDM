@@ -37,8 +37,10 @@ class CategoryDetailScreen extends StatelessWidget {
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     // Get all tasks in this category that are completed/failed
-    final provider = context.watch<DownloadProvider>();
-    final categoryTasks = provider.tasks
+    final tasks = context.select<DownloadProvider, List<DownloadTask>>(
+      (p) => p.tasks,
+    );
+    final categoryTasks = tasks
         .where((t) =>
             t.category == categoryName &&
             (t.status == DownloadStatus.completed ||

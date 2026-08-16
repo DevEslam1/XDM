@@ -58,8 +58,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
             isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
         final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
         final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-        final downloadProvider = context.watch<DownloadProvider>();
-        final accentClr = getActiveFilterColor(downloadProvider, isDark);
+        final accentClr = context.select<DownloadProvider, Color>(
+          (p) => getActiveFilterColor(p, isDark),
+        );
 
         return Selector<DownloadProvider, List<DownloadTask>>(
           selector: (_, provider) => provider.tasks.where((task) {

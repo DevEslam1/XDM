@@ -111,7 +111,12 @@ class _SystemMonitorsCardState extends State<SystemMonitorsCard>
   Widget build(BuildContext context) {
     final isRtl = L10n.isRtl(context);
     final settings = context.watch<SettingsProvider>();
-    final downloadProvider = context.watch<DownloadProvider>();
+    final isWifi = context.select<DownloadProvider, bool>(
+      (p) => p.networkMonitor.hasWifiOrEthernet,
+    );
+    final activeDownloads = context.select<DownloadProvider, int>(
+      (p) => p.downloadingTasksCount,
+    );
 
     final batteryLevel = PowerMonitor.batteryLevel;
     final isCharging = PowerMonitor.isCharging;
@@ -124,8 +129,6 @@ class _SystemMonitorsCardState extends State<SystemMonitorsCard>
     final jankPct = (perf.jankRatio * 100).toStringAsFixed(1);
     final avgBuildMs = perf.averageBuildMillis?.toStringAsFixed(1) ?? '0.0';
     final avgRasterMs = perf.averageRasterMillis?.toStringAsFixed(1) ?? '0.0';
-    final isWifi = downloadProvider.networkMonitor.hasWifiOrEthernet;
-    final activeDownloads = downloadProvider.downloadingTasksCount;
 
     final cardBg = widget.isDark
         ? AppTheme.cardBg.withAlpha(220)

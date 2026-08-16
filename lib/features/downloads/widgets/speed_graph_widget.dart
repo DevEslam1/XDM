@@ -210,8 +210,8 @@ class SpeedGraphPainter extends CustomPainter {
     final gridPaint = Paint()
       ..color = isDark ? Colors.white10 : Colors.black12
       ..strokeWidth = 1.0;
-    canvas.drawLine(
-        Offset(0, size.height * 0.5), Offset(size.width, size.height * 0.5), gridPaint);
+    canvas.drawLine(Offset(0, size.height * 0.5),
+        Offset(size.width, size.height * 0.5), gridPaint);
     canvas.drawLine(
         Offset(0, size.height), Offset(size.width, size.height), gridPaint);
 
@@ -239,8 +239,8 @@ class SpeedGraphPainter extends CustomPainter {
 
     for (int i = 0; i < dataPoints.length; i++) {
       final x = i * stepX;
-      final y =
-          size.height - ((dataPoints[i] / maxSpeed).clamp(0.0, 1.0) * (size.height - 4) + 2);
+      final y = size.height -
+          ((dataPoints[i] / maxSpeed).clamp(0.0, 1.0) * (size.height - 4) + 2);
       if (i == 0) {
         path.moveTo(x, y);
         fillPath.moveTo(x, size.height);
@@ -260,8 +260,10 @@ class SpeedGraphPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant SpeedGraphPainter oldDelegate) {
     if (oldDelegate.dataPoints.length != dataPoints.length) return true;
-    if (dataPoints.isNotEmpty && 
-        oldDelegate.dataPoints.last != dataPoints.last) return true;
+    if (dataPoints.isNotEmpty &&
+        oldDelegate.dataPoints.last != dataPoints.last) {
+      return true;
+    }
     return oldDelegate.maxSpeed != maxSpeed ||
         oldDelegate.color != color ||
         oldDelegate.isDark != isDark;

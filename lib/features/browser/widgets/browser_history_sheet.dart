@@ -226,7 +226,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
-    final downloadTasks = context.watch<DownloadProvider>().tasks;
+    final downloadTasks =
+        context.select<DownloadProvider, List<DownloadTask>>((p) => p.tasks);
 
     return DraggableScrollableSheet(
       expand: false,

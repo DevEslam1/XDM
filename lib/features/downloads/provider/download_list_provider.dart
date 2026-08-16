@@ -66,4 +66,9 @@ class DownloadListProvider extends ChangeNotifier {
   }
 
   DownloadTask? getTask(String id) => findTask(id);
+
+  double getTaskProgress(String id) {
+    final task = findTask(id);
+    return task?.progress ?? 0.0;
+  }
 }

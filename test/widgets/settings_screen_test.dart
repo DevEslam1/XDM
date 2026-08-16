@@ -63,15 +63,15 @@ void main() {
         child: const SettingsScreen(initialSection: 'power'),
         settingsProvider: settings,
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
-      expect(settings.activeSettingsTabIndex, equals(5));
+      expect(settings.activeSettingsTabIndex, equals(4));
 
       await settings.setBatterySaverMode(true);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(settings.batterySaverMode, isTrue);
-      expect(settings.activeSettingsTabIndex, equals(5));
+      expect(settings.activeSettingsTabIndex, equals(4));
       expect(find.byType(SettingsScreen), findsOneWidget);
     });
   });

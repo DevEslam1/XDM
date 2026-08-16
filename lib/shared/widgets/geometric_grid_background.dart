@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_theme.dart';
-import '../../core/di/injection.dart';
 import '../../core/services/background_gate.dart';
 import '../../core/services/download_engine.dart';
 import '../../core/services/logging_service.dart';
@@ -23,7 +22,9 @@ class AmbientProgress with WidgetsBindingObserver {
     PowerMonitor.screenStateStream.listen((screenOn) {
       if (!screenOn) {
         _stopTimer();
-      } else if (_refCount > 0 && !_isBackgrounded && !DownloadEngine.isInBackground) {
+      } else if (_refCount > 0 &&
+          !_isBackgrounded &&
+          !DownloadEngine.isInBackground) {
         _startTimer();
       }
     });
@@ -55,7 +56,10 @@ class AmbientProgress with WidgetsBindingObserver {
   }
 
   void restartIfMounted() {
-    if (_refCount > 0 && !_isBackgrounded && !PowerMonitor.screenOff && !DownloadEngine.isInBackground) {
+    if (_refCount > 0 &&
+        !_isBackgrounded &&
+        !PowerMonitor.screenOff &&
+        !DownloadEngine.isInBackground) {
       _startTimer();
     }
   }
@@ -201,7 +205,8 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
       gridOpacity = context.select((SettingsProvider s) => s.gridOpacity);
     } catch (e) {
       assert(() {
-        debugPrint('[GeometricGridBackground] SettingsProvider not in context: $e');
+        debugPrint(
+            '[GeometricGridBackground] SettingsProvider not in context: $e');
         return true;
       }());
       try {
@@ -212,7 +217,8 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
         reduceVisuals = s.reduceVisuals;
         gridOpacity = s.gridOpacity;
       } catch (e, st) {
-        LoggingService.logger('GeometricGridBackground').warning('Failed to read fallback settings', e, st);
+        LoggingService.logger('GeometricGridBackground')
+            .warning('Failed to read fallback settings', e, st);
       }
     }
 
@@ -222,7 +228,8 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
       );
     } catch (e) {
       assert(() {
-        debugPrint('[GeometricGridBackground] DownloadProvider not in context: $e');
+        debugPrint(
+            '[GeometricGridBackground] DownloadProvider not in context: $e');
         return true;
       }());
     }
