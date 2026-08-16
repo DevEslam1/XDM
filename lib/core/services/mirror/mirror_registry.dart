@@ -41,6 +41,9 @@ class MirrorHealthStore implements DisposableService {
   bool _dirty = false;
   bool _flushing = false;
 
+  @visibleForTesting
+  bool get isDirtyForTesting => _dirty;
+
   static const String _rankingCacheKey = 'mirror_ranking_cache';
   static const String _rankingTtlKey = 'mirror_ranking_cache_ttl';
 
