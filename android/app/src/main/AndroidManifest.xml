@@ -1,18 +1,24 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <!-- Required to download files from remote servers -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Required to read and resume partially downloaded files from shared storage on Android 12 and below -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- Required to write downloaded files to shared storage on Android 9 and below -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <!-- Required to display active background download status notifications to the user -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Required to run a persistent background download data-sync worker -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Required to keep the CPU awake during active downloads to prevent OS termination -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Required to show download progress notifications to the user on Android 13+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Required to monitor network connectivity status (e.g. Wi-Fi vs mobile data) for auto-resume -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Required to reschedule incomplete or queued downloads after device reboots -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:label="XDM"
@@ -93,27 +99,15 @@
             android:value="2" />
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="dataSync|specialUse"
+            android:foregroundServiceType="dataSync"
             android:exported="false"
-            tools:replace="android:exported">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="File download manager requiring persistent background execution" />
-        </service>
-        <service
-            android:name="id.flutter.flutter_background_service.ForegroundService"
-            android:foregroundServiceType="dataSync|specialUse"
-            android:exported="false" />
-        <service
-            android:name="id.flutter.flutter_background_service.IsolateService"
-            android:foregroundServiceType="dataSync|specialUse"
-            android:exported="false" />
+            tools:replace="android:exported" />
         <receiver android:name=".widget.DMXWidgetProvider" android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <intent-filter>
-                <action android:name="com.example.dmx.UPDATE_WIDGETS" />
+                <action android:name="com.xdm.downloadmanager.UPDATE_WIDGETS" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -123,13 +117,13 @@
             android:name=".widget.WidgetActionReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.example.dmx.PAUSE_ALL" />
-                <action android:name="com.example.dmx.RESUME_ALL" />
-                <action android:name="com.example.dmx.TOGGLE_TASK" />
-                <action android:name="com.example.dmx.OPEN_TASK" />
-                <action android:name="com.example.dmx.SELECT_TAB" />
-                <action android:name="com.example.dmx.PAUSE_TASK" />
-                <action android:name="com.example.dmx.CANCEL_TASK" />
+                <action android:name="com.xdm.downloadmanager.PAUSE_ALL" />
+                <action android:name="com.xdm.downloadmanager.RESUME_ALL" />
+                <action android:name="com.xdm.downloadmanager.TOGGLE_TASK" />
+                <action android:name="com.xdm.downloadmanager.OPEN_TASK" />
+                <action android:name="com.xdm.downloadmanager.SELECT_TAB" />
+                <action android:name="com.xdm.downloadmanager.PAUSE_TASK" />
+                <action android:name="com.xdm.downloadmanager.CANCEL_TASK" />
             </intent-filter>
         </receiver>
     </application>

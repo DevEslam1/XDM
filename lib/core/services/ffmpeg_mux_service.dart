@@ -8,6 +8,7 @@ import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit_config.dart';
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_session.dart';
 import 'package:ffmpeg_kit_flutter_new_min/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
+import 'package:ffmpeg_kit_flutter_new_min/statistics_callback.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
@@ -314,32 +315,36 @@ class FFmpegMuxService {
         strategy: strategy,
       );
       _log.info('Running merge strategy $strategy with args: $args');
-      final session = await FFmpegKit.executeWithArguments(args);
-      sessionHolder?.activeSession = session;
-
       DateTime lastStatsProgress = DateTime.fromMillisecondsSinceEpoch(0);
-      FFmpegKitConfig.enableStatisticsCallback((statistics) {
-        if (session.getSessionId() != statistics.getSessionId()) return;
-        if (onProgress == null ||
-            totalDuration == null ||
-            totalDuration.inMilliseconds == 0) {
-          return;
-        }
-        final now = DateTime.now();
-        // Cap statistics progress updates at 4 Hz (250 ms)
-        if (now.difference(lastStatsProgress).inMilliseconds < 250) {
-          return;
-        }
-        lastStatsProgress = now;
-        final timeMs = statistics.getTime();
-        if (timeMs > 0) {
-          onProgress((timeMs / totalDuration.inMilliseconds).clamp(0.0, 1.0));
-        }
-      });
+
+      // Task 3.6: Use per-session StatisticsCallback rather than the global
+      // FFmpegKitConfig.enableStatisticsCallback, which can bleed across
+      // concurrent sessions and requires manual cleanup on success/failure.
+      StatisticsCallback? sessionStatsCallback;
+      if (onProgress != null && totalDuration != null && totalDuration.inMilliseconds > 0) {
+        sessionStatsCallback = (statistics) {
+          final now = DateTime.now();
+          // Cap statistics progress updates at 4 Hz (250 ms)
+          if (now.difference(lastStatsProgress).inMilliseconds < 250) return;
+          lastStatsProgress = now;
+          final timeMs = statistics.getTime();
+          if (timeMs > 0) {
+            onProgress((timeMs / totalDuration.inMilliseconds).clamp(0.0, 1.0));
+          }
+        };
+      }
+
+      final session = await FFmpegSession.create(
+        args,
+        null,
+        null,
+        sessionStatsCallback,
+      );
+      sessionHolder?.activeSession = session;
+      await FFmpegKitConfig.ffmpegExecute(session);
 
       try {
         final returnCode = await session.getReturnCode();
-        FFmpegKitConfig.enableStatisticsCallback(null);
         if (ReturnCode.isSuccess(returnCode)) {
           final targetExpectedDuration = expectedDuration ?? totalDuration;
           if (await _validateOutput(outputPath,
@@ -350,7 +355,6 @@ class FFmpegMuxService {
           }
         }
       } catch (e) {
-        FFmpegKitConfig.enableStatisticsCallback(null);
         _log.warning('Merge strategy $strategy failed: $e');
       }
     }

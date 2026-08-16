@@ -29,6 +29,11 @@ const Duration defaultTaskHardTimeout = kTaskHardTimeout;
 int _workerGlobalLimitBps = 0;
 int _workerGlobalActive = 1;
 final Map<String, HttpTransferJob> _runningJobs = {};
+// Task 3.1: Hoist Random and RegExps to avoid per-request allocations.
+final Random _rng = Random();
+final RegExp _contentRangeTotalRegex = RegExp(r'/(\d+)');
+final RegExp _contentRangeHeaderRegex =
+    RegExp(r'^bytes\s+(\d+)-(\d+)/(\d+|\*)$', caseSensitive: false);
 
 @pragma('vm:entry-point')
 Future<void> workerEntry(SendPort poolPort) async {
@@ -325,7 +330,9 @@ class HttpTransferJob {
     _state!.status = DmxStateStatus.active;
     await StateStore.save(cmd.tempFilePath, _state!);
 
-    if (_state!.downloadedBytes > 0 && cmd.supportsResume) {
+    // Task 3.2: Skip the identity probe round-trip when backgrounded.
+    // The LRU cache ensures we still validate on the first foreground resume.
+    if (_state!.downloadedBytes > 0 && cmd.supportsResume && !DownloadEngine.isInBackground) {
       await _verifyServerIdentity(dio);
     }
     return _state!;
@@ -452,7 +459,7 @@ class HttpTransferJob {
         int? serverTotal;
         if (contentRange != null) {
           serverTotal = int.tryParse(
-              RegExp(r'/(\d+)').firstMatch(contentRange)?.group(1) ?? '');
+              _contentRangeTotalRegex.firstMatch(contentRange)?.group(1) ?? '');
         }
         serverTotal ??= int.tryParse(
             response.headers.value(Headers.contentLengthHeader) ?? '');
@@ -889,7 +896,7 @@ class HttpTransferJob {
         _emitProgress(_stopwatch.elapsedMilliseconds,
             statusMessage: 'Retrying…');
         await _cancellableDelay(
-            Duration(seconds: (attempts * attempts * 2) + Random().nextInt(3)));
+            Duration(seconds: (attempts * attempts * 2) + _rng.nextInt(3)));
       } on PositionalFileWriterException {
         rethrow;
       } catch (e) {
@@ -1234,7 +1241,7 @@ class HttpTransferJob {
         _emitProgress(_stopwatch.elapsedMilliseconds,
             statusMessage: 'Retrying…');
         await _cancellableDelay(
-            Duration(seconds: (attempts * attempts * 2) + Random().nextInt(3)));
+            Duration(seconds: (attempts * attempts * 2) + _rng.nextInt(3)));
       } finally {
         try {
           await sink?.flush();
@@ -1554,9 +1561,7 @@ class HttpTransferJob {
         message: 'Missing Content-Range header during resume.',
       );
     }
-    final match =
-        RegExp(r'^bytes\s+(\d+)-(\d+)/(\d+|\*)$', caseSensitive: false)
-            .firstMatch(value.trim());
+    final match = _contentRangeHeaderRegex.firstMatch(value.trim());
     if (match == null) {
       if (allowUnknown) return;
       throw DioException(

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'database_service.dart';
 import 'diagnostic_service.dart';
 import 'ios_background_service.dart';
 import 'logging_service.dart';
@@ -35,7 +36,8 @@ class BackgroundService {
   static Timer? _wakeLockRenewalTimer;
   static Timer? _wakeLockSafetyTimer;
   static Timer? _heartbeatTimer;
-  static const Duration _maxWakeLockHold = Duration(hours: 2);
+  static Duration get _maxWakeLockHold =>
+      Platform.isIOS ? const Duration(seconds: 30) : const Duration(hours: 4);
   static DateTime? _lastHeartbeatTime;
   static bool _hasActiveDownloads = false;
   static int Function()? _activeDownloadCountQuery;
@@ -216,9 +218,15 @@ class BackgroundService {
     }
     _iosBgCallInFlight = true;
     _iosBgWatchdogTimer?.cancel();
-    _iosBgWatchdogTimer = Timer(const Duration(seconds: 60), () {
+    // Task 6.1: Reduce watchdog to 25s and flush pending database writes.
+    _iosBgWatchdogTimer = Timer(const Duration(seconds: 25), () {
       if (_iosBgCallInFlight) {
-        _log.warning('[iOS BG Watchdog] iOS background call wedged for 60s; force-resetting in-flight flag.');
+        _log.warning('[iOS BG Watchdog] iOS background call wedged for 25s; force-resetting in-flight flag and flushing DB.');
+        try {
+          DatabaseService.instance.flushPendingSaves();
+        } catch (e, st) {
+          _log.warning('Failed to flush DB during iOS background watchdog reset: $e', e, st);
+        }
         _iosBgCallInFlight = false;
       }
     });

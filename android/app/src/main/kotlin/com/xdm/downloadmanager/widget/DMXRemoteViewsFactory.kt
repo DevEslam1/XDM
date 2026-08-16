@@ -1,4 +1,4 @@
-package com.example.dmx.widget
+package com.xdm.downloadmanager.widget
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -7,8 +7,8 @@ import android.content.Intent
 import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews
-import com.example.dmx.MainActivity
-import com.example.dmx.R
+import com.xdm.downloadmanager.MainActivity
+import com.xdm.downloadmanager.R
 
 object DMXRemoteViewsFactory {
     const val SIZE_MINI = "mini"

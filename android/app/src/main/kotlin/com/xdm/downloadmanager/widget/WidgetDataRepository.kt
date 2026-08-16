@@ -1,4 +1,4 @@
-package com.example.dmx.widget
+package com.xdm.downloadmanager.widget
 
 import android.content.Context
 import android.content.Intent

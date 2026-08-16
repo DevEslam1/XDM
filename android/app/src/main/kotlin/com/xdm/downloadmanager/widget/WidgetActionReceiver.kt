@@ -1,4 +1,4 @@
-package com.example.dmx.widget
+package com.xdm.downloadmanager.widget
 
 import android.appwidget.AppWidgetManager
 import android.content.BroadcastReceiver
@@ -6,7 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
-import com.example.dmx.MainActivity
+import com.xdm.downloadmanager.MainActivity
 
 /**
  * Receives quick-action taps and tab selection from widget buttons and forwards them
@@ -74,13 +74,13 @@ class WidgetActionReceiver : BroadcastReceiver() {
     }
 
     companion object {
-        const val ACTION_PAUSE_ALL = "com.example.dmx.PAUSE_ALL"
-        const val ACTION_RESUME_ALL = "com.example.dmx.RESUME_ALL"
-        const val ACTION_TOGGLE_TASK = "com.example.dmx.TOGGLE_TASK"
-        const val ACTION_OPEN_TASK = "com.example.dmx.OPEN_TASK"
-        const val ACTION_SELECT_TAB = "com.example.dmx.SELECT_TAB"
-        const val ACTION_PAUSE_TASK = "com.example.dmx.PAUSE_TASK"
-        const val ACTION_CANCEL_TASK = "com.example.dmx.CANCEL_TASK"
+        const val ACTION_PAUSE_ALL = "com.xdm.downloadmanager.PAUSE_ALL"
+        const val ACTION_RESUME_ALL = "com.xdm.downloadmanager.RESUME_ALL"
+        const val ACTION_TOGGLE_TASK = "com.xdm.downloadmanager.TOGGLE_TASK"
+        const val ACTION_OPEN_TASK = "com.xdm.downloadmanager.OPEN_TASK"
+        const val ACTION_SELECT_TAB = "com.xdm.downloadmanager.SELECT_TAB"
+        const val ACTION_PAUSE_TASK = "com.xdm.downloadmanager.PAUSE_TASK"
+        const val ACTION_CANCEL_TASK = "com.xdm.downloadmanager.CANCEL_TASK"
 
         const val EXTRA_TASK_ID = "task_id"
         const val EXTRA_TAB = "tab"

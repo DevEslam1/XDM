@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const extractorChannel = MethodChannel('com.example.dmx/youtube_extractor');
+  const extractorChannel = MethodChannel('com.xdm.downloadmanager/youtube_extractor');
   const storageChannel =
       MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
   const testUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';

@@ -184,7 +184,7 @@ Future<void> configureDependencies() async {
   );
 
   getIt.registerLazySingleton<AppLifecycleCoordinator>(
-    () => AppLifecycleCoordinator(),
+    () => AppLifecycleCoordinator.instance,
     dispose: (s) => AppLifecycleCoordinator.dispose(),
   );
 
@@ -205,10 +205,5 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<SharedPrefsBatcher>(
     () => SharedPrefsBatcher.instance,
     dispose: (b) => b.dispose(),
-  );
-
-  getIt.registerLazySingleton<TorrentService>(
-    () => TorrentService(),
-    dispose: (_) => TorrentService.dispose(),
   );
 }

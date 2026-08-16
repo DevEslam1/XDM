@@ -195,7 +195,7 @@ void main() {
 
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('com.example.dmx/widget'),
+      const MethodChannel('com.xdm.downloadmanager/widget'),
       (methodCall) async => null,
     );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

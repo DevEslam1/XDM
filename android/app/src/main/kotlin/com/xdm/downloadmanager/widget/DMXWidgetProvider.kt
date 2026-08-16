@@ -1,4 +1,4 @@
-package com.example.dmx.widget
+package com.xdm.downloadmanager.widget
 
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -49,7 +49,7 @@ class DMXWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        const val ACTION_UPDATE_WIDGETS = "com.example.dmx.UPDATE_WIDGETS"
+        const val ACTION_UPDATE_WIDGETS = "com.xdm.downloadmanager.UPDATE_WIDGETS"
 
         fun updateWidget(context: Context, manager: AppWidgetManager, widgetId: Int) {
             val dashboard = WidgetDataRepository.load(context)

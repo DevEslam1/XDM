@@ -172,7 +172,7 @@ class XdmBackendClient {
         'User-Agent':
             'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9',
-        'X-Requested-With': 'com.example.dmx',
+        'X-Requested-With': 'com.xdm.downloadmanager',
         'Referer': 'https://www.youtube.com/',
       },
     ));

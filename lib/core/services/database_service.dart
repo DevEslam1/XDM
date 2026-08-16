@@ -14,6 +14,7 @@ import '../../features/browser/models/bookmark.dart';
 import '../../features/downloads/models/download_task.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import 'background_gate.dart';
+import 'crash_reporting_service.dart';
 import 'database/app_database.dart';
 import 'database/hive_migration_service.dart';
 import 'download_engine.dart';
@@ -261,9 +262,14 @@ class DatabaseService {
       orElse: () {
         debugPrint(
           '[DMX] _rowToTask: unrecognised status "$statusName" for task '
-          '${row.id} — defaulting to paused.',
+          '${row.id} — reporting and defaulting to error.',
         );
-        return DownloadStatus.paused;
+        CrashReportingService.recordError(
+          FormatException('Unrecognised download task status: "$statusName"'),
+          StackTrace.current,
+          hint: 'Task ${row.id} has invalid status "$statusName" in SQLite',
+        );
+        return DownloadStatus.failed;
       },
     );
 
@@ -444,8 +450,18 @@ class DatabaseService {
     int attempt = 0;
     while (true) {
       try {
-        await _db.into(_db.downloadTasks).insert(_taskToCompanion(task),
-            mode: drift.InsertMode.insertOrReplace);
+        if (task.status == DownloadStatus.completed) {
+          // Task 5.2: Durable completion writes with PRAGMA synchronous = FULL
+          await _db.transaction(() async {
+            await _db.customStatement('PRAGMA synchronous = FULL');
+            await _db.into(_db.downloadTasks).insert(_taskToCompanion(task),
+                mode: drift.InsertMode.insertOrReplace);
+            await _db.customStatement('PRAGMA synchronous = NORMAL');
+          });
+        } else {
+          await _db.into(_db.downloadTasks).insert(_taskToCompanion(task),
+              mode: drift.InsertMode.insertOrReplace);
+        }
         return;
       } catch (e) {
         final errStr = e.toString().toLowerCase();

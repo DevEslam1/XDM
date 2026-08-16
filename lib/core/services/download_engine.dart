@@ -35,7 +35,14 @@ class DownloadEngine implements IDownloadEngine {
   static bool get appInForeground => appInForegroundNotifier.value;
   static set appInForeground(bool val) => appInForegroundNotifier.value = val;
   static bool get isInBackground => !appInForeground;
+  @Deprecated('Use markForeground() / markBackground() instead — the setter was semantically inverted.')
   static set isInBackground(bool val) => appInForeground = !val;
+
+  /// Explicitly mark the engine as foreground. Prefer over `isInBackground = false`.
+  static void markForeground() => appInForeground = true;
+
+  /// Explicitly mark the engine as background. Prefer over `isInBackground = true`.
+  static void markBackground() => appInForeground = false;
   static const int _isolatePoolSize = 4;
 
   final HttpDownloadOrchestrator _httpOrchestrator;
@@ -90,18 +97,21 @@ class DownloadEngine implements IDownloadEngine {
         await dir.create(recursive: true);
       }
 
-      if (Platform.isAndroid) {
-        final stat = await Process.run('df', [saveDir]);
-        final lines = stat.stdout.toString().split('\n');
-        if (lines.length > 1) {
-          final parts = lines[1].trim().split(RegExp(r'\s+'));
-          if (parts.length >= 4) {
-            final availableKb = int.tryParse(parts[3]) ?? 0;
-            final availableBytes = availableKb * 1024;
-            return availableBytes > requiredBytes;
-          }
+      if (Platform.isIOS) {
+        // iOS/App Store: Process.run is unavailable. Use a stat-based heuristic:
+        // Write a 1-byte probe file and check if it succeeds; for larger checks
+        // rely on NSFileSystemFreeSize surfaced via path_provider-like APIs.
+        // Returning `true` and letting the OS error is safer than spawning a process.
+        try {
+          final probe = File(p.join(saveDir, '.dmx_probe'));
+          await probe.writeAsBytes([0]);
+          await probe.delete();
+        } catch (_) {
+          return false; // write failed → full or inaccessible
         }
-      } else if (Platform.isIOS || Platform.isMacOS || Platform.isLinux) {
+        return true;
+      } else if (Platform.isAndroid || Platform.isLinux || Platform.isMacOS) {
+        // df reports 1K-blocks; column 4 (0-indexed) is available blocks.
         final stat = await Process.run('df', [saveDir]);
         final lines = stat.stdout.toString().split('\n');
         if (lines.length > 1) {
@@ -112,8 +122,10 @@ class DownloadEngine implements IDownloadEngine {
           }
         }
       } else if (Platform.isWindows) {
-        // Use PowerShell on Windows
+        // Use GetDiskFreeSpaceEx via PowerShell only on Windows desktop.
         final result = await Process.run('powershell', [
+          '-NoProfile',
+          '-NonInteractive',
           '-Command',
           '(Get-PSDrive -Name (Get-Item \'$saveDir\').PSDrive.Name).Free'
         ]);

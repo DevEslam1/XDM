@@ -38,12 +38,12 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
   @visibleForTesting
   static Timer? get inactiveTimerForTesting => _inactiveTimer;
 
-  /// Register this observer once in `main.dart` after [WidgetsFlutterBinding.ensureInitialized].
+  /// Register this observer once after [WidgetsFlutterBinding.ensureInitialized].
   static void init() {
     WidgetsBinding.instance.addObserver(instance);
   }
 
-  /// Manually dispose / remove the observer (useful for testing).
+  /// Remove the observer and clean up.
   static void dispose() {
     _inactiveTimer?.cancel();
     _inactiveTimer = null;
@@ -59,8 +59,8 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
       isAppForegrounded = true;
       PowerMonitor.isAppForegrounded = true;
       PowerMonitor.setScreenOn(true);
-      DownloadEngine.appInForeground = true;
-      DownloadEngine.isInBackground = false;
+      DownloadEngine.markForeground();
+      // Task 2.3: use explicit markForeground() instead of inverted isInBackground setter
 
       // Resume widget updates (NEW-02)
       WidgetDataBridge.instance.resumeWidgetUpdates();
@@ -103,8 +103,8 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
     isAppForegrounded = false;
     PowerMonitor.isAppForegrounded = false;
     PowerMonitor.setScreenOn(false);
-    DownloadEngine.appInForeground = false;
-    DownloadEngine.isInBackground = true;
+    DownloadEngine.markBackground();
+    // Task 2.3: use explicit markBackground() instead of inverted isInBackground setter
 
     // Pause widget updates (NEW-02)
     WidgetDataBridge.instance.pauseWidgetUpdates();

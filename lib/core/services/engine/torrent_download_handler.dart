@@ -356,8 +356,12 @@ class TorrentDownloadHandler {
       );
       torrentCompleted = true;
     } finally {
-      _activeSubs.remove(id);
+      // Task 6.2: Clean up subscriptions and cached files on completion/cancellation/error
+      final sub = _activeSubs.remove(id);
+      await sub?.cancel();
       _activeTorrentIds.remove(id);
+      TorrentSubscriptionRegistry.instance.unregister(id, this);
+      cachedAccurateFiles = null;
     }
   }
 

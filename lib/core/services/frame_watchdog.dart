@@ -20,6 +20,7 @@ class FrameWatchdog {
   static const normalWindow = Duration(seconds: 30);
   static const heavyWindow = Duration(seconds: 60);
   static double _refreshRate = 60.0;
+  static double get refreshRate => _refreshRate;
 
   static double get frameBudgetMs => 1000.0 / _refreshRate;
   static double get _budgetMs => frameBudgetMs;
@@ -35,7 +36,10 @@ class FrameWatchdog {
     }
     if (!_metricsListenerRegistered) {
       _metricsListenerRegistered = true;
+      // Task 3.5: Chain onto any existing handler rather than overwriting it.
+      final previousHandler = PlatformDispatcher.instance.onMetricsChanged;
       PlatformDispatcher.instance.onMetricsChanged = () {
+        previousHandler?.call();
         _cachedRefreshRate = null;
         detectRefreshRate(force: true);
       };

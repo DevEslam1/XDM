@@ -10,6 +10,9 @@ import '../../features/settings/provider/settings_provider.dart';
 class PerformanceMonitorOverlay extends StatefulWidget {
   final Widget child;
 
+  /// Global runtime feature flag to toggle the overlay. Defaults to kDebugMode.
+  static bool enabled = kDebugMode;
+
   const PerformanceMonitorOverlay({super.key, required this.child});
 
   @override
@@ -26,21 +29,21 @@ class _PerformanceMonitorOverlayState extends State<PerformanceMonitorOverlay> {
   @override
   void initState() {
     super.initState();
+    if (!kDebugMode || !PerformanceMonitorOverlay.enabled) return;
+
     try {
       _reduceMotion = SettingsProvider.instance.reduceVisuals;
     } catch (e, st) {
       LoggingService.logger('PerformanceOverlay').fine('Failed to read reduceVisuals setting', e, st);
     }
-    if (kDebugMode) {
-      _timer = Timer.periodic(const Duration(seconds: 2), (_) {
-        if (mounted) {
-          setState(() {
-            _fps = PerformanceMonitor.instance.currentFps;
-            _screenOff = PowerMonitor.screenOff;
-          });
-        }
-      });
-    }
+    _timer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (mounted) {
+        setState(() {
+          _fps = PerformanceMonitor.instance.currentFps;
+          _screenOff = PowerMonitor.screenOff;
+        });
+      }
+    });
   }
 
   @override

@@ -1,4 +1,4 @@
-package com.example.dmx
+package com.xdm.downloadmanager
 
 import android.content.ContentValues
 import android.content.Context
@@ -24,13 +24,13 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterActivityLaunchConfigs
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import com.example.dmx.widget.WidgetDataRepository
+import com.xdm.downloadmanager.widget.WidgetDataRepository
 
 class MainActivity : FlutterActivity() {
     private val WIDGET_BRIDGE_CHANNEL = "com.dmx.app/widget_bridge"
     private val MEDIA_CHANNEL = "com.dmx.app/media"
-    private val YOUTUBE_CHANNEL = "com.example.dmx/youtube_extractor"
-    private val SAF_CHANNEL = "com.example.dmx/saf"
+    private val YOUTUBE_CHANNEL = "com.xdm.downloadmanager/youtube_extractor"
+    private val SAF_CHANNEL = "com.xdm.downloadmanager/saf"
     private val WAKE_LOCK_CHANNEL = "com.dmx.app/wakelock"
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
     private var wakeLock: PowerManager.WakeLock? = null

@@ -57,8 +57,11 @@ class _ScreenObserver with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final isResumed = state == AppLifecycleState.resumed;
-    DownloadEngine.appInForeground = isResumed;
-    DownloadEngine.isInBackground = !isResumed;
+    if (isResumed) {
+      DownloadEngine.markForeground();
+    } else {
+      DownloadEngine.markBackground();
+    }
     PowerMonitor.setScreenOn(isResumed);
     // FIX MISC-4: Lifecycle management for watchdog, performance monitor, and pulse driver
     if (isResumed) {
@@ -123,7 +126,6 @@ Future<void> main(List<String> args) async {
     }
 
     WidgetsFlutterBinding.ensureInitialized();
-    AppLifecycleCoordinator.init();
 
     // FIX-0.4: Adaptive ImageCache sizing based on device RAM
     final deviceMemory = await _getDeviceMemoryGB();
@@ -213,6 +215,8 @@ Future<void> main(List<String> args) async {
       // No-op otherwise; errors before this point go to the console logger.
       await CrashReportingService.init();
       await configureDependencies();
+      // 2.2: Register the AppLifecycleCoordinator as the sole WidgetsBinding observer.
+      AppLifecycleCoordinator.init();
       if (getIt.isRegistered<AmbientAnimationController>()) {
         getIt.unregister<AmbientAnimationController>();
       }
