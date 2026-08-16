@@ -311,7 +311,9 @@ class HttpTransferJob {
       final nowBytes = st.downloadedBytes;
       final delta = nowBytes - _watchdogCheckpointBytes;
       _watchdogCheckpointBytes = nowBytes;
-      if (delta > 60 * 1024 * 1024) {
+      final resetThreshold =
+          max(60 * 1024 * 1024, (st.totalSize * 0.01).round());
+      if (delta > resetThreshold) {
         _hardTimeoutTimer?.cancel();
         _hardTimeoutTimer = Timer(hardTimeoutDuration, onHardTimeout);
       }
