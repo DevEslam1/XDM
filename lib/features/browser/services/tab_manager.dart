@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
+import '../../settings/provider/settings_provider.dart';
 import '../models/browser_tab.dart';
 import '../models/tab_group.dart';
 import 'page_intent_classifier.dart';
@@ -233,7 +234,16 @@ class TabManager extends ChangeNotifier {
   }
 
   /// Opens a new tab with optional background loading logic.
-  static const int maxTabs = 8;
+  static const int defaultMaxTabs = 12;
+  static const int maxTabs = 12;
+
+  int get effectiveMaxTabs {
+    try {
+      return SettingsProvider.instance.maxTabs;
+    } catch (_) {
+      return defaultMaxTabs;
+    }
+  }
 
   /// Callback when a tab is evicted due to max tabs cap
   void Function(String message)? onTabEvicted;
@@ -251,15 +261,16 @@ class TabManager extends ChangeNotifier {
   }
 
   void _evictLruTabIfNeeded() {
-    if (_tabs.length < maxTabs) return;
+    final cap = effectiveMaxTabs;
+    if (_tabs.length < cap) return;
     final activeId = activeTab?.id;
     final candidates = _tabs.where((t) => t.id != activeId).toList();
     if (candidates.isEmpty) return;
     candidates.sort((a, b) => a.lastVisitedAt.compareTo(b.lastVisitedAt));
     final oldest = candidates.first;
     _log.info(
-        '[TabManager] Evicting LRU tab ${oldest.id} (${oldest.title.isNotEmpty ? oldest.title : oldest.url}) due to max tab cap ($maxTabs)');
-    onTabEvicted?.call('Closed inactive tab "${oldest.title.isNotEmpty ? oldest.title : oldest.url}" to stay under tab limit.');
+        '[TabManager] Evicting LRU tab ${oldest.id} (${oldest.title.isNotEmpty ? oldest.title : oldest.url}) due to max tab cap ($cap)');
+    onTabEvicted?.call('Closed inactive tab "${oldest.title.isNotEmpty ? oldest.title : oldest.url}" to stay under tab limit ($cap).');
     closeTab(oldest.id);
   }
 
