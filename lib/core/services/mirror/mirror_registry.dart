@@ -431,10 +431,40 @@ class ServerProfileManager
   final Map<String, ServerProfile> _profiles = {};
   static const _maxProfiles = 100;
 
+  /// FIX-P1-05: Eviction index keyed by eviction score (lastAccess +
+  /// reliability bonus). Finding the least-recently-used profile becomes
+  /// O(log n) instead of the previous O(n) reduce() inside a while loop.
+  final SplayTreeMap<int, Set<String>> _evictionIndex =
+      SplayTreeMap<int, Set<String>>();
+
   ServerProfile getProfile(String url) {
     _evictIfNeeded();
     final host = Uri.tryParse(url)?.host ?? url;
-    return _profiles.putIfAbsent(host, () => ServerProfile(host: host));
+    final existing = _profiles[host];
+    if (existing != null) return existing;
+    final profile = ServerProfile(host: host);
+    _profiles[host] = profile;
+    _indexProfile(profile);
+    return profile;
+  }
+
+  int _scoreFor(ServerProfile profile) =>
+      profile.lastAccess.millisecondsSinceEpoch +
+      (profile.reliabilityScore * 1000).round();
+
+  void _indexProfile(ServerProfile profile) {
+    final score = _scoreFor(profile);
+    _evictionIndex.putIfAbsent(score, () => <String>{}).add(profile.host);
+  }
+
+  void _unindexProfile(ServerProfile profile) {
+    final score = _scoreFor(profile);
+    final bucket = _evictionIndex[score];
+    if (bucket == null) return;
+    bucket.remove(profile.host);
+    if (bucket.isEmpty) {
+      _evictionIndex.remove(score);
+    }
   }
 
   ({double successRate, int avgResponseTimeMs, bool supportsRange})
@@ -449,7 +479,9 @@ class ServerProfileManager
 
   void recordSuccess(String url, {required int responseTimeMs}) {
     final profile = getProfile(url);
+    _unindexProfile(profile);
     profile.recordSuccess(responseTimeMs);
+    _indexProfile(profile);
     _evictIfNeeded();
   }
 
@@ -459,7 +491,9 @@ class ServerProfileManager
     required String? retryAfter,
   }) {
     final profile = getProfile(url);
+    _unindexProfile(profile);
     profile.recordFailure(statusCode, retryAfter);
+    _indexProfile(profile);
     _evictIfNeeded();
   }
 
@@ -484,29 +518,46 @@ class ServerProfileManager
 
   void _evictIfNeeded() {
     final now = DateTime.now();
-    _profiles.removeWhere((_, profile) =>
-        now.difference(profile.lastAccess) > ServerProfile.profileTtl);
+    final expired = _profiles.entries
+        .where((e) =>
+            now.difference(e.value.lastAccess) > ServerProfile.profileTtl)
+        .toList();
+    for (final entry in expired) {
+      _unindexProfile(entry.value);
+      _profiles.remove(entry.key);
+    }
     while (_profiles.length > _maxProfiles) {
-      final toEvict = _profiles.entries.reduce((a, b) {
-        final scoreA = a.value.lastAccess.millisecondsSinceEpoch +
-            (a.value.reliabilityScore * 1000).round();
-        final scoreB = b.value.lastAccess.millisecondsSinceEpoch +
-            (b.value.reliabilityScore * 1000).round();
-        return scoreA < scoreB ? a : b;
-      });
-      _profiles.remove(toEvict.key);
+      if (_evictionIndex.isEmpty) break;
+      final lowestScore = _evictionIndex.firstKey();
+      final bucket = _evictionIndex[lowestScore];
+      if (bucket == null || bucket.isEmpty) {
+        _evictionIndex.remove(lowestScore);
+        continue;
+      }
+      final host = bucket.first;
+      bucket.remove(host);
+      if (bucket.isEmpty) {
+        _evictionIndex.remove(lowestScore);
+      }
+      _profiles.remove(host);
     }
   }
 
   void clear() {
     _profiles.clear();
+    _evictionIndex.clear();
   }
 
   @override
   void onMemoryPressure() {
-    _profiles.removeWhere((_, profile) =>
-        DateTime.now().difference(profile.lastAccess) >
-        const Duration(hours: 1));
+    final cutoff = DateTime.now().subtract(const Duration(hours: 1));
+    final stale = _profiles.entries
+        .where((e) => e.value.lastAccess.isBefore(cutoff))
+        .toList();
+    for (final entry in stale) {
+      _unindexProfile(entry.value);
+      _profiles.remove(entry.key);
+    }
   }
 
   @override
@@ -514,6 +565,7 @@ class ServerProfileManager
     ServiceRegistry.unregister(this);
     ServiceRegistry.unregisterMemoryPressureListener(this);
     _profiles.clear();
+    _evictionIndex.clear();
   }
 }
 
