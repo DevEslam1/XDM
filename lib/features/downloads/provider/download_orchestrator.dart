@@ -2123,7 +2123,7 @@ class DownloadOrchestrator {
                   liveAudioTask.mergedAudioUrl!,
                   options: Options(
                     headers: {
-                      if (cookieString != null) 'Cookie': cookieString,
+                      if (cookieString.isNotEmpty) 'Cookie': cookieString,
                       if (YoutubeService.oauthToken != null)
                         'Authorization': 'Bearer ${YoutubeService.oauthToken}',
                     },

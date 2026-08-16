@@ -11,6 +11,7 @@ import '../../core/services/logging_service.dart';
 import '../../core/services/performance_monitor.dart';
 import '../../core/services/power_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
+import '../accessibility/high_contrast_detector.dart';
 
 /// High-performance backdrop blur filter with battery, thermal, and low-end gating.
 ///
@@ -122,11 +123,13 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
     final blurEnabled = widget.enableBlur ?? BackgroundGate.shouldAnimate;
     final isBatterySaver =
         PowerMonitor.batterySaverMode != BatterySaverMode.off;
+    final isHighContrast = HighContrastDetector.isActive(context);
     if (_allocated &&
         (kIsWeb ||
             DmxBackdropFilter.disabled ||
             isBatterySaver ||
             !blurEnabled ||
+            isHighContrast ||
             !BackgroundGate.allowHeavyOps ||
             PowerMonitor.screenOff ||
             PerformanceMonitor.shouldReduceMotion)) {
@@ -138,6 +141,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
         !DmxBackdropFilter.disabled &&
         !isBatterySaver &&
         blurEnabled &&
+        !isHighContrast &&
         BackgroundGate.allowHeavyOps &&
         !PowerMonitor.screenOff &&
         !PerformanceMonitor.shouldReduceMotion) {
@@ -150,11 +154,13 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
     final blurEnabled = widget.enableBlur ?? BackgroundGate.shouldAnimate;
     final isBatterySaver =
         PowerMonitor.batterySaverMode != BatterySaverMode.off;
+    final isHighContrast = HighContrastDetector.isActive(context);
     if (kIsWeb ||
         DmxBackdropFilter.disabled ||
         _isLowEndDevice ||
         isBatterySaver ||
         !blurEnabled ||
+        isHighContrast ||
         widget.forceSolid ||
         PowerMonitor.screenOff ||
         PerformanceMonitor.shouldReduceMotion ||

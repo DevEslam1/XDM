@@ -1,6 +1,10 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
+import '../../core/services/background_gate.dart';
 import '../../core/services/performance_monitor.dart';
+import '../../core/services/power_monitor.dart';
+import '../accessibility/high_contrast_detector.dart';
 
 /// A surface panel with an optional accent rail, tinted border, and a subtle
 /// press response.
@@ -15,21 +19,21 @@ class GlassCard extends StatefulWidget {
   final bool elevated;
   final LinearGradient? gradientBorder;
   final VoidCallback? onTap;
-  final bool? enableBlur;
+  final bool enableBlur;
 
   const GlassCard({
     super.key,
     required this.child,
     this.borderRadius = 16.0,
     this.padding,
-    required this.isDarkMode,
+    this.isDarkMode = true,
     this.border,
     this.accentColor,
     this.showRail = false,
     this.elevated = false,
     this.gradientBorder,
     this.onTap,
-    this.enableBlur,
+    this.enableBlur = true,
   });
 
   @override
@@ -41,64 +45,49 @@ class _GlassCardState extends State<GlassCard> {
 
   @override
   Widget build(BuildContext context) {
+    final shouldBlur = widget.enableBlur &&
+        !PowerMonitor.batterySaverMode.isAggressive &&
+        !HighContrastDetector.isActive(context) &&
+        BackgroundGate.shouldAnimate;
+
+    if (!shouldBlur) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(widget.borderRadius),
+        ),
+        child: widget.child,
+      );
+    }
+
     final isDark = widget.isDarkMode;
     final accent = widget.accentColor ??
         (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
 
-    final base = AnimatedContainer(
-      duration: AppTheme.motionBase,
-      curve: AppTheme.motionCurve,
-      padding: widget.padding,
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+    final blurredBase = RepaintBoundary(
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(widget.borderRadius),
-        border: widget.border ??
-            Border.all(
-              color: widget.accentColor != null
-                  ? accent.withValues(alpha: 0.30)
-                  : (isDark ? AppTheme.border : AppTheme.lightBorder),
-              width: widget.accentColor != null ? 1.0 : 0.5,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            padding: widget.padding,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.3)
+                  : Colors.white.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(widget.borderRadius),
+              border: widget.border ??
+                  Border.all(
+                    color: widget.accentColor != null
+                        ? accent.withValues(alpha: 0.30)
+                        : (isDark ? AppTheme.border : AppTheme.lightBorder),
+                    width: widget.accentColor != null ? 1.0 : 0.5,
+                  ),
             ),
-        boxShadow: widget.elevated
-            ? [
-                if (widget.accentColor != null)
-                  AppTheme.glow(
-                    accent,
-                    alpha: isDark ? 0.12 : 0.08,
-                    blur: 14,
-                    spread: -4,
-                  ),
-                BoxShadow(
-                  color: (isDark
-                          ? Colors.black
-                          : Colors.black.withValues(alpha: 0.5))
-                      .withValues(alpha: 0.25),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                  spreadRadius: -1,
-                ),
-                BoxShadow(
-                  color: accent.withValues(alpha: 0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ]
-            : [
-                if (widget.accentColor != null)
-                  AppTheme.glow(
-                    accent,
-                    alpha: isDark ? 0.12 : 0.08,
-                    blur: 14,
-                    spread: -4,
-                  ),
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
+            child: widget.child,
+          ),
+        ),
       ),
-      child: widget.child,
     );
 
     final withRail = widget.showRail
@@ -106,7 +95,7 @@ class _GlassCardState extends State<GlassCard> {
             borderRadius: BorderRadius.circular(widget.borderRadius),
             child: Stack(
               children: [
-                base,
+                blurredBase,
                 PositionedDirectional(
                   start: 0,
                   top: 10,
@@ -125,7 +114,7 @@ class _GlassCardState extends State<GlassCard> {
               ],
             ),
           )
-        : base;
+        : blurredBase;
 
     final withBorder = widget.gradientBorder != null
         ? Container(
@@ -156,8 +145,6 @@ class _GlassCardState extends State<GlassCard> {
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
             onEnter: (_) {
-              // FIX-P3: Avoid redundant setState on hover — only reset when a
-              // press is actually in flight.
               if (_pressed && mounted) setState(() => _pressed = false);
             },
             child: GestureDetector(

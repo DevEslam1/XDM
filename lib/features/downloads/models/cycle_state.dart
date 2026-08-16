@@ -15,34 +15,6 @@ enum CycleState {
   failed,
   updatingLinks;
 
-  static const Map<String, CycleState> _libtorrentStateMap = {
-    'downloading_metadata': CycleState.fetchingMetadata,
-    'fetching_metadata': CycleState.fetchingMetadata,
-    'metadata': CycleState.fetchingMetadata,
-    'allocating': CycleState.allocating,
-    'checking_files': CycleState.verifying,
-    'queued_for_checking': CycleState.verifying,
-    'checking_resume_data': CycleState.verifying,
-    'checking': CycleState.verifying,
-    'verifying': CycleState.verifying,
-    'downloading': CycleState.downloading,
-    'seeding': CycleState.seeding,
-    'finished': CycleState.completed,
-    'completed': CycleState.completed,
-    'paused': CycleState.paused,
-    'stopped': CycleState.paused,
-    'stalled': CycleState.stalled,
-    'error': CycleState.failed,
-    'failed': CycleState.failed,
-    'resuming': CycleState.resuming,
-    'retrying': CycleState.retrying,
-    'updating_links': CycleState.updatingLinks,
-    'merging': CycleState.merging,
-    'muxing': CycleState.merging,
-    'starting': CycleState.starting,
-    'queued': CycleState.starting,
-  };
-
   /// Maps libtorrent state labels / strings to a canonical [CycleState].
   static CycleState fromLibtorrent(String? stateLabel) {
     final s = stateLabel?.toLowerCase() ?? '';

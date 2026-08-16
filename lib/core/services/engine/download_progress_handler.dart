@@ -43,7 +43,8 @@ class DownloadProgressHandler {
   DateTime? get counterpartWaitStartForTesting => _counterpartWaitStart;
 
   @visibleForTesting
-  set counterpartWaitStartForTesting(DateTime? val) => _counterpartWaitStart = val;
+  set counterpartWaitStartForTesting(DateTime? val) =>
+      _counterpartWaitStart = val;
 
   final List<Map<String, dynamic>>? Function()? getTorrentFiles;
 
@@ -102,12 +103,15 @@ class DownloadProgressHandler {
   }) async {
     int? override = ytCounterpartDownloadedOverride;
     bool isCounterpartUnregistered = false;
-    if (override == null && ytLiveBytes != null && ytCounterpartTaskIds != null) {
+    if (override == null &&
+        ytLiveBytes != null &&
+        ytCounterpartTaskIds != null) {
       final cpId = ytCounterpartTaskIds[taskId];
       if (cpId != null) {
         final lastAccess = ytLiveBytes.getLastAccessed(cpId);
         if (lastAccess == null ||
-            DateTime.now().difference(lastAccess) <= const Duration(seconds: 15)) {
+            DateTime.now().difference(lastAccess) <=
+                const Duration(seconds: 15)) {
           override = ytLiveBytes[cpId];
         }
       } else if (ytStreamKind != null) {
@@ -150,7 +154,8 @@ class DownloadProgressHandler {
           .toList();
     }
 
-    lastDownloadedBytes = (p['downloadedBytes'] as num?)?.toInt() ?? lastDownloadedBytes;
+    lastDownloadedBytes =
+        (p['downloadedBytes'] as num?)?.toInt() ?? lastDownloadedBytes;
     lastFileSize = (p['fileSize'] as num?)?.toInt() ?? lastFileSize;
 
     // Torrent file handling
@@ -177,18 +182,22 @@ class DownloadProgressHandler {
         (p['ytCounterpartDownloadedBytes'] as num?)?.toInt() ??
         ytCounterpartDownloadedBytes;
 
-    if (isCounterpartUnregistered && ytStreamKind != null && cycle == CycleState.downloading) {
+    if (isCounterpartUnregistered &&
+        ytStreamKind != null &&
+        cycle == CycleState.downloading) {
       _counterpartWaitStart ??= DateTime.now();
-      if (DateTime.now().difference(_counterpartWaitStart!) > const Duration(seconds: 30)) {
+      if (DateTime.now().difference(_counterpartWaitStart!) >
+          const Duration(seconds: 30)) {
         _counterpartWaitStart = null;
-        throw UrlExpiredException(
+        throw const UrlExpiredException(
           'Counterpart stream lost — refresh required',
           refreshAllMirrors: true,
         );
       }
       final cpSize = dynamicYtCounterpartSize;
-      final cpDone = cpSize != null && cpSize > 0 && 
-                     (dynamicYtCounterpartDownloaded ?? 0) >= cpSize;
+      final cpDone = cpSize != null &&
+          cpSize > 0 &&
+          (dynamicYtCounterpartDownloaded ?? 0) >= cpSize;
       if (cpDone) {
         _counterpartWaitStart = null;
         cycle = CycleState.merging;
@@ -202,13 +211,16 @@ class DownloadProgressHandler {
     }
 
     // YT Combined Sync Check
-    if (cycle == CycleState.completed && ytStreamKind != null && ytStreamKind != YtStreamKind.combined) {
+    if (cycle == CycleState.completed &&
+        ytStreamKind != null &&
+        ytStreamKind != YtStreamKind.combined) {
       final cpSize = dynamicYtCounterpartSize;
       final cpLive = dynamicYtCounterpartDownloaded ?? 0;
-      
+
       final bool counterpartResolved = cpSize != null && cpSize > 0;
       final bool counterpartDone = counterpartResolved && cpLive >= cpSize;
-      final bool selfDone = lastFileSize > 0 && lastDownloadedBytes >= lastFileSize;
+      final bool selfDone =
+          lastFileSize > 0 && lastDownloadedBytes >= lastFileSize;
 
       if (!counterpartResolved || !counterpartDone || !selfDone) {
         cycle = CycleState.downloading;
@@ -223,32 +235,40 @@ class DownloadProgressHandler {
         : (isDone ? totalParts : chunkList.where((c) => c.isComplete).length);
 
     lastChunkDetails = chunkDetails ?? lastChunkDetails;
-    lastTotalChunks = (isTorrent || chunkDetails == null) ? lastTotalChunks : totalParts;
-    lastCompletedChunks = (isTorrent || chunkDetails == null) ? lastCompletedChunks : doneParts;
+    lastTotalChunks =
+        (isTorrent || chunkDetails == null) ? lastTotalChunks : totalParts;
+    lastCompletedChunks =
+        (isTorrent || chunkDetails == null) ? lastCompletedChunks : doneParts;
 
     final rawPauseReason = p['pauseReason'];
     final PauseReason? pauseReason = rawPauseReason is PauseReason
         ? rawPauseReason
-        : (rawPauseReason is String ? PauseReason.fromName(rawPauseReason) : null);
+        : (rawPauseReason is String
+            ? PauseReason.fromName(rawPauseReason)
+            : null);
 
     final progress = DownloadProgress(
       downloadedBytes: lastDownloadedBytes,
       fileSize: lastFileSize,
       speed: (p['speed'] as num?)?.toDouble() ?? 0.0,
       eta: (p['eta'] as num?)?.toInt(),
-      chunks: p['chunks'] != null ? List<double>.from(p['chunks'] as List) : null,
+      chunks:
+          p['chunks'] != null ? List<double>.from(p['chunks'] as List) : null,
       fileName: p['fileName'] as String? ?? resolvedFileName,
       supportsResume: p['supportsResume'] as bool? ?? resolvedSupportsResume,
       statusMessage: sm,
       ytStreamKind: ytStreamKind,
       ytCounterpartSize: dynamicYtCounterpartSize,
-      ytDownloadedBytes: (p['ytDownloadedBytes'] as num?)?.toInt() ?? (ytStreamKind != null ? lastDownloadedBytes : null),
+      ytDownloadedBytes: (p['ytDownloadedBytes'] as num?)?.toInt() ??
+          (ytStreamKind != null ? lastDownloadedBytes : null),
       ytCounterpartDownloadedBytes: dynamicYtCounterpartDownloaded,
       chunkDetails: lastChunkDetails,
       cycleState: cycle,
       pauseReason: pauseReason,
-      totalChunks: (isTorrent || lastChunkDetails == null) ? null : lastTotalChunks,
-      completedChunks: (isTorrent || lastChunkDetails == null) ? null : lastCompletedChunks,
+      totalChunks:
+          (isTorrent || lastChunkDetails == null) ? null : lastTotalChunks,
+      completedChunks:
+          (isTorrent || lastChunkDetails == null) ? null : lastCompletedChunks,
       torrentFiles: lastTorrentFiles,
       totalFiles: lastTotalFiles,
       completedFiles: lastCompletedFiles,
@@ -260,7 +280,8 @@ class DownloadProgressHandler {
     final intervalMs = getEffectiveIntervalMs();
     final now = DateTime.now();
     final bool canEmitNow = lastProgressEmitTime == null ||
-        now.difference(lastProgressEmitTime!) >= Duration(milliseconds: intervalMs);
+        now.difference(lastProgressEmitTime!) >=
+            Duration(milliseconds: intervalMs);
     final isTerminalChange = cycle == CycleState.failed ||
         cycle == CycleState.completed ||
         cycle == CycleState.paused;
@@ -277,7 +298,8 @@ class DownloadProgressHandler {
       if (_throttleTimer == null) {
         final elapsed = now.difference(lastProgressEmitTime!).inMilliseconds;
         final remainingMs = intervalMs - elapsed;
-        _throttleTimer = Timer(Duration(milliseconds: remainingMs.clamp(1, intervalMs)), () {
+        _throttleTimer =
+            Timer(Duration(milliseconds: remainingMs.clamp(1, intervalMs)), () {
           _throttleTimer = null;
           if (cancelToken.isCancelled) {
             _pendingProgress = null;
@@ -307,9 +329,12 @@ class DownloadProgressHandler {
       return map;
     }).toList();
 
-    final selected = lastTorrentFiles!.where((f) => (f['selected'] as bool?) ?? true).toList();
+    final selected = lastTorrentFiles!
+        .where((f) => (f['selected'] as bool?) ?? true)
+        .toList();
     lastTotalFiles = selected.length;
-    lastTotalFileBytes = selected.fold<int>(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
+    lastTotalFileBytes = selected.fold<int>(
+        0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
     lastDownloadedFileBytes = selected.fold<int>(0, (sum, f) {
       final len = (f['length'] as num?)?.toInt() ?? 0;
       final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;

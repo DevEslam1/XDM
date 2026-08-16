@@ -6,9 +6,14 @@ class HighContrastDetector extends StatelessWidget {
 
   const HighContrastDetector({super.key, required this.builder});
 
+  static bool isActive(BuildContext context) {
+    return MediaQuery.maybeHighContrastOf(context) ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isHighContrast = MediaQuery.of(context).highContrast;
+    final isHighContrast = isActive(context);
     return builder(context, isHighContrast);
   }
 }
+

@@ -10,7 +10,15 @@ import 'package:logging/logging.dart';
 enum ThermalStatus { none, fair, moderate, severe, critical }
 
 /// Battery saver operating modes.
-enum BatterySaverMode { off, moderate, aggressive }
+enum BatterySaverMode {
+  off,
+  moderate,
+  aggressive;
+
+  bool get isAggressive => this == BatterySaverMode.aggressive;
+  bool get isModerate => this == BatterySaverMode.moderate;
+  bool get isOff => this == BatterySaverMode.off;
+}
 
 /// Central power intelligence. Every subsystem reads from here.
 class PowerMonitor {
@@ -30,6 +38,10 @@ class PowerMonitor {
   static Timer? _thermalTimer;
   static bool _screenOn = true;
   static bool isAppForegrounded = true;
+
+  /// Notifies subscribers immediately whenever [batterySaverMode] changes.
+  static final ValueNotifier<BatterySaverMode> batterySaverModeNotifier =
+      ValueNotifier<BatterySaverMode>(BatterySaverMode.off);
 
   /// Notifies subscribers immediately whenever [throttleFactor] changes.
   static final ValueNotifier<double> throttleFactorNotifier =
@@ -145,6 +157,7 @@ class PowerMonitor {
   }
 
   static void _notifyThrottleFactor() {
+    batterySaverModeNotifier.value = batterySaverMode;
     throttleFactorNotifier.value = throttleFactor;
   }
 
