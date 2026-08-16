@@ -91,6 +91,15 @@ class DownloadEngine implements IDownloadEngine {
       p.join(dir, '$fileName.dmxpart');
 
   Future<bool> hasEnoughDiskSpace(String saveDir, int requiredBytes) async {
+    final result = await hasEnoughDiskSpaceOrNull(saveDir, requiredBytes);
+    return result ?? false;
+  }
+
+  /// Like [hasEnoughDiskSpace] but returns `null` when the free-space check
+  /// itself fails (unknown), so callers can distinguish "no space" from
+  /// "could not determine". The non-nullable variant is fail-safe: it
+  /// conservatively reports `false` when the check cannot complete.
+  Future<bool?> hasEnoughDiskSpaceOrNull(String saveDir, int requiredBytes) async {
     try {
       if (requiredBytes <= 0) return true;
       final dir = Directory(saveDir);
@@ -136,7 +145,7 @@ class DownloadEngine implements IDownloadEngine {
       return true; // fallback: assume enough space
     } catch (e) {
       debugPrint('[DiskCheck] Failed to check disk space: $e');
-      return true;
+      return null;
     }
   }
 
