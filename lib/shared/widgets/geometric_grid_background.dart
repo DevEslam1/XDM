@@ -132,50 +132,53 @@ class GeometricGridBackground extends StatefulWidget {
 }
 
 class _GeometricGridBackgroundState extends State<GeometricGridBackground>
-    with WidgetsBindingObserver {
-  bool _isVisible = true;
-
-  AmbientProgress get _ambientProgress {
-    try {
-      if (getIt.isRegistered<AmbientProgress>()) {
-        return getIt<AmbientProgress>();
-      }
-    } catch (e, st) {
-      LoggingService.logger('GeometricGridBackground').fine('getIt resolution fallback', e, st);
-    }
-    return AmbientProgress.instance;
-  }
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _ambientProgress.addRef();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 20),
+    );
+    if (BackgroundGate.shouldAnimate) {
+      _controller.repeat();
+    }
+    // Listen to power state changes
+    PowerMonitor.batterySaverModeNotifier.addListener(_onPowerChanged);
+  }
+
+  void _onPowerChanged() {
+    if (BackgroundGate.shouldAnimate && !_controller.isAnimating) {
+      _controller.repeat();
+    } else if (!BackgroundGate.shouldAnimate && _controller.isAnimating) {
+      _controller.stop();
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.hidden) {
-      if (_isVisible) {
-        setState(() {
-          _isVisible = false;
-        });
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      if (_controller.isAnimating) {
+        _controller.stop();
       }
     } else if (state == AppLifecycleState.resumed) {
-      if (!_isVisible) {
-        setState(() {
-          _isVisible = true;
-        });
+      if (BackgroundGate.shouldAnimate && !_controller.isAnimating) {
+        _controller.repeat();
       }
     }
   }
 
   @override
   void dispose() {
+    PowerMonitor.batterySaverModeNotifier.removeListener(_onPowerChanged);
+    _controller.dispose();
     WidgetsBinding.instance.removeObserver(this);
-    _ambientProgress.removeRef();
     super.dispose();
   }
 
@@ -228,7 +231,6 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
 
     if (classicUi ||
         reduceVisuals ||
-        !_isVisible ||
         PerformanceMonitor.shouldReduceMotion ||
         MediaQuery.disableAnimationsOf(context) ||
         DownloadEngine.isInBackground ||
@@ -248,12 +250,12 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
         children: [
           Positioned.fill(
             child: RepaintBoundary(
-              child: ValueListenableBuilder<double>(
-                valueListenable: _ambientProgress.progress,
-                builder: (context, progress, _) {
+              child: AnimatedBuilder(
+                animation: _controller,
+                builder: (context, _) {
                   return CustomPaint(
                     painter: _AmbientBlobPainter(
-                      progress: progress,
+                      progress: _controller.value,
                       isDark: isDark,
                       intensity: gridOpacity / 40.0,
                       bgColor: bgColor,

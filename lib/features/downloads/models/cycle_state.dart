@@ -15,16 +15,56 @@ enum CycleState {
   failed,
   updatingLinks;
 
+  static const Map<String, CycleState> _libtorrentStateMap = {
+    'downloading_metadata': CycleState.fetchingMetadata,
+    'fetching_metadata': CycleState.fetchingMetadata,
+    'metadata': CycleState.fetchingMetadata,
+    'allocating': CycleState.allocating,
+    'checking_files': CycleState.verifying,
+    'queued_for_checking': CycleState.verifying,
+    'checking_resume_data': CycleState.verifying,
+    'checking': CycleState.verifying,
+    'verifying': CycleState.verifying,
+    'downloading': CycleState.downloading,
+    'seeding': CycleState.seeding,
+    'finished': CycleState.completed,
+    'completed': CycleState.completed,
+    'paused': CycleState.paused,
+    'stopped': CycleState.paused,
+    'stalled': CycleState.stalled,
+    'error': CycleState.failed,
+    'failed': CycleState.failed,
+    'resuming': CycleState.resuming,
+    'retrying': CycleState.retrying,
+    'updating_links': CycleState.updatingLinks,
+    'merging': CycleState.merging,
+    'muxing': CycleState.merging,
+    'starting': CycleState.starting,
+    'queued': CycleState.starting,
+  };
+
   /// Maps libtorrent state labels / strings to a canonical [CycleState].
   static CycleState fromLibtorrent(String? stateLabel) {
-    final s = stateLabel?.toLowerCase() ?? '';
+    if (stateLabel == null || stateLabel.trim().isEmpty) {
+      return CycleState.downloading;
+    }
+    final s = stateLabel.trim().toLowerCase().replaceAll(' ', '_');
+
+    // 1. Fast exact match lookup
+    final direct = _libtorrentStateMap[s];
+    if (direct != null) return direct;
+
+    // 2. Substring fallback matching for compound or unformatted states
     if (s.contains('queued_for_checking') ||
         s.contains('checking_files') ||
         s.contains('checking_resume_data') ||
-        s.contains('verifying')) {
+        s.contains('verifying') ||
+        s.contains('checking')) {
       return CycleState.verifying;
     }
-    if (s.contains('downloading_metadata') || s.contains('fetching_metadata')) {
+    if (s.contains('downloading_metadata') ||
+        s.contains('fetching_metadata') ||
+        s.contains('metadata')) {
       return CycleState.fetchingMetadata;
     }
     if (s.contains('allocating')) return CycleState.allocating;

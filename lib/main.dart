@@ -221,7 +221,9 @@ Future<void> main(List<String> args) async {
         getIt.unregister<AmbientAnimationController>();
       }
       getIt.registerSingleton<AmbientAnimationController>(
-        const CompositeAmbientAnimationController(),
+        (kDebugMode == false || PowerMonitor.isLowEndDevice)
+            ? const NoOpAmbientAnimationController()
+            : const CompositeAmbientAnimationController(),
       );
 
       // ── PHASE 4: Build providers (no blocking I/O) and show UI immediately ──

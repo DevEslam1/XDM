@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../features/downloads/data/drift_task_repository.dart';
@@ -15,6 +16,7 @@ import '../../features/downloads/usecases/retry_download_usecase.dart';
 import '../../features/downloads/usecases/start_download_usecase.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../../shared/animation/ambient_animation_coordinator.dart';
+import '../../shared/animation/composite_ambient_animation_controller.dart';
 import '../interfaces/i_torrent_service.dart';
 import '../services/app_lifecycle_coordinator.dart';
 import '../services/app_lock_service.dart';
@@ -193,7 +195,9 @@ Future<void> configureDependencies() async {
   );
 
   getIt.registerLazySingleton<AmbientAnimationController>(
-    () => const NoOpAmbientAnimationController(),
+    () => (kDebugMode == false || PowerMonitor.isLowEndDevice)
+        ? const NoOpAmbientAnimationController()
+        : const CompositeAmbientAnimationController(),
   );
 
   getIt.registerLazySingleton<BackgroundTimerManager>(
