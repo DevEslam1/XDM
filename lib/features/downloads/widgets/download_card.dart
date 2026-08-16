@@ -69,8 +69,6 @@ class _DownloadCardState extends State<DownloadCard>
     super.build(context);
     final task = widget.task;
     final compact = widget.compact;
-    final showDragHandle = widget.showDragHandle;
-    final index = widget.index;
 
     final isSelectionMode =
         context.select((DownloadProvider p) => p.isSelectionMode);
