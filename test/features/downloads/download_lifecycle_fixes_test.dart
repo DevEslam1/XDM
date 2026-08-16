@@ -630,11 +630,12 @@ void main() {
       expect(task.downloadedFileBytes, equals(150)); // 100 + 50
     });
 
-    // 17. Unregistered YouTube Counterpart Timeout (Fix 5)
-    test('17. Unregistered YouTube Counterpart throws UrlExpiredException after 30s', () async {
+    // 17. Unregistered YouTube Counterpart Timeout & Warning
+    test('17. Unregistered YouTube Counterpart retries at 30s and throws UrlExpiredException after 90s', () async {
+      DownloadProgress? lastEmitted;
       final handler = DownloadProgressHandler(
         taskId: 'yt_timeout',
-        onProgress: (_) {},
+        onProgress: (p) => lastEmitted = p,
         cancelToken: CancelToken(),
         resolvedFileName: 'video.mp4',
         resolvedSupportsResume: true,
@@ -657,10 +658,21 @@ void main() {
         isCounterpartUnregistered: true,
       );
 
-      // Set wait start to 35 seconds ago
+      // Set wait start to 35 seconds ago -> should emit retrying warning state
       handler.counterpartWaitStartForTesting = DateTime.now().subtract(const Duration(seconds: 35));
+      await handler.handleWorkerProgress(
+        {
+          'downloadedBytes': 100,
+          'fileSize': 1000,
+          'cycleState': CycleState.downloading,
+        },
+        isCounterpartUnregistered: true,
+      );
+      expect(lastEmitted?.cycleState, equals(CycleState.retrying));
+      expect(lastEmitted?.statusMessage, contains('Counterpart stream slow'));
 
-      // Next progress should throw UrlExpiredException
+      // Set wait start to 95 seconds ago -> should throw UrlExpiredException
+      handler.counterpartWaitStartForTesting = DateTime.now().subtract(const Duration(seconds: 95));
       expect(
         () => handler.handleWorkerProgress(
           {
@@ -672,6 +684,101 @@ void main() {
         ),
         throwsA(isA<UrlExpiredException>()),
       );
+    });
+
+    // 18. URL Expiration Limit & Window Reset
+    test('18. DownloadProgressHandler throws after 3 URL expirations in 5min and resets window', () {
+      final handler = DownloadProgressHandler(
+        taskId: 'expire_test',
+        onProgress: (_) {},
+        cancelToken: CancelToken(),
+        resolvedFileName: 'test.zip',
+        resolvedSupportsResume: true,
+        ytStreamKind: null,
+        ytCounterpartSize: null,
+        ytCounterpartDownloadedBytes: null,
+        isTorrent: false,
+        getEffectiveIntervalMs: () => 0,
+        lastDownloadedBytes: 0,
+        lastFileSize: 1000,
+      );
+
+      handler.urlExpireWindowStartForTesting = DateTime.now();
+      handler.urlExpireCountForTesting = 2;
+
+      // 3rd expiration in window should throw DownloadIntegrityException
+      expect(() => handler.handleUrlExpired(), throwsA(isA<DownloadIntegrityException>()));
+
+      // Counter should be reset after throwing
+      expect(handler.urlExpireCountForTesting, equals(0));
+
+      // 5 minutes later, new expiration starts new window
+      handler.urlExpireWindowStartForTesting = DateTime.now().subtract(const Duration(minutes: 6));
+      handler.urlExpireCountForTesting = 5;
+      handler.handleUrlExpired();
+      expect(handler.urlExpireCountForTesting, equals(1));
+    });
+
+    // 19. distributeEstimatedBytes respects priority weights
+    test('19. distributeEstimatedBytes allocates more to higher priority files', () {
+      final files = [
+        {'name': 'high.mp4', 'length': 1000, 'downloadedBytes': -1, 'selected': true, 'priority': 7},
+        {'name': 'low.mp4', 'length': 1000, 'downloadedBytes': -1, 'selected': true, 'priority': 1},
+      ];
+      TorrentDownloadHandler.distributeEstimatedBytes(files, 1000);
+      final highDl = (files[0]['downloadedBytes'] as num).toInt();
+      final lowDl = (files[1]['downloadedBytes'] as num).toInt();
+      expect(highDl + lowDl, lessThanOrEqualTo(1000));
+      expect(highDl, greaterThan(lowDl));
+      expect(files[0]['progressEstimated'], isTrue);
+    });
+
+    // 20. DownloadTask previousCycleState field
+    test('20. DownloadTask preserves previousCycleState on copyWith and fromMap', () {
+      final task = DownloadTask(
+        id: 'task_1',
+        fileName: 'file.mp4',
+        url: 'http://example.com/file.mp4',
+        fileSize: 1000,
+        downloadedBytes: 500,
+        category: 'other',
+        status: DownloadStatus.paused,
+        savePath: '/tmp',
+        localFilePath: '/tmp/file.mp4',
+        tempFilePath: '/tmp/file.mp4.part',
+        threadCount: 1,
+        chunks: [0.5],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        cycleState: CycleState.paused,
+        previousCycleState: CycleState.fetchingMetadata,
+      );
+
+      expect(task.previousCycleState, equals(CycleState.fetchingMetadata));
+
+      final copied = task.copyWith(cycleState: CycleState.downloading);
+      expect(copied.previousCycleState, equals(CycleState.fetchingMetadata));
+
+      final cleared = task.copyWith(clearPreviousCycleState: true);
+      expect(cleared.previousCycleState, isNull);
+
+      final fromMapTask = DownloadTask.fromMap({
+        'id': 'task_2',
+        'fileName': 'file2.mp4',
+        'url': 'http://example.com/file2.mp4',
+        'fileSize': 1000,
+        'downloadedBytes': 0,
+        'category': 'other',
+        'status': 'paused',
+        'savePath': '/tmp',
+        'localFilePath': '/tmp/file2.mp4',
+        'tempFilePath': '/tmp/file2.mp4.part',
+        'threadCount': 1,
+        'chunks': [0.0],
+        'cycleState': 'paused',
+        'previousCycleState': 'updatingLinks',
+      });
+      expect(fromMapTask.previousCycleState, equals(CycleState.updatingLinks));
     });
   });
 }

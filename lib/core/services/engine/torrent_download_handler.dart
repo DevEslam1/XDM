@@ -6,8 +6,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 
+import '../../../features/downloads/provider/network_monitor.dart';
 import '../../di/injection.dart';
 import '../../interfaces/i_torrent_service.dart';
+import '../background_gate.dart';
 import '../download_engine.dart';
 import '../logging_service.dart';
 import '../torrent_resume_store.dart';
@@ -81,13 +83,8 @@ class TorrentDownloadHandler {
                 ? getIt<ITorrentService>()
                 : TorrentServiceImpl());
 
-  static PauseReason _inferPauseReason(String? message) {
-    if (message == null) return PauseReason.userRequested;
-    final m = message.toLowerCase();
-    if (m.contains('network') || m.contains('connection')) return PauseReason.networkLost;
-    if (m.contains('battery')) return PauseReason.batteryLow;
-    if (m.contains('schedule')) return PauseReason.scheduled;
-    return PauseReason.userRequested;
+  static PauseReason _inferPauseReason([PauseReason? reason]) {
+    return reason ?? PauseReason.userRequested;
   }
 
   Set<int> get activeTorrentIds => Set.unmodifiable(_activeTorrentIds);
@@ -101,12 +98,15 @@ class TorrentDownloadHandler {
 
   @visibleForTesting
   static Duration computeAdaptiveSyncInterval(int fileCount, {bool inBackground = false}) {
-    if (inBackground) return const Duration(seconds: 30);
-    return Duration(milliseconds: max(4000, fileCount * 4));
+    if (inBackground) return const Duration(seconds: 60);
+    if (fileCount > 5000) return const Duration(seconds: 45);
+    if (fileCount > 1000) return const Duration(seconds: 30);
+    if (fileCount > 100) return const Duration(seconds: 15);
+    return const Duration(seconds: 5);
   }
 
   @visibleForTesting
-  static bool shouldSkipPerFileSync(int fileCount) => fileCount > 1000;
+  static bool shouldSkipPerFileSync(int fileCount) => fileCount > 10000;
 
   static Map<String, dynamic> normalizeTorrentFile(Map<String, dynamic> f) {
     final len = (f['length'] as num?)?.toInt() ?? 0;
@@ -238,42 +238,51 @@ class TorrentDownloadHandler {
     }
   }
 
+  static double _priorityWeight(int priority) {
+    if (priority <= 0) return 0.0;
+    if (priority == 4) return 1.0;
+    if (priority >= 7) return 1.5;
+    return 1.0 + ((priority - 4) / 6.0);
+  }
+
   static void distributeEstimatedBytes(
       List<Map<String, dynamic>> files, int totalDownloadedBytes) {
     int confirmedBytes = 0;
-    int totalNeedingSize = 0;
+    double totalWeightedNeedingSize = 0;
     final needing = <Map<String, dynamic>>[];
 
-    for (var i = 0; i < files.length; i++) {
-      final f = files[i];
+    for (final f in files) {
       final estimated = (f['progressEstimated'] as bool?) ?? true;
       final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
       final len = (f['length'] as num?)?.toInt() ?? 0;
-
+      final priority = (f['priority'] as num?)?.toInt() ?? 4;
       if (!estimated) {
         confirmedBytes += dl;
       } else if (dl < len) {
         needing.add(f);
-        totalNeedingSize += len;
+        totalWeightedNeedingSize += len * _priorityWeight(priority);
       }
     }
-
     if (needing.isEmpty) return;
 
     final remaining = max(0, totalDownloadedBytes - confirmedBytes);
-    for (var i = 0; i < needing.length; i++) {
-      final f = needing[i];
+
+    for (final f in needing) {
       final length = (f['length'] as num?)?.toInt() ?? 0;
+      final priority = (f['priority'] as num?)?.toInt() ?? 4;
       if (length <= 0) {
         f['downloadedBytes'] = 0;
-      } else if (totalNeedingSize > 0 && remaining > 0) {
-        final est = ((length / totalNeedingSize) * remaining).round();
-        f['downloadedBytes'] = est.clamp(0, length);
-        f['progressEstimated'] = true;
-      } else {
-        final prev = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-        f['downloadedBytes'] = prev.clamp(0, length);
+        continue;
       }
+
+      final weight = totalWeightedNeedingSize > 0 && remaining > 0
+          ? (length * _priorityWeight(priority)) / totalWeightedNeedingSize
+          : 0.0;
+      final est = (weight * remaining).round().clamp(0, length);
+      f['downloadedBytes'] = est;
+      f['progressEstimated'] = true;
+      f['progress'] = length > 0 ? (est / length).clamp(0.0, 1.0) : 1.0;
+      f['isComplete'] = est >= length;
     }
     _reconcileEstimatedFiles(files, totalDownloadedBytes);
   }
@@ -292,6 +301,7 @@ class TorrentDownloadHandler {
     List<Map<String, dynamic>>? Function()? getTorrentFiles,
     int? torrentId,
     bool isRetry = false,
+    PauseReason? pauseReason,
   }) async {
     final initFiles = getTorrentFiles?.call();
     final initSummary = normalizeTorrentFiles(initFiles);
@@ -470,7 +480,7 @@ class TorrentDownloadHandler {
       ));
     }
 
-    cancelToken.whenCancel.then((_) async {
+    cancelToken.whenCancel.then((cancelReason) async {
       if (torrentCompleted) return;
       try {
         TorrentService.pauseTorrent(id);
@@ -479,16 +489,17 @@ class TorrentDownloadHandler {
       }
       await Future.delayed(const Duration(milliseconds: 50));
       List<Map<String, dynamic>>? pauseFiles = getTorrentFiles?.call();
+      String normKey(String name) => name.toLowerCase().replaceAll('\\', '/');
       final previousSelectedMap = <String, bool>{
         if (pauseFiles != null)
           for (final f in pauseFiles)
-            if (f['name'] != null) (f['name'] as String): (f['selected'] as bool?) ?? true
+            if (f['name'] != null) normKey(f['name'] as String): (f['selected'] as bool?) ?? true
       };
       final previousPriorityMap = <String, int>{
         if (pauseFiles != null)
           for (final f in pauseFiles)
             if (f['name'] != null && f['priority'] is int)
-              (f['name'] as String): f['priority'] as int
+              normKey(f['name'] as String): f['priority'] as int
       };
       try {
         final accurateFiles =
@@ -500,8 +511,8 @@ class TorrentDownloadHandler {
                 'name': accurateFiles[i].name,
                 'length': accurateFiles[i].size,
                 'downloadedBytes': accurateFiles[i].downloadedBytes,
-                'selected': previousSelectedMap[accurateFiles[i].name] ?? true,
-                'priority': previousPriorityMap[accurateFiles[i].name] ?? 4,
+                'selected': previousSelectedMap[normKey(accurateFiles[i].name)] ?? true,
+                'priority': previousPriorityMap[normKey(accurateFiles[i].name)] ?? 4,
                 'progress': accurateFiles[i].progress,
                 'isComplete': accurateFiles[i].isComplete,
                 'progressEstimated': false,
@@ -512,6 +523,15 @@ class TorrentDownloadHandler {
         LoggingService.logger('TorrentDownloadHandler').warning('Operation failed', e, st);
       }
       final pauseSummary = normalizeTorrentFiles(pauseFiles);
+      final String? cancelReasonStr = cancelReason.error?.toString() ??
+          cancelReason.message ??
+          cancelToken.cancelError?.error?.toString() ??
+          cancelToken.cancelError?.message;
+      final parsedPauseReason = cancelReasonStr?.contains(':') == true
+          ? (PauseReason.fromName(cancelReasonStr!.split(':')[1]) ?? PauseReason.userRequested)
+          : (cancelReasonStr != null && cancelReasonStr.isNotEmpty
+              ? (PauseReason.fromName(cancelReasonStr) ?? _inferPauseReason(pauseReason))
+              : _inferPauseReason(pauseReason));
       onProgress(DownloadProgress(
         downloadedBytes: pauseSummary.downloaded,
         fileSize: pauseSummary.bytes > 0 ? pauseSummary.bytes : knownFileSize,
@@ -521,7 +541,7 @@ class TorrentDownloadHandler {
         torrentFiles: pauseFiles,
         statusMessage: 'Paused',
         cycleState: CycleState.paused,
-        pauseReason: _inferPauseReason(cancelToken.cancelError?.message),
+        pauseReason: parsedPauseReason,
         torrentId: id,
         totalFiles: pauseSummary.total > 0 ? pauseSummary.total : null,
         completedFiles: pauseSummary.total > 0 ? pauseSummary.done : null,
@@ -593,17 +613,39 @@ class TorrentDownloadHandler {
     lastStateLabel = '';
     DateTime lastTorrentProgressTime = DateTime.now();
     int lastTorrentDownloadedBytes = 0;
+    double lastTorrentSpeed = 0.0;
     int currentTotalSize = 0;
+    DateTime? lastRecoveryEmit;
     Timer? stallWatchdog;
 
     try {
-      stallWatchdog = Timer.periodic(const Duration(minutes: 5), (_) {
+      stallWatchdog = Timer.periodic(BackgroundGate.adaptInterval(const Duration(seconds: 30)), (_) {
+        if (getIt.isRegistered<NetworkMonitor>()) {
+          final networkMonitor = getIt<NetworkMonitor>();
+          if (!networkMonitor.hasConnection) {
+            onProgress(DownloadProgress(
+              downloadedBytes: lastTorrentDownloadedBytes,
+              fileSize: currentTotalSize,
+              speed: 0,
+              eta: null,
+              torrentFiles: cachedAccurateFiles,
+              cycleState: CycleState.paused,
+              pauseReason: PauseReason.networkLost,
+              statusMessage: 'Waiting for network…',
+              torrentId: id,
+            ));
+            return;
+          }
+        }
+
         final elapsed = DateTime.now().difference(lastTorrentProgressTime);
         final isTerminal = lastStateLabel == 'seeding' ||
             lastStateLabel == 'paused' ||
             lastStateLabel == 'stopped' ||
             lastStateLabel == 'error';
-        if (elapsed >= const Duration(minutes: 5) && !isTerminal) {
+        if (isTerminal) return;
+
+        if (elapsed >= const Duration(minutes: 5)) {
           onProgress(DownloadProgress(
             downloadedBytes: lastTorrentDownloadedBytes,
             fileSize: currentTotalSize,
@@ -614,10 +656,21 @@ class TorrentDownloadHandler {
             statusMessage: 'Stalled (no peers)',
             torrentId: id,
           ));
+        } else if (elapsed >= const Duration(seconds: 60) && lastTorrentSpeed == 0) {
+          onProgress(DownloadProgress(
+            downloadedBytes: lastTorrentDownloadedBytes,
+            fileSize: currentTotalSize,
+            speed: 0,
+            eta: null,
+            torrentFiles: cachedAccurateFiles,
+            cycleState: CycleState.stalled,
+            statusMessage: 'Looking for peers…',
+            torrentId: id,
+          ));
         }
 
         // Force re-announce after 10 minutes of stall
-        if (elapsed >= const Duration(minutes: 10) && !isTerminal) {
+        if (elapsed >= const Duration(minutes: 10)) {
           _log.warning('Torrent $id stalled for 10min — forcing reannounce');
           try {
             TorrentService.announceNow(id);
@@ -703,19 +756,76 @@ class TorrentDownloadHandler {
                     0));
         currentTotalSize = totalSize;
 
-        final torrentAggregate = torrent.totalWantedDone > 0
-            ? torrent.totalWantedDone
-            : (torrent.totalDone > 0 ? torrent.totalDone : 0);
+        final fileCount = resolvedFiles?.length ?? (cachedAccurateFiles?.length ?? 0);
+        if (fileCount > 0 && !shouldSkipPerFileSync(fileCount)) {
+          final syncInterval = computeAdaptiveSyncInterval(fileCount, inBackground: DownloadEngine.isInBackground);
+          if (now.difference(lastAccurateSync) >= syncInterval) {
+            lastAccurateSync = now;
+            try {
+              final saveDir = File(localFilePath).parent.path;
+              final accurate = await _torrentService.getAccurateFileProgress(id, saveDir);
+              if (accurate.isNotEmpty) {
+                String normKey(String n) => n.toLowerCase().replaceAll('\\', '/');
+                final previousSelectedMap = <String, bool>{
+                  if (resolvedFiles != null)
+                    for (final f in resolvedFiles)
+                      if (f['name'] != null) normKey(f['name'] as String): (f['selected'] as bool?) ?? true
+                };
+                final previousPriorityMap = <String, int>{
+                  if (resolvedFiles != null)
+                    for (final f in resolvedFiles)
+                      if (f['name'] != null && f['priority'] is int)
+                        normKey(f['name'] as String): f['priority'] as int
+                };
+                resolvedFiles = [
+                  for (final f in accurate)
+                    {
+                      'name': f.name,
+                      'length': f.size,
+                      'downloadedBytes': f.downloadedBytes,
+                      'selected': previousSelectedMap[normKey(f.name)] ?? true,
+                      'priority': previousPriorityMap[normKey(f.name)] ?? 4,
+                      'progress': f.progress,
+                      'isComplete': f.isComplete,
+                      'progressEstimated': false,
+                    }
+                ];
+                cachedAccurateFiles = resolvedFiles;
+              }
+            } catch (e, st) {
+              LoggingService.logger('TorrentDownloadHandler')
+                  .warning('Accurate file sync failed: $e', e, st);
+            }
+          }
+        }
 
-        final rawDownloaded = torrentAggregate > 0 ? torrentAggregate : 0;
+        final rawDownloaded = torrent.totalWantedDone > 0 ? torrent.totalWantedDone : 0;
         final safeProgress = torrent.progress.isFinite ? torrent.progress.clamp(0.0, 1.0) : 0.0;
 
         if (resolvedFiles != null && resolvedFiles.isNotEmpty) {
-          updateFilesWithNativeProgress(resolvedFiles, safeProgress, rawDownloaded);
+          bool pieceMapped = false;
+          if (fileCount > 5000) {
+            try {
+              final pieceProgress = await _torrentService.getPieceProgress(id);
+              if (pieceProgress != null) {
+                final piecesHave = (pieceProgress['piecesHave'] as num?)?.toInt() ?? 0;
+                final piecesTotal = (pieceProgress['piecesTotal'] as num?)?.toInt() ?? 0;
+                if (piecesTotal > 0) {
+                  final pieceRatio = (piecesHave / piecesTotal).clamp(0.0, 1.0);
+                  updateFilesWithNativeProgress(resolvedFiles, pieceRatio, rawDownloaded);
+                  pieceMapped = true;
+                }
+              }
+            } catch (_) {}
+          }
+          if (!pieceMapped) {
+            updateFilesWithNativeProgress(resolvedFiles, safeProgress, rawDownloaded);
+          }
         }
 
         final downloadedBytes = rawDownloaded;
         final speed = torrent.downloadPayloadRate.toDouble();
+        lastTorrentSpeed = speed;
 
         var resolvedCycleState = CycleState.fromLibtorrent(torrent.stateLabel);
         var resolvedStatusMessage = torrent.stateLabel;
@@ -725,13 +835,17 @@ class TorrentDownloadHandler {
           lastTorrentProgressTime = DateTime.now();
         } else if (speed == 0) {
           final elapsed = DateTime.now().difference(lastTorrentProgressTime);
-          if (elapsed >= const Duration(minutes: 5) &&
-              stateLabel != 'seeding' &&
+          if (stateLabel != 'seeding' &&
               stateLabel != 'paused' &&
               stateLabel != 'stopped' &&
               stateLabel != 'error') {
-            resolvedStatusMessage = 'Stalled (no peers)';
-            resolvedCycleState = CycleState.stalled;
+            if (elapsed >= const Duration(minutes: 5)) {
+              resolvedStatusMessage = 'Stalled (no peers)';
+              resolvedCycleState = CycleState.stalled;
+            } else if (elapsed >= const Duration(seconds: 60)) {
+              resolvedStatusMessage = 'Looking for peers…';
+              resolvedCycleState = CycleState.stalled;
+            }
           }
         }
 
@@ -742,6 +856,7 @@ class TorrentDownloadHandler {
                 stateLabel == 'checking_files' ||
                 stateLabel == 'checking_resume_data');
         if (isRecovering) {
+          lastRecoveryEmit = DateTime.now();
           onProgress(DownloadProgress(
             downloadedBytes: downloadedBytes,
             fileSize: totalSize,
@@ -756,18 +871,21 @@ class TorrentDownloadHandler {
           ));
         }
 
-        onProgress(DownloadProgress(
-          downloadedBytes: downloadedBytes,
-          fileSize: totalSize,
-          speed: speed,
-          eta: null,
-          torrentFiles: resolvedFiles ?? cachedAccurateFiles,
-          cycleState: resolvedCycleState,
-          totalPieces: torrent.piecesTotal,
-          completedPieces: torrent.piecesHave,
-          statusMessage: resolvedStatusMessage,
-          torrentId: id,
-        ));
+        if (lastRecoveryEmit == null ||
+            DateTime.now().difference(lastRecoveryEmit!).inMilliseconds >= 2000) {
+          onProgress(DownloadProgress(
+            downloadedBytes: downloadedBytes,
+            fileSize: totalSize,
+            speed: speed,
+            eta: null,
+            torrentFiles: resolvedFiles ?? cachedAccurateFiles,
+            cycleState: resolvedCycleState,
+            totalPieces: torrent.piecesTotal,
+            completedPieces: torrent.piecesHave,
+            statusMessage: resolvedStatusMessage,
+            torrentId: id,
+          ));
+        }
 
         if (stateLabel == 'seeding' ||
             (totalSize > 0 && downloadedBytes >= totalSize)) {

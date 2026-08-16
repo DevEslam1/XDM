@@ -38,6 +38,9 @@ class DownloadProgressHandler {
   DownloadProgress? _pendingProgress;
   CycleState? _lastEmittedCycleState;
   DateTime? _counterpartWaitStart;
+  int _urlExpireCount = 0;
+  DateTime? _urlExpireWindowStart;
+  bool _selfActuallyFinalized = false;
 
   @visibleForTesting
   DateTime? get counterpartWaitStartForTesting => _counterpartWaitStart;
@@ -45,6 +48,55 @@ class DownloadProgressHandler {
   @visibleForTesting
   set counterpartWaitStartForTesting(DateTime? val) =>
       _counterpartWaitStart = val;
+
+  @visibleForTesting
+  int get urlExpireCountForTesting => _urlExpireCount;
+
+  @visibleForTesting
+  set urlExpireCountForTesting(int val) => _urlExpireCount = val;
+
+  @visibleForTesting
+  set urlExpireWindowStartForTesting(DateTime? val) =>
+      _urlExpireWindowStart = val;
+
+  @visibleForTesting
+  bool get selfActuallyFinalizedForTesting => _selfActuallyFinalized;
+
+  @visibleForTesting
+  set selfActuallyFinalizedForTesting(bool val) =>
+      _selfActuallyFinalized = val;
+
+  void markDone() {
+    _selfActuallyFinalized = true;
+  }
+
+  void handleEngineMessage(EngineMessageType type) {
+    if (type == EngineMessageType.done) {
+      _selfActuallyFinalized = true;
+    }
+  }
+
+  @visibleForTesting
+  void handleUrlExpired() => _handleUrlExpired();
+
+  void _handleUrlExpired() {
+    final now = DateTime.now();
+    if (_urlExpireWindowStart == null ||
+        now.difference(_urlExpireWindowStart!) > const Duration(minutes: 5)) {
+      _urlExpireWindowStart = now;
+      _urlExpireCount = 1;
+    } else {
+      _urlExpireCount++;
+    }
+    if (_urlExpireCount >= 3) {
+      _urlExpireCount = 0;
+      _urlExpireWindowStart = null;
+      throw const DownloadIntegrityException(
+        'Exceeded maximum URL expiration retries (3 within 5 minutes). '
+        'The source may require re-authentication.',
+      );
+    }
+  }
 
   final List<Map<String, dynamic>>? Function()? getTorrentFiles;
 
@@ -170,8 +222,13 @@ class DownloadProgressHandler {
       cycle = CycleState.paused;
     } else if (p['cycleState'] is CycleState) {
       cycle = p['cycleState'] as CycleState;
+      if (cycle == CycleState.completed) _selfActuallyFinalized = true;
     } else if (p['cycleState'] is String) {
       cycle = CycleState.fromName(p['cycleState'] as String);
+      if (cycle == CycleState.completed) _selfActuallyFinalized = true;
+    }
+    if (p['done'] == true || p['isDone'] == true || p['selfActuallyFinalized'] == true) {
+      _selfActuallyFinalized = true;
     }
     cycle ??= deriveCycleState(sm, cancelToken.isCancelled, isTorrent);
 
@@ -186,9 +243,10 @@ class DownloadProgressHandler {
         ytStreamKind != null &&
         cycle == CycleState.downloading) {
       _counterpartWaitStart ??= DateTime.now();
-      if (DateTime.now().difference(_counterpartWaitStart!) >
-          const Duration(seconds: 30)) {
+      final waitDiff = DateTime.now().difference(_counterpartWaitStart!);
+      if (waitDiff > const Duration(seconds: 90)) {
         _counterpartWaitStart = null;
+        _handleUrlExpired();
         throw const UrlExpiredException(
           'Counterpart stream lost — refresh required',
           refreshAllMirrors: true,
@@ -200,8 +258,18 @@ class DownloadProgressHandler {
           (dynamicYtCounterpartDownloaded ?? 0) >= cpSize;
       if (cpDone) {
         _counterpartWaitStart = null;
-        cycle = CycleState.merging;
-        sm = 'Merging audio + video…';
+        final bool selfDone =
+            lastFileSize > 0 && lastDownloadedBytes >= lastFileSize;
+        if (selfDone) {
+          cycle = CycleState.merging;
+          sm = 'Merging audio + video…';
+        } else {
+          cycle = CycleState.downloading;
+          sm = 'Downloading (counterpart ready)…';
+        }
+      } else if (waitDiff > const Duration(seconds: 30)) {
+        cycle = CycleState.retrying;
+        sm = 'Counterpart stream slow — retrying connection…';
       } else {
         cycle = CycleState.starting;
         sm = 'Waiting for counterpart stream…';
@@ -219,11 +287,11 @@ class DownloadProgressHandler {
 
       final bool counterpartResolved = cpSize != null && cpSize > 0;
       final bool counterpartDone = counterpartResolved && cpLive >= cpSize;
-      final bool selfDone =
-          lastFileSize > 0 && lastDownloadedBytes >= lastFileSize;
+      final bool selfFinalized =
+          _selfActuallyFinalized || (lastFileSize > 0 && lastDownloadedBytes >= lastFileSize);
 
-      if (!counterpartResolved || !counterpartDone || !selfDone) {
-        cycle = CycleState.downloading;
+      if (!selfFinalized || !counterpartDone) {
+        cycle = counterpartDone ? CycleState.merging : CycleState.downloading;
       }
     }
 
@@ -326,6 +394,7 @@ class DownloadProgressHandler {
       map['downloadedBytes'] = dl;
       map['progress'] = progress;
       map['isComplete'] = length == 0 || dl >= length;
+      map['progressEstimated'] = (map['progressEstimated'] as bool?) ?? false;
       return map;
     }).toList();
 

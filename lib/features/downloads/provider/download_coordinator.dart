@@ -57,7 +57,8 @@ class DownloadCoordinator extends ChangeNotifier {
 
   DownloadTask? findTask(String id) => listProvider.findTask(id);
 
-  Future<void> pauseTask(String id) => _pauseUseCase(id);
+  Future<void> pauseTask(String id, {PauseReason reason = PauseReason.userRequested}) =>
+      _pauseUseCase(id, reason: reason);
   Future<void> resumeTask(String id) => _resumeUseCase(id);
   Future<void> deleteTask(String id) => _deleteUseCase(id);
 

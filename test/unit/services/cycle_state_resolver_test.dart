@@ -107,6 +107,22 @@ void main() {
         CycleState.downloading,
       );
       expect(
+        CycleStateResolver.resolve(statusMessage: 'Refreshing links…'),
+        CycleState.updatingLinks,
+      );
+      expect(
+        CycleStateResolver.resolve(statusMessage: 'Retrying (mirror failover)…'),
+        CycleState.retrying,
+      );
+      expect(
+        CycleStateResolver.resolve(statusMessage: 'Finishing merge…'),
+        isNot(CycleState.completed),
+      );
+      expect(
+        CycleStateResolver.resolve(statusMessage: 'Finished download'),
+        CycleState.completed,
+      );
+      expect(
         CycleStateResolver.resolve(statusMessage: null),
         CycleState.downloading,
       );

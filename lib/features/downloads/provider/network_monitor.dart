@@ -72,6 +72,9 @@ class NetworkMonitor {
   /// Whether there is any active network connection.
   bool get hasAnyNetworkConnection => !hasNoNetwork;
 
+  /// Alias for hasAnyNetworkConnection.
+  bool get hasConnection => hasAnyNetworkConnection;
+
   void markWifiWaiting(String taskId) {
     _tasksPausedDueToWifiOnly.add(taskId);
   }

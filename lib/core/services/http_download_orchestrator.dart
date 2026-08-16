@@ -180,6 +180,7 @@ class HttpDownloadOrchestrator {
           );
           break;
         case EngineMessageType.done:
+          progressHandler.markDone();
           if (ytStreamKind != null) _ytCoordinator.unregister(taskId);
           if (!completer.isCompleted) completer.complete();
           break;

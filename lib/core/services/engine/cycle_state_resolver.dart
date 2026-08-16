@@ -17,22 +17,22 @@ class CycleStateResolver {
   static final _seedingRegex =
       RegExp(r'\b(seed\w*)\b', caseSensitive: false);
   static final _completedRegex =
-      RegExp(r'\b(completed|done|finish\w*)\b', caseSensitive: false);
+      RegExp(r'\b(completed|done|finished)\b', caseSensitive: false);
   static final _pausedRegex =
-      RegExp(r'\b(paused|paus\w*|stop|stopped)\b', caseSensitive: false);
+      RegExp(r'\b(paused|stopped)\b', caseSensitive: false);
   static final _stalledRegex =
       RegExp(r'\b(stall\w*)\b', caseSensitive: false);
   static final _failedRegex =
       RegExp(r'\b(error|fail\w*)\b', caseSensitive: false);
   static final _updatingLinksRegex = RegExp(
-      r'\b(updating[_\s]links|refresh\w*|updating|link\w*)\b',
+      r'\b(?:updating|refresh(?:ing)?)\b.*?\b(?:links?|urls?)\b',
       caseSensitive: false);
   static final _retryingRegex =
-      RegExp(r'\b(retry\w*|retrying)\b', caseSensitive: false);
+      RegExp(r'\bretry\w*\b', caseSensitive: false);
   static final _resumingRegex =
-      RegExp(r'\b(resum\w*|resuming)\b', caseSensitive: false);
+      RegExp(r'\bresum\w*\b', caseSensitive: false);
   static final _startingRegex = RegExp(
-      r'\b(start\w*|starting|prepar\w*|waiting for counterpart\w*)\b',
+      r'\b(start\w*|prepar\w*|waiting for counterpart\w*)\b',
       caseSensitive: false);
 
   /// Resolves the canonical [CycleState] given [statusMessage], cancellation flag,
@@ -63,18 +63,6 @@ class CycleStateResolver {
     if (_seedingRegex.hasMatch(sm)) {
       return CycleState.seeding;
     }
-    if (_completedRegex.hasMatch(sm)) {
-      return CycleState.completed;
-    }
-    if (_pausedRegex.hasMatch(sm)) {
-      return CycleState.paused;
-    }
-    if (_stalledRegex.hasMatch(sm)) {
-      return CycleState.stalled;
-    }
-    if (_failedRegex.hasMatch(sm)) {
-      return CycleState.failed;
-    }
     if (_updatingLinksRegex.hasMatch(sm)) {
       return CycleState.updatingLinks;
     }
@@ -86,6 +74,18 @@ class CycleStateResolver {
     }
     if (_startingRegex.hasMatch(sm)) {
       return CycleState.starting;
+    }
+    if (_completedRegex.hasMatch(sm)) {
+      return CycleState.completed;
+    }
+    if (_pausedRegex.hasMatch(sm)) {
+      return CycleState.paused;
+    }
+    if (_stalledRegex.hasMatch(sm)) {
+      return CycleState.stalled;
+    }
+    if (_failedRegex.hasMatch(sm)) {
+      return CycleState.failed;
     }
     return CycleState.downloading;
   }

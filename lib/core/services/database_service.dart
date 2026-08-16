@@ -263,7 +263,7 @@ class DatabaseService {
     }
 
     final statusName = row.status;
-    final status = DownloadStatus.values.firstWhere(
+    final parsedStatus = DownloadStatus.values.firstWhere(
       (value) => value.name == statusName,
       orElse: () {
         debugPrint(
@@ -278,6 +278,24 @@ class DatabaseService {
         return DownloadStatus.failed;
       },
     );
+
+    final rawCycleState = row.cycleState != null
+        ? CycleState.fromName(row.cycleState)
+        : null;
+    final rawPauseReason = row.pauseReason != null
+        ? PauseReason.fromName(row.pauseReason)
+        : null;
+
+    final isInterruptedActive = parsedStatus == DownloadStatus.downloading ||
+        rawCycleState == CycleState.starting ||
+        rawCycleState == CycleState.resuming ||
+        rawCycleState == CycleState.retrying ||
+        rawCycleState == CycleState.fetchingMetadata ||
+        rawCycleState == CycleState.updatingLinks;
+
+    final status = isInterruptedActive ? DownloadStatus.paused : parsedStatus;
+    final cycleState = isInterruptedActive ? CycleState.paused : rawCycleState;
+    final pauseReason = isInterruptedActive ? PauseReason.appRestarted : rawPauseReason;
 
     return DownloadTask(
       id: row.id,
@@ -323,15 +341,12 @@ class DatabaseService {
       priority: row.priority,
       expectedSha256: row.expectedSha256,
       mirrorUrls: row.mirrorUrls,
-      pauseReason: row.pauseReason != null
-          ? PauseReason.fromName(row.pauseReason)
-          : null,
+      pauseReason: pauseReason,
       totalPieces: row.totalPieces,
       completedPieces: row.completedPieces,
       ytCounterpartDownloadedBytes: row.ytCounterpartDownloadedBytes,
-      cycleState: row.cycleState != null
-          ? CycleState.fromName(row.cycleState)
-          : null,
+      cycleState: cycleState,
+      previousCycleState: isInterruptedActive ? rawCycleState : null,
       totalFiles: (row.torrentFiles != null && row.torrentFiles!.isNotEmpty)
           ? row.torrentFiles!
               .where((f) => (f['selected'] as bool?) ?? true)

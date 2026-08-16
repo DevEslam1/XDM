@@ -2138,7 +2138,7 @@ class DownloadProvider extends ChangeNotifier
   }
 
   @override
-  Future<void> pauseTask(String id) async {
+  Future<void> pauseTask(String id, {PauseReason reason = PauseReason.userRequested}) async {
     // Guard task state mutations with synchronized lock
     return _lockFor(id).synchronized(() async {
       final task = _findTask(id);
@@ -2159,7 +2159,7 @@ class DownloadProvider extends ChangeNotifier
       // Optimistic UI Update: immediately mark as paused, speed = 0, clear eta
       final updated = task.copyWith(
         status: DownloadStatus.paused,
-        pausedByUser: true,
+        pausedByUser: reason == PauseReason.userRequested,
         speed: 0,
         clearEta: true,
       );
@@ -2169,7 +2169,10 @@ class DownloadProvider extends ChangeNotifier
       unawaited(
         _lockFor(id).synchronized(() async {
           try {
-            await _pauseTaskInternal(id, wasDownloading: wasDownloading, wasSeeding: isSeedingTorrent);
+            await _pauseTaskInternal(id,
+                wasDownloading: wasDownloading,
+                wasSeeding: isSeedingTorrent,
+                reason: reason);
           } catch (e, st) {
             _log.warning('Background engine pause failed for $id', e, st);
           }
@@ -2182,6 +2185,7 @@ class DownloadProvider extends ChangeNotifier
     String id, {
     required bool wasDownloading,
     required bool wasSeeding,
+    PauseReason reason = PauseReason.userRequested,
   }) async {
     _orchestrator.clearStartingFlag(id);
     final initialTask = _findTask(id);
@@ -2237,7 +2241,7 @@ class DownloadProvider extends ChangeNotifier
             status: DownloadStatus.paused,
             speed: 0,
             clearEta: true,
-            pausedByUser: true,
+            pausedByUser: reason == PauseReason.userRequested,
           ));
           _orchestrator.clearStartingFlag(id);
           _orchestrator.clearPushScheduled(id);
@@ -2259,7 +2263,7 @@ class DownloadProvider extends ChangeNotifier
           for (final suffix in ['::video', '::audio', '']) {
             final k = suffix.isEmpty ? id : '$id$suffix';
             try {
-              _cancelTokens[k]?.cancel('paused');
+              _cancelTokens[k]?.cancel('paused:${reason.name}');
             } catch (e, st) {
               LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
             }

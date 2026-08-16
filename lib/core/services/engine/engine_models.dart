@@ -352,8 +352,11 @@ class DownloadProgress {
 
   double? get ytCombinedProgress {
     if (ytStreamKind == null) return null;
+    if (ytStreamKind == YtStreamKind.combined) {
+      return progressRatio;
+    }
     final cpSize = ytCounterpartSize;
-    if (cpSize == null || cpSize < 0) return null;
+    if (cpSize == null || cpSize <= 0) return null;
     final totalSize = fileSize + cpSize;
     if (totalSize <= 0) return null;
     final selfDownloaded = ytDownloadedBytes ?? downloadedBytes;

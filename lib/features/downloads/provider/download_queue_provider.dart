@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
 import 'download_list_provider.dart';
@@ -48,13 +49,13 @@ class DownloadQueueProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> pauseTask(String id) async {
+  Future<void> pauseTask(String id, {PauseReason reason = PauseReason.userRequested}) async {
     final list = _listProvider;
     if (list == null) return;
     final task = list.findTask(id);
     if (task != null && task.status == DownloadStatus.downloading) {
       await list.updateTask(
-        task.copyWith(status: DownloadStatus.paused, pausedByUser: true),
+        task.copyWith(status: DownloadStatus.paused, pausedByUser: reason == PauseReason.userRequested),
       );
       pumpQueue();
     }

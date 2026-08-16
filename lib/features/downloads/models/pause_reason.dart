@@ -5,7 +5,8 @@ enum PauseReason {
   batterySaver,
   diskFull,
   networkLost,
-  scheduled;
+  scheduled,
+  appRestarted;
 
   static const PauseReason userRequested = PauseReason.user;
   static const PauseReason batteryLow = PauseReason.batterySaver;
@@ -23,6 +24,7 @@ enum PauseReason {
       'diskfull' || 'disk_full' => PauseReason.diskFull,
       'networklost' || 'network_lost' => PauseReason.networkLost,
       'scheduled' => PauseReason.scheduled,
+      'apprestarted' || 'app_restarted' => PauseReason.appRestarted,
       _ => fallback,
     };
   }

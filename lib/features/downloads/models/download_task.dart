@@ -204,6 +204,7 @@ class DownloadTask {
   final int? completedPieces;
   final int? ytCounterpartDownloadedBytes;
   final CycleState? cycleState;
+  final CycleState? previousCycleState;
   final int? totalFiles;
   final int? completedFiles;
   final int? totalFileBytes;
@@ -270,6 +271,7 @@ class DownloadTask {
     this.completedPieces,
     this.ytCounterpartDownloadedBytes,
     this.cycleState,
+    this.previousCycleState,
     this.totalFiles,
     this.completedFiles,
     this.totalFileBytes,
@@ -643,6 +645,8 @@ class DownloadTask {
     int? ytCounterpartDownloadedBytes,
     CycleState? cycleState,
     bool clearCycleState = false,
+    CycleState? previousCycleState,
+    bool clearPreviousCycleState = false,
     int? totalFiles,
     int? completedFiles,
     int? totalFileBytes,
@@ -749,6 +753,9 @@ class DownloadTask {
       completedPieces: clearCompletedPieces ? null : (completedPieces ?? this.completedPieces),
       ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes ?? this.ytCounterpartDownloadedBytes,
       cycleState: clearCycleState ? null : (cycleState ?? this.cycleState),
+      previousCycleState: clearPreviousCycleState
+          ? null
+          : (previousCycleState ?? this.previousCycleState),
       totalFiles: totalFiles ?? this.totalFiles,
       completedFiles: completedFiles ?? this.completedFiles,
       totalFileBytes: totalFileBytes ?? this.totalFileBytes,
@@ -1010,6 +1017,11 @@ class DownloadTask {
       cycleState: map['cycleState'] is String
           ? CycleState.fromName(map['cycleState'] as String)
           : (map['cycleState'] is CycleState ? map['cycleState'] as CycleState : null),
+      previousCycleState: map['previousCycleState'] is String
+          ? CycleState.fromName(map['previousCycleState'] as String)
+          : (map['previousCycleState'] is CycleState
+              ? map['previousCycleState'] as CycleState
+              : null),
       totalFiles: totalFiles,
       completedFiles: completedFiles,
       totalFileBytes: totalFileBytes,

@@ -343,18 +343,24 @@ class HttpTransferJob {
     await StateStore.save(cmd.tempFilePath, _state!);
 
     if (_state!.downloadedBytes > 0) {
-      _emitProgress(0, statusMessage: 'Resuming…');
+      if (cmd.supportsResume) {
+        _emitProgress(0,
+            statusMessage: 'Verifying resume data…',
+            cycleStateOverride: CycleState.verifying);
+        if (!DownloadEngine.isInBackground) {
+          await _verifyServerIdentity(dio);
+        }
+        _emitProgress(0,
+            statusMessage: 'Resuming…',
+            cycleStateOverride: CycleState.resuming);
+      } else {
+        _emitProgress(0, statusMessage: 'Resuming…');
+      }
     } else {
       // Fix 1: Emit explicit starting state for fresh downloads
       _emitProgress(0,
           statusMessage: 'Starting…',
           cycleStateOverride: CycleState.starting);
-    }
-
-    // Task 3.2: Skip the identity probe round-trip when backgrounded.
-    // The LRU cache ensures we still validate on the first foreground resume.
-    if (_state!.downloadedBytes > 0 && cmd.supportsResume && !DownloadEngine.isInBackground) {
-      await _verifyServerIdentity(dio);
     }
     return _state!;
   }
@@ -543,7 +549,7 @@ class HttpTransferJob {
       if (isYtOrSigned && (status == 401 || status == 403)) {
         _serverIdentityCache.remove(cacheKey);
         _emitProgress(0,
-            statusMessage: 'Updating links (URL expired)…',
+            statusMessage: 'Refreshing links…',
             cycleStateOverride: CycleState.updatingLinks);
         await Future.delayed(const Duration(milliseconds: 10));
         throw UrlExpiredException(
@@ -612,6 +618,7 @@ class HttpTransferJob {
       for (var i = 0; i < st.chunks.length; i++)
         if (!st.chunks[i].isComplete) (i, st.chunks[i]),
     ];
+    final failFast = Completer<void>();
     try {
       final results = await Future.wait<ChunkResult>(
         work.map((entry) async {
@@ -622,6 +629,14 @@ class HttpTransferJob {
           StackTrace? lastSt;
 
           while (attempts < maxAttempts) {
+            if (failFast.isCompleted) {
+              return ChunkResult(
+                chunk: chunk,
+                success: false,
+                error: RangeUnsupportedException(),
+                attempts: attempts,
+              );
+            }
             attempts++;
             try {
               await _runChunk(
@@ -649,8 +664,8 @@ class HttpTransferJob {
                   attempts: attempts,
                 );
               }
-              if (e is RangeUnsupportedException ||
-                  e is PositionalFileWriterException) {
+              if (e is RangeUnsupportedException) {
+                if (!failFast.isCompleted) failFast.complete();
                 return ChunkResult(
                   chunk: chunk,
                   success: false,
@@ -659,7 +674,16 @@ class HttpTransferJob {
                   attempts: attempts,
                 );
               }
-              if (attempts < maxAttempts) {
+              if (e is PositionalFileWriterException) {
+                return ChunkResult(
+                  chunk: chunk,
+                  success: false,
+                  error: e,
+                  stackTrace: st,
+                  attempts: attempts,
+                );
+              }
+              if (attempts < maxAttempts && !failFast.isCompleted) {
                 await _cancellableDelay(
                   Duration(milliseconds: 200 * (1 << attempts)),
                 );
@@ -899,7 +923,7 @@ class HttpTransferJob {
               cmd.url.contains('signature=');
           if (isLikelyExpired) {
             _emitProgress(0,
-                statusMessage: 'Updating links (URL expired)…',
+                statusMessage: 'Refreshing links…',
                 cycleStateOverride: CycleState.updatingLinks);
             await Future.delayed(const Duration(milliseconds: 10));
             throw UrlExpiredException(
@@ -1262,7 +1286,7 @@ class HttpTransferJob {
               cmd.url.contains('signature=');
           if (isYtOrSigned) {
             _emitProgress(0,
-                statusMessage: 'Updating links (URL expired)…',
+                statusMessage: 'Refreshing links…',
                 cycleStateOverride: CycleState.updatingLinks);
             await Future.delayed(const Duration(milliseconds: 10));
             throw UrlExpiredException(
@@ -1463,8 +1487,8 @@ class HttpTransferJob {
 
   List<Map<String, dynamic>>? _getChunkDetails(TransferState st) {
     if (st.chunks.isEmpty) return null;
-    final chunkHash =
-        st.chunks.fold<int>(0, (h, c) => h ^ c.downloaded.hashCode);
+    final chunkHash = st.chunks.fold<int>(
+        0, (h, c) => h ^ Object.hash(c.start, c.end, c.size, c.downloaded));
     if (_cachedChunkDetails != null && chunkHash == _lastChunkDetailsHash) {
       return _cachedChunkDetails;
     }
@@ -1532,17 +1556,20 @@ class HttpTransferJob {
       _lastEta = null;
     }
     final chunkDetails = _getChunkDetails(st);
-    final totalChunks = st.chunks.isNotEmpty ? st.chunks.length : null;
-    final completedChunks = st.chunks.isNotEmpty
-        ? st.chunks.where((c) => c.isComplete).length
-        : null;
+    final hasIndeterminate = st.chunks.any((c) => c.size < 0);
+    final totalChunks =
+        st.chunks.isNotEmpty ? st.chunks.length : null;
+    final completedChunks =
+        (st.chunks.isNotEmpty && !hasIndeterminate)
+            ? st.chunks.where((c) => c.isComplete).length
+            : null;
     final cycleState =
         cycleStateOverride ?? _deriveCycleState(statusMessage, st.status);
     final isCycleStateChanged = cycleState != _lastEmittedCycleState;
 
-    // Fix 6: Folded hash of individual chunk downloaded bytes instead of chunkDetails?.length
-    final chunkDetailsHash =
-        st.chunks.fold<int>(0, (h, c) => h ^ c.downloaded.hashCode);
+    // Fix 6: Folded hash of chunk details
+    final chunkDetailsHash = st.chunks.fold<int>(
+        0, (h, c) => h ^ Object.hash(c.start, c.end, c.size, c.downloaded));
 
     final fingerprint = Object.hash(
       downloaded,

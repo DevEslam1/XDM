@@ -39,7 +39,7 @@ mixin DownloadQueueMixin {
   bool startTaskFromQueue(DownloadTask task);
   bool isTaskPendingStart(String taskId);
   bool isTaskWaitingForRetry(String taskId);
-  Future<void> pauseTask(String id);
+  Future<void> pauseTask(String id, {PauseReason reason = PauseReason.userRequested});
   Future<void> resumeTask(String id);
   int get queuedTasksCount;
   DatabaseService get providerDatabaseService; // FIX(13)
