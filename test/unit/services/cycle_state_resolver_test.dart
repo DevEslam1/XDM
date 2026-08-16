@@ -198,5 +198,26 @@ void main() {
 
       expect(sw.elapsedMilliseconds, lessThan(500));
     });
+
+    test('regex edge cases resolve properly', () {
+      expect(
+        CycleStateResolver.resolve(statusMessage: 'error 404 (not found)'),
+        CycleState.failed,
+      );
+      expect(
+        CycleStateResolver.resolve(
+            statusMessage: 'HTTP error: 503 Service Unavailable'),
+        CycleState.failed,
+      );
+      expect(
+        CycleStateResolver.resolve(statusMessage: 'Server returned error: 500'),
+        CycleState.failed,
+      );
+      expect(
+        CycleStateResolver.resolve(
+            statusMessage: 'allocating 500 MB for payload'),
+        CycleState.allocating,
+      );
+    });
   });
 }

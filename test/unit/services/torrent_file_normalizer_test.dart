@@ -118,5 +118,27 @@ void main() {
       expect(nullResult.hasEstimated, isFalse);
       expect(nullResult.normalizedFiles, isEmpty);
     });
+
+    test('10000-entry file list normalizes and hashes efficiently', () {
+      final bigList = List.generate(
+        10000,
+        (i) => {
+          'name': 'folder/file_$i.dat',
+          'length': 1024 * 1024,
+          'downloadedBytes': i % 2 == 0 ? 1024 * 1024 : 512 * 1024,
+          'selected': true,
+        },
+      );
+
+      final sw = Stopwatch()..start();
+      final result = TorrentFileNormalizer.normalizeTorrentFileList(bigList);
+      final hash = TorrentFileNormalizer.computeFileListHash(bigList);
+      sw.stop();
+
+      expect(result.total, equals(10000));
+      expect(result.done, equals(5000));
+      expect(hash, isNonZero);
+      expect(sw.elapsedMilliseconds, lessThan(1000));
+    });
   });
 }

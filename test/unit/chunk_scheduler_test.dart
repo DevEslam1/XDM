@@ -48,5 +48,19 @@ void main() {
           ChunkScheduler.plan(totalSize: 50 * 1024 * 1024, threadCount: -5);
       expect(chunksLow.length, equals(1));
     });
+
+    test('8. Chunk boundaries never overlap and fully cover file range', () {
+      for (final totalSize in [1024 * 1024, 10000007, 50 * 1024 * 1024 + 13]) {
+        for (final threads in [2, 3, 4, 8, 16, 32]) {
+          final chunks =
+              ChunkScheduler.plan(totalSize: totalSize, threadCount: threads);
+          expect(chunks.first.start, equals(0));
+          expect(chunks.last.end, equals(totalSize - 1));
+          for (int i = 0; i < chunks.length - 1; i++) {
+            expect(chunks[i].end + 1, equals(chunks[i + 1].start));
+          }
+        }
+      }
+    });
   });
 }
