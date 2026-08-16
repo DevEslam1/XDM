@@ -218,10 +218,9 @@ class BackgroundService {
     }
     _iosBgCallInFlight = true;
     _iosBgWatchdogTimer?.cancel();
-    // Task 6.1: Reduce watchdog to 25s and flush pending database writes.
-    _iosBgWatchdogTimer = Timer(const Duration(seconds: 25), () {
+    _iosBgWatchdogTimer = Timer(const Duration(seconds: 20), () {
       if (_iosBgCallInFlight) {
-        _log.warning('[iOS BG Watchdog] iOS background call wedged for 25s; force-resetting in-flight flag and flushing DB.');
+        _log.warning('[iOS BG Watchdog] iOS background call wedged for 20s; force-resetting in-flight flag and flushing DB.');
         try {
           DatabaseService.instance.flushPendingSaves();
         } catch (e, st) {
@@ -244,9 +243,14 @@ class BackgroundService {
 
       const channel = MethodChannel('com.dmx.app/background_download');
       try {
+        final nativeStart = DateTime.now();
         final result = await channel
             .invokeMethod<bool>('scheduleDownload')
-            .timeout(const Duration(seconds: 5));
+            .timeout(const Duration(seconds: 18));
+        final nativeDuration = DateTime.now().difference(nativeStart);
+        if (nativeDuration.inSeconds > 15) {
+          _log.warning('[iOS BG] Native scheduleDownload took ${nativeDuration.inSeconds}s — approaching limit');
+        }
         final success = result ?? false;
         _log.info('iOS background schedule completed. Success: $success');
         return success;
