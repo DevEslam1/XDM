@@ -47,6 +47,7 @@ class DownloadProgressHandler {
   DateTime? _urlExpireWindowStart;
   bool _selfActuallyFinalized = false;
   int _lastChunkDetailsHash = 0;
+  int _emittedChunkDetailsHash = -1;
 
   int get chunkFingerprint => _lastChunkDetailsHash;
 
@@ -441,6 +442,16 @@ class DownloadProgressHandler {
             ? PauseReason.fromName(rawPauseReason)
             : null);
 
+    final bool chunkHashChanged =
+        _lastChunkDetailsHash != _emittedChunkDetailsHash;
+    final List<ChunkDetail>? chunkDetailsToEmit;
+    if (chunkHashChanged) {
+      chunkDetailsToEmit = lastChunkDetails;
+      _emittedChunkDetailsHash = _lastChunkDetailsHash;
+    } else {
+      chunkDetailsToEmit = null;
+    }
+
     final progress = DownloadProgress(
       downloadedBytes: lastDownloadedBytes,
       fileSize: lastFileSize,
@@ -456,7 +467,7 @@ class DownloadProgressHandler {
       ytDownloadedBytes: (p['ytDownloadedBytes'] as num?)?.toInt() ??
           (ytStreamKind != null ? lastDownloadedBytes : null),
       ytCounterpartDownloadedBytes: dynamicYtCounterpartDownloaded,
-      chunkDetails: lastChunkDetails,
+      chunkDetails: chunkDetailsToEmit,
       cycleState: cycle,
       pauseReason: pauseReason,
       totalChunks:
