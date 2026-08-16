@@ -547,11 +547,8 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
   }
 
   bool _effectiveForceDark(SettingsProvider settings) {
-    // Forcing dark is implied whenever the app UI is in dark/amoled mode;
-    // the dedicated switch can still force it on even in light mode.
-    return settings.isDarkMode ||
-        settings.isAmoledMode ||
-        settings.forceDarkMode;
+    // Dedicated switch controls whether web content is forced to dark mode.
+    return settings.forceDarkMode;
   }
 
   /// UX 3.4: Dialog to clear cache, cookies, history, form data and downloads.

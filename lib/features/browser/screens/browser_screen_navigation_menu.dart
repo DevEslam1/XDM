@@ -301,25 +301,7 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
         );
         break;
       case 'force_dark_mode':
-        await settings.setForceDarkMode(!settings.forceDarkMode);
-        if (mounted) {
-          final effectiveDark = _effectiveForceDark(settings);
-          ThemedSnackbar.show(
-            context,
-            message: effectiveDark
-                ? 'Dark mode enabled — reloading page'
-                : 'Dark mode disabled — reloading page',
-            color: settings.isDarkMode
-                ? AppTheme.neonBlue
-                : AppTheme.lightNeonBlue,
-            icon: Icons.dark_mode_rounded,
-            isDarkMode: settings.isDarkMode,
-          );
-          _applyForceDarkToAll();
-          if (!activeTab.isHome) {
-            await _safeReloadTab(activeTab);
-          }
-        }
+        await _toggleForceDark(activeTab);
         break;
       case 'bookmark':
         final currentUrl = _urlController.text.trim();
@@ -705,13 +687,17 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     final settings = context.read<SettingsProvider>();
     await settings.setForceDarkMode(!settings.forceDarkMode);
     final effectiveDark = _effectiveForceDark(settings);
-    _applyForceDarkToAll();
+    await _applyForceDarkToAll();
     if (mounted) {
       ThemedSnackbar.show(
         context,
         message: effectiveDark
-            ? 'Force dark enabled — reloading page'
-            : 'Force dark disabled — reloading page',
+            ? (L10n.isRtl(context)
+                ? 'تم تفعيل الوضع الداكن للمتصفح'
+                : 'Dark mode enabled')
+            : (L10n.isRtl(context)
+                ? 'تم تعطيل الوضع الداكن للمتصفح'
+                : 'Dark mode disabled'),
         color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
         icon:
             effectiveDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,

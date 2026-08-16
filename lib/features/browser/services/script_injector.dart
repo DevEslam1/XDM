@@ -62,15 +62,13 @@ class ScriptInjector {
     :root {
       color-scheme: dark !important;
     }
-    @media (prefers-color-scheme: light) {
-      html {
-        filter: invert(0.92) hue-rotate(180deg) !important;
-        background-color: #121212 !important;
-      }
-      /* Preserve natural appearance of multimedia, embedded objects, canvases and photos */
-      img, video, iframe, canvas, svg, picture, [style*="background-image"] {
-        filter: invert(1.08) hue-rotate(180deg) !important;
-      }
+    html {
+      filter: invert(0.92) hue-rotate(180deg) !important;
+      background-color: #121212 !important;
+    }
+    /* Preserve natural appearance of multimedia, embedded objects, canvases and photos */
+    img, video, iframe, canvas, svg, picture, [style*="background-image"] {
+      filter: invert(1.08) hue-rotate(180deg) !important;
     }
     /* Darken scrollbars */
     ::-webkit-scrollbar {
@@ -426,9 +424,9 @@ $customJs
     }
 
     // Force-dark CSS fallback (non-Android); Android uses the native
-    // `forceDark` WebView setting instead. Enabled whenever the app UI is
-    // dark/amoled or the dedicated force-dark switch is on.
-    if (settings.isDarkMode || settings.forceDarkMode) {
+    // `forceDark` WebView setting instead. Enabled whenever the dedicated
+    // force-dark switch is on.
+    if (settings.forceDarkMode) {
       final css = buildForceDarkCss();
       scripts.add('(function() {'
           '  var s = document.getElementById("xdm-force-dark");'
