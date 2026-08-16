@@ -78,48 +78,66 @@ class BackgroundService {
   /// Callback invoked when background execution is requested on iOS where it is unsupported.
   static VoidCallback? onIosBackgroundUnavailable;
 
-  static Future<void> setDownloadActive(bool active, [String? taskId]) async {
+  static Future<void> setDownloadActive(bool active, String taskId) async {
     await _activeLock.synchronized(() async {
-      if (taskId != null) {
-        if (active) {
-          if (_activeTaskIds.add(taskId)) {
-            _activeDownloadCount = _activeTaskIds.length;
-          }
-        } else {
-          if (_activeTaskIds.remove(taskId)) {
-            _activeDownloadCount = _activeTaskIds.length;
-          }
+      if (active) {
+        if (_activeTaskIds.add(taskId)) {
+          _activeDownloadCount = _activeTaskIds.length;
         }
       } else {
-        if (active) {
-          _activeDownloadCount++;
-        } else {
-          _activeDownloadCount = (_activeDownloadCount - 1).clamp(0, 1 << 30);
-          if (_activeDownloadCount == 0) {
-            _activeTaskIds.clear();
-          }
+        if (_activeTaskIds.remove(taskId)) {
+          _activeDownloadCount = _activeTaskIds.length;
         }
       }
-      if (_activeDownloadCount <= 0) {
-        final queryCount = _activeDownloadCountQuery?.call() ?? 0;
-        if (queryCount <= 0) {
-          _heartbeatTimer?.cancel();
-          _heartbeatTimer = null;
-          await releaseWakeLock();
-        }
-      } else {
-        if (!kIsWeb && Platform.isAndroid) {
-          final isRunning =
-              _testMode || await FlutterBackgroundService().isRunning();
-          if (isRunning) {
-            _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
-              sendHeartbeat();
-            });
-          }
-        }
-        await acquireWakeLock();
-      }
+      assert(
+        _activeTaskIds.length == _activeDownloadCount,
+        'activeTaskIds ($_activeTaskIds) out of sync with count '
+        '($_activeDownloadCount) after setDownloadActive($active, $taskId)',
+      );
+      await _afterActiveCountChanged();
     });
+  }
+
+  /// Reconciles the internally tracked active task set to exactly
+  /// [activeTaskIds]. This is the aggregate form used by callers that compute
+  /// the full set of active downloads (e.g. the provider widget timer).
+  static Future<void> reconcileActiveTaskIds(Set<String> activeTaskIds) async {
+    await _activeLock.synchronized(() async {
+      _activeTaskIds
+        ..removeWhere((id) => !activeTaskIds.contains(id))
+        ..addAll(activeTaskIds);
+      _activeDownloadCount = _activeTaskIds.length;
+      assert(
+        _activeTaskIds.length == _activeDownloadCount,
+        'activeTaskIds ($_activeTaskIds) out of sync with count '
+        '($_activeDownloadCount) after reconcileActiveTaskIds',
+      );
+      await _afterActiveCountChanged();
+    });
+  }
+
+  /// Shared post-update logic: maintain the heartbeat timer and wake lock
+  /// based on the (possibly task-tracked) active download count.
+  static Future<void> _afterActiveCountChanged() async {
+    if (_activeDownloadCount <= 0) {
+      final queryCount = _activeDownloadCountQuery?.call() ?? 0;
+      if (queryCount <= 0) {
+        _heartbeatTimer?.cancel();
+        _heartbeatTimer = null;
+        await releaseWakeLock();
+      }
+    } else {
+      if (!kIsWeb && Platform.isAndroid) {
+        final isRunning =
+            _testMode || await FlutterBackgroundService().isRunning();
+        if (isRunning) {
+          _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+            sendHeartbeat();
+          });
+        }
+      }
+      await acquireWakeLock();
+    }
   }
 
   static bool _testMode = false;

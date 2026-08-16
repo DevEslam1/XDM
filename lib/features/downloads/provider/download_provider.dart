@@ -4689,7 +4689,16 @@ class DownloadProvider extends ChangeNotifier
     final hasActive = downloadingTasksCount > 0 || seedingTasksCount > 0;
 
     FrameWatchdog.setDownloadingTasksCount(downloadingTasksCount);
-    BackgroundService.setDownloadActive(hasActive);
+    BackgroundService.reconcileActiveTaskIds(
+      _tasks
+          .where((t) =>
+              t.status == DownloadStatus.downloading ||
+              (t.status == DownloadStatus.completed &&
+                  t.isTorrent &&
+                  t.seedingEnabled))
+          .map((t) => t.id)
+          .toSet(),
+    );
     PowerMonitor.setDownloadActive(hasActive);
 
     if (!hasActive) {
@@ -4781,7 +4790,7 @@ class DownloadProvider extends ChangeNotifier
   void _stopWidgetTimer() {
     _widgetTimer?.cancel();
     _widgetTimer = null;
-    BackgroundService.setDownloadActive(false);
+    BackgroundService.reconcileActiveTaskIds(const <String>{});
     PowerMonitor.setDownloadActive(false);
   }
 

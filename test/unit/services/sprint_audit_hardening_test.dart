@@ -42,7 +42,7 @@ void main() {
 
       // When query returns 0, stop() should not be blocked by active downloads
       simulatedActiveDownloads = 0;
-      await BackgroundService.setDownloadActive(false);
+      await BackgroundService.setDownloadActive(false, 'task-reset');
 
       // Verify that query callback was set and can report active downloads
       simulatedActiveDownloads = 3;

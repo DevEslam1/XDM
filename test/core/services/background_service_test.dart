@@ -52,15 +52,44 @@ void main() {
       expect(BackgroundService.activeTaskIdsForTesting, isEmpty);
     });
 
-    test('setDownloadActive without taskId updates count atomically', () async {
-      await BackgroundService.setDownloadActive(true);
-      await BackgroundService.setDownloadActive(true);
+    test('reconcileActiveTaskIds replaces the active set exactly', () async {
+      await BackgroundService.setDownloadActive(true, 'task-a');
+      await BackgroundService.setDownloadActive(true, 'task-b');
       expect(BackgroundService.activeDownloadCountForTesting, equals(2));
 
-      await BackgroundService.setDownloadActive(false);
+      // Reconcile down to a single task; stale ids must be dropped.
+      await BackgroundService.reconcileActiveTaskIds({'task-b'});
+      expect(BackgroundService.activeDownloadCountForTesting, equals(1));
+      expect(BackgroundService.activeTaskIdsForTesting, {'task-b'});
+
+      // Reconcile to empty releases everything.
+      await BackgroundService.reconcileActiveTaskIds(const {});
+      expect(BackgroundService.activeDownloadCountForTesting, equals(0));
+      expect(BackgroundService.activeTaskIdsForTesting, isEmpty);
+    });
+
+    test('reconcileActiveTaskIds adds new tasks and keeps shared ids',
+        () async {
+      await BackgroundService.setDownloadActive(true, 'task-a');
+      await BackgroundService.reconcileActiveTaskIds({'task-a', 'task-c'});
+      expect(BackgroundService.activeDownloadCountForTesting, equals(2));
+      expect(
+        BackgroundService.activeTaskIdsForTesting,
+        containsAll(['task-a', 'task-c']),
+      );
+    });
+
+    test('taskId is required and tracked independently', () async {
+      // Each taskId is tracked independently so a task-tracked false can
+      // always decrement the exact task that incremented the count.
+      await BackgroundService.setDownloadActive(true, 'task-x');
+      await BackgroundService.setDownloadActive(true, 'task-y');
+      expect(BackgroundService.activeDownloadCountForTesting, equals(2));
+
+      await BackgroundService.setDownloadActive(false, 'task-x');
       expect(BackgroundService.activeDownloadCountForTesting, equals(1));
 
-      await BackgroundService.setDownloadActive(false);
+      await BackgroundService.setDownloadActive(false, 'task-y');
       expect(BackgroundService.activeDownloadCountForTesting, equals(0));
     });
   });
