@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../features/downloads/models/download_task.dart';
 import 'database_service.dart';
 import 'diagnostic_service.dart';
 import 'download_engine.dart';
@@ -85,7 +86,8 @@ class BackgroundService {
       }
     } else {
       if (!kIsWeb && Platform.isAndroid) {
-        final isRunning = _testMode || await FlutterBackgroundService().isRunning();
+        final isRunning =
+            _testMode || await FlutterBackgroundService().isRunning();
         if (isRunning) {
           _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
             sendHeartbeat();
@@ -136,16 +138,16 @@ class BackgroundService {
   static StreamSubscription<Map<String, dynamic>?>? onStartHeartbeatSub;
 
   @visibleForTesting
-  static StreamSubscription<Map<String, dynamic>?>? get onStartStopSubForTesting =>
-      onStartStopSub;
+  static StreamSubscription<Map<String, dynamic>?>?
+      get onStartStopSubForTesting => onStartStopSub;
 
   @visibleForTesting
-  static StreamSubscription<Map<String, dynamic>?>? get onStartUpdateSubForTesting =>
-      onStartUpdateSub;
+  static StreamSubscription<Map<String, dynamic>?>?
+      get onStartUpdateSubForTesting => onStartUpdateSub;
 
   @visibleForTesting
-  static StreamSubscription<Map<String, dynamic>?>? get onStartHeartbeatSubForTesting =>
-      onStartHeartbeatSub;
+  static StreamSubscription<Map<String, dynamic>?>?
+      get onStartHeartbeatSubForTesting => onStartHeartbeatSub;
 
   @pragma('vm:entry-point')
   static void _onStart(ServiceInstance service) {
@@ -226,19 +228,24 @@ class BackgroundService {
       'iOS background callback invoked. Bridging to native BackgroundDownloadController.',
     );
     if (_iosBgCallInFlight) {
-      _log.warning('iOS background callback already in flight, ignoring duplicate call');
+      _log.warning(
+          'iOS background callback already in flight, ignoring duplicate call');
       return false;
     }
     _iosBgCallInFlight = true;
     _iosBgWatchdogTimer?.cancel();
     _iosBgWatchdogTimer = Timer(const Duration(seconds: 20), () {
       if (_iosBgCallInFlight) {
-        _log.warning('[iOS BG Watchdog] iOS background call wedged for 20s; force-resetting.');
+        _log.warning(
+            '[iOS BG Watchdog] iOS background call wedged for 20s; force-resetting.');
         try {
           DownloadEngine.markBackground();
           DatabaseService.instance.flushPendingSaves();
         } catch (e, st) {
-          _log.warning('Failed to flush DB during iOS background watchdog reset: $e', e, st);
+          _log.warning(
+              'Failed to flush DB during iOS background watchdog reset: $e',
+              e,
+              st);
         }
         _iosBgCallInFlight = false;
       }
@@ -263,13 +270,15 @@ class BackgroundService {
             .timeout(const Duration(seconds: 18));
         final nativeDuration = DateTime.now().difference(nativeStart);
         if (nativeDuration.inSeconds > 15) {
-          _log.warning('[iOS BG] Native scheduleDownload took ${nativeDuration.inSeconds}s — approaching limit');
+          _log.warning(
+              '[iOS BG] Native scheduleDownload took ${nativeDuration.inSeconds}s — approaching limit');
         }
         final success = result ?? false;
         _log.info('iOS background schedule completed. Success: $success');
         return success;
       } catch (e, st) {
-        _log.fine('Failed to bridge to iOS background download controller', e, st);
+        _log.fine(
+            'Failed to bridge to iOS background download controller', e, st);
         return false;
       }
     } finally {
@@ -365,7 +374,8 @@ class BackgroundService {
         return;
       }
     } catch (e, st) {
-      LoggingService.logger('BackgroundService').warning('Operation failed', e, st);
+      LoggingService.logger('BackgroundService')
+          .warning('Operation failed', e, st);
     }
 
     try {
@@ -437,8 +447,7 @@ class BackgroundService {
     try {
       await NotificationService().showServiceNotification(
         title: 'XDM',
-        content:
-            'Background downloads may pause: the system blocked wake-lock '
+        content: 'Background downloads may pause: the system blocked wake-lock '
             'renewal. Disable battery optimization for XDM to keep downloads '
             'running.',
       );
@@ -458,12 +467,14 @@ class BackgroundService {
       // FIX: P0-03 — check active downloads before releasing
       final hasActive = await _checkActiveDownloadCount();
       if (hasActive > 0) {
-        _log.info('Wake lock safety timer fired but downloads active. Renewing.');
+        _log.info(
+            'Wake lock safety timer fired but downloads active. Renewing.');
         try {
           await _wakeLockChannel.invokeMethod<void>('acquire');
         } catch (e, st) {
-      LoggingService.logger('BackgroundService').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('BackgroundService')
+              .warning('Operation failed', e, st);
+        }
         // Restart the safety timer for another cycle
         _scheduleWakeLockSafetyCheck();
         return;
@@ -497,6 +508,35 @@ class BackgroundService {
     _wakeLockSafetyTimer?.cancel();
     _wakeLockSafetyTimer = null;
     await releaseWakeLock();
+  }
+
+  /// Restores interrupted downloads after unexpected OS kill or reboot (E8).
+  static Future<List<DownloadTask>> restoreInterruptedTasks(
+    DatabaseService dbService,
+  ) async {
+    try {
+      final tasks = await dbService.loadTasks();
+      final restored = <DownloadTask>[];
+      for (final task in tasks) {
+        if (task.pauseReason == PauseReason.appRestarted ||
+            task.status == DownloadStatus.downloading ||
+            task.cycleState == CycleState.downloading ||
+            task.cycleState == CycleState.starting) {
+          final resumingTask = task.copyWith(
+            status: DownloadStatus.downloading,
+            cycleState: CycleState.resuming,
+            speed: 0.0,
+            pauseReason: null,
+          );
+          await dbService.saveTask(resumingTask);
+          restored.add(resumingTask);
+        }
+      }
+      return restored;
+    } catch (e, st) {
+      _log.warning('Failed to restore interrupted tasks', e, st);
+      return [];
+    }
   }
 }
 

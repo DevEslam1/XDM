@@ -539,12 +539,16 @@ class DatabaseService {
       try {
         if (task.status == DownloadStatus.completed) {
           // Task 5.2: Durable completion writes with PRAGMA synchronous = FULL
-          await _db.transaction(() async {
+          try {
             await _db.customStatement('PRAGMA synchronous = FULL');
-            await _db.into(_db.downloadTasks).insert(_taskToCompanion(task),
-                mode: drift.InsertMode.insertOrReplace);
+          } catch (_) {}
+          await _db.into(_db.downloadTasks).insert(
+                _taskToCompanion(task),
+                mode: drift.InsertMode.insertOrReplace,
+              );
+          try {
             await _db.customStatement('PRAGMA synchronous = NORMAL');
-          });
+          } catch (_) {}
         } else {
           await _db.into(_db.downloadTasks).insert(_taskToCompanion(task),
               mode: drift.InsertMode.insertOrReplace);

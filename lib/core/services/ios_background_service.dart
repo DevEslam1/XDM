@@ -42,6 +42,32 @@ class IosBackgroundService {
   static const EventChannel _eventChannel =
       EventChannel('com.dmx.app/background_download_events');
 
+  /// Optional callback invoked when native iOS BGTaskScheduler task is expiring (L8).
+  static Future<void> Function()? onBackgroundExpiration;
+
+  /// Sets up method call handler for native callbacks including background task expiration (L8).
+  static void initializeMethodCallHandler() {
+    _channel.setMethodCallHandler(handleMethodCall);
+  }
+
+  @visibleForTesting
+  static Future<dynamic> handleMethodCall(MethodCall call) async {
+    if (call.method == 'onTaskExpired' || call.method == 'onExpiration') {
+      debugPrint(
+        '[IosBackgroundService] iOS background task expiring. Flushing state.',
+      );
+      if (onBackgroundExpiration != null) {
+        try {
+          await onBackgroundExpiration!().timeout(const Duration(seconds: 4));
+        } catch (e, st) {
+          LoggingService.logger('IosBackgroundService')
+              .warning('Expiration handler failed', e, st);
+        }
+      }
+    }
+    return null;
+  }
+
   /// Stream of native iOS background transfer progress and completion events.
   static Stream<IosBackgroundTransferEvent> get backgroundEvents {
     if (kIsWeb || !Platform.isIOS) return const Stream.empty();
@@ -138,7 +164,8 @@ class IosBackgroundService {
       final prefs = await SharedPreferences.getInstance();
       _isRegistered = prefs.getBool(_prefKeyIsRegistered) ?? false;
     } catch (e, st) {
-      LoggingService.logger('IosBackgroundService').warning('Operation failed', e, st);
+      LoggingService.logger('IosBackgroundService')
+          .warning('Operation failed', e, st);
     }
     return _isRegistered;
   }
@@ -160,8 +187,9 @@ class IosBackgroundService {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool(_prefKeyIsRegistered, true);
         } catch (e, st) {
-      LoggingService.logger('IosBackgroundService').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('IosBackgroundService')
+              .warning('Operation failed', e, st);
+        }
       }
       return success;
     } catch (e) {
@@ -181,8 +209,9 @@ class IosBackgroundService {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool(_prefKeyIsRegistered, false);
       } catch (e, st) {
-      LoggingService.logger('IosBackgroundService').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('IosBackgroundService')
+            .warning('Operation failed', e, st);
+      }
       return success;
     } catch (e) {
       debugPrint('Failed to cancel iOS background download: $e');

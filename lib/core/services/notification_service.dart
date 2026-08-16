@@ -32,7 +32,8 @@ void _onBackgroundNotificationResponse(NotificationResponse response) {
     actionId = parts[0];
     payload = parts[1];
   }
-  unawaited(_forwardBackgroundAction(actionId, payload).catchError((e) => debugPrint('[Notifications] Failed to forward background action: $e')));
+  unawaited(_forwardBackgroundAction(actionId, payload).catchError((e) =>
+      debugPrint('[Notifications] Failed to forward background action: $e')));
 }
 
 Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
@@ -70,7 +71,8 @@ String? _nonce;
 
 class NotificationService {
   NotificationService._() {
-    unawaited(_ensureNoncePersisted().catchError((e) => debugPrint('[Notifications] Failed to ensure nonce persisted: $e')));
+    unawaited(_ensureNoncePersisted().catchError((e) =>
+        debugPrint('[Notifications] Failed to ensure nonce persisted: $e')));
   }
   static final NotificationService _instance = NotificationService._();
   factory NotificationService() => _instance;
@@ -96,6 +98,19 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
   final Map<int, DateTime> _lastProgressPostTimes = {};
+  final Map<int, Timer> _trailingPostTimers = {};
+
+  @visibleForTesting
+  static void setInitializedForTesting(bool val) {
+    _instance._initialized = val;
+  }
+
+  @visibleForTesting
+  Future<void> Function({
+    required int id,
+    required String title,
+    required String body,
+  })? showHookForTesting;
 
   static bool get isSupported =>
       !kIsWeb &&
@@ -118,7 +133,8 @@ class NotificationService {
       StreamController<Map<String, String>>.broadcast(
     sync: true,
     onListen: () {
-      unawaited(_drainActionQueue().catchError((e) => debugPrint('[Notifications] Failed to drain action queue: $e')));
+      unawaited(_drainActionQueue().catchError((e) =>
+          debugPrint('[Notifications] Failed to drain action queue: $e')));
     },
   );
 
@@ -275,7 +291,8 @@ class NotificationService {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(
         BackgroundGate.adaptInterval(const Duration(seconds: 30)), (_) {
-      unawaited(processPendingBackgroundActions().catchError((e) => debugPrint('[Notifications] Failed to process pending background actions: $e')));
+      unawaited(processPendingBackgroundActions().catchError((e) => debugPrint(
+          '[Notifications] Failed to process pending background actions: $e')));
     });
   }
 
@@ -289,7 +306,8 @@ class NotificationService {
     if (_initFuture != null) {
       if (_receivePort != null &&
           IsolateNameServer.lookupPortByName('dmx_notification_port') != null) {
-        unawaited(processPendingBackgroundActions().catchError((e) => debugPrint('[Notifications] Failed to process pending background actions: $e')));
+        unawaited(processPendingBackgroundActions().catchError((e) => debugPrint(
+            '[Notifications] Failed to process pending background actions: $e')));
         return _initFuture!;
       }
       try {
@@ -357,7 +375,8 @@ class NotificationService {
               );
             }
           }
-          unawaited(processPendingBackgroundActions().catchError((e) => debugPrint('[Notifications] Failed to process pending background actions: $e')));
+          unawaited(processPendingBackgroundActions().catchError((e) => debugPrint(
+              '[Notifications] Failed to process pending background actions: $e')));
         }
       });
 
@@ -381,7 +400,8 @@ class NotificationService {
               'payload=${payload ?? "null"} failed validation',
             );
           }
-          unawaited(processPendingBackgroundActions().catchError((e) => debugPrint('[Notifications] Failed to process pending background actions: $e')));
+          unawaited(processPendingBackgroundActions().catchError((e) => debugPrint(
+              '[Notifications] Failed to process pending background actions: $e')));
         },
         onDidReceiveBackgroundNotificationResponse:
             _onBackgroundNotificationResponse,
@@ -497,14 +517,41 @@ class NotificationService {
     if (!_initialized) return;
     final now = DateTime.now();
     final lastPost = _lastProgressPostTimes[notificationId];
-    // FIX M-BG-10: 10000ms background throttle, 2000ms foreground
+    // FIX (B5): Enforce minimum 1,000ms between calls per notification ID, 10,000ms in background
     final isBg = DownloadEngine.isInBackground || PowerMonitor.screenOff;
-    final throttleMs = isBg ? 10000 : 2000;
+    final throttleMs = isBg ? 10000 : 1000;
     if (!isPaused &&
         lastPost != null &&
         now.difference(lastPost).inMilliseconds < throttleMs) {
+      // Schedule trailing update if not already scheduled
+      _trailingPostTimers[notificationId]?.cancel();
+      _trailingPostTimers[notificationId] = Timer(
+        Duration(
+          milliseconds:
+              (throttleMs - now.difference(lastPost).inMilliseconds) + 20,
+        ),
+        () {
+          _trailingPostTimers.remove(notificationId);
+          unawaited(
+            showDownloadProgress(
+              notificationId: notificationId,
+              title: title,
+              progressPercent: progressPercent,
+              speed: speed,
+              eta: eta,
+              languageCode: languageCode,
+              payload: payload,
+              isPaused: isPaused,
+              hasMultipleActive: hasMultipleActive,
+              groupKey: groupKey,
+            ),
+          );
+        },
+      );
       return;
     }
+    _trailingPostTimers[notificationId]?.cancel();
+    _trailingPostTimers.remove(notificationId);
     _lastProgressPostTimes[notificationId] = now;
     // FIX-M5: Cap _lastProgressPostTimes at 100 entries
     if (_lastProgressPostTimes.length > 100) {
@@ -570,12 +617,23 @@ class NotificationService {
       android: androidDetails,
       iOS: iosDetails,
     );
+    final body = isPaused
+        ? L10n.translate(languageCode, 'notification_paused')
+        : (eta.isNotEmpty ? '$speed | $eta' : speed);
+
+    if (showHookForTesting != null) {
+      await showHookForTesting!(
+        id: notificationId,
+        title: title,
+        body: body,
+      );
+      return;
+    }
+
     await _plugin.show(
       id: notificationId,
       title: title,
-      body: isPaused
-          ? L10n.translate(languageCode, 'notification_paused')
-          : (eta.isNotEmpty ? '$speed | $eta' : speed),
+      body: body,
       notificationDetails: details,
       payload: payload,
     );
@@ -698,14 +756,39 @@ class NotificationService {
     );
   }
 
+  Future<void> showProgress({
+    required int notificationId,
+    required String title,
+    required int progressPercent,
+    String speed = '',
+    String eta = '',
+    String languageCode = 'en',
+    String payload = '',
+  }) =>
+      showDownloadProgress(
+        notificationId: notificationId,
+        title: title,
+        progressPercent: progressPercent,
+        speed: speed,
+        eta: eta,
+        languageCode: languageCode,
+        payload: payload,
+      );
+
   Future<void> cancelNotification(int notificationId) async {
     _lastProgressPostTimes.remove(notificationId);
+    _trailingPostTimers[notificationId]?.cancel();
+    _trailingPostTimers.remove(notificationId);
     if (!_initialized) return;
     await _plugin.cancel(id: notificationId);
   }
 
   Future<void> cancelAll() async {
     _lastProgressPostTimes.clear();
+    for (final timer in _trailingPostTimers.values) {
+      timer.cancel();
+    }
+    _trailingPostTimers.clear();
     if (!_initialized) return;
     await _plugin.cancelAll();
   }
@@ -713,6 +796,10 @@ class NotificationService {
   Future<void> dispose() async {
     _pollTimer?.cancel();
     _pollTimer = null;
+    for (final timer in _trailingPostTimers.values) {
+      timer.cancel();
+    }
+    _trailingPostTimers.clear();
     await _receivePortSub?.cancel();
     _receivePortSub = null;
     _receivePort?.close();
