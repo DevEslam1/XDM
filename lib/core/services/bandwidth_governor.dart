@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+
 import 'power_monitor.dart';
 
 /// A token-bucket bandwidth governor.
@@ -16,6 +18,15 @@ class BandwidthGovernor {
   double _burstFactor;
   double _availableTokens = 0;
   DateTime _lastRefill = DateTime.now().subtract(const Duration(seconds: 1));
+  // FIX-P1-02: Refill throttle — skip token arithmetic when the previous
+  // refill happened less than 50ms ago so a burst of acquire() calls does not
+  // re-run DateTime.now() + float math on every single probe.
+  int _lastRefillMs = 0;
+  static const int _minRefillIntervalMs = 50;
+
+  /// Milliseconds since epoch of the most recent refill. Testing hook.
+  @visibleForTesting
+  int get lastRefillMsForTesting => _lastRefillMs;
 
   BandwidthGovernor([
     this._globalBytesPerSecond = 0,
@@ -192,6 +203,13 @@ class BandwidthGovernor {
 
   void _refill() {
     final now = DateTime.now();
+    final nowMs = now.millisecondsSinceEpoch;
+    // FIX-P1-02: Throttle refills to at most once per 50ms.
+    if (_lastRefillMs != 0 && nowMs - _lastRefillMs < _minRefillIntervalMs) {
+      return;
+    }
+    _lastRefillMs = nowMs;
+
     final elapsedMs = now.difference(_lastRefill).inMilliseconds;
 
     if (elapsedMs <= 0) return;

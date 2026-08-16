@@ -93,5 +93,26 @@ void main() {
       final waitA = governor.acquireNonBlocking(5000, taskId: 'task-a');
       expect(waitA, greaterThan(0));
     });
+
+    test('global refill is throttled to at most once per 50ms', () {
+      final governor = BandwidthGovernor(1000, 1.0);
+      governor.registerConsumer();
+
+      // Warm up: first call must perform a refill.
+      governor.acquireNonBlocking(1);
+      expect(governor.lastRefillMsForTesting, isNonZero);
+
+      // Capture the timestamp from the previous refill.
+      final before = governor.lastRefillMsForTesting;
+
+      // A burst of immediate acquires must NOT trigger recomputation
+      // (nowMs - lastRefillMs stays well below the 50ms threshold).
+      for (int i = 0; i < 100; i++) {
+        governor.acquireNonBlocking(1);
+      }
+
+      // No refill ran, so the recorded timestamp must be unchanged.
+      expect(governor.lastRefillMsForTesting, equals(before));
+    });
   });
 }
