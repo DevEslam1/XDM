@@ -402,6 +402,12 @@ class HttpTransferJob {
   }
 
   @visibleForTesting
+  set stateForTesting(TransferState? st) => _state = st;
+
+  @visibleForTesting
+  TransferState? get stateForTesting => _state;
+
+  @visibleForTesting
   Future<void> executeDownload(Dio dio) async {
     final multiThread = _state!.totalSize > 0 &&
         cmd.supportsResume &&
@@ -1122,7 +1128,7 @@ class HttpTransferJob {
               validateStatus: (_) => true,
             ),
           );
-          if (response.statusCode == 206 && response.data == null) {
+          if (response.statusCode == 206 && response.data != null) {
             final builder = BytesBuilder(copy: false);
             await for (final b in response.data!.stream) {
               builder.add(b);
