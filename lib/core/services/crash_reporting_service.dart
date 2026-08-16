@@ -71,18 +71,12 @@ class CrashReportingService {
       options.environment = kDebugMode ? 'dev' : 'production';
       options.beforeSend = (event, hint) {
         // Redact URLs that carry auth tokens (e.g. signed download URLs).
-        // Assign values directly to the event — this is future-proof and
-        // avoids copyWith deprecation.
         if (event.request?.url != null && event.request!.url!.contains('?')) {
           final uri = Uri.tryParse(event.request!.url!);
           if (uri != null) {
             final redacted = uri.replace(queryParameters: {
               for (final entry in uri.queryParameters.entries)
-                entry.key: entry.key.toLowerCase().contains('token') ||
-                        entry.key.toLowerCase().contains('key') ||
-                        entry.key.toLowerCase().contains('auth') ||
-                        entry.key.toLowerCase().contains('sig') ||
-                        entry.key.toLowerCase().contains('secret')
+                entry.key: _sensitiveKeyPattern.hasMatch(entry.key)
                     ? '***'
                     : entry.value,
             }).toString();
@@ -106,7 +100,9 @@ class CrashReportingService {
             for (final entry in breadcrumb.data!.entries)
               entry.key: entry.value is String
                   ? _redactSensitive(entry.value as String)
-                  : entry.value,
+                  : (_sensitiveKeyPattern.hasMatch(entry.key)
+                      ? '***'
+                      : entry.value),
           };
         }
         return breadcrumb;
@@ -116,24 +112,43 @@ class CrashReportingService {
     _initialized = true;
   }
 
+  static final RegExp _sensitiveKeyPattern = RegExp(
+    r'(token|key|auth|sig|secret|password|pwd|pass|credential|api[_-]?key|access[_-]?token|refresh[_-]?token|bearer)',
+    caseSensitive: false,
+  );
+
   static final RegExp _sensitiveUrlPattern = RegExp(
       r'''(https?://[^\s"'<]+)(?<params>[?&][^\s"'<]*)''',
       caseSensitive: false);
 
+  static final RegExp _bearerPattern =
+      RegExp(r'bearer\s+[^\s]+', caseSensitive: false);
+
+  static final RegExp _sensitiveKeyValuePattern = RegExp(
+    r'''(?<key>token|key|auth|sig|secret|password|pwd|pass|credential|api[_-]?key|access[_-]?token|refresh[_-]?token)(?<sep>[:=]\s*)(?<val>[^\s,&"']+)''',
+    caseSensitive: false,
+  );
+
+  @visibleForTesting
+  static String redactSensitive(String input) => _redactSensitive(input);
+
   static String _redactSensitive(String input) {
-    return input.replaceAllMapped(_sensitiveUrlPattern, (match) {
+    var result = input.replaceAllMapped(_bearerPattern, (match) => 'Bearer ***');
+    result = result.replaceAllMapped(_sensitiveKeyValuePattern, (match) {
+      final regExpMatch = match as RegExpMatch;
+      final key = regExpMatch.namedGroup('key') ?? '';
+      final sep = regExpMatch.namedGroup('sep') ?? '=';
+      return '$key$sep***';
+    });
+    return result.replaceAllMapped(_sensitiveUrlPattern, (match) {
       final regExpMatch = match as RegExpMatch;
       final String query = regExpMatch.namedGroup('params') ?? '';
       if (query.isEmpty) return match.group(0)!;
       final sanitized = query.split('&').map((String part) {
         final idx = part.indexOf('=');
         if (idx <= 0) return part;
-        final name = part.substring(0, idx).toLowerCase();
-        return (name.contains('token') ||
-                name.contains('key') ||
-                name.contains('auth') ||
-                name.contains('sig') ||
-                name.contains('secret'))
+        final name = part.substring(0, idx);
+        return _sensitiveKeyPattern.hasMatch(name)
             ? '${part.substring(0, idx)}=***'
             : part;
       }).join('&');
