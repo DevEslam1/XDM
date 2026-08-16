@@ -39,8 +39,16 @@ class BackgroundService {
   static Duration get _maxWakeLockHold =>
       Platform.isIOS ? const Duration(seconds: 30) : const Duration(hours: 4);
   static DateTime? _lastHeartbeatTime;
-  static bool _hasActiveDownloads = false;
+  static int _activeDownloadCount = 0;
   static int Function()? _activeDownloadCountQuery;
+
+  @visibleForTesting
+  static int get activeDownloadCountForTesting => _activeDownloadCount;
+
+  @visibleForTesting
+  static void resetActiveDownloadCountForTesting() {
+    _activeDownloadCount = 0;
+  }
 
   /// Consecutive wake-lock renewal failures (escalate after 3).
   static int _wakeLockRenewalFailures = 0;
@@ -55,17 +63,21 @@ class BackgroundService {
     if (_activeDownloadCountQuery != null) {
       return _activeDownloadCountQuery!();
     }
-    return _hasActiveDownloads ? 1 : 0;
+    return _activeDownloadCount;
   }
 
   /// Callback invoked when background execution is requested on iOS where it is unsupported.
   static VoidCallback? onIosBackgroundUnavailable;
 
   static Future<void> setDownloadActive(bool active) async {
-    _hasActiveDownloads = active;
-    if (!active) {
-      final activeCount = await _checkActiveDownloadCount();
-      if (activeCount <= 0) {
+    if (active) {
+      _activeDownloadCount++;
+    } else {
+      _activeDownloadCount = (_activeDownloadCount - 1).clamp(0, 1 << 30);
+    }
+    if (_activeDownloadCount <= 0) {
+      final queryCount = _activeDownloadCountQuery?.call() ?? 0;
+      if (queryCount <= 0) {
         _heartbeatTimer?.cancel();
         _heartbeatTimer = null;
         await releaseWakeLock();

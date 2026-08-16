@@ -56,5 +56,23 @@ void main() {
       await BackgroundService.setDownloadActive(false);
       expect(releaseCount, equals(1));
     });
+
+    test('wake-lock counter releases only when internal count reaches 0', () async {
+      BackgroundService.setActiveDownloadCountQuery(null);
+      BackgroundService.resetActiveDownloadCountForTesting();
+
+      await BackgroundService.setDownloadActive(true);
+      await BackgroundService.setDownloadActive(true);
+      expect(acquireCount, equals(1));
+      expect(BackgroundService.activeDownloadCountForTesting, equals(2));
+
+      await BackgroundService.setDownloadActive(false);
+      expect(releaseCount, equals(0));
+      expect(BackgroundService.activeDownloadCountForTesting, equals(1));
+
+      await BackgroundService.setDownloadActive(false);
+      expect(releaseCount, equals(1));
+      expect(BackgroundService.activeDownloadCountForTesting, equals(0));
+    });
   });
 }
