@@ -314,6 +314,28 @@ class DatabaseService {
     // Ensure previousCycleState is populated for UI hinting
     final previousCycleState = isInterruptedActive ? rawCycleState : null;
 
+    // FIX-P1-01: Single-pass aggregation over torrentFiles instead of four
+    // separate where/fold iterations.
+    final files = row.torrentFiles;
+    int totalFiles = 0;
+    int completedFiles = 0;
+    int totalFileBytes = 0;
+    int downloadedFileBytes = 0;
+    if (files != null && files.isNotEmpty) {
+      for (final f in files) {
+        final selected = (f['selected'] as bool?) ?? true;
+        if (!selected) continue;
+        final len = (f['length'] as num?)?.toInt() ?? 0;
+        final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+        totalFiles++;
+        totalFileBytes += len;
+        if (len == 0 || dl >= len) {
+          completedFiles++;
+        }
+        downloadedFileBytes += len > 0 ? dl.clamp(0, len) : 0;
+      }
+    }
+
     return DownloadTask(
       id: row.id,
       fileName: row.fileName,
@@ -364,36 +386,13 @@ class DatabaseService {
       ytCounterpartDownloadedBytes: row.ytCounterpartDownloadedBytes,
       cycleState: cycleState,
       previousCycleState: previousCycleState,
-      totalFiles: (row.torrentFiles != null && row.torrentFiles!.isNotEmpty)
-          ? row.torrentFiles!
-              .where((f) => (f['selected'] as bool?) ?? true)
-              .length
-          : null,
-      completedFiles: (row.torrentFiles != null && row.torrentFiles!.isNotEmpty)
-          ? row.torrentFiles!
-              .where((f) => (f['selected'] as bool?) ?? true)
-              .where((f) {
-              final len = (f['length'] as num?)?.toInt() ?? 0;
-              final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-              return len == 0 || dl >= len;
-            }).length
-          : null,
-      totalFileBytes: (row.torrentFiles != null && row.torrentFiles!.isNotEmpty)
-          ? row.torrentFiles!
-              .where((f) => (f['selected'] as bool?) ?? true)
-              .fold<int>(
-                  0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0))
-          : null,
+      totalFiles: files != null && files.isNotEmpty ? totalFiles : null,
+      completedFiles:
+          files != null && files.isNotEmpty ? completedFiles : null,
+      totalFileBytes:
+          files != null && files.isNotEmpty ? totalFileBytes : null,
       downloadedFileBytes:
-          (row.torrentFiles != null && row.torrentFiles!.isNotEmpty)
-              ? row.torrentFiles!
-                  .where((f) => (f['selected'] as bool?) ?? true)
-                  .fold<int>(0, (sum, f) {
-                  final len = (f['length'] as num?)?.toInt() ?? 0;
-                  final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-                  return sum + (len > 0 ? dl.clamp(0, len) : 0);
-                })
-              : null,
+          files != null && files.isNotEmpty ? downloadedFileBytes : null,
     );
   }
 

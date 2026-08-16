@@ -294,7 +294,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -318,6 +318,7 @@ class AppDatabase extends _$AppDatabase {
               'CREATE INDEX IF NOT EXISTS idx_bookmarks_url ON bookmarks (url)');
           await customStatement(
               'CREATE INDEX IF NOT EXISTS idx_browser_tabs_position ON browser_tabs (position)');
+          await _createTaskSummaryView();
         },
         onUpgrade: (m, from, to) async {
           debugPrint('AppDatabase: Upgrading schema from $from to $to');
@@ -652,10 +653,63 @@ class AppDatabase extends _$AppDatabase {
               _dbLog.info('Column total_pieces may already exist: $e');
             }
           }
-          if (to > 20) {
+          if (from < 21) {
+            await _createTaskSummaryView();
+          }
+          if (to > 21) {
             _dbLog.warning(
-                'AppDatabase: Upgrade target version $to is higher than version 20, no specific migrations defined!');
+                'AppDatabase: Upgrade target version $to is higher than version 21, no specific migrations defined!');
           }
         },
       );
+
+  Future<void> _createTaskSummaryView() async {
+    await customStatement('''
+      CREATE VIEW IF NOT EXISTS v_download_task_summary AS
+      SELECT
+        id,
+        file_name,
+        url,
+        file_size,
+        downloaded_bytes,
+        speed,
+        eta,
+        status,
+        category,
+        thread_count,
+        created_at,
+        updated_at,
+        completed_at,
+        scheduled_at,
+        supports_resume,
+        priority,
+        CASE WHEN torrent_files IS NOT NULL AND json_valid(torrent_files) = 1 THEN
+          (SELECT COUNT(*) FROM json_each(torrent_files) AS f
+            WHERE COALESCE(json_extract(f.value, '\$.selected'), 1) = 1)
+        ELSE 0 END AS total_files,
+        CASE WHEN torrent_files IS NOT NULL AND json_valid(torrent_files) = 1 THEN
+          (SELECT COUNT(*) FROM json_each(torrent_files) AS f
+            WHERE COALESCE(json_extract(f.value, '\$.selected'), 1) = 1
+              AND (COALESCE(json_extract(f.value, '\$.length'), 0) = 0
+                OR COALESCE(json_extract(f.value, '\$.downloadedBytes'), 0) >=
+                   COALESCE(json_extract(f.value, '\$.length'), 0)))
+        ELSE 0 END AS completed_files,
+        CASE WHEN torrent_files IS NOT NULL AND json_valid(torrent_files) = 1 THEN
+          COALESCE((SELECT SUM(COALESCE(json_extract(f.value, '\$.length'), 0))
+            FROM json_each(torrent_files) AS f
+            WHERE COALESCE(json_extract(f.value, '\$.selected'), 1) = 1), 0)
+        ELSE 0 END AS total_file_bytes,
+        CASE WHEN torrent_files IS NOT NULL AND json_valid(torrent_files) = 1 THEN
+          COALESCE((SELECT SUM(
+              CASE WHEN COALESCE(json_extract(f.value, '\$.length'), 0) > 0
+                THEN MIN(
+                  COALESCE(json_extract(f.value, '\$.downloadedBytes'), 0),
+                  COALESCE(json_extract(f.value, '\$.length'), 0))
+                ELSE 0 END)
+            FROM json_each(torrent_files) AS f
+            WHERE COALESCE(json_extract(f.value, '\$.selected'), 1) = 1), 0)
+        ELSE 0 END AS downloaded_file_bytes
+      FROM download_tasks;
+    ''');
+  }
 }
