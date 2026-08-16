@@ -200,9 +200,14 @@ class DownloadTask {
   final String? contentHint;
 
   final PauseReason? pauseReason;
+  final int? totalPieces;
   final int? completedPieces;
   final int? ytCounterpartDownloadedBytes;
   final CycleState? cycleState;
+  final int? totalFiles;
+  final int? completedFiles;
+  final int? totalFileBytes;
+  final int? downloadedFileBytes;
 
   final bool isMergeInProgress; // runtime only, not persisted
 
@@ -261,9 +266,14 @@ class DownloadTask {
     this.siteDisplayName,
     this.contentHint,
     this.pauseReason,
+    this.totalPieces,
     this.completedPieces,
     this.ytCounterpartDownloadedBytes,
     this.cycleState,
+    this.totalFiles,
+    this.completedFiles,
+    this.totalFileBytes,
+    this.downloadedFileBytes,
   });
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
@@ -626,11 +636,17 @@ class DownloadTask {
     bool? isMergeInProgress,
     PauseReason? pauseReason,
     bool clearPauseReason = false,
+    int? totalPieces,
+    bool clearTotalPieces = false,
     int? completedPieces,
     bool clearCompletedPieces = false,
     int? ytCounterpartDownloadedBytes,
     CycleState? cycleState,
     bool clearCycleState = false,
+    int? totalFiles,
+    int? completedFiles,
+    int? totalFileBytes,
+    int? downloadedFileBytes,
   }) {
     final effectiveFileSize = clearFileSize
         ? 0
@@ -729,9 +745,14 @@ class DownloadTask {
       siteDisplayName: siteDisplayName ?? this.siteDisplayName,
       contentHint: contentHint ?? this.contentHint,
       pauseReason: clearPauseReason ? null : (pauseReason ?? this.pauseReason),
+      totalPieces: clearTotalPieces ? null : (totalPieces ?? this.totalPieces),
       completedPieces: clearCompletedPieces ? null : (completedPieces ?? this.completedPieces),
       ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes ?? this.ytCounterpartDownloadedBytes,
       cycleState: clearCycleState ? null : (cycleState ?? this.cycleState),
+      totalFiles: totalFiles ?? this.totalFiles,
+      completedFiles: completedFiles ?? this.completedFiles,
+      totalFileBytes: totalFileBytes ?? this.totalFileBytes,
+      downloadedFileBytes: downloadedFileBytes ?? this.downloadedFileBytes,
     );
   }
 
@@ -805,9 +826,14 @@ class DownloadTask {
       'siteDisplayName': siteDisplayName,
       'contentHint': contentHint,
       'pauseReason': pauseReason?.name,
+      'totalPieces': totalPieces,
       'completedPieces': completedPieces,
       'ytCounterpartDownloadedBytes': ytCounterpartDownloadedBytes,
       'cycleState': cycleState?.name,
+      'totalFiles': totalFiles,
+      'completedFiles': completedFiles,
+      'totalFileBytes': totalFileBytes,
+      'downloadedFileBytes': downloadedFileBytes,
     };
   }
 
@@ -887,6 +913,35 @@ class DownloadTask {
         ? PauseReason.fromName(rawPauseReason)
         : (rawPauseReason is PauseReason ? rawPauseReason : null);
 
+    final rawTorrentFiles = (map['torrentFiles'] as List?)
+        ?.whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+
+    int? totalFiles = (map['totalFiles'] as num?)?.toInt();
+    int? completedFiles = (map['completedFiles'] as num?)?.toInt();
+    int? totalFileBytes = (map['totalFileBytes'] as num?)?.toInt();
+    int? downloadedFileBytes = (map['downloadedFileBytes'] as num?)?.toInt();
+
+    // Fix 4: Compute torrent file aggregates directly from torrentFiles JSON array
+    if (rawTorrentFiles != null && rawTorrentFiles.isNotEmpty) {
+      final selected =
+          rawTorrentFiles.where((f) => (f['selected'] as bool?) ?? true).toList();
+      totalFiles ??= selected.length;
+      completedFiles ??= selected.where((f) {
+        final len = (f['length'] as num?)?.toInt() ?? 0;
+        final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+        return len == 0 || dl >= len;
+      }).length;
+      totalFileBytes ??= selected.fold<int>(
+          0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
+      downloadedFileBytes ??= selected.fold<int>(0, (sum, f) {
+        final len = (f['length'] as num?)?.toInt() ?? 0;
+        final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+        return sum + (len > 0 ? dl.clamp(0, len) : 0);
+      });
+    }
+
     return DownloadTask(
       id: map['id'] as String? ?? '',
       fileName: map['fileName'] as String? ?? '',
@@ -922,9 +977,7 @@ class DownloadTask {
       seedingLimited: map['seedingLimited'] as bool? ?? false,
       seedingLimitKbps: (map['seedingLimitKbps'] as num?)?.toInt() ?? 500,
       uploadedBytes: (map['uploadedBytes'] as num?)?.toInt() ?? 0,
-      torrentFiles: (map['torrentFiles'] as List?)
-          ?.map((e) => e as Map<String, dynamic>)
-          .toList(),
+      torrentFiles: rawTorrentFiles,
       downloadPageUrl: map['downloadPageUrl'] as String?,
       mergedAudioUrl: map['mergedAudioUrl'] as String?,
       audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
@@ -951,11 +1004,16 @@ class DownloadTask {
       siteDisplayName: map['siteDisplayName'] as String?,
       contentHint: map['contentHint'] as String?,
       pauseReason: pauseReason,
+      totalPieces: (map['totalPieces'] as num?)?.toInt(),
       completedPieces: (map['completedPieces'] as num?)?.toInt(),
       ytCounterpartDownloadedBytes: (map['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
       cycleState: map['cycleState'] is String
           ? CycleState.fromName(map['cycleState'] as String)
           : (map['cycleState'] is CycleState ? map['cycleState'] as CycleState : null),
+      totalFiles: totalFiles,
+      completedFiles: completedFiles,
+      totalFileBytes: totalFileBytes,
+      downloadedFileBytes: downloadedFileBytes,
     );
   }
 

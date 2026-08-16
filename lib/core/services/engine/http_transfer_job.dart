@@ -163,6 +163,15 @@ class HttpTransferJob {
   CycleState? _lastEmittedCycleState;
   int _currentWriterBufferSize = 256 * 1024;
   
+  static PauseReason _inferPauseReason(String? message) {
+    if (message == null) return PauseReason.userRequested;
+    final m = message.toLowerCase();
+    if (m.contains('network') || m.contains('connection')) return PauseReason.networkLost;
+    if (m.contains('battery')) return PauseReason.batteryLow;
+    if (m.contains('schedule')) return PauseReason.scheduled;
+    return PauseReason.userRequested;
+  }
+
   void requestCancel() {
     _abortAllDelays();
     if (!_cancelToken.isCancelled) _cancelToken.cancel('paused');
@@ -268,7 +277,9 @@ class HttpTransferJob {
       final elapsed = _stopwatch.elapsedMilliseconds - _lastProgressTimeMs;
       if (elapsed >= 5 * 60 * 1000) {
         _stalledEmitted = true;
-        _emitProgress(_stopwatch.elapsedMilliseconds, statusMessage: 'Stalled');
+        _emitProgress(_stopwatch.elapsedMilliseconds,
+            statusMessage: 'Stalled',
+            cycleStateOverride: CycleState.stalled);
       }
     });
   }
@@ -688,9 +699,9 @@ class HttpTransferJob {
     } catch (e) {
       if (e is DioException && e.type == DioExceptionType.cancel) {
         st.status = DmxStateStatus.paused;
-        // Fix 8: Populate pauseReason when emitting Paused
         _emitProgress(0,
-            statusMessage: 'Paused', pauseReason: PauseReason.userRequested);
+            statusMessage: 'Paused',
+            pauseReason: _inferPauseReason(e.message));
       } else if (e is! RangeUnsupportedException) {
         final anyProven = st.chunks.any((c) => c.downloaded > 0);
         st.status = DmxStateStatus.failed;
@@ -1225,9 +1236,9 @@ class HttpTransferJob {
       } on DioException catch (e) {
         if (e.type == DioExceptionType.cancel) {
           _state!.status = DmxStateStatus.paused;
-          // Fix 8: Populate pauseReason when emitting Paused
           _emitProgress(0,
-              statusMessage: 'Paused', pauseReason: PauseReason.userRequested);
+              statusMessage: 'Paused',
+              pauseReason: _inferPauseReason(e.message));
           rethrow;
         }
         if (e.message == 'HTML_INSTEAD_OF_MEDIA') {

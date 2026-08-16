@@ -230,6 +230,7 @@ class DatabaseService {
       expectedSha256: drift.Value(task.expectedSha256),
       mirrorUrls: drift.Value(task.mirrorUrls),
       pauseReason: drift.Value(task.pauseReason?.name),
+      totalPieces: drift.Value(task.totalPieces),
       completedPieces: drift.Value(task.completedPieces),
       ytCounterpartDownloadedBytes:
           drift.Value(task.ytCounterpartDownloadedBytes),
@@ -325,11 +326,42 @@ class DatabaseService {
       pauseReason: row.pauseReason != null
           ? PauseReason.fromName(row.pauseReason)
           : null,
+      totalPieces: row.totalPieces,
       completedPieces: row.completedPieces,
       ytCounterpartDownloadedBytes: row.ytCounterpartDownloadedBytes,
       cycleState: row.cycleState != null
           ? CycleState.fromName(row.cycleState)
           : null,
+      totalFiles: (row.torrentFiles != null && row.torrentFiles!.isNotEmpty)
+          ? row.torrentFiles!
+              .where((f) => (f['selected'] as bool?) ?? true)
+              .length
+          : null,
+      completedFiles: (row.torrentFiles != null && row.torrentFiles!.isNotEmpty)
+          ? row.torrentFiles!
+              .where((f) => (f['selected'] as bool?) ?? true)
+              .where((f) {
+              final len = (f['length'] as num?)?.toInt() ?? 0;
+              final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+              return len == 0 || dl >= len;
+            }).length
+          : null,
+      totalFileBytes: (row.torrentFiles != null && row.torrentFiles!.isNotEmpty)
+          ? row.torrentFiles!
+              .where((f) => (f['selected'] as bool?) ?? true)
+              .fold<int>(0,
+                  (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0))
+          : null,
+      downloadedFileBytes:
+          (row.torrentFiles != null && row.torrentFiles!.isNotEmpty)
+              ? row.torrentFiles!
+                  .where((f) => (f['selected'] as bool?) ?? true)
+                  .fold<int>(0, (sum, f) {
+                  final len = (f['length'] as num?)?.toInt() ?? 0;
+                  final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                  return sum + (len > 0 ? dl.clamp(0, len) : 0);
+                })
+              : null,
     );
   }
 

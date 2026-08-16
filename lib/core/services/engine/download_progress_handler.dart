@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../engines/http_download_engine.dart';
 import 'cycle_state_resolver.dart';
+import 'engine_exceptions.dart';
 import 'engine_models.dart';
 import 'engine_utils.dart';
 
@@ -35,6 +37,13 @@ class DownloadProgressHandler {
   Timer? _throttleTimer;
   DownloadProgress? _pendingProgress;
   CycleState? _lastEmittedCycleState;
+  DateTime? _counterpartWaitStart;
+
+  @visibleForTesting
+  DateTime? get counterpartWaitStartForTesting => _counterpartWaitStart;
+
+  @visibleForTesting
+  set counterpartWaitStartForTesting(DateTime? val) => _counterpartWaitStart = val;
 
   final List<Map<String, dynamic>>? Function()? getTorrentFiles;
 
@@ -169,16 +178,27 @@ class DownloadProgressHandler {
         ytCounterpartDownloadedBytes;
 
     if (isCounterpartUnregistered && ytStreamKind != null && cycle == CycleState.downloading) {
+      _counterpartWaitStart ??= DateTime.now();
+      if (DateTime.now().difference(_counterpartWaitStart!) > const Duration(seconds: 30)) {
+        _counterpartWaitStart = null;
+        throw UrlExpiredException(
+          'Counterpart stream lost — refresh required',
+          refreshAllMirrors: true,
+        );
+      }
       final cpSize = dynamicYtCounterpartSize;
       final cpDone = cpSize != null && cpSize > 0 && 
                      (dynamicYtCounterpartDownloaded ?? 0) >= cpSize;
       if (cpDone) {
+        _counterpartWaitStart = null;
         cycle = CycleState.merging;
         sm = 'Merging audio + video…';
       } else {
         cycle = CycleState.starting;
         sm = 'Waiting for counterpart stream…';
       }
+    } else {
+      _counterpartWaitStart = null;
     }
 
     // YT Combined Sync Check

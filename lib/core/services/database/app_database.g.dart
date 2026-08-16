@@ -311,6 +311,12 @@ class $DownloadTasksTable extends DownloadTasks
   late final GeneratedColumn<String> pauseReason = GeneratedColumn<String>(
       'pause_reason', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _totalPiecesMeta =
+      const VerificationMeta('totalPieces');
+  @override
+  late final GeneratedColumn<int> totalPieces = GeneratedColumn<int>(
+      'total_pieces', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
   static const VerificationMeta _completedPiecesMeta =
       const VerificationMeta('completedPieces');
   @override
@@ -375,6 +381,7 @@ class $DownloadTasksTable extends DownloadTasks
         expectedSha256,
         mirrorUrls,
         pauseReason,
+        totalPieces,
         completedPieces,
         ytCounterpartDownloadedBytes,
         cycleState
@@ -628,6 +635,12 @@ class $DownloadTasksTable extends DownloadTasks
           pauseReason.isAcceptableOrUnknown(
               data['pause_reason']!, _pauseReasonMeta));
     }
+    if (data.containsKey('total_pieces')) {
+      context.handle(
+          _totalPiecesMeta,
+          totalPieces.isAcceptableOrUnknown(
+              data['total_pieces']!, _totalPiecesMeta));
+    }
     if (data.containsKey('completed_pieces')) {
       context.handle(
           _completedPiecesMeta,
@@ -748,6 +761,8 @@ class $DownloadTasksTable extends DownloadTasks
               DriftSqlType.string, data['${effectivePrefix}mirror_urls'])),
       pauseReason: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}pause_reason']),
+      totalPieces: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}total_pieces']),
       completedPieces: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}completed_pieces']),
       ytCounterpartDownloadedBytes: attachedDatabase.typeMapping.read(
@@ -817,6 +832,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final String? expectedSha256;
   final List<String>? mirrorUrls;
   final String? pauseReason;
+  final int? totalPieces;
   final int? completedPieces;
   final int? ytCounterpartDownloadedBytes;
   final String? cycleState;
@@ -865,6 +881,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       this.expectedSha256,
       this.mirrorUrls,
       this.pauseReason,
+      this.totalPieces,
       this.completedPieces,
       this.ytCounterpartDownloadedBytes,
       this.cycleState});
@@ -949,6 +966,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     }
     if (!nullToAbsent || pauseReason != null) {
       map['pause_reason'] = Variable<String>(pauseReason);
+    }
+    if (!nullToAbsent || totalPieces != null) {
+      map['total_pieces'] = Variable<int>(totalPieces);
     }
     if (!nullToAbsent || completedPieces != null) {
       map['completed_pieces'] = Variable<int>(completedPieces);
@@ -1037,6 +1057,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       pauseReason: pauseReason == null && nullToAbsent
           ? const Value.absent()
           : Value(pauseReason),
+      totalPieces: totalPieces == null && nullToAbsent
+          ? const Value.absent()
+          : Value(totalPieces),
       completedPieces: completedPieces == null && nullToAbsent
           ? const Value.absent()
           : Value(completedPieces),
@@ -1101,6 +1124,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       expectedSha256: serializer.fromJson<String?>(json['expectedSha256']),
       mirrorUrls: serializer.fromJson<List<String>?>(json['mirrorUrls']),
       pauseReason: serializer.fromJson<String?>(json['pauseReason']),
+      totalPieces: serializer.fromJson<int?>(json['totalPieces']),
       completedPieces: serializer.fromJson<int?>(json['completedPieces']),
       ytCounterpartDownloadedBytes:
           serializer.fromJson<int?>(json['ytCounterpartDownloadedBytes']),
@@ -1156,6 +1180,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'expectedSha256': serializer.toJson<String?>(expectedSha256),
       'mirrorUrls': serializer.toJson<List<String>?>(mirrorUrls),
       'pauseReason': serializer.toJson<String?>(pauseReason),
+      'totalPieces': serializer.toJson<int?>(totalPieces),
       'completedPieces': serializer.toJson<int?>(completedPieces),
       'ytCounterpartDownloadedBytes':
           serializer.toJson<int?>(ytCounterpartDownloadedBytes),
@@ -1209,6 +1234,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           Value<String?> expectedSha256 = const Value.absent(),
           Value<List<String>?> mirrorUrls = const Value.absent(),
           Value<String?> pauseReason = const Value.absent(),
+          Value<int?> totalPieces = const Value.absent(),
           Value<int?> completedPieces = const Value.absent(),
           Value<int?> ytCounterpartDownloadedBytes = const Value.absent(),
           Value<String?> cycleState = const Value.absent()}) =>
@@ -1267,6 +1293,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
             expectedSha256.present ? expectedSha256.value : this.expectedSha256,
         mirrorUrls: mirrorUrls.present ? mirrorUrls.value : this.mirrorUrls,
         pauseReason: pauseReason.present ? pauseReason.value : this.pauseReason,
+        totalPieces: totalPieces.present ? totalPieces.value : this.totalPieces,
         completedPieces: completedPieces.present
             ? completedPieces.value
             : this.completedPieces,
@@ -1371,6 +1398,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           data.mirrorUrls.present ? data.mirrorUrls.value : this.mirrorUrls,
       pauseReason:
           data.pauseReason.present ? data.pauseReason.value : this.pauseReason,
+      totalPieces:
+          data.totalPieces.present ? data.totalPieces.value : this.totalPieces,
       completedPieces: data.completedPieces.present
           ? data.completedPieces.value
           : this.completedPieces,
@@ -1429,6 +1458,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('expectedSha256: $expectedSha256, ')
           ..write('mirrorUrls: $mirrorUrls, ')
           ..write('pauseReason: $pauseReason, ')
+          ..write('totalPieces: $totalPieces, ')
           ..write('completedPieces: $completedPieces, ')
           ..write(
               'ytCounterpartDownloadedBytes: $ytCounterpartDownloadedBytes, ')
@@ -1483,6 +1513,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         expectedSha256,
         mirrorUrls,
         pauseReason,
+        totalPieces,
         completedPieces,
         ytCounterpartDownloadedBytes,
         cycleState
@@ -1535,6 +1566,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.expectedSha256 == this.expectedSha256 &&
           other.mirrorUrls == this.mirrorUrls &&
           other.pauseReason == this.pauseReason &&
+          other.totalPieces == this.totalPieces &&
           other.completedPieces == this.completedPieces &&
           other.ytCounterpartDownloadedBytes ==
               this.ytCounterpartDownloadedBytes &&
@@ -1586,6 +1618,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<String?> expectedSha256;
   final Value<List<String>?> mirrorUrls;
   final Value<String?> pauseReason;
+  final Value<int?> totalPieces;
   final Value<int?> completedPieces;
   final Value<int?> ytCounterpartDownloadedBytes;
   final Value<String?> cycleState;
@@ -1635,6 +1668,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.expectedSha256 = const Value.absent(),
     this.mirrorUrls = const Value.absent(),
     this.pauseReason = const Value.absent(),
+    this.totalPieces = const Value.absent(),
     this.completedPieces = const Value.absent(),
     this.ytCounterpartDownloadedBytes = const Value.absent(),
     this.cycleState = const Value.absent(),
@@ -1685,6 +1719,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.expectedSha256 = const Value.absent(),
     this.mirrorUrls = const Value.absent(),
     this.pauseReason = const Value.absent(),
+    this.totalPieces = const Value.absent(),
     this.completedPieces = const Value.absent(),
     this.ytCounterpartDownloadedBytes = const Value.absent(),
     this.cycleState = const Value.absent(),
@@ -1745,6 +1780,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<String>? expectedSha256,
     Expression<String>? mirrorUrls,
     Expression<String>? pauseReason,
+    Expression<int>? totalPieces,
     Expression<int>? completedPieces,
     Expression<int>? ytCounterpartDownloadedBytes,
     Expression<String>? cycleState,
@@ -1797,6 +1833,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (expectedSha256 != null) 'expected_sha256': expectedSha256,
       if (mirrorUrls != null) 'mirror_urls': mirrorUrls,
       if (pauseReason != null) 'pause_reason': pauseReason,
+      if (totalPieces != null) 'total_pieces': totalPieces,
       if (completedPieces != null) 'completed_pieces': completedPieces,
       if (ytCounterpartDownloadedBytes != null)
         'yt_counterpart_downloaded_bytes': ytCounterpartDownloadedBytes,
@@ -1850,6 +1887,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       Value<String?>? expectedSha256,
       Value<List<String>?>? mirrorUrls,
       Value<String?>? pauseReason,
+      Value<int?>? totalPieces,
       Value<int?>? completedPieces,
       Value<int?>? ytCounterpartDownloadedBytes,
       Value<String?>? cycleState,
@@ -1899,6 +1937,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       expectedSha256: expectedSha256 ?? this.expectedSha256,
       mirrorUrls: mirrorUrls ?? this.mirrorUrls,
       pauseReason: pauseReason ?? this.pauseReason,
+      totalPieces: totalPieces ?? this.totalPieces,
       completedPieces: completedPieces ?? this.completedPieces,
       ytCounterpartDownloadedBytes:
           ytCounterpartDownloadedBytes ?? this.ytCounterpartDownloadedBytes,
@@ -2046,6 +2085,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     if (pauseReason.present) {
       map['pause_reason'] = Variable<String>(pauseReason.value);
     }
+    if (totalPieces.present) {
+      map['total_pieces'] = Variable<int>(totalPieces.value);
+    }
     if (completedPieces.present) {
       map['completed_pieces'] = Variable<int>(completedPieces.value);
     }
@@ -2109,6 +2151,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('expectedSha256: $expectedSha256, ')
           ..write('mirrorUrls: $mirrorUrls, ')
           ..write('pauseReason: $pauseReason, ')
+          ..write('totalPieces: $totalPieces, ')
           ..write('completedPieces: $completedPieces, ')
           ..write(
               'ytCounterpartDownloadedBytes: $ytCounterpartDownloadedBytes, ')
@@ -3260,6 +3303,7 @@ typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
   Value<String?> expectedSha256,
   Value<List<String>?> mirrorUrls,
   Value<String?> pauseReason,
+  Value<int?> totalPieces,
   Value<int?> completedPieces,
   Value<int?> ytCounterpartDownloadedBytes,
   Value<String?> cycleState,
@@ -3311,6 +3355,7 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
   Value<String?> expectedSha256,
   Value<List<String>?> mirrorUrls,
   Value<String?> pauseReason,
+  Value<int?> totalPieces,
   Value<int?> completedPieces,
   Value<int?> ytCounterpartDownloadedBytes,
   Value<String?> cycleState,
@@ -3476,6 +3521,9 @@ class $$DownloadTasksTableFilterComposer
 
   ColumnFilters<String> get pauseReason => $composableBuilder(
       column: $table.pauseReason, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get totalPieces => $composableBuilder(
+      column: $table.totalPieces, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get completedPieces => $composableBuilder(
       column: $table.completedPieces,
@@ -3651,6 +3699,9 @@ class $$DownloadTasksTableOrderingComposer
   ColumnOrderings<String> get pauseReason => $composableBuilder(
       column: $table.pauseReason, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get totalPieces => $composableBuilder(
+      column: $table.totalPieces, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get completedPieces => $composableBuilder(
       column: $table.completedPieces,
       builder: (column) => ColumnOrderings(column));
@@ -3806,6 +3857,9 @@ class $$DownloadTasksTableAnnotationComposer
   GeneratedColumn<String> get pauseReason => $composableBuilder(
       column: $table.pauseReason, builder: (column) => column);
 
+  GeneratedColumn<int> get totalPieces => $composableBuilder(
+      column: $table.totalPieces, builder: (column) => column);
+
   GeneratedColumn<int> get completedPieces => $composableBuilder(
       column: $table.completedPieces, builder: (column) => column);
 
@@ -3887,6 +3941,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<String?> expectedSha256 = const Value.absent(),
             Value<List<String>?> mirrorUrls = const Value.absent(),
             Value<String?> pauseReason = const Value.absent(),
+            Value<int?> totalPieces = const Value.absent(),
             Value<int?> completedPieces = const Value.absent(),
             Value<int?> ytCounterpartDownloadedBytes = const Value.absent(),
             Value<String?> cycleState = const Value.absent(),
@@ -3937,6 +3992,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             expectedSha256: expectedSha256,
             mirrorUrls: mirrorUrls,
             pauseReason: pauseReason,
+            totalPieces: totalPieces,
             completedPieces: completedPieces,
             ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
             cycleState: cycleState,
@@ -3988,6 +4044,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<String?> expectedSha256 = const Value.absent(),
             Value<List<String>?> mirrorUrls = const Value.absent(),
             Value<String?> pauseReason = const Value.absent(),
+            Value<int?> totalPieces = const Value.absent(),
             Value<int?> completedPieces = const Value.absent(),
             Value<int?> ytCounterpartDownloadedBytes = const Value.absent(),
             Value<String?> cycleState = const Value.absent(),
@@ -4038,6 +4095,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             expectedSha256: expectedSha256,
             mirrorUrls: mirrorUrls,
             pauseReason: pauseReason,
+            totalPieces: totalPieces,
             completedPieces: completedPieces,
             ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
             cycleState: cycleState,

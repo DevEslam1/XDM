@@ -210,6 +210,7 @@ class DownloadTasks extends Table {
       .map(const NullAwareTypeConverter.wrap(StringListConverter()))
       .nullable()();
   TextColumn get pauseReason => text().nullable()();
+  IntColumn get totalPieces => integer().nullable()();
   IntColumn get completedPieces => integer().nullable()();
   IntColumn get ytCounterpartDownloadedBytes => integer().nullable()();
   TextColumn get cycleState => text().nullable()();
@@ -276,7 +277,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -622,9 +623,17 @@ class AppDatabase extends _$AppDatabase {
               _dbLog.info('Column cycle_state may already exist: $e');
             }
           }
-          if (to > 19) {
+          if (from < 20) {
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN total_pieces INTEGER');
+            } catch (e) {
+              _dbLog.info('Column total_pieces may already exist: $e');
+            }
+          }
+          if (to > 20) {
             _dbLog.warning(
-                'AppDatabase: Upgrade target version $to is higher than version 19, no specific migrations defined!');
+                'AppDatabase: Upgrade target version $to is higher than version 20, no specific migrations defined!');
           }
         },
       );

@@ -1,10 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/engine/cycle_state_resolver.dart';
 import 'package:dmx/core/services/engine/download_progress_handler.dart';
+import 'package:dmx/core/services/engine/engine_exceptions.dart';
 import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:dmx/core/services/engine/engine_utils.dart';
 import 'package:dmx/core/services/engine/http_transfer_job.dart';
 import 'package:dmx/core/services/engine/torrent_download_handler.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -12,11 +14,15 @@ void main() {
 
   group('Download Lifecycle & Progress Tracking Fixes Tests', () {
     // 1. Cycle State Transitions
-    test('1. Cycle State Transitions - explicit libtorrent and resolver mapping', () {
-      expect(CycleState.fromLibtorrent('downloading_metadata'), CycleState.fetchingMetadata);
+    test(
+        '1. Cycle State Transitions - explicit libtorrent and resolver mapping',
+        () {
+      expect(CycleState.fromLibtorrent('downloading_metadata'),
+          CycleState.fetchingMetadata);
       expect(CycleState.fromLibtorrent('allocating'), CycleState.allocating);
       expect(CycleState.fromLibtorrent('checking_files'), CycleState.verifying);
-      expect(CycleState.fromLibtorrent('checking_resume_data'), CycleState.verifying);
+      expect(CycleState.fromLibtorrent('checking_resume_data'),
+          CycleState.verifying);
       expect(CycleState.fromLibtorrent('downloading'), CycleState.downloading);
       expect(CycleState.fromLibtorrent('seeding'), CycleState.seeding);
       expect(CycleState.fromLibtorrent('finished'), CycleState.completed);
@@ -25,21 +31,30 @@ void main() {
       expect(CycleState.fromLibtorrent('error'), CycleState.failed);
       expect(CycleState.fromLibtorrent('resuming'), CycleState.resuming);
       expect(CycleState.fromLibtorrent('retrying'), CycleState.retrying);
-      expect(CycleState.fromLibtorrent('updating_links'), CycleState.updatingLinks);
+      expect(CycleState.fromLibtorrent('updating_links'),
+          CycleState.updatingLinks);
       expect(CycleState.fromLibtorrent('merging'), CycleState.merging);
       expect(CycleState.fromLibtorrent('starting'), CycleState.starting);
-      expect(CycleState.fromLibtorrent('unknown_state'), CycleState.downloading);
+      expect(
+          CycleState.fromLibtorrent('unknown_state'), CycleState.downloading);
 
       // Verify CycleStateResolver
-      expect(CycleStateResolver.resolve(statusMessage: 'allocating'), CycleState.allocating);
-      expect(CycleStateResolver.resolve(statusMessage: 'verifying files'), CycleState.verifying);
-      expect(CycleStateResolver.resolve(statusMessage: 'retrying connection'), CycleState.retrying);
+      expect(CycleStateResolver.resolve(statusMessage: 'allocating'),
+          CycleState.allocating);
+      expect(CycleStateResolver.resolve(statusMessage: 'verifying files'),
+          CycleState.verifying);
+      expect(CycleStateResolver.resolve(statusMessage: 'retrying connection'),
+          CycleState.retrying);
       expect(CycleStateResolver.resolve(isCancelled: true), CycleState.paused);
-      expect(CycleStateResolver.resolve(statusMessage: 'seeding', isTorrent: true), CycleState.seeding);
+      expect(
+          CycleStateResolver.resolve(statusMessage: 'seeding', isTorrent: true),
+          CycleState.seeding);
     });
 
     // 2. YouTube Counterpart Completion
-    test('2. YouTube Counterpart Completion - gate remains downloading until counterpart done', () async {
+    test(
+        '2. YouTube Counterpart Completion - gate remains downloading until counterpart done',
+        () async {
       final emissions = <DownloadProgress>[];
       final cancelToken = CancelToken();
 
@@ -59,7 +74,9 @@ void main() {
       );
 
       final cpMap = TimestampedLruMap<String, String>()..['v1'] = 'a1';
-      final liveBytes = TimestampedLruMap<String, int>()..['v1'] = 1000..['a1'] = 0;
+      final liveBytes = TimestampedLruMap<String, int>()
+        ..['v1'] = 1000
+        ..['a1'] = 0;
 
       // Primary done, counterpart size unresolved -> should stay downloading
       await handler.handleProgress(
@@ -110,7 +127,9 @@ void main() {
     });
 
     // 3. Torrent File Selection by Path
-    test('3. Torrent File Selection - path based mapping preserves selection regardless of order', () {
+    test(
+        '3. Torrent File Selection - path based mapping preserves selection regardless of order',
+        () {
       final pauseFiles = [
         {'name': 'b_file.mp4', 'selected': false, 'priority': 1, 'length': 200},
         {'name': 'a_file.mp4', 'selected': true, 'priority': 7, 'length': 100},
@@ -118,11 +137,13 @@ void main() {
 
       final previousSelectedMap = <String, bool>{
         for (final f in pauseFiles)
-          if (f['name'] != null) (f['name'] as String): (f['selected'] as bool?) ?? true
+          if (f['name'] != null)
+            (f['name'] as String): (f['selected'] as bool?) ?? true
       };
       final previousPriorityMap = <String, int>{
         for (final f in pauseFiles)
-          if (f['name'] != null && f['priority'] is int) (f['name'] as String): f['priority'] as int
+          if (f['name'] != null && f['priority'] is int)
+            (f['name'] as String): f['priority'] as int
       };
 
       // Native returns files in reverse or different order
@@ -141,14 +162,20 @@ void main() {
           }
       ];
 
-      expect(result.firstWhere((f) => f['name'] == 'a_file.mp4')['selected'], isTrue);
-      expect(result.firstWhere((f) => f['name'] == 'a_file.mp4')['priority'], equals(7));
-      expect(result.firstWhere((f) => f['name'] == 'b_file.mp4')['selected'], isFalse);
-      expect(result.firstWhere((f) => f['name'] == 'b_file.mp4')['priority'], equals(1));
+      expect(result.firstWhere((f) => f['name'] == 'a_file.mp4')['selected'],
+          isTrue);
+      expect(result.firstWhere((f) => f['name'] == 'a_file.mp4')['priority'],
+          equals(7));
+      expect(result.firstWhere((f) => f['name'] == 'b_file.mp4')['selected'],
+          isFalse);
+      expect(result.firstWhere((f) => f['name'] == 'b_file.mp4')['priority'],
+          equals(1));
     });
 
     // 4. distributeEstimatedBytes when remaining == 0
-    test('4. distributeEstimatedBytes - remaining == 0 does not falsely flag progressEstimated', () {
+    test(
+        '4. distributeEstimatedBytes - remaining == 0 does not falsely flag progressEstimated',
+        () {
       final files = [
         {
           'name': 'f1.mp4',
@@ -173,7 +200,8 @@ void main() {
     });
 
     // 5. validateContentRange
-    test('5. validateContentRange - throws on mismatch and malformed headers', () {
+    test('5. validateContentRange - throws on mismatch and malformed headers',
+        () {
       expect(
         () => HttpTransferJob.validateContentRange(
           'bytes 0-100/500',
@@ -207,7 +235,9 @@ void main() {
     });
 
     // 6. Torrent Pause Aggregation with length == 0 files
-    test('6. normalizeTorrentFiles - length == 0 files produce progress 1.0 and isComplete true', () {
+    test(
+        '6. normalizeTorrentFiles - length == 0 files produce progress 1.0 and isComplete true',
+        () {
       final files = [
         {
           'name': 'empty.txt',
@@ -235,16 +265,28 @@ void main() {
     });
 
     // 7. CycleStateResolver Word-Boundary Checks
-    test('7. CycleStateResolver - word boundary matching prevents false positives', () {
-      expect(CycleStateResolver.resolve(statusMessage: 'Paused download'), CycleState.paused);
-      expect(CycleStateResolver.resolve(statusMessage: 'Merging audio and video'), CycleState.merging);
-      expect(CycleStateResolver.resolve(statusMessage: 'Fetching metadata from DHT'), CycleState.fetchingMetadata);
-      expect(CycleStateResolver.resolve(statusMessage: 'Updating link details'), CycleState.updatingLinks);
-      expect(CycleStateResolver.resolve(statusMessage: 'Allocating disk space'), CycleState.allocating);
+    test(
+        '7. CycleStateResolver - word boundary matching prevents false positives',
+        () {
+      expect(CycleStateResolver.resolve(statusMessage: 'Paused download'),
+          CycleState.paused);
+      expect(
+          CycleStateResolver.resolve(statusMessage: 'Merging audio and video'),
+          CycleState.merging);
+      expect(
+          CycleStateResolver.resolve(
+              statusMessage: 'Fetching metadata from DHT'),
+          CycleState.fetchingMetadata);
+      expect(CycleStateResolver.resolve(statusMessage: 'Updating link details'),
+          CycleState.updatingLinks);
+      expect(CycleStateResolver.resolve(statusMessage: 'Allocating disk space'),
+          CycleState.allocating);
     });
 
     // 8. DownloadProgressHandler Throttle Bypass on CycleState Change
-    test('8. DownloadProgressHandler - cycle state change bypasses interval throttle', () async {
+    test(
+        '8. DownloadProgressHandler - cycle state change bypasses interval throttle',
+        () async {
       final emissions = <DownloadProgress>[];
       final handler = DownloadProgressHandler(
         taskId: 'task-throttle',
@@ -292,7 +334,9 @@ void main() {
     });
 
     // 9. Unregistered YouTube Counterpart transitions to merging when counterpart done
-    test('9. YouTube Unregistered Counterpart - transitions to merging when done', () async {
+    test(
+        '9. YouTube Unregistered Counterpart - transitions to merging when done',
+        () async {
       final emissions = <DownloadProgress>[];
       final handler = DownloadProgressHandler(
         taskId: 'task-yt',
@@ -322,7 +366,9 @@ void main() {
     });
 
     // 10. Torrent Estimated Reconciliation
-    test('10. Torrent Estimated Reconciliation - largest file absorbs difference', () {
+    test(
+        '10. Torrent Estimated Reconciliation - largest file absorbs difference',
+        () {
       final files = [
         {
           'name': 'f1.mp4',
@@ -357,34 +403,54 @@ void main() {
     });
 
     // 11. DownloadProgress Equality and HashCode (Fix 5)
-    test('11. DownloadProgress Equality - compares chunkDetails and torrentFiles accurately', () {
-      final p1 = DownloadProgress(
+    test(
+        '11. DownloadProgress Equality - compares chunkDetails and torrentFiles accurately',
+        () {
+      const p1 = DownloadProgress(
         downloadedBytes: 100,
         fileSize: 200,
         speed: 10,
         eta: 10,
         chunkDetails: [
-          const ChunkDetail(index: 0, start: 0, end: 99, downloaded: 50, size: 100, ratio: 0.5),
+          ChunkDetail(
+              index: 0,
+              start: 0,
+              end: 99,
+              downloaded: 50,
+              size: 100,
+              ratio: 0.5),
         ],
       );
 
-      final p2 = DownloadProgress(
+      const p2 = DownloadProgress(
         downloadedBytes: 100,
         fileSize: 200,
         speed: 10,
         eta: 10,
         chunkDetails: [
-          const ChunkDetail(index: 0, start: 0, end: 99, downloaded: 50, size: 100, ratio: 0.5),
+          ChunkDetail(
+              index: 0,
+              start: 0,
+              end: 99,
+              downloaded: 50,
+              size: 100,
+              ratio: 0.5),
         ],
       );
 
-      final p3 = DownloadProgress(
+      const p3 = DownloadProgress(
         downloadedBytes: 100,
         fileSize: 200,
         speed: 10,
         eta: 10,
         chunkDetails: [
-          const ChunkDetail(index: 0, start: 0, end: 99, downloaded: 60, size: 100, ratio: 0.6),
+          ChunkDetail(
+              index: 0,
+              start: 0,
+              end: 99,
+              downloaded: 60,
+              size: 100,
+              ratio: 0.6),
         ],
       );
 
@@ -393,7 +459,7 @@ void main() {
       expect(p1 == p3, isFalse);
       expect(p1.hashCode == p3.hashCode, isFalse);
 
-      final t1 = DownloadProgress(
+      const t1 = DownloadProgress(
         downloadedBytes: 100,
         fileSize: 200,
         speed: 10,
@@ -403,7 +469,7 @@ void main() {
         ],
       );
 
-      final t2 = DownloadProgress(
+      const t2 = DownloadProgress(
         downloadedBytes: 100,
         fileSize: 200,
         speed: 10,
@@ -413,7 +479,7 @@ void main() {
         ],
       );
 
-      final t3 = DownloadProgress(
+      const t3 = DownloadProgress(
         downloadedBytes: 100,
         fileSize: 200,
         speed: 10,
@@ -430,7 +496,9 @@ void main() {
     });
 
     // 12. Dynamic YouTube Counterpart Size Override (Fix 2)
-    test('12. Dynamic YouTube Counterpart Size Override - dynamically updates completion check', () async {
+    test(
+        '12. Dynamic YouTube Counterpart Size Override - dynamically updates completion check',
+        () async {
       final emissions = <DownloadProgress>[];
       final handler = DownloadProgressHandler(
         taskId: 'v2',
@@ -463,7 +531,9 @@ void main() {
     });
 
     // 13. updateFilesWithNativeProgress proportional distribution (Fix 7)
-    test('13. updateFilesWithNativeProgress - distributes estimated bytes proportionally', () {
+    test(
+        '13. updateFilesWithNativeProgress - distributes estimated bytes proportionally',
+        () {
       final files = [
         {
           'name': 'f1.mp4',
@@ -482,14 +552,17 @@ void main() {
       TorrentDownloadHandler.updateFilesWithNativeProgress(files, 0.5, 200);
 
       // f1 should get ~50, f2 should get ~150 -> sum = 200
-      expect((files[0]['downloadedBytes'] as int) + (files[1]['downloadedBytes'] as int), equals(200));
+      expect(
+          (files[0]['downloadedBytes'] as int) +
+              (files[1]['downloadedBytes'] as int),
+          equals(200));
       expect(files[0]['downloadedBytes'], equals(50));
       expect(files[1]['downloadedBytes'], equals(150));
     });
 
     // 14. Pause Reason Engine Population (Fix 8)
     test('14. DownloadProgress handles PauseReason.userRequested', () {
-      final progress = DownloadProgress(
+      const progress = DownloadProgress(
         downloadedBytes: 50,
         fileSize: 100,
         speed: 0,
@@ -499,6 +572,106 @@ void main() {
       );
 
       expect(progress.pauseReason, equals(PauseReason.user));
+    });
+
+    // 15. Sequential Torrent File Progress Distribution (Fix 6)
+    test('15. distributeEstimatedBytesSequential fills files sequentially', () {
+      final files = [
+        {
+          'name': 'f1.mp4',
+          'length': 100,
+          'downloadedBytes': 0,
+          'selected': true,
+        },
+        {
+          'name': 'f2.mp4',
+          'length': 100,
+          'downloadedBytes': 0,
+          'selected': true,
+        },
+        {
+          'name': 'f3.mp4',
+          'length': 100,
+          'downloadedBytes': 0,
+          'selected': false, // unselected
+        },
+      ];
+
+      // Downloaded 150 bytes: f1 gets 100 (complete), f2 gets 50 (partial), f3 skipped
+      TorrentDownloadHandler.distributeEstimatedBytesSequential(files, 150);
+
+      expect(files[0]['downloadedBytes'], equals(100));
+      expect(files[0]['isComplete'], isTrue);
+      expect(files[1]['downloadedBytes'], equals(50));
+      expect(files[1]['isComplete'], isFalse);
+      expect(files[2]['downloadedBytes'], equals(0));
+    });
+
+    // 16. Compute Torrent File Aggregates on Load (Fix 4)
+    test('16. DownloadTask.fromMap computes torrent file aggregates', () {
+      final map = {
+        'id': 'task_torrent_1',
+        'fileName': 'movie.torrent',
+        'url': 'magnet:?xt=urn:btih:abc',
+        'torrentFiles': [
+          {'name': 'f1.mp4', 'length': 100, 'downloadedBytes': 100, 'selected': true},
+          {'name': 'f2.mp4', 'length': 200, 'downloadedBytes': 50, 'selected': true},
+          {'name': 'f3.txt', 'length': 50, 'downloadedBytes': 0, 'selected': false},
+        ],
+        'totalPieces': 42,
+      };
+
+      final task = DownloadTask.fromMap(map);
+
+      expect(task.totalPieces, equals(42));
+      expect(task.totalFiles, equals(2)); // only selected
+      expect(task.completedFiles, equals(1)); // f1 is done
+      expect(task.totalFileBytes, equals(300)); // 100 + 200
+      expect(task.downloadedFileBytes, equals(150)); // 100 + 50
+    });
+
+    // 17. Unregistered YouTube Counterpart Timeout (Fix 5)
+    test('17. Unregistered YouTube Counterpart throws UrlExpiredException after 30s', () async {
+      final handler = DownloadProgressHandler(
+        taskId: 'yt_timeout',
+        onProgress: (_) {},
+        cancelToken: CancelToken(),
+        resolvedFileName: 'video.mp4',
+        resolvedSupportsResume: true,
+        ytStreamKind: YtStreamKind.video,
+        ytCounterpartSize: null,
+        ytCounterpartDownloadedBytes: null,
+        isTorrent: false,
+        getEffectiveIntervalMs: () => 0,
+        lastDownloadedBytes: 0,
+        lastFileSize: 1000,
+      );
+
+      // Initial progress: initializes _counterpartWaitStart
+      await handler.handleWorkerProgress(
+        {
+          'downloadedBytes': 100,
+          'fileSize': 1000,
+          'cycleState': CycleState.downloading,
+        },
+        isCounterpartUnregistered: true,
+      );
+
+      // Set wait start to 35 seconds ago
+      handler.counterpartWaitStartForTesting = DateTime.now().subtract(const Duration(seconds: 35));
+
+      // Next progress should throw UrlExpiredException
+      expect(
+        () => handler.handleWorkerProgress(
+          {
+            'downloadedBytes': 100,
+            'fileSize': 1000,
+            'cycleState': CycleState.downloading,
+          },
+          isCounterpartUnregistered: true,
+        ),
+        throwsA(isA<UrlExpiredException>()),
+      );
     });
   });
 }

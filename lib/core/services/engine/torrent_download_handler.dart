@@ -81,6 +81,15 @@ class TorrentDownloadHandler {
                 ? getIt<ITorrentService>()
                 : TorrentServiceImpl());
 
+  static PauseReason _inferPauseReason(String? message) {
+    if (message == null) return PauseReason.userRequested;
+    final m = message.toLowerCase();
+    if (m.contains('network') || m.contains('connection')) return PauseReason.networkLost;
+    if (m.contains('battery')) return PauseReason.batteryLow;
+    if (m.contains('schedule')) return PauseReason.scheduled;
+    return PauseReason.userRequested;
+  }
+
   Set<int> get activeTorrentIds => Set.unmodifiable(_activeTorrentIds);
 
   void removeActiveTorrent(int id) {
@@ -204,8 +213,29 @@ class TorrentDownloadHandler {
         f['progressEstimated'] = true;
       }
     }
-    // Fix 7: Distribute missing/estimated bytes proportionally across all uncompleted files
-    distributeEstimatedBytes(files, totalDownloadedBytes);
+    // Fix 6 & 7: Check sequentialDownloadEnabled and distribute estimated bytes accordingly
+    if (TorrentService.sequentialDownloadEnabled) {
+      distributeEstimatedBytesSequential(files, totalDownloadedBytes);
+    } else {
+      distributeEstimatedBytes(files, totalDownloadedBytes);
+    }
+  }
+
+  static void distributeEstimatedBytesSequential(
+      List<Map<String, dynamic>> files, int totalDownloadedBytes) {
+    int remaining = totalDownloadedBytes;
+    for (final f in files) {
+      if (!isTorrentFileSelected(f)) continue;
+      final len = (f['length'] as num?)?.toInt() ?? 0;
+      if (len <= 0) continue;
+      final dl = remaining >= len ? len : remaining;
+      f['downloadedBytes'] = dl;
+      f['progress'] = len > 0 ? (dl / len).clamp(0.0, 1.0) : 1.0;
+      f['isComplete'] = dl >= len;
+      f['progressEstimated'] = true;
+      remaining -= dl;
+      if (remaining <= 0) break;
+    }
   }
 
   static void distributeEstimatedBytes(
@@ -491,7 +521,7 @@ class TorrentDownloadHandler {
         torrentFiles: pauseFiles,
         statusMessage: 'Paused',
         cycleState: CycleState.paused,
-        pauseReason: PauseReason.userRequested, // Fix 8: Populate pauseReason in pause emissions
+        pauseReason: _inferPauseReason(cancelToken.cancelError?.message),
         torrentId: id,
         totalFiles: pauseSummary.total > 0 ? pauseSummary.total : null,
         completedFiles: pauseSummary.total > 0 ? pauseSummary.done : null,
@@ -567,7 +597,7 @@ class TorrentDownloadHandler {
     Timer? stallWatchdog;
 
     try {
-      stallWatchdog = Timer.periodic(const Duration(minutes: 1), (_) {
+      stallWatchdog = Timer.periodic(const Duration(minutes: 5), (_) {
         final elapsed = DateTime.now().difference(lastTorrentProgressTime);
         final isTerminal = lastStateLabel == 'seeding' ||
             lastStateLabel == 'paused' ||
@@ -584,6 +614,16 @@ class TorrentDownloadHandler {
             statusMessage: 'Stalled (no peers)',
             torrentId: id,
           ));
+        }
+
+        // Force re-announce after 10 minutes of stall
+        if (elapsed >= const Duration(minutes: 10) && !isTerminal) {
+          _log.warning('Torrent $id stalled for 10min — forcing reannounce');
+          try {
+            TorrentService.announceNow(id);
+          } catch (e, st) {
+            _log.warning('Force reannounce failed for $id', e, st);
+          }
         }
       });
 

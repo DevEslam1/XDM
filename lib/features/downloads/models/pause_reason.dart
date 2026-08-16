@@ -4,9 +4,11 @@ enum PauseReason {
   background,
   batterySaver,
   diskFull,
-  networkLost;
+  networkLost,
+  scheduled;
 
   static const PauseReason userRequested = PauseReason.user;
+  static const PauseReason batteryLow = PauseReason.batterySaver;
 
   static PauseReason? fromName(String? name, {PauseReason? fallback}) {
     if (name == null || name.trim().isEmpty) return fallback;
@@ -16,9 +18,11 @@ enum PauseReason {
     }
     return switch (normalized.toLowerCase()) {
       'user' || 'userrequested' || 'user_requested' => PauseReason.user,
-      'batterysaver' || 'battery_saver' => PauseReason.batterySaver,
+      'batterysaver' || 'battery_saver' || 'batterylow' || 'battery_low' =>
+        PauseReason.batterySaver,
       'diskfull' || 'disk_full' => PauseReason.diskFull,
       'networklost' || 'network_lost' => PauseReason.networkLost,
+      'scheduled' => PauseReason.scheduled,
       _ => fallback,
     };
   }
