@@ -44,7 +44,7 @@ enum CycleState {
   };
 
   /// Maps libtorrent state labels / strings to a canonical [CycleState].
-  static CycleState fromLibtorrent(String? stateLabel) {
+  static CycleState fromLibtorrent(String? stateLabel, {bool seedingEnabled = true}) {
     if (stateLabel == null || stateLabel.trim().isEmpty) {
       return CycleState.downloading;
     }
@@ -52,9 +52,17 @@ enum CycleState {
 
     // 1. Fast exact match lookup
     final direct = _libtorrentStateMap[s];
-    if (direct != null) return direct;
+    if (direct != null) {
+      if (direct == CycleState.seeding && !seedingEnabled) {
+        return CycleState.completed;
+      }
+      return direct;
+    }
 
     // 2. Substring fallback matching for compound or unformatted states
+    if (s.contains('seeding')) {
+      return seedingEnabled ? CycleState.seeding : CycleState.completed;
+    }
     if (s.contains('queued_for_checking') ||
         s.contains('checking_files') ||
         s.contains('checking_resume_data') ||

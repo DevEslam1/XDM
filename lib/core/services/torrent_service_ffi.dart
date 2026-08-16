@@ -346,6 +346,72 @@ class _CapabilityGate {
       _log.warning('setPieceDeadline failed for id $id: $e');
     }
   }
+
+  void addWebSeed(int id, String url) {
+    try {
+      // ignore: avoid_dynamic_calls
+      (LibtorrentFlutter.instance as dynamic).addWebSeed(id, url);
+    } catch (e) {
+      try {
+        // ignore: avoid_dynamic_calls
+        (LibtorrentFlutter.instance as dynamic).addUrlSeed(id, url);
+      } catch (e2) {
+        _log.warning('addWebSeed failed for id $id ($url): $e2');
+      }
+    }
+  }
+
+  void removeWebSeed(int id, String url) {
+    try {
+      // ignore: avoid_dynamic_calls
+      (LibtorrentFlutter.instance as dynamic).removeWebSeed(id, url);
+    } catch (e) {
+      try {
+        // ignore: avoid_dynamic_calls
+        (LibtorrentFlutter.instance as dynamic).removeUrlSeed(id, url);
+      } catch (e2) {
+        _log.warning('removeWebSeed failed for id $id ($url): $e2');
+      }
+    }
+  }
+
+  Future<void> setProxy({
+    required String host,
+    required int port,
+    required ProxyType type,
+    String? username,
+    String? password,
+  }) async {
+    try {
+      // ignore: avoid_dynamic_calls
+      await (LibtorrentFlutter.instance as dynamic).setProxy(
+        host: host,
+        port: port,
+        type: type.name,
+        username: username,
+        password: password,
+      );
+    } catch (e) {
+      _log.warning('setProxy native call failed: $e');
+    }
+  }
+
+  Future<void> setSslCertificate({
+    required String certPath,
+    required String privateKeyPath,
+    String? dhParamsPath,
+  }) async {
+    try {
+      // ignore: avoid_dynamic_calls
+      await (LibtorrentFlutter.instance as dynamic).setSslCertificate(
+        certPath: certPath,
+        privateKeyPath: privateKeyPath,
+        dhParamsPath: dhParamsPath,
+      );
+    } catch (e) {
+      _log.warning('setSslCertificate native call failed: $e');
+    }
+  }
 }
 
 enum TorrentSessionState {
@@ -518,6 +584,46 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   Future<Map<String, dynamic>?> getPieceProgress(int torrentId) =>
       TorrentService.getPieceProgress(torrentId);
+
+  @override
+  Future<void> setProxy({
+    required String host,
+    required int port,
+    required ProxyType type,
+    String? username,
+    String? password,
+  }) =>
+      TorrentService.setProxy(
+        host: host,
+        port: port,
+        type: type,
+        username: username,
+        password: password,
+      );
+
+  @override
+  Future<void> setSslCertificate({
+    required String certPath,
+    required String privateKeyPath,
+    String? dhParamsPath,
+  }) =>
+      TorrentService.setSslCertificate(
+        certPath: certPath,
+        privateKeyPath: privateKeyPath,
+        dhParamsPath: dhParamsPath,
+      );
+
+  @override
+  void addWebSeed(int torrentId, String url) =>
+      TorrentService.addWebSeed(torrentId, url);
+
+  @override
+  void removeWebSeed(int torrentId, String url) =>
+      TorrentService.removeWebSeed(torrentId, url);
+
+  @override
+  List<String> getWebSeeds(int torrentId) =>
+      TorrentService.getWebSeeds(torrentId);
 
 
   @override
@@ -729,10 +835,13 @@ class TorrentService {
   }
 
   static bool _sequentialDownload = false;
+  static bool _seedingEnabled = true;
   static double _shareRatioLimit = 2.0;
   static int _maxSeedingTimeMinutes = 0;
 
   static bool get sequentialDownloadEnabled => _sequentialDownload;
+  static bool get seedingEnabled => _seedingEnabled;
+  static void setSeedingEnabled(bool enabled) => _seedingEnabled = enabled;
   static double get shareRatioLimit => _shareRatioLimit;
   static int get maxSeedingTimeMinutes => _maxSeedingTimeMinutes;
 
@@ -1804,6 +1913,51 @@ class TorrentService {
       return false;
     }
   }
+
+  static final Map<int, Set<String>> _webSeeds = {};
+
+  static void addWebSeed(int torrentId, String url) {
+    if (url.trim().isEmpty) return;
+    _webSeeds.putIfAbsent(torrentId, () => {}).add(url.trim());
+    _CapabilityGate.instance.addWebSeed(torrentId, url.trim());
+  }
+
+  static void removeWebSeed(int torrentId, String url) {
+    _webSeeds[torrentId]?.remove(url.trim());
+    _CapabilityGate.instance.removeWebSeed(torrentId, url.trim());
+  }
+
+  static List<String> getWebSeeds(int torrentId) {
+    return _webSeeds[torrentId]?.toList() ?? const [];
+  }
+
+  static Future<void> setProxy({
+    required String host,
+    required int port,
+    required ProxyType type,
+    String? username,
+    String? password,
+  }) async {
+    await _CapabilityGate.instance.setProxy(
+      host: host,
+      port: port,
+      type: type,
+      username: username,
+      password: password,
+    );
+  }
+
+  static Future<void> setSslCertificate({
+    required String certPath,
+    required String privateKeyPath,
+    String? dhParamsPath,
+  }) async {
+    await _CapabilityGate.instance.setSslCertificate(
+      certPath: certPath,
+      privateKeyPath: privateKeyPath,
+      dhParamsPath: dhParamsPath,
+    );
+  }
 }
 
 class TorrentServiceStub implements ITorrentService {
@@ -1950,6 +2104,28 @@ class TorrentServiceStub implements ITorrentService {
   @override
   Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async => null;
 
+  @override
+  Future<void> setProxy({
+    required String host,
+    required int port,
+    required ProxyType type,
+    String? username,
+    String? password,
+  }) async {}
+
+  @override
+  Future<void> setSslCertificate({
+    required String certPath,
+    required String privateKeyPath,
+    String? dhParamsPath,
+  }) async {}
+
+  @override
+  void addWebSeed(int torrentId, String url) {}
+  @override
+  void removeWebSeed(int torrentId, String url) {}
+  @override
+  List<String> getWebSeeds(int torrentId) => const [];
 
   @override
   bool shouldStopSeeding({

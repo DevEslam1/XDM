@@ -13,7 +13,7 @@ void main() {
       expect(progress.ytCombinedProgress, isNull);
     });
 
-    test('returns null when ytCounterpartSize is null or negative', () {
+    test('computes ratio from known side when ytCounterpartSize is null or non-positive', () {
       const progress1 = DownloadProgress(
         downloadedBytes: 100,
         fileSize: 1000,
@@ -22,7 +22,7 @@ void main() {
         ytStreamKind: YtStreamKind.video,
         ytCounterpartSize: null,
       );
-      expect(progress1.ytCombinedProgress, isNull);
+      expect(progress1.ytCombinedProgress, equals(0.1));
 
       const progress2 = DownloadProgress(
         downloadedBytes: 100,
@@ -32,7 +32,7 @@ void main() {
         ytStreamKind: YtStreamKind.video,
         ytCounterpartSize: -1,
       );
-      expect(progress2.ytCombinedProgress, isNull);
+      expect(progress2.ytCombinedProgress, equals(0.1));
     });
 
     test('returns null when total size is 0 to avoid division by zero', () {

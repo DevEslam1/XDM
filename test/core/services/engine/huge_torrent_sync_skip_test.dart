@@ -5,12 +5,12 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Huge Torrent Sync Skip & Adaptive Sync Intervals (P0-7)', () {
-    test('Torrents with >10000 files skip expensive per-file progress queries', () {
+    test('Torrents with >10000 files do not skip per-file sync but use adaptive interval', () {
       expect(TorrentDownloadHandler.shouldSkipPerFileSync(100), isFalse);
       expect(TorrentDownloadHandler.shouldSkipPerFileSync(1000), isFalse);
       expect(TorrentDownloadHandler.shouldSkipPerFileSync(5000), isFalse);
       expect(TorrentDownloadHandler.shouldSkipPerFileSync(10000), isFalse);
-      expect(TorrentDownloadHandler.shouldSkipPerFileSync(10001), isTrue);
+      expect(TorrentDownloadHandler.shouldSkipPerFileSync(10001), isFalse);
     });
 
     test('Sync interval is adaptive based on file count', () {
@@ -30,6 +30,12 @@ void main() {
       expect(
         TorrentDownloadHandler.computeAdaptiveSyncInterval(6000),
         equals(const Duration(seconds: 45)),
+      );
+
+      // 12000 files (>10000 files): 120s
+      expect(
+        TorrentDownloadHandler.computeAdaptiveSyncInterval(12000),
+        equals(const Duration(seconds: 120)),
       );
 
       // In background: fixed 60s

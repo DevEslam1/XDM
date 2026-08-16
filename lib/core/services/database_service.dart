@@ -238,6 +238,9 @@ class DatabaseService {
     );
   }
 
+  @visibleForTesting
+  DownloadTask rowToTaskForTesting(DbDownloadTask row) => _rowToTask(row);
+
   DownloadTask _rowToTask(DbDownloadTask row) {
     DateTime parseIntDate(int msSinceEpoch) {
       try {
@@ -286,16 +289,26 @@ class DatabaseService {
         ? PauseReason.fromName(row.pauseReason)
         : null;
 
+    // State recovery: include allocating and stalled transient states on restart
     final isInterruptedActive = parsedStatus == DownloadStatus.downloading ||
         rawCycleState == CycleState.starting ||
         rawCycleState == CycleState.resuming ||
         rawCycleState == CycleState.retrying ||
         rawCycleState == CycleState.fetchingMetadata ||
-        rawCycleState == CycleState.updatingLinks;
+        rawCycleState == CycleState.merging ||
+        rawCycleState == CycleState.verifying ||
+        rawCycleState == CycleState.updatingLinks ||
+        rawCycleState == CycleState.allocating ||
+        rawCycleState == CycleState.stalled;
 
+    final isUpdatingLinks = rawCycleState == CycleState.updatingLinks;
     final status = isInterruptedActive ? DownloadStatus.paused : parsedStatus;
     final cycleState = isInterruptedActive ? CycleState.paused : rawCycleState;
-    final pauseReason = isInterruptedActive ? PauseReason.appRestarted : rawPauseReason;
+    final pauseReason = isUpdatingLinks
+        ? PauseReason.urlExpired
+        : (isInterruptedActive ? PauseReason.appRestarted : rawPauseReason);
+    // Ensure previousCycleState is populated for UI hinting
+    final previousCycleState = isInterruptedActive ? rawCycleState : null;
 
     return DownloadTask(
       id: row.id,
@@ -346,7 +359,7 @@ class DatabaseService {
       completedPieces: row.completedPieces,
       ytCounterpartDownloadedBytes: row.ytCounterpartDownloadedBytes,
       cycleState: cycleState,
-      previousCycleState: isInterruptedActive ? rawCycleState : null,
+      previousCycleState: previousCycleState,
       totalFiles: (row.torrentFiles != null && row.torrentFiles!.isNotEmpty)
           ? row.torrentFiles!
               .where((f) => (f['selected'] as bool?) ?? true)

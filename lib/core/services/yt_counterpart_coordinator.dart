@@ -37,6 +37,12 @@ class YtCounterpartCoordinator {
 
   int? getLiveBytes(String taskId) => _ytLiveBytes.get(taskId);
 
+  bool isLiveBytesStale(String taskId, {Duration threshold = const Duration(seconds: 15)}) {
+    final lastAccessed = _ytLiveBytes.getLastAccessed(taskId);
+    if (lastAccessed == null) return false;
+    return DateTime.now().difference(lastAccessed) > threshold;
+  }
+
   bool isStreamFinished(String taskId) => _ytFinishedStreams.containsKey(taskId);
 
   bool isCounterpartFinished(String taskId) {

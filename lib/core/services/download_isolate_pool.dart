@@ -465,9 +465,12 @@ class DownloadIsolatePool implements MemoryPressureListener {
     }
   }
 
-  void _cancelJob(PoolJob job) {
-    job._worker?.commandPort
-        ?.send({'t': 'cancel', 'jobId': job.command.taskId});
+  void _cancelJob(PoolJob job, [PauseReason? reason]) {
+    job._worker?.commandPort?.send({
+      't': 'cancel',
+      'jobId': job.command.taskId,
+      if (reason != null) 'reason': reason.name,
+    });
   }
 
   void forceCancelJob(String taskId) {
@@ -643,7 +646,7 @@ class PoolJob {
   _Worker? _worker;
   late final Stream<EngineMessage> messages;
   bool _disposed = false;
-  void cancel() => _pool._cancelJob(this);
+  void cancel([PauseReason? reason]) => _pool._cancelJob(this, reason);
   void _deliverError(String type, String message, int? status) {
     if (_disposed) return;
     _incoming.sendPort.send(EngineMessage.encode(

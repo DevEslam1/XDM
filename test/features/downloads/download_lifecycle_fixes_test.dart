@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/engine/cycle_state_resolver.dart';
 import 'package:dmx/core/services/engine/download_progress_handler.dart';
@@ -658,7 +660,7 @@ void main() {
         isCounterpartUnregistered: true,
       );
 
-      // Set wait start to 35 seconds ago -> should emit retrying warning state
+      // Set wait start to 35 seconds ago -> should emit retrying state
       handler.counterpartWaitStartForTesting = DateTime.now().subtract(const Duration(seconds: 35));
       await handler.handleWorkerProgress(
         {
@@ -669,10 +671,10 @@ void main() {
         isCounterpartUnregistered: true,
       );
       expect(lastEmitted?.cycleState, equals(CycleState.retrying));
-      expect(lastEmitted?.statusMessage, contains('Counterpart stream slow'));
+      expect(lastEmitted?.statusMessage, contains('Waiting for counterpart stream'));
 
-      // Set wait start to 95 seconds ago -> should throw UrlExpiredException
-      handler.counterpartWaitStartForTesting = DateTime.now().subtract(const Duration(seconds: 95));
+      // Set wait start to 305 seconds ago (> 5 min) -> should throw UrlExpiredException
+      handler.counterpartWaitStartForTesting = DateTime.now().subtract(const Duration(seconds: 305));
       expect(
         () => handler.handleWorkerProgress(
           {
@@ -779,6 +781,126 @@ void main() {
         'previousCycleState': 'updatingLinks',
       });
       expect(fromMapTask.previousCycleState, equals(CycleState.updatingLinks));
+    });
+
+    // 21. DownloadProgress hasEstimatedFileProgress (Refactor 4)
+    test('21. DownloadProgress hasEstimatedFileProgress is preserved across equality & copyWith', () {
+      const p1 = DownloadProgress(
+        downloadedBytes: 100,
+        fileSize: 200,
+        speed: 50.0,
+        eta: 2,
+        hasEstimatedFileProgress: true,
+      );
+      const p2 = DownloadProgress(
+        downloadedBytes: 100,
+        fileSize: 200,
+        speed: 50.0,
+        eta: 2,
+        hasEstimatedFileProgress: true,
+      );
+      const p3 = DownloadProgress(
+        downloadedBytes: 100,
+        fileSize: 200,
+        speed: 50.0,
+        eta: 2,
+        hasEstimatedFileProgress: false,
+      );
+
+      expect(p1, equals(p2));
+      expect(p1.hashCode, equals(p2.hashCode));
+      expect(p1, isNot(equals(p3)));
+
+      final copied = p1.copyWith(hasEstimatedFileProgress: false);
+      expect(copied.hasEstimatedFileProgress, isFalse);
+
+      final workerMapProgress = DownloadProgress.fromWorkerMap(const {
+        'downloadedBytes': 100,
+        'fileSize': 200,
+        'speed': 50.0,
+        'eta': 2,
+        'hasEstimatedFileProgress': true,
+      });
+      expect(workerMapProgress.hasEstimatedFileProgress, isTrue);
+    });
+
+    // 22. HttpTransferJob structured PauseReason cancellation (Refactor 2)
+    test('22. HttpTransferJob stores and uses structured PauseReason on cancel', () {
+      const cmd = DownloadCommand(
+        taskId: 'test_pause_reason',
+        url: 'http://example.com/file.zip',
+        punyUrl: 'http://example.com/file.zip',
+        tempFilePath: '/tmp/test_pause_reason.part',
+        localFilePath: '/tmp/test_pause_reason.zip',
+        knownFileSize: 1000,
+        supportsResume: true,
+        threadCount: 1,
+      );
+
+      final receivePort = ReceivePort();
+      final job = HttpTransferJob(cmd, receivePort.sendPort);
+
+      // Default before cancel
+      expect(job.effectivePauseReason, equals(PauseReason.userRequested));
+
+      // Request cancel with specific reason (e.g. networkLost)
+      job.requestCancel(PauseReason.networkLost);
+      expect(job.effectivePauseReason, equals(PauseReason.networkLost));
+
+      receivePort.close();
+    });
+
+    // 23. PauseReason.urlExpired parsing & mapping (Refactor 3)
+    test('23. PauseReason.urlExpired parses from string variants', () {
+      expect(PauseReason.fromName('urlExpired'), equals(PauseReason.urlExpired));
+      expect(PauseReason.fromName('url_expired'), equals(PauseReason.urlExpired));
+      expect(PauseReason.fromName('URLEXPIRED'), equals(PauseReason.urlExpired));
+    });
+
+    // 24. CycleState.fromLibtorrent seeding translation when seeding is disabled
+    test('24. CycleState.fromLibtorrent translates seeding to completed when seedingEnabled is false', () {
+      expect(CycleState.fromLibtorrent('seeding', seedingEnabled: true), equals(CycleState.seeding));
+      expect(CycleState.fromLibtorrent('seeding', seedingEnabled: false), equals(CycleState.completed));
+    });
+
+    // 25. ytCombinedProgress single known side calculation
+    test('25. ytCombinedProgress computes ratio when one side is known and other is 0', () {
+      const pVideoOnly = DownloadProgress(
+        downloadedBytes: 50,
+        fileSize: 100,
+        speed: 0,
+        eta: null,
+        ytStreamKind: YtStreamKind.video,
+        ytDownloadedBytes: 50,
+        ytCounterpartSize: 0,
+        ytCounterpartDownloadedBytes: 0,
+      );
+      expect(pVideoOnly.ytCombinedProgress, equals(0.5));
+
+      const pAudioOnly = DownloadProgress(
+        downloadedBytes: 0,
+        fileSize: 0,
+        speed: 0,
+        eta: null,
+        ytStreamKind: YtStreamKind.audio,
+        ytDownloadedBytes: 0,
+        ytCounterpartSize: 200,
+        ytCounterpartDownloadedBytes: 150,
+      );
+      expect(pAudioOnly.ytCombinedProgress, equals(0.75));
+    });
+
+    // 26. distributeEstimatedBytesSequential preserves prior partial downloaded bytes
+    test('26. distributeEstimatedBytesSequential preserves prior partial downloaded bytes', () {
+      final files = [
+        {'name': 'f1.mp4', 'length': 100, 'downloadedBytes': 80, 'selected': true, 'progressEstimated': true},
+        {'name': 'f2.mp4', 'length': 100, 'downloadedBytes': 40, 'selected': true, 'progressEstimated': true},
+      ];
+      TorrentDownloadHandler.distributeEstimatedBytesSequential(files, 50);
+      // f1 should be max(80, 50) = 80
+      expect(files[0]['downloadedBytes'], equals(80));
+      // f2 should preserve prior 40
+      expect(files[1]['downloadedBytes'], equals(40));
     });
   });
 }

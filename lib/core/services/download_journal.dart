@@ -37,7 +37,8 @@ class StateStoreInstance {
   final Map<String, Lock> _pathLocks = {};
   static const int _maxCachedPayloads = kStateCacheMaxPayloads;
 
-  bool stateSaveStrictDedup = false;
+  // Fix 6: Enable SHA-256 state save strict deduplication by default
+  bool stateSaveStrictDedup = true;
 
   String pathFor(String tempFilePath, {String? taskId}) {
     if (taskId != null && taskId.isNotEmpty) {

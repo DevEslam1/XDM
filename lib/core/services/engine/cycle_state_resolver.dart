@@ -25,8 +25,9 @@ class CycleStateResolver {
   static final _failedRegex =
       RegExp(r'\b(error|fail\w*)\b', caseSensitive: false);
   static final _updatingLinksRegex = RegExp(
-      r'\b(?:updating|refresh(?:ing)?)\b.*?\b(?:links?|urls?)\b',
-      caseSensitive: false);
+    r'\b(?:updating\s+(?:links?|urls?|mirrors?)|refresh(?:ing)?\s+(?:links?|urls?|mirrors?))\b',
+    caseSensitive: false,
+  );
   static final _retryingRegex =
       RegExp(r'\bretry\w*\b', caseSensitive: false);
   static final _resumingRegex =

@@ -461,6 +461,24 @@ class DownloadTask {
     return ratio.clamp(0.0, 1.0);
   }
 
+  /// Transient unified progress for YouTube audio/video pair downloads.
+  double? get ytCombinedProgress {
+    if (!hasMergedAudio && audioSize <= 0 && youtubeQualityPreset == null) {
+      return null;
+    }
+    final selfSize = fileSize > 0 ? fileSize : 0;
+    final cpSize = audioSize > 0 ? audioSize : 0;
+    final totalSize = selfSize + cpSize;
+    if (totalSize <= 0) return null;
+
+    final selfDownloaded = downloadedBytes;
+    final cpDownloaded = audioDownloadedBytes;
+    final totalDownloaded = (selfDownloaded > 0 ? selfDownloaded : 0) +
+        (cpDownloaded > 0 ? cpDownloaded : 0);
+
+    return (totalDownloaded / totalSize).clamp(0.0, 1.0);
+  }
+
   String get progressPercentString {
     if (status == DownloadStatus.completed) return '100.0%';
     final total = combinedTotalSize;

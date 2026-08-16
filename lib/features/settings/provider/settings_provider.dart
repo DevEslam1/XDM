@@ -12,6 +12,8 @@ import '../../../core/services/torrent_models.dart';
 import '../../../core/services/xdm_backend_client.dart';
 
 
+import 'mixins/torrent_settings_mixin.dart';
+
 // FIX-P2-03: Modular settings mixin references
 export 'mixins/download_settings_mixin.dart';
 export 'mixins/network_settings_mixin.dart';
@@ -19,7 +21,8 @@ export 'mixins/power_settings_mixin.dart';
 export 'mixins/torrent_settings_mixin.dart';
 export 'mixins/ui_settings_mixin.dart';
 
-class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
+class SettingsProvider extends ChangeNotifier
+    with WidgetsBindingObserver, TorrentSettingsMixin {
   static final _log = Logger('SettingsProvider');
 
   static SettingsProvider? _instance;
@@ -109,6 +112,12 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _proxyPortKey = 'proxyPort';
   static const _enableProxyKey = 'enableProxy';
   static const _enforceProxyKey = 'enforceProxy';
+  static const _torrentProxyTypeKey = 'torrent_proxy_type';
+  static const _torrentProxyUsernameKey = 'torrent_proxy_username';
+  static const _torrentProxyPasswordKey = 'torrent_proxy_password';
+  static const _torrentSslCertPathKey = 'torrent_ssl_cert_path';
+  static const _torrentSslKeyPathKey = 'torrent_ssl_key_path';
+  static const _torrentSslDhParamsPathKey = 'torrent_ssl_dh_params_path';
   static const _defaultThreadCountKey = 'defaultThreadCount';
 
   static const _customDownloadPathKey = 'customDownloadPath';
@@ -261,18 +270,23 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool sendBrowserCookiesToBackend = true;
   bool useLocalYtFallback = true;
 
+  @override
   bool globalTorrentSeeding = true;
   bool globalTorrentSeedingLimited = false;
   int globalTorrentSeedingLimitKbps = 500;
   int torrentMetadataTimeoutSeconds = 300;
+  @override
   bool enableDht = true;
   bool enableUpnp = true;
   bool enableNatPmp = true;
   bool enableLpd = true;
+  @override
   bool enablePex = true;
+  @override
   int maxActiveTorrents = 3;
   int maxActiveDownloads = 2;
   int maxActiveSeeds = 2;
+  @override
   bool queueTorrents = true;
   bool forceEncrypt = false;
   int torrentConnectionsLimit = 200;
@@ -292,10 +306,31 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool enableIpFilter = false;
   String ipFilterPath = '';
   bool enableAnonymousMode = false;
+  @override
   String proxyHost = '';
+  @override
   int proxyPort = 1080;
   bool enableProxy = false;
   bool enforceProxy = false;
+  @override
+  String? proxyType = 'none';
+  @override
+  String? proxyUsername;
+  @override
+  String? proxyPassword;
+  @override
+  String? sslCertPath;
+  @override
+  String? sslKeyPath;
+  @override
+  String? sslDhParamsPath;
+
+  @override
+  bool get isSslActive =>
+      sslCertPath != null &&
+      sslCertPath!.isNotEmpty &&
+      sslKeyPath != null &&
+      sslKeyPath!.isNotEmpty;
 
   TorrentSettingsPack get torrentSettingsPack => TorrentSettingsPack(
         enableDht: enableDht,
@@ -337,6 +372,62 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> setEnforceProxy(bool value) async {
     enforceProxy = value;
     await _prefs.setBool(_enforceProxyKey, value);
+    notifyListeners();
+  }
+
+  @override
+  Future<void> setProxySettings({
+    required String host,
+    required int port,
+    required dynamic type,
+    String? username,
+    String? password,
+  }) async {
+    final typeStr =
+        type is ProxyType ? type.name : (type?.toString() ?? 'none');
+    proxyHost = host;
+    proxyPort = port;
+    proxyType = typeStr;
+    proxyUsername = username;
+    proxyPassword = password;
+    enableProxy = typeStr != 'none' && host.isNotEmpty;
+    enforceProxy = enableProxy;
+
+    await _prefs.setString(_proxyHostKey, host);
+    await _prefs.setInt(_proxyPortKey, port);
+    await _prefs.setString(_torrentProxyTypeKey, typeStr);
+    if (username != null && username.isNotEmpty) {
+      await _prefs.setString(_torrentProxyUsernameKey, username);
+    } else {
+      await _prefs.remove(_torrentProxyUsernameKey);
+    }
+    if (password != null && password.isNotEmpty) {
+      await _prefs.setString(_torrentProxyPasswordKey, password);
+    } else {
+      await _prefs.remove(_torrentProxyPasswordKey);
+    }
+    await _prefs.setBool(_enableProxyKey, enableProxy);
+    await _prefs.setBool(_enforceProxyKey, enforceProxy);
+    notifyListeners();
+  }
+
+  @override
+  Future<void> setSslSettings({
+    required String certPath,
+    required String privateKeyPath,
+    String? dhParamsPath,
+  }) async {
+    sslCertPath = certPath;
+    sslKeyPath = privateKeyPath;
+    sslDhParamsPath = dhParamsPath;
+
+    await _prefs.setString(_torrentSslCertPathKey, certPath);
+    await _prefs.setString(_torrentSslKeyPathKey, privateKeyPath);
+    if (dhParamsPath != null && dhParamsPath.isNotEmpty) {
+      await _prefs.setString(_torrentSslDhParamsPathKey, dhParamsPath);
+    } else {
+      await _prefs.remove(_torrentSslDhParamsPathKey);
+    }
     notifyListeners();
   }
 
@@ -562,6 +653,13 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       proxyPort = _prefs.getInt(_proxyPortKey) ?? proxyPort;
       enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
       enforceProxy = _prefs.getBool(_enforceProxyKey) ?? enforceProxy;
+      proxyType = _prefs.getString(_torrentProxyTypeKey) ??
+          (enableProxy ? 'socks5' : 'none');
+      proxyUsername = _prefs.getString(_torrentProxyUsernameKey);
+      proxyPassword = _prefs.getString(_torrentProxyPasswordKey);
+      sslCertPath = _prefs.getString(_torrentSslCertPathKey);
+      sslKeyPath = _prefs.getString(_torrentSslKeyPathKey);
+      sslDhParamsPath = _prefs.getString(_torrentSslDhParamsPathKey);
       _defaultThreadCount =
 
           _prefs.getInt(_defaultThreadCountKey) ?? _defaultThreadCount;

@@ -162,6 +162,28 @@ class TorrentServiceStub implements ITorrentService {
   @override
   Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async => null;
 
+  @override
+  Future<void> setProxy({
+    required String host,
+    required int port,
+    required ProxyType type,
+    String? username,
+    String? password,
+  }) async {}
+
+  @override
+  Future<void> setSslCertificate({
+    required String certPath,
+    required String privateKeyPath,
+    String? dhParamsPath,
+  }) async {}
+
+  @override
+  void addWebSeed(int torrentId, String url) {}
+  @override
+  void removeWebSeed(int torrentId, String url) {}
+  @override
+  List<String> getWebSeeds(int torrentId) => const [];
 
   @override
   bool shouldStopSeeding({
@@ -215,6 +237,9 @@ class TorrentService {
   static bool get fileProgressSupported => _activeService.fileProgressSupported;
   static bool get filePrioritiesSupported => _activeService.filePrioritiesSupported;
   static bool get sequentialDownloadEnabled => _activeService.sequentialDownloadEnabled;
+  static bool _seedingEnabled = true;
+  static bool get seedingEnabled => _seedingEnabled;
+  static void setSeedingEnabled(bool enabled) => _seedingEnabled = enabled;
   static double get shareRatioLimit => _activeService.shareRatioLimit;
   static int get maxSeedingTimeMinutes => _activeService.maxSeedingTimeMinutes;
 
@@ -332,6 +357,41 @@ class TorrentService {
     String savePath,
   ) =>
       _activeService.getAccurateFileProgress(torrentId, savePath);
+
+  static Future<void> setProxy({
+    required String host,
+    required int port,
+    required ProxyType type,
+    String? username,
+    String? password,
+  }) =>
+      _activeService.setProxy(
+        host: host,
+        port: port,
+        type: type,
+        username: username,
+        password: password,
+      );
+
+  static Future<void> setSslCertificate({
+    required String certPath,
+    required String privateKeyPath,
+    String? dhParamsPath,
+  }) =>
+      _activeService.setSslCertificate(
+        certPath: certPath,
+        privateKeyPath: privateKeyPath,
+        dhParamsPath: dhParamsPath,
+      );
+
+  static void addWebSeed(int torrentId, String url) =>
+      _activeService.addWebSeed(torrentId, url);
+
+  static void removeWebSeed(int torrentId, String url) =>
+      _activeService.removeWebSeed(torrentId, url);
+
+  static List<String> getWebSeeds(int torrentId) =>
+      _activeService.getWebSeeds(torrentId);
 
   static bool shouldStopSeeding({
     required double progress,

@@ -219,6 +219,7 @@ class DownloadProgress {
   final int? ytCounterpartSize;
   final int? ytCounterpartDownloadedBytes;
   final int? ytDownloadedBytes;
+  final bool? hasEstimatedFileProgress;
 
   const DownloadProgress({
     required this.downloadedBytes,
@@ -246,6 +247,7 @@ class DownloadProgress {
     this.ytCounterpartSize,
     this.ytCounterpartDownloadedBytes,
     this.ytDownloadedBytes,
+    this.hasEstimatedFileProgress,
   });
 
   factory DownloadProgress.fromWorkerMap(Map<String, dynamic> p) {
@@ -291,6 +293,7 @@ class DownloadProgress {
       ytCounterpartSize: (p['ytCounterpartSize'] as num?)?.toInt(),
       ytCounterpartDownloadedBytes: (p['ytCounterpartDownloadedBytes'] as num?)?.toInt(),
       ytDownloadedBytes: (p['ytDownloadedBytes'] as num?)?.toInt(),
+      hasEstimatedFileProgress: p['hasEstimatedFileProgress'] as bool?,
     );
   }
 
@@ -320,6 +323,7 @@ class DownloadProgress {
     int? ytCounterpartSize,
     int? ytCounterpartDownloadedBytes,
     int? ytDownloadedBytes,
+    bool? hasEstimatedFileProgress,
   }) {
     return DownloadProgress(
       downloadedBytes: downloadedBytes ?? this.downloadedBytes,
@@ -347,6 +351,7 @@ class DownloadProgress {
       ytCounterpartSize: ytCounterpartSize ?? this.ytCounterpartSize,
       ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes ?? this.ytCounterpartDownloadedBytes,
       ytDownloadedBytes: ytDownloadedBytes ?? this.ytDownloadedBytes,
+      hasEstimatedFileProgress: hasEstimatedFileProgress ?? this.hasEstimatedFileProgress,
     );
   }
 
@@ -355,13 +360,15 @@ class DownloadProgress {
     if (ytStreamKind == YtStreamKind.combined) {
       return progressRatio;
     }
-    final cpSize = ytCounterpartSize;
-    if (cpSize == null || cpSize <= 0) return null;
-    final totalSize = fileSize + cpSize;
+    final cpSize = (ytCounterpartSize != null && ytCounterpartSize! > 0) ? ytCounterpartSize! : 0;
+    final selfSize = fileSize > 0 ? fileSize : 0;
+    final totalSize = selfSize + cpSize;
     if (totalSize <= 0) return null;
+
     final selfDownloaded = ytDownloadedBytes ?? downloadedBytes;
     final cpDownloaded = ytCounterpartDownloadedBytes ?? 0;
-    return ((selfDownloaded + cpDownloaded) / totalSize).clamp(0.0, 1.0);
+    final totalDownloaded = (selfDownloaded > 0 ? selfDownloaded : 0) + (cpDownloaded > 0 ? cpDownloaded : 0);
+    return (totalDownloaded / totalSize).clamp(0.0, 1.0);
   }
 
   double get progressRatio {
@@ -424,6 +431,7 @@ class DownloadProgress {
           ytCounterpartSize == other.ytCounterpartSize &&
           ytCounterpartDownloadedBytes == other.ytCounterpartDownloadedBytes &&
           ytDownloadedBytes == other.ytDownloadedBytes &&
+          hasEstimatedFileProgress == other.hasEstimatedFileProgress &&
           _areChunkDetailsEqual(chunkDetails, other.chunkDetails) &&
           _areTorrentFilesEqual(torrentFiles, other.torrentFiles);
 
@@ -451,6 +459,7 @@ class DownloadProgress {
         Object.hash(
           ytCounterpartDownloadedBytes,
           ytDownloadedBytes,
+          hasEstimatedFileProgress,
           _computeChunkDetailsHash(chunkDetails),
           _computeTorrentFilesHash(torrentFiles),
         ),

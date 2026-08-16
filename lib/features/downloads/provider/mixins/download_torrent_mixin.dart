@@ -637,4 +637,66 @@ mixin DownloadTorrentMixin {
       }
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Advanced Torrent Controls: Web Seeds, Proxy, SSL
+  // ---------------------------------------------------------------------------
+
+  void addWebSeed(String url, int torrentId) {
+    TorrentService.addWebSeed(torrentId, url);
+    safeNotify();
+  }
+
+  void removeWebSeed(String url, int torrentId) {
+    TorrentService.removeWebSeed(torrentId, url);
+    safeNotify();
+  }
+
+  List<String> getWebSeeds(int torrentId) {
+    return TorrentService.getWebSeeds(torrentId);
+  }
+
+  Future<void> applyProxySettings({
+    required String host,
+    required int port,
+    required ProxyType type,
+    String? username,
+    String? password,
+  }) async {
+    await providerSettingsProvider.setProxySettings(
+      host: host,
+      port: port,
+      type: type,
+      username: username,
+      password: password,
+    );
+    await TorrentService.setProxy(
+      host: host,
+      port: port,
+      type: type,
+      username: username,
+      password: password,
+    );
+    TorrentService.reconfigureSession();
+    safeNotify();
+  }
+
+  Future<void> applySslSettings({
+    required String certPath,
+    required String privateKeyPath,
+    String? dhParamsPath,
+  }) async {
+    await providerSettingsProvider.setSslSettings(
+      certPath: certPath,
+      privateKeyPath: privateKeyPath,
+      dhParamsPath: dhParamsPath,
+    );
+    await TorrentService.setSslCertificate(
+      certPath: certPath,
+      privateKeyPath: privateKeyPath,
+      dhParamsPath: dhParamsPath,
+    );
+    TorrentService.reconfigureSession();
+    safeNotify();
+  }
 }

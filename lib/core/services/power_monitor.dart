@@ -60,6 +60,8 @@ class PowerMonitor {
   static bool get isCharging =>
       _state == BatteryState.charging || _state == BatteryState.full;
   static bool get screenOff => !_screenOn;
+  @visibleForTesting
+  static set screenOff(bool val) => _screenOn = !val;
 
   static bool? _isLowEndDeviceCache;
   static bool get isLowEndDevice {

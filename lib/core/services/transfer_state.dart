@@ -48,6 +48,7 @@ class TransferState {
     this.etag,
     this.lastModified,
     this.status = DmxStateStatus.active,
+    this.cycleState,
     DateTime? updatedAt,
     this.migrationNote,
   }) : updatedAt = updatedAt ?? DateTime.now();
@@ -61,6 +62,7 @@ class TransferState {
   String? etag;
   String? lastModified;
   DmxStateStatus status;
+  String? cycleState;
   DateTime updatedAt;
   String? migrationNote;
 
@@ -89,6 +91,7 @@ class TransferState {
         'status': status.name,
         'updatedAt': updatedAt.millisecondsSinceEpoch,
         'chunks': chunks.map((c) => c.toJson()).toList(),
+        if (cycleState != null) 'cycleState': cycleState,
         if (migrationNote != null) 'migrationNote': migrationNote,
       };
 
@@ -103,6 +106,7 @@ class TransferState {
         etag: etag,
         lastModified: lastModified,
         status: status,
+        cycleState: cycleState,
         updatedAt: updatedAt,
         migrationNote: migrationNote,
       );
@@ -133,9 +137,11 @@ class TransferState {
           (s) => s.name == statusName,
           orElse: () => DmxStateStatus.active,
         ),
+        cycleState: json['cycleState'] as String?,
         updatedAt: json['updatedAt'] is int
             ? DateTime.fromMillisecondsSinceEpoch(json['updatedAt'] as int)
             : DateTime.now(),
+        migrationNote: json['migrationNote'] as String?,
       );
     } catch (e) {
       debugPrint('[DmxState] v3 parse failed: $e');
@@ -181,6 +187,7 @@ class TransferState {
         url: json['url'] as String?,
         etag: json['etag'] as String?,
         lastModified: json['lastModified'] as String?,
+        cycleState: json['cycleState'] as String?,
         migrationNote: 'v2',
       );
     } catch (e, st) {

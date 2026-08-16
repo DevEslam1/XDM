@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import '../../di/injection.dart';
 import '../engines/http_download_engine.dart';
+import '../yt_counterpart_coordinator.dart';
 import 'cycle_state_resolver.dart';
 import 'engine_exceptions.dart';
 import 'engine_models.dart';
 import 'engine_utils.dart';
+import 'torrent_file_normalizer.dart';
 
 /// Encapsulates progress state management and throttling for download tasks.
 /// Non-locking throttle using plain timestamps and scheduled timers.
@@ -32,6 +35,7 @@ class DownloadProgressHandler {
   int? lastCompletedFiles;
   int? lastTotalFileBytes;
   int? lastDownloadedFileBytes;
+  bool? lastHasEstimatedFileProgress;
   DateTime? lastProgressEmitTime;
 
   Timer? _throttleTimer;
@@ -89,6 +93,19 @@ class DownloadProgressHandler {
       _urlExpireCount++;
     }
     if (_urlExpireCount >= 3) {
+      if (_urlExpireCount == 3) {
+        emit(DownloadProgress(
+          downloadedBytes: lastDownloadedBytes,
+          fileSize: lastFileSize,
+          speed: 0,
+          eta: null,
+          cycleState: CycleState.failed,
+          statusMessage: 'Failed: Counterpart stream lost after 3 retries',
+          ytStreamKind: ytStreamKind,
+          ytCounterpartSize: ytCounterpartSize,
+          ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
+        ));
+      }
       _urlExpireCount = 0;
       _urlExpireWindowStart = null;
       throw const DownloadIntegrityException(
@@ -187,6 +204,7 @@ class DownloadProgressHandler {
     int effectiveThreadCount = 1,
     HttpDownloadEngine? httpEngine,
     bool isCounterpartUnregistered = false,
+    bool isCounterpartStale = false,
   }) async {
     if (cancelToken.isCancelled) return;
 
@@ -232,6 +250,23 @@ class DownloadProgressHandler {
     }
     cycle ??= deriveCycleState(sm, cancelToken.isCancelled, isTorrent);
 
+    // Fix 1: Live lookup for YouTube counterpart downloaded bytes regardless of registration status
+    if (ytStreamKind != null && ytStreamKind != YtStreamKind.combined) {
+      try {
+        if (getIt.isRegistered<YtCounterpartCoordinator>()) {
+          final coord = getIt<YtCounterpartCoordinator>();
+          final cpId = coord.getCounterpartId(taskId);
+          if (cpId != null) {
+            final live = coord.getLiveBytes(cpId);
+            if (live != null) {
+              ytCounterpartDownloadedOverride = live;
+              isCounterpartUnregistered = false;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     // Fix 2: Dynamic YouTube counterpart size & downloaded resolution
     final dynamicYtCounterpartSize =
         (p['ytCounterpartSize'] as num?)?.toInt() ?? ytCounterpartSize;
@@ -239,14 +274,47 @@ class DownloadProgressHandler {
         (p['ytCounterpartDownloadedBytes'] as num?)?.toInt() ??
         ytCounterpartDownloadedBytes;
 
+    final isWaitingCycle = cycle == CycleState.downloading ||
+        cycle == CycleState.starting ||
+        cycle == CycleState.resuming;
+
+    if (isCounterpartStale) {
+      lastHasEstimatedFileProgress = true;
+    }
+
     if (isCounterpartUnregistered &&
         ytStreamKind != null &&
-        cycle == CycleState.downloading) {
+        isWaitingCycle) {
       _counterpartWaitStart ??= DateTime.now();
       final waitDiff = DateTime.now().difference(_counterpartWaitStart!);
-      if (waitDiff > const Duration(seconds: 90)) {
+
+      // Trigger re-check of counterpart task ID via YtCounterpartCoordinator if accessible
+      try {
+        if (getIt.isRegistered<YtCounterpartCoordinator>()) {
+          final coord = getIt<YtCounterpartCoordinator>();
+          final cpId = coord.getCounterpartId(taskId);
+          if (cpId != null) {
+            final live = coord.getLiveBytes(cpId);
+            if (live != null) {
+              isCounterpartUnregistered = false;
+              ytCounterpartDownloadedOverride = live;
+            }
+          }
+        }
+      } catch (_) {}
+
+      // Decouple slow-start: extend timeout to 5 minutes before throwing UrlExpiredException
+      if (waitDiff > const Duration(minutes: 5)) {
         _counterpartWaitStart = null;
         _handleUrlExpired();
+        emit(DownloadProgress(
+          downloadedBytes: lastDownloadedBytes,
+          fileSize: lastFileSize,
+          speed: 0,
+          eta: null,
+          cycleState: CycleState.updatingLinks,
+          statusMessage: 'Refreshing links…',
+        ));
         throw const UrlExpiredException(
           'Counterpart stream lost — refresh required',
           refreshAllMirrors: true,
@@ -269,7 +337,7 @@ class DownloadProgressHandler {
         }
       } else if (waitDiff > const Duration(seconds: 30)) {
         cycle = CycleState.retrying;
-        sm = 'Counterpart stream slow — retrying connection…';
+        sm = 'Waiting for counterpart stream…';
       } else {
         cycle = CycleState.starting;
         sm = 'Waiting for counterpart stream…';
@@ -341,7 +409,8 @@ class DownloadProgressHandler {
       totalFiles: lastTotalFiles,
       completedFiles: lastCompletedFiles,
       totalFileBytes: lastTotalFileBytes,
-      downloadedFileBytes: lastDownloadedFileBytes,
+      hasEstimatedFileProgress: (p['hasEstimatedFileProgress'] as bool?) ??
+          lastHasEstimatedFileProgress,
       torrentId: torrentId,
     );
 
@@ -385,34 +454,13 @@ class DownloadProgressHandler {
   }
 
   void _handleTorrentFiles(List pTorrentFiles) {
-    lastTorrentFiles = pTorrentFiles.whereType<Map>().map((m) {
-      final map = Map<String, dynamic>.from(m);
-      final length = (map['length'] as num?)?.toInt() ?? 0;
-      final dlRaw = (map['downloadedBytes'] as num?)?.toInt() ?? 0;
-      final dl = length > 0 ? dlRaw.clamp(0, length) : 0;
-      final progress = length > 0 ? (dl / length).clamp(0.0, 1.0) : 1.0;
-      map['downloadedBytes'] = dl;
-      map['progress'] = progress;
-      map['isComplete'] = length == 0 || dl >= length;
-      map['progressEstimated'] = (map['progressEstimated'] as bool?) ?? false;
-      return map;
-    }).toList();
-
-    final selected = lastTorrentFiles!
-        .where((f) => (f['selected'] as bool?) ?? true)
-        .toList();
-    lastTotalFiles = selected.length;
-    lastTotalFileBytes = selected.fold<int>(
-        0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
-    lastDownloadedFileBytes = selected.fold<int>(0, (sum, f) {
-      final len = (f['length'] as num?)?.toInt() ?? 0;
-      final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-      return sum + (len > 0 ? dl.clamp(0, len) : 0);
-    });
-    lastCompletedFiles = selected.where((f) {
-      final length = (f['length'] as num?)?.toInt() ?? 0;
-      final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-      return length == 0 || dl >= length;
-    }).length;
+    final result =
+        TorrentFileNormalizer.normalizeTorrentFileList(pTorrentFiles);
+    lastTorrentFiles = result.normalizedFiles;
+    lastTotalFiles = result.total;
+    lastTotalFileBytes = result.bytes;
+    lastDownloadedFileBytes = result.downloaded;
+    lastCompletedFiles = result.done;
+    lastHasEstimatedFileProgress = result.hasEstimated;
   }
 }

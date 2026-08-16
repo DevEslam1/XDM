@@ -413,4 +413,35 @@ class TorrentAlertEvent {
       '[${timestamp.toIso8601String()}] [T$torrentId] ($category) $message';
 }
 
+/// Supported libtorrent proxy types.
+enum ProxyType {
+  none,
+  socks5,
+  http;
+
+  static ProxyType fromString(String? val) {
+    if (val == null) return ProxyType.none;
+    switch (val.toLowerCase().trim()) {
+      case 'socks5':
+        return ProxyType.socks5;
+      case 'http':
+      case 'https':
+        return ProxyType.http;
+      default:
+        return ProxyType.none;
+    }
+  }
+
+  String get displayName {
+    switch (this) {
+      case ProxyType.none:
+        return 'None (Direct)';
+      case ProxyType.socks5:
+        return 'SOCKS5';
+      case ProxyType.http:
+        return 'HTTP';
+    }
+  }
+}
+
 

@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'database_service.dart';
 import 'diagnostic_service.dart';
+import 'download_engine.dart';
 import 'ios_background_service.dart';
 import 'logging_service.dart';
 import 'notification_service.dart';
@@ -232,8 +233,9 @@ class BackgroundService {
     _iosBgWatchdogTimer?.cancel();
     _iosBgWatchdogTimer = Timer(const Duration(seconds: 20), () {
       if (_iosBgCallInFlight) {
-        _log.warning('[iOS BG Watchdog] iOS background call wedged for 20s; force-resetting in-flight flag and flushing DB.');
+        _log.warning('[iOS BG Watchdog] iOS background call wedged for 20s; force-resetting.');
         try {
+          DownloadEngine.markBackground();
           DatabaseService.instance.flushPendingSaves();
         } catch (e, st) {
           _log.warning('Failed to flush DB during iOS background watchdog reset: $e', e, st);

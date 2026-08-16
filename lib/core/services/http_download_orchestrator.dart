@@ -138,8 +138,16 @@ class HttpDownloadOrchestrator {
     final job = pool.submit(command);
     final completer = Completer<void>();
 
+    PauseReason? getStructuredPauseReason() {
+      final err = cancelToken.cancelError;
+      final r = err?.error ?? err?.message;
+      if (r is PauseReason) return r;
+      if (r is String) return PauseReason.fromName(r);
+      return null;
+    }
+
     if (cancelToken.isCancelled) {
-      job.cancel();
+      job.cancel(getStructuredPauseReason());
       throw DioException(
         requestOptions: RequestOptions(path: punyUrl),
         type: DioExceptionType.cancel,
@@ -149,7 +157,7 @@ class HttpDownloadOrchestrator {
 
     unawaited(cancelToken.whenCancel.then((_) {
       if (!completer.isCompleted) {
-        job.cancel();
+        job.cancel(getStructuredPauseReason());
         if (ytStreamKind != null) _ytCoordinator.unregister(taskId);
         completer.completeError(
           DioException(
@@ -166,17 +174,20 @@ class HttpDownloadOrchestrator {
         case EngineMessageType.progress:
           final data = message.data;
           int? ytCpOverride;
+          bool isCpStale = false;
           if (ytStreamKind != null) {
             final downloaded = (data['downloadedBytes'] as num?)?.toInt() ?? 0;
             _ytCoordinator.updateLiveBytes(taskId, downloaded);
             final cpId = _ytCoordinator.getCounterpartId(taskId);
             if (cpId != null) {
               ytCpOverride = _ytCoordinator.getLiveBytes(cpId);
+              isCpStale = _ytCoordinator.isLiveBytesStale(cpId);
             }
           }
           progressHandler.handleWorkerProgress(
             data,
             ytCounterpartDownloadedOverride: ytCpOverride,
+            isCounterpartStale: isCpStale,
           );
           break;
         case EngineMessageType.done:

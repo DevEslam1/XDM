@@ -10,6 +10,7 @@ import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../constants/thresholds.dart';
+import '../../di/injection.dart';
 import '../bandwidth_governor.dart';
 import '../download_engine.dart' show DownloadEngine;
 import '../download_journal.dart';
@@ -17,6 +18,7 @@ import '../engines/http_download_engine.dart';
 import '../mirror/mirror_selector.dart';
 import '../positional_file_writer.dart';
 import '../power_monitor.dart';
+import '../site_intelligence/site_intelligence_service.dart';
 import 'cycle_state_resolver.dart';
 import 'engine_exceptions.dart';
 import 'engine_models.dart';
@@ -62,7 +64,9 @@ Future<void> workerEntry(SendPort poolPort) async {
         });
         break;
       case 'cancel':
-        _runningJobs[raw['jobId'] as String]?.requestCancel();
+        final reasonStr = raw['reason'] as String?;
+        final reason = PauseReason.fromName(reasonStr);
+        _runningJobs[raw['jobId'] as String]?.requestCancel(reason);
         break;
       case 'limits':
         _workerGlobalLimitBps = (raw['bps'] as num?)?.toInt() ?? 0;
@@ -71,7 +75,7 @@ Future<void> workerEntry(SendPort poolPort) async {
         break;
       case 'shutdown':
         for (final job in _runningJobs.values) {
-          job.requestCancel();
+          job.requestCancel(PauseReason.background);
         }
         cmdPort.close();
         return;
@@ -163,16 +167,15 @@ class HttpTransferJob {
   CycleState? _lastEmittedCycleState;
   int _currentWriterBufferSize = 256 * 1024;
   
-  static PauseReason _inferPauseReason(String? message) {
-    if (message == null) return PauseReason.userRequested;
-    final m = message.toLowerCase();
-    if (m.contains('network') || m.contains('connection')) return PauseReason.networkLost;
-    if (m.contains('battery')) return PauseReason.batteryLow;
-    if (m.contains('schedule')) return PauseReason.scheduled;
-    return PauseReason.userRequested;
-  }
+  PauseReason? _pendingPauseReason;
 
-  void requestCancel() {
+  PauseReason get effectivePauseReason =>
+      _pendingPauseReason ?? PauseReason.userRequested;
+
+  void requestCancel([PauseReason? reason]) {
+    if (reason != null) {
+      _pendingPauseReason = reason;
+    }
     _abortAllDelays();
     if (!_cancelToken.isCancelled) _cancelToken.cancel('paused');
   }
@@ -343,6 +346,7 @@ class HttpTransferJob {
     await StateStore.save(cmd.tempFilePath, _state!);
 
     if (_state!.downloadedBytes > 0) {
+      _stalledEmitted = false;
       if (cmd.supportsResume) {
         _emitProgress(0,
             statusMessage: 'Verifying resume data…',
@@ -459,7 +463,7 @@ class HttpTransferJob {
 
   Future<void> _verifyServerIdentity(Dio dio) async {
     final cacheKey =
-        '${cmd.punyUrl}|${_state!.etag}|${_state!.lastModified}|${_state!.totalSize}';
+        '${Uri.tryParse(cmd.punyUrl)?.host}|${_state!.etag}|${_state!.lastModified}|${_state!.totalSize}';
     _serverIdentityCache.removeStale(const Duration(minutes: 10));
     if (_serverIdentityCache.containsKey(cacheKey)) {
       probeSkipCount++;
@@ -541,16 +545,18 @@ class HttpTransferJob {
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
-      final isYtOrSigned = host.endsWith('.googlevideo.com') ||
-          host.contains('youtube.com') ||
-          host.contains('youtu.be') ||
-          cmd.url.contains('expire=') ||
-          cmd.url.contains('signature=');
+      final isYtOrSigned = _isExpiredUrlOrSite(cmd.url, host);
       if (isYtOrSigned && (status == 401 || status == 403)) {
         _serverIdentityCache.remove(cacheKey);
         _emitProgress(0,
             statusMessage: 'Refreshing links…',
             cycleStateOverride: CycleState.updatingLinks);
+        if (_state != null) {
+          _state!.cycleState = CycleState.updatingLinks.name;
+          try {
+            await StateStore.save(cmd.tempFilePath, _state!, durable: true);
+          } catch (_) {}
+        }
         await Future.delayed(const Duration(milliseconds: 10));
         throw UrlExpiredException(
           'YouTube / signed URL expired during identity probe (HTTP $status).',
@@ -569,6 +575,11 @@ class HttpTransferJob {
     }
     st.chunks = ChunkScheduler.singleStream(st.totalSize);
     st.threadCount = 1;
+
+    // Fix 3: Invalidate cached chunk details before first progress emit on fallback
+    _cachedChunkDetails = null;
+    _lastChunkDetailsHash = 0;
+
     try {
       final f = File(cmd.tempFilePath);
       if (f.existsSync()) f.deleteSync();
@@ -725,14 +736,14 @@ class HttpTransferJob {
         st.status = DmxStateStatus.paused;
         _emitProgress(0,
             statusMessage: 'Paused',
-            pauseReason: _inferPauseReason(e.message));
+            pauseReason: effectivePauseReason);
       } else if (e is! RangeUnsupportedException) {
         final anyProven = st.chunks.any((c) => c.downloaded > 0);
         st.status = DmxStateStatus.failed;
         st.migrationNote =
             '${st.migrationNote ?? ''} ${anyProven ? 'resumable' : 'restartRequired'}'
                 .trim();
-        _emitProgress(0, statusMessage: 'Failed');
+        _emitProgress(0, statusMessage: _formatFailedMessage(e));
       }
       try {
         await writer.flushAll();
@@ -892,6 +903,9 @@ class HttpTransferJob {
           }
         }
         failover.reportSuccess();
+        _emitProgress(_stopwatch.elapsedMilliseconds,
+            statusMessage: 'Downloading…',
+            cycleStateOverride: CycleState.downloading);
         attempts = 0;
         if (chunk.isComplete) {
           try {
@@ -912,19 +926,17 @@ class HttpTransferJob {
         if (status == 401 || status == 403) {
           final bodyText = (e.response?.data?.toString() ?? '').toLowerCase();
           final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
-          final isLikelyExpired = host.endsWith('.googlevideo.com') ||
-              host.contains('youtube.com') ||
-              host.contains('youtu.be') ||
-              bodyText.contains('expired') ||
-              bodyText.contains('token') ||
-              bodyText.contains('signature') ||
-              bodyText.contains('forbidden') ||
-              cmd.url.contains('expire=') ||
-              cmd.url.contains('signature=');
+          final isLikelyExpired = _isExpiredUrlOrSite(cmd.url, host, bodyText);
           if (isLikelyExpired) {
             _emitProgress(0,
                 statusMessage: 'Refreshing links…',
                 cycleStateOverride: CycleState.updatingLinks);
+            if (_state != null) {
+              _state!.cycleState = CycleState.updatingLinks.name;
+              try {
+                await StateStore.save(cmd.tempFilePath, _state!, durable: true);
+              } catch (_) {}
+            }
             await Future.delayed(const Duration(milliseconds: 10));
             throw UrlExpiredException(
               'Download URL expired (HTTP $status). Refresh required.',
@@ -1262,32 +1274,35 @@ class HttpTransferJob {
           _state!.status = DmxStateStatus.paused;
           _emitProgress(0,
               statusMessage: 'Paused',
-              pauseReason: _inferPauseReason(e.message));
+              pauseReason: effectivePauseReason);
           rethrow;
         }
         if (e.message == 'HTML_INSTEAD_OF_MEDIA') {
           _state!.status = DmxStateStatus.failed;
-          _emitProgress(0, statusMessage: 'Failed');
+          _emitProgress(0, statusMessage: _formatFailedMessage(e));
           rethrow;
         }
         if (e.message?.startsWith('Server rejected resume') == true) {
           _state!.status = DmxStateStatus.failed;
-          _emitProgress(0, statusMessage: 'Failed');
+          _emitProgress(0, statusMessage: _formatFailedMessage(e));
           rethrow;
         }
         final status = e.response?.statusCode;
 
         if (status == 401 || status == 403) {
           final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
-          final isYtOrSigned = host.endsWith('.googlevideo.com') ||
-              host.contains('youtube.com') ||
-              host.contains('youtu.be') ||
-              cmd.url.contains('expire=') ||
-              cmd.url.contains('signature=');
+          final bodyText = (e.response?.data?.toString() ?? '').toLowerCase();
+          final isYtOrSigned = _isExpiredUrlOrSite(cmd.url, host, bodyText);
           if (isYtOrSigned) {
             _emitProgress(0,
                 statusMessage: 'Refreshing links…',
                 cycleStateOverride: CycleState.updatingLinks);
+            if (_state != null) {
+              _state!.cycleState = CycleState.updatingLinks.name;
+              try {
+                await StateStore.save(cmd.tempFilePath, _state!, durable: true);
+              } catch (_) {}
+            }
             await Future.delayed(const Duration(milliseconds: 10));
             throw UrlExpiredException(
               'Download URL expired (HTTP $status). Refresh required.',
@@ -1298,7 +1313,7 @@ class HttpTransferJob {
 
         if (status == 401 || status == 403 || status == 404 || status == 410) {
           _state!.status = DmxStateStatus.failed;
-          _emitProgress(0, statusMessage: 'Failed');
+          _emitProgress(0, statusMessage: _formatFailedMessage(e));
           rethrow;
         }
 
@@ -1308,7 +1323,7 @@ class HttpTransferJob {
             status != 408 &&
             status != 429) {
           _state!.status = DmxStateStatus.failed;
-          _emitProgress(0, statusMessage: 'Failed');
+          _emitProgress(0, statusMessage: _formatFailedMessage(e));
           rethrow;
         }
         if (attempts >= maxAttempts) {
@@ -1323,7 +1338,7 @@ class HttpTransferJob {
                 cycleStateOverride: CycleState.retrying);
             continue;
           }
-          _emitProgress(0, statusMessage: 'Failed');
+          _emitProgress(0, statusMessage: _formatFailedMessage(e));
           rethrow;
         }
         _emitProgress(_stopwatch.elapsedMilliseconds,
@@ -1350,9 +1365,10 @@ class HttpTransferJob {
       } else {
         st.status = DmxStateStatus.failed;
         await StateStore.save(cmd.tempFilePath, st, durable: true);
-        _emitProgress(0, statusMessage: 'Failed');
-        throw DownloadIntegrityException(
+        final err = DownloadIntegrityException(
             'expected ${st.totalSize} bytes, got $actualLen');
+        _emitProgress(0, statusMessage: _formatFailedMessage(err));
+        throw err;
       }
     }
     governor.removeTaskLimit(cmd.taskId);
@@ -1367,9 +1383,10 @@ class HttpTransferJob {
       if (!tempExists) {
         st.status = DmxStateStatus.failed;
         await StateStore.save(cmd.tempFilePath, st, durable: true);
-        _emitProgress(0, statusMessage: 'Failed');
-        throw DownloadIntegrityException(
+        final err = DownloadIntegrityException(
             'Temporary download file missing: ${cmd.tempFilePath}');
+        _emitProgress(0, statusMessage: _formatFailedMessage(err));
+        throw err;
       }
       final finalFile = File(cmd.localFilePath);
       await finalFile.parent.create(recursive: true);
@@ -1392,9 +1409,10 @@ class HttpTransferJob {
       if (!localExists) {
         st.status = DmxStateStatus.failed;
         await StateStore.save(cmd.tempFilePath, st, durable: true);
-        _emitProgress(0, statusMessage: 'Failed');
-        throw DownloadIntegrityException(
+        final err = DownloadIntegrityException(
             'Download output file missing: ${cmd.localFilePath}');
+        _emitProgress(0, statusMessage: _formatFailedMessage(err));
+        throw err;
       }
     }
     st.status = DmxStateStatus.complete;
@@ -1511,6 +1529,58 @@ class HttpTransferJob {
     return _cachedChunkDetails;
   }
 
+  bool _isExpiredUrlOrSite(String rawUrl, String host, [String bodyText = '']) {
+    final hostLower = host.toLowerCase();
+    final urlLower = rawUrl.toLowerCase();
+    final bodyLower = bodyText.toLowerCase();
+
+    if (hostLower.endsWith('.googlevideo.com') ||
+        hostLower.contains('youtube.com') ||
+        hostLower.contains('youtu.be') ||
+        urlLower.contains('expire=') ||
+        urlLower.contains('signature=') ||
+        bodyLower.contains('expired') ||
+        bodyLower.contains('token') ||
+        bodyLower.contains('signature') ||
+        bodyLower.contains('forbidden')) {
+      return true;
+    }
+
+    try {
+      final siteService = getIt.isRegistered<SiteIntelligenceService>()
+          ? getIt<SiteIntelligenceService>()
+          : SiteIntelligenceService();
+      final analysis = siteService.analyzeUrl(rawUrl);
+      if (analysis.isExpiredOrSigned || (analysis.profile?.urlsExpire == true)) {
+        return true;
+      }
+    } catch (e) {
+      // Fix 4: Proper logging for SiteIntelligence analysis failure
+      debugPrint('[DMX-Job] SiteIntelligence analysis failed: $e');
+    }
+
+    return false;
+  }
+
+  String _formatFailedMessage(Object? e) {
+    if (e == null) return 'Failed';
+    String msg;
+    if (e is DioException) {
+      msg = e.message ?? e.toString();
+    } else {
+      msg = e.toString();
+    }
+    if (msg.startsWith('Exception: ')) {
+      msg = msg.substring('Exception: '.length);
+    }
+    msg = msg.trim();
+    if (msg.isEmpty) return 'Failed';
+    if (msg.length > 80) {
+      msg = '${msg.substring(0, 77)}…';
+    }
+    return 'Failed: $msg';
+  }
+
   void _emitProgress(int nowMs,
       {String? statusMessage,
       CycleState? cycleStateOverride,
@@ -1571,6 +1641,7 @@ class HttpTransferJob {
     final chunkDetailsHash = st.chunks.fold<int>(
         0, (h, c) => h ^ Object.hash(c.start, c.end, c.size, c.downloaded));
 
+    final ytLiveCounterpartBytes = cmd.ytCounterpartDownloadedBytes;
     final fingerprint = Object.hash(
       downloaded,
       total,
@@ -1580,6 +1651,8 @@ class HttpTransferJob {
       statusMessage,
       chunkDetailsHash,
       completedChunks,
+      pauseReason?.name,
+      ytLiveCounterpartBytes,
     );
 
     if (!isCycleStateChanged && fingerprint == _lastProgressFingerprint) {
@@ -1587,8 +1660,6 @@ class HttpTransferJob {
     }
     _lastProgressFingerprint = fingerprint;
     _lastEmittedCycleState = cycleState;
-
-    final ytLiveCounterpartBytes = cmd.ytCounterpartDownloadedBytes;
     _send('progress', {
       'downloadedBytes': downloaded,
       'fileSize': total,

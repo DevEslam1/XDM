@@ -99,6 +99,24 @@ abstract class ITorrentService {
 
   Future<Map<String, dynamic>?> getPieceProgress(int torrentId);
 
+  Future<void> setProxy({
+    required String host,
+    required int port,
+    required ProxyType type,
+    String? username,
+    String? password,
+  });
+
+  Future<void> setSslCertificate({
+    required String certPath,
+    required String privateKeyPath,
+    String? dhParamsPath,
+  });
+
+  void addWebSeed(int torrentId, String url);
+  void removeWebSeed(int torrentId, String url);
+  List<String> getWebSeeds(int torrentId);
+
   bool shouldStopSeeding({
     required double progress,
     required int uploadedBytes,
