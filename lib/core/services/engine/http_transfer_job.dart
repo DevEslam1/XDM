@@ -221,6 +221,12 @@ class HttpTransferJob {
     });
   }
 
+  /// FIX-9: Replaces Map SendPort messages with TransferableTypedData for chunk
+  /// bytes path while keeping Map for control messages to reduce isolate copy overhead.
+  void sendChunkBytes(Uint8List bytes) {
+    out.send(TransferableTypedData.fromList([bytes]));
+  }
+
   void sendUnhandledError(Object e) {
     if (e is DioException && e.type == DioExceptionType.cancel) {
       _send('error', {
