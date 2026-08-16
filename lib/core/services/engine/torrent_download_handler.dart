@@ -86,6 +86,18 @@ class TorrentSubscriptionRegistry {
     }
   }
 
+  /// FIX-P2-02: Explicit disposal — cancels the subscription and removes the
+  /// entry immediately instead of waiting for WeakReference GC to trigger a
+  /// later cleanup. Called from the task-delete path so deleted torrents
+  /// release their stream subscriptions deterministically.
+  void dispose(int torrentId) {
+    final entry = _registry.remove(torrentId);
+    if (entry == null) return;
+    try {
+      entry.subscription.cancel();
+    } catch (_) {}
+  }
+
   @visibleForTesting
   void clear() {
     for (final entry in _registry.values) {

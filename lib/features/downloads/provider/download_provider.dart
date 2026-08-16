@@ -3858,6 +3858,11 @@ class DownloadProvider extends ChangeNotifier
       // 2. For torrents, pause + remove from session IMMEDIATELY
       if (task.isTorrent) {
         final torrentId = _torrentIds[id];
+        // FIX-P2-02: Deterministically dispose the torrent subscription on
+        // delete instead of relying on WeakReference GC cleanup.
+        if (torrentId != null) {
+          TorrentSubscriptionRegistry.instance.dispose(torrentId);
+        }
         if (torrentId != null && TorrentService.isTorrentAlive(torrentId)) {
           // FIX-B10: Guard with alive check
           try {

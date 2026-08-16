@@ -64,5 +64,29 @@ void main() {
       expect(handlerA.activeSubsForTesting, isEmpty);
       expect(handlerB.activeSubsForTesting, isEmpty);
     });
+
+    test('dispose cancels the subscription and drops the entry immediately',
+        () async {
+      final handler = TorrentDownloadHandler();
+      final controller = StreamController<void>();
+      var events = 0;
+      final sub = controller.stream.listen((_) => events++);
+
+      TorrentSubscriptionRegistry.instance.register(303, handler, sub);
+      expect(TorrentSubscriptionRegistry.instance.getSubscription(303),
+          equals(sub));
+
+      // Explicit dispose must cancel the subscription and remove the entry.
+      TorrentSubscriptionRegistry.instance.dispose(303);
+      expect(TorrentSubscriptionRegistry.instance.getSubscription(303), isNull);
+      expect(controller.hasListener, isFalse);
+
+      // No further events after dispose.
+      controller.add(null);
+      await Future<void>.delayed(Duration.zero);
+      expect(events, equals(0));
+
+      await controller.close();
+    });
   });
 }
