@@ -449,7 +449,7 @@ class TorrentDownloadHandler {
 
     int id = torrentId ?? -1;
     bool hasLoadedResume = false;
-    if (id >= 0 && !TorrentService.isTorrentAlive(id)) {
+    if (id >= 0 && !_torrentService.isTorrentAlive(id)) {
       _log.warning('Stale torrent handle $id detected; re-adding.');
       _activeTorrentIds.remove(id);
       id = -1;
@@ -616,9 +616,8 @@ class TorrentDownloadHandler {
     }
 
     final cancelCompleter = Completer<void>();
-    cancelToken.whenCancel.then((cancelReason) async {
-      if (torrentCompleted) return;
-      if (cancelCompleter.isCompleted) return;
+    final cancelSubscription = cancelToken.whenCancel.then((cancelReason) async {
+      if (torrentCompleted || cancelCompleter.isCompleted) return;
       cancelCompleter.complete();
       try {
         TorrentService.pauseTorrent(id);
@@ -746,6 +745,10 @@ class TorrentDownloadHandler {
       );
       torrentCompleted = true;
     } finally {
+      // Cancel the whenCancel listener if torrent completed naturally
+      if (torrentCompleted && !cancelCompleter.isCompleted) {
+        cancelCompleter.complete();
+      }
       final sub = _activeSubs.remove(id);
       await sub?.cancel();
       _activeTorrentIds.remove(id);

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:dmx/core/di/injection.dart';
 import 'package:dmx/core/interfaces/i_torrent_service.dart';
+import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:dmx/core/services/engine/torrent_download_handler.dart';
 import 'package:dmx/core/services/torrent_models.dart';
 import 'package:dmx/core/services/torrent_service_stub.dart';
@@ -20,6 +21,20 @@ class MockTorrentService extends TorrentServiceStub {
 
   @override
   bool isTorrentAlive(int id) => true;
+
+  @override
+  int addMagnet(String magnetUri, String savePath) => 42;
+
+  @override
+  Future<int> addMagnetWithMetadataTimeout(
+    String magnetUri,
+    String savePath, {
+    Duration timeout = const Duration(seconds: 300),
+    void Function(String message)? onStatusUpdate,
+    int maxRetries = 2,
+    Duration retryDelay = const Duration(seconds: 10),
+  }) async =>
+      42;
 
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
@@ -207,6 +222,39 @@ void main() {
 
       // Verify that removeActiveTorrent is safe for non-existent IDs
       expect(() => handler.removeActiveTorrent(99999), returnsNormally);
+    });
+
+    test(
+        'torrent completing naturally should NOT trigger pause progress emission',
+        () async {
+      final emittedStates = <CycleState>[];
+      final cancel = CancelToken();
+
+      final downloadFuture = handler.handleTorrentDownload(
+        taskId: 'test-torrent-task',
+        torrentId: 42,
+        url: 'magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789',
+        currentLocalFilePath: '${Directory.systemTemp.path}/dmx_handler/file.mkv',
+        knownFileSize: 1000,
+        cancelToken: cancel,
+        clientBuilder: (u) => Dio(),
+        clientReleaser: (d) => d.close(force: true),
+        onProgress: (p) {
+          if (p.cycleState != null) {
+            emittedStates.add(p.cycleState!);
+          }
+        },
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      controller.add({42: seedingInfo(42)});
+
+      await downloadFuture;
+
+      cancel.cancel('test cancel after completion');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(emittedStates.contains(CycleState.paused), isFalse);
     });
   });
 }
