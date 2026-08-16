@@ -21,5 +21,25 @@ void main() {
 
       await pool.dispose();
     });
+
+    test('cleanup debounce coalesces bursts of releases', () async {
+      final pool = DioClientPool(enableCleanupTimer: false);
+
+      // Simulate a burst: acquire and release several clients back-to-back.
+      for (int i = 0; i < 5; i++) {
+        final client = pool.acquireClient(url: 'https://h$i.com/f');
+        pool.releaseClient(client);
+      }
+
+      // The stale-idle cleanup is debounced for 1s: after a synchronous burst
+      // the idle map must still hold all released hosts.
+      expect(pool.idleClientsByHostForTesting.length, equals(5));
+
+      // Let the debounce window elapse; cleanup may evict none because the
+      // clients are fresh, but the timer must not throw.
+      await Future.delayed(const Duration(milliseconds: 1200));
+
+      await pool.dispose();
+    });
   });
 }

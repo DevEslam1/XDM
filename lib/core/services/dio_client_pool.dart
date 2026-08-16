@@ -22,6 +22,11 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
   final LinkedHashMap<String, Dio> _idleClientsByHost = LinkedHashMap<String, Dio>();
   final Map<Dio, String> _clientHosts = {};
 
+  /// FIX-P1-06: Debounce timer for stale-idle cleanup. Multiple releases in a
+  /// burst coalesce into a single run 1s after the last one.
+  Timer? _cleanupDebounceTimer;
+  static const Duration _cleanupDebounce = Duration(seconds: 1);
+
   DioClientPool({bool enableCleanupTimer = false}) {
     ServiceRegistry.register(this);
     ServiceRegistry.registerMemoryPressureListener(this);
@@ -71,6 +76,16 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
   }
 
   void _performCleanup() {
+    // FIX-P1-06: Debounce — coalesce bursts of releaseClient() calls into a
+    // single cleanup pass 1s after the last one.
+    _cleanupDebounceTimer?.cancel();
+    _cleanupDebounceTimer = Timer(_cleanupDebounce, () {
+      _cleanupDebounceTimer = null;
+      _runCleanup();
+    });
+  }
+
+  void _runCleanup() {
     final now = DateTime.now();
     final isPowerConstrained =
         PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ||
@@ -236,6 +251,8 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
   Future<void> dispose() async {
     ServiceRegistry.unregister(this);
     ServiceRegistry.unregisterMemoryPressureListener(this);
+    _cleanupDebounceTimer?.cancel();
+    _cleanupDebounceTimer = null;
     for (final client in List<Dio>.from(_activeClients)) {
       try {
         client.close(force: true);
