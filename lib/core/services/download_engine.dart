@@ -20,6 +20,7 @@ import 'engine/engine_models.dart';
 import 'engine/http_transfer_job.dart';
 import 'http_download_orchestrator.dart';
 import 'metadata_probe_service.dart';
+import 'permission_service.dart';
 import 'service_registry.dart';
 import 'torrent_download_orchestrator.dart';
 import 'yt_counterpart_coordinator.dart';
@@ -320,6 +321,20 @@ class DownloadEngine implements IDownloadEngine {
     bool isRetry = false,
     int? metadataTimeoutSeconds,
   }) async {
+    final permService = PermissionService();
+    if (!await permService.isStoragePermissionValid()) {
+      onProgress(DownloadProgress(
+        downloadedBytes: 0,
+        fileSize: knownFileSize,
+        speed: 0,
+        eta: null,
+        cycleState: CycleState.paused,
+        pauseReason: PauseReason.permissionRevoked,
+        statusMessage: 'Storage permission revoked',
+      ));
+      return;
+    }
+
     final isTorrent = isTorrentUrl(url, fileName: p.basename(localFilePath));
     if (isTorrent) {
       return _torrentOrchestrator.download(

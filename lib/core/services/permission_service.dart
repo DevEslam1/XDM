@@ -56,6 +56,11 @@ class PermissionService {
     return await Permission.storage.isGranted;
   }
 
+  /// Checks whether storage permission is currently valid and not revoked (FIX-14).
+  Future<bool> isStoragePermissionValid() async {
+    return _isStorageGranted();
+  }
+
   Future<String> defaultDownloadDirectory() async {
     if (!kIsWeb &&
         (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
