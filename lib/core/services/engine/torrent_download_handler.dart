@@ -728,6 +728,25 @@ class TorrentDownloadHandler {
     }
   }
 
+  @visibleForTesting
+  Future<void> listenForCompletionForTesting(
+    int id,
+    String url,
+    String localFilePath,
+    CancelToken cancelToken,
+    ValueChangedProgress onProgress, {
+    List<Map<String, dynamic>>? Function()? getTorrentFiles,
+  }) {
+    return _listenForCompletion(
+      id,
+      url,
+      localFilePath,
+      cancelToken,
+      onProgress,
+      getTorrentFiles: getTorrentFiles,
+    );
+  }
+
   Future<void> _listenForCompletion(
     int id,
     String url,
@@ -736,6 +755,19 @@ class TorrentDownloadHandler {
     ValueChangedProgress onProgress, {
     List<Map<String, dynamic>>? Function()? getTorrentFiles,
   }) async {
+    // Cancel any stale stall watchdog from a previous cycle before creating a
+    // new one. Otherwise the old Timer leaks and can double-complete the guard.
+    _stallWatchdog?.cancel();
+    _stallWatchdog = null;
+
+    // Guard against overlapping completion handlers: if a previous
+    // _listenForCompletion for this torrent is still running, wait on its
+    // completion future rather than starting a second subscription loop.
+    if (_completionGuard != null && !_completionGuard!.isCompleted) {
+      await _completionGuard!.future;
+      return;
+    }
+
     final completer = Completer<void>();
     StreamSubscription? sub;
 
