@@ -449,6 +449,8 @@ class HttpTransferJob {
           await StateStore.save(cmd.tempFilePath, _state!);
         } catch (_) {} // coverage:ignore-line
       }
+      _cachedChunkDetails = null;
+      _lastChunkDetailsHash = 0;
       dio.close(force: true);
     }
   }
