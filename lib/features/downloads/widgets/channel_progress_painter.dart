@@ -12,12 +12,14 @@ class ChannelProgressPainter extends CustomPainter {
   final bool isDark;
   final bool isTorrent;
   final List<ChunkDetail> chunkDetails;
+  final int chunkFingerprint;
 
   ChannelProgressPainter({
     required this.progress,
     required this.isDark,
     required this.isTorrent,
     this.chunkDetails = const [],
+    this.chunkFingerprint = 0,
   }) : super(repaint: progress); // ← repaints ONLY when value changes
 
   @override
@@ -72,6 +74,15 @@ class ChannelProgressPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant ChannelProgressPainter oldDelegate) {
+    // FIX-P0-5: When the chunk fingerprint is unchanged the chunk set is
+    // byte-identical, so skip the per-chunk diff loop entirely.
+    if (oldDelegate.chunkFingerprint == chunkFingerprint &&
+        chunkFingerprint != 0) {
+      return (oldDelegate.progress.value - progress.value).abs() > 0.001 ||
+          oldDelegate.progress != progress ||
+          oldDelegate.isDark != isDark ||
+          oldDelegate.isTorrent != isTorrent;
+    }
     if (oldDelegate.chunkDetails.length != chunkDetails.length) return true;
     for (int i = 0; i < chunkDetails.length; i++) {
       if (oldDelegate.chunkDetails[i].downloaded !=
@@ -94,6 +105,7 @@ class IsolatedProgressBar extends StatelessWidget {
   final bool isDark;
   final bool isTorrent;
   final double height;
+  final int chunkFingerprint;
 
   const IsolatedProgressBar({
     super.key,
@@ -101,6 +113,7 @@ class IsolatedProgressBar extends StatelessWidget {
     required this.isDark,
     this.isTorrent = false,
     this.height = 6,
+    this.chunkFingerprint = 0,
   });
 
   @override
@@ -125,6 +138,7 @@ class IsolatedProgressBar extends StatelessWidget {
                 progress: progress,
                 isDark: isDark,
                 isTorrent: isTorrent,
+                chunkFingerprint: chunkFingerprint,
               ),
             ),
           ),

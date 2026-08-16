@@ -882,6 +882,7 @@ class _ChunkedProgressBar extends StatelessWidget {
           isDark: isDark,
           isTorrent: task.isTorrent,
           height: 8,
+          chunkFingerprint: Object.hashAll(chunks),
         ),
       );
     } else {
