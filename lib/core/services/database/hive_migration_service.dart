@@ -82,7 +82,7 @@ class HiveMigrationService {
     if (!await Hive.boxExists(downloadsBoxName)) return true;
     final box = await Hive.openBox<dynamic>(downloadsBoxName);
     if (box.isEmpty) {
-      box.deleteFromDisk();
+      await _safeDeleteBox(box);
       return true;
     }
 
@@ -92,12 +92,39 @@ class HiveMigrationService {
     final tasks = <DownloadTasksCompanion>[];
     final parsedValues = <dynamic>[];
     final failedItems = <dynamic>[];
+    final Map<String, DownloadTask> deduplicatedTasks = {};
+
     for (final value in box.values) {
       if (value is Map) {
         try {
           final task = DownloadTask.fromMap(Map<String, dynamic>.from(value));
           if (!existingTaskIds.contains(task.id)) {
-            tasks.add(_taskToCompanion(task));
+            final compositeKey = '${task.url}|${task.fileName}';
+
+            // Check collision on task.id
+            if (deduplicatedTasks.containsKey(task.id)) {
+              final existing = deduplicatedTasks[task.id]!;
+              if (task.updatedAt.isAfter(existing.updatedAt)) {
+                deduplicatedTasks[task.id] = task;
+              }
+            } else {
+              // Check collision on composite URL + fileName
+              DownloadTask? existingWithKey;
+              for (final t in deduplicatedTasks.values) {
+                if ('${t.url}|${t.fileName}' == compositeKey) {
+                  existingWithKey = t;
+                  break;
+                }
+              }
+              if (existingWithKey != null) {
+                if (task.updatedAt.isAfter(existingWithKey.updatedAt)) {
+                  deduplicatedTasks.remove(existingWithKey.id);
+                  deduplicatedTasks[task.id] = task;
+                }
+              } else {
+                deduplicatedTasks[task.id] = task;
+              }
+            }
             parsedValues.add(value);
           }
         } catch (e) {
@@ -107,6 +134,11 @@ class HiveMigrationService {
         failedItems.add(value);
       }
     }
+
+    for (final task in deduplicatedTasks.values) {
+      tasks.add(_taskToCompanion(task));
+    }
+
     if (tasks.isNotEmpty) {
       try {
         await db.batch(
@@ -138,7 +170,7 @@ class HiveMigrationService {
         return false;
       }
     }
-    box.deleteFromDisk();
+    await _safeDeleteBox(box);
     return true;
   }
 
@@ -146,7 +178,7 @@ class HiveMigrationService {
     if (!await Hive.boxExists(bookmarksBoxName)) return true;
     final box = await Hive.openBox<dynamic>(bookmarksBoxName);
     if (box.isEmpty) {
-      box.deleteFromDisk();
+      await _safeDeleteBox(box);
       return true;
     }
 
@@ -202,7 +234,7 @@ class HiveMigrationService {
         return false;
       }
     }
-    box.deleteFromDisk();
+    await _safeDeleteBox(box);
     return true;
   }
 
@@ -210,7 +242,7 @@ class HiveMigrationService {
     if (!await Hive.boxExists(browserTabsBoxName)) return true;
     final box = await Hive.openBox<dynamic>(browserTabsBoxName);
     if (box.isEmpty) {
-      box.deleteFromDisk();
+      await _safeDeleteBox(box);
       return true;
     }
 
@@ -272,7 +304,7 @@ class HiveMigrationService {
         return false;
       }
     }
-    box.deleteFromDisk();
+    await _safeDeleteBox(box);
     return true;
   }
 
@@ -280,7 +312,7 @@ class HiveMigrationService {
     if (!await Hive.boxExists(browserHistoryBoxName)) return true;
     final box = await Hive.openBox<dynamic>(browserHistoryBoxName);
     if (box.isEmpty) {
-      box.deleteFromDisk();
+      await _safeDeleteBox(box);
       return true;
     }
 
@@ -331,11 +363,19 @@ class HiveMigrationService {
         return false;
       }
     }
-    box.deleteFromDisk();
+    await _safeDeleteBox(box);
     return true;
   }
 
-  Future<void> _backupHiveBox(dynamic box, String boxName) async {
+  Future<void> _safeDeleteBox(Box<dynamic> box) async {
+    try {
+      await box.deleteFromDisk();
+    } catch (e) {
+      _log.info('deleteFromDisk safely handled: $e');
+    }
+  }
+
+  Future<void> _backupHiveBox(Box<dynamic> box, String boxName) async {
     try {
       final dir = await getApplicationDocumentsDirectory();
       final backupParentDir = Directory(p.join(dir.path, 'hive_backups'));
@@ -343,8 +383,7 @@ class HiveMigrationService {
         await backupParentDir.create(recursive: true);
       }
       final backupPath = p.join(backupParentDir.path, '${boxName}_backup.hive');
-      final String? boxPath =
-          box is Box ? box.path : (box as dynamic).path as String?;
+      final String? boxPath = box.path;
       if (boxPath != null) {
         final srcFile = File(boxPath);
         final srcDir = Directory(boxPath);
