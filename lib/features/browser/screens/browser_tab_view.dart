@@ -201,8 +201,15 @@ class _BrowserTabViewState extends State<_BrowserTabView> {
                         ),
                         onReceivedServerTrustAuthRequest:
                             (controller, challenge) async {
+                          widget.state._log.warning(
+                              '[Browser SSL] Blocked untrusted certificate challenge: host=${challenge.protectionSpace.host}, port=${challenge.protectionSpace.port}');
                           return ServerTrustAuthResponse(
                               action: ServerTrustAuthResponseAction.CANCEL);
+                        },
+                        onReceivedHttpAuthRequest:
+                            (controller, challenge) async {
+                          return await widget.state
+                              ._handleHttpAuthRequest(challenge);
                         },
                         onCreateWindow: (controller, createWindowAction) async {
                           final reqUrl = createWindowAction.request.url;

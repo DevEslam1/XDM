@@ -319,6 +319,13 @@ class ErrorTaxonomy {
 
     if (error is DioException) {
       switch (error.type) {
+        case DioExceptionType.badCertificate:
+          return const ErrorClassification(
+            family: ErrorFamily.auth,
+            message: 'SSL certificate verification failed (Untrusted or Expired)',
+            severe: true,
+            recoveryAction: RecoveryAction.refreshUrl,
+          );
         case DioExceptionType.connectionTimeout:
         case DioExceptionType.receiveTimeout:
         case DioExceptionType.sendTimeout:
@@ -329,6 +336,19 @@ class ErrorTaxonomy {
             recoveryAction: RecoveryAction.retryWithDelay,
           );
         case DioExceptionType.connectionError:
+          final underlying = error.error;
+          if (underlying is HandshakeException ||
+              underlying is TlsException ||
+              underlying is CertificateException ||
+              error.toString().contains('CERTIFICATE_VERIFY_FAILED') ||
+              error.toString().contains('HandshakeException')) {
+            return const ErrorClassification(
+              family: ErrorFamily.auth,
+              message: 'Secure connection failed (SSL/TLS Certificate Error)',
+              severe: true,
+              recoveryAction: RecoveryAction.refreshUrl,
+            );
+          }
           return const ErrorClassification(
             family: ErrorFamily.network,
             message: 'Network error',
@@ -338,6 +358,17 @@ class ErrorTaxonomy {
         default:
           break;
       }
+    }
+
+    if (error is HandshakeException ||
+        error is TlsException ||
+        error is CertificateException) {
+      return const ErrorClassification(
+        family: ErrorFamily.auth,
+        message: 'Secure connection failed (SSL/TLS Certificate Error)',
+        severe: true,
+        recoveryAction: RecoveryAction.refreshUrl,
+      );
     }
 
     if (error is FileSystemException) {

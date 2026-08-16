@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -105,13 +106,28 @@ Dio buildTransferDio({
   }
   if (oauthToken != null && oauthToken.isNotEmpty) {
     client.options.headers['Authorization'] = 'Bearer $oauthToken';
+  } else if (url != null) {
+    final uri = Uri.tryParse(url);
+    if (uri != null && uri.userInfo.isNotEmpty) {
+      final base64Auth =
+          base64Encode(utf8.encode(Uri.decodeComponent(uri.userInfo)));
+      client.options.headers['Authorization'] = 'Basic $base64Auth';
+    }
   }
 
   if (client.httpClientAdapter is IOHttpClientAdapter) {
-    (client.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
+    final adapter = client.httpClientAdapter as IOHttpClientAdapter;
+    adapter.createHttpClient = () {
       final client = HttpClient();
       client.badCertificateCallback = DebugCertOverride.getCallback(url);
       return client;
+    };
+    adapter.validateCertificate = (cert, host, port) {
+      final cb = DebugCertOverride.getCallback(url);
+      if (cb != null && cert != null) {
+        return cb(cert, host, port);
+      }
+      return true; // Delegate to default validation when no debug override
     };
   }
 

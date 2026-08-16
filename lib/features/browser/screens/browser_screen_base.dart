@@ -551,6 +551,101 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
     return settings.forceDarkMode;
   }
 
+  /// Handles HTTP Basic / Digest authentication challenges (401 Unauthorized).
+  Future<HttpAuthResponse?> _handleHttpAuthRequest(
+      URLAuthenticationChallenge challenge) async {
+    final host = challenge.protectionSpace.host;
+    final realm = challenge.protectionSpace.realm ?? '';
+    final usernameController = TextEditingController();
+    final passwordController = TextEditingController();
+    final isDark = _settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+
+    if (!mounted) return null;
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.lock_outline_rounded,
+                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                isRtl ? 'تسجيل الدخول المطلوب' : 'Authentication Required',
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              realm.isNotEmpty
+                  ? '$host ($realm)'
+                  : (isRtl
+                      ? 'الموقع $host يتطلب اسم مستخدم وكلمة مرور'
+                      : 'The site at $host requires a username and password.'),
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark
+                    ? AppTheme.textSecondary
+                    : AppTheme.lightTextSecondary,
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: usernameController,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: isRtl ? 'اسم المستخدم' : 'Username',
+                prefixIcon: const Icon(Icons.person_outline, size: 18),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: isRtl ? 'كلمة المرور' : 'Password',
+                prefixIcon: const Icon(Icons.password_outlined, size: 18),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text(L10n.of(dialogCtx, 'cancel_btn')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: Text(isRtl ? 'تسجيل الدخول' : 'Sign In'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      return HttpAuthResponse(
+        action: HttpAuthResponseAction.PROCEED,
+        username: usernameController.text.trim(),
+        password: passwordController.text,
+      );
+    }
+    return HttpAuthResponse(action: HttpAuthResponseAction.CANCEL);
+  }
+
   /// UX 3.4: Dialog to clear cache, cookies, history, form data and downloads.
   void _showClearBrowsingDataDialog() {
     final settings = _settings;
