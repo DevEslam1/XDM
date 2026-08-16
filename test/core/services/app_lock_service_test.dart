@@ -115,5 +115,27 @@ void main() {
       await AppLockService.disableLock();
       expect(await AppLockService.isLockEnabled(), isFalse);
     });
+
+    test('Lockout state survives a clock rollback', () async {
+      await AppLockService.setPin('1234');
+      for (var i = 0; i < 5; i++) {
+        await AppLockService.verifyPin('9999');
+      }
+
+      final initialRemaining = await AppLockService.lockoutRemaining();
+      expect(initialRemaining.inSeconds, greaterThan(0));
+
+      // Simulate a backwards clock jump by setting lastObservedTimeMs far in future
+      AppLockService.lastObservedTimeMs =
+          DateTime.now().millisecondsSinceEpoch + 3600000; // 1h in future
+
+      // Reset monotonic state to simulate app process restart while clock was rolled back
+      AppLockService.resetMonotonicState();
+
+      // Lockout must survive the rollback
+      final remainingAfterRollback = await AppLockService.lockoutRemaining();
+      expect(remainingAfterRollback.inSeconds, greaterThan(0));
+      expect(await AppLockService.verifyPin('1234'), isFalse);
+    });
   });
 }

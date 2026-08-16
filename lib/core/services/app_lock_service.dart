@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../utils/crypto_utils.dart';
+import 'crash_reporting_service.dart';
 
 class AppLockService {
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
@@ -56,6 +57,11 @@ class AppLockService {
         'Detected backwards clock jump of ${_lastObservedTimeMs - nowMs}ms. '
         'Re-deriving lockout from persisted lockedUntil.',
       );
+      unawaited(CrashReportingService.addBreadcrumb(
+        'Detected backwards clock jump of ${_lastObservedTimeMs - nowMs}ms (clock rollback fallback).',
+        category: 'security',
+        data: {'jumpMs': _lastObservedTimeMs - nowMs},
+      ));
       final rawUntil = await _storage.read(key: _lockedUntilKey);
       final rawDuration = await _storage.read(key: _lockoutDurationKey);
       final lockedUntil = int.tryParse(rawUntil ?? '');
@@ -178,6 +184,10 @@ class AppLockService {
 
     // If wall clock was manipulated backwards, enforce full duration
     if (wallRemaining.inMilliseconds > totalDurationMs + 1000) {
+      unawaited(CrashReportingService.addBreadcrumb(
+        'Wall clock rollback detected in lockoutRemaining; enforcing full lockout duration',
+        category: 'security',
+      ));
       _monotonicLockoutStartMs = currentMono;
       _totalLockoutDurationMs = totalDurationMs;
       return Duration(milliseconds: totalDurationMs);
