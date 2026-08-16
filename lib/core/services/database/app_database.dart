@@ -328,8 +328,9 @@ LazyDatabase _openConnection(String path) {
 
 @DriftDatabase(tables: [DownloadTasks, Bookmarks, BrowserHistory, BrowserTabs])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase(String path) : super(_openConnection(path));
-  AppDatabase.forTesting(super.e);
+  final String? dbPath;
+  AppDatabase(String path) : dbPath = path, super(_openConnection(path));
+  AppDatabase.forTesting(super.e) : dbPath = null;
 
   @override
   int get schemaVersion => 21;

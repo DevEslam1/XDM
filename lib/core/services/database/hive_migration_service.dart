@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart' as drift;
+import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 import 'package:hive/hive.dart';
 import 'package:path/path.dart' as p;
@@ -17,12 +18,78 @@ import 'repositories/task_companion_converter.dart';
 
 final _log = LoggingService.logger('HiveMigrationService');
 
+class _MigratePayload {
+  final String? dbPath;
+  final String? hivePath;
+  final Map<String, Object> initialPrefs;
+
+  _MigratePayload(
+    AppDatabase db,
+    SharedPreferences prefs, {
+    String? hiveDirectoryPath,
+  })  : dbPath = db.dbPath,
+        hivePath = hiveDirectoryPath ??
+            (db.dbPath != null ? File(db.dbPath!).parent.path : null),
+        initialPrefs = {
+          for (final key in prefs.getKeys())
+            if (prefs.get(key) != null) key: prefs.get(key)!,
+        };
+
+  _MigratePayload.raw({
+    this.dbPath,
+    this.hivePath,
+    this.initialPrefs = const {},
+  });
+}
+
+Future<bool> _migrateIsolate(_MigratePayload payload) async {
+  if (payload.hivePath != null && payload.hivePath!.isNotEmpty) {
+    Hive.init(payload.hivePath!);
+  }
+
+  final AppDatabase isolateDb;
+  if (payload.dbPath != null && payload.dbPath!.isNotEmpty) {
+    isolateDb = AppDatabase(payload.dbPath!);
+  } else {
+    isolateDb = AppDatabase.forTesting(NativeDatabase.memory());
+  }
+
+  SharedPreferences.setMockInitialValues(payload.initialPrefs);
+  final isolatePrefs = await SharedPreferences.getInstance();
+
+  try {
+    final service = HiveMigrationService._direct(isolateDb, isolatePrefs);
+    const boxes = [
+      HiveMigrationService.downloadsBoxName,
+      HiveMigrationService.bookmarksBoxName,
+      HiveMigrationService.browserTabsBoxName,
+      HiveMigrationService.browserHistoryBoxName,
+    ];
+
+    bool allSuccessful = true;
+    for (final boxName in boxes) {
+      final success = await service.migrateSingleHiveBox(boxName);
+      if (!success) {
+        allSuccessful = false;
+        _log.warning(
+          'Migration had errors for box $boxName; will retry on next launch.',
+        );
+      }
+    }
+    return allSuccessful;
+  } finally {
+    await isolateDb.close();
+  }
+}
+
 /// Service responsible for one-time migration of legacy Hive data boxes into SQLite (Drift).
 class HiveMigrationService {
   final AppDatabase db;
   final SharedPreferences prefs;
 
   HiveMigrationService(this.db, this.prefs);
+
+  HiveMigrationService._direct(this.db, this.prefs);
 
   static const String downloadsBoxName = 'downloads';
   static const String bookmarksBoxName = 'browser_bookmarks';
@@ -34,23 +101,35 @@ class HiveMigrationService {
   Future<void> migrate() async {
     if (prefs.getBool(migrationKey) == true) return;
 
-    const boxes = [
-      downloadsBoxName,
-      bookmarksBoxName,
-      browserTabsBoxName,
-      browserHistoryBoxName,
-    ];
+    if (db.dbPath == null) {
+      const boxes = [
+        downloadsBoxName,
+        bookmarksBoxName,
+        browserTabsBoxName,
+        browserHistoryBoxName,
+      ];
 
-    bool allSuccessful = true;
-    for (final boxName in boxes) {
-      final success = await migrateSingleHiveBox(boxName);
-      if (!success) {
-        allSuccessful = false;
-        _log.warning(
-          'Migration had errors for box $boxName; will retry on next launch.',
-        );
+      bool allSuccessful = true;
+      for (final boxName in boxes) {
+        final success = await migrateSingleHiveBox(boxName);
+        if (!success) {
+          allSuccessful = false;
+          _log.warning(
+            'Migration had errors for box $boxName; will retry on next launch.',
+          );
+        }
       }
+
+      if (allSuccessful) {
+        await prefs.setBool(migrationKey, true);
+      }
+      return;
     }
+
+    final allSuccessful = await compute(
+      _migrateIsolate,
+      _MigratePayload(db, prefs),
+    );
 
     if (allSuccessful) {
       await prefs.setBool(migrationKey, true);
