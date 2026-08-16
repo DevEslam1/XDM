@@ -151,6 +151,21 @@ class BackgroundService {
       _testMode || (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
 
   static Future<void> initialize() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cooldownMs = prefs.getInt(_iosBgCooldownKey);
+      if (cooldownMs != null) {
+        final cooldownUntil = DateTime.fromMillisecondsSinceEpoch(cooldownMs);
+        if (DateTime.now().isBefore(cooldownUntil)) {
+          _iosBgCooldownUntil = cooldownUntil;
+        } else {
+          await prefs.remove(_iosBgCooldownKey);
+          _iosBgCooldownUntil = null;
+        }
+      }
+    } catch (e, st) {
+      _log.fine('Failed to load iOS background cooldown', e, st);
+    }
     if (!isSupported) return;
     if (Platform.isIOS) {
       return; // Native BGTaskScheduler registered in AppDelegate
@@ -256,6 +271,8 @@ class BackgroundService {
   static Timer? _iosBgWatchdogTimer;
   static DateTime? _iosBgCooldownUntil;
 
+  static const String _iosBgCooldownKey = 'ios_bg_cooldown_until_ms';
+
   static const List<Duration> _bgBackoffSchedule = [
     Duration(seconds: 30),
     Duration(minutes: 2),
@@ -327,12 +344,21 @@ class BackgroundService {
     _log.info(
       'iOS background callback invoked. Bridging to native BackgroundDownloadController.',
     );
-    if (_iosBgCooldownUntil != null &&
-        DateTime.now().isBefore(_iosBgCooldownUntil!)) {
-      _log.warning(
-        'iOS background callback invoked during 60s cooldown; skipping execution.',
-      );
-      return false;
+    if (_iosBgCooldownUntil != null) {
+      if (DateTime.now().isBefore(_iosBgCooldownUntil!)) {
+        _log.warning(
+          'iOS background callback invoked during 60s cooldown; skipping execution.',
+        );
+        return false;
+      } else {
+        _iosBgCooldownUntil = null;
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove(_iosBgCooldownKey);
+        } catch (e, st) {
+          _log.fine('Failed to clear expired iOS background cooldown', e, st);
+        }
+      }
     }
     if (_iosBgCallInFlight) {
       _log.warning(
@@ -355,7 +381,11 @@ class BackgroundService {
               st);
         }
         _iosBgCallInFlight = false;
-        _iosBgCooldownUntil = DateTime.now().add(const Duration(seconds: 60));
+        final cooldown = DateTime.now().add(const Duration(seconds: 60));
+        _iosBgCooldownUntil = cooldown;
+        SharedPreferences.getInstance().then((prefs) {
+          prefs.setInt(_iosBgCooldownKey, cooldown.millisecondsSinceEpoch);
+        }).catchError((_) {});
       }
     });
 
