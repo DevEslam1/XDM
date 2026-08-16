@@ -89,7 +89,7 @@ class DesktopTrayService with TrayListener {
       _log.fine('Wakelock disable skipped on exit: $e');
     }
     try {
-      await BackgroundService().releaseWakeLock();
+      await BackgroundService.releaseWakeLock();
     } catch (e) {
       _log.fine('BackgroundService wake lock release skipped on exit: $e');
     }
