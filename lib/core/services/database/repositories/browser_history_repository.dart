@@ -149,32 +149,36 @@ class BrowserHistoryRepository {
 
     _historyInsertCount++;
     if (_historyInsertCount % 100 == 0) {
-      int maxHistory;
+      await _trimHistoryInternal();
+    }
+
+    return id;
+  }
+
+  Future<void> _trimHistoryInternal([int? maxEntries]) async {
+    int maxHistory;
+    if (maxEntries != null) {
+      maxHistory = maxEntries;
+    } else {
       try {
         await SettingsProvider.instance.ensureLoaded();
         maxHistory = SettingsProvider.instance.historyMaxEntries;
       } catch (_) {
         maxHistory = 500;
       }
-      final countResult = await _db
-          .customSelect(
-            'SELECT COUNT(*) as cnt FROM browser_history',
-          )
-          .get();
-      final count = countResult.first.read<int>('cnt');
-      if (count > maxHistory) {
-        await _db.customStatement(
-          'DELETE FROM browser_history WHERE id NOT IN ('
-          '  SELECT id FROM browser_history '
-          '  ORDER BY visited_at DESC '
-          '  LIMIT ?'
-          ')',
-          [maxHistory],
-        );
-      }
     }
+    final thresholdRow = await _db.customSelect(
+      'SELECT visited_at FROM browser_history ORDER BY visited_at DESC LIMIT 1 OFFSET ?',
+      variables: [drift.Variable.withInt(maxHistory)],
+    ).getSingleOrNull();
 
-    return id;
+    if (thresholdRow != null) {
+      final cutoff = thresholdRow.read<int>('visited_at');
+      await _db.customStatement(
+        'DELETE FROM browser_history WHERE visited_at < ?',
+        [cutoff],
+      );
+    }
   }
 
   Future<void> updateBrowserHistoryTitle(int id, String title) async {
