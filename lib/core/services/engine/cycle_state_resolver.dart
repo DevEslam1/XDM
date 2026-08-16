@@ -1,36 +1,9 @@
 import '../../../features/downloads/models/cycle_state.dart';
 
-/// Unified resolver for deriving canonical [CycleState] across all engine phases,
-/// workers, and download types.
+/// Unified high-performance resolver for deriving canonical [CycleState] across all engine phases,
+/// workers, and download types without expensive RegExp allocations.
 class CycleStateResolver {
   const CycleStateResolver._();
-
-  static final _metadataRegex =
-      RegExp(r'\b(fetching[_\s]metadata|metadata)\b', caseSensitive: false);
-  static final _allocatingRegex =
-      RegExp(r'\b(allocat\w*)\b', caseSensitive: false);
-  static final _verifyingRegex = RegExp(
-      r'\b(verif\w*|check\w*|checking[_\s]resume[_\s]data|checking[_\s]files)\b',
-      caseSensitive: false);
-  static final _mergingRegex =
-      RegExp(r'\b(merg\w*|mux\w*)\b', caseSensitive: false);
-  static final _seedingRegex = RegExp(r'\b(seed\w*)\b', caseSensitive: false);
-  static final _completedRegex =
-      RegExp(r'\b(completed|done|finished)\b', caseSensitive: false);
-  static final _pausedRegex =
-      RegExp(r'\b(paused|stopped)\b', caseSensitive: false);
-  static final _stalledRegex = RegExp(r'\b(stall\w*)\b', caseSensitive: false);
-  static final _failedRegex =
-      RegExp(r'\b(error|fail\w*)\b', caseSensitive: false);
-  static final _updatingLinksRegex = RegExp(
-    r'\b(?:updating\s+(?:links?|urls?|mirrors?)|refresh(?:ing)?\s+(?:links?|urls?|mirrors?))\b',
-    caseSensitive: false,
-  );
-  static final _retryingRegex = RegExp(r'\bretry\w*\b', caseSensitive: false);
-  static final _resumingRegex = RegExp(r'\bresum\w*\b', caseSensitive: false);
-  static final _startingRegex = RegExp(
-      r'\b(start\w*|prepar\w*|waiting for counterpart\w*)\b',
-      caseSensitive: false);
 
   /// Resolves the canonical [CycleState] given [statusMessage], cancellation flag,
   /// and whether the download is a BitTorrent transfer.
@@ -45,45 +18,54 @@ class CycleStateResolver {
     final sm = statusMessage?.trim() ?? '';
     if (sm.isEmpty) return CycleState.downloading;
 
-    if (_metadataRegex.hasMatch(sm)) {
+    final s = sm.toLowerCase();
+
+    // Fast static keyword checks in exact precedence order
+    if (s.contains('metadata')) {
       return CycleState.fetchingMetadata;
     }
-    if (_allocatingRegex.hasMatch(sm)) {
+    if (s.contains('allocat')) {
       return CycleState.allocating;
     }
-    if (_verifyingRegex.hasMatch(sm)) {
+    if (s.contains('verif') || s.contains('check')) {
       return CycleState.verifying;
     }
-    if (_mergingRegex.hasMatch(sm)) {
+    if (s.contains('merg') || s.contains('mux')) {
       return CycleState.merging;
     }
-    if (_seedingRegex.hasMatch(sm)) {
+    if (s.contains('seed')) {
       return CycleState.seeding;
     }
-    if (_updatingLinksRegex.hasMatch(sm)) {
+    if ((s.contains('updating') || s.contains('refresh')) &&
+        (s.contains('link') || s.contains('url') || s.contains('mirror'))) {
       return CycleState.updatingLinks;
     }
-    if (_retryingRegex.hasMatch(sm)) {
+    if (s.contains('retry')) {
       return CycleState.retrying;
     }
-    if (_resumingRegex.hasMatch(sm)) {
+    if (s.contains('resum')) {
       return CycleState.resuming;
     }
-    if (_startingRegex.hasMatch(sm)) {
+    if (s.contains('start') ||
+        s.contains('prepar') ||
+        s.contains('waiting for counterpart')) {
       return CycleState.starting;
     }
-    if (_completedRegex.hasMatch(sm)) {
+    if (s.contains('completed') ||
+        s.contains('done') ||
+        s.contains('finished')) {
       return CycleState.completed;
     }
-    if (_pausedRegex.hasMatch(sm)) {
+    if (s.contains('paused') || s.contains('stopped')) {
       return CycleState.paused;
     }
-    if (_stalledRegex.hasMatch(sm)) {
+    if (s.contains('stall')) {
       return CycleState.stalled;
     }
-    if (_failedRegex.hasMatch(sm)) {
+    if (s.contains('error') || s.contains('fail')) {
       return CycleState.failed;
     }
+
     return CycleState.downloading;
   }
 }

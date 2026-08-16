@@ -302,8 +302,9 @@ class DownloadProvider extends ChangeNotifier
         try {
           notifyListeners();
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
     }
   }
@@ -483,7 +484,8 @@ class DownloadProvider extends ChangeNotifier
                   errorMessage: 'Torrent engine error: ${info.stateLabel}',
                   speed: 0,
                   clearEta: true,
-                )).catchError((e) => _log.warning('Failed to set task state from torrent error', e)));
+                )).catchError((e) => _log.warning(
+                    'Failed to set task state from torrent error', e)));
               }
             }
           }
@@ -542,7 +544,8 @@ class DownloadProvider extends ChangeNotifier
     for (final entry in _uploadSpeedHistories.entries) {
       final task = _findTask(entry.key);
       final isSeeding = task?.isTorrent == true && task?.seedingEnabled == true;
-      final maxLen = (task?.status == DownloadStatus.downloading || isSeeding) ? 20 : 5;
+      final maxLen =
+          (task?.status == DownloadStatus.downloading || isSeeding) ? 20 : 5;
       while (entry.value.length > maxLen) {
         entry.value.removeFirst();
       }
@@ -581,6 +584,10 @@ class DownloadProvider extends ChangeNotifier
     _progressNotifiers.remove(taskId)?.dispose();
     _speedNotifiers.remove(taskId)?.dispose();
   }
+
+  @visibleForTesting
+  int get taskNotifierCount =>
+      _progressNotifiers.length + _speedNotifiers.length;
 
   void _pushTick(String taskId, double progress, double speed) {
     if (!DownloadEngine.appInForeground || PowerMonitor.screenOff) {
@@ -968,8 +975,9 @@ class DownloadProvider extends ChangeNotifier
             final f = File(p);
             if (await f.exists()) await f.delete();
           } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadProvider')
+                .warning('Operation failed', e, st);
+          }
         }
         return task.copyWith(audioProgress: 0.0, audioDownloadedBytes: 0);
       }
@@ -978,8 +986,9 @@ class DownloadProvider extends ChangeNotifier
       try {
         await itagFile.writeAsString(oldItag);
       } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('DownloadProvider')
+            .warning('Operation failed', e, st);
+      }
     }
 
     if (await audioStateFile.exists()) {
@@ -991,8 +1000,9 @@ class DownloadProvider extends ChangeNotifier
         try {
           await audioStateFile.delete();
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
     }
 
@@ -1001,8 +1011,9 @@ class DownloadProvider extends ChangeNotifier
         try {
           await audioStateFile.delete();
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
       return task.copyWith(audioProgress: 0.0, audioDownloadedBytes: 0);
     }
@@ -1016,8 +1027,9 @@ class DownloadProvider extends ChangeNotifier
           audioThreads = decoded['threadCount'] as int;
         }
       } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('DownloadProvider')
+            .warning('Operation failed', e, st);
+      }
     }
     final audioBytes = await actualDownloadedBytes(
       audioFile.path,
@@ -1108,8 +1120,9 @@ class DownloadProvider extends ChangeNotifier
               videoBytes = await partFile.length();
             }
           } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadProvider')
+                .warning('Operation failed', e, st);
+          }
         }
       } else {
         // Multi-threaded: partial file may be pre-allocated to full size.
@@ -1284,8 +1297,8 @@ class DownloadProvider extends ChangeNotifier
             task.torrentFiles != null &&
             task.torrentFiles!.isNotEmpty &&
             task.downloadedBytes > 0) {
-          final hasZeroFiles = task.torrentFiles!.every((f) =>
-              ((f['downloadedBytes'] as num?)?.toInt() ?? 0) == 0);
+          final hasZeroFiles = task.torrentFiles!.every(
+              (f) => ((f['downloadedBytes'] as num?)?.toInt() ?? 0) == 0);
           if (hasZeroFiles) {
             final modifiableFiles = List<Map<String, dynamic>>.from(
                 task.torrentFiles!.map((f) => Map<String, dynamic>.from(f)));
@@ -1375,10 +1388,10 @@ class DownloadProvider extends ChangeNotifier
               'iOS: $activeDownloads active download(s) scheduled with native BGTaskScheduler / URLSession.',
             );
             unawaited(
-      BackgroundService.start().catchError((e) {
-        _log.warning('BackgroundService.start failed: $e');
-      }),
-    );
+              BackgroundService.start().catchError((e) {
+                _log.warning('BackgroundService.start failed: $e');
+              }),
+            );
           } else {
             _log.warning(
               'iOS: $activeDownloads download(s) were active but native background execution is unsupported. Pausing.',
@@ -1405,10 +1418,10 @@ class DownloadProvider extends ChangeNotifier
             task.status == DownloadStatus.completed &&
             task.seedingEnabled) {
           unawaited(
-      startSeedingTorrent(task).catchError((e) {
-        _log.warning('startSeedingTorrent failed: $e');
-      }),
-    );
+            startSeedingTorrent(task).catchError((e) {
+              _log.warning('startSeedingTorrent failed: $e');
+            }),
+          );
         }
       }
 
@@ -2001,7 +2014,8 @@ class DownloadProvider extends ChangeNotifier
     final int finalVideoStreamSize;
     if (mergedAudioUrl != null && mergedAudioUrl.isNotEmpty && audioSize > 0) {
       finalVideoStreamSize = size > 0 ? size : 0;
-      finalFileSize = size > 0 ? (size + audioSize) : (fileSize > 0 ? fileSize : 0);
+      finalFileSize =
+          size > 0 ? (size + audioSize) : (fileSize > 0 ? fileSize : 0);
     } else {
       finalVideoStreamSize = 0;
       finalFileSize = fileSize;
@@ -2138,7 +2152,8 @@ class DownloadProvider extends ChangeNotifier
   }
 
   @override
-  Future<void> pauseTask(String id, {PauseReason reason = PauseReason.userRequested}) async {
+  Future<void> pauseTask(String id,
+      {PauseReason reason = PauseReason.userRequested}) async {
     // Guard task state mutations with synchronized lock
     return _lockFor(id).synchronized(() async {
       final task = _findTask(id);
@@ -2265,7 +2280,8 @@ class DownloadProvider extends ChangeNotifier
             try {
               _cancelTokens[k]?.cancel('paused:${reason.name}');
             } catch (e, st) {
-              LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+              LoggingService.logger('DownloadProvider')
+                  .warning('Operation failed', e, st);
             }
             _cancelTokens.remove(k);
           }
@@ -2274,7 +2290,10 @@ class DownloadProvider extends ChangeNotifier
             try {
               await fut.timeout(const Duration(seconds: 3));
             } on TimeoutException catch (e, st) {
-              _log.warning('Engine future timed out on pause (3s). Force-cancelling task $id.', e, st);
+              _log.warning(
+                  'Engine future timed out on pause (3s). Force-cancelling task $id.',
+                  e,
+                  st);
               _downloadEngine.forceCancelJob(id);
               final latest = _findTask(id) ?? task;
               await _databaseService.saveTask(
@@ -2286,7 +2305,8 @@ class DownloadProvider extends ChangeNotifier
                 ),
               );
             } catch (e, st) {
-              LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+              LoggingService.logger('DownloadProvider')
+                  .warning('Operation failed', e, st);
             }
           }
 
@@ -2306,8 +2326,9 @@ class DownloadProvider extends ChangeNotifier
             final latest = _findTask(id) ?? task;
             await File('${latest.tempFilePath}.dmxstate').delete();
           } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadProvider')
+                .warning('Operation failed', e, st);
+          }
         }
       }
 
@@ -2540,8 +2561,9 @@ class DownloadProvider extends ChangeNotifier
             debugPrint('[DMX] M1: 250ms retry recovered valid .dmxstate parse');
           }
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
 
       if (!parseOk) {
@@ -2558,15 +2580,17 @@ class DownloadProvider extends ChangeNotifier
                 '[DMX] pauseTask: journal has data, preserving .dmxstate');
           }
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
 
         if (!recoveredFromJournal) {
           try {
             await stateFile.delete();
           } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadProvider')
+                .warning('Operation failed', e, st);
+          }
           debugPrint(
               '[DMX] pauseTask: deleted corrupt .dmxstate (no journal fallback)');
         }
@@ -2605,8 +2629,9 @@ class DownloadProvider extends ChangeNotifier
             audioThreads = decoded['threadCount'] as int;
           }
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
       final audioDiskBytes = await actualDownloadedBytes(
         audioPath,
@@ -2644,8 +2669,9 @@ class DownloadProvider extends ChangeNotifier
             actualAudioThreads = decoded['threadCount'] as int;
           }
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
       audioBytesOnDisk = await actualDownloadedBytes(
         audioStatePath,
@@ -2961,8 +2987,9 @@ class DownloadProvider extends ChangeNotifier
             }
           }
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
     }
 
@@ -3066,13 +3093,15 @@ class DownloadProvider extends ChangeNotifier
       // Pause every active download so state is saved cleanly.
       await pauseAllTasks();
     } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+      LoggingService.logger('DownloadProvider')
+          .warning('Operation failed', e, st);
     }
     try {
       await BackgroundService.releaseWakeLock();
       await BackgroundService.stop();
     } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
+      LoggingService.logger('DownloadProvider')
+          .warning('Operation failed', e, st);
     }
     // Give the service a moment to clean up, then hard-exit.
     await Future<void>.delayed(const Duration(milliseconds: 400));
@@ -3096,8 +3125,9 @@ class DownloadProvider extends ChangeNotifier
         try {
           _cancelTokens[k]?.cancel('cancelled');
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
         _cancelTokens.remove(k);
       }
 
@@ -3194,8 +3224,9 @@ class DownloadProvider extends ChangeNotifier
                 if (await f.exists()) await f.delete();
               }
             } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadProvider')
+                  .warning('Operation failed', e, st);
+            }
             task = task.copyWith(
               url: newUrl,
               mergedAudioUrl: newAudioUrl,
@@ -3374,8 +3405,9 @@ class DownloadProvider extends ChangeNotifier
           final f = File(path);
           if (await f.exists()) await f.delete();
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
       // Reset progress to zero locally
       task = task.copyWith(
@@ -3457,8 +3489,9 @@ class DownloadProvider extends ChangeNotifier
           final f = File(path);
           if (await f.exists()) await f.delete();
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
 
       // FIX-YT-05 / FIX-6: Only clean audio sidecars when the audio file is
@@ -3487,8 +3520,9 @@ class DownloadProvider extends ChangeNotifier
               final f = File(p);
               if (await f.exists()) await f.delete();
             } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadProvider')
+                  .warning('Operation failed', e, st);
+            }
           }
         }
       } else {
@@ -3500,8 +3534,9 @@ class DownloadProvider extends ChangeNotifier
             final f = File(p);
             if (await f.exists()) await f.delete();
           } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadProvider')
+                .warning('Operation failed', e, st);
+          }
         }
       }
 
@@ -3515,10 +3550,12 @@ class DownloadProvider extends ChangeNotifier
             TorrentService.pauseTorrent(staleTorrentId);
             TorrentService.removeTorrent(staleTorrentId, deleteFiles: false);
           } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadProvider')
+                .warning('Operation failed', e, st);
+          }
         }
-        unawaited(TorrentResumeStore.deleteResumeDataForSource(task.url).catchError((e) {
+        unawaited(TorrentResumeStore.deleteResumeDataForSource(task.url)
+            .catchError((e) {
           _log.warning('Failed to delete resume data for torrent source', e);
         }));
       }
@@ -3562,8 +3599,9 @@ class DownloadProvider extends ChangeNotifier
         try {
           await stateFile.delete();
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
         final idx = _tasks.indexWhere((t) => t.id == id);
         if (idx != -1) {
           _tasks[idx] = _tasks[idx].copyWith(
@@ -3743,8 +3781,9 @@ class DownloadProvider extends ChangeNotifier
       try {
         token.cancel('cleaned_up');
       } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+        LoggingService.logger('DownloadProvider')
+            .warning('Operation failed', e, st);
+      }
     }
     _taskLocks.remove(id);
     _lastTaskOpTimes.remove(id);
@@ -3772,6 +3811,7 @@ class DownloadProvider extends ChangeNotifier
     _needsForcedPauseOnRegister.remove(id);
     _flushingIds.remove(id);
     _activeFutures.remove(id);
+    disposeTaskNotifier(id);
     StateStore.removeTaskState(id);
     _orchestrator.cleanupTaskState(id);
   }
@@ -3793,8 +3833,9 @@ class DownloadProvider extends ChangeNotifier
         try {
           token.cancel('deleted');
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
 
       final activeFuture = _activeFutures[id];
@@ -3803,12 +3844,14 @@ class DownloadProvider extends ChangeNotifier
           await activeFuture.timeout(
             const Duration(seconds: 5),
             onTimeout: () {
-              debugPrint('[DMX] deleteTask: Future timeout for $id, proceeding');
+              debugPrint(
+                  '[DMX] deleteTask: Future timeout for $id, proceeding');
             },
           );
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
       _activeFutures.remove(id);
 
@@ -4286,8 +4329,9 @@ class DownloadProvider extends ChangeNotifier
           try {
             token.cancel('failed');
           } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadProvider')
+                .warning('Operation failed', e, st);
+          }
         }
         _cancelTokens.remove(id);
       }
@@ -4655,11 +4699,12 @@ class DownloadProvider extends ChangeNotifier
       return;
     }
 
-    final int timerIntervalSec = (DownloadEngine.isInBackground || PowerMonitor.screenOff)
-        ? 30
-        : BackgroundGate.adaptInterval(
-            const Duration(seconds: 5),
-          ).inSeconds;
+    final int timerIntervalSec =
+        (DownloadEngine.isInBackground || PowerMonitor.screenOff)
+            ? 30
+            : BackgroundGate.adaptInterval(
+                const Duration(seconds: 5),
+              ).inSeconds;
 
     _widgetTimer = Timer.periodic(Duration(seconds: timerIntervalSec), (timer) {
       if (_disposed || !BackgroundGate.shouldWriteState) {
@@ -4771,8 +4816,9 @@ class DownloadProvider extends ChangeNotifier
             continue;
           }
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
         _tasks[i] = task.copyWith(
           status: DownloadStatus.paused,
           speed: 0,
@@ -4781,7 +4827,8 @@ class DownloadProvider extends ChangeNotifier
               'Download state file was corrupted. Tap Resume to re-validate and continue.',
         );
         unawaited(_databaseService.saveTask(_tasks[i]).catchError((e) {
-          _log.warning('Failed to save task during integrity check recovery', e);
+          _log.warning(
+              'Failed to save task during integrity check recovery', e);
         }));
       }
     }
@@ -4912,8 +4959,9 @@ class DownloadProvider extends ChangeNotifier
           final f = File(p);
           if (await f.exists()) await f.delete();
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
     }
 
@@ -4934,8 +4982,9 @@ class DownloadProvider extends ChangeNotifier
             final fb = Uri.tryParse(b)?.toFilePath() ?? b;
             if (fa == fb) return true;
           } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadProvider')
+                .warning('Operation failed', e, st);
+          }
         }
         return false;
       }
@@ -5106,8 +5155,9 @@ class DownloadProvider extends ChangeNotifier
             }
           }
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
 
       if (newFileSize == null && !isRefresh) {
@@ -5266,8 +5316,9 @@ class DownloadProvider extends ChangeNotifier
                 final dec = jsonDecode(await sf.readAsString());
                 if (dec is Map) storedEtag = dec['etag'] as String?;
               } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+                LoggingService.logger('DownloadProvider')
+                    .warning('Operation failed', e, st);
+              }
             }
           }
           final etagMismatch = metadata?.etag != null &&
@@ -5328,8 +5379,9 @@ class DownloadProvider extends ChangeNotifier
               try {
                 await fut.timeout(const Duration(seconds: 3));
               } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+                LoggingService.logger('DownloadProvider')
+                    .warning('Operation failed', e, st);
+              }
             }
           }
           // Stream identity changed on refresh -> delete state and part files
@@ -5342,8 +5394,9 @@ class DownloadProvider extends ChangeNotifier
               final f = File(path);
               if (await f.exists()) await f.delete();
             } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadProvider')
+                  .warning('Operation failed', e, st);
+            }
           }
         } else {
           // Stream identity unchanged -> do NOT delete .dmxstate.
@@ -5385,8 +5438,9 @@ class DownloadProvider extends ChangeNotifier
             final f = File(path);
             if (await f.exists()) await f.delete();
           } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadProvider')
+                .warning('Operation failed', e, st);
+          }
         }
       }
 
@@ -5543,8 +5597,8 @@ class DownloadProvider extends ChangeNotifier
         final t = _findTask(taskId);
         if (t != null && !t.pausedByUser) {
           unawaited(resumeTask(taskId).catchError((e) {
-        _log.warning('Failed to resume task from YT throttle refresh', e);
-      }));
+            _log.warning('Failed to resume task from YT throttle refresh', e);
+          }));
         }
       }
       rethrow;
@@ -5611,8 +5665,9 @@ class DownloadProvider extends ChangeNotifier
               final dec = jsonDecode(await sf.readAsString());
               if (dec is Map) storedEtag = dec['etag'] as String?;
             } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+              LoggingService.logger('DownloadProvider')
+                  .warning('Operation failed', e, st);
+            }
           }
         }
         // FIX-C3: If Content-Length differs by >1% OR if ETag present and differs from stored etag, call startOverTask
@@ -5670,8 +5725,9 @@ class DownloadProvider extends ChangeNotifier
             final f = File(p);
             if (await f.exists()) await f.delete();
           } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadProvider')
+                .warning('Operation failed', e, st);
+          }
         }
         final fresh = _findTask(id);
         if (fresh != null) {
@@ -5745,8 +5801,7 @@ class DownloadProvider extends ChangeNotifier
     if (torrentId != null) {
       TorrentService.removeTorrent(torrentId, deleteFiles: false);
       _torrentIds.remove(id);
-      unawaited(TorrentResumeStore.delete(
-          torrentId).catchError((e) {
+      unawaited(TorrentResumeStore.delete(torrentId).catchError((e) {
         _log.warning('Failed to delete TorrentResumeStore entry', e);
       })); // FIX-9: Clear TorrentResumeStore
     }
@@ -5762,8 +5817,9 @@ class DownloadProvider extends ChangeNotifier
           final f = File(p);
           if (await f.exists()) await f.delete();
         } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
       }
     }
 
@@ -5802,8 +5858,9 @@ class DownloadProvider extends ChangeNotifier
             final f = File(path);
             if (await f.exists()) await f.delete();
           } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed', e, st);
-    }
+            LoggingService.logger('DownloadProvider')
+                .warning('Operation failed', e, st);
+          }
         }
       } catch (e) {
         debugPrint('Failed to delete temp files: $e');
@@ -5933,14 +5990,28 @@ class DownloadProvider extends ChangeNotifier
 
     if (pendingSaves.isNotEmpty) {
       Future.wait(pendingSaves).then(
-        (_) => unawaited(_downloadEngine.close().catchError((e) => _log.warning('Failed to close engine after wait', e))),
-        onError: (_) => unawaited(_downloadEngine.close().catchError((e) => _log.warning('Failed to close engine on error', e))),
+        (_) => unawaited(_downloadEngine.close().catchError(
+            (e) => _log.warning('Failed to close engine after wait', e))),
+        onError: (_) => unawaited(_downloadEngine.close().catchError(
+            (e) => _log.warning('Failed to close engine on error', e))),
       );
     } else {
-      unawaited(_downloadEngine.close().catchError((e) => _log.warning('Failed to close engine', e)));
+      unawaited(_downloadEngine
+          .close()
+          .catchError((e) => _log.warning('Failed to close engine', e)));
     }
 
     _latestTorrentStats.clear();
+    for (final notifier in _progressNotifiers.values) {
+      notifier.dispose();
+    }
+    _progressNotifiers.clear();
+    for (final notifier in _speedNotifiers.values) {
+      notifier.dispose();
+    }
+    _speedNotifiers.clear();
+    progressRevision.dispose();
+    lastSaveError.dispose();
     super.dispose();
   }
 
@@ -6090,7 +6161,8 @@ class DownloadProvider extends ChangeNotifier
 
       return false;
     } catch (e, st) {
-      LoggingService.logger('DownloadProvider').warning('Operation failed with fallback', e, st);
+      LoggingService.logger('DownloadProvider')
+          .warning('Operation failed with fallback', e, st);
       return false;
     }
   }

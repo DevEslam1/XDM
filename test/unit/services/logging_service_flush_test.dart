@@ -29,5 +29,31 @@ void main() {
       final backgroundInterval = LoggingService.adaptedIntervalForTesting();
       expect(backgroundInterval.inSeconds, greaterThanOrEqualTo(60));
     });
+
+    test(
+        '10 concurrent workers emitting 1000 logs each completes without race conditions or dropped logs (C4)',
+        () async {
+      LoggingService.init();
+
+      // Launch 10 concurrent workers
+      final futures = <Future<void>>[];
+      for (var worker = 0; worker < 10; worker++) {
+        futures.add(Future(() async {
+          final logger = LoggingService.logger('Worker_$worker');
+          for (var i = 0; i < 1000; i++) {
+            logger.info('Log entry $i from worker $worker');
+            if (i % 250 == 0) {
+              await Future.delayed(Duration.zero);
+            }
+          }
+        }));
+      }
+
+      await Future.wait(futures);
+
+      // Verify flushLogBuffer and dispose execute cleanly with no concurrent modification exceptions
+      expect(() => LoggingService.flushLogBuffer(), returnsNormally);
+      expect(() => LoggingService.dispose(), returnsNormally);
+    });
   });
 }

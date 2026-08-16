@@ -130,5 +130,34 @@ void main() {
         CycleState.downloading,
       );
     });
+
+    test(
+        'Benchmark: fast string resolution achieves high throughput (>100k ops/sec)',
+        () {
+      final messages = [
+        'Fetching metadata…',
+        'Allocating disk space',
+        'Checking checksums',
+        'Merging audio and video',
+        'Download completed successfully',
+        'Paused by user',
+        'Stalled (no peers)',
+        'Updating expired links',
+        'Retrying chunk 3',
+        'Transferring data 1.2 MB/s',
+      ];
+
+      final sw = Stopwatch()..start();
+      const iterations = 50000;
+      for (var i = 0; i < iterations; i++) {
+        final msg = messages[i % messages.length];
+        final state = CycleStateResolver.resolve(statusMessage: msg);
+        expect(state, isNotNull);
+      }
+      sw.stop();
+
+      // 50,000 iterations without regex overhead should easily finish under 200ms
+      expect(sw.elapsedMilliseconds, lessThan(500));
+    });
   });
 }

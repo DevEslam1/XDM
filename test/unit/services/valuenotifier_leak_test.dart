@@ -1,3 +1,4 @@
+import 'package:dmx/features/downloads/provider/download_progress_tracker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -40,6 +41,31 @@ void main() {
 
       tab1.dispose();
       tab2.dispose();
+    });
+
+    test(
+        'Adding 50 downloads and removing all 50 returns notifier count to 0 (R3)',
+        () {
+      final tracker = DownloadProgressTracker();
+      expect(tracker.notifierCount, equals(0));
+
+      // Add 50 download tasks
+      for (var i = 0; i < 50; i++) {
+        final taskId = 'task_$i';
+        tracker.getProgress(taskId).value = 0.5;
+        tracker.getSpeed(taskId).value = 1024.0;
+      }
+      expect(tracker.notifierCount, equals(100)); // 50 progress + 50 speed
+
+      // Remove all 50 tasks
+      for (var i = 0; i < 50; i++) {
+        final taskId = 'task_$i';
+        tracker.disposeTask(taskId);
+      }
+
+      // Must return cleanly to baseline 0
+      expect(tracker.notifierCount, equals(0));
+      tracker.dispose();
     });
   });
 }

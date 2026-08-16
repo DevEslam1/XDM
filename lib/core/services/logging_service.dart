@@ -6,12 +6,14 @@ import 'package:dmx/core/services/background_gate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart' as pkg_logging;
 import 'package:logging/logging.dart' show Level;
+import 'package:synchronized/synchronized.dart';
 
 /// Centralized application logger with console and optional rolling file logging.
 class LoggingService {
   static bool _initialized = false;
   static File? _logFile;
   static IOSink? _fileSink;
+  static final Lock _bufferLock = Lock();
 
   /// Call once at app startup before any other logging.
   static void init({Level? overrideLevel, Directory? logDir}) {
@@ -61,33 +63,40 @@ class LoggingService {
   static Duration adaptedIntervalForTesting() => _adaptedInterval();
 
   @visibleForTesting
-  static void bufferReleaseLogForTesting(String entry) => _bufferReleaseLog(entry);
+  static void bufferReleaseLogForTesting(String entry) =>
+      _bufferReleaseLog(entry);
 
   static void _onFlush() {
     flushLogBuffer();
-    if (_releaseLogBuffer.isNotEmpty) {
-      _releaseFlushTimer = Timer(_adaptedInterval(), _onFlush);
-    } else {
-      _releaseFlushTimer = null;
-    }
+    _bufferLock.synchronized(() {
+      if (_releaseLogBuffer.isNotEmpty) {
+        _releaseFlushTimer = Timer(_adaptedInterval(), _onFlush);
+      } else {
+        _releaseFlushTimer = null;
+      }
+    });
   }
 
   static void _bufferReleaseLog(String entry) {
-    _releaseLogBuffer.add(entry);
-    if (_releaseLogBuffer.length >= _maxReleaseBufferSize) {
-      flushLogBuffer();
-      _releaseFlushTimer?.cancel();
-      _releaseFlushTimer = null;
-    } else {
-      _releaseFlushTimer ??= Timer(_adaptedInterval(), _onFlush);
-    }
+    _bufferLock.synchronized(() {
+      _releaseLogBuffer.add(entry);
+      if (_releaseLogBuffer.length >= _maxReleaseBufferSize) {
+        flushLogBuffer();
+        _releaseFlushTimer?.cancel();
+        _releaseFlushTimer = null;
+      } else {
+        _releaseFlushTimer ??= Timer(_adaptedInterval(), _onFlush);
+      }
+    });
   }
 
   static void flushLogBuffer() {
-    if (_releaseLogBuffer.isEmpty) return;
-    final toWrite = _releaseLogBuffer.join('');
-    _releaseLogBuffer.clear();
-    _writeToFile(toWrite);
+    _bufferLock.synchronized(() {
+      if (_releaseLogBuffer.isEmpty) return;
+      final toWrite = _releaseLogBuffer.join('');
+      _releaseLogBuffer.clear();
+      _writeToFile(toWrite);
+    });
   }
 
   static void _initFileLogging(Directory dir) {
@@ -97,7 +106,8 @@ class LoggingService {
       _rotateLogsIfNeeded(dir);
       _fileSink = _logFile!.openWrite(mode: FileMode.append);
     } catch (e, st) {
-      LoggingService.logger('LoggingService').warning('Operation failed', e, st);
+      LoggingService.logger('LoggingService')
+          .warning('Operation failed', e, st);
     }
   }
 
@@ -114,7 +124,8 @@ class LoggingService {
         }
       }
     } catch (e, st) {
-      LoggingService.logger('LoggingService').warning('Operation failed', e, st);
+      LoggingService.logger('LoggingService')
+          .warning('Operation failed', e, st);
     }
   }
 
@@ -122,7 +133,8 @@ class LoggingService {
     try {
       _fileSink?.write(text);
     } catch (e, st) {
-      LoggingService.logger('LoggingService').warning('Operation failed', e, st);
+      LoggingService.logger('LoggingService')
+          .warning('Operation failed', e, st);
     }
   }
 
@@ -186,7 +198,8 @@ class LoggingService {
       _fileSink?.close();
       _fileSink = null;
     } catch (e, st) {
-      LoggingService.logger('LoggingService').warning('Operation failed', e, st);
+      LoggingService.logger('LoggingService')
+          .warning('Operation failed', e, st);
     }
     _initialized = false;
   }
