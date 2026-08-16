@@ -90,7 +90,8 @@ class DatabaseService {
     _scheduleMaintenanceTimer();
     _throttleFactorListener = () => _scheduleMaintenanceTimer();
     PowerMonitor.throttleFactorNotifier.addListener(_throttleFactorListener!);
-    _screenStateSub = PowerMonitor.screenStateStream.listen((_) => _scheduleMaintenanceTimer());
+    _screenStateSub = PowerMonitor.screenStateStream
+        .listen((_) => _scheduleMaintenanceTimer());
   }
 
   StreamSubscription<bool>? _screenStateSub;
@@ -121,7 +122,8 @@ class DatabaseService {
   /// - Every 12th cycle (6h): PRAGMA optimize, incremental_vacuum, foreign_key_check (when idle)
   Future<void> _runPeriodicMaintenance() async {
     final activeRows = await _db
-        .customSelect("SELECT COUNT(*) as cnt FROM download_tasks WHERE status = 'downloading'")
+        .customSelect(
+            "SELECT COUNT(*) as cnt FROM download_tasks WHERE status = 'downloading'")
         .get();
     final hasActiveDownloads = (activeRows.first.read<int>('cnt')) > 0;
 
@@ -129,9 +131,11 @@ class DatabaseService {
     int logPages = 0;
     try {
       if (hasActiveDownloads) {
-        _log.fine('[DatabaseService] Active downloads in progress; skipping periodic wal_checkpoint');
+        _log.fine(
+            '[DatabaseService] Active downloads in progress; skipping periodic wal_checkpoint');
       } else {
-        final walRows = await _db.customSelect('PRAGMA wal_checkpoint(RESTART)').get();
+        final walRows =
+            await _db.customSelect('PRAGMA wal_checkpoint(RESTART)').get();
         if (walRows.isNotEmpty) {
           final row = walRows.first.data;
           final log = row['log'] ?? 0;
@@ -145,8 +149,7 @@ class DatabaseService {
       }
       swCheckpoint.stop();
       if (swCheckpoint.elapsedMilliseconds > 500) {
-        _log.info(
-            'wal_checkpoint took ${swCheckpoint.elapsedMilliseconds}ms');
+        _log.info('wal_checkpoint took ${swCheckpoint.elapsedMilliseconds}ms');
       }
     } catch (e) {
       _log.warning('wal_checkpoint failed', e);
@@ -161,7 +164,8 @@ class DatabaseService {
           await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
         }
       } catch (e, st) {
-        LoggingService.logger('DatabaseService').warning('Operation failed', e, st);
+        LoggingService.logger('DatabaseService')
+            .warning('Operation failed', e, st);
       }
     }
     if (_maintenanceRuns % 12 == 0 && !hasActiveDownloads) {
@@ -171,7 +175,8 @@ class DatabaseService {
         try {
           await _db.customStatement('PRAGMA foreign_key_check');
         } catch (e, st) {
-          LoggingService.logger('DatabaseService').warning('PRAGMA foreign_key_check failed', e, st);
+          LoggingService.logger('DatabaseService')
+              .warning('PRAGMA foreign_key_check failed', e, st);
         }
         swVacuum.stop();
         if (swVacuum.elapsedMilliseconds > 500) {
@@ -179,7 +184,8 @@ class DatabaseService {
               'incremental_vacuum took ${swVacuum.elapsedMilliseconds}ms');
         }
       } catch (e, st) {
-        LoggingService.logger('DatabaseService').warning('Periodic vacuum/fk check failed', e, st);
+        LoggingService.logger('DatabaseService')
+            .warning('Periodic vacuum/fk check failed', e, st);
       }
     }
   }
@@ -282,12 +288,10 @@ class DatabaseService {
       },
     );
 
-    final rawCycleState = row.cycleState != null
-        ? CycleState.fromName(row.cycleState)
-        : null;
-    final rawPauseReason = row.pauseReason != null
-        ? PauseReason.fromName(row.pauseReason)
-        : null;
+    final rawCycleState =
+        row.cycleState != null ? CycleState.fromName(row.cycleState) : null;
+    final rawPauseReason =
+        row.pauseReason != null ? PauseReason.fromName(row.pauseReason) : null;
 
     // State recovery: include allocating and stalled transient states on restart
     final isInterruptedActive = parsedStatus == DownloadStatus.downloading ||
@@ -377,8 +381,8 @@ class DatabaseService {
       totalFileBytes: (row.torrentFiles != null && row.torrentFiles!.isNotEmpty)
           ? row.torrentFiles!
               .where((f) => (f['selected'] as bool?) ?? true)
-              .fold<int>(0,
-                  (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0))
+              .fold<int>(
+                  0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0))
           : null,
       downloadedFileBytes:
           (row.torrentFiles != null && row.torrentFiles!.isNotEmpty)
@@ -443,7 +447,9 @@ class DatabaseService {
     }
     if (search != null && search.trim().isNotEmpty) {
       final term = '%${search.trim()}%';
-      query = query..where(_db.downloadTasks.fileName.like(term) | _db.downloadTasks.url.like(term));
+      query = query
+        ..where(_db.downloadTasks.fileName.like(term) |
+            _db.downloadTasks.url.like(term));
     }
     final result = await query.getSingle();
     return result.read(countExp) ?? 0;
@@ -466,12 +472,16 @@ class DatabaseService {
   int get pendingProgressSavesCount => _pendingProgressSaves.length;
 
   Future<void> saveTaskDebounced(DownloadTask task) async {
+    bool shouldFlushImmediately = false;
     await _pendingSavesLock.synchronized(() {
       _pendingProgressSaves[task.id] = task;
+      // Strict threshold: if pending items reach 25, force an immediate flush bypassing the timer
+      if (_pendingProgressSaves.length >= 25) {
+        shouldFlushImmediately = true;
+      }
     });
 
-    // Flush immediately if pending saves reach batch threshold (10)
-    if (_pendingProgressSaves.length >= 10) {
+    if (shouldFlushImmediately) {
       await flushPendingSaves();
       return;
     }
@@ -480,13 +490,17 @@ class DatabaseService {
         DownloadEngine.isInBackground ||
         PowerMonitor.screenOff;
     final interval = isBackground
-        ? const Duration(seconds: 600) // 600s in background
+        ? const Duration(seconds: 120) // 120s in background
         : const Duration(seconds: 30); // 30s in foreground
 
     _scheduleFlush(interval);
   }
 
   void _scheduleFlush(Duration interval) {
+    // Avoid resetting the timer on rapid debounced calls to prevent DB queue starvation
+    if (_dbBatchTimer != null && _dbBatchTimer!.isActive) {
+      return;
+    }
     _dbBatchTimer?.cancel();
     _dbBatchTimer = Timer(interval, flushPendingSaves);
   }
@@ -552,7 +566,8 @@ class DatabaseService {
           rethrow;
         }
         final delayMs = 100 * (1 << (attempt - 1));
-        _log.warning('saveTask failed due to lock/busy, retrying in ${delayMs}ms... Error: $e');
+        _log.warning(
+            'saveTask failed due to lock/busy, retrying in ${delayMs}ms... Error: $e');
         await Future.delayed(Duration(milliseconds: delayMs));
       }
     }
@@ -561,16 +576,35 @@ class DatabaseService {
   Future<void> saveTasks(Iterable<DownloadTask> tasks) async {
     final comps = tasks.map(_taskToCompanion).toList();
     if (comps.isEmpty) return;
-    await _db.transaction(() async {
-      await _db.batch(
-        (batch) => batch.insertAll(
-          _db.downloadTasks,
-          comps,
-          mode: drift.InsertMode.insertOrReplace,
-        ),
-      );
-    });
+    try {
+      await _db.transaction(() async {
+        await _db.batch(
+          (batch) => batch.insertAll(
+            _db.downloadTasks,
+            comps,
+            mode: drift.InsertMode.insertOrReplace,
+          ),
+        );
+      });
+    } catch (e, st) {
+      _log.warning(
+          'saveTasks batch failed, falling back to per-task upsert: $e', e, st);
+      for (final comp in comps) {
+        try {
+          await _db.into(_db.downloadTasks).insertOnConflictUpdate(comp);
+        } catch (inner, innerSt) {
+          _log.severe(
+              'Per-task upsert fallback failed for ${comp.id.value}: $inner',
+              inner,
+              innerSt);
+        }
+      }
+    }
   }
+
+  /// Batch upserts tasks, falling back to primary key conflict resolution on collision.
+  Future<void> batchUpsertTasks(Iterable<DownloadTask> tasks) =>
+      saveTasks(tasks);
 
   Future<void> deleteTask(String id) {
     return (_db.delete(_db.downloadTasks)..where((t) => t.id.equals(id))).go();
@@ -907,7 +941,8 @@ class DatabaseService {
     await flushPendingHistory();
 
     if (_throttleFactorListener != null) {
-      PowerMonitor.throttleFactorNotifier.removeListener(_throttleFactorListener!);
+      PowerMonitor.throttleFactorNotifier
+          .removeListener(_throttleFactorListener!);
       _throttleFactorListener = null;
     }
     _screenStateSub?.cancel();

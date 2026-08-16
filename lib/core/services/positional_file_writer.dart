@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:logging/logging.dart';
 import 'package:synchronized/synchronized.dart';
 import 'download_engine.dart';
+import 'service_registry.dart';
 
 final _log = Logger('PositionalFileWriter');
 
@@ -44,21 +47,33 @@ class _ChunkBuffer {
 }
 
 /// Random-access writer for chunked downloads with per-chunk handles and write buffers.
-class PositionalFileWriter {
+class PositionalFileWriter
+    implements DisposableService, MemoryPressureListener {
   PositionalFileWriter._({
     required this.path,
     required this.totalSize,
     required this.threadCount,
     int? bufferSize,
+    int? maxPendingBytes,
   })  : _bufferSize = bufferSize ?? 256 * 1024,
-        _highWater = List<int>.filled(threadCount < 1 ? 1 : threadCount, 0);
+        maxPendingBytes = maxPendingBytes ?? defaultMaxPendingBytes,
+        _highWater = List<int>.filled(threadCount < 1 ? 1 : threadCount, 0) {
+    ServiceRegistry.registerMemoryPressureListener(this);
+  }
+
+  static const int defaultMaxPendingBytes = 8 * 1024 * 1024; // 8MB
 
   final String path;
   final int totalSize;
   final int threadCount;
+  final int maxPendingBytes;
   int _bufferSize;
+  int _pendingBytes = 0;
   final Lock _metaLock = Lock();
   final List<int> _highWater;
+
+  @visibleForTesting
+  int get pendingBytes => _pendingBytes;
 
   void setBufferSize(int newSize) {
     if (newSize > 0) {
@@ -76,6 +91,7 @@ class PositionalFileWriter {
     required int totalSize,
     required int threadCount,
     int? bufferSize,
+    int? maxPendingBytes,
   }) async {
     try {
       final file = File(path);
@@ -91,6 +107,7 @@ class PositionalFileWriter {
         totalSize: totalSize,
         threadCount: threadCount,
         bufferSize: bufferSize,
+        maxPendingBytes: maxPendingBytes,
       );
       return writer;
     } catch (e) {
@@ -103,6 +120,7 @@ class PositionalFileWriter {
     required int threadCount,
     int? totalSize,
     int? bufferSize,
+    int? maxPendingBytes,
   }) async {
     try {
       final file = File(path);
@@ -132,6 +150,7 @@ class PositionalFileWriter {
         totalSize: totalSize ?? 0,
         threadCount: threadCount,
         bufferSize: bufferSize,
+        maxPendingBytes: maxPendingBytes,
       );
     } on PositionalFileWriterException {
       rethrow;
@@ -175,6 +194,14 @@ class PositionalFileWriter {
           'len=${data.length} total=$totalSize');
     }
 
+    // Bounded write buffer: drain when pending bytes exceed maxPendingBytes
+    while (_pendingBytes + data.length > maxPendingBytes && !_closed) {
+      await flushBuffers();
+      if (_pendingBytes + data.length > maxPendingBytes) {
+        await Future.delayed(const Duration(milliseconds: 5));
+      }
+    }
+
     final key = threadIndex < 0 ? 0 : threadIndex;
     final raf = await _getHandle(key);
     final handleLock = _handleLocks[key]!;
@@ -191,6 +218,7 @@ class PositionalFileWriter {
         }
 
         buffer.add(absolutePosition, data);
+        _pendingBytes += data.length;
         _bytesSinceLastFlush += data.length;
 
         if (buffer.length >= _bufferSize) {
@@ -217,6 +245,7 @@ class PositionalFileWriter {
     if (buffer.isEmpty) return;
     final pos = buffer.startPos;
     final bytes = buffer.takeBytes();
+    _pendingBytes = math.max(0, _pendingBytes - bytes.length);
     try {
       await raf.setPosition(pos);
       await raf.writeFrom(bytes);
@@ -274,7 +303,8 @@ class PositionalFileWriter {
 
   DateTime _lastPacedFlush = DateTime.fromMillisecondsSinceEpoch(0);
   int _bytesSinceLastFlush = 0;
-  static const Duration minFlushInterval = Duration(milliseconds: 2000); // was 500ms
+  static const Duration minFlushInterval =
+      Duration(milliseconds: 2000); // was 500ms
   static const int flushByteThreshold = 4 * 1024 * 1024; // was 1MB
 
   /// Paced flush: flushes only if 500ms has elapsed or 1MB written since last flush (F-01/F-02).
@@ -340,7 +370,18 @@ class PositionalFileWriter {
 
   Future<int> fileSize() => length();
 
+  @override
+  void onMemoryPressure() {
+    if (!_closed) {
+      unawaited(flushBuffers());
+    }
+  }
+
+  @override
+  Future<void> dispose() => close();
+
   Future<void> close() async {
+    ServiceRegistry.unregisterMemoryPressureListener(this);
     await _metaLock.synchronized(() async {
       if (_closed) return;
       try {
@@ -385,6 +426,7 @@ class PositionalFileWriter {
         _handles.clear();
         _handleLocks.clear();
         _buffers.clear();
+        _pendingBytes = 0;
       }
     });
   }
