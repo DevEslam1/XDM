@@ -64,5 +64,31 @@ void main() {
       job.requestCancel();
       receivePort.close();
     });
+
+    test('throttledSaveAndReport skips work while a state save is pending', () async {
+      final receivePort = ReceivePort();
+      const cmd = DownloadCommand(
+        taskId: 'test-throttle-skip',
+        url: 'https://example.com/test.bin',
+        punyUrl: 'https://example.com/test.bin',
+        tempFilePath: 'test.tmp',
+        localFilePath: 'test.bin',
+        threadCount: 1,
+        knownFileSize: 1000,
+        supportsResume: true,
+      );
+
+      final job = HttpTransferJob(cmd, receivePort.sendPort);
+
+      // With a save pending, the call must return immediately without
+      // touching _state (which is null here) — proving the skip guard runs
+      // before any state access.
+      job.stateSavePendingForTesting = true;
+      await job.throttledSaveAndReportForTesting();
+      expect(job.stateSavePendingForTesting, isTrue);
+
+      job.requestCancel();
+      receivePort.close();
+    });
   });
 }

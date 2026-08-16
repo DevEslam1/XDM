@@ -118,6 +118,16 @@ class HttpTransferJob {
   List<Timer> get pendingDelayTimersForTesting => _pendingTimers.values.toList();
 
   @visibleForTesting
+  bool get stateSavePendingForTesting => _stateSavePending;
+
+  @visibleForTesting
+  set stateSavePendingForTesting(bool value) => _stateSavePending = value;
+
+  @visibleForTesting
+  Future<void> throttledSaveAndReportForTesting() =>
+      _throttledSaveAndReport(null);
+
+  @visibleForTesting
   Future<void> cancellableDelay(Duration duration) async {
     if (_cancelRequested || _cancelToken.isCancelled) return;
 
@@ -1484,6 +1494,12 @@ class HttpTransferJob {
     PositionalFileWriter? writer, {
     Future<void> Function()? preSaveFlush,
   }) async {
+    // FIX-P1-07: A state save is already queued — skip the whole throttled
+    // save/report pass (including the chunk-fingerprint fold) so a high
+    // progress-event rate cannot pile up duplicate work. The queued save
+    // flushes the latest state shortly.
+    if (_stateSavePending) return;
+
     final nowMs = _stopwatch.elapsedMilliseconds;
     final st = _state!;
 
