@@ -23,6 +23,7 @@ class DmxBackdropFilter extends StatefulWidget {
   final Widget child;
   final bool forceSolid;
   final bool? enableBlur;
+  final bool enabled;
 
   const DmxBackdropFilter({
     super.key,
@@ -31,6 +32,7 @@ class DmxBackdropFilter extends StatefulWidget {
     required this.child,
     this.forceSolid = false,
     this.enableBlur,
+    this.enabled = true,
   });
 
   static int _activeCount = 0;
@@ -93,6 +95,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
     final isBatterySaver =
         PowerMonitor.batterySaverMode != BatterySaverMode.off;
     if (!kIsWeb &&
+        widget.enabled &&
         !DmxBackdropFilter.disabled &&
         !widget.forceSolid &&
         !isBatterySaver &&
@@ -127,6 +130,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
     final isHighContrast = HighContrastDetector.isActive(context);
     if (_allocated &&
         (kIsWeb ||
+            !widget.enabled ||
             DmxBackdropFilter.disabled ||
             isBatterySaver ||
             !blurEnabled ||
@@ -139,6 +143,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
       _allocated = false;
     } else if (!_allocated &&
         !kIsWeb &&
+        widget.enabled &&
         !DmxBackdropFilter.disabled &&
         !isBatterySaver &&
         blurEnabled &&
@@ -155,11 +160,16 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
     final blurEnabled = widget.enableBlur ?? BackgroundGate.shouldAnimate;
     final isBatterySaver =
         PowerMonitor.batterySaverMode != BatterySaverMode.off;
+    final isAggressiveSaver =
+        PowerMonitor.batterySaverMode == BatterySaverMode.aggressive;
     final isHighContrast = HighContrastDetector.isActive(context);
+
     if (kIsWeb ||
+        !widget.enabled ||
         DmxBackdropFilter.disabled ||
         _isLowEndDevice ||
         isBatterySaver ||
+        isAggressiveSaver ||
         !blurEnabled ||
         isHighContrast ||
         widget.forceSolid ||
@@ -168,11 +178,9 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
         !BackgroundGate.allowHeavyOps ||
         !_allocated) {
       return RepaintBoundary(
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.85),
-          ),
-          child: widget.child,
+        child: ColoredBox(
+          color: Colors.black.withValues(alpha: 0.85),
+          child: RepaintBoundary(child: widget.child),
         ),
       );
     }
@@ -197,9 +205,9 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
     }
     if (reduceVisuals || classicUi) {
       return RepaintBoundary(
-        child: Container(
+        child: ColoredBox(
           color: Colors.black.withValues(alpha: 0.35),
-          child: widget.child,
+          child: RepaintBoundary(child: widget.child),
         ),
       );
     }
@@ -221,7 +229,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
       return RepaintBoundary(
         child: ImageFiltered(
           imageFilter: _cachedFilter!,
-          child: widget.child,
+          child: RepaintBoundary(child: widget.child),
         ),
       );
     }
@@ -229,7 +237,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
     return RepaintBoundary(
       child: BackdropFilter(
         filter: _cachedFilter!,
-        child: widget.child,
+        child: RepaintBoundary(child: widget.child),
       ),
     );
   }

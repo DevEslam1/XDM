@@ -7,15 +7,18 @@ import 'package:dmx/core/services/engine/download_progress_handler.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/metadata_probe_service.dart';
 import 'package:dmx/core/services/power_monitor.dart';
+import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
 import 'package:dmx/core/services/yt_counterpart_coordinator.dart';
 import 'package:dmx/core/utils/url_utils.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter/foundation.dart';
+import 'package:get_it/get_it.dart';
 
 /// Orchestrates HTTP multi-threaded downloads, managing mirrors, retries, and YT sync.
 /// Task 1.1: Fixes Infinite Mirror Retry Loop.
 /// Task 1.2: Specialized Service for HTTP download orchestration.
 class HttpDownloadOrchestrator {
+  static final _log = LoggingService.logger('HttpDownloadOrchestrator');
   final MetadataProbeService _metadataService;
   final YtCounterpartCoordinator _ytCoordinator;
   final SettingsProvider _settings;
@@ -94,6 +97,17 @@ class HttpDownloadOrchestrator {
     }
 
     final punyUrl = convertIdnToPunycode(url);
+    bool urlExpiresHint = false;
+    try {
+      if (GetIt.instance.isRegistered<SiteIntelligenceService>()) {
+        final analysis = GetIt.instance<SiteIntelligenceService>().analyzeUrl(url);
+        urlExpiresHint =
+            analysis.isExpiredOrSigned || (analysis.profile?.urlsExpire == true);
+      }
+    } catch (e, st) {
+      _log.fine('Failed to pre-compute urlExpiresHint: $e', e, st);
+    }
+
     final command = DownloadCommand(
       taskId: taskId,
       url: url,
@@ -120,6 +134,7 @@ class HttpDownloadOrchestrator {
       ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
       ytCounterpartTaskId: _ytCoordinator.getCounterpartId(taskId),
       throttleFactor: PowerMonitor.throttleFactor,
+      urlExpiresHint: urlExpiresHint,
     );
 
     final progressHandler = DownloadProgressHandler(

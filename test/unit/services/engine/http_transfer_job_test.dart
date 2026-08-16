@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:isolate';
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/engine/http_transfer_job.dart';
 import 'package:dmx/core/services/mirror/mirror_registry.dart';
@@ -201,6 +203,33 @@ void main() {
       // Must terminate at exactly 9 iterations
       expect(totalMirrorAttempts, equals(10)); // Exits at 10th attempt check
       expect(totalMirrorAttempts > maxTotalAttempts, isTrue);
+    });
+
+    test('worker isolate executes without GetIt registration or access', () async {
+      final poolPort = ReceivePort();
+      final isolate = await Isolate.spawn(workerEntry, poolPort.sendPort);
+
+      final events = <dynamic>[];
+      final completer = Completer<SendPort>();
+
+      final sub = poolPort.listen((message) {
+        events.add(message);
+        if (message is Map && message['t'] == 'hello') {
+          completer.complete(message['port'] as SendPort);
+        }
+      });
+
+      final cmdPort = await completer.future.timeout(const Duration(seconds: 5));
+      expect(cmdPort, isNotNull);
+      expect(events.any((e) => e is Map && e['t'] == 'hello'), isTrue);
+
+      // Send shutdown
+      cmdPort.send({'t': 'shutdown'});
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      await sub.cancel();
+      poolPort.close();
+      isolate.kill(priority: Isolate.immediate);
     });
   });
 }

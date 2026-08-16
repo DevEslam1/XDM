@@ -463,6 +463,7 @@ class DownloadCommand {
     this.ytCounterpartDownloadedBytes,
     this.ytCounterpartTaskId,
     this.throttleFactor = 1.0,
+    this.urlExpiresHint = false,
   })  : initialSpeedLimit = speedLimit ?? initialSpeedLimit,
         initialActiveCount = activeCount ?? initialActiveCount,
         speedLimitKbps = speedLimit ?? speedLimitKbps;
@@ -491,6 +492,7 @@ class DownloadCommand {
   final int? ytCounterpartSize;
   final int? ytCounterpartDownloadedBytes;
   final String? ytCounterpartTaskId;
+  final bool urlExpiresHint;
 
   Map<String, dynamic> toMap() => {
         'taskId': taskId,
@@ -519,6 +521,7 @@ class DownloadCommand {
         if (ytCounterpartTaskId != null)
           'ytCounterpartTaskId': ytCounterpartTaskId,
         'throttleFactor': throttleFactor,
+        'urlExpiresHint': urlExpiresHint,
       };
 
   factory DownloadCommand.fromMap(Map<String, dynamic> m) => DownloadCommand(
@@ -542,6 +545,7 @@ class DownloadCommand {
         adaptiveThreads: m['adaptiveThreads'] as bool? ?? false,
         resolvedFileName: m['resolvedFileName'] as String?,
         throttleFactor: (m['throttleFactor'] as num?)?.toDouble() ?? 1.0,
+        urlExpiresHint: m['urlExpiresHint'] as bool? ?? false,
         ytStreamKind: m['ytStreamKind'] != null
             ? YtStreamKind.values.firstWhere(
                 (k) => k.name == m['ytStreamKind'],

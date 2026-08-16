@@ -43,7 +43,9 @@ class TorrentSubscriptionRegistry {
         deadKeys.add(entry.key);
         try {
           entry.value.subscription.cancel();
-        } catch (_) {}
+        } catch (e, st) {
+          _log.fine('Failed to cancel dead entry sub: $e', e, st);
+        }
       }
     }
     for (final k in deadKeys) {
@@ -68,7 +70,9 @@ class TorrentSubscriptionRegistry {
     if (handler == null) {
       try {
         entry.subscription.cancel();
-      } catch (_) {}
+      } catch (e, st) {
+        _log.fine('Failed to cancel subscription: $e', e, st);
+      }
       _registry.remove(torrentId);
       return null;
     }
@@ -95,7 +99,9 @@ class TorrentSubscriptionRegistry {
     if (entry == null) return;
     try {
       entry.subscription.cancel();
-    } catch (_) {}
+    } catch (e, st) {
+      _log.fine('Failed to cancel disposed subscription: $e', e, st);
+    }
   }
 
   @visibleForTesting
@@ -103,7 +109,9 @@ class TorrentSubscriptionRegistry {
     for (final entry in _registry.values) {
       try {
         entry.subscription.cancel();
-      } catch (_) {}
+      } catch (e, st) {
+        _log.fine('Failed to cancel registry subscription: $e', e, st);
+      }
     }
     _registry.clear();
   }
@@ -165,7 +173,9 @@ class TorrentDownloadHandler {
           return PauseReason.networkLost;
         }
       }
-    } catch (_) {}
+    } catch (e, st) {
+      _log.fine('NetworkMonitor check in pause inference failed: $e', e, st);
+    }
     try {
       if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
         return PauseReason.batterySaver;
@@ -173,7 +183,9 @@ class TorrentDownloadHandler {
       if (PowerMonitor.screenOff) {
         return PauseReason.background;
       }
-    } catch (_) {}
+    } catch (e, st) {
+      _log.fine('PowerMonitor check in pause inference failed: $e', e, st);
+    }
     return PauseReason.userRequested;
   }
 
@@ -667,7 +679,9 @@ class TorrentDownloadHandler {
           if (!hasSpace) {
             effectivePauseReason = PauseReason.diskFull;
           }
-        } catch (_) {}
+        } catch (e, st) {
+          _log.fine('Disk space check before pause failed: $e', e, st);
+        }
       }
 
       final String? cancelReasonStr = cancelReason.error?.toString() ??
@@ -1054,7 +1068,9 @@ class TorrentDownloadHandler {
                   pieceMapped = true;
                 }
               }
-            } catch (_) {}
+            } catch (e, st) {
+              _log.fine('Piece progress query failed: $e', e, st);
+            }
           }
           if (!pieceMapped) {
             updateFilesWithNativeProgress(

@@ -13,6 +13,7 @@ import '../../../features/downloads/models/download_task.dart';
 import '../history_merger.dart';
 import '../logging_service.dart';
 import 'app_database.dart';
+import 'repositories/task_companion_converter.dart';
 
 final _log = LoggingService.logger('HiveMigrationService');
 
@@ -451,74 +452,12 @@ class HiveMigrationService {
     return value.toString();
   }
 
-  DownloadTasksCompanion _taskToCompanion(DownloadTask task) {
-    final isInterrupted = task.status == DownloadStatus.downloading ||
-        task.cycleState == CycleState.downloading ||
-        task.cycleState == CycleState.starting ||
-        task.cycleState == CycleState.resuming;
-
-    final pauseReason =
-        (task.status == DownloadStatus.downloading && task.supportsResume)
-            ? PauseReason.appRestarted.name
-            : task.pauseReason?.name;
-
-    final cycleState =
-        isInterrupted ? CycleState.paused.name : task.cycleState?.name;
-
-    final status =
-        isInterrupted ? DownloadStatus.paused.name : task.status.name;
-
-    return DownloadTasksCompanion.insert(
-      id: task.id,
-      fileName: task.fileName,
-      url: task.url,
-      fileSize: drift.Value(task.fileSize),
-      downloadedBytes: drift.Value(task.downloadedBytes),
-      speed: drift.Value(task.speed),
-      eta: drift.Value(task.eta),
-      category: task.category,
-      status: status,
-      savePath: task.savePath,
-      localFilePath: task.localFilePath,
-      tempFilePath: task.tempFilePath,
-      errorMessage: drift.Value(task.errorMessage),
-      threadCount: task.threadCount,
-      chunks: drift.Value(task.chunks),
-      createdAt: task.createdAt.millisecondsSinceEpoch,
-      updatedAt: task.updatedAt.millisecondsSinceEpoch,
-      completedAt: drift.Value(task.completedAt?.millisecondsSinceEpoch),
-      scheduledAt: drift.Value(task.scheduledAt?.millisecondsSinceEpoch),
-      supportsResume: drift.Value(task.supportsResume),
-      speedLimitKbps: drift.Value(task.speedLimitKbps),
-      seedingEnabled: drift.Value(task.seedingEnabled),
-      seedingLimited: drift.Value(task.seedingLimited),
-      seedingLimitKbps: drift.Value(task.seedingLimitKbps),
-      torrentFiles: drift.Value(task.torrentFiles),
-      downloadPageUrl: drift.Value(task.downloadPageUrl),
-      mergedAudioUrl: drift.Value(task.mergedAudioUrl),
-      audioSize: drift.Value(task.audioSize),
-      audioDownloadedBytes: drift.Value(task.audioDownloadedBytes),
-      videoStreamSize: drift.Value(task.videoStreamSize),
-      audioProgress: drift.Value(task.audioProgress),
-      pausedByUser: drift.Value(task.pausedByUser),
-      youtubeQualityPreset: drift.Value(task.youtubeQualityPreset),
-      notes: drift.Value(task.notes),
-      playlistId: drift.Value(task.playlistId),
-      playlistTitle: drift.Value(task.playlistTitle),
-      thumbnailUrl: drift.Value(task.thumbnailUrl),
-      isAppUpdate: drift.Value(task.isAppUpdate),
-      uploadedBytes: drift.Value(task.uploadedBytes),
-      priority: drift.Value(task.priority),
-      expectedSha256: drift.Value(task.expectedSha256),
-      mirrorUrls: drift.Value(task.mirrorUrls),
-      pauseReason: drift.Value(pauseReason),
-      cycleState: drift.Value(cycleState),
-    );
-  }
+  DownloadTasksCompanion _taskToCompanion(DownloadTask task) =>
+      TaskCompanionConverter.taskToCompanion(task);
 
   @visibleForTesting
   DownloadTasksCompanion taskToCompanionForTesting(DownloadTask task) =>
-      _taskToCompanion(task);
+      TaskCompanionConverter.taskToCompanion(task);
 
   BookmarksCompanion _bookmarkToCompanion(Bookmark bm) {
     return BookmarksCompanion.insert(

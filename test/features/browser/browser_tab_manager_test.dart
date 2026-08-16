@@ -147,5 +147,35 @@ void main() {
       // Active tab (site5) must remain active
       expect(tabManager.activeTab!.isSuspended, isFalse);
     });
+
+    test('Max tabs cap (8) evicts least recently visited inactive tab', () {
+      String? evictedMessage;
+      tabManager.onTabEvicted = (msg) => evictedMessage = msg;
+
+      for (int i = 0; i < 8; i++) {
+        tabManager.openInNewTab('https://tab$i.com', switchToTab: true);
+      }
+      expect(tabManager.tabs.length, equals(8));
+
+      // Opening 9th tab must evict the LRU inactive tab (tab0)
+      tabManager.openInNewTab('https://tab8.com', switchToTab: true);
+      expect(tabManager.tabs.length, equals(8));
+      expect(evictedMessage, isNotNull);
+      expect(tabManager.tabs.any((t) => t.url == 'https://tab8.com'), isTrue);
+      expect(tabManager.tabs.any((t) => t.url == 'https://tab0.com'), isFalse);
+    });
+
+    test('onMemoryPressure closes all inactive tabs', () {
+      for (int i = 0; i < 5; i++) {
+        tabManager.openInNewTab('https://site$i.com', switchToTab: true);
+      }
+      expect(tabManager.tabs.length, equals(5));
+      expect(tabManager.activeTab?.url, equals('https://site4.com'));
+
+      tabManager.onMemoryPressure();
+
+      expect(tabManager.tabs.length, equals(1));
+      expect(tabManager.activeTab?.url, equals('https://site4.com'));
+    });
   });
 }

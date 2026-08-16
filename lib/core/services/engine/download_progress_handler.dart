@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:logging/logging.dart';
 import '../../di/injection.dart';
 import '../engines/http_download_engine.dart';
 import '../yt_counterpart_coordinator.dart';
@@ -122,6 +123,8 @@ class DownloadProgressHandler {
   YtCounterpartCoordinator? _cachedYtCoordinator;
   bool _ytCoordinatorResolved = false;
 
+  static final _log = Logger('DownloadProgressHandler');
+
   YtCounterpartCoordinator? get _ytCoordinator {
     if (!_ytCoordinatorResolved) {
       _ytCoordinatorResolved = true;
@@ -129,7 +132,9 @@ class DownloadProgressHandler {
         if (getIt.isRegistered<YtCounterpartCoordinator>()) {
           _cachedYtCoordinator = getIt<YtCounterpartCoordinator>();
         }
-      } catch (_) {}
+      } catch (e, st) {
+        _log.fine('Failed to resolve YtCounterpartCoordinator: $e', e, st);
+      }
     }
     return _cachedYtCoordinator;
   }
@@ -158,7 +163,9 @@ class DownloadProgressHandler {
         _cachedYtCoordinator = getIt<YtCounterpartCoordinator>();
         _ytCoordinatorResolved = true;
       }
-    } catch (_) {}
+    } catch (e, st) {
+      _log.fine('Initial YtCounterpartCoordinator resolve skipped: $e', e, st);
+    }
   }
 
   void emit(DownloadProgress progress) {
@@ -290,7 +297,9 @@ class DownloadProgressHandler {
             }
           }
         }
-      } catch (_) {}
+      } catch (e, st) {
+        _log.fine('Error looking up live bytes from coordinator: $e', e, st);
+      }
     }
 
     // Fix 2: Dynamic YouTube counterpart size & downloaded resolution
@@ -325,7 +334,9 @@ class DownloadProgressHandler {
             }
           }
         }
-      } catch (_) {}
+      } catch (e, st) {
+        _log.fine('Error refreshing counterpart task ID: $e', e, st);
+      }
 
       if (!isCounterpartUnregistered) {
         _counterpartWaitStart = null;

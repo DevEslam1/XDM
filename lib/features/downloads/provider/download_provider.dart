@@ -3460,7 +3460,10 @@ class DownloadProvider extends ChangeNotifier
                 await stateFile.delete();
                 final tmpState = File('$statePath.tmp');
                 if (await tmpState.exists()) await tmpState.delete();
-              } catch (_) {}
+              } catch (e, st) {
+                LoggingService.logger('DownloadProvider')
+                    .fine('Failed to delete corrupt state file: $e', e, st);
+              }
               task = task.copyWith(
                 downloadedBytes: 0,
                 chunks: List<double>.filled(

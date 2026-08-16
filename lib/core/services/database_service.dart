@@ -12,11 +12,13 @@ import 'package:synchronized/synchronized.dart';
 
 import '../../features/browser/models/bookmark.dart';
 import '../../features/downloads/models/download_task.dart';
-import '../../features/settings/provider/settings_provider.dart';
-import 'background_gate.dart';
-import 'crash_reporting_service.dart';
 import 'database/app_database.dart';
 import 'database/hive_migration_service.dart';
+import 'database/repositories/bookmark_repository.dart';
+import 'database/repositories/browser_history_repository.dart';
+import 'database/repositories/browser_tab_repository.dart';
+import 'database/repositories/task_companion_converter.dart';
+import 'database/services/database_maintenance_service.dart';
 import 'download_engine.dart';
 import 'logging_service.dart';
 import 'power_monitor.dart';
@@ -39,16 +41,17 @@ class DatabaseService {
   late AppDatabase _db;
   bool _initialized = false;
   bool get isInitialized => _initialized;
+  AppDatabase get db => _db;
 
-  /// FIX(23): history is capped on *every* write (below), so the old
-  /// "every Nth insert" counter — which reset on hot restart and let history
-  /// grow unbounded — is removed.
+  late BookmarkRepository _bookmarkRepo;
+  late BrowserHistoryRepository _historyRepo;
+  late BrowserTabRepository _tabRepo;
+  late DatabaseMaintenanceService _maintenanceService;
 
-  /// FIX(15): periodic WAL checkpoint + occasional VACUUM to keep the
-  /// database file small and recovery fast.
-  Timer? _maintenanceTimer;
-  int _maintenanceRuns = 0;
-  int _historyInsertCount = 0;
+  BookmarkRepository get bookmarks => _bookmarkRepo;
+  BrowserHistoryRepository get history => _historyRepo;
+  BrowserTabRepository get tabs => _tabRepo;
+  DatabaseMaintenanceService get maintenance => _maintenanceService;
 
   // Hive constants for migration
   static const String downloadsBoxName = 'downloads';
@@ -83,318 +86,37 @@ class DatabaseService {
       _db = AppDatabase(dbPath);
     }
 
+    _bookmarkRepo = BookmarkRepository(_db);
+    _historyRepo = BrowserHistoryRepository(_db);
+    _tabRepo = BrowserTabRepository(_db);
+    _maintenanceService = DatabaseMaintenanceService(_db);
+
     final prefs = await SharedPreferences.getInstance();
     await HiveMigrationService(_db, prefs).migrate();
     _initialized = true;
 
-    _scheduleMaintenanceTimer();
-    _throttleFactorListener = () => _scheduleMaintenanceTimer();
-    PowerMonitor.throttleFactorNotifier.addListener(_throttleFactorListener!);
-    _screenStateSub = PowerMonitor.screenStateStream
-        .listen((_) => _scheduleMaintenanceTimer());
-  }
-
-  StreamSubscription<bool>? _screenStateSub;
-  VoidCallback? _throttleFactorListener;
-
-  void _scheduleMaintenanceTimer() {
-    _maintenanceTimer?.cancel();
-    if (!_initialized) return;
-    final interval = BackgroundGate.adaptInterval(const Duration(minutes: 30));
-    _maintenanceTimer = Timer.periodic(interval, (_) async {
-      await _runPeriodicMaintenance();
-    });
+    _maintenanceService.start();
   }
 
   @visibleForTesting
-  int get maintenanceRuns => _maintenanceRuns;
+  int get maintenanceRuns => _maintenanceService.maintenanceRuns;
 
   @visibleForTesting
-  set maintenanceRuns(int value) => _maintenanceRuns = value;
+  set maintenanceRuns(int value) => _maintenanceService.maintenanceRuns = value;
 
   @visibleForTesting
-  Future<void> runPeriodicMaintenanceForTesting() => _runPeriodicMaintenance();
+  Future<void> runPeriodicMaintenanceForTesting() =>
+      _maintenanceService.runPeriodicMaintenanceForTesting();
 
-  /// Periodic SQLite maintenance cadence:
-  /// - When active downloads exist: skip wal_checkpoint to protect throughput; run PRAGMA optimize.
-  /// - When idle: wal_checkpoint(RESTART) to fully fold the WAL into the database file.
-  /// - Every 6th cycle (3h): Check WAL size, force TRUNCATE if > 1250 pages (~5MB)
-  /// - Every 12th cycle (6h): PRAGMA optimize, incremental_vacuum, foreign_key_check (when idle)
-  Future<void> _runPeriodicMaintenance() async {
-    final activeRows = await _db
-        .customSelect(
-            "SELECT COUNT(*) as cnt FROM download_tasks WHERE status = 'downloading'")
-        .get();
-    final hasActiveDownloads = (activeRows.first.read<int>('cnt')) > 0;
-
-    final swCheckpoint = Stopwatch()..start();
-    int logPages = 0;
-    try {
-      if (hasActiveDownloads) {
-        _log.fine(
-            '[DatabaseService] Active downloads in progress; skipping periodic wal_checkpoint');
-      } else {
-        final walRows =
-            await _db.customSelect('PRAGMA wal_checkpoint(RESTART)').get();
-        if (walRows.isNotEmpty) {
-          final row = walRows.first.data;
-          final log = row['log'] ?? 0;
-          if (log is num) {
-            logPages = log.toInt();
-          }
-        }
-      }
-      if (_maintenanceRuns % 12 == 0) {
-        await _db.customStatement('PRAGMA optimize');
-      }
-      swCheckpoint.stop();
-      if (swCheckpoint.elapsedMilliseconds > 500) {
-        _log.info('wal_checkpoint took ${swCheckpoint.elapsedMilliseconds}ms');
-      }
-    } catch (e) {
-      _log.warning('wal_checkpoint failed', e);
-    }
-
-    _maintenanceRuns++;
-    if (_maintenanceRuns % 6 == 0 && !hasActiveDownloads) {
-      try {
-        if (logPages > 1250) {
-          // ~5MB in 4KB pages
-          _log.warning('WAL too large ($logPages pages), forcing TRUNCATE');
-          await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
-        }
-      } catch (e, st) {
-        LoggingService.logger('DatabaseService')
-            .warning('Operation failed', e, st);
-      }
-    }
-    if (_maintenanceRuns % 12 == 0 && !hasActiveDownloads) {
-      try {
-        final swVacuum = Stopwatch()..start();
-        await _db.customStatement('PRAGMA incremental_vacuum(50)');
-        try {
-          await _db.customStatement('PRAGMA foreign_key_check');
-        } catch (e, st) {
-          LoggingService.logger('DatabaseService')
-              .warning('PRAGMA foreign_key_check failed', e, st);
-        }
-        swVacuum.stop();
-        if (swVacuum.elapsedMilliseconds > 500) {
-          _log.info(
-              'incremental_vacuum took ${swVacuum.elapsedMilliseconds}ms');
-        }
-      } catch (e, st) {
-        LoggingService.logger('DatabaseService')
-            .warning('Periodic vacuum/fk check failed', e, st);
-      }
-    }
-  }
-
-  DownloadTasksCompanion _taskToCompanion(DownloadTask task) {
-    return DownloadTasksCompanion.insert(
-      id: task.id,
-      fileName: task.fileName,
-      url: task.url,
-      fileSize: drift.Value(task.fileSize),
-      downloadedBytes: drift.Value(task.downloadedBytes),
-      speed: drift.Value(task.speed),
-      eta: drift.Value(task.eta),
-      category: task.category,
-      status: task.status.name,
-      savePath: task.savePath,
-      localFilePath: task.localFilePath,
-      tempFilePath: task.tempFilePath,
-      errorMessage: drift.Value(task.errorMessage),
-      threadCount: task.threadCount,
-      chunks: drift.Value(task.chunks),
-      createdAt: task.createdAt.millisecondsSinceEpoch,
-      updatedAt: task.updatedAt.millisecondsSinceEpoch,
-      completedAt: drift.Value(task.completedAt?.millisecondsSinceEpoch),
-      scheduledAt: drift.Value(task.scheduledAt?.millisecondsSinceEpoch),
-      supportsResume: drift.Value(task.supportsResume),
-      speedLimitKbps: drift.Value(task.speedLimitKbps),
-      seedingEnabled: drift.Value(task.seedingEnabled),
-      seedingLimited: drift.Value(task.seedingLimited),
-      seedingLimitKbps: drift.Value(task.seedingLimitKbps),
-      torrentFiles: drift.Value(task.torrentFiles),
-      downloadPageUrl: drift.Value(task.downloadPageUrl),
-      mergedAudioUrl: drift.Value(task.mergedAudioUrl),
-      audioSize: drift.Value(task.audioSize),
-      audioDownloadedBytes:
-          drift.Value(task.audioDownloadedBytes), // FIX-AUDIT-01
-      videoStreamSize: drift.Value(task.videoStreamSize), // FIX-B4
-      audioProgress: drift.Value(task.audioProgress),
-      pausedByUser: drift.Value(task.pausedByUser),
-      youtubeQualityPreset: drift.Value(task.youtubeQualityPreset),
-      notes: drift.Value(task.notes),
-      playlistId: drift.Value(task.playlistId),
-      playlistTitle: drift.Value(task.playlistTitle),
-      thumbnailUrl: drift.Value(task.thumbnailUrl),
-      isAppUpdate: drift.Value(task.isAppUpdate),
-      uploadedBytes: drift.Value(task.uploadedBytes), // FIX F5
-      priority: drift.Value(task.priority),
-      expectedSha256: drift.Value(task.expectedSha256),
-      mirrorUrls: drift.Value(task.mirrorUrls),
-      pauseReason: drift.Value(task.pauseReason?.name),
-      totalPieces: drift.Value(task.totalPieces),
-      completedPieces: drift.Value(task.completedPieces),
-      ytCounterpartDownloadedBytes:
-          drift.Value(task.ytCounterpartDownloadedBytes),
-      cycleState: drift.Value(task.cycleState?.name),
-    );
-  }
+  DownloadTasksCompanion _taskToCompanion(DownloadTask task) =>
+      TaskCompanionConverter.taskToCompanion(task);
 
   @visibleForTesting
-  DownloadTask rowToTaskForTesting(DbDownloadTask row) => _rowToTask(row);
+  DownloadTask rowToTaskForTesting(DbDownloadTask row) =>
+      TaskCompanionConverter.rowToTask(row);
 
-  DownloadTask _rowToTask(DbDownloadTask row) {
-    DateTime parseIntDate(int msSinceEpoch) {
-      try {
-        return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch);
-      } catch (e) {
-        debugPrint(
-          '[DMX] Error parsing date millisecondsSinceEpoch $msSinceEpoch: $e',
-        );
-        return DateTime.fromMillisecondsSinceEpoch(0);
-      }
-    }
-
-    DateTime? parseNullableIntDate(int? msSinceEpoch) {
-      if (msSinceEpoch == null) return null;
-      try {
-        return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch);
-      } catch (e) {
-        debugPrint(
-          '[DMX] Error parsing nullable date millisecondsSinceEpoch $msSinceEpoch: $e',
-        );
-        return null;
-      }
-    }
-
-    final statusName = row.status;
-    final parsedStatus = DownloadStatus.values.firstWhere(
-      (value) => value.name == statusName,
-      orElse: () {
-        debugPrint(
-          '[DMX] _rowToTask: unrecognised status "$statusName" for task '
-          '${row.id} — reporting and defaulting to paused.',
-        );
-        CrashReportingService.recordError(
-          FormatException('Unrecognised download task status: "$statusName"'),
-          StackTrace.current,
-          hint: 'recoverable',
-        );
-        return DownloadStatus.paused;
-      },
-    );
-
-    final rawCycleState =
-        row.cycleState != null ? CycleState.fromName(row.cycleState) : null;
-    final rawPauseReason =
-        row.pauseReason != null ? PauseReason.fromName(row.pauseReason) : null;
-
-    // State recovery: include allocating and stalled transient states on restart
-    final isInterruptedActive = parsedStatus == DownloadStatus.downloading ||
-        rawCycleState == CycleState.starting ||
-        rawCycleState == CycleState.resuming ||
-        rawCycleState == CycleState.retrying ||
-        rawCycleState == CycleState.fetchingMetadata ||
-        rawCycleState == CycleState.merging ||
-        rawCycleState == CycleState.verifying ||
-        rawCycleState == CycleState.updatingLinks ||
-        rawCycleState == CycleState.allocating ||
-        rawCycleState == CycleState.stalled;
-
-    final isUpdatingLinks = rawCycleState == CycleState.updatingLinks;
-    final status = isInterruptedActive ? DownloadStatus.paused : parsedStatus;
-    final cycleState = isInterruptedActive ? CycleState.paused : rawCycleState;
-    final pauseReason = isUpdatingLinks
-        ? PauseReason.urlExpired
-        : (isInterruptedActive ? PauseReason.appRestarted : rawPauseReason);
-    // Ensure previousCycleState is populated for UI hinting
-    final previousCycleState = isInterruptedActive ? rawCycleState : null;
-
-    // FIX-P1-01: Single-pass aggregation over torrentFiles instead of four
-    // separate where/fold iterations.
-    final files = row.torrentFiles;
-    int totalFiles = 0;
-    int completedFiles = 0;
-    int totalFileBytes = 0;
-    int downloadedFileBytes = 0;
-    if (files != null && files.isNotEmpty) {
-      for (final f in files) {
-        final selected = (f['selected'] as bool?) ?? true;
-        if (!selected) continue;
-        final len = (f['length'] as num?)?.toInt() ?? 0;
-        final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-        totalFiles++;
-        totalFileBytes += len;
-        if (len == 0 || dl >= len) {
-          completedFiles++;
-        }
-        downloadedFileBytes += len > 0 ? dl.clamp(0, len) : 0;
-      }
-    }
-
-    return DownloadTask(
-      id: row.id,
-      fileName: row.fileName,
-      url: row.url,
-      fileSize: row.fileSize,
-      downloadedBytes: row.downloadedBytes,
-      speed: row.speed,
-      eta: row.eta,
-      category: row.category,
-      status: status,
-      savePath: row.savePath,
-      localFilePath: row.localFilePath,
-      tempFilePath: row.tempFilePath,
-      errorMessage: row.errorMessage,
-      threadCount: row.threadCount,
-      chunks: row.chunks ?? [],
-      createdAt: parseIntDate(row.createdAt),
-      updatedAt: parseIntDate(row.updatedAt),
-      completedAt: parseNullableIntDate(row.completedAt),
-      scheduledAt: parseNullableIntDate(row.scheduledAt),
-      supportsResume: row.supportsResume,
-      speedLimitKbps: row.speedLimitKbps,
-      seedingEnabled: row.seedingEnabled,
-      seedingLimited: row.seedingLimited,
-      seedingLimitKbps: row.seedingLimitKbps,
-      torrentFiles: row.torrentFiles,
-      downloadPageUrl: row.downloadPageUrl,
-      mergedAudioUrl: row.mergedAudioUrl,
-      audioSize: row.audioSize,
-      audioDownloadedBytes: row.audioDownloadedBytes, // FIX-AUDIT-01
-      videoStreamSize: row.videoStreamSize, // FIX-B4
-      audioProgress: row.audioProgress,
-      pausedByUser: row.pausedByUser,
-      youtubeQualityPreset: row.youtubeQualityPreset,
-      notes: row.notes,
-      playlistId: row.playlistId?.isNotEmpty == true ? row.playlistId : null,
-      playlistTitle:
-          row.playlistTitle?.isNotEmpty == true ? row.playlistTitle : null,
-      thumbnailUrl: row.thumbnailUrl,
-      isAppUpdate: row.isAppUpdate,
-      uploadedBytes: row.uploadedBytes, // FIX F5
-      priority: row.priority,
-      expectedSha256: row.expectedSha256,
-      mirrorUrls: row.mirrorUrls,
-      pauseReason: pauseReason,
-      totalPieces: row.totalPieces,
-      completedPieces: row.completedPieces,
-      ytCounterpartDownloadedBytes: row.ytCounterpartDownloadedBytes,
-      cycleState: cycleState,
-      previousCycleState: previousCycleState,
-      totalFiles: files != null && files.isNotEmpty ? totalFiles : null,
-      completedFiles:
-          files != null && files.isNotEmpty ? completedFiles : null,
-      totalFileBytes:
-          files != null && files.isNotEmpty ? totalFileBytes : null,
-      downloadedFileBytes:
-          files != null && files.isNotEmpty ? downloadedFileBytes : null,
-    );
-  }
+  DownloadTask _rowToTask(DbDownloadTask row) =>
+      TaskCompanionConverter.rowToTask(row);
 
   Future<List<DownloadTask>> loadTasks() async {
     final rows = await (_db.select(
@@ -534,10 +256,8 @@ class DatabaseService {
   void cancelPendingTimers() {
     _dbBatchTimer?.cancel();
     _dbBatchTimer = null;
-    _maintenanceTimer?.cancel();
-    _maintenanceTimer = null;
-    _historyFlushTimer?.cancel();
-    _historyFlushTimer = null;
+    _maintenanceService.dispose();
+    _historyRepo.dispose();
   }
 
   Future<void> flushImmediately() => flushPendingSaves();
@@ -640,341 +360,73 @@ class DatabaseService {
     return _db.delete(_db.downloadTasks).go();
   }
 
-  BookmarksCompanion _bookmarkToCompanion(Bookmark bm) {
-    return BookmarksCompanion.insert(
-      id: bm.id,
-      title: bm.title,
-      url: bm.url,
-      folder: drift.Value(bm.folder),
-      createdAt: bm.createdAt.millisecondsSinceEpoch,
-    );
-  }
+  Future<List<Bookmark>> loadBookmarks({String? searchQuery}) =>
+      _bookmarkRepo.loadBookmarks(searchQuery: searchQuery);
 
-  Bookmark _rowToBookmark(DbBookmark row) {
-    return Bookmark.fromMap({
-      'id': row.id,
-      'title': row.title,
-      'url': row.url,
-      'folder': row.folder,
-      'createdAt': row.createdAt,
-    });
-  }
+  Future<List<Bookmark>> searchBookmarks(String query, {int limit = 3}) =>
+      _bookmarkRepo.searchBookmarks(query, limit: limit);
 
-  Future<List<Bookmark>> loadBookmarks({String? searchQuery}) async {
-    final query = _db.select(_db.bookmarks);
-    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
-      final term = '%${searchQuery.trim().toLowerCase()}%';
-      query.where((t) =>
-          t.title.lower().like(term) |
-          t.url.lower().like(term) |
-          t.folder.lower().like(term));
-    }
-    final rows = await (query
-          ..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)]))
-        .get();
-    return rows.map(_rowToBookmark).toList();
-  }
+  Future<void> saveBookmark(Bookmark bookmark) =>
+      _bookmarkRepo.saveBookmark(bookmark);
 
-  Future<List<Bookmark>> searchBookmarks(String query, {int limit = 3}) async {
-    if (query.trim().isEmpty) return [];
-    final term = '%${query.trim().toLowerCase()}%';
-    final q = _db.select(_db.bookmarks)
-      ..where((t) => t.title.lower().like(term) | t.url.lower().like(term))
-      ..limit(limit);
-    final rows = await q.get();
-    return rows.map(_rowToBookmark).toList();
-  }
+  Future<void> deleteBookmark(String id) => _bookmarkRepo.deleteBookmark(id);
 
-  Future<void> saveBookmark(Bookmark bookmark) async {
-    // FIX: Prevent duplicate bookmarks by checking if a bookmark with the
-    // same URL already exists. Updates the existing entry instead of creating
-    // a duplicate.
-    final existing = await (_db.select(_db.bookmarks)
-          ..where((t) => t.url.equals(bookmark.url))
-          ..limit(1))
-        .getSingleOrNull();
-    if (existing != null) {
-      await (_db.update(_db.bookmarks)..where((t) => t.id.equals(existing.id)))
-          .write(BookmarksCompanion(
-        title: drift.Value(bookmark.title),
-        url: drift.Value(bookmark.url),
-        folder: drift.Value(bookmark.folder),
-        // FIX-BM-02: Preserve original createdAt — re-saving should not
-        // reset the bookmark's creation date or break ordering.
-        createdAt: drift.Value(existing.createdAt),
-      ));
-      return;
-    }
-    await _db.into(_db.bookmarks).insert(
-          _bookmarkToCompanion(bookmark),
-          mode: drift.InsertMode.insertOrReplace,
-        );
-  }
-
-  Future<void> deleteBookmark(String id) {
-    return (_db.delete(_db.bookmarks)..where((t) => t.id.equals(id))).go();
-  }
-
-  Future<void> clearBookmarks() {
-    return _db.delete(_db.bookmarks).go();
-  }
+  Future<void> clearBookmarks() => _bookmarkRepo.clearBookmarks();
 
   Future<List<Map<String, dynamic>>> loadBrowserHistory({
     int? max,
     String? searchQuery,
-  }) async {
-    // FIX: Default to SettingsProvider.instance.historyMaxEntries so the
-    // load limit matches the cap enforced in addBrowserHistory. Previously
-    // this defaulted to 200 while the cap could be set higher by the user,
-    // causing entries to be invisible in the UI even though they existed
-    // in the database.
-    int effectiveMax;
-    try {
-      await SettingsProvider.instance.ensureLoaded();
-      effectiveMax = max ?? SettingsProvider.instance.historyMaxEntries;
-    } catch (_) {
-      effectiveMax = max ?? 500; // safe default
-    }
-    final query = _db.select(_db.browserHistory)
-      ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
-      ..limit(effectiveMax);
+  }) =>
+      _historyRepo.loadBrowserHistory(max: max, searchQuery: searchQuery);
 
-    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
-      final term = searchQuery.trim();
-      query.where((t) => t.url.contains(term) | t.title.contains(term));
-    }
+  Future<void> clearBrowserHistoryBefore(DateTime? before) =>
+      _historyRepo.clearBrowserHistoryBefore(before);
 
-    final rows = await query.get();
-
-    return rows
-        .map(
-          (r) => {
-            'id': r.id,
-            'url': r.url,
-            'title': r.title,
-            'visitedAt': r.visitedAt,
-            'visitCount': r.visitCount,
-            'faviconUrl': r.faviconUrl,
-          },
-        )
-        .toList();
-  }
-
-  /// FIX-BH-07: Clear browser history older than [before].
-  /// If [before] is null, clears all history.
-  Future<void> clearBrowserHistoryBefore(DateTime? before) async {
-    if (before == null) {
-      await clearBrowserHistory();
-      return;
-    }
-    await (_db.delete(_db.browserHistory)
-          ..where((t) =>
-              t.visitedAt.isSmallerThanValue(before.millisecondsSinceEpoch)))
-        .go();
-  }
-
-  /// FIX-BH-08: Get total visit count for a specific URL.
-  Future<int> getVisitCount(String url) async {
-    final rows = await (_db.select(_db.browserHistory)
-          ..where((t) => t.url.equals(url)))
-        .get();
-    return rows.fold<int>(0, (sum, r) => sum + r.visitCount);
-  }
-
-  Timer? _historyFlushTimer;
-  final Map<String, Map<String, dynamic>> _pendingHistoryEntries = {};
+  Future<int> getVisitCount(String url) => _historyRepo.getVisitCount(url);
 
   @visibleForTesting
-  Timer? get historyFlushTimer => _historyFlushTimer;
+  Timer? get historyFlushTimer => _historyRepo.historyFlushTimer;
 
   @visibleForTesting
-  int get pendingHistoryEntriesCount => _pendingHistoryEntries.length;
+  int get pendingHistoryEntriesCount => _historyRepo.pendingHistoryEntriesCount;
 
-  /// Adds browser history using a single global 5-second flush timer (DB-04).
   Future<int> addBrowserHistory(
     Map<String, dynamic> entry, {
     bool immediate = false,
-  }) async {
-    final url = entry['url'] as String? ?? '';
-    if (url.isEmpty || url == 'about:blank') return 0;
+  }) =>
+      _historyRepo.addBrowserHistory(entry, immediate: immediate);
 
-    if (immediate) {
-      return _writeBrowserHistoryDirect(entry);
-    }
+  Future<void> flushPendingHistory() => _historyRepo.flushPendingHistory();
 
-    _pendingHistoryEntries[url] = entry;
+  Future<void> updateBrowserHistoryTitle(int id, String title) =>
+      _historyRepo.updateBrowserHistoryTitle(id, title);
 
-    if (_pendingHistoryEntries.length >= 20) {
-      await flushPendingHistory();
-      return 1;
-    }
+  Future<void> updateBrowserHistoryTime(int id, int visitedAt) =>
+      _historyRepo.updateBrowserHistoryTime(id, visitedAt);
 
-    _historyFlushTimer ??= Timer(const Duration(seconds: 5), () async {
-      _historyFlushTimer = null;
-      await flushPendingHistory();
-    });
+  Future<void> deleteBrowserHistory(int id) =>
+      _historyRepo.deleteBrowserHistory(id);
 
-    return 1;
-  }
+  Future<void> clearBrowserHistory() => _historyRepo.clearBrowserHistory();
 
-  Future<void> flushPendingHistory() async {
-    _historyFlushTimer?.cancel();
-    _historyFlushTimer = null;
-    if (_pendingHistoryEntries.isEmpty) return;
+  Future<void> saveOpenTabs(List<SavedBrowserTab> tabs) =>
+      _tabRepo.saveOpenTabs(tabs);
 
-    final entries =
-        List<Map<String, dynamic>>.from(_pendingHistoryEntries.values);
-    _pendingHistoryEntries.clear();
+  Future<List<SavedBrowserTab>> loadAndClearOpenTabs() =>
+      _tabRepo.loadAndClearOpenTabs();
 
-    for (final entry in entries) {
-      await _writeBrowserHistoryDirect(entry);
-    }
-  }
+  Future<List<SavedBrowserTab>> loadOpenTabs() => _tabRepo.loadOpenTabs();
 
-  Future<int> _writeBrowserHistoryDirect(Map<String, dynamic> entry) async {
-    final url = entry['url'] as String? ?? '';
-    if (url.isEmpty || url == 'about:blank') return 0;
-    final visitedAt = (entry['visitedAt'] as num?)?.toInt() ??
-        DateTime.now().millisecondsSinceEpoch;
-    final title = entry['title'] as String? ?? url;
-    final faviconUrl = entry['faviconUrl'] as String?;
-
-    // FIX-BH-04 + FIX-RACE: Deduplicate by URL using a transaction with
-    // a re-check inside the transaction to eliminate the race condition
-    // where two concurrent writes both find no existing row and both insert.
-    final id = await _db.transaction(() async {
-      final existing = await (_db.select(_db.browserHistory)
-            ..where((t) => t.url.equals(url))
-            ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
-            ..limit(1))
-          .getSingleOrNull();
-
-      if (existing != null) {
-        await (_db.update(_db.browserHistory)
-              ..where((t) => t.id.equals(existing.id)))
-            .write(BrowserHistoryCompanion(
-          title: drift.Value(title),
-          visitedAt: drift.Value(visitedAt),
-          visitCount: drift.Value(existing.visitCount + 1),
-          faviconUrl: drift.Value(faviconUrl ?? existing.faviconUrl),
-        ));
-        return existing.id;
-      } else {
-        return await _db.into(_db.browserHistory).insert(
-              BrowserHistoryCompanion.insert(
-                url: url,
-                title: title,
-                visitedAt: visitedAt,
-                visitCount: const drift.Value(1),
-                faviconUrl: drift.Value(faviconUrl),
-              ),
-            );
-      }
-    });
-
-    _historyInsertCount++;
-    if (_historyInsertCount % 100 == 0) {
-      int maxHistory;
-      try {
-        await SettingsProvider.instance.ensureLoaded();
-        maxHistory = SettingsProvider.instance.historyMaxEntries;
-      } catch (_) {
-        maxHistory = 500;
-      }
-      final countResult = await _db
-          .customSelect(
-            'SELECT COUNT(*) as cnt FROM browser_history',
-          )
-          .get();
-      final count = countResult.first.read<int>('cnt');
-      if (count > maxHistory) {
-        await _db.customStatement(
-          'DELETE FROM browser_history WHERE id NOT IN ('
-          '  SELECT id FROM browser_history '
-          '  ORDER BY visited_at DESC '
-          '  LIMIT ?'
-          ')',
-          [maxHistory],
-        );
-      }
-    }
-
-    return id;
-  }
-
-  Future<void> updateBrowserHistoryTitle(int id, String title) async {
-    await (_db.update(_db.browserHistory)..where((t) => t.id.equals(id))).write(
-      BrowserHistoryCompanion(title: drift.Value(title)),
-    );
-  }
-
-  Future<void> updateBrowserHistoryTime(int id, int visitedAt) async {
-    // FIX-BH-09: Also increment visit_count when updating visit time,
-    // since this is called when a page is re-visited. Uses raw SQL to
-    // avoid an extra SELECT round-trip.
-    await _db.customStatement(
-      'UPDATE browser_history SET visited_at = ?, visit_count = visit_count + 1 WHERE id = ?',
-      [visitedAt, id],
-    );
-  }
-
-  Future<void> deleteBrowserHistory(int id) {
-    return (_db.delete(_db.browserHistory)..where((t) => t.id.equals(id))).go();
-  }
-
-  Future<void> clearBrowserHistory() {
-    return _db.delete(_db.browserHistory).go();
-  }
-
-  Future<void> saveOpenTabs(List<SavedBrowserTab> tabs) async {
-    // FIX-BT-05: Use batch insert instead of per-tab individual inserts
-    // for better performance (single transaction, single write).
-    await _db.transaction(() async {
-      await _db.delete(_db.browserTabs).go();
-      if (tabs.isEmpty) return;
-      await _db.batch((batch) {
-        batch.insertAll(_db.browserTabs, tabs);
-      });
-    });
-  }
-
-  Future<List<SavedBrowserTab>> loadAndClearOpenTabs() async {
-    // FIX-BT-04: Actually clear tabs after loading so they don't duplicate
-    // on next app launch. The previous implementation was a no-op that
-    // left all tabs in the DB, causing stale duplicates on restore.
-    final tabs = await loadOpenTabs();
-    await clearOpenTabs();
-    return tabs;
-  }
-
-  Future<List<SavedBrowserTab>> loadOpenTabs() {
-    return (_db.select(
-      _db.browserTabs,
-    )..orderBy([(t) => drift.OrderingTerm.asc(t.position)]))
-        .get();
-  }
-
-  Future<void> clearOpenTabs() => _db.delete(_db.browserTabs).go();
+  Future<void> clearOpenTabs() => _tabRepo.clearOpenTabs();
 
   Future<void> dispose() async {
-    // FIX-M2: Force flush on dispose
+    // Force flush on dispose
     await flushPendingSaves();
     await flushPendingHistory();
 
-    if (_throttleFactorListener != null) {
-      PowerMonitor.throttleFactorNotifier
-          .removeListener(_throttleFactorListener!);
-      _throttleFactorListener = null;
-    }
-    _screenStateSub?.cancel();
-    _screenStateSub = null;
+    _maintenanceService.dispose();
+    _historyRepo.dispose();
 
-    _historyFlushTimer?.cancel();
-    _historyFlushTimer = null;
-    _pendingHistoryEntries.clear();
-
-    _maintenanceTimer?.cancel();
-    _maintenanceTimer = null;
     _dbBatchTimer?.cancel();
     _dbBatchTimer = null;
     await _db.close();

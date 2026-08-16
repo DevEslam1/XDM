@@ -233,7 +233,35 @@ class TabManager extends ChangeNotifier {
   }
 
   /// Opens a new tab with optional background loading logic.
-  static const int maxTabs = 20;
+  static const int maxTabs = 8;
+
+  /// Callback when a tab is evicted due to max tabs cap
+  void Function(String message)? onTabEvicted;
+
+  /// Closes all inactive tabs to release memory under system memory pressure.
+  void onMemoryPressure() {
+    _log.warning(
+        '[TabManager] Handling memory pressure: closing all inactive tabs');
+    final activeId = activeTab?.id;
+    final inactiveIds =
+        _tabs.where((t) => t.id != activeId).map((t) => t.id).toList();
+    for (final id in inactiveIds) {
+      closeTab(id);
+    }
+  }
+
+  void _evictLruTabIfNeeded() {
+    if (_tabs.length < maxTabs) return;
+    final activeId = activeTab?.id;
+    final candidates = _tabs.where((t) => t.id != activeId).toList();
+    if (candidates.isEmpty) return;
+    candidates.sort((a, b) => a.lastVisitedAt.compareTo(b.lastVisitedAt));
+    final oldest = candidates.first;
+    _log.info(
+        '[TabManager] Evicting LRU tab ${oldest.id} (${oldest.title.isNotEmpty ? oldest.title : oldest.url}) due to max tab cap ($maxTabs)');
+    onTabEvicted?.call('Closed inactive tab "${oldest.title.isNotEmpty ? oldest.title : oldest.url}" to stay under tab limit.');
+    closeTab(oldest.id);
+  }
 
   void openInNewTab(
     String url, {
@@ -242,16 +270,14 @@ class TabManager extends ChangeNotifier {
     bool isIncognito = false,
   }) {
     if (!isActive() || url.isEmpty) return;
-    if (_tabs.length >= maxTabs) {
-      _log.warning(
-          '[TabManager] Max tab cap reached ($maxTabs). Rejecting new tab for: $url');
-      return;
-    }
 
     // 1. Evict stale background ad/popup tabs atomically before adding
     _evictStaleAdTabsInternal();
 
-    // 2. Construct the new tab
+    // 2. Evict LRU inactive tab if tab cap is reached
+    _evictLruTabIfNeeded();
+
+    // 3. Construct the new tab
     final newTab = createTab(
       initialUrl: url,
       isIncognito: isIncognito,
@@ -259,7 +285,7 @@ class TabManager extends ChangeNotifier {
     );
     _tabs.add(newTab);
 
-    // 3. Update current index if switching or keep focus on active tab
+    // 4. Update current index if switching or keep focus on active tab
     if (switchToTab) {
       final oldActive = activeTab;
       if (oldActive != null) {
@@ -281,6 +307,7 @@ class TabManager extends ChangeNotifier {
 
   /// Directly adds a tab instance created outside TabManager.
   void addTab(BrowserTab tab, {bool switchToTab = true}) {
+    _evictLruTabIfNeeded();
     _tabs.add(tab);
     if (switchToTab) {
       final oldActive = activeTab;

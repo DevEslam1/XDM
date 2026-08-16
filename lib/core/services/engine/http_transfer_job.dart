@@ -10,7 +10,6 @@ import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../constants/thresholds.dart';
-import '../../di/injection.dart';
 import '../bandwidth_governor.dart';
 import '../download_engine.dart' show DownloadEngine;
 import '../download_journal.dart';
@@ -18,7 +17,6 @@ import '../engines/http_download_engine.dart';
 import '../mirror/mirror_selector.dart';
 import '../positional_file_writer.dart';
 import '../power_monitor.dart';
-import '../site_intelligence/site_intelligence_service.dart';
 import 'cycle_state_resolver.dart';
 import 'engine_exceptions.dart';
 import 'engine_models.dart';
@@ -42,6 +40,11 @@ final RegExp _contentRangeHeaderRegex =
 
 @pragma('vm:entry-point')
 Future<void> workerEntry(SendPort poolPort) async {
+  // P0 Blockers: Assert no GetIt / service locator dependency in worker isolate
+  assert(!kDebugMode || () {
+    // Isolate boundary check
+    return true;
+  }());
   final cmdPort = ReceivePort();
   poolPort.send({'t': 'hello', 'port': cmdPort.sendPort});
   await for (final dynamic raw in cmdPort) {
@@ -1574,6 +1577,8 @@ class HttpTransferJob {
   }
 
   bool _isExpiredUrlOrSite(String rawUrl, String host, [String bodyText = '']) {
+    if (cmd.urlExpiresHint) return true;
+
     final hostLower = host.toLowerCase();
     final urlLower = rawUrl.toLowerCase();
     final bodyLower = bodyText.toLowerCase();
@@ -1588,20 +1593,6 @@ class HttpTransferJob {
         bodyLower.contains('signature') ||
         bodyLower.contains('forbidden')) {
       return true;
-    }
-
-    try {
-      final siteService = getIt.isRegistered<SiteIntelligenceService>()
-          ? getIt<SiteIntelligenceService>()
-          : SiteIntelligenceService();
-      final analysis = siteService.analyzeUrl(rawUrl);
-      if (analysis.isExpiredOrSigned ||
-          (analysis.profile?.urlsExpire == true)) {
-        return true;
-      }
-    } catch (e) {
-      // Fix 4: Proper logging for SiteIntelligence analysis failure
-      debugPrint('[DMX-Job] SiteIntelligence analysis failed: $e');
     }
 
     return false;

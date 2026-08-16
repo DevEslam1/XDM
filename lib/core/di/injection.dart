@@ -27,6 +27,10 @@ import '../services/checksum_service.dart';
 import '../services/clipboard_service.dart';
 import '../services/connection_manager.dart';
 import '../services/crash_reporting_service.dart';
+import '../services/database/repositories/bookmark_repository.dart';
+import '../services/database/repositories/browser_history_repository.dart';
+import '../services/database/repositories/browser_tab_repository.dart';
+import '../services/database/services/database_maintenance_service.dart';
 import '../services/database_service.dart';
 import '../services/dio_client_pool.dart';
 import '../services/download_engine.dart';
@@ -64,6 +68,18 @@ Future<void> configureDependencies() async {
   getIt
       .registerLazySingleton<SettingsProvider>(() => SettingsProvider.instance);
   getIt.registerLazySingleton<DatabaseService>(() => DatabaseService());
+  getIt.registerLazySingleton<BookmarkRepository>(
+    () => getIt<DatabaseService>().bookmarks,
+  );
+  getIt.registerLazySingleton<BrowserHistoryRepository>(
+    () => getIt<DatabaseService>().history,
+  );
+  getIt.registerLazySingleton<BrowserTabRepository>(
+    () => getIt<DatabaseService>().tabs,
+  );
+  getIt.registerLazySingleton<DatabaseMaintenanceService>(
+    () => getIt<DatabaseService>().maintenance,
+  );
   getIt.registerLazySingleton<TaskRepository>(
     () => DriftTaskRepository(getIt<DatabaseService>()),
   );
