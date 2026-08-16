@@ -8,6 +8,8 @@ import '../accessibility/high_contrast_detector.dart';
 /// A surface panel with an optional accent rail, tinted border, and a subtle
 /// press response.
 class GlassCard extends StatefulWidget {
+  static bool enabled = true;
+
   final Widget child;
   final double borderRadius;
   final EdgeInsetsGeometry? padding;
@@ -76,7 +78,7 @@ class _GlassCardState extends State<GlassCard> {
 
   @override
   Widget build(BuildContext context) {
-    final isLowEnd = PowerMonitor.isLowEndDevice;
+    final isLowEnd = PowerMonitor.isLowEndDevice || !GlassCard.enabled;
     final shouldBlur = widget.enableBlur &&
         !isLowEnd &&
         !PowerMonitor.batterySaverMode.isAggressive &&

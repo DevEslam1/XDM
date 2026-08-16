@@ -126,6 +126,8 @@ class AmbientProgress with WidgetsBindingObserver {
 }
 
 class GeometricGridBackground extends StatefulWidget {
+  static bool enabled = true;
+
   final Widget child;
 
   const GeometricGridBackground({super.key, required this.child});
@@ -147,7 +149,9 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
       vsync: this,
       duration: const Duration(seconds: 20),
     );
-    if (BackgroundGate.shouldAnimate) {
+    if (BackgroundGate.shouldAnimate &&
+        !PowerMonitor.isLowEndDevice &&
+        GeometricGridBackground.enabled) {
       _controller.repeat();
     }
     // Listen to power state changes
@@ -155,9 +159,12 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
   }
 
   void _onPowerChanged() {
-    if (BackgroundGate.shouldAnimate && !_controller.isAnimating) {
+    final canAnimate = BackgroundGate.shouldAnimate &&
+        !PowerMonitor.isLowEndDevice &&
+        GeometricGridBackground.enabled;
+    if (canAnimate && !_controller.isAnimating) {
       _controller.repeat();
-    } else if (!BackgroundGate.shouldAnimate && _controller.isAnimating) {
+    } else if (!canAnimate && _controller.isAnimating) {
       _controller.stop();
     }
   }
@@ -172,7 +179,10 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
         _controller.stop();
       }
     } else if (state == AppLifecycleState.resumed) {
-      if (BackgroundGate.shouldAnimate && !_controller.isAnimating) {
+      final canAnimate = BackgroundGate.shouldAnimate &&
+          !PowerMonitor.isLowEndDevice &&
+          GeometricGridBackground.enabled;
+      if (canAnimate && !_controller.isAnimating) {
         _controller.repeat();
       }
     }
@@ -238,6 +248,8 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
 
     if (classicUi ||
         reduceVisuals ||
+        !GeometricGridBackground.enabled ||
+        PowerMonitor.isLowEndDevice ||
         PerformanceMonitor.shouldReduceMotion ||
         MediaQuery.disableAnimationsOf(context) ||
         DownloadEngine.isInBackground ||

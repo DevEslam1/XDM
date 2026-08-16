@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/performance_monitor.dart';
+import '../../core/services/power_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../mixins/pausable_loop_animation.dart';
 
 class NeonGlowButton extends StatefulWidget {
+  static bool enabled = true;
+
   final VoidCallback? onPressed;
   final String text;
   final IconData? icon;
@@ -48,6 +51,8 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
   bool get loopWanted =>
       widget.onPressed != null &&
       !widget.isLoading &&
+      !PowerMonitor.isLowEndDevice &&
+      NeonGlowButton.enabled &&
       !PerformanceMonitor.shouldReduceMotion;
 
   @override
@@ -79,9 +84,10 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
         context.select<SettingsProvider, ({bool isDark, bool enableGlow})>(
       (s) => (isDark: s.isDarkMode, enableGlow: s.enableGlow),
     );
+    final isLowEnd = PowerMonitor.isLowEndDevice || !NeonGlowButton.enabled;
     final filledContentColor =
         isDark ? AppTheme.background : AppTheme.lightBackground;
-    final effectiveGlow = widget.hasGlow || enableGlow;
+    final effectiveGlow = !isLowEnd && (widget.hasGlow || enableGlow);
     final enabled = widget.onPressed != null && !widget.isLoading;
     final glow = widget.glowColor ?? widget.color;
 
