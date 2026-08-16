@@ -7,6 +7,8 @@ import '../logging_service.dart';
 
 part 'app_database.g.dart';
 
+final _dbLog = LoggingService.logger('AppDatabase');
+
 /// Binary packed format converter for chunk and torrent file detail blobs (FIX-12).
 /// Format: [int32 count, [int64 start, int64 end, int64 size, int64 downloaded, int8 isComplete] * count]
 class BinaryChunkBlobConverter {

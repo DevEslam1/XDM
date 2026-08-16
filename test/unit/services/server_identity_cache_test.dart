@@ -42,5 +42,30 @@ void main() {
       expect(cache.containsKey('key1'), isFalse);
       expect(cache.containsKey('key2'), isFalse);
     });
+
+    test('two jobs for same URL within 10 minutes only probe server once', () {
+      final identityCache = ServerIdentityCache(maxCapacity: 100);
+      const urlKey =
+          'https://example.com/movie.mp4|etag-123|Tue, 15 Nov 2026|52428800';
+
+      int probeCount = 0;
+      void verifyServerIdentity(String key) {
+        identityCache.removeStale(const Duration(minutes: 10));
+        if (identityCache.containsKey(key)) {
+          return;
+        }
+        probeCount++;
+        identityCache.put(key, true);
+      }
+
+      // First job runs probe
+      verifyServerIdentity(urlKey);
+      expect(probeCount, equals(1));
+      expect(identityCache.containsKey(urlKey), isTrue);
+
+      // Second job within 10 minutes hits cache and skips probe
+      verifyServerIdentity(urlKey);
+      expect(probeCount, equals(1));
+    });
   });
 }

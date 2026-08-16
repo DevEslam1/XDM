@@ -6,6 +6,7 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

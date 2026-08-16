@@ -4,7 +4,7 @@ import 'engine_utils.dart';
 /// Thread-safe bounded cache for verified server identities (ETag / Last-Modified / totalSize).
 /// Implements [DisposableService] and [MemoryPressureListener] for lifecycle and memory hygiene.
 class ServerIdentityCache implements DisposableService, MemoryPressureListener {
-  ServerIdentityCache({int maxCapacity = 25})
+  ServerIdentityCache({int maxCapacity = 100})
       : _cache = TimestampedLruMap<String, bool>(maxCapacity: maxCapacity) {
     ServiceRegistry.register(this);
     ServiceRegistry.registerMemoryPressureListener(this);
