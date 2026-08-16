@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -35,7 +36,8 @@ class AppLockService {
       final val = await _monotonicChannel.invokeMethod<int>('elapsedRealtime');
       if (val != null && val > 0) return val;
     } catch (e, st) {
-      LoggingService.logger('AppLockService').warning('Operation failed', e, st);
+      LoggingService.logger('AppLockService')
+          .warning('Operation failed', e, st);
     }
     return _lockoutStopwatch.elapsedMilliseconds;
   }
@@ -237,5 +239,35 @@ class AppLockService {
     await _storage.delete(key: _saltKey);
     await _storage.write(key: _enabledKey, value: 'false');
     await resetFailedAttempts();
+  }
+
+  static Completer<bool>? _activeAuthCompleter;
+
+  /// Authenticates using the configured [authAction] callback.
+  /// If an authentication request is already in-flight, subsequent concurrent calls
+  /// await and share the same active authentication result without spawning multiple prompts (E1).
+  static Future<bool> authenticate(
+      {Future<bool> Function()? authAction}) async {
+    if (!await isLockEnabled()) return true;
+
+    if (_activeAuthCompleter != null) {
+      return _activeAuthCompleter!.future;
+    }
+
+    final completer = Completer<bool>();
+    _activeAuthCompleter = completer;
+
+    try {
+      final result = authAction != null ? await authAction() : false;
+      completer.complete(result);
+      return result;
+    } catch (e, st) {
+      LoggingService.logger('AppLockService')
+          .warning('Authentication action threw error', e, st);
+      completer.complete(false);
+      return false;
+    } finally {
+      _activeAuthCompleter = null;
+    }
   }
 }
