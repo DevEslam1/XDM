@@ -34,12 +34,6 @@ class _MigratePayload {
           for (final key in prefs.getKeys())
             if (prefs.get(key) != null) key: prefs.get(key)!,
         };
-
-  _MigratePayload.raw({
-    this.dbPath,
-    this.hivePath,
-    this.initialPrefs = const {},
-  });
 }
 
 Future<bool> _migrateIsolate(_MigratePayload payload) async {
@@ -54,6 +48,7 @@ Future<bool> _migrateIsolate(_MigratePayload payload) async {
     isolateDb = AppDatabase.forTesting(NativeDatabase.memory());
   }
 
+  // ignore: invalid_use_of_visible_for_testing_member
   SharedPreferences.setMockInitialValues(payload.initialPrefs);
   final isolatePrefs = await SharedPreferences.getInstance();
 

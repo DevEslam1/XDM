@@ -616,7 +616,7 @@ class TorrentDownloadHandler {
     }
 
     final cancelCompleter = Completer<void>();
-    final cancelSubscription = cancelToken.whenCancel.then((cancelReason) async {
+    cancelToken.whenCancel.then((cancelReason) async {
       if (torrentCompleted || cancelCompleter.isCompleted) return;
       cancelCompleter.complete();
       try {
@@ -817,8 +817,6 @@ class TorrentDownloadHandler {
     int lastTorrentPeerCount = 0;
     int currentTotalSize = 0;
     DateTime? lastRecoveryEmit;
-    int lastFileListHash = 0;
-    ({int total, int done, int bytes, int downloaded})? lastNormalizedResult;
 
     final initialFiles = getTorrentFiles?.call();
     final initialFileCount = initialFiles?.length ?? 0;
@@ -952,8 +950,6 @@ class TorrentDownloadHandler {
         lastStateLabel = stateLabel;
         if (isStateChange) {
           lastTorrentProgressTime = now;
-          lastFileListHash = 0;
-          lastNormalizedResult = null;
         }
 
         List<Map<String, dynamic>>? resolvedFiles = getTorrentFiles?.call();
