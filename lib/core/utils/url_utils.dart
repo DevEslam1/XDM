@@ -33,6 +33,26 @@ bool isSafeWebUrl(String value) {
       scheme == 'dmx';
 }
 
+/// Validates that an incoming deep link or share intent URL uses a safe protocol (http, https, magnet).
+/// Strictly blocks dangerous or unsupported schemes (javascript:, data:, blob:, file:, content:, about:).
+bool isSafeIntentUrl(String value) {
+  final clean = value.trim().toLowerCase();
+  if (clean.isEmpty) return false;
+  if (clean.startsWith('javascript:') ||
+      clean.startsWith('data:') ||
+      clean.startsWith('vbscript:') ||
+      clean.startsWith('about:') ||
+      clean.startsWith('blob:') ||
+      clean.startsWith('file:') ||
+      clean.startsWith('content:')) {
+    return false;
+  }
+  final uri = Uri.tryParse(clean);
+  if (uri == null) return false;
+  final scheme = uri.scheme.toLowerCase();
+  return scheme == 'http' || scheme == 'https' || scheme == 'magnet';
+}
+
 String? extractUrlFromText(String text) {
   final trimmed = text.trim();
   if (isHttpUrl(trimmed) || isMagnetUrl(trimmed) || isTorrentFileUrl(trimmed)) {
@@ -254,8 +274,6 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
   }
 
   return result;
-
-
 }
 
 String _base32ToHex(String base32) {

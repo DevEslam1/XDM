@@ -352,7 +352,10 @@ String sanitizeFileName(String fileName) {
   name = name.replaceAll(RegExp(r'[\\\/]'), '_');
   name = name.replaceAll('..', '_');
   name = name.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
-  if (name.isEmpty || name == '.' || name == '..') {
+  if (name.isEmpty ||
+      name == '.' ||
+      name == '..' ||
+      name.replaceAll('_', '').trim().isEmpty) {
     return 'download_${DateTime.now().millisecondsSinceEpoch}';
   }
   if (name.length > 255) {
@@ -367,5 +370,6 @@ String sanitizeFileName(String fileName) {
 bool isSafeSubpath(String rootDirectory, String targetPath) {
   final canonicalRoot = p.canonicalize(rootDirectory);
   final canonicalTarget = p.canonicalize(targetPath);
-  return p.isWithin(canonicalRoot, canonicalTarget) || canonicalRoot == canonicalTarget;
+  return p.isWithin(canonicalRoot, canonicalTarget) ||
+      canonicalRoot == canonicalTarget;
 }
