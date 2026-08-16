@@ -114,5 +114,23 @@ void main() {
       // No refill ran, so the recorded timestamp must be unchanged.
       expect(governor.lastRefillMsForTesting, equals(before));
     });
+
+    test('rapid acquire() calls do not permanently zero out tokens', () async {
+      final governor = BandwidthGovernor(100000, 1.0); // 100 KB/s
+      governor.registerConsumer();
+
+      // Drain all initial tokens
+      governor.acquireNonBlocking(150000);
+
+      // Perform a rapid succession of acquire calls with tiny delays spanning > 100ms
+      for (int i = 0; i < 20; i++) {
+        await Future.delayed(const Duration(milliseconds: 5));
+        governor.acquireNonBlocking(10);
+      }
+
+      // After 100ms+, tokens must have refilled despite rapid calls
+      final wait = governor.acquireNonBlocking(1000);
+      expect(wait, lessThan(1000));
+    });
   });
 }

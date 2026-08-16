@@ -204,15 +204,11 @@ class BandwidthGovernor {
   void _refill() {
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
-    // FIX-P1-02: Throttle refills to at most once per 50ms.
-    if (_lastRefillMs != 0 && nowMs - _lastRefillMs < _minRefillIntervalMs) {
-      return;
-    }
     _lastRefillMs = nowMs;
 
     final elapsedMs = now.difference(_lastRefill).inMilliseconds;
 
-    if (elapsedMs <= 0) return;
+    if (elapsedMs < _minRefillIntervalMs) return;
 
     final share = perConsumerBytesPerSecond;
     if (share <= 0) {
