@@ -475,45 +475,76 @@ class DownloadProvider extends ChangeNotifier
             uploadQueue.add(info.uploadRate.toDouble());
             if (uploadQueue.length > 20) uploadQueue.removeFirst();
 
-            // FIX-E: Push live metrics onto the task so the UI never shows
-            // zeros even though the engine is transferring.
-            final taskIdx = _tasks.indexWhere((t) => t.id == taskId);
-            if (taskIdx != -1) {
-              final task = _tasks[taskIdx];
-              final liveDone = info.totalWantedDone > 0
-                  ? info.totalWantedDone
-                  : (info.totalDone > 0
-                      ? info.totalDone
-                      : task.downloadedBytes);
-              final newSize = (info.totalWanted > 0 &&
-                      (task.fileSize <= 0 || task.fileSize < info.totalWanted))
-                  ? info.totalWanted
-                  : task.fileSize;
-              final newSpeed = (task.status == DownloadStatus.downloading ||
-                      task.status == DownloadStatus.merging)
-                  ? info.downloadRate.toDouble()
-                  : (task.status == DownloadStatus.completed &&
-                          task.seedingEnabled
-                      ? info.uploadRate.toDouble()
-                      : task.speed);
-              // Derive granular cycleState from the engine's stateLabel
-              final newCycleState = CycleState.fromLibtorrent(
-                info.stateLabel,
-                seedingEnabled: task.seedingEnabled,
-              );
-              if (task.downloadedBytes != liveDone ||
-                  task.fileSize != newSize ||
-                  task.speed != newSpeed ||
-                  task.cycleState != newCycleState) {
-                _tasks[taskIdx] = task.copyWith(
-                  downloadedBytes: liveDone,
-                  fileSize: newSize,
-                  speed: newSpeed,
-                  cycleState: newCycleState,
-                );
-                notifyListeners();
+        // FIX v2.0.0: Push live metrics AND torrentFiles onto the task.
+        // Previously torrentFiles was never synced here, so the details
+        // screen showed no files until the orchestrator's onProgress fired.
+        final taskIdx = _tasks.indexWhere((t) => t.id == taskId);
+        if (taskIdx != -1) {
+          final task = _tasks[taskIdx];
+          final liveDone = info.totalWantedDone > 0
+              ? info.totalWantedDone
+              : (info.totalDone > 0
+                  ? info.totalDone
+                  : task.downloadedBytes);
+          final newSize = (info.totalWanted > 0 &&
+                  (task.fileSize <= 0 || task.fileSize < info.totalWanted))
+              ? info.totalWanted
+              : task.fileSize;
+          final newSpeed = (task.status == DownloadStatus.downloading ||
+                  task.status == DownloadStatus.merging)
+              ? info.downloadRate.toDouble()
+              : (task.status == DownloadStatus.completed &&
+                      task.seedingEnabled
+                  ? info.uploadRate.toDouble()
+                  : task.speed);
+          final newCycleState = CycleState.fromLibtorrent(
+            info.stateLabel,
+            seedingEnabled: task.seedingEnabled,
+          );
+
+          // FIX v2.0.0: Sync torrentFiles from the engine so the
+          // details screen shows files even before onProgress fires.
+          List<Map<String, dynamic>>? syncedFiles = task.torrentFiles;
+          if (info.hasMetadata &&
+              (syncedFiles == null || syncedFiles.isEmpty)) {
+            try {
+              final nativeFiles = TorrentService.getFiles(tid);
+              if (nativeFiles.isNotEmpty) {
+                syncedFiles = nativeFiles.map((f) {
+                  final dl = f.safeDownloadedBytes;
+                  return <String, dynamic>{
+                    'name': f.name,
+                    'length': f.size,
+                    'downloadedBytes': dl >= 0 ? dl : 0,
+                    'selected': f.selected,
+                    'priority': f.priority,
+                    'progress':
+                        f.size > 0 ? (dl.clamp(0, f.size) / f.size) : 1.0,
+                    'isComplete': f.size == 0 || dl >= f.size,
+                    'progressEstimated': dl < 0,
+                  };
+                }).toList();
               }
+            } catch (e) {
+              _log.fine('Failed to sync torrent files for $taskId: $e');
             }
+          }
+
+          if (task.downloadedBytes != liveDone ||
+              task.fileSize != newSize ||
+              task.speed != newSpeed ||
+              task.cycleState != newCycleState ||
+              syncedFiles != task.torrentFiles) {
+            _tasks[taskIdx] = task.copyWith(
+              downloadedBytes: liveDone,
+              fileSize: newSize,
+              speed: newSpeed,
+              cycleState: newCycleState,
+              torrentFiles: syncedFiles,
+            );
+            notifyListeners();
+          }
+        }
           }
 
           // FIX T-5: Sync uploadedBytes in real-time during seeding
@@ -2278,14 +2309,15 @@ class DownloadProvider extends ChangeNotifier
         return (total: trusted, files: files);
       }
 
-      if (type == FileSystemEntityType.directory) {
-        if (fileList != null && fileList.isNotEmpty) {
-          final scan = scanTorrentFilesOnDisk(rootPath, fileList);
-          return (total: scan.total, files: scan.files);
+              if (type == FileSystemEntityType.directory) {
+          if (fileList != null && fileList.isNotEmpty) {
+            final scan = scanTorrentFilesOnDisk(rootPath, fileList);
+            return (total: scan.total, files: scan.files);
+          }
+          // FIX: Do NOT scan the entire folder if we don't have the file list yet (e.g. magnets).
+          // Scanning the whole folder could count unrelated files and falsely report 100% progress.
+          return (total: 0, files: null);
         }
-
-        return (total: scanFolderBytesSync(rootPath), files: null);
-      }
 
       return (total: 0, files: fileList);
     } catch (e) {

@@ -385,9 +385,11 @@ class DownloadTask {
   /// selected torrent files (magnets only learn their size after metadata),
   /// then 0. Every size/percentage readout must go through this getter so
   /// torrents with a late-resolved size still render correct numbers.
+  /// FIX v2.0.0: Enhanced fallback chain for torrent file size.
+  /// When torrentFiles is null (metadata not received) AND fileSize is 0,
+  /// try totalFileBytes from the engine's aggregate stats.
   int get resolvedFileSize {
-    if (fileSize < 0) return 0; // FIX-C1: Handle negative fileSize
-    // FIX-10: For torrents, prefer the torrentFiles sum as it's computed from actual metadata
+    if (fileSize < 0) return 0;
     if (isTorrent && torrentFiles != null && torrentFiles!.isNotEmpty) {
       final sum = torrentFiles!
           .where((f) => isTorrentFileSelected(f))
@@ -395,6 +397,10 @@ class DownloadTask {
       if (sum > 0) return sum;
     }
     if (fileSize > 0) return fileSize;
+    // FIX v2.0.0: Fall back to engine-reported aggregate if available
+    if (isTorrent && totalFileBytes != null && totalFileBytes! > 0) {
+      return totalFileBytes!;
+    }
     return 0;
   }
 

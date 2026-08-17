@@ -120,8 +120,12 @@ class _CapabilityGate {
       // ignore: avoid_dynamic_calls
       (target as dynamic).getTrackers(-1);
     } catch (e) {
-      trackersSupported = false;
-      _log.fine('probe getTrackers disabled: $e');
+      if (isMethodMissing(e)) {
+        trackersSupported = false;
+        _log.fine('probe getTrackers disabled: $e');
+      } else {
+        trackersSupported = true;
+      }
     }
 
     try {
@@ -132,40 +136,60 @@ class _CapabilityGate {
         trackers: <String>[],
       );
     } catch (e) {
-      createTorrentSupported = false;
-      _log.fine('probe createTorrent disabled: $e');
+      if (isMethodMissing(e)) {
+        createTorrentSupported = false;
+        _log.fine('probe createTorrent disabled: $e');
+      } else {
+        createTorrentSupported = true;
+      }
     }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).loadIpFilter('');
     } catch (e) {
-      ipFilterSupported = false;
-      _log.fine('probe loadIpFilter disabled: $e');
+      if (isMethodMissing(e)) {
+        ipFilterSupported = false;
+        _log.fine('probe loadIpFilter disabled: $e');
+      } else {
+        ipFilterSupported = true;
+      }
     }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).setSequentialDownload(-1, false);
     } catch (e) {
-      sequentialDownloadSupported = false;
-      _log.fine('probe setSequentialDownload disabled: $e');
+      if (isMethodMissing(e)) {
+        sequentialDownloadSupported = false;
+        _log.fine('probe setSequentialDownload disabled: $e');
+      } else {
+        sequentialDownloadSupported = true;
+      }
     }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).setSuperSeeding(-1, false);
     } catch (e) {
-      superSeedingSupported = false;
-      _log.fine('probe setSuperSeeding disabled: $e');
+      if (isMethodMissing(e)) {
+        superSeedingSupported = false;
+        _log.fine('probe setSuperSeeding disabled: $e');
+      } else {
+        superSeedingSupported = true;
+      }
     }
 
     try {
       // ignore: avoid_dynamic_calls
       (target as dynamic).setPieceDeadline(-1, 0, 0);
     } catch (e) {
-      pieceDeadlineSupported = false;
-      _log.fine('probe setPieceDeadline disabled: $e');
+      if (isMethodMissing(e)) {
+        pieceDeadlineSupported = false;
+        _log.fine('probe setPieceDeadline disabled: $e');
+      } else {
+        pieceDeadlineSupported = true;
+      }
     }
 
     _log.fine(
@@ -958,6 +982,9 @@ class TorrentService {
   static double progressFor(int id) => _latestProgress[id] ?? 0.0;
 
   /// Returns the native fast-resume blob for [id], or null when unavailable.
+  /// FIX v2.0.0: The sync saveResumeData always returns null in v2.0.0
+  /// (the native call returns a Future). Use a cached blob from the last
+  /// async save, or trigger an async save and return null for this call.
   static Uint8List? resumeBlobFor(int id) {
     if (!isPluginAvailable ||
         _state == TorrentSessionState.uninitialized ||
@@ -965,13 +992,29 @@ class TorrentService {
       return null;
     }
     try {
-      return _CapabilityGate.instance.saveResumeData(id);
+      // v2.0.0: Try sync first (works on some builds), then fall back
+      final syncResult = _CapabilityGate.instance.saveResumeData(id);
+      if (syncResult != null && syncResult.isNotEmpty) return syncResult;
+      // Sync returned null (v2.0.0) — trigger async save for next call
+      // and return the last known cached blob if available.
+      unawaited(_CapabilityGate.instance.saveResumeDataAsync(id).then((blob) {
+        if (blob != null && blob.isNotEmpty) {
+          _cachedResumeBlobs[id] = blob;
+        }
+      }).catchError((_) {}));
+      return _cachedResumeBlobs[id];
     } catch (e, st) {
       LoggingService.logger('TorrentServiceFfi')
           .warning('Operation failed with fallback', e, st);
       return null;
     }
   }
+
+  /// Cache of last-known resume blobs keyed by torrent id.
+  /// Populated by async saveResumeData calls so that sync callers
+  /// (fetchResumeBytes, resumeBlobFor) can return stale-but-valid data
+  /// instead of null in v2.0.0.
+  static final Map<int, Uint8List> _cachedResumeBlobs = {};
 
   static Future<void> _readyOrThrow() async {
     if (_state == TorrentSessionState.ready && isPluginAvailable) return;
@@ -1212,6 +1255,18 @@ class TorrentService {
               final safeProgress = value.progress.isFinite
                   ? value.progress.clamp(0.0, 1.0)
                   : 0.0;
+              // FIX v2.0.0: When totalWanted is 0 (pre-metadata), fall back
+              // to totalDone so progress isn't lost. Also cache resume blobs.
+              final int resolvedTotalWantedDone;
+              if (value.totalWanted > 0) {
+                resolvedTotalWantedDone = (safeProgress * value.totalWanted)
+                    .round()
+                    .clamp(0, value.totalWanted);
+              } else if (value.totalDone > 0) {
+                resolvedTotalWantedDone = value.totalDone;
+              } else {
+                resolvedTotalWantedDone = 0;
+              }
               final info = TorrentUpdateInfo(
                 id: value.id,
                 name: value.name,
@@ -1220,13 +1275,7 @@ class TorrentService {
                 uploadRate: value.uploadRate,
                 totalDone: value.totalDone,
                 totalWanted: value.totalWanted,
-                // v2.0.0: totalWantedDone should NEVER fall back to totalDone
-                // (totalDone counts unwanted bytes too). Estimate from progress.
-                totalWantedDone: value.totalWanted > 0
-                    ? (safeProgress * value.totalWanted)
-                        .round()
-                        .clamp(0, value.totalWanted)
-                    : 0,
+                totalWantedDone: resolvedTotalWantedDone,
                 hasMetadata: value.hasMetadata,
                 stateLabel: value.state.label,
                 numSeeds: value.numSeeds,
@@ -1409,9 +1458,9 @@ class TorrentService {
     }
   }
 
+  /// FIX v2.0.0: Fall back to totalDone when totalWanted is 0.
   static int _estimatePiecesTotal(TorrentInfo torrentInfo) {
-    // v2.0.0: try to read actual piece length from the info object.
-    int pieceSize = 256 * 1024; // safe fallback
+    int pieceSize = 256 * 1024;
     try {
       final dynamic info = torrentInfo;
       final ps = (info as dynamic).pieceLength;
@@ -1420,8 +1469,10 @@ class TorrentService {
       }
     } catch (_) {}
     final totalWanted = torrentInfo.totalWanted;
-    if (totalWanted > 0) {
-      return (totalWanted / pieceSize).ceil();
+    final totalDone = torrentInfo.totalDone;
+    final effectiveTotal = totalWanted > 0 ? totalWanted : totalDone;
+    if (effectiveTotal > 0) {
+      return (effectiveTotal / pieceSize).ceil();
     }
     return 0;
   }
@@ -1435,10 +1486,26 @@ class TorrentService {
     return 0;
   }
 
-  /// Attempts to save native fast-resume data for [torrentId].
-  static Uint8List? fetchResumeBytes(int torrentId) =>
-      _CapabilityGate.instance.saveResumeData(torrentId);
+  /// FIX v2.0.0: sync saveResumeData returns null in v2.0.0.
+  /// Return cached blob if available, otherwise trigger async save.
+  static Uint8List? fetchResumeBytes(int torrentId) {
+    final syncResult = _CapabilityGate.instance.saveResumeData(torrentId);
+    if (syncResult != null && syncResult.isNotEmpty) {
+      _cachedResumeBlobs[torrentId] = syncResult;
+      return syncResult;
+    }
+    // v2.0.0: return cached blob and trigger refresh
+    unawaited(
+        _CapabilityGate.instance.saveResumeDataAsync(torrentId).then((blob) {
+      if (blob != null && blob.isNotEmpty) {
+        _cachedResumeBlobs[torrentId] = blob;
+      }
+    }).catchError((_) {}));
+    return _cachedResumeBlobs[torrentId];
+  }
 
+  /// FIX v2.0.0: Always use async saveResumeData and cache the blob
+  /// so that sync callers (fetchResumeBytes) can access it.
   static Future<void> saveResumeData(int torrentId) async {
     if (_state == TorrentSessionState.uninitialized ||
         _state == TorrentSessionState.initializing) {
@@ -1449,6 +1516,8 @@ class TorrentService {
       final data =
           await _CapabilityGate.instance.saveResumeDataAsync(torrentId);
       if (data != null && data.isNotEmpty) {
+        // FIX v2.0.0: Cache the blob for sync access
+        _cachedResumeBlobs[torrentId] = data;
         final source = _torrentSources[torrentId];
         if (source != null) {
           await TorrentResumeStore.saveAndWait(
@@ -1540,6 +1609,7 @@ class TorrentService {
     _latestProgress.clear();
     _cachedPrioritiesSnapshot.clear();
     _recentAlerts.clear();
+    _cachedResumeBlobs.clear();
 
     try {
       await LibtorrentFlutter.instance.dispose();
@@ -1994,62 +2064,89 @@ class TorrentService {
     }
   }
 
+  /// FIX v2.0.0: Allow getFiles during checking/allocating phases.
+  /// Previously returned [] when !isTorrentAlive, but v2.0.0 handles
+  /// are alive during checking — only truly removed handles should fail.
   static List<TorrentFileItem> getFiles(int id) {
-    if (!isInitialized || !isTorrentAlive(id)) return [];
-    if (id >= 0) {
-      try {
-        final files = LibtorrentFlutter.instance.getFiles(id);
-        final progress = _CapabilityGate.instance.fileProgressSupported
-            ? _CapabilityGate.instance.fileProgress(id)
-            : null;
-        final priorities = _CapabilityGate.instance.filePrioritiesSupported
-            ? _CapabilityGate.instance.filePriorities(id)
-            : null;
-        final stats = _latestStats[id];
-        final double fallbackProgress = stats?.progress ?? 0.0;
-        return List.generate(files.length, (i) {
-          final f = files[i];
-          int resolvedDownloadedBytes;
-          if (progress != null && i < progress.length) {
-            final rawValue = progress[i] as num?;
-            if (rawValue == null) {
-              resolvedDownloadedBytes = -1;
-            } else if (rawValue.toDouble() <= 1.0 &&
-                rawValue.toDouble() >= 0.0) {
-              // v2.0.0 returns progress ratio (0.0-1.0)
-              final ratio = rawValue.toDouble().clamp(0.0, 1.0);
+    if (!isInitialized || id < 0) return [];
+    // FIX v2.0.0: Don't gate on isTorrentAlive — the native getFiles
+    // call itself will throw for dead handles, which we catch below.
+    // This fixes "no files shown" during checking/allocating phases.
+    try {
+      final files = LibtorrentFlutter.instance.getFiles(id);
+      if (files.isEmpty) return [];
+      final progress = _CapabilityGate.instance.fileProgressSupported
+          ? _CapabilityGate.instance.fileProgress(id)
+          : null;
+      final priorities = _CapabilityGate.instance.filePrioritiesSupported
+          ? _CapabilityGate.instance.filePriorities(id)
+          : null;
+      final stats = _latestStats[id];
+      final double fallbackProgress = stats?.progress ?? 0.0;
+      return List.generate(files.length, (i) {
+        final f = files[i];
+        int resolvedDownloadedBytes;
+        if (progress != null && i < progress.length) {
+          final rawValue = progress[i] as num?;
+          if (rawValue == null) {
+            resolvedDownloadedBytes = -1;
+          } else {
+            // FIX v2.0.0: Robust ratio vs raw-bytes detection.
+            // v2.0.0 ALWAYS returns ratios in [0.0, 1.0].
+            // Legacy returns raw bytes (integers, often > 1).
+            // Ambiguity zone: values 0 and 1. In v2.0.0 these are
+            // ratios (0% and 100%). We detect v2.0.0 by checking if
+            // the value has a fractional part OR is exactly 0.0/1.0.
+            final doubleVal = rawValue.toDouble();
+            final intVal = rawValue.toInt();
+            final bool isLikelyRatio;
+            if (doubleVal > 1.0) {
+              isLikelyRatio = false; // Definitely raw bytes
+            } else if (doubleVal < 0.0) {
+              isLikelyRatio = false; // Invalid → unknown
+            } else if (doubleVal == doubleVal.roundToDouble() &&
+                intVal > 1) {
+              // Integer > 1 in [0,1] range is impossible for ratio
+              isLikelyRatio = false;
+            } else {
+              // 0.0, 1.0, or fractional → v2.0.0 ratio
+              isLikelyRatio = true;
+            }
+            if (isLikelyRatio) {
+              final ratio = doubleVal.clamp(0.0, 1.0);
               resolvedDownloadedBytes =
                   (f.size * ratio).round().clamp(0, f.size);
-            } else if (rawValue.toInt() >= 0) {
-              // Legacy: raw bytes
-              resolvedDownloadedBytes = rawValue.toInt().clamp(0, f.size);
+            } else if (intVal >= 0) {
+              resolvedDownloadedBytes = intVal.clamp(0, f.size);
             } else {
               resolvedDownloadedBytes = -1;
             }
-          } else if (fallbackProgress > 0 && f.size > 0) {
-            // Fallback: estimate from overall torrent progress
-            resolvedDownloadedBytes =
-                (f.size * fallbackProgress).round().clamp(0, f.size);
-          } else {
-            resolvedDownloadedBytes = -1;
           }
-          final int filePriority = (priorities != null && i < priorities.length)
-              ? ((priorities[i] as num?)?.toInt() ?? 4)
-              : 4;
-          // v2.0.0: priority 0 = skip/deselected, 1-7 = selected with weight
-          final bool fileSelected = filePriority > 0;
-          return TorrentFileItem(
-            index: f.index,
-            name: f.name,
-            size: f.size,
-            downloadedBytes: resolvedDownloadedBytes,
-            priority: filePriority,
-            selected: fileSelected,
-          );
-        });
-      } catch (e, st) {
-        _log.warning('getFiles failed for id $id: $e', e, st);
-      }
+        } else if (fallbackProgress > 0 && f.size > 0) {
+          resolvedDownloadedBytes =
+              (f.size * fallbackProgress).round().clamp(0, f.size);
+        } else {
+          resolvedDownloadedBytes = -1;
+        }
+        final int filePriority =
+            (priorities != null && i < priorities.length)
+                ? ((priorities[i] as num?)?.toInt() ?? 4)
+                : 4;
+        final bool fileSelected = filePriority > 0;
+        return TorrentFileItem(
+          index: f.index,
+          name: f.name,
+          size: f.size,
+          downloadedBytes: resolvedDownloadedBytes,
+          priority: filePriority,
+          selected: fileSelected,
+          progressRatio: resolvedDownloadedBytes >= 0 && f.size > 0
+              ? (resolvedDownloadedBytes / f.size).clamp(0.0, 1.0)
+              : null,
+        );
+      });
+    } catch (e, st) {
+      _log.warning('getFiles failed for id $id: $e', e, st);
     }
     return [];
   }
@@ -2217,13 +2314,13 @@ class TorrentService {
 
   /// Returns accurate per-file progress directly from memory/native libtorrent stats.
   /// Eliminates 4-second disk scans and expensive I/O byte probes.
+  /// FIX v2.0.0: Same robust ratio/bytes detection as getFiles.
   static Future<List<TorrentFileProgress>> getAccurateFileProgress(
     int torrentId,
     String savePath,
   ) async {
     if (!isInitialized || torrentId < 0) return [];
     try {
-      // v2.0.0: always re-fetch native file list + progress directly.
       final nativeFiles = LibtorrentFlutter.instance.getFiles(torrentId);
       final progress = _CapabilityGate.instance.fileProgressSupported
           ? _CapabilityGate.instance.fileProgress(torrentId)
@@ -2235,17 +2332,36 @@ class TorrentService {
         int downloadedBytes;
         if (progress != null && i < progress.length) {
           final raw = progress[i] as num?;
-          if (raw != null && raw.toDouble() >= 0.0 && raw.toDouble() <= 1.0) {
-            downloadedBytes =
-                (f.size * raw.toDouble()).round().clamp(0, f.size);
-          } else if (raw != null && raw.toInt() >= 0) {
-            downloadedBytes = raw.toInt().clamp(0, f.size);
-          } else {
+          if (raw == null) {
             downloadedBytes =
                 (f.size * overallProgress).round().clamp(0, f.size);
+          } else {
+            final doubleVal = raw.toDouble();
+            final intVal = raw.toInt();
+            // FIX v2.0.0: Robust detection (same logic as getFiles)
+            final bool isRatio;
+            if (doubleVal > 1.0) {
+              isRatio = false;
+            } else if (doubleVal < 0.0) {
+              isRatio = false;
+            } else if (doubleVal == doubleVal.roundToDouble() && intVal > 1) {
+              isRatio = false;
+            } else {
+              isRatio = true;
+            }
+            if (isRatio) {
+              downloadedBytes =
+                  (f.size * doubleVal.clamp(0.0, 1.0)).round().clamp(0, f.size);
+            } else if (intVal >= 0) {
+              downloadedBytes = intVal.clamp(0, f.size);
+            } else {
+              downloadedBytes =
+                  (f.size * overallProgress).round().clamp(0, f.size);
+            }
           }
         } else {
-          downloadedBytes = (f.size * overallProgress).round().clamp(0, f.size);
+          downloadedBytes =
+              (f.size * overallProgress).round().clamp(0, f.size);
         }
         final isComplete = f.size == 0 || downloadedBytes >= f.size;
         final fileProg =

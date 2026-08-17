@@ -40,7 +40,38 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
 
   @override
   Widget build(BuildContext context) {
+    // FIX v2.0.0: Show a loading indicator instead of blank space
+    // when files haven't been received yet (metadata pending).
     if (widget.torrentFiles.isEmpty) {
+      if (widget.isDownloading) {
+        return DmxCardShell(
+          showRail: false,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  widget.isDownloading
+                      ? 'Waiting for torrent metadata…'
+                      : 'No files available',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: widget.isDark == true
+                        ? AppTheme.textMuted
+                        : AppTheme.lightTextMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
       return const SizedBox.shrink();
     }
 

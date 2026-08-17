@@ -16,7 +16,15 @@ class TorrentFileItem {
     this.progressRatio,
   });
   bool get hasProgressData => downloadedBytes >= 0 || progressRatio != null;
+  /// FIX v2.0.0: When downloadedBytes is 0 and progressRatio is available,
+  /// prefer progressRatio (the engine may report 0 before first piece).
   int get safeDownloadedBytes {
+    if (downloadedBytes > 0) return downloadedBytes;
+    if (downloadedBytes == 0 && progressRatio != null && progressRatio! > 0) {
+      if (size > 0) {
+        return (size * progressRatio!.clamp(0.0, 1.0)).round().clamp(0, size);
+      }
+    }
     if (downloadedBytes >= 0) return downloadedBytes;
     if (progressRatio != null && size > 0) {
       return (size * progressRatio!.clamp(0.0, 1.0)).round().clamp(0, size);

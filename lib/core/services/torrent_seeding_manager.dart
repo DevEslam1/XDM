@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:logging/logging.dart';
+import '../../features/downloads/provider/network_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
+import '../di/injection.dart';
 import 'power_monitor.dart';
 import 'torrent_service.dart';
 
@@ -82,8 +84,14 @@ class TorrentSeedingManager {
         minSeedTimeMinutes: s.minSeedTimeMinutes,
       );
 
-      final isCharging = PowerMonitor.isCharging;
-      const isWifi = true;
+    final isCharging = PowerMonitor.isCharging;
+    // FIX v2.0.0: Actually check wifi status instead of hardcoding true.
+    bool isWifi = true;
+    try {
+      if (getIt.isRegistered<NetworkMonitor>()) {
+        isWifi = getIt<NetworkMonitor>().hasWifiOrEthernet;
+      }
+    } catch (_) {}
       final currentRatio =
           calculateRatio(stats.totalPayloadUpload, stats.totalPayloadDownload);
       final seedDuration = getSeedDuration(id);
