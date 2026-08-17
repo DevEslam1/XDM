@@ -37,7 +37,6 @@ class BrowserTabView extends StatefulWidget {
 
 class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
   static final _log = Logger('BrowserTabView');
-  bool _attemptedSilentCrashReload = false;
 
   @override
   Widget build(BuildContext context) {
@@ -186,12 +185,16 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
       },
       onRenderProcessGone: (controller, detail) async {
         _log.warning('Render process gone on tab ${tab.id}: didCrash=${detail.didCrash}');
-        if (!_attemptedSilentCrashReload) {
-          _attemptedSilentCrashReload = true;
+        // FIX(B3): Use the per-tab flag so the silent reload is attempted once
+        // per crash regardless of State rebuilds.
+        if (!tab.hasAttemptedSilentReload) {
+          tab.hasAttemptedSilentReload = true;
           try {
             await controller.reload();
             return;
-          } catch (_) {}
+          } catch (e, st) {
+            _log.warning('Silent crash reload failed', e, st);
+          }
         }
         widget.controller.handleTabCrash(tab);
         if (mounted) setState(() {});

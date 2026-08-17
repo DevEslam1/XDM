@@ -43,6 +43,14 @@ class BrowserHistoryManager {
   void recordHistory(String url, {String? title}) {
     if (url.isEmpty || url == 'about:blank') return;
 
+    // FIX(B9): Check incognito FIRST (before cleaning/dedup work) and clear
+    // stale dedup state so the first visit after exiting incognito isn't
+    // incorrectly skipped.
+    if (isIncognito()) {
+      reset();
+      return;
+    }
+
     final String clean;
     try {
       clean = cleanUrl(url);
@@ -51,12 +59,6 @@ class BrowserHistoryManager {
       return;
     }
 
-    if (isIncognito()) {
-      // Clear stale dedup state so the first visit after exiting
-      // incognito isn't incorrectly skipped.
-      reset();
-      return;
-    }
     final now = DateTime.now();
 
     // Clean up old entries in _recentVisits to prevent leaks
@@ -142,7 +144,10 @@ class BrowserHistoryManager {
     String? title,
     bool isIncognito = false,
   }) {
-    if (isIncognito) return;
+    // FIX(B9): Also consult the injected isIncognito() function so visits made
+    // while incognito mode is active never leak into history, even when the
+    // caller doesn't pass the flag.
+    if (isIncognito || this.isIncognito()) return;
     recordHistory(url, title: title);
   }
 

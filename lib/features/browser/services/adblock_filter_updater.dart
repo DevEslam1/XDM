@@ -184,18 +184,44 @@ class AdBlockFilterUpdater {
   final Set<String> _scriptletRules = {};
   final Map<String, RegExp> _compiledWildcardPatterns = {};
 
-  void _rebuildWildcardPatterns() {
-    _compiledWildcardPatterns.clear();
-    for (final pattern in _urlPatterns) {
-      if (pattern.contains('*')) {
-        try {
-          final regexStr =
-              '^${RegExp.escape(pattern).replaceAll(r'\*', '.*')}\$';
-          _compiledWildcardPatterns[pattern] =
-              RegExp(regexStr, caseSensitive: false);
-        } catch (_) {}
+  void _rebuildWildcardPatterns([Set<String>? changedPatterns]) {
+    // FIX(P6): Incremental rebuild — when the caller knows exactly which
+    // patterns changed (added/removed), only those are recompiled instead of
+    // clearing and recompiling the entire cache on every filter update.
+    if (changedPatterns == null) {
+      _compiledWildcardPatterns.clear();
+      for (final pattern in _urlPatterns) {
+        if (pattern.contains('*')) {
+          try {
+            _compiledWildcardPatterns[pattern] =
+                _compileWildcardPattern(pattern);
+          } catch (_) {}
+        }
+      }
+      return;
+    }
+
+    for (final pattern in changedPatterns) {
+      if (!_urlPatterns.contains(pattern)) {
+        // Pattern was removed.
+        _compiledWildcardPatterns.remove(pattern);
+        continue;
+      }
+      if (!pattern.contains('*')) {
+        _compiledWildcardPatterns.remove(pattern);
+        continue;
+      }
+      try {
+        _compiledWildcardPatterns[pattern] = _compileWildcardPattern(pattern);
+      } catch (_) {
+        _compiledWildcardPatterns.remove(pattern);
       }
     }
+  }
+
+  RegExp _compileWildcardPattern(String pattern) {
+    final regexStr = '^${RegExp.escape(pattern).replaceAll(r'\*', '.*')}\$';
+    return RegExp(regexStr, caseSensitive: false);
   }
 
   // PERF (TASK 4): LRU cache for cosmeticRulesForHost.
@@ -260,7 +286,9 @@ class AdBlockFilterUpdater {
     for (final p in cachedPatterns) {
       _urlPatternsTrie.insert(p);
     }
-    _rebuildWildcardPatterns();
+    // FIX(P6): Initial load is a full build, but passing the explicit set keeps
+    // the wildcard cache consistent with only the patterns we actually have.
+    _rebuildWildcardPatterns(cachedPatterns.toSet());
     _cosmeticRules.addAll(cachedCosmetics);
     _scriptletRules.addAll(cachedScriptlets);
 
@@ -430,6 +458,9 @@ class AdBlockFilterUpdater {
 
   Future<void> _downloadAndParse() async {
     _invalidateCosmeticCache();
+    // FIX(P6): Track exactly which url patterns changed during this update so
+    // wildcard regexes are only recompiled for those, not the whole cache.
+    final changedPatterns = <String>{};
 
     // FIX: Clear all parsed rule sets BEFORE re-parsing so stale rules from
     // a previous update cycle don't accumulate. Without this, every update
@@ -511,7 +542,7 @@ class AdBlockFilterUpdater {
             return;
           }
 
-          final result = await _parseFilterLines(lines, source.type);
+          final result = await _parseFilterLines(lines, source.type, changedPatterns);
 
           // Save size of the successfully validated file for future comparisons
           await prefs.setInt(sizeKey, fileSize);
@@ -611,7 +642,8 @@ class AdBlockFilterUpdater {
         _scriptletsKey,
         _scriptletRules.take(1000).toList(),
       );
-      _rebuildWildcardPatterns();
+      // FIX(P6): Only recompile wildcard regexes that actually changed.
+      _rebuildWildcardPatterns(changedPatterns);
     } else {
       _log.warning(
           'Some filter sources failed to download. Pattern and cosmetic rule updates were skipped to prevent data loss.');
@@ -630,7 +662,8 @@ class AdBlockFilterUpdater {
       for (final p in cachedPatterns) {
         _urlPatternsTrie.insert(p);
       }
-      _rebuildWildcardPatterns();
+      // FIX(P6): Rebuild only from the restored pattern set.
+      _rebuildWildcardPatterns(cachedPatterns.toSet());
       _cosmeticRules.addAll(cachedCosmetics);
       _scriptletRules.addAll(cachedScriptlets);
 
@@ -673,7 +706,7 @@ class AdBlockFilterUpdater {
   }
 
   Future<({Set<String> blocked, Set<String> excepted})> _parseFilterLines(
-      List<String> lines, FilterType type) async {
+      List<String> lines, FilterType type, Set<String> changedPatterns) async {
     final parsed = FilterLineParser.parse(lines, type);
 
     _scriptletRules.addAll(parsed.scriptletRules);
@@ -695,6 +728,9 @@ class AdBlockFilterUpdater {
     for (final p in parsed.exactPathPatterns) {
       _urlPatternsTrie.insert(p);
     }
+    // FIX(P6): Remember these patterns so the wildcard cache can be rebuilt
+    // incrementally after all sources finish parsing.
+    changedPatterns.addAll(parsed.urlPatterns.where((p) => p.contains('*')));
 
     return (blocked: parsed.blocked, excepted: parsed.excepted);
   }
@@ -702,7 +738,20 @@ class AdBlockFilterUpdater {
   @visibleForTesting
   Future<({Set<String> blocked, Set<String> excepted})> parseFilterFile(
           File file, FilterType type) async =>
-      _parseFilterLines(await file.readAsLines(), type);
+      _parseFilterLines(await file.readAsLines(), type, <String>{});
+
+  /// FIX(P7): Expose URL-path pattern matching (wildcard regexes + trie)
+  /// separately from domain checks so callers can merge domain lookups into a
+  /// single set instead of re-walking the same domains here.
+  bool matchesUrlPath(String path) {
+    if (path.isEmpty) return false;
+    for (final regex in _compiledWildcardPatterns.values) {
+      if (regex.hasMatch(path)) {
+        return true;
+      }
+    }
+    return _urlPatternsTrie.searchSubstrings(path);
+  }
 
   bool shouldBlock(String hostnameOrUrl) {
     if (hostnameOrUrl.isEmpty) return false;
@@ -725,14 +774,7 @@ class AdBlockFilterUpdater {
     }
 
     // FIX #9 & PERF P2: Check collected URL path patterns using pre-compiled wildcard patterns and Trie
-    if (path.isNotEmpty) {
-      for (final regex in _compiledWildcardPatterns.values) {
-        if (regex.hasMatch(path)) {
-          return true;
-        }
-      }
-      if (_urlPatternsTrie.searchSubstrings(path)) return true;
-    }
+    if (matchesUrlPath(path)) return true;
 
     // FIX: Check allow-list FIRST so excepted domains are never blocked,
     // even if they appear in a blocklist.

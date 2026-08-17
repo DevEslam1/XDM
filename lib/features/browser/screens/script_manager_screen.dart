@@ -22,6 +22,12 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
+  // FIX(P4): Cache the filtered script list and only recompute it when the
+  // search query changes or the manager notifies, instead of re-filtering the
+  // entire script list on every build.
+  List<UserScript> _filteredScriptsCache = const [];
+  bool _cacheNeedsRebuild = true;
+
   @override
   void initState() {
     super.initState();
@@ -31,13 +37,18 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
       if (mounted) {
         setState(() {
           _searchQuery = _searchController.text.trim().toLowerCase();
+          _cacheNeedsRebuild = true;
         });
       }
     });
   }
 
   void _onManagerChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {
+        _cacheNeedsRebuild = true;
+      });
+    }
   }
 
   @override
@@ -48,11 +59,18 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
   }
 
   List<UserScript> get _filteredScripts {
-    if (_searchQuery.isEmpty) return _manager.scripts;
-    return _manager.scripts.where((s) {
-      return s.name.toLowerCase().contains(_searchQuery) ||
-          s.urlPattern.toLowerCase().contains(_searchQuery);
-    }).toList();
+    if (_cacheNeedsRebuild) {
+      if (_searchQuery.isEmpty) {
+        _filteredScriptsCache = _manager.scripts;
+      } else {
+        _filteredScriptsCache = _manager.scripts.where((s) {
+          return s.name.toLowerCase().contains(_searchQuery) ||
+              s.urlPattern.toLowerCase().contains(_searchQuery);
+        }).toList();
+      }
+      _cacheNeedsRebuild = false;
+    }
+    return _filteredScriptsCache;
   }
 
   Future<void> _addScript() async {

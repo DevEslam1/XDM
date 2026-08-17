@@ -799,7 +799,10 @@ class DownloadOrchestrator {
           .setTaskState(current.copyWith(status: DownloadStatus.merging));
 
       await _host.setTaskState(
-        current.copyWith(statusMessage: DownloadStatusMessages.merging),
+        current.copyWith(
+          statusMessage: DownloadStatusMessages.merging,
+          cycleState: CycleState.merging,
+        ),
       );
 
       var actualVideoPath = current.localFilePath;
@@ -858,6 +861,7 @@ class DownloadOrchestrator {
 
       await _host.setTaskState(current.copyWith(
         statusMessage: DownloadStatusMessages.merging,
+        cycleState: CycleState.merging,
       ));
 
       debugPrint('[DMX] Phase 3 — Merge starting:');
@@ -1993,6 +1997,7 @@ class DownloadOrchestrator {
                 '[DMX] FIX A-3: Both streams complete. Merge-only path.');
             await _host.setTaskState(task.copyWith(
               statusMessage: DownloadStatusMessages.merging,
+              cycleState: CycleState.merging,
             ));
             final merged = await _mergeAudioVideo(task.id, effectiveAudioPath);
             if (merged) {
@@ -3771,6 +3776,7 @@ class DownloadOrchestrator {
                 await _host.setTaskState(task.copyWith(
                   status: DownloadStatus.downloading,
                   statusMessage: DownloadStatusMessages.merging,
+                  cycleState: CycleState.merging,
                 ));
 
                 final merged = await _mergeAudioVideo(task.id, audioFile.path);

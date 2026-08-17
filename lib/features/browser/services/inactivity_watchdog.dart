@@ -56,6 +56,8 @@ class InactivityWatchdog {
 
   /// Resumes media elements on [tab] if they were paused by inactivity.
   void resumeTabMedia(BrowserTab tab) {
+    // FIX(B12): resumeTabMedia already removes the id via remove(); this also
+    // releases the paused flag so a future hibernate can re-pause cleanly.
     if (!tab.isHome && _pausedByInactivityTabIds.remove(tab.id)) {
       try {
         tab.controller
@@ -68,6 +70,12 @@ class InactivityWatchdog {
         _log.warning('[Browser] Resume media error: $e');
       }
     }
+  }
+
+  /// FIX(B12): Drops [tabId] from the paused set without resuming media.
+  /// Called when a tab is closed so stale ids never leak or mis-resume.
+  void clearTab(String tabId) {
+    _pausedByInactivityTabIds.remove(tabId);
   }
 
   /// Executes background hibernation cleanup on inactivity timeout or memory pressure.

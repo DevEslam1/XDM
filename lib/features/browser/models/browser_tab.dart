@@ -25,8 +25,15 @@ class BrowserTab {
   bool get isLoading => _isLoading;
   set isLoading(bool val) {
     _isLoading = val;
-    if (!_isDisposed && loadingNotifier.value != val) {
-      loadingNotifier.value = val;
+    // FIX(B2): Check _isDisposed before touching the notifier and guard the
+    // value assignment against already-disposed notifiers.
+    if (_isDisposed) return;
+    try {
+      if (loadingNotifier.value != val) {
+        loadingNotifier.value = val;
+      }
+    } catch (e, st) {
+      _log.warning('[browser_tab] loadingNotifier set failed', e, st);
     }
   }
 
@@ -88,6 +95,10 @@ class BrowserTab {
   int savedScrollY = 0;
   String? tabGroupId;
 
+  // FIX(B3): Per-tab crash-reload flag so silent reloads are attempted once
+  // per crash rather than per State rebuild. Reset on every page-load start.
+  bool hasAttemptedSilentReload = false;
+
   BrowserTab({
     required this.id,
     this.controller,
@@ -125,8 +136,14 @@ class BrowserTab {
   double get progress => progressNotifier.value;
 
   set progress(double val) {
+    // FIX(B2): Check _isDisposed before touching the notifier and guard the
+    // value assignment against already-disposed notifiers.
     if (_isDisposed) return;
-    progressNotifier.value = val;
+    try {
+      progressNotifier.value = val;
+    } catch (e, st) {
+      _log.warning('[browser_tab] progressNotifier set failed', e, st);
+    }
   }
 
   bool get isSecure => _url.toLowerCase().startsWith('https://');
@@ -158,8 +175,13 @@ class BrowserTab {
       _url = canonical;
       _cachedHost = null;
       isHome = (canonical == canonicalBlankUrl);
-      if (!_isDisposed) {
+      // FIX(B2): Check _isDisposed before touching the notifier and guard the
+      // value assignment against already-disposed notifiers.
+      if (_isDisposed) return;
+      try {
         urlNotifier.value = canonical;
+      } catch (e, st) {
+        _log.warning('[browser_tab] urlNotifier set failed', e, st);
       }
     }
   }
@@ -189,6 +211,8 @@ class BrowserTab {
   set lastVisitedAt(int value) => lastVisitedAtMs = value;
 
   void dispose() {
+    // FIX(B2): Set _isDisposed FIRST so concurrent setters no-op, then detach
+    // the controller, then dispose notifiers (guarded against double-dispose).
     if (_isDisposed) return;
     _isDisposed = true;
     controller = null;

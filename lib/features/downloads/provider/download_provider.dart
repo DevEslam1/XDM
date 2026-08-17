@@ -496,13 +496,20 @@ class DownloadProvider extends ChangeNotifier
                           task.seedingEnabled
                       ? info.uploadRate.toDouble()
                       : task.speed);
+              // Derive granular cycleState from the engine's stateLabel
+              final newCycleState = CycleState.fromLibtorrent(
+                info.stateLabel,
+                seedingEnabled: task.seedingEnabled,
+              );
               if (task.downloadedBytes != liveDone ||
                   task.fileSize != newSize ||
-                  task.speed != newSpeed) {
+                  task.speed != newSpeed ||
+                  task.cycleState != newCycleState) {
                 _tasks[taskIdx] = task.copyWith(
                   downloadedBytes: liveDone,
                   fileSize: newSize,
                   speed: newSpeed,
+                  cycleState: newCycleState,
                 );
                 notifyListeners();
               }
@@ -2313,6 +2320,8 @@ class DownloadProvider extends ChangeNotifier
         final updated = task.copyWith(
           status: DownloadStatus.paused,
           pausedByUser: reason == PauseReason.userRequested,
+          pauseReason: reason,
+          cycleState: CycleState.paused,
           speed: 0,
           clearEta: true,
         );
@@ -2435,6 +2444,8 @@ class DownloadProvider extends ChangeNotifier
               speed: 0,
               clearEta: true,
               pausedByUser: reason == PauseReason.userRequested,
+              pauseReason: reason,
+              cycleState: CycleState.paused,
             ));
             _orchestrator.clearStartingFlag(id);
             _orchestrator.clearPushScheduled(id);
@@ -2497,7 +2508,9 @@ class DownloadProvider extends ChangeNotifier
             await _databaseService.saveTask(
               latest.copyWith(
                 status: DownloadStatus.paused,
-                pausedByUser: true,
+                pausedByUser: reason == PauseReason.userRequested,
+                pauseReason: reason,
+                cycleState: CycleState.paused,
                 speed: 0,
                 clearEta: true,
               ),
@@ -2680,6 +2693,9 @@ class DownloadProvider extends ChangeNotifier
             status: DownloadStatus.paused,
             speed: 0,
             clearEta: true,
+            pausedByUser: reason == PauseReason.userRequested,
+            pauseReason: reason,
+            cycleState: CycleState.paused,
             statusMessage:
                 'Torrent session lost — will restart from last saved progress',
           );
@@ -2710,6 +2726,8 @@ class DownloadProvider extends ChangeNotifier
           clearError: true,
           clearStatusMessage: true,
           pausedByUser: reason == PauseReason.userRequested,
+          pauseReason: reason,
+          cycleState: CycleState.paused,
         ),
       );
       updateActualTorrentUploadLimit();
@@ -2765,7 +2783,9 @@ class DownloadProvider extends ChangeNotifier
           clearError: true,
           clearStatusMessage: true,
           clearScheduledAt: !scheduleStillPending,
-          pausedByUser: true,
+          pausedByUser: reason == PauseReason.userRequested,
+          pauseReason: reason,
+          cycleState: CycleState.paused,
           torrentFiles: snapshotFiles,
         ),
       );
@@ -2968,7 +2988,9 @@ class DownloadProvider extends ChangeNotifier
         clearError: true,
         clearStatusMessage: true,
         clearScheduledAt: !scheduleStillPending,
-        pausedByUser: true,
+        pausedByUser: reason == PauseReason.userRequested,
+        pauseReason: reason,
+        cycleState: CycleState.paused,
         audioProgress: syncedAudioProgress,
         audioDownloadedBytes: audioBytesOnDisk,
         torrentFiles: snapshotFiles,
@@ -3310,6 +3332,8 @@ class DownloadProvider extends ChangeNotifier
       clearScheduledAt: true,
       clearWasScheduledAt: true,
       pausedByUser: false,
+      clearPauseReason: true,
+      clearCycleState: true,
     );
     validatedTask = await validateAudioProgress(validatedTask);
 
@@ -3934,6 +3958,10 @@ class DownloadProvider extends ChangeNotifier
         clearStatusMessage: true,
         clearCompletedAt: true,
         clearFailureCategory: true, // FIX RT-1
+        clearRecoveryHint: true, // FIX RT-1b: clear stale hint on retry
+        clearPauseReason: true,
+        cycleState: CycleState.starting,
+        clearPreviousCycleState: true,
         pausedByUser: false,
         videoStreamSize: shouldResetAllProgressMetadata
             ? 0
@@ -4696,12 +4724,19 @@ class DownloadProvider extends ChangeNotifier
       updated = updated.copyWith(
         failureCategory: FailureCategory.unknown,
         recoveryHint: RecoveryHints.hintFor(FailureCategory.unknown),
+        cycleState: CycleState.failed,
       );
     } else if (updated.status == DownloadStatus.failed &&
         updated.recoveryHint == null) {
       updated = updated.copyWith(
         recoveryHint: RecoveryHints.hintFor(updated.failureCategory!),
+        cycleState: CycleState.failed,
       );
+    } else if (updated.status == DownloadStatus.failed) {
+      // failureCategory and recoveryHint already present — just stamp cycleState
+      if (updated.cycleState != CycleState.failed) {
+        updated = updated.copyWith(cycleState: CycleState.failed);
+      }
     }
 
     final protocol = updated.isTorrent
@@ -4950,7 +4985,7 @@ class DownloadProvider extends ChangeNotifier
 
       if (active.length > maxSlots) {
         for (var i = maxSlots; i < active.length; i++) {
-          pauseTask(active[i].id);
+          pauseTask(active[i].id, reason: PauseReason.batterySaver);
         }
       }
     }

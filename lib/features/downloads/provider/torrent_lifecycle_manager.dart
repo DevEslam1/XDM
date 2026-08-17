@@ -1,14 +1,10 @@
-/// Handles torrent-specific lifecycle events (start/stop/seeding).
-class TorrentLifecycleManager {
-  final Map<String, int> _torrentIds = {};
-
-  void registerTorrent(String taskId, int torrentId) {
-    _torrentIds[taskId] = torrentId;
-  }
-
-  void unregisterTorrent(String taskId) {
-    _torrentIds.remove(taskId);
-  }
-
-  int? getTorrentId(String taskId) => _torrentIds[taskId];
-}
+// REMOVED: TorrentLifecycleManager was a dead duplicate of [TorrentProvider].
+//
+// It maintained a `Map<String, int> _torrentIds` identical to the one in
+// [TorrentProvider] but was never instantiated or referenced anywhere in the
+// codebase. All torrent ID registration/lookup is handled by:
+//
+//   • [TorrentProvider.registerTorrentId] / [TorrentProvider.unregisterTorrentId]
+//   • [TorrentProvider.torrentIds] (the live map)
+//
+// If you need torrent lifecycle tracking, use [TorrentProvider] directly.

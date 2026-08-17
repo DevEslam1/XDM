@@ -46,6 +46,12 @@ class AdBlockerService {
   final ValueNotifier<int> _blockedCountNotifier = ValueNotifier<int>(0);
   final Set<String> _blockedDomains = {};
 
+  // FIX(P7): Single merged set of all blockable domains (downloaded filter
+  // lists + custom user hosts + hardcoded ad hosts) so shouldBlockUrl performs
+  // ONE Set.contains lookup + parent-domain walk instead of three separate
+  // source-specific lookups.
+  Set<String> _mergedBlockedDomains = {};
+
   bool get isEnabled => _enabled;
   int get blockedCount => _blockedCountNotifier.value;
   ValueNotifier<int> get blockedCountNotifier => _blockedCountNotifier;
@@ -56,7 +62,18 @@ class AdBlockerService {
     _blockedCountNotifier.value = 0;
   }
 
+  // FIX(P7): Rebuild the merged blocked-domain set from all sources.
+  void _rebuildMergedBlockedDomains() {
+    final merged = <String>{}
+      ..addAll(AdBlockFilterUpdater().allBlockedDomains)
+      ..addAll(AdBlockFilterUpdater().allTrackingDomains)
+      ..addAll(CustomAdBlockStore.instance.hosts)
+      ..addAll(_adHostnames);
+    _mergedBlockedDomains = merged;
+  }
+
   void refresh() {
+    _rebuildMergedBlockedDomains();
     _rebuildContentBlockers();
     _notifyListeners();
   }
@@ -136,6 +153,7 @@ class AdBlockerService {
       _log.warning('AdBlocker init error: $e');
       _enabled = false;
     }
+    _rebuildMergedBlockedDomains();
     _rebuildContentBlockers();
   }
 
@@ -211,6 +229,7 @@ class AdBlockerService {
       // regenerates the native iOS/macOS content blockers after a filter
       // update (without this, the _lastBuiltGen guard skipped the rebuild).
       bumpGen();
+      _rebuildMergedBlockedDomains();
       _rebuildContentBlockers();
       return true;
     } catch (e) {
@@ -274,7 +293,35 @@ class AdBlockerService {
 ''';
 
   /// Compiled regex cache for pattern matching.
-  final Map<String, RegExp> _compiledPatterns = {};
+  // FIX(B4): Use a bounded LRU cache (remove-on-access map).
+  // Caps at 500 entries and evicts the oldest 250 to prevent unbounded growth.
+  static const int _maxCompiledPatterns = 500;
+  static const int _evictCompiledPatternsCount = 250;
+  final Map<String, RegExp> _compiledPatterns = <String, RegExp>{};
+
+  RegExp? _compilePatternCached(String pattern) {
+    final cached = _compiledPatterns.remove(pattern);
+    if (cached != null) {
+      // Refresh LRU position by re-inserting at the end.
+      _compiledPatterns[pattern] = cached;
+      return cached;
+    }
+    if (_compiledPatterns.length >= _maxCompiledPatterns) {
+      final keys = _compiledPatterns.keys.take(_evictCompiledPatternsCount);
+      for (final k in keys) {
+        _compiledPatterns.remove(k);
+      }
+    }
+    try {
+      final regex = RegExp(pattern, caseSensitive: false);
+      _compiledPatterns[pattern] = regex;
+      return regex;
+    } catch (e, st) {
+      LoggingService.logger('AdBlockerService')
+          .warning('Invalid regex pattern: $pattern', e, st);
+      return null;
+    }
+  }
 
   /// Fast-path pattern matching using compiled regex cache.
   bool matchesPatternCached(String url, List<String> patterns) {
@@ -283,11 +330,8 @@ class AdBlockerService {
       return true;
     }
     for (final pattern in patterns) {
-      final regex = _compiledPatterns.putIfAbsent(
-        pattern,
-        () => RegExp(pattern, caseSensitive: false),
-      );
-      if (regex.hasMatch(url)) {
+      final regex = _compilePatternCached(pattern);
+      if (regex != null && regex.hasMatch(url)) {
         return true;
       }
     }
@@ -441,19 +485,7 @@ class AdBlockerService {
     'zedo.com',
   };
 
-  static bool _matchesAdHostnames(String host) {
-    if (_adHostnames.contains(host)) return true;
-    int dotIndex = host.indexOf('.');
-    while (dotIndex != -1 && dotIndex < host.length - 1) {
-      final suffix = host.substring(dotIndex + 1);
-      if (_adHostnames.contains(suffix)) return true;
-      dotIndex = host.indexOf('.', dotIndex + 1);
-    }
-    return false;
-  }
-
-  /// Returns true if [url] should be blocked by the ad blocker.
-  /// Returns true if [url] should be blocked by the ad blocker.
+/// Returns true if [url] should be blocked by the ad blocker.
   bool shouldBlockUrl(String url) {
     if (!_enabled || url.isEmpty) return false;
     try {
@@ -472,23 +504,27 @@ class AdBlockerService {
         return false;
       }
 
-      // Check the downloaded filter lists FIRST — these contain
-      // 50,000+ domains from EasyList, EasyPrivacy, AdGuard, etc.
-      if (AdBlockFilterUpdater().shouldBlock(url)) {
+      // FIX(P7): Match URL path patterns (wildcard regexes + trie) using the
+      // filter updater, then perform a single Set.contains lookup over the
+      // merged blocked-domain set (50k+ domains, O(1) per lookup) plus a
+      // parent-domain walk (O(depth), typically < 5) instead of three separate
+      // source-specific lookups.
+      if (AdBlockFilterUpdater().matchesUrlPath(path)) {
         _recordBlocked(host);
         return true;
       }
 
-      // Fallback: hardcoded known-ad hostnames for instant blocking
-      // before the first filter download completes.
-      if (_matchesAdHostnames(host)) {
+      if (_mergedBlockedDomains.contains(host)) {
         _recordBlocked(host);
         return true;
       }
-      // Custom hosts from user store
-      if (customStore.contains(host)) {
-        _recordBlocked(host);
-        return true;
+      final parts = host.split('.');
+      for (var i = 1; i < parts.length - 1; i++) {
+        final parent = parts.sublist(i).join('.');
+        if (_mergedBlockedDomains.contains(parent)) {
+          _recordBlocked(host);
+          return true;
+        }
       }
     } catch (e, st) {
       LoggingService.logger('AdBlockerService')
@@ -517,7 +553,6 @@ class AdBlockerService {
     }
     _blockedCountNotifier.value++;
   }
-
 
   // ─────────────────────────────────────────────────────────────────────
   // FIX #2: CSS rules use EXACT selectors instead of substring wildcards.

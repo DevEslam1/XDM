@@ -467,7 +467,16 @@ $customJs
 
     if (scripts.isEmpty) return;
 
-    final safeScripts = scripts.map((s) => '''
+    // FIX(P5): Inject scripts in small isolated groups of 3-5 so a single
+    // failing script (or oversized batch) can't kill the whole injection.
+    // Each group is wrapped in its own try/catch; failures are logged and the
+    // next group still runs.
+    const groupSize = 4;
+    for (var start = 0; start < scripts.length; start += groupSize) {
+      final end =
+          (start + groupSize > scripts.length) ? scripts.length : start + groupSize;
+      final group = scripts.sublist(start, end);
+      final safeGroup = group.map((s) => '''
 try {
 $s
 } catch(e) {
@@ -475,10 +484,12 @@ $s
 }
 ''').join('\n;\n');
 
-    try {
-      await controller.evaluateJavascript(source: safeScripts);
-    } catch (e) {
-      _log.warning('[Browser] Batched script injection failed: $e');
+      try {
+        await controller.evaluateJavascript(source: safeGroup);
+      } catch (e) {
+        _log.warning(
+            '[Browser] Script group ${start ~/ groupSize} injection failed: $e');
+      }
     }
   }
 }

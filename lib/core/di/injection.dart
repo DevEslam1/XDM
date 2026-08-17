@@ -1,3 +1,4 @@
+import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 
@@ -111,12 +112,10 @@ Future<void> configureDependencies() async {
     ),
   );
 
-  // Clean Architecture Use Cases
+  // Clean Architecture Use Cases (deprecated stubs — forward to DownloadProvider)
   getIt.registerLazySingleton<StartDownloadUseCase>(
-    () => StartDownloadUseCase(
-      getIt<DownloadListProvider>(),
-      getIt<DownloadQueueProvider>(),
-    ),
+    // ignore: deprecated_member_use_from_same_package
+    () => StartDownloadUseCase(getIt<DownloadProvider>()),
   );
   getIt.registerLazySingleton<PauseDownloadUseCase>(
     () => PauseDownloadUseCase(
@@ -128,13 +127,12 @@ Future<void> configureDependencies() async {
     () => ResumeDownloadUseCase(getIt<DownloadQueueProvider>()),
   );
   getIt.registerLazySingleton<CancelDownloadUseCase>(
-    () => CancelDownloadUseCase(getIt<DownloadListProvider>()),
+    // ignore: deprecated_member_use_from_same_package
+    () => CancelDownloadUseCase(getIt<DownloadProvider>()),
   );
   getIt.registerLazySingleton<RetryDownloadUseCase>(
-    () => RetryDownloadUseCase(
-      getIt<DownloadListProvider>(),
-      getIt<DownloadQueueProvider>(),
-    ),
+    // ignore: deprecated_member_use_from_same_package
+    () => RetryDownloadUseCase(getIt<DownloadProvider>()),
   );
   getIt.registerLazySingleton<DeleteDownloadUseCase>(
     () => DeleteDownloadUseCase(

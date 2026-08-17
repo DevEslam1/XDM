@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:dmx/core/services/logging_service.dart';
@@ -279,6 +280,15 @@ class _SmartUrlBarState extends State<SmartUrlBar>
 
     _overlayEntry = OverlayEntry(
       builder: (ctx) {
+        // FIX(B10): Clamp the suggestion overlay above the on-screen keyboard
+        // by accounting for the keyboard inset, so the list never renders
+        // underneath the keyboard when the soft input is open.
+        final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
+        final visibleHeight =
+            MediaQuery.of(ctx).size.height - viewInsets;
+        final effectiveTop = viewInsets > 0
+            ? math.min(top, visibleHeight - 64)
+            : top;
         return Stack(
           children: [
             // Barrier behind overlay
@@ -295,7 +305,7 @@ class _SmartUrlBarState extends State<SmartUrlBar>
 
             // Elevated Frosted Glass Suggestion Container
             Positioned(
-              top: top,
+              top: effectiveTop,
               left: 12,
               right: 12,
               child: Center(

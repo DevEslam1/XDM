@@ -206,6 +206,7 @@ class NetworkMonitor {
           status: DownloadStatus.paused,
           speed: 0,
           clearEta: true,
+          pauseReason: PauseReason.networkLost,
           errorMessage: DownloadStatusMessages.waitingNetwork,
         ),
       );
@@ -230,6 +231,7 @@ class NetworkMonitor {
           status: DownloadStatus.queued,
           clearError: true,
           clearEta: true,
+          clearPauseReason: true,
         ),
       );
     }
@@ -259,6 +261,7 @@ class NetworkMonitor {
           status: DownloadStatus.paused,
           speed: 0,
           clearEta: true,
+          pauseReason: PauseReason.networkLost,
           errorMessage: DownloadStatusMessages.waitingWifi,
         ),
       );
@@ -282,6 +285,7 @@ class NetworkMonitor {
           status: DownloadStatus.queued,
           clearError: true,
           clearEta: true,
+          clearPauseReason: true,
         ),
       );
     }

@@ -40,7 +40,15 @@ class BrowserTabStrip extends StatelessWidget {
           final tab = tabs[index];
           final isActive = index == currentIndex;
 
-          return Semantics(
+          // FIX(P12): Each tab item rebuilds only when ITS OWN url/loading
+          // notifiers fire, instead of rebuilding the whole ListView whenever
+          // any tab changes.
+          return ListenableBuilder(
+            listenable: Listenable.merge(
+                [tab.loadingNotifier, tab.urlNotifier]),
+            builder: (context, _) {
+              final isLoading = tab.loadingNotifier.value;
+              return Semantics(
             button: true,
             selected: isActive,
             label: 'Tab: ${tab.stripLabel}',
@@ -72,25 +80,20 @@ class BrowserTabStrip extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // U10: Show small spinner on loading tabs
-                    ValueListenableBuilder<bool>(
-                      valueListenable: tab.loadingNotifier,
-                      builder: (context, isLoading, child) {
-                        if (isLoading) {
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(accent),
-                              ),
-                            ),
-                          );
-                        }
-                        return child!;
-                      },
-                      child: Padding(
+                    if (isLoading) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(accent),
+                          ),
+                        ),
+                      ),
+                    ] else
+                      Padding(
                         padding: const EdgeInsets.only(right: 6),
                         child: tab.faviconBytes != null
                             ? Image(
@@ -109,7 +112,6 @@ class BrowserTabStrip extends StatelessWidget {
                                 color: isActive ? accent : textClr.withValues(alpha: 0.6),
                               ),
                       ),
-                    ),
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 120),
                       child: Text(
@@ -141,6 +143,8 @@ class BrowserTabStrip extends StatelessWidget {
                 ),
               ),
             ),
+          );
+            },
           );
         },
       ),

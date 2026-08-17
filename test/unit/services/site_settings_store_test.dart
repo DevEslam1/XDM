@@ -10,7 +10,6 @@ void main() {
 
     setUp(() {
       SharedPreferences.setMockInitialValues({});
-      SiteSettingsStore.clearCache();
       store = SiteSettingsStore();
     });
 

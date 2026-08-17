@@ -267,7 +267,7 @@ class SettingsProvider extends ChangeNotifier
   String backendUrl = '';
   String backendToken = '';
   bool sendBrowserCookiesToBackend = true;
-  bool useLocalYtFallback = true;
+  bool useLocalYtFallback = false;
 
   @override
   bool globalTorrentSeeding = true;

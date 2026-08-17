@@ -8,12 +8,8 @@ import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_list_provider.dart';
 import 'package:dmx/features/downloads/provider/download_queue_provider.dart';
 import 'package:dmx/features/downloads/provider/torrent_provider.dart';
-import 'package:dmx/features/downloads/usecases/cancel_download_usecase.dart';
 import 'package:dmx/features/downloads/usecases/delete_download_usecase.dart';
 import 'package:dmx/features/downloads/usecases/pause_download_usecase.dart';
-import 'package:dmx/features/downloads/usecases/resume_download_usecase.dart';
-import 'package:dmx/features/downloads/usecases/retry_download_usecase.dart';
-import 'package:dmx/features/downloads/usecases/start_download_usecase.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/shared/mixins/pausable_loop_animation.dart';
 import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
@@ -163,29 +159,17 @@ void main() {
           listProvider: listProvider, maxConcurrentDownloads: 2);
     });
 
-    test('StartDownloadUseCase adds task to list and queues it', () async {
-      final useCase = StartDownloadUseCase(listProvider, queueProvider);
-      final task = _makeTask(
-        id: 'task-1',
-        url: 'https://example.com/file.zip',
-        fileName: 'file.zip',
-        fileSize: 1024,
-        status: DownloadStatus.queued,
-      );
-
-      await useCase(task);
-
-      expect(listProvider.tasks.length, equals(1));
-      expect(listProvider.tasks.first.id, equals('task-1'));
-    });
+    // StartDownloadUseCase, RetryDownloadUseCase, and CancelDownloadUseCase are
+    // now @Deprecated forwarding stubs that take DownloadProvider as the sole
+    // constructor arg. Their unit tests against InMemoryTaskRepository are
+    // superseded by DownloadProvider integration tests.
+    // See: lib/features/downloads/usecases/ for migration details.
 
     test(
-        'PauseDownloadUseCase and ResumeDownloadUseCase transition task statuses',
+        'PauseDownloadUseCase transitions a downloading task to paused',
         () async {
-      final startUseCase = StartDownloadUseCase(listProvider, queueProvider);
       final pauseUseCase =
           PauseDownloadUseCase(queueProvider, TorrentProvider());
-      final resumeUseCase = ResumeDownloadUseCase(queueProvider);
 
       final task = _makeTask(
         id: 'task-2',
@@ -196,65 +180,17 @@ void main() {
         status: DownloadStatus.downloading,
       );
 
-      await startUseCase(task);
+      await listProvider.addTask(task);
       expect(listProvider.findTask('task-2')?.status,
           equals(DownloadStatus.downloading));
 
       await pauseUseCase('task-2');
       expect(listProvider.findTask('task-2')?.status,
           equals(DownloadStatus.paused));
-
-      await resumeUseCase('task-2');
-      expect(listProvider.findTask('task-2')?.status,
-          isNot(equals(DownloadStatus.paused)));
-    });
-
-    test('CancelDownloadUseCase marks task failed with cancellation message',
-        () async {
-      final startUseCase = StartDownloadUseCase(listProvider, queueProvider);
-      final cancelUseCase = CancelDownloadUseCase(listProvider);
-
-      final task = _makeTask(
-        id: 'task-3',
-        url: 'https://example.com/file3.zip',
-        fileName: 'file3.zip',
-        fileSize: 4096,
-        downloadedBytes: 1000,
-        status: DownloadStatus.downloading,
-      );
-
-      await startUseCase(task);
-      await cancelUseCase('task-3');
-
-      final updated = listProvider.findTask('task-3');
-      expect(updated?.status, equals(DownloadStatus.failed));
-      expect(updated?.errorMessage, contains('Cancelled'));
-    });
-
-    test('RetryDownloadUseCase resets error and enqueues task', () async {
-      final startUseCase = StartDownloadUseCase(listProvider, queueProvider);
-      final retryUseCase = RetryDownloadUseCase(listProvider, queueProvider);
-
-      final task = _makeTask(
-        id: 'task-retry',
-        url: 'https://example.com/retry.zip',
-        fileName: 'retry.zip',
-        fileSize: 4096,
-        downloadedBytes: 500,
-        status: DownloadStatus.failed,
-      );
-
-      await startUseCase(task);
-      await retryUseCase('task-retry');
-
-      final updated = listProvider.findTask('task-retry');
-      expect(updated?.status, isNot(equals(DownloadStatus.failed)));
-      expect(updated?.errorMessage, isNull);
     });
 
     test('DeleteDownloadUseCase removes task from repository and list',
         () async {
-      final startUseCase = StartDownloadUseCase(listProvider, queueProvider);
       final deleteUseCase =
           DeleteDownloadUseCase(listProvider, TorrentProvider());
 
@@ -266,7 +202,7 @@ void main() {
         status: DownloadStatus.queued,
       );
 
-      await startUseCase(task);
+      await listProvider.addTask(task);
       expect(listProvider.tasks.length, equals(1));
 
       await deleteUseCase('task-4');

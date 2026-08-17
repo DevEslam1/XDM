@@ -31,8 +31,17 @@ class ReaderArticle {
 class ReaderModeService {
   static const _extractJs = '''
 (function() {
-  const doc = document.cloneNode(true);
-  const removeSelectors = [
+  // FIX(B13): Avoid document.cloneNode(true) which can trigger heavy layout /
+  // style recalcs and copies scripts. Read only the body HTML, cap its size,
+  // and parse it into a detached div instead.
+  var bodyHtml = document.body ? document.body.innerHTML : '';
+  if (bodyHtml.length > 500000) {
+    bodyHtml = bodyHtml.substring(0, 500000);
+  }
+  var doc = document.createElement('div');
+  doc.innerHTML = bodyHtml;
+
+  var removeSelectors = [
     'script', 'style', 'nav', 'footer', 'header',
     '.sidebar', '.nav', '.footer', '.header', '.ad',
     '.ads', '.advertisement', '[role="navigation"]',
@@ -40,11 +49,11 @@ class ReaderModeService {
     '.related-articles', '.newsletter', 'iframe'
   ];
   
-  removeSelectors.forEach(sel => {
-    doc.querySelectorAll(sel).forEach(el => el.remove());
+  removeSelectors.forEach(function(sel) {
+    doc.querySelectorAll(sel).forEach(function(el) { el.remove(); });
   });
   
-  const candidates = [
+  var candidates = [
     doc.querySelector('article'),
     doc.querySelector('[role="main"]'),
     doc.querySelector('main'),
@@ -52,12 +61,13 @@ class ReaderModeService {
     doc.querySelector('.article-body'),
     doc.querySelector('.entry-content'),
     doc.querySelector('#content'),
-    doc.body
+    doc
   ];
   
-  let content = null;
-  for (const candidate of candidates) {
-    if (candidate && candidate.textContent.trim().length > 100) {
+  var content = null;
+  for (var i = 0; i < candidates.length; i++) {
+    var candidate = candidates[i];
+    if (candidate && candidate.textContent && candidate.textContent.trim().length > 100) {
       content = candidate;
       break;
     }
@@ -65,28 +75,35 @@ class ReaderModeService {
   
   if (!content) return JSON.stringify(null);
   
-  const title = doc.querySelector('h1')?.textContent ||
-                doc.querySelector('title')?.textContent ||
-                document.title;
+  var title = doc.querySelector('h1') ? doc.querySelector('h1').textContent : null;
+  if (!title || !title.trim()) title = document.title;
   
-  const author = doc.querySelector('[rel="author"]')?.textContent ||
-                 doc.querySelector('.author')?.textContent ||
-                 doc.querySelector('meta[name="author"]')?.getAttribute('content');
+  var authorEl = doc.querySelector('[rel="author"]');
+  var author = authorEl ? authorEl.textContent : null;
+  if (!author) {
+    var authorMeta = document.querySelector('meta[name="author"]');
+    author = authorMeta ? authorMeta.getAttribute('content') : null;
+  }
   
-  const publishedDate = doc.querySelector('time')?.getAttribute('datetime') ||
-                        doc.querySelector('meta[property="article:published_time"]')?.getAttribute('content');
+  var timeEl = doc.querySelector('time');
+  var publishedDate = timeEl ? timeEl.getAttribute('datetime') : null;
+  if (!publishedDate) {
+    var pubMeta = document.querySelector('meta[property="article:published_time"]');
+    publishedDate = pubMeta ? pubMeta.getAttribute('content') : null;
+  }
   
-  const images = Array.from(content.querySelectorAll('img'))
-    .map(img => ({ src: img.src, alt: img.alt || '' }))
-    .filter(img => img.src && !img.src.includes('data:'));
+  var images = Array.prototype.slice.call(content.querySelectorAll('img'))
+    .map(function(img) { return { src: img.src, alt: img.alt || '' }; })
+    .filter(function(img) { return img.src && img.src.indexOf('data:') !== 0; });
   
-  const textContent = content.textContent.trim().substring(0, 5000);
-  const words = content.textContent.split(/\\s+/).filter(Boolean).length;
-  const readingTime = Math.ceil(words / 200);
+  var fullText = content.textContent ? content.textContent : '';
+  var textContent = fullText.trim().substring(0, 5000);
+  var words = fullText.split(/\\s+/).filter(Boolean).length;
+  var readingTime = Math.ceil(words / 200);
 
   return JSON.stringify({
-    title: title?.trim() || 'Untitled',
-    author: author?.trim() || null,
+    title: title ? title.trim() : 'Untitled',
+    author: author ? author.trim() : null,
     publishedDate: publishedDate || null,
     content: content.innerHTML,
     textContent: textContent,

@@ -142,13 +142,23 @@ class DownloadInterceptor {
 
   // Shared Dio instance — reusing connections across content checks
   // avoids the overhead of creating a new HttpClient per call.
-  late final Dio _sharedDio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 4),
-    receiveTimeout: const Duration(seconds: 4),
-    followRedirects: true,
-    maxRedirects: 10,
-    validateStatus: (s) => true,
-  ));
+  // FIX(B7): Lazy nullable instance so an interceptor that never performs a
+  // content check doesn't hold a socket, and so it can be torn down safely.
+  Dio? _dioInstance;
+
+  Dio get _dio {
+    final existing = _dioInstance;
+    if (existing != null) return existing;
+    final created = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 4),
+      receiveTimeout: const Duration(seconds: 4),
+      followRedirects: true,
+      maxRedirects: 10,
+      validateStatus: (s) => true,
+    ));
+    _dioInstance = created;
+    return created;
+  }
 
   /// Reusable HEAD-then-streamed-GET verification logic.
   Future<ContentCheckResult> verifyContentType(
@@ -167,7 +177,7 @@ class DownloadInterceptor {
         if (origin.isNotEmpty) 'Origin': origin,
       };
 
-      final dio = _sharedDio;
+      final dio = _dio;
 
       String finalUrl = url;
       String contentType = '';
@@ -253,7 +263,10 @@ class DownloadInterceptor {
   void dispose() {
     _bypassedSniffUrls.clear();
     _interceptedList.clear();
-    _sharedDio.close(force: true);
+    // FIX(B7): Only close the Dio instance if it was actually created, then
+    // drop the reference so the interceptor can be re-used if needed.
+    _dioInstance?.close(force: true);
+    _dioInstance = null;
   }
 
   /// Whether a navigation from a page at [tabUrl] to [requestUrl] should be

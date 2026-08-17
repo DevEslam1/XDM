@@ -53,10 +53,13 @@ class SiteSettings {
 
 class SiteSettingsStore {
   static const _storeKey = 'browser_site_settings';
-  static Map<String, SiteSettings>? _cache;
-  static final Lock _lock = Lock();
 
-  static Future<Map<String, SiteSettings>> _load() async {
+  // FIX(B5): _cache, _lock, and the load/persist/clear helpers are instance
+  // members so multiple stores never share a single global mutable cache.
+  Map<String, SiteSettings>? _cache;
+  final Lock _lock = Lock();
+
+  Future<Map<String, SiteSettings>> _load() async {
     return _lock.synchronized(() async {
       if (_cache != null) return _cache!;
       final prefs = await SharedPreferences.getInstance();
@@ -91,7 +94,7 @@ class SiteSettingsStore {
   Future<void> updateForHost(String host, SiteSettings settings) =>
       saveForHost(host, settings);
 
-  static Future<void> _persist(Map<String, SiteSettings> all) async {
+  Future<void> _persist(Map<String, SiteSettings> all) async {
     return _lock.synchronized(() async {
       final prefs = await SharedPreferences.getInstance();
       final raw = jsonEncode(all.map((k, v) => MapEntry(k, v.toJson())));
@@ -109,7 +112,7 @@ class SiteSettingsStore {
     await saveForHost(host, settings.copyWith(zoomLevel: level));
   }
 
-  static void clearCache() {
+  void clearCache() {
     _cache = null;
   }
 }

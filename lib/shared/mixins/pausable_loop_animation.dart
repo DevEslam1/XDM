@@ -108,8 +108,12 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
   void _sync() {
     if (!mounted) return;
     bool batterySaver = false;
+    bool glowEnabled = true;
     try {
       batterySaver = SettingsProvider.instance.batterySaverMode;
+      // FIX(B11): Only loop continuously when the user wants glow effects.
+      // With glow disabled the animation plays once (forward) and stops.
+      glowEnabled = SettingsProvider.instance.enableGlow;
     } catch (e) {
       assert(() {
         debugPrint('[PausableLoopAnimation] SettingsProvider not ready: $e');
@@ -123,7 +127,13 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
         BackgroundGate.allowHeavyOps;
     try {
       if (shouldRun) {
-        if (!loopController.isAnimating) loopController.repeat();
+        if (!loopController.isAnimating) {
+          if (glowEnabled) {
+            loopController.repeat();
+          } else {
+            loopController.forward(from: 0);
+          }
+        }
       } else {
         if (loopController.isAnimating) loopController.stop();
       }

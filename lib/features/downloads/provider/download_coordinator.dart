@@ -11,7 +11,43 @@ import 'torrent_provider.dart';
 
 /// Coordinator bridging sub-providers and enforcing Clean Architecture boundaries
 /// by delegating actions to specialized UseCases.
-/// Task 1.3: Enforce Clean Architecture Boundaries.
+///
+/// ─────────────────────────────────────────────────────────────────────────────
+/// ⚠️  NOT INSTANTIATED — This class is never registered in the DI container
+///     and is never called from any UI or service layer.
+/// ─────────────────────────────────────────────────────────────────────────────
+///
+/// ## Why this is orphaned
+///
+/// All actual download lifecycle logic (pause/resume/retry/start) is handled
+/// directly by [DownloadProvider] in `download_provider.dart` (~6,600 lines).
+/// The UI layer calls `context.read<DownloadProvider>().pauseTask(...)` etc.
+/// directly; none of the usecase/coordinator path is involved at runtime.
+///
+/// ## What would be required to "activate" this layer
+///
+/// 1. Register [DownloadCoordinator] in the DI container (`injection.dart`)
+///    and replace every `context.read<DownloadProvider>()` callsite in the UI
+///    with `context.read<DownloadCoordinator>()`.
+/// 2. Wire [PauseDownloadUseCase] to pass the correct [PauseReason] so
+///    `task.pauseReason` is set (currently it only passes `userRequested`).
+/// 3. Add `startTask` and `retryTask` usecases (they don't exist in this layer).
+/// 4. Replace [RetryDownloadUseCase] with a real implementation that matches
+///    `DownloadProvider._retryTaskInternal` — YouTube URL refresh, failure
+///    classification, merge-only retry, CycleState/pauseReason clearing, etc.
+///
+/// ## What to do instead
+///
+/// Do NOT add logic here. Extend [DownloadProvider] and its orchestrator.
+/// If a full Clean Architecture refactor is planned, start with a working
+/// integration test suite first, then migrate one operation at a time.
+///
+/// Task 1.3: Enforce Clean Architecture Boundaries — deferred pending refactor.
+@Deprecated(
+  'DownloadCoordinator is never instantiated. '
+  'All runtime logic lives in DownloadProvider. '
+  'See the class docstring for a migration checklist.',
+)
 class DownloadCoordinator extends ChangeNotifier {
   final DownloadListProvider listProvider;
   final DownloadQueueProvider queueProvider;

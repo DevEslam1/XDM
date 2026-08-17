@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -665,40 +663,14 @@ class YoutubeService {
     return null;
   }
 
-  static Future<List<Map<String, dynamic>>?> _tryLocalExtractorFallback(
-      String url) async {
-    if (!Platform.isAndroid) return null;
-    try {
-      const channel =
-          MethodChannel('com.xdm.downloadmanager/youtube_extractor');
-      final res =
-          await channel.invokeMethod<List<dynamic>>('getStreams', {'url': url});
-      if (res != null && res.isNotEmpty) {
-        return res
-            .map((m) => Map<String, dynamic>.from(m as Map<dynamic, dynamic>))
-            .toList();
-      }
-    } catch (e) {
-      debugPrint('[YoutubeService] Local NewPipe fallback failed: $e');
-    }
-    return null;
-  }
-
-  /// Resolves streams for [url] using the remote backend, with optional local fallback.
+  /// Resolves streams for [url] using the remote backend only.
   static Future<List<Map<String, dynamic>>?> _resolveStreamsWithFallback(
     String url, {
     String? cookies,
   }) async {
-    // FIX-H4: Circuit breaker check: if 3 consecutive timeouts occurred, skip backend for 30s
+    // Circuit breaker check: if 3 consecutive timeouts occurred, skip backend for 30s
     if (_circuitBreakerUntil != null &&
         DateTime.now().isBefore(_circuitBreakerUntil!)) {
-      final settings = SettingsProvider.instance;
-      if (settings.useLocalYtFallback) {
-        final localStreams = await _tryLocalExtractorFallback(url);
-        if (localStreams != null && localStreams.isNotEmpty) {
-          return localStreams;
-        }
-      }
       throw Exception(
           'YouTube backend circuit breaker active (30s cooldown due to consecutive timeouts).');
     }
@@ -726,16 +698,6 @@ class YoutubeService {
               DateTime.now().add(const Duration(seconds: 30));
           debugPrint(
               '[YoutubeService] Circuit breaker tripped (3 timeouts): skipping backend for 30s');
-        }
-      }
-      final settings = SettingsProvider.instance;
-      final isTimeoutOr503 = isTimeout || (e.toString().contains('503'));
-      if (isTimeoutOr503 && settings.useLocalYtFallback) {
-        debugPrint(
-            '[YoutubeService] Backend 503/timeout: triggering local NewPipe fallback');
-        final localStreams = await _tryLocalExtractorFallback(url);
-        if (localStreams != null && localStreams.isNotEmpty) {
-          return localStreams;
         }
       }
       if (e is TimeoutException) {

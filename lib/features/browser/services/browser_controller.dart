@@ -422,6 +422,9 @@ class BrowserController extends ChangeNotifier {
     _blockedAdsPerTab.remove(tabId);
     _blockedPopupsPerTab.remove(tabId);
     mediaSniffer.cleanupTab(tabId);
+    // FIX(B12): Drop the tab from the inactivity watchdog's paused set so no
+    // stale id lingers after the tab is closed.
+    inactivityWatchdog.clearTab(tabId);
   }
 
   // ── Navigation Facade ──
@@ -554,6 +557,8 @@ class BrowserController extends ChangeNotifier {
     tab.hasError = false;
     tab.hasCrashed = false;
     tab.errorDescription = null;
+    // FIX(B3): Reset the per-tab silent crash-reload flag on every load start.
+    tab.hasAttemptedSilentReload = false;
 
     if (url != null) {
       tab.updateUrl(url);
@@ -846,7 +851,9 @@ class BrowserController extends ChangeNotifier {
     _autofillDebounceTimer?.cancel();
     _autofillDebounceTimer =
         Timer(const Duration(milliseconds: 1500), () async {
-      if (_pendingAutofillData != null && !_isDisposed) {
+      // FIX(B1): Guard timer callback against post-dispose execution.
+      if (_isDisposed) return;
+      if (_pendingAutofillData != null) {
         try {
           final settings = await siteSettingsStore.getForHost(host);
           await siteSettingsStore.saveForHost(
@@ -937,9 +944,15 @@ class BrowserController extends ChangeNotifier {
   @override
   void dispose() {
     if (_isDisposed) return;
+
+    // FIX(B1): Cancel autofill debounce timer BEFORE marking as disposed so
+    // the timer callback can still be inspected; null out pending data.
+    _autofillDebounceTimer?.cancel();
+    _autofillDebounceTimer = null;
+    _pendingAutofillData = null;
+
     _isDisposed = true;
 
-    _autofillDebounceTimer?.cancel();
     _sharedHttpClient?.close(force: true);
 
     for (final t in _loadingTimeoutTimers.values) {
