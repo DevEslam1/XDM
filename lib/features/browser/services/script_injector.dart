@@ -57,7 +57,7 @@ class ScriptInjector {
     })();
   ''';
 
-  /// High-quality, smart Dark Mode CSS engine for non-native WebView rendering or CSS injection.
+  /// High-quality, smart Dark Mode CSS engine for web pages.
   static String buildForceDarkCss() => '''
     :root {
       color-scheme: dark !important;
@@ -66,9 +66,17 @@ class ScriptInjector {
       filter: invert(0.92) hue-rotate(180deg) !important;
       background-color: #121212 !important;
     }
+    body {
+      background-color: #121212 !important;
+      color: #e0e0e0 !important;
+    }
     /* Preserve natural appearance of multimedia, embedded objects, canvases and photos */
-    img, video, iframe, canvas, svg, picture, [style*="background-image"] {
+    img, video, iframe, canvas, svg, [style*="background-image"] {
       filter: invert(1.08) hue-rotate(180deg) !important;
+    }
+    /* Prevent double inversion on nested media */
+    img img, video video, iframe iframe {
+      filter: none !important;
     }
     /* Darken scrollbars */
     ::-webkit-scrollbar {
@@ -397,9 +405,7 @@ $customJs
       scripts.add(kDesktopModeScript);
     }
 
-    // Force-dark CSS fallback (non-Android); Android uses the native
-    // `forceDark` WebView setting instead. Enabled whenever the dedicated
-    // force-dark switch is on.
+    // Force-dark CSS. Enabled whenever the dedicated force-dark switch is on.
     if (settings.forceDarkMode) {
       final css = buildForceDarkCss();
       scripts.add('(function() {'
@@ -407,7 +413,7 @@ $customJs
           '  if (!s) {'
           '    s = document.createElement("style");'
           '    s.id = "xdm-force-dark";'
-          '    document.head.appendChild(s);'
+          '    (document.head || document.documentElement).appendChild(s);'
           '  }'
           '  s.textContent = ${jsonEncode(css)};'
           '})();');

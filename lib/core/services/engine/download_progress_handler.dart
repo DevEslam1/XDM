@@ -563,23 +563,20 @@ class DownloadProgressHandler {
   void _handleTorrentFiles(List pTorrentFiles) {
     final result =
         TorrentFileNormalizer.normalizeTorrentFileList(pTorrentFiles);
-    // v2.0.0: never overwrite an existing non-empty file list with an empty
-    // snapshot — that was wiping the UI on transiently-empty updates.
-    if (result.normalizedFiles.isNotEmpty || lastTorrentFiles == null) {
-      lastTorrentFiles = result.normalizedFiles;
+    // FIX v2.0.0-Bug8: If normalization produced an empty list from a
+    // non-empty input (all items were invalid/non-Map), do NOT update
+    // any state. The previous code set lastTorrentFiles = [] which caused
+    // the UI to show "0 files" instead of keeping the previous valid list
+    // or showing "loading…".
+    if (result.normalizedFiles.isEmpty) {
+      // Input was non-empty but all items were invalid — keep existing state
+      return;
     }
-    if (result.total > 0 || lastTotalFiles == null) {
-      lastTotalFiles = result.total;
-    }
-    if (result.bytes > 0 || lastTotalFileBytes == null) {
-      lastTotalFileBytes = result.bytes;
-    }
-    if (result.total > 0 || lastCompletedFiles == null) {
-      lastCompletedFiles = result.done;
-    }
-    lastDownloadedFileBytes = result.downloaded > 0
-        ? result.downloaded
-        : (lastDownloadedFileBytes ?? result.downloaded);
+    lastTorrentFiles = result.normalizedFiles;
+    lastTotalFiles = result.total;
+    lastTotalFileBytes = result.bytes;
+    lastCompletedFiles = result.done;
+    lastDownloadedFileBytes = result.downloaded;
     lastHasEstimatedFileProgress = result.hasEstimated;
   }
 }

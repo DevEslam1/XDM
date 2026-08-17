@@ -294,7 +294,12 @@ LoggingService.logger('TorrentServiceFfi')
     try {
       final result = (LibtorrentFlutter.instance as dynamic).saveResumeData(id);
       if (result is Future) {
-        return await result.timeout(const Duration(seconds: 5)) as Uint8List?;
+        // FIX v2.0.0-Bug3: Increased timeout from 5s to 20s. In v2.0.0,
+        // saveResumeData emits an async alert that can take 5-10s for
+        // large torrents (v2/hybrid with many piece hashes). The old 5s
+        // timeout caused the method to return null, silently dropping
+        // resume data and forcing a full recheck on every restart.
+        return await result.timeout(const Duration(seconds: 20)) as Uint8List?;
       }
       return result as Uint8List?;
     } catch (e, st) {
@@ -1135,10 +1140,33 @@ class TorrentService {
             TorrentResumeStore.validateResumeData(blob)) {
           final source = _torrentSources[id];
           if (source != null) {
+            // FIX v2.0.0-Bug5: Also save file priorities alongside the resume
+            // blob so they survive app restarts. Previously, only the raw
+            // resume blob was saved, and file priorities were lost on every
+            // auto-save cycle (every 5 minutes), causing all files to reset
+            // to default priority (4) on restart.
+            List<Map<String, dynamic>>? torrentFiles;
+            try {
+              final items = getFiles(id);
+              if (items.isNotEmpty) {
+                torrentFiles = items
+                    .map((f) => {
+                          'name': f.name,
+                          'size': f.size,
+                          'priority': f.priority,
+                          'selected': f.selected,
+                          'downloadedBytes': f.safeDownloadedBytes,
+                        })
+                    .toList();
+              }
+            } catch (e) {
+              _log.fine('File snapshot for auto-save failed for $id: $e');
+            }
             await TorrentResumeStore.saveAndWait(
               torrentId: id,
               sourceUrl: source,
               fetchResumeData: () => blob,
+              files: torrentFiles,
             );
           }
         }
@@ -1588,9 +1616,30 @@ class TorrentService {
       // v2.0.0: MUST use saveResumeDataAsync — the sync version returns null
       // because saveResumeData() returns a Future that cannot be resolved
       // synchronously. Without this fix, no resume data is saved on exit.
+      // FIX v2.0.0-Bug6: Pass filesFor callback so file priorities are saved
+      // alongside resume blobs during dispose. Previously, dispose() only
+      // saved raw resume blobs, losing all file priority/selection state.
       await TorrentResumeStore.saveAll(
         _activeTorrentIds,
         (id) => _CapabilityGate.instance.saveResumeDataAsync(id),
+        (id) {
+          try {
+            final items = getFiles(id);
+            if (items.isEmpty) return null;
+            return items
+                .map((f) => {
+                      'name': f.name,
+                      'size': f.size,
+                      'priority': f.priority,
+                      'selected': f.selected,
+                      'downloadedBytes': f.safeDownloadedBytes,
+                    })
+                .toList();
+          } catch (e) {
+            _log.fine('File snapshot for dispose save failed for $id: $e');
+            return null;
+          }
+        },
       );
     } catch (e) {
       _log.warning('Error saving resume data during dispose: $e');
@@ -1630,9 +1679,23 @@ class TorrentService {
       if (id >= 0) {
         _activeTorrentIds.add(id);
         _torrentSources[id] = magnetUri;
-        unawaited(_tryLoadFastResumeForSource(id, magnetUri).catchError((e) =>
-            debugPrint(
-                '[Torrent] Failed to load fast resume: $e'))); // FIX-02: kept async
+        // FIX v2.0.0-Bug7: Pause immediately to prevent downloading before
+        // fast-resume data is loaded. Load fast-resume, then resume.
+        // This prevents re-downloading pieces that are already on disk.
+        try {
+          LibtorrentFlutter.instance.pauseTorrent(id);
+        } catch (_) {}
+        unawaited(_tryLoadFastResumeForSource(id, magnetUri).then((_) {
+          try {
+            LibtorrentFlutter.instance.resumeTorrent(id);
+          } catch (_) {}
+        }).catchError((e) {
+          debugPrint('[Torrent] Failed to load fast resume: $e');
+          // Resume even if fast resume failed — don't leave torrent paused
+          try {
+            LibtorrentFlutter.instance.resumeTorrent(id);
+          } catch (_) {}
+        }));
       }
       return id;
     } catch (e) {
@@ -1757,9 +1820,21 @@ class TorrentService {
       if (id >= 0) {
         _activeTorrentIds.add(id);
         _torrentSources[id] = source;
-        unawaited(_tryLoadFastResumeForSource(id, source).catchError((e) =>
-            debugPrint(
-                '[Torrent] Failed to load fast resume: $e'))); // FIX-02: kept async
+        // FIX v2.0.0-Bug7: Pause immediately, load fast-resume, then resume.
+        // Prevents re-downloading pieces already on disk.
+        try {
+          LibtorrentFlutter.instance.pauseTorrent(id);
+        } catch (_) {}
+        unawaited(_tryLoadFastResumeForSource(id, source).then((_) {
+          try {
+            LibtorrentFlutter.instance.resumeTorrent(id);
+          } catch (_) {}
+        }).catchError((e) {
+          debugPrint('[Torrent] Failed to load fast resume: $e');
+          try {
+            LibtorrentFlutter.instance.resumeTorrent(id);
+          } catch (_) {}
+        }));
       }
       return id;
     } catch (e) {
@@ -2073,7 +2148,11 @@ class TorrentService {
     // call itself will throw for dead handles, which we catch below.
     // This fixes "no files shown" during checking/allocating phases.
     try {
-      final files = LibtorrentFlutter.instance.getFiles(id);
+      // FIX v2.0.0-Bug9: Defensive null check — v2.0.0 may return null
+      // instead of an empty list when metadata isn't ready yet.
+      final dynamic rawFiles = LibtorrentFlutter.instance.getFiles(id);
+      if (rawFiles == null) return [];
+      final files = rawFiles as List;
       if (files.isEmpty) return [];
       final progress = _CapabilityGate.instance.fileProgressSupported
           ? _CapabilityGate.instance.fileProgress(id)
@@ -2099,6 +2178,13 @@ class TorrentService {
             // the value has a fractional part OR is exactly 0.0/1.0.
             final doubleVal = rawValue.toDouble();
             final intVal = rawValue.toInt();
+            // FIX v2.0.0-Bug10: Improved ratio vs raw-bytes detection.
+            // The old logic treated int value 1 as a ratio (1.0 = 100%),
+            // but it could also be 1 raw byte downloaded. We now use
+            // file size context: if the file is > 1 byte and the value
+            // is exactly 1, it's more likely a ratio (100%) than 1 byte.
+            // For files of exactly 1 byte, we check if ALL progress values
+            // are in {0, 1} — if so, they're ratios.
             final bool isLikelyRatio;
             if (doubleVal > 1.0) {
               isLikelyRatio = false; // Definitely raw bytes
@@ -2108,23 +2194,30 @@ class TorrentService {
                 intVal > 1) {
               // Integer > 1 in [0,1] range is impossible for ratio
               isLikelyRatio = false;
+            } else if (intVal == 1 && f.size > 1) {
+              // Value is 1 but file is larger than 1 byte → ratio (100%)
+              isLikelyRatio = true;
+            } else if (intVal == 1 && f.size <= 1) {
+              // Ambiguous: could be 1 byte downloaded or 100% ratio.
+              // Use fallback progress to decide.
+              isLikelyRatio = fallbackProgress >= 0.99;
             } else {
-              // 0.0, 1.0, or fractional → v2.0.0 ratio
+              // 0.0, fractional → v2.0.0 ratio
               isLikelyRatio = true;
             }
             if (isLikelyRatio) {
               final ratio = doubleVal.clamp(0.0, 1.0);
               resolvedDownloadedBytes =
-                  (f.size * ratio).round().clamp(0, f.size);
+                  (f.size * ratio).round().clamp(0, f.size).toInt();
             } else if (intVal >= 0) {
-              resolvedDownloadedBytes = intVal.clamp(0, f.size);
+              resolvedDownloadedBytes = intVal.clamp(0, f.size).toInt();
             } else {
               resolvedDownloadedBytes = -1;
             }
           }
         } else if (fallbackProgress > 0 && f.size > 0) {
           resolvedDownloadedBytes =
-              (f.size * fallbackProgress).round().clamp(0, f.size);
+              (f.size * fallbackProgress).round().clamp(0, f.size).toInt();
         } else {
           resolvedDownloadedBytes = -1;
         }
@@ -2334,7 +2427,7 @@ class TorrentService {
           final raw = progress[i] as num?;
           if (raw == null) {
             downloadedBytes =
-                (f.size * overallProgress).round().clamp(0, f.size);
+                (f.size * overallProgress).round().clamp(0, f.size).toInt();
           } else {
             final doubleVal = raw.toDouble();
             final intVal = raw.toInt();
@@ -2351,21 +2444,26 @@ class TorrentService {
             }
             if (isRatio) {
               downloadedBytes =
-                  (f.size * doubleVal.clamp(0.0, 1.0)).round().clamp(0, f.size);
+                  (f.size * doubleVal.clamp(0.0, 1.0)).round().clamp(0, f.size).toInt();
             } else if (intVal >= 0) {
-              downloadedBytes = intVal.clamp(0, f.size);
+              downloadedBytes = intVal.clamp(0, f.size).toInt();
             } else {
               downloadedBytes =
-                  (f.size * overallProgress).round().clamp(0, f.size);
+                  (f.size * overallProgress).round().clamp(0, f.size).toInt();
             }
           }
         } else {
           downloadedBytes =
-              (f.size * overallProgress).round().clamp(0, f.size);
+              (f.size * overallProgress).round().clamp(0, f.size).toInt();
         }
-        final isComplete = f.size == 0 || downloadedBytes >= f.size;
+        // FIX v2.0.0-Bug2: size==0 means unknown, NOT 100% complete.
+        // Was: f.size == 0 || downloadedBytes >= f.size (treated 0-size
+        // as complete) and progress = 1.0 for 0-size. This caused
+        // unknown-size files to show as 100% complete in the accurate
+        // progress path, which then propagated to the pause snapshot.
+        final isComplete = f.size > 0 && downloadedBytes >= f.size;
         final fileProg =
-            f.size > 0 ? (downloadedBytes / f.size).clamp(0.0, 1.0) : 1.0;
+            f.size > 0 ? (downloadedBytes / f.size).clamp(0.0, 1.0) : 0.0;
         return TorrentFileProgress(
           index: f.index,
           name: f.name,

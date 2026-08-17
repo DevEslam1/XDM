@@ -18,6 +18,7 @@ import '../services/browser_controller.dart';
 import '../services/download_interceptor.dart';
 import '../services/long_press_parser.dart';
 import '../services/screenshot_service.dart';
+import '../services/script_injector.dart';
 import 'link_options_sheet.dart';
 
 class BrowserTabView extends StatefulWidget {
@@ -38,6 +39,51 @@ class BrowserTabView extends StatefulWidget {
 
 class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
   static final _log = Logger('BrowserTabView');
+
+  @override
+  void didUpdateWidget(BrowserTabView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.settings.forceDarkMode != widget.settings.forceDarkMode ||
+        oldWidget.settings.isDarkMode != widget.settings.isDarkMode) {
+      _applyForceDarkMode();
+    }
+  }
+
+  void _applyForceDarkMode() {
+    final controller = widget.tab.controller;
+    if (controller == null) return;
+    final isDark = widget.settings.forceDarkMode || widget.settings.isDarkMode;
+    try {
+      controller.setSettings(
+        settings: InAppWebViewSettings(
+          forceDark: isDark ? ForceDark.ON : ForceDark.OFF,
+          algorithmicDarkeningAllowed: isDark,
+          forceDarkStrategy: ForceDarkStrategy.USER_AGENT_DARKENING_ONLY,
+        ),
+      );
+    } catch (_) {}
+    if (widget.settings.forceDarkMode) {
+      final css = ScriptInjector.buildForceDarkCss();
+      controller.evaluateJavascript(source: '''
+(function() {
+  var s = document.getElementById("xdm-force-dark");
+  if (!s) {
+    s = document.createElement("style");
+    s.id = "xdm-force-dark";
+    (document.head || document.documentElement).appendChild(s);
+  }
+  s.textContent = ${jsonEncode(css)};
+})();
+''');
+    } else {
+      controller.evaluateJavascript(source: '''
+(function() {
+  var s = document.getElementById("xdm-force-dark");
+  if (s) s.remove();
+})();
+''');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +166,12 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
             builtInZoomControls: true,
             displayZoomControls: false,
             isInspectable: kDebugMode,
-            forceDark: settings.isDarkMode ? ForceDark.ON : ForceDark.OFF,
+            forceDark: (settings.forceDarkMode || settings.isDarkMode)
+                ? ForceDark.ON
+                : ForceDark.OFF,
+            algorithmicDarkeningAllowed:
+                settings.forceDarkMode || settings.isDarkMode,
+            forceDarkStrategy: ForceDarkStrategy.USER_AGENT_DARKENING_ONLY,
             useHybridComposition: true, // FIX #6: Use hybrid composition to avoid TextureView/Virtual Display bitmap crashes
           ),
           onWebViewCreated: (controller) {

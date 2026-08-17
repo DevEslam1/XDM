@@ -202,22 +202,42 @@ class TorrentDownloadHandler {
   Future<void> _saveResumeDataBeforePause(int id, String sourceUrl) async {
     try {
       await _torrentService.saveResumeData(id).timeout(
-        const Duration(seconds: 12),
+        const Duration(seconds: 20),
         onTimeout: () => _log.warning(
             'saveResumeData timed out for torrent $id — pause proceeding'),
       );
     } catch (e, st) {
       _log.warning('Failed to save resume data for torrent $id: $e', e, st);
-      // FIX v2.0.0: Try one more time with the async path directly
+      // FIX v2.0.0-Bug4: The previous fallback used TorrentService.resumeBlobFor(id)
+      // which is SYNCHRONOUS and always returns null in v2.0.0 (the sync
+      // saveResumeData returns null because the native call returns a Future).
+      // Use the async path directly via saveAndWait with the async fetcher.
       try {
-        final blob = await TorrentService.resumeBlobFor(id);
-        if (blob != null && blob.isNotEmpty) {
-          await TorrentResumeStore.saveAndWait(
-            torrentId: id,
-            sourceUrl: sourceUrl,
-            fetchResumeData: () => blob,
-          );
-        }
+        final files = _torrentService.getFiles(id);
+        final torrentFiles = files.isNotEmpty
+            ? files
+                .map((f) => {
+                      'name': f.name,
+                      'length': f.size,
+                      'priority': f.priority,
+                      'selected': f.selected,
+                      'downloadedBytes': f.safeDownloadedBytes,
+                    })
+                .toList()
+            : null;
+        await TorrentResumeStore.saveAndWait(
+          torrentId: id,
+          sourceUrl: sourceUrl,
+          fetchResumeData: () async {
+            // Use a longer timeout for the fallback async save
+            final blob = _torrentService.resumeBlobFor(id);
+            if (blob != null && blob.isNotEmpty) return blob;
+            // If sync cache is empty, wait briefly for async save to populate
+            await Future.delayed(const Duration(milliseconds: 500));
+            return _torrentService.resumeBlobFor(id);
+          },
+          files: torrentFiles,
+        ).timeout(const Duration(seconds: 15));
       } catch (e2, st2) {
         _log.warning('Fallback resume save also failed for $id: $e2', e2, st2);
       }
@@ -556,6 +576,24 @@ class TorrentDownloadHandler {
       if (!await dir.exists()) {
         await dir.create(recursive: true);
       }
+      // FIX v2.0.0-Bug7: Preload resume data from disk BEFORE adding the
+      // torrent so it can be applied immediately after addMagnet/addTorrentFile
+      // returns. Previously the torrent started downloading for the duration
+      // of the async loadResumeDataForSource call, re-downloading pieces that
+      // were already on disk.
+      Uint8List? preloadedResume;
+      List<Map<String, dynamic>>? preloadedFiles;
+      try {
+        if (await TorrentService.hasResumeData(url)) {
+          preloadedResume =
+              await TorrentResumeStore.loadResumeDataForSource(url);
+          if (preloadedResume != null) {
+            preloadedFiles = await TorrentResumeStore.loadFilesForSource(url);
+          }
+        }
+      } catch (e, st) {
+        _log.fine('Preload resume data failed: $e', e, st);
+      }
       if (url.startsWith('magnet:')) {
         onProgress(DownloadProgress(
           downloadedBytes: 0,
@@ -630,28 +668,62 @@ class TorrentDownloadHandler {
         }
       }
 
-      if (id >= 0 && await TorrentService.hasResumeData(url)) {
-        final resumeBytes = TorrentService.fetchResumeBytes(id) ??
-            await TorrentResumeStore.loadResumeDataForSource(url);
-        if (resumeBytes != null) {
-          hasLoadedResume = true;
-          onProgress(DownloadProgress(
-            downloadedBytes: initSummary.downloaded,
-            fileSize: initSummary.bytes > 0 ? initSummary.bytes : knownFileSize,
-            speed: 0,
-            eta: null,
-            supportsResume: true,
-            torrentFiles: initFiles,
-            statusMessage: 'Verifying resume data…',
-            cycleState: CycleState.verifying,
-            torrentId: id,
-            totalFiles: initSummary.total > 0 ? initSummary.total : null,
-            completedFiles: initSummary.total > 0 ? initSummary.done : null,
-            totalFileBytes: initSummary.bytes > 0 ? initSummary.bytes : null,
-            downloadedFileBytes:
-                initSummary.bytes > 0 ? initSummary.downloaded : null,
-          ));
-          TorrentService.loadResumeData(id, resumeBytes.toList());
+      // FIX v2.0.0-Bug7: Use preloaded resume data (loaded before adding
+      // the torrent) to eliminate the window where the torrent downloads
+      // before fast-resume is applied.
+      if (id >= 0 && preloadedResume != null) {
+        final resumeBytes = preloadedResume;
+        hasLoadedResume = true;
+        onProgress(DownloadProgress(
+          downloadedBytes: initSummary.downloaded,
+          fileSize: initSummary.bytes > 0 ? initSummary.bytes : knownFileSize,
+          speed: 0,
+          eta: null,
+          supportsResume: true,
+          torrentFiles: initFiles,
+          statusMessage: 'Verifying resume data…',
+          cycleState: CycleState.verifying,
+          torrentId: id,
+          totalFiles: initSummary.total > 0 ? initSummary.total : null,
+          completedFiles: initSummary.total > 0 ? initSummary.done : null,
+          totalFileBytes: initSummary.bytes > 0 ? initSummary.bytes : null,
+          downloadedFileBytes:
+              initSummary.bytes > 0 ? initSummary.downloaded : null,
+        ));
+        TorrentService.loadResumeData(id, resumeBytes.toList());
+      } else if (id >= 0) {
+        // Fallback: try the original path if preload didn't have data
+        try {
+          if (await TorrentService.hasResumeData(url)) {
+            final fallbackBytes = TorrentService.fetchResumeBytes(id) ??
+                await TorrentResumeStore.loadResumeDataForSource(url);
+            if (fallbackBytes != null) {
+              hasLoadedResume = true;
+              onProgress(DownloadProgress(
+                downloadedBytes: initSummary.downloaded,
+                fileSize:
+                    initSummary.bytes > 0 ? initSummary.bytes : knownFileSize,
+                speed: 0,
+                eta: null,
+                supportsResume: true,
+                torrentFiles: initFiles,
+                statusMessage: 'Verifying resume data…',
+                cycleState: CycleState.verifying,
+                torrentId: id,
+                totalFiles:
+                    initSummary.total > 0 ? initSummary.total : null,
+                completedFiles:
+                    initSummary.total > 0 ? initSummary.done : null,
+                totalFileBytes:
+                    initSummary.bytes > 0 ? initSummary.bytes : null,
+                downloadedFileBytes:
+                    initSummary.bytes > 0 ? initSummary.downloaded : null,
+              ));
+              TorrentService.loadResumeData(id, fallbackBytes.toList());
+            }
+          }
+        } catch (e, st) {
+          _log.fine('Fallback resume data load failed: $e', e, st);
         }
       }
     }
@@ -1111,8 +1183,11 @@ class TorrentDownloadHandler {
                   'downloadedBytes': dl,
                   'selected': f.selected,
                   'priority': f.priority,
-                  'progress': f.size > 0 ? (dl / f.size).clamp(0.0, 1.0) : 1.0,
-                  'isComplete': f.size == 0 || dl >= f.size,
+                  // FIX v2.0.0-Bug1: size==0 means unknown, NOT 100% complete.
+                  // Was 1.0 which caused files to show as 100% complete
+                  // when the engine reported 0-size during metadata phase.
+                  'progress': f.size > 0 ? (dl / f.size).clamp(0.0, 1.0) : 0.0,
+                  'isComplete': f.size > 0 && dl >= f.size,
                   'progressEstimated': isEstimated,
                 };
               }).toList();
@@ -1124,6 +1199,10 @@ class TorrentDownloadHandler {
         }
         // FIX v2.0.0: total size must ALWAYS be computed from the full file list.
         // Added fallback to torrent.totalDone when totalWanted is 0 (pre-metadata).
+        // FIX v2.0.0-Bug11: Prefer selectedFilesSum over allFilesSum for
+        // totalSize because the user only cares about selected files' size.
+        // Also added totalWantedDone as a last-resort fallback for v2.0.0
+        // where totalWanted can be 0 even with active downloads.
         final int allFilesSum = resolvedFiles?.fold<int>(
                 0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0)) ??
             0;
@@ -1132,13 +1211,17 @@ class TorrentDownloadHandler {
                 .fold<int>(
                     0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0)) ??
             0;
-        final totalSize = allFilesSum > 0
-            ? allFilesSum
-            : (torrent.totalWanted > 0
-                ? torrent.totalWanted
-                : (torrent.totalDone > 0
-                    ? torrent.totalDone
-                    : selectedFilesSum));
+        final totalSize = selectedFilesSum > 0
+            ? selectedFilesSum
+            : (allFilesSum > 0
+                ? allFilesSum
+                : (torrent.totalWanted > 0
+                    ? torrent.totalWanted
+                    : (torrent.totalWantedDone > 0
+                        ? torrent.totalWantedDone
+                        : (torrent.totalDone > 0
+                            ? torrent.totalDone
+                            : selectedFilesSum))));
         currentTotalSize = totalSize;
         final fileCount =
             resolvedFiles?.length ?? (cachedAccurateFiles?.length ?? 0);

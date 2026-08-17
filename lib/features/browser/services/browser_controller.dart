@@ -638,6 +638,20 @@ class BrowserController extends ChangeNotifier {
               ?.evaluateJavascript(source: AdBlockerService.youtubeEarlyJs);
         }
       }
+      if (settingsProvider.forceDarkMode) {
+        final css = ScriptInjector.buildForceDarkCss();
+        tab.controller?.evaluateJavascript(source: '''
+(function() {
+  var s = document.getElementById("xdm-force-dark");
+  if (!s) {
+    s = document.createElement("style");
+    s.id = "xdm-force-dark";
+    (document.head || document.documentElement).appendChild(s);
+  }
+  s.textContent = ${jsonEncode(css)};
+})();
+''');
+      }
       tab.controller
           ?.evaluateJavascript(source: ScriptInjector.kLongPressScript);
     }
@@ -719,24 +733,17 @@ class BrowserController extends ChangeNotifier {
       await tab.controller?.zoomBy(zoomFactor: siteSettings.zoomLevel!);
     }
 
-    if (siteSettings.customJs != null) {
-      for (final js in siteSettings.customJs!) {
-        await tab.controller?.evaluateJavascript(
-          source:
-              'try { (function() { $js })(); } catch(e) { console.error(e); }',
-        );
-      }
-    }
+    final customJs = siteSettings.customJs?.join('\n') ?? '';
+    final customCss = siteSettings.customCss?.join('\n') ?? '';
 
-    if (siteSettings.customCss != null) {
-      for (final css in siteSettings.customCss!) {
-        final escaped = css.replaceAll("'", r"\'").replaceAll('\n', ' ');
-        await tab.controller?.evaluateJavascript(
-          source:
-              "try { var s = document.createElement('style'); s.innerHTML = '$escaped'; document.head.appendChild(s); } catch(e) {}",
-        );
-      }
-    }
+    await scriptInjector.injectAllScripts(
+      tab,
+      url,
+      settings: settingsProvider,
+      adBlocker: adBlocker.service,
+      customJs: customJs,
+      customCss: customCss,
+    );
   }
 
   void handlePageError(BrowserTab tab, String errorDescription) {
