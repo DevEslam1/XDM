@@ -3645,31 +3645,6 @@ class DownloadProvider extends ChangeNotifier
       }
     }
 
-    // Resource identity changed or non-resumeable auth/gone error force a clean state wipe:
-    var youtubeIdentityChanged = false;
-    if (task.youtubeQualityPreset != null &&
-        task.downloadPageUrl != null &&
-        task.downloadPageUrl!.isNotEmpty) {
-      try {
-        final fresh = await YoutubeService.getFreshStreams(
-          task.downloadPageUrl!,
-          preferredType: task.youtubePreferredType,
-        );
-        if (fresh != null && fresh['url'] != null) {
-          final newUrl = fresh['url'] as String;
-          if (youtubeStreamIdentityChanged(task.url, newUrl)) {
-            youtubeIdentityChanged = true;
-          }
-          task = task.copyWith(
-            url: newUrl,
-            mergedAudioUrl: fresh['audioUrl'] ?? task.mergedAudioUrl,
-          );
-        }
-      } catch (e) {
-        debugPrint('[DMX] YouTube refresh probe during retryTask failed: $e');
-      }
-    }
-
     final shouldClearState = family == ErrorFamily.integrity ||
         family == ErrorFamily.auth ||
         status == 410 ||
@@ -3688,7 +3663,7 @@ class DownloadProvider extends ChangeNotifier
         (videoExists ^ audioExists);
 
     final shouldResetAllProgressMetadata =
-        (shouldClearState || isUnrecoverable || youtubeIdentityChanged) &&
+        (shouldClearState || isUnrecoverable) &&
             !isMergeLegPartial;
 
     if (shouldResetAllProgressMetadata) {
