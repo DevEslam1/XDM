@@ -3084,13 +3084,44 @@ class DownloadProvider extends ChangeNotifier
               final identityChanged =
                   DownloadProvider.youtubeStreamIdentityChanged(
                       task.url, newUrl);
-              final updated = task.copyWith(
-                url: newUrl,
-                mergedAudioUrl: fresh['audioUrl'] ?? task.mergedAudioUrl,
-                audioProgress: identityChanged ? 0.0 : task.audioProgress,
-                audioDownloadedBytes:
-                    identityChanged ? 0 : task.audioDownloadedBytes,
-              );
+              DownloadTask updated;
+              if (identityChanged) {
+                // Stream identity changed → ALL partial data is invalid.
+                // Delete video + audio artifacts and reset both progress tracks.
+                for (final path in [
+                  task.tempFilePath,
+                  '${task.tempFilePath}.dmxstate',
+                  '${task.tempFilePath}.dmxstate.tmp',
+                  '${task.tempFilePath}.journal',
+                  '${task.tempFilePath}.audio',
+                  '${task.tempFilePath}.audio.dmxstate',
+                  '${task.tempFilePath}.audio.journal',
+                  '${task.tempFilePath}.audio.itag',
+                ]) {
+                  try {
+                    final f = File(path);
+                    if (await f.exists()) await f.delete();
+                  } catch (e, st) {
+                    debugPrint('[DMX] Resume identity-reset cleanup failed '
+                        'for $path: $e');
+                  }
+                }
+                updated = task.copyWith(
+                  url: newUrl,
+                  mergedAudioUrl: fresh['audioUrl'] ?? task.mergedAudioUrl,
+                  downloadedBytes: 0,
+                  chunks: List<double>.filled(
+                      task.threadCount > 0 ? task.threadCount : 1, 0.0),
+                  audioProgress: 0.0,
+                  audioDownloadedBytes: 0,
+                  videoStreamSize: 0,
+                );
+              } else {
+                updated = task.copyWith(
+                  url: newUrl,
+                  mergedAudioUrl: fresh['audioUrl'] ?? task.mergedAudioUrl,
+                );
+              }
               await _setTask(updated);
               await _databaseService.saveTask(updated);
             }
