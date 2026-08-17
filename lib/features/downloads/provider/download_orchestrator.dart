@@ -1956,11 +1956,16 @@ class DownloadOrchestrator {
         .then((_) {
           final v = activeVideoCancelToken;
           final a = activeAudioCancelToken;
+          final reason = cancelToken.cancelError?.message ?? 'cancelled';
           if (v != null && !v.isCancelled) {
-            v.cancel();
+            try {
+              v.cancel(reason);
+            } catch (_) {}
           }
           if (a != null && !a.isCancelled) {
-            a.cancel();
+            try {
+              a.cancel(reason);
+            } catch (_) {}
           }
         })
         .asStream()
@@ -2781,11 +2786,19 @@ class DownloadOrchestrator {
           try {
             await Future.wait([
               videoFuture.catchError((e) {
-                audioCancelToken.cancel();
+                if (!audioCancelToken.isCancelled) {
+                  try {
+                    audioCancelToken.cancel('peer_stream_error:$e');
+                  } catch (_) {}
+                }
                 throw e;
               }),
               audioFuture.catchError((e) {
-                videoCancelToken.cancel();
+                if (!videoCancelToken.isCancelled) {
+                  try {
+                    videoCancelToken.cancel('peer_stream_error:$e');
+                  } catch (_) {}
+                }
                 throw e;
               }),
             ]);
@@ -2941,8 +2954,16 @@ class DownloadOrchestrator {
           await _finalizeDownload(task.id, notificationId);
           return;
         } catch (error) {
-          if (!videoCancelToken.isCancelled) videoCancelToken.cancel();
-          if (!audioCancelToken.isCancelled) audioCancelToken.cancel();
+          if (!videoCancelToken.isCancelled) {
+            try {
+              videoCancelToken.cancel('download_error:$error');
+            } catch (_) {}
+          }
+          if (!audioCancelToken.isCancelled) {
+            try {
+              audioCancelToken.cancel('download_error:$error');
+            } catch (_) {}
+          }
 
           final isYoutubeDownload = (task.downloadPageUrl != null &&
                   YoutubeService.extractVideoId(task.downloadPageUrl!) !=
@@ -3560,12 +3581,18 @@ class DownloadOrchestrator {
         verifiedTorrentFiles = task.torrentFiles;
       }
 
-      final int realTotalDownloaded = task.downloadedBytes;
-      // FIX(3): Do NOT re-derive per-file bytes from disk on resume: libtorrent
-      // pre-allocates files to full length, so File.lengthSync() reports the full
-      // size even for undownloaded files and would render every file as 100%.
-      // Keep the engine's last-known per-file bytes; the engine re-reports
-      // accurate values after the post-resume recheck.
+      // Recompute aggregate from verified per-file data so the task-level
+      // total can never exceed the sum of its files.
+      final int realTotalDownloaded =
+          (verifiedTorrentFiles != null && verifiedTorrentFiles.isNotEmpty)
+              ? verifiedTorrentFiles.fold<int>(0, (sum, f) {
+                  if (isTorrentFileSelected(f)) {
+                    final bytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                    return sum + (bytes > 0 ? bytes : 0);
+                  }
+                  return sum;
+                })
+              : task.downloadedBytes;
 
       task = task.copyWith(
         status: DownloadStatus.downloading,
