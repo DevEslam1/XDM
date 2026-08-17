@@ -11,8 +11,6 @@ import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/browser_tab.dart';
-import '../models/tab_group.dart';
-import 'page_intent_classifier.dart';
 
 /// Signature matching the screen's `_createNewTab` factory.
 typedef CreateTabCallback = BrowserTab Function(
@@ -35,7 +33,11 @@ class TabManager extends ChangeNotifier {
     required this.cleanupTabState,
     required this.syncUrlController,
     required this.updateNavState,
+    required this.settingsProvider,
   });
+
+  /// Injected SettingsProvider reference
+  final SettingsProvider settingsProvider;
 
   /// Whether the host screen is still mounted.
   final bool Function() isActive;
@@ -59,95 +61,8 @@ class TabManager extends ChangeNotifier {
   final VoidCallback updateNavState;
 
   final List<BrowserTab> _tabs = [];
-  final List<TabGroup> _tabGroups = [];
   int _currentIndex = 0;
   final List<String> _tabIdHistory = [];
-
-  List<TabGroup> get tabGroups => List.unmodifiable(_tabGroups);
-
-  Future<TabGroup> createTabGroup(String name, Color color) async {
-    final group = TabGroup(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      name: name,
-      color: color,
-      tabIds: [],
-    );
-    _tabGroups.add(group);
-    await _persistTabGroups();
-    notifyListeners();
-    return group;
-  }
-
-  Future<void> moveTabToGroup(String tabId, String? groupId) async {
-    for (final group in _tabGroups) {
-      group.tabIds.remove(tabId);
-    }
-    final tabIndex = _tabs.indexWhere((t) => t.id == tabId);
-    if (tabIndex != -1) {
-      _tabs[tabIndex].tabGroupId = groupId;
-    }
-    if (groupId != null) {
-      final targetGroup = _tabGroups.firstWhere(
-        (g) => g.id == groupId,
-        orElse: () => throw Exception('Group not found'),
-      );
-      if (!targetGroup.tabIds.contains(tabId)) {
-        targetGroup.tabIds.add(tabId);
-      }
-    }
-    await _persistTabGroups();
-    notifyListeners();
-  }
-
-  Future<void> closeTabGroup(String groupId, {bool closeTabs = false}) async {
-    final idx = _tabGroups.indexWhere((g) => g.id == groupId);
-    if (idx == -1) return;
-    final group = _tabGroups[idx];
-
-    if (closeTabs) {
-      final idsToClose = List<String>.from(group.tabIds);
-      for (final tabId in idsToClose) {
-        closeTab(tabId);
-      }
-    } else {
-      for (final tabId in group.tabIds) {
-        final tabIndex = _tabs.indexWhere((t) => t.id == tabId);
-        if (tabIndex != -1) {
-          _tabs[tabIndex].tabGroupId = null;
-        }
-      }
-    }
-
-    _tabGroups.removeAt(idx);
-    await _persistTabGroups();
-    notifyListeners();
-  }
-
-  Future<void> _persistTabGroups() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final data = _tabGroups.map((g) => g.toJson()).toList();
-      await prefs.setString('browser_tab_groups', jsonEncode(data));
-    } catch (e) {
-      _log.warning('Failed to persist tab groups: $e');
-    }
-  }
-
-  Future<void> _restoreTabGroups() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = prefs.getString('browser_tab_groups');
-      if (jsonStr != null && jsonStr.isNotEmpty) {
-        final decoded = jsonDecode(jsonStr) as List<dynamic>;
-        _tabGroups
-          ..clear()
-          ..addAll(
-              decoded.map((e) => TabGroup.fromJson(e as Map<String, dynamic>)));
-      }
-    } catch (e) {
-      _log.warning('Failed to restore tab groups: $e');
-    }
-  }
 
   /// Maximum allowed background ad/popup tabs before auto-eviction.
   final int _maxUnvisitedAdTabs = 3;
@@ -237,16 +152,7 @@ class TabManager extends ChangeNotifier {
   static const int defaultMaxTabs = 12;
   static const int maxTabs = 12;
 
-  int get effectiveMaxTabs {
-    try {
-      return SettingsProvider.instance.maxTabs;
-    } catch (_) {
-      return defaultMaxTabs;
-    }
-  }
-
-  /// Callback when a tab is evicted due to max tabs cap
-  void Function(String message)? onTabEvicted;
+  int get effectiveMaxTabs => settingsProvider.maxTabs;
 
   /// Closes all inactive tabs to release memory under system memory pressure.
   void onMemoryPressure() {
@@ -270,7 +176,6 @@ class TabManager extends ChangeNotifier {
     final oldest = candidates.first;
     _log.info(
         '[TabManager] Evicting LRU tab ${oldest.id} (${oldest.title.isNotEmpty ? oldest.title : oldest.url}) due to max tab cap ($cap)');
-    onTabEvicted?.call('Closed inactive tab "${oldest.title.isNotEmpty ? oldest.title : oldest.url}" to stay under tab limit ($cap).');
     closeTab(oldest.id);
   }
 
@@ -399,6 +304,13 @@ class TabManager extends ChangeNotifier {
 
   /// Clears all open tabs and resets state.
   void clearAllTabs() {
+    for (final timer in List<Timer>.from(pendingTimers)) {
+      try {
+        timer.cancel();
+      } catch (_) {}
+    }
+    pendingTimers.clear();
+
     for (final tab in _tabs) {
       cleanupTabState(tab.id);
       if (!_disposedTabIds.contains(tab.id)) {
@@ -478,6 +390,9 @@ class TabManager extends ChangeNotifier {
       timer.cancel();
     }
     pendingTimers.clear();
+    for (final tab in _tabs) {
+      tab.dispose();
+    }
     _disposedTabIds.clear();
     super.dispose();
   }
@@ -600,7 +515,6 @@ class TabManager extends ChangeNotifier {
 
   Future<void> _performRestoreTabs() async {
     if (!isActive()) return;
-    await _restoreTabGroups();
     try {
       final db = resolveDatabase();
       if (db.isInitialized) {
@@ -744,47 +658,5 @@ class TabManager extends ChangeNotifier {
         }
       });
     });
-  }
-
-  Future<PageClassification> smartNavigate(
-    String url, {
-    bool isUserInitiated = true,
-    bool isFromClick = false,
-  }) async {
-    final classifier = PageIntentClassifier.instance;
-    final classification = classifier.classifyWithContext(
-      currentUrl: activeTab?.url ?? '',
-      targetUrl: url,
-      isUserInitiated: isUserInitiated,
-      isFromClick: isFromClick,
-    );
-
-    switch (classification.action) {
-      case PageAction.block:
-        return classification;
-
-      case PageAction.openSameTab:
-        final active = activeTab;
-        if (active != null) {
-          active.url = url;
-          active.controller?.loadUrl(
-            urlRequest: URLRequest(url: WebUri(url)),
-          );
-        }
-        return classification;
-
-      case PageAction.openNewTab:
-      case PageAction.openNewTabWithWarning:
-      case PageAction.openNewTabWithDownloadSuggestion:
-        openInNewTab(url, switchToTab: true);
-        return classification;
-
-      case PageAction.openBackgroundTab:
-        openInNewTab(url, switchToTab: false);
-        return classification;
-
-      case PageAction.directDownload:
-        return classification;
-    }
   }
 }

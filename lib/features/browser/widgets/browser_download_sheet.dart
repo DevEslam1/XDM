@@ -83,7 +83,7 @@ class BrowserDownloadSheet extends StatefulWidget {
     List<MediaSourceItem> sources = const [],
   }) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
-    runHaptic(settings);
+    HapticHelper.triggerHaptic(settings);
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -367,31 +367,65 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
                         ),
                       ],
                       const SizedBox(height: 14),
-                      // ── URL readout with corner brackets ───────────
-                      _CornerFrame(
-                        color: accent,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(13),
-                          decoration: BoxDecoration(
-                            color: (isDark
-                                    ? AppTheme.background
-                                    : AppTheme.lightBackground)
-                                .withValues(alpha: 0.6),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            widget.url,
-                            style: TextStyle(
-                              color: textClr,
-                              fontSize: 11,
-                              fontFamily: 'monospace',
-                              height: 1.4,
+                      // ── Filename, Host & URL readout with corner brackets (U5) ───────────
+                      Builder(
+                        builder: (context) {
+                          final detected = BrowserDetector.detect(widget.url);
+                          final displayName = widget.suggestedName ??
+                              detected?.suggestedFileName ??
+                              fileNameFromUrl(widget.url);
+                          final host = Uri.tryParse(widget.url)?.host ?? '';
+
+                          return _CornerFrame(
+                            color: accent,
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(13),
+                              decoration: BoxDecoration(
+                                color: (isDark
+                                        ? AppTheme.background
+                                        : AppTheme.lightBackground)
+                                    .withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    displayName,
+                                    style: TextStyle(
+                                      color: textClr,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (host.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Icon(Icons.language_rounded, size: 12, color: muted),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            host,
+                                            style: TextStyle(
+                                              color: muted,
+                                              fontSize: 11,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
+                          );
+                        },
                       ),
                       const SizedBox(height: 20),
                       // ── Link Navigation Actions ────────────────────
@@ -672,10 +706,10 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
           ThemedSnackbar.show(
             context,
             message: isRtl
-                ? 'تم إنشاء الاتصال. القنوات متصلة.'
-                : 'TRANSMISSION ESTABLISHED. CHANNELS CONNECTED.',
-            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-            icon: Icons.rocket_launch_outlined,
+                ? 'تم بدء التنزيل: $finalFileName'
+                : 'Started downloading: $finalFileName',
+            color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+            icon: Icons.file_download_done_rounded,
             isDarkMode: isDark,
           );
         }

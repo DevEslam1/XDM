@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
@@ -25,22 +26,29 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
   String _searchQuery = '';
   final Set<String> _collapsedFolders = {};
 
+  Timer? _searchDebounce;
+
   @override
   void initState() {
     super.initState();
     _bookmarks = [];
     _searchController.addListener(() {
-      final query = _searchController.text.trim().toLowerCase();
-      if (_searchQuery != query) {
-        _searchQuery = query;
-        _load();
-      }
+      _searchDebounce?.cancel();
+      _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+        if (!mounted) return;
+        final query = _searchController.text.trim().toLowerCase();
+        if (_searchQuery != query) {
+          _searchQuery = query;
+          _load();
+        }
+      });
     });
     _load();
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -76,7 +84,7 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
     if (result == null) return;
     if (!mounted) return;
     final settings = context.read<SettingsProvider>();
-    runHaptic(settings);
+    HapticHelper.triggerHaptic(settings);
     final db = context.read<DatabaseService>();
     final bm = Bookmark(
       id: const Uuid().v4(),
@@ -163,7 +171,7 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
   Future<void> _delete(Bookmark bm) async {
     final db = context.read<DatabaseService>();
     final settings = context.read<SettingsProvider>();
-    runHaptic(settings);
+    HapticHelper.triggerHaptic(settings);
 
     try {
       await db.deleteBookmark(bm.id);
@@ -566,7 +574,7 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                   tooltip: L10n.of(context, 'browser_menu_copy_url'),
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: bm.url));
-                    runHaptic(context.read<SettingsProvider>());
+                    HapticHelper.triggerHaptic(context.read<SettingsProvider>());
                   },
                 ),
                 IconButton(

@@ -26,6 +26,7 @@ class AdBlockerDelegate {
   final AdBlockerService _adBlocker;
   static final _log = Logger('ad_blocker_delegate');
 
+  AdBlockerService get service => _adBlocker;
   bool get isEnabled => _adBlocker.isEnabled;
 
   List<String> get customRules => _adBlocker.customRules;

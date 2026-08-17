@@ -347,7 +347,20 @@ class PageIntentClassifier {
     bool isUserInitiated = true,
     bool isFromClick = false,
   }) {
+    final currentHost = Uri.tryParse(currentUrl)?.host.toLowerCase() ?? '';
+    final targetHost = Uri.tryParse(targetUrl)?.host.toLowerCase() ?? '';
+    final isSameOrigin = currentHost.isNotEmpty && currentHost == targetHost;
+
     if (isUserInitiated && isFromClick) {
+      if (isSameOrigin) {
+        return PageClassification(
+          intent: PageIntent.normalBrowsing,
+          action: PageAction.openSameTab,
+          url: targetUrl,
+          confidence: 0.9,
+          reason: 'User click on same-origin navigation',
+        );
+      }
       final classification = classify(targetUrl);
       if (classification.intent == PageIntent.adPage) {
         final lowerTarget = targetUrl.toLowerCase();

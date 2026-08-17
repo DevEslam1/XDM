@@ -131,11 +131,15 @@ class DownloadProvider extends ChangeNotifier
     bool enableBackgroundTimers = true,
   })  : _databaseService = databaseService,
         _settingsProvider = settingsProvider,
-        _downloadEngine = downloadEngine ?? DownloadEngine(),
-        _permissionService = permissionService ?? PermissionService(),
-        _notificationService = notificationService ?? NotificationService(),
         enableBackgroundTimers = enableBackgroundTimers &&
-            !Platform.environment.containsKey('FLUTTER_TEST') {
+            !Platform.environment.containsKey('FLUTTER_TEST'),
+        _downloadEngine = downloadEngine ??
+            DownloadEngine(
+              enableCleanupTimer: enableBackgroundTimers &&
+                  !Platform.environment.containsKey('FLUTTER_TEST'),
+            ),
+        _permissionService = permissionService ?? PermissionService(),
+        _notificationService = notificationService ?? NotificationService() {
     _settingsProvider.addListener(_onSettingsChanged);
 
     _networkMonitor = NetworkMonitor(

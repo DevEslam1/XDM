@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:dmx/core/app_theme.dart';
 import 'package:logging/logging.dart';
 
 class Bookmark {
@@ -33,15 +34,7 @@ class Bookmark {
   }
 
   Color get accentColor {
-    const palette = [
-      Color(0xFF3B82F6),
-      Color(0xFF8B5CF6),
-      Color(0xFF10B981),
-      Color(0xFFF59E0B),
-      Color(0xFFEF4444),
-      Color(0xFF06B6D4),
-      Color(0xFFFACC15),
-    ];
+    const palette = AppTheme.bookmarkPalette;
     return palette[domain.hashCode.abs() % palette.length];
   }
 
@@ -70,6 +63,8 @@ class Bookmark {
     };
   }
 
+  Map<String, dynamic> toJson() => toMap();
+
   factory Bookmark.fromMap(Map<String, dynamic> map) {
     return Bookmark(
       id: map['id'] as String? ?? '',
@@ -79,6 +74,8 @@ class Bookmark {
       createdAt: parseTimestamp(map['createdAt']),
     );
   }
+
+  factory Bookmark.fromJson(Map<String, dynamic> json) => Bookmark.fromMap(json);
 
   static DateTime parseTimestamp(dynamic value) {
     if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);

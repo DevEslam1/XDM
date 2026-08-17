@@ -10,7 +10,7 @@ import '../services/search_engine_config.dart';
 import 'script_manager_screen.dart';
 
 /// Browser settings screen with search-engine picker, media sniffer toggle,
-/// and many other toggles that tailor web browsing to user preferences.
+/// privacy features, max tabs slider, and web rendering options.
 class BrowserSettingsScreen extends StatefulWidget {
   final bool isSnifferEnabled;
   final ValueChanged<bool>? onSnifferChanged;
@@ -68,7 +68,6 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
     final subtitleClr = isDark ? Colors.white54 : Colors.black54;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
 
-    // Use centralized engine list; fallback to Google if stored value is invalid.
     final currentEngine = SearchEngineConfig.isValid(settings.searchEngine)
         ? settings.searchEngine
         : 'Google';
@@ -99,7 +98,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
             child: Icon(Icons.arrow_back_rounded, color: accent, size: 20),
           ),
           onPressed: () {
-            lightPulse(settings);
+            HapticHelper.triggerHaptic(settings);
             Navigator.pop(context);
           },
         ),
@@ -125,14 +124,12 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 leading: _SettingIconBadge(
-                  icon: Icons.search_rounded,
+                  icon: Icons.travel_explore_rounded,
                   color: accent,
                   isDark: isDark,
                 ),
                 title: Text(
-                  L10n.isRtl(context)
-                      ? 'محرك البحث الرئيسي'
-                      : 'Default Search Engine',
+                  L10n.isRtl(context) ? 'محرك البحث' : 'Default Search Engine',
                   style: TextStyle(
                       color: textClr,
                       fontWeight: FontWeight.w600,
@@ -140,29 +137,79 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                 ),
                 subtitle: Text(
                   currentEngine,
-                  style: TextStyle(color: subtitleClr, fontSize: 12),
+                  style: TextStyle(
+                      color: accent,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12),
                 ),
-                trailing: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: currentEngine,
-                    dropdownColor:
-                        isDark ? AppTheme.surface : AppTheme.lightSurface,
-                    style: TextStyle(color: textClr, fontSize: 14),
-                    icon: Icon(Icons.keyboard_arrow_down_rounded,
-                        color: accent, size: 22),
-                    borderRadius: BorderRadius.circular(14),
-                    items: SearchEngineConfig.engines.map((engine) {
-                      return DropdownMenuItem<String>(
-                        value: engine.name,
-                        child: Text(engine.name),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        lightPulse(settings);
-                        settings.setSearchEngine(val);
-                      }
-                    },
+                trailing: PopupMenuButton<String>(
+                  initialValue: currentEngine,
+                  color: isDark ? AppTheme.cardBg : AppTheme.lightCardBg,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: isDark
+                          ? AppTheme.border.withValues(alpha: 0.5)
+                          : AppTheme.lightBorder,
+                    ),
+                  ),
+                  onSelected: (engine) {
+                    HapticHelper.triggerHaptic(settings);
+                    settings.setSearchEngine(engine);
+                  },
+                  itemBuilder: (context) => SearchEngineConfig.engines.map((e) {
+                    return PopupMenuItem<String>(
+                      value: e.name,
+                      child: Row(
+                        children: [
+                          Icon(
+                            e.name == currentEngine
+                                ? Icons.radio_button_checked_rounded
+                                : Icons.radio_button_off_rounded,
+                            size: 16,
+                            color: e.name == currentEngine
+                                ? accent
+                                : (isDark ? Colors.white38 : Colors.black38),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            e.name,
+                            style: TextStyle(
+                              color: e.name == currentEngine
+                                  ? textClr
+                                  : subtitleClr,
+                              fontWeight: e.name == currentEngine
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          currentEngine,
+                          style: TextStyle(
+                            color: accent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.arrow_drop_down_rounded,
+                            color: accent, size: 18),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -170,12 +217,13 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
           ),
           const SizedBox(height: 24),
           SectionHeader(
-            title:
-                L10n.isRtl(context) ? 'الأمان والخصوصية' : 'Privacy & Shield',
+            title: L10n.isRtl(context)
+                ? 'الحماية والخصوصية'
+                : 'Privacy & Security',
             subtitle: L10n.isRtl(context)
-                ? 'تحكم في الحماية والخصوصية'
-                : 'Control protection and privacy',
-            icon: Icons.shield_rounded,
+                ? 'إعدادات الأمان ومنع التتبع وحفظ السجل'
+                : 'Ad blocker, sniffer, history & anti-tracking',
+            icon: Icons.security_rounded,
             isDark: isDark,
             accentColor: accent,
           ),
@@ -199,7 +247,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                 subtitleClr: subtitleClr,
                 isDark: isDark,
                 onChanged: (val) {
-                  lightPulse(settings);
+                  HapticHelper.triggerHaptic(settings);
                   _adBlocker.setEnabled(val);
                 },
               ),
@@ -219,10 +267,164 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                 subtitleClr: subtitleClr,
                 isDark: isDark,
                 onChanged: (val) {
-                  lightPulse(settings);
+                  HapticHelper.triggerHaptic(settings);
                   setState(() => _snifferEnabled = val);
                   widget.onSnifferChanged?.call(val);
                 },
+              ),
+              _divider(isDark),
+              _buildSettingsSwitch(
+                context: context,
+                icon: Icons.history_toggle_off_rounded,
+                title: L10n.isRtl(context) ? 'حفظ السجل' : 'Save Browsing History',
+                subtitle: L10n.isRtl(context)
+                    ? 'تسجيل المواقع المزارة في السجل'
+                    : 'Keep record of visited websites',
+                value: settings.saveBrowserHistory,
+                accent: accent,
+                textClr: textClr,
+                subtitleClr: subtitleClr,
+                isDark: isDark,
+                onChanged: (val) {
+                  HapticHelper.triggerHaptic(settings);
+                  settings.setSaveBrowserHistory(val);
+                },
+              ),
+              _divider(isDark),
+              _buildSettingsSwitch(
+                context: context,
+                icon: Icons.lock_outline_rounded,
+                title: L10n.isRtl(context) ? 'الاتصال الآمن فقط (HTTPS)' : 'HTTPS-Only Mode',
+                subtitle: L10n.isRtl(context)
+                    ? 'ترقية جميع الاتصالات إلى HTTPS المشفر'
+                    : 'Upgrade insecure HTTP requests to HTTPS',
+                value: settings.httpsOnly,
+                accent: accent,
+                textClr: textClr,
+                subtitleClr: subtitleClr,
+                isDark: isDark,
+                onChanged: (val) {
+                  HapticHelper.triggerHaptic(settings);
+                  settings.setHttpsOnly(val);
+                },
+              ),
+              _divider(isDark),
+              _buildSettingsSwitch(
+                context: context,
+                icon: Icons.fingerprint_rounded,
+                title: L10n.isRtl(context) ? 'مقاومة التتبع الرقمي' : 'Anti-Fingerprinting',
+                subtitle: L10n.isRtl(context)
+                    ? 'حماية هوية المتصفح من التعقب'
+                    : 'Shield canvas, audio & navigator fingerprinting',
+                value: settings.antiFingerprinting,
+                accent: accent,
+                textClr: textClr,
+                subtitleClr: subtitleClr,
+                isDark: isDark,
+                onChanged: (val) {
+                  HapticHelper.triggerHaptic(settings);
+                  settings.setAntiFingerprinting(val);
+                },
+              ),
+              _divider(isDark),
+              _buildSettingsSwitch(
+                context: context,
+                icon: Icons.password_rounded,
+                title: L10n.isRtl(context) ? 'الملء التلقائي للنماذج' : 'Form Autofill',
+                subtitle: L10n.isRtl(context)
+                    ? 'حفظ وتعبئة الحقول والنماذج تلقائياً'
+                    : 'Save & autofill login credentials and inputs',
+                value: settings.formAutofill,
+                accent: accent,
+                textClr: textClr,
+                subtitleClr: subtitleClr,
+                isDark: isDark,
+                onChanged: (val) {
+                  HapticHelper.triggerHaptic(settings);
+                  settings.setFormAutofill(val);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          SectionHeader(
+            title: L10n.isRtl(context) ? 'علامات التبويب والموارد' : 'Tabs & Resource Management',
+            subtitle: L10n.isRtl(context)
+                ? 'الحد الأقصى للألسنة وإدارة الذاكرة'
+                : 'Maximum tabs limit and memory allocation',
+            icon: Icons.tab_rounded,
+            isDark: isDark,
+            accentColor: accent,
+          ),
+          const SizedBox(height: 10),
+          SettingsCard(
+            isDark: isDark,
+            isAmoled: isAmoled,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            _SettingIconBadge(
+                              icon: Icons.layers_rounded,
+                              color: accent,
+                              isDark: isDark,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              L10n.isRtl(context) ? 'أقصى عدد للألسنة' : 'Max Open Tabs',
+                              style: TextStyle(
+                                color: textClr,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${settings.maxTabs}',
+                            style: TextStyle(
+                              color: accent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Slider(
+                      value: settings.maxTabs.toDouble().clamp(4.0, 30.0),
+                      min: 4.0,
+                      max: 30.0,
+                      divisions: 26,
+                      activeColor: accent,
+                      inactiveColor: isDark ? Colors.white12 : Colors.black12,
+                      onChanged: (v) {
+                        HapticHelper.triggerHaptic(settings);
+                        settings.maxTabs = v.round();
+                      },
+                    ),
+                    Text(
+                      L10n.isRtl(context)
+                          ? 'عند تجاوز الحد، يتم تعليق الألسنة غير النشطة لتوفير الذاكرة'
+                          : 'Inactive tabs are suspended when exceeding limit to preserve RAM',
+                      style: TextStyle(color: subtitleClr, fontSize: 11),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -258,7 +460,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                 subtitleClr: subtitleClr,
                 isDark: isDark,
                 onChanged: (val) {
-                  lightPulse(settings);
+                  HapticHelper.triggerHaptic(settings);
                   settings.setDesktopMode(val);
                 },
               ),
@@ -277,7 +479,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                 subtitleClr: subtitleClr,
                 isDark: isDark,
                 onChanged: (val) {
-                  lightPulse(settings);
+                  HapticHelper.triggerHaptic(settings);
                   settings.setPinchToZoom(val);
                 },
               ),
@@ -299,7 +501,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                 subtitleClr: subtitleClr,
                 isDark: isDark,
                 onChanged: (val) {
-                  lightPulse(settings);
+                  HapticHelper.triggerHaptic(settings);
                   settings.setForceDarkMode(val);
                 },
               ),
@@ -319,7 +521,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                 subtitleClr: subtitleClr,
                 isDark: isDark,
                 onChanged: (val) {
-                  lightPulse(settings);
+                  HapticHelper.triggerHaptic(settings);
                   settings.setBlockImages(val);
                 },
               ),
@@ -339,7 +541,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                 subtitleClr: subtitleClr,
                 isDark: isDark,
                 onChanged: (val) {
-                  lightPulse(settings);
+                  HapticHelper.triggerHaptic(settings);
                   settings.setOpenLinksInApp(val);
                 },
               ),
@@ -395,7 +597,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                       color: accent, size: 20),
                 ),
                 onTap: () {
-                  lightPulse(settings);
+                  HapticHelper.triggerHaptic(settings);
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -463,28 +665,66 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       secondary: _SettingIconBadge(
         icon: icon,
-        color: value ? accent : subtitleClr,
+        color: value
+            ? accent
+            : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
         isDark: isDark,
       ),
       title: Text(
         title,
         style: TextStyle(
-            color: textClr, fontWeight: FontWeight.w600, fontSize: 14),
+          color: textClr,
+          fontWeight: FontWeight.w600,
+          fontSize: 14,
+        ),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(color: subtitleClr, fontSize: 12, height: 1.3),
+        style: TextStyle(
+          color: subtitleClr,
+          fontSize: 12,
+        ),
       ),
+      activeThumbColor: accent,
       value: value,
-      activeThumbColor: Colors.white,
-      activeTrackColor: accent,
-      inactiveThumbColor:
-          isDark ? const Color(0xFF7F7F90) : const Color(0xFF94A3B8),
-      inactiveTrackColor:
-          isDark ? const Color(0x1AFFFFFF) : const Color(0x0D000000),
-      trackOutlineColor:
-          WidgetStateProperty.resolveWith((states) => Colors.transparent),
       onChanged: onChanged,
+    );
+  }
+}
+
+class SettingsCard extends StatelessWidget {
+  final List<Widget> children;
+  final bool isDark;
+  final bool isAmoled;
+
+  const SettingsCard({
+    super.key,
+    required this.children,
+    required this.isDark,
+    this.isAmoled = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = isAmoled
+        ? const Color(0xFF0A0A0A)
+        : (isDark ? AppTheme.cardBg : AppTheme.lightCardBg);
+    final borderClr = isDark
+        ? AppTheme.border.withValues(alpha: 0.4)
+        : AppTheme.lightBorder;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderClr, width: 0.8),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          children: children,
+        ),
+      ),
     );
   }
 }
@@ -503,17 +743,12 @@ class _SettingIconBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 36,
-      height: 36,
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: color.withValues(alpha: 0.2),
-          width: 0.7,
-        ),
       ),
-      child: Icon(icon, color: color, size: 18),
+      child: Icon(icon, color: color, size: 20),
     );
   }
 }

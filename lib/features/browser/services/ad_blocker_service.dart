@@ -518,26 +518,6 @@ class AdBlockerService {
     _blockedCountNotifier.value++;
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  // FIX #1: intervalCleanupJs — ONLY clears intervals tagged by our ad
-  // detection, never touches legitimate page timers.
-  //
-  // The old version ran `clearInterval` / `clearTimeout` on EVERYTHING,
-  // killing countdown timers, auto-refresh, delayed download buttons, etc.
-  // ─────────────────────────────────────────────────────────────────────
-  static const String intervalCleanupJs = '''
-(function() {
-  // Only clear intervals that were CREATED by known ad scripts.
-  // We track them via a tagged wrapper installed in earlyJs.
-  if (window.__xdmAdIntervals) {
-    window.__xdmAdIntervals.forEach(function(id) {
-      try { clearInterval(id); } catch(e) {}
-      try { clearTimeout(id); } catch(e) {}
-    });
-    window.__xdmAdIntervals = [];
-  }
-})();
-''';
 
   // ─────────────────────────────────────────────────────────────────────
   // FIX #2: CSS rules use EXACT selectors instead of substring wildcards.

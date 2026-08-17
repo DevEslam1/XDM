@@ -62,7 +62,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
     );
     if (result == null) return;
     if (!mounted) return;
-    lightPulse(context.read<SettingsProvider>());
+    HapticHelper.triggerHaptic(context.read<SettingsProvider>());
     await _manager.add(
       UserScript(
         id: '${DateTime.now().microsecondsSinceEpoch}_${result.name.hashCode.abs()}',
@@ -88,7 +88,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
     );
     if (result == null) return;
     if (!mounted) return;
-    lightPulse(context.read<SettingsProvider>());
+    HapticHelper.triggerHaptic(context.read<SettingsProvider>());
     await _manager.update(
       script.copyWith(
         name: result.name,
@@ -113,7 +113,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
   }
 
   Future<void> _toggleScript(UserScript script, bool val) async {
-    if (mounted) lightPulse(context.read<SettingsProvider>());
+    if (mounted) HapticHelper.triggerHaptic(context.read<SettingsProvider>());
     await _manager.toggle(script.id, val);
   }
 
@@ -787,42 +787,6 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
                 ),
               ],
             ),
-            if (!_isCss) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Script Permissions',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: isDark
-                      ? AppTheme.textSecondary
-                      : AppTheme.lightTextSecondary,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: ScriptPermission.values.map((perm) {
-                  final selected = _permissions.contains(perm);
-                  return FilterChip(
-                    label:
-                        Text(perm.name, style: const TextStyle(fontSize: 11)),
-                    selected: selected,
-                    onSelected: (val) {
-                      setState(() {
-                        if (val) {
-                          _permissions.add(perm);
-                        } else {
-                          _permissions.remove(perm);
-                        }
-                      });
-                    },
-                    selectedColor: accent.withValues(alpha: 0.15),
-                  );
-                }).toList(),
-              ),
-            ],
             const SizedBox(height: 10),
             TextField(
               controller: _codeC,

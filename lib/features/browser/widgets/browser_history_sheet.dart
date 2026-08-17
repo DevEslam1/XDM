@@ -92,7 +92,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
 
   void _switchTab(int index) {
     if (_selectedTab == index) return;
-    triggerHaptic(context.read<SettingsProvider>());
+    HapticHelper.triggerHaptic(context.read<SettingsProvider>());
     if (index == 1) {
       _tabSlide.forward();
     } else {
@@ -132,7 +132,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
 
   Future<void> _exportHistoryToJson() async {
     final settings = context.read<SettingsProvider>();
-    runHaptic(settings);
+    HapticHelper.triggerHaptic(settings);
     try {
       final List<Map<String, dynamic>> exportData = [];
       if (_selectedTab == 0) {
@@ -334,7 +334,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                               isDark: isDark,
                               danger: true,
                               onTap: () {
-                                runHaptic(settings);
+                                HapticHelper.triggerHaptic(settings);
                                 _showClearHistoryConfirmation(settings);
                               },
                             ),
@@ -343,7 +343,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                             tooltip: L10n.of(context, 'browser_close_btn'),
                             isDark: isDark,
                             onTap: () {
-                              runHaptic(settings);
+                              HapticHelper.triggerHaptic(settings);
                               Navigator.pop(context);
                             },
                           ),
@@ -844,7 +844,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
         actions: [
           TextButton(
             onPressed: () {
-              runHaptic(settings);
+              HapticHelper.triggerHaptic(settings);
               Navigator.pop(context, false);
             },
             child: Text(
@@ -867,7 +867,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
               ),
             ),
             onPressed: () {
-              runHaptic(settings);
+              HapticHelper.triggerHaptic(settings);
               Navigator.pop(context, true);
             },
             child: Text(
@@ -928,7 +928,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
           child: InkWell(
             borderRadius: BorderRadius.circular(13),
             onTap: () {
-              runHaptic(settings);
+              HapticHelper.triggerHaptic(settings);
               Navigator.pop(context, url);
             },
             child: Padding(
@@ -1012,7 +1012,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                     isDark: isDark,
                     onTap: () {
                       Clipboard.setData(ClipboardData(text: url));
-                      runHaptic(settings);
+                      HapticHelper.triggerHaptic(settings);
                     },
                   ),
                   _TileAction(
@@ -1020,7 +1020,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                     isDark: isDark,
                     danger: true,
                     onTap: () {
-                      runHaptic(settings);
+                      HapticHelper.triggerHaptic(settings);
                       if (id > 0) _deleteHistoryItem(id);
                     },
                   ),
@@ -1068,7 +1068,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
             borderRadius: BorderRadius.circular(13),
             onTap: () {
               Clipboard.setData(ClipboardData(text: t.url));
-              runHaptic(context.read<SettingsProvider>());
+              HapticHelper.triggerHaptic(context.read<SettingsProvider>());
               ThemedSnackbar.show(
                 context,
                 message:

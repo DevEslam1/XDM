@@ -149,24 +149,6 @@ class ScriptInjector {
     })();
   ''';
 
-  static const String kTimerSpeedScript = '''
-    (function() {
-      if (window.__xdmTimerSpeedInjected) return;
-      window.__xdmTimerSpeedInjected = true;
-      var _origSetTimeout = window.setTimeout;
-      var _origSetInterval = window.setInterval;
-      window.setTimeout = function(fn, delay) {
-        var args = Array.prototype.slice.call(arguments, 2);
-        var speedupDelay = (typeof delay === 'number' && delay > 1000) ? Math.min(delay, 1000) : delay;
-        return _origSetTimeout.apply(window, [fn, speedupDelay].concat(args));
-      };
-      window.setInterval = function(fn, delay) {
-        var args = Array.prototype.slice.call(arguments, 2);
-        var speedupDelay = (typeof delay === 'number' && delay > 3000) ? Math.min(delay, 3000) : delay;
-        return _origSetInterval.apply(window, [fn, speedupDelay].concat(args));
-      };
-    })();
-  ''';
 
   static const String kLongPressScript = '''
     (function() {
@@ -309,10 +291,6 @@ class ScriptInjector {
     return kMediaDomains.any((d) => host.contains(d));
   }
 
-  Future<void> injectTimerSpeedScript(BrowserTab tab) async {
-    // No-op: do not override site timers so countdown timers run accurately
-  }
-
   Future<void> injectLongPressScriptToTab(BrowserTab tab) async {
     try {
       await tab.controller?.evaluateJavascript(source: kLongPressScript);
@@ -388,10 +366,6 @@ $customJs
     final controller = tab.controller;
     if (controller == null) return;
     final scripts = <String>[];
-
-    // FIX: intervalCleanupJs now only clears AD-tagged intervals,
-    // never legitimate page timers. Safe to run first.
-    scripts.add(AdBlockerService.intervalCleanupJs);
 
     // Dynamic ad blocker MutationObserver
     scripts.add(AdBlockerService.dynamicAdBlockJs);

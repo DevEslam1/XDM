@@ -13,16 +13,22 @@ class ScreenshotService {
   static Future<Uint8List?> captureFullPage(
     InAppWebViewController controller,
   ) async {
+    int? snapshotHeight;
     try {
-      await controller.evaluateJavascript(source: '''
+      final res = await controller.evaluateJavascript(source: '''
         Math.max(
-          document.body.scrollHeight,
-          document.body.offsetHeight,
-          document.documentElement.clientHeight,
-          document.documentElement.scrollHeight,
-          document.documentElement.offsetHeight
+          document.body ? document.body.scrollHeight : 0,
+          document.body ? document.body.offsetHeight : 0,
+          document.documentElement ? document.documentElement.clientHeight : 0,
+          document.documentElement ? document.documentElement.scrollHeight : 0,
+          document.documentElement ? document.documentElement.offsetHeight : 0
         )
       ''');
+      if (res is num) {
+        snapshotHeight = res.toInt();
+      } else if (res is String) {
+        snapshotHeight = int.tryParse(res);
+      }
     } catch (e, st) {
       LoggingService.logger('ScreenshotService')
           .warning('Operation failed', e, st);
@@ -32,6 +38,14 @@ class ScreenshotService {
       screenshotConfiguration: ScreenshotConfiguration(
         compressFormat: CompressFormat.PNG,
         quality: 100,
+        rect: snapshotHeight != null
+            ? InAppWebViewRect(
+                x: 0,
+                y: 0,
+                width: 0,
+                height: snapshotHeight.toDouble(),
+              )
+            : null,
       ),
     );
   }

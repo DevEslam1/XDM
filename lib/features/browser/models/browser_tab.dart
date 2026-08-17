@@ -8,20 +8,38 @@ enum TabOrigin { userDirect, adOrPopup, redirect }
 class BrowserTab {
   static final _log = Logger('browser_tab');
 
+  static const String canonicalBlankUrl = 'about:blank';
+
   final String id;
   InAppWebViewController? controller;
-  String url;
+  String _url;
+  String get url => _url;
+  set url(String val) => updateUrl(val);
+
   String title;
   bool isIncognito;
   PullToRefreshController? pullToRefreshController;
   int lastRenderedProgress = 0;
-  bool isLoading;
+  
+  bool _isLoading;
+  bool get isLoading => _isLoading;
+  set isLoading(bool val) {
+    _isLoading = val;
+    if (!_isDisposed && loadingNotifier.value != val) {
+      loadingNotifier.value = val;
+    }
+  }
+
   bool hasCrashed;
   bool isTimedOut;
   bool isSuspended;
   bool hasError;
   String? errorDescription;
+  
   final ValueNotifier<double> progressNotifier;
+  final ValueNotifier<bool> loadingNotifier;
+  final ValueNotifier<String> urlNotifier;
+
   bool isHome;
   bool canGoBack;
   bool canGoForward;
@@ -30,12 +48,13 @@ class BrowserTab {
   int lastVisitedAtMs = DateTime.now().millisecondsSinceEpoch;
 
   String? faviconUrl;
-  // FIX-M8: Cap favicon bytes at 10KB (10240 bytes)
+  
+  // FIX-B2: Detach sublist buffer to avoid keeping giant backing buffer in memory
   Uint8List? _faviconBytes;
   Uint8List? get faviconBytes => _faviconBytes;
   set faviconBytes(Uint8List? bytes) {
     if (bytes != null && bytes.length > 10240) {
-      _faviconBytes = Uint8List.sublistView(bytes, 0, 10240);
+      _faviconBytes = Uint8List.fromList(bytes.sublist(0, 10240));
     } else {
       _faviconBytes = bytes;
     }
@@ -72,17 +91,17 @@ class BrowserTab {
   BrowserTab({
     required this.id,
     this.controller,
-    required this.url,
-    required this.title,
+    required String url,
+    this.title = '',
     this.isIncognito = false,
-    this.isLoading = false,
+    bool isLoading = false,
     this.hasCrashed = false,
     this.isTimedOut = false,
     this.isSuspended = false,
     this.hasError = false,
     this.errorDescription,
     double progress = 0.0,
-    this.isHome = true,
+    bool? isHome,
     this.canGoBack = false,
     this.canGoForward = false,
     this.origin = TabOrigin.userDirect,
@@ -90,8 +109,14 @@ class BrowserTab {
     FindInteractionController? findController,
     this.savedScrollY = 0,
     this.tabGroupId,
-  })  : createdAtMs = createdAtMs ?? DateTime.now().millisecondsSinceEpoch,
+    this.findQuery,
+  })  : _url = (url.isEmpty || url == canonicalBlankUrl) ? canonicalBlankUrl : url,
+        _isLoading = isLoading,
+        isHome = isHome ?? (url.isEmpty || url == canonicalBlankUrl),
+        createdAtMs = createdAtMs ?? DateTime.now().millisecondsSinceEpoch,
         progressNotifier = ValueNotifier<double>(progress),
+        loadingNotifier = ValueNotifier<bool>(isLoading),
+        urlNotifier = ValueNotifier<String>((url.isEmpty || url == canonicalBlankUrl) ? canonicalBlankUrl : url),
         _findInteractionController = findController;
 
   bool _isDisposed = false;
@@ -104,16 +129,21 @@ class BrowserTab {
     progressNotifier.value = val;
   }
 
-  bool get isSecure => url.toLowerCase().startsWith('https://');
+  bool get isSecure => _url.toLowerCase().startsWith('https://');
 
   String? _cachedHost;
   final int createdAtMs;
 
   /// Cached host calculation for performance in interceptors
   String get host {
+    if (_url.isEmpty || _url == canonicalBlankUrl) {
+      _cachedHost = '';
+      return '';
+    }
     if (_cachedHost != null) return _cachedHost!;
     try {
-      _cachedHost = Uri.parse(url).host.toLowerCase();
+      final parsed = Uri.tryParse(_url);
+      _cachedHost = (parsed != null && parsed.hasAuthority) ? parsed.host.toLowerCase() : '';
     } catch (_) {
       _cachedHost = '';
     }
@@ -121,9 +151,16 @@ class BrowserTab {
   }
 
   void updateUrl(String newUrl) {
-    if (url != newUrl) {
-      url = newUrl;
+    final canonical = (newUrl.isEmpty || newUrl == canonicalBlankUrl)
+        ? canonicalBlankUrl
+        : newUrl;
+    if (_url != canonical) {
+      _url = canonical;
       _cachedHost = null;
+      isHome = (canonical == canonicalBlankUrl);
+      if (!_isDisposed) {
+        urlNotifier.value = canonical;
+      }
     }
   }
 
@@ -140,9 +177,11 @@ class BrowserTab {
 
   String get stripLabel {
     if (isHome) return 'Home';
-    if (title.trim().isNotEmpty && title.trim() != url) return title.trim();
+    if (title.trim().isNotEmpty && title.trim() != _url && title.trim() != canonicalBlankUrl) {
+      return title.trim();
+    }
     final d = domain;
-    return d.isNotEmpty ? d : url;
+    return d.isNotEmpty ? d : _url;
   }
 
   /// Backward-compatible alias for [lastVisitedAtMs].
@@ -157,8 +196,10 @@ class BrowserTab {
     pullToRefreshController = null;
     try {
       progressNotifier.dispose();
+      loadingNotifier.dispose();
+      urlNotifier.dispose();
     } catch (e, st) {
-      _log.warning('[browser_tab] progressNotifier dispose failed', e, st);
+      _log.warning('[browser_tab] notifier dispose failed', e, st);
     }
   }
 }

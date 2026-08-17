@@ -46,7 +46,7 @@ class LinkOptionsSheet extends StatelessWidget with HapticHelper {
     VoidCallback? onDownload,
   }) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
-    runHaptic(settings);
+    HapticHelper.triggerHaptic(settings);
     return showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,

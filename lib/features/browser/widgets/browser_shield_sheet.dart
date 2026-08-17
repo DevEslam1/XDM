@@ -1,48 +1,56 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/app_theme.dart';
+import '../../../core/services/logging_service.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../services/ad_blocker_service.dart';
 import '../services/adblock_filter_updater.dart';
 
-/// Quick Site Security & AdBlock Shield bottom sheet.
+/// Modern Shield bottom sheet displaying ad & tracking statistics,
+/// security status, and quick whitelist toggle for the active site.
 class BrowserShieldSheet extends StatefulWidget {
   final String currentUrl;
   final int blockedAdsCount;
   final int blockedPopupsCount;
-  final VoidCallback? onStartElementPicker;
   final VoidCallback? onReloadTab;
+  final VoidCallback? onStartElementPicker;
 
   const BrowserShieldSheet({
     super.key,
     required this.currentUrl,
-    required this.blockedAdsCount,
-    required this.blockedPopupsCount,
-    this.onStartElementPicker,
+    this.blockedAdsCount = 0,
+    this.blockedPopupsCount = 0,
     this.onReloadTab,
+    this.onStartElementPicker,
   });
 
   static Future<void> show({
     required BuildContext context,
     required String currentUrl,
-    required int blockedAdsCount,
-    required int blockedPopupsCount,
-    VoidCallback? onStartElementPicker,
+    int blockedAdsCount = 0,
+    int blockedPopupsCount = 0,
     VoidCallback? onReloadTab,
+    VoidCallback? onStartElementPicker,
   }) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    HapticHelper.triggerHaptic(settings);
+
     return showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => BrowserShieldSheet(
+      backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => BrowserShieldSheet(
         currentUrl: currentUrl,
         blockedAdsCount: blockedAdsCount,
         blockedPopupsCount: blockedPopupsCount,
-        onStartElementPicker: onStartElementPicker,
         onReloadTab: onReloadTab,
+        onStartElementPicker: onStartElementPicker,
       ),
     );
   }
@@ -63,14 +71,14 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
   }
 
   String get _domain {
-    if (widget.currentUrl.isEmpty) return 'Local Page';
+    if (widget.currentUrl.isEmpty) return '';
     try {
       final uri = Uri.parse(widget.currentUrl);
-      return uri.host.isNotEmpty ? uri.host : widget.currentUrl;
+      return uri.host;
     } catch (e, st) {
       LoggingService.logger('BrowserShieldSheet')
           .warning('Operation failed with fallback', e, st);
-      return widget.currentUrl;
+      return '';
     }
   }
 
@@ -88,34 +96,29 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
     final bgClr = isAmoled
         ? Colors.black
         : (isDark ? AppTheme.surface : AppTheme.lightSurface);
-    final cardBg = isDark
-        ? (isAmoled
-            ? AppTheme.amoledCardBg
-            : Colors.white.withValues(alpha: 0.05))
-        : Colors.black.withValues(alpha: 0.03);
+    final cardBg = isAmoled
+        ? const Color(0xFF0A0A0A)
+        : (isDark ? AppTheme.cardBg : AppTheme.lightCardBg);
+    final textPrimary = isDark ? Colors.white : Colors.black87;
+    final textMuted = isDark ? Colors.white54 : Colors.black54;
     final borderClr = isDark
-        ? (isAmoled ? AppTheme.amoledBorder : AppTheme.glassBorder)
-        : AppTheme.lightGlassBorder;
-    final textPrimary =
-        isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final textMuted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+        ? AppTheme.border.withValues(alpha: 0.5)
+        : AppTheme.lightBorder;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final green = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
 
     return Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
       decoration: BoxDecoration(
         color: bgClr,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border.all(color: borderClr, width: 0.8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
-            blurRadius: 20,
-            spreadRadius: 4,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border(
+          top: BorderSide(
+            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+            width: 1,
           ),
-        ],
+        ),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -123,10 +126,12 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
           // Drag handle
           Center(
             child: Container(
-              width: 38,
+              width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: isDark ? Colors.white24 : Colors.black12,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.2)
+                    : Colors.black.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -155,7 +160,7 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _domain,
+                      _domain.isNotEmpty ? _domain : (widget.currentUrl.isEmpty ? 'Local Page' : widget.currentUrl),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -182,11 +187,49 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
                   ],
                 ),
               ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: _isAllowlisted
+                      ? AppTheme.neonAmber.withValues(alpha: 0.12)
+                      : green.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _isAllowlisted
+                        ? AppTheme.neonAmber.withValues(alpha: 0.3)
+                        : green.withValues(alpha: 0.3),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _isAllowlisted
+                          ? Icons.shield_outlined
+                          : Icons.shield_rounded,
+                      size: 13,
+                      color: _isAllowlisted ? AppTheme.neonAmber : green,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      _isAllowlisted
+                          ? (isRtl ? 'مستثنى' : 'Whitelisted')
+                          : (isRtl ? 'محمي' : 'Protected'),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: _isAllowlisted ? AppTheme.neonAmber : green,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),
 
-          // Stats tile (Blocked Ads & Popups)
+          // Protection statistics card
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -202,7 +245,7 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.shield_rounded, size: 16, color: accent),
+                          Icon(Icons.block_rounded, size: 16, color: accent),
                           const SizedBox(width: 6),
                           Text(
                             isRtl ? 'إعلانات محجوبة' : 'Ads Blocked',
@@ -223,9 +266,9 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
                   ),
                 ),
                 Container(
-                  width: 1,
                   height: 36,
-                  color: isDark ? Colors.white10 : Colors.black12,
+                  width: 1,
+                  color: borderClr,
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -260,52 +303,53 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
           ),
           const SizedBox(height: 16),
 
-          // Whitelist toggle tile
-          Container(
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: borderClr, width: 0.5),
-            ),
-            child: SwitchListTile(
-              activeThumbColor: accent,
-              shape: RoundedRectangleBorder(
+          // Whitelist toggle tile (Guarded by _domain.isNotEmpty)
+          if (_domain.isNotEmpty) ...[
+            Container(
+              decoration: BoxDecoration(
+                color: cardBg,
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: borderClr, width: 0.5),
               ),
-              title: Text(
-                isRtl ? 'استثناء هذا الموقع' : 'Whitelist this site',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: textPrimary,
+              child: SwitchListTile(
+                activeThumbColor: accent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
                 ),
+                title: Text(
+                  isRtl ? 'استثناء هذا الموقع' : 'Whitelist this site',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+                subtitle: Text(
+                  _isAllowlisted
+                      ? (isRtl
+                          ? 'تم إيقاف الحجب لهذا الموقع'
+                          : 'Ad blocking disabled for this site')
+                      : (isRtl
+                          ? 'الحجب نشط لهذا الموقع'
+                          : 'Ad blocking active on this site'),
+                  style: TextStyle(fontSize: 11, color: textMuted),
+                ),
+                value: _isAllowlisted,
+                onChanged: (val) async {
+                  HapticHelper.triggerHaptic(settings);
+                  setState(() => _isAllowlisted = val);
+                  final filterUpdater = AdBlockFilterUpdater.instance;
+                  if (val) {
+                    filterUpdater.addAllowListDomain(_domain);
+                  } else {
+                    filterUpdater.removeAllowListDomain(_domain);
+                  }
+                  widget.onReloadTab?.call();
+                },
               ),
-              subtitle: Text(
-                _isAllowlisted
-                    ? (isRtl
-                        ? 'تم إيقاف الحجب لهذا الموقع'
-                        : 'Ad blocking disabled for this site')
-                    : (isRtl
-                        ? 'الحجب نشط لهذا الموقع'
-                        : 'Ad blocking active on this site'),
-                style: TextStyle(fontSize: 11, color: textMuted),
-              ),
-              value: _isAllowlisted,
-              onChanged: (val) async {
-                lightPulse(settings);
-                setState(() => _isAllowlisted = val);
-                final filterUpdater = AdBlockFilterUpdater();
-                if (val) {
-                  filterUpdater.allowListedDomains.add(_domain.toLowerCase());
-                } else {
-                  filterUpdater.allowListedDomains
-                      .remove(_domain.toLowerCase());
-                }
-                widget.onReloadTab?.call();
-              },
             ),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ],
 
           // Block Element Button
           SizedBox(
@@ -328,7 +372,7 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
                 ),
               ),
               onPressed: () {
-                lightPulse(settings);
+                HapticHelper.triggerHaptic(settings);
                 Navigator.pop(context);
                 widget.onStartElementPicker?.call();
               },

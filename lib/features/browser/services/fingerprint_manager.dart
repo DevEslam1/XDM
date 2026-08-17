@@ -22,6 +22,8 @@ class FingerprintManager {
       'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 '
       'Mobile/15E148 Safari/604.1';
 
+  static const String antiDetectJs = fingerprintHideJs;
+
   static const String fingerprintHideJs = r'''
     try {
       // 1. Webdriver Stub

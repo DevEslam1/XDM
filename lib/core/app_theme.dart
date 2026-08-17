@@ -66,6 +66,17 @@ class AppTheme {
   static const Color neonOrange = Color(0xFFF97316);
   static const Color lightNeonOrange = Color(0xFFEA580C);
 
+  /// Palette for bookmarks and category accents
+  static const List<Color> bookmarkPalette = [
+    Color(0xFF3B82F6),
+    Color(0xFF8B5CF6),
+    Color(0xFF10B981),
+    Color(0xFFF59E0B),
+    Color(0xFFEF4444),
+    Color(0xFF06B6D4),
+    Color(0xFFFACC15),
+  ];
+
   // ── Text ──
   static const Color textPrimary = Color(0xFFF2F4F8);
   static const Color textSecondary = Color(0xFF9AA3B5);
@@ -158,7 +169,8 @@ class AppTheme {
       isDark ? (isAmoled ? amoledBackground : background) : lightBackground;
 
   /// Primary channel accent for the current mode.
-  static Color accent(bool isDark) => isDark ? neonBlue : lightNeonBlue;
+  static Color accent(bool isDark, [double alpha = 1.0]) =>
+      (isDark ? neonBlue : lightNeonBlue).withValues(alpha: alpha.clamp(0.0, 1.0));
 
   /// WCAG AA enforced min size 11sp for text styles
   static TextStyle dataStyle({

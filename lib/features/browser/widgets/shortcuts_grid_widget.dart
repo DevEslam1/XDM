@@ -10,6 +10,7 @@ class ShortcutsGridWidget extends StatelessWidget {
   final VoidCallback onOpenBookmarks;
   final VoidCallback onOpenHistory;
   final VoidCallback onOpenScripts;
+  final VoidCallback? onAddShortcut;
   final Function(Map<String, String>) onRemoveShortcut;
   final Function(String url) onNavigate;
 
@@ -22,6 +23,7 @@ class ShortcutsGridWidget extends StatelessWidget {
     required this.onOpenBookmarks,
     required this.onOpenHistory,
     required this.onOpenScripts,
+    this.onAddShortcut,
     required this.onRemoveShortcut,
     required this.onNavigate,
   });
@@ -116,6 +118,15 @@ class ShortcutsGridWidget extends StatelessWidget {
           color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
           onTap: onOpenScripts,
         ),
+        if (onAddShortcut != null)
+          _buildShortcutCard(
+            context,
+            title: isRtl ? 'إضافة اختصار' : 'Add Shortcut',
+            url: '',
+            icon: Icons.add_rounded,
+            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            onTap: onAddShortcut,
+          ),
         ...customShortcuts.map((sc) {
           return _buildShortcutCard(
             context,

@@ -108,7 +108,7 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
     if (widget.focusNode.hasFocus) {
       try {
         final settings = context.read<SettingsProvider>();
-        lightPulse(settings);
+        HapticHelper.triggerHaptic(settings);
       } catch (e, st) {
         LoggingService.logger('SmartUrlBar').warning('Operation failed', e, st);
       }
@@ -244,6 +244,10 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
     final settings = context.read<SettingsProvider>();
     final isAmoled = settings.isAmoledMode;
 
+    final renderBox = context.findRenderObject() as RenderBox?;
+    final targetOffset = renderBox?.localToGlobal(Offset.zero) ?? Offset.zero;
+    final top = targetOffset.dy + (renderBox?.size.height ?? 40) + 6;
+
     _overlayEntry = OverlayEntry(
       builder: (ctx) {
         return Stack(
@@ -260,49 +264,47 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
               ),
             ),
 
-            // suggestion container follower
+            // Suggestion container spanning full screen width with clean responsive margins
             Positioned(
-              top: 0,
-              left: 0,
-              child: CompositedTransformFollower(
-                link: _layerLink,
-                showWhenUnlinked: false,
-                targetAnchor: Alignment.bottomLeft,
-                followerAnchor: Alignment.topLeft,
-                offset: const Offset(0, 6),
-                child: SizedBox(
-                  width: _layerLink.leaderSize?.width ??
-                      (MediaQuery.of(context).size.width - 32),
+              top: top,
+              left: 12,
+              right: 12,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 640),
                   child: Material(
-                    elevation: 12,
-                    shadowColor: Colors.black.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(20),
+                    elevation: 16,
+                    shadowColor: Colors.black.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(18),
                     color: isDark
                         ? (isAmoled
                             ? AppTheme.surface
-                            : AppTheme.surface.withValues(alpha: 0.96))
-                        : Colors.white.withValues(alpha: 0.96),
+                            : AppTheme.surface.withValues(alpha: 0.98))
+                        : Colors.white.withValues(alpha: 0.98),
                     child: Container(
-                      constraints: const BoxConstraints(maxHeight: 300),
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(ctx).size.height * 0.45,
+                      ),
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(18),
                         border: Border.all(
                           color: isDark
                               ? (isAmoled
                                   ? AppTheme.amoledBorder
                                   : AppTheme.glassBorder)
                               : AppTheme.lightGlassBorder,
-                          width: 0.8,
+                          width: 1.0,
                         ),
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(18),
                         child: ListView.separated(
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
                           shrinkWrap: true,
                           itemCount: _suggestions.length,
                           separatorBuilder: (_, __) =>
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 4),
                           itemBuilder: (context, index) {
                             final s = _suggestions[index];
                             final accent = isDark
@@ -316,19 +318,18 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
                                         ? AppTheme.amoledCardBg
                                         : Colors.white.withValues(alpha: 0.05))
                                     : Colors.black.withValues(alpha: 0.03),
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color:
-                                      isDark ? Colors.white10 : Colors.black12,
+                                  color: isDark ? Colors.white10 : Colors.black12,
                                   width: 0.5,
                                 ),
                               ),
                               child: Material(
                                 color: Colors.transparent,
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(12),
                                 clipBehavior: Clip.antiAlias,
                                 child: InkWell(
-                                  borderRadius: BorderRadius.circular(14),
+                                  borderRadius: BorderRadius.circular(12),
                                   onTap: () {
                                     widget.focusNode.unfocus();
                                     _removeOverlay();
@@ -365,7 +366,7 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
                                                 overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
                                                   fontSize: 13,
-                                                  fontWeight: FontWeight.bold,
+                                                  fontWeight: FontWeight.w600,
                                                   color: isDark
                                                       ? AppTheme.textPrimary
                                                       : AppTheme

@@ -22,15 +22,21 @@ class PictureInPictureService {
     try {
       final supported = await isSupported(controller);
       if (!supported) return false;
-      await controller.evaluateJavascript(source: '''
-        (function() {
-          const video = document.querySelector('video');
-          if (video && video.requestPictureInPicture) {
-            video.requestPictureInPicture();
+      final res = await controller.evaluateJavascript(source: '''
+        (async function() {
+          try {
+            const video = document.querySelector('video');
+            if (video && typeof video.requestPictureInPicture === 'function') {
+              await video.requestPictureInPicture();
+              return true;
+            }
+            return false;
+          } catch (e) {
+            return false;
           }
         })();
       ''');
-      return true;
+      return res == true || res == 'true';
     } catch (e, st) {
       _log.warning('enterPiP failed', e, st);
       return false;
@@ -39,14 +45,20 @@ class PictureInPictureService {
 
   static Future<bool> exitPiP(InAppWebViewController controller) async {
     try {
-      await controller.evaluateJavascript(source: '''
-        (function() {
-          if (document.pictureInPictureElement) {
-            document.exitPictureInPicture();
+      final res = await controller.evaluateJavascript(source: '''
+        (async function() {
+          try {
+            if (document.pictureInPictureElement && typeof document.exitPictureInPicture === 'function') {
+              await document.exitPictureInPicture();
+              return true;
+            }
+            return false;
+          } catch (e) {
+            return false;
           }
         })();
       ''');
-      return true;
+      return res == true || res == 'true';
     } catch (e, st) {
       _log.warning('exitPiP failed', e, st);
       return false;

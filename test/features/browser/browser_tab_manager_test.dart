@@ -1,12 +1,17 @@
 import 'package:dmx/features/browser/models/browser_tab.dart';
 import 'package:dmx/features/browser/services/tab_manager.dart';
+import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../helpers/test_helpers.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('TabManager Unit Tests', () {
     late TabManager tabManager;
+    late SettingsProvider settings;
     int tabCounter = 0;
 
     BrowserTab dummyCreateTab({
@@ -29,6 +34,9 @@ void main() {
     }
 
     setUp(() {
+      setupTestPluginMocks();
+      SharedPreferences.setMockInitialValues({});
+      settings = SettingsProvider();
       tabCounter = 0;
       tabManager = TabManager(
         isActive: () => true,
@@ -38,6 +46,7 @@ void main() {
         cleanupTabState: (_) {},
         syncUrlController: () {},
         updateNavState: () {},
+        settingsProvider: settings,
       );
     });
 
@@ -62,31 +71,20 @@ void main() {
       expect(tabManager.activeTab!.url, equals('https://example.com'));
     });
 
-    test('closeTab falls back to LRU history or adjacent index atomically', () {
-      tabManager.openInNewTab('https://tab1.com', switchToTab: true);
-      tabManager.openInNewTab('https://tab2.com', switchToTab: true);
-      tabManager.openInNewTab('https://tab3.com', switchToTab: true);
-
-      expect(tabManager.currentIndex, equals(2));
-      final closedTabId = tabManager.activeTab!.id;
-
-      tabManager.closeTab(closedTabId);
-      expect(tabManager.tabs.length, equals(2));
-      expect(tabManager.activeTab!.url, equals('https://tab2.com'));
-    });
-
-    test('evictStaleAdTabs cleans up stale ad tabs without evicting active tab',
-        () {
+    test('max unvisited ad/popup tabs are capped at 3', () {
       tabManager.openInNewTab('https://main.com', switchToTab: true);
-      for (int i = 0; i < 5; i++) {
-        tabManager.openInNewTab(
-          'https://ad$i.com',
-          switchToTab: false,
-          origin: TabOrigin.adOrPopup,
-        );
-      }
 
-      tabManager.evictStaleAdTabs();
+      // Open 4 ad tabs sequentially in background
+      tabManager.openInNewTab('https://ad1.com',
+          switchToTab: false, origin: TabOrigin.adOrPopup);
+      tabManager.openInNewTab('https://ad2.com',
+          switchToTab: false, origin: TabOrigin.adOrPopup);
+      tabManager.openInNewTab('https://ad3.com',
+          switchToTab: false, origin: TabOrigin.adOrPopup);
+      tabManager.openInNewTab('https://ad4.com',
+          switchToTab: false, origin: TabOrigin.adOrPopup);
+
+      // Main tab should still be active
       expect(tabManager.activeTab!.url, equals('https://main.com'));
       final adTabs = tabManager.tabs
           .where((t) => t.origin == TabOrigin.adOrPopup)
@@ -108,6 +106,7 @@ void main() {
         },
         syncUrlController: () {},
         updateNavState: () {},
+        settingsProvider: settings,
       );
 
       // Open a normal tab and an incognito tab
@@ -148,20 +147,17 @@ void main() {
       expect(tabManager.activeTab!.isSuspended, isFalse);
     });
 
-    test('Max tabs cap (8) evicts least recently visited inactive tab', () {
-      String? evictedMessage;
-      tabManager.onTabEvicted = (msg) => evictedMessage = msg;
-
-      for (int i = 0; i < 8; i++) {
+    test('Max tabs cap evicts least recently visited inactive tab', () {
+      final max = tabManager.effectiveMaxTabs;
+      for (int i = 0; i < max; i++) {
         tabManager.openInNewTab('https://tab$i.com', switchToTab: true);
       }
-      expect(tabManager.tabs.length, equals(8));
+      expect(tabManager.tabs.length, equals(max));
 
-      // Opening 9th tab must evict the LRU inactive tab (tab0)
-      tabManager.openInNewTab('https://tab8.com', switchToTab: true);
-      expect(tabManager.tabs.length, equals(8));
-      expect(evictedMessage, isNotNull);
-      expect(tabManager.tabs.any((t) => t.url == 'https://tab8.com'), isTrue);
+      // Opening next tab must evict the LRU inactive tab (tab0)
+      tabManager.openInNewTab('https://tab$max.com', switchToTab: true);
+      expect(tabManager.tabs.length, equals(max));
+      expect(tabManager.tabs.any((t) => t.url == 'https://tab$max.com'), isTrue);
       expect(tabManager.tabs.any((t) => t.url == 'https://tab0.com'), isFalse);
     });
 

@@ -6,14 +6,17 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('SiteSettingsStore', () {
+    late SiteSettingsStore store;
+
     setUp(() {
       SharedPreferences.setMockInitialValues({});
       SiteSettingsStore.clearCache();
+      store = SiteSettingsStore();
     });
 
     test('getForHost returns default SiteSettings for unconfigured host',
         () async {
-      final settings = await SiteSettingsStore.getForHost('example.com');
+      final settings = await store.getForHost('example.com');
       expect(settings.desktopMode, isNull);
       expect(settings.adBlockEnabled, isNull);
     });
@@ -26,8 +29,8 @@ void main() {
         zoomLevel: 1.2,
       );
 
-      await SiteSettingsStore.updateForHost(host, settings);
-      final retrieved = await SiteSettingsStore.getForHost(host);
+      await store.updateForHost(host, settings);
+      final retrieved = await store.getForHost(host);
 
       expect(retrieved.desktopMode, isTrue);
       expect(retrieved.adBlockEnabled, isFalse);

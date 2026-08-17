@@ -35,9 +35,29 @@ class LongPressPayload {
   }
 
   static Map<String, dynamic>? _decode(String raw) {
-    if (raw.startsWith('{') || raw.startsWith('[')) {
-      final decoded = _jsonDecode(raw);
-      return decoded is Map<String, dynamic> ? decoded : null;
+    final str = raw.trim();
+    if (str.startsWith('"') && str.endsWith('"') && str.length >= 2) {
+      try {
+        final unescaped = jsonDecode(str);
+        if (unescaped is String) {
+          final inner = _decode(unescaped);
+          if (inner != null) return inner;
+        } else if (unescaped is Map<String, dynamic>) {
+          return unescaped;
+        } else if (unescaped is Map) {
+          return Map<String, dynamic>.from(unescaped);
+        }
+      } catch (_) {
+        final stripped = str.substring(1, str.length - 1).replaceAll(r'\"', '"');
+        final inner = _decode(stripped);
+        if (inner != null) return inner;
+      }
+    }
+    if (str.startsWith('{') || str.startsWith('[')) {
+      final decoded = _jsonDecode(str);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      if (decoded is String) return _decode(decoded);
     }
     return null;
   }

@@ -4,14 +4,16 @@ import 'package:flutter/services.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
 mixin HapticHelper {
-  void triggerHaptic(SettingsProvider settings) {
-    lightPulse(settings);
-  }
-
-  void lightPulse(SettingsProvider settings) {
+  /// Standardized haptic trigger across all browser widgets (static).
+  static void triggerHaptic(SettingsProvider settings) {
     if (settings.vibration) {
       HapticFeedback.lightImpact();
     }
+  }
+
+  /// Instance method proxying the standardized trigger.
+  void triggerHapticFeedback(SettingsProvider settings) {
+    triggerHaptic(settings);
   }
 
   void mediumPulse(SettingsProvider settings) {
@@ -43,8 +45,7 @@ mixin HapticHelper {
   }
 }
 
-void runHaptic(SettingsProvider settings) {
-  if (settings.vibration) {
-    HapticFeedback.lightImpact();
-  }
-}
+/// Global helper functions for backward compatibility across all screens.
+void triggerHaptic(SettingsProvider settings) => HapticHelper.triggerHaptic(settings);
+void runHaptic(SettingsProvider settings) => HapticHelper.triggerHaptic(settings);
+void lightPulse(SettingsProvider settings) => HapticHelper.triggerHaptic(settings);

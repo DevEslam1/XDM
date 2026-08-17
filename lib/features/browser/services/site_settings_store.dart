@@ -77,16 +77,19 @@ class SiteSettingsStore {
     });
   }
 
-  static Future<SiteSettings> getForHost(String host) async {
+  Future<SiteSettings> getForHost(String host) async {
     final all = await _load();
     return all[host] ?? const SiteSettings();
   }
 
-  static Future<void> updateForHost(String host, SiteSettings settings) async {
+  Future<void> saveForHost(String host, SiteSettings settings) async {
     final all = await _load();
     all[host] = settings;
     await _persist(all);
   }
+
+  Future<void> updateForHost(String host, SiteSettings settings) =>
+      saveForHost(host, settings);
 
   static Future<void> _persist(Map<String, SiteSettings> all) async {
     return _lock.synchronized(() async {
@@ -94,6 +97,16 @@ class SiteSettingsStore {
       final raw = jsonEncode(all.map((k, v) => MapEntry(k, v.toJson())));
       await prefs.setString(_storeKey, raw);
     });
+  }
+
+  Future<double> getZoom(String host) async {
+    final settings = await getForHost(host);
+    return settings.zoomLevel ?? 1.0;
+  }
+
+  Future<void> setZoom(String host, double level) async {
+    final settings = await getForHost(host);
+    await saveForHost(host, settings.copyWith(zoomLevel: level));
   }
 
   static void clearCache() {

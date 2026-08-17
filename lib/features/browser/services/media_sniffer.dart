@@ -137,6 +137,14 @@ class MediaSniffer extends ChangeNotifier {
     mediaScanTimers.clear();
   }
 
+  /// Schedules a debounced media scan for the given tab.
+  void scheduleScan(BrowserTab tab, {List<BrowserTab>? tabs}) {
+    mediaScanTimers[tab.id]?.cancel();
+    mediaScanTimers[tab.id] = Timer(const Duration(milliseconds: 800), () {
+      scanPageMedia(tab, tabs: tabs ?? [tab]);
+    });
+  }
+
   /// Cancels all pending scan timers and clears detection state.
   @override
   void dispose() {
@@ -315,7 +323,8 @@ class MediaSniffer extends ChangeNotifier {
   }
   try {
     var resources = window.performance.getEntriesByType('resource');
-    for (var r = 0; r < resources.length; r++) {
+    var maxEntries = Math.min(resources.length, 200);
+    for (var r = 0; r < maxEntries; r++) {
       var rUrl = resources[r].name;
       if (rUrl && (rUrl.includes('.m3u8') || rUrl.includes('.mpd') || rUrl.includes('.m4s'))) {
         var label = rUrl.includes('.m3u8') ? 'HLS Manifest (Network)' : (rUrl.includes('.mpd') ? 'DASH Manifest (Network)' : 'DASH Segment');

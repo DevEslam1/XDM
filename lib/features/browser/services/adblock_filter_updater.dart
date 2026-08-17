@@ -11,6 +11,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
 
+import 'filter_line_parser.dart';
+
 enum FilterType { ads, tracking }
 
 class _FilterSource {
@@ -20,12 +22,14 @@ class _FilterSource {
   /// Optional fallback URL tried when [url] fails (e.g. CDN mirror).
   final String? fallbackUrl;
   final FilterType type;
+  final double regressionThreshold;
 
   const _FilterSource({
     required this.name,
     required this.url,
     this.fallbackUrl,
     required this.type,
+    this.regressionThreshold = 0.50,
   });
 }
 
@@ -48,13 +52,16 @@ class _PathTrie {
   }
 
   bool searchSubstrings(String text) {
-    if (text.isEmpty) return false;
+    if (text.isEmpty || root.children.isEmpty) return false;
     final len = text.length;
     for (var i = 0; i < len; i++) {
-      var current = root;
-      for (var j = i; j < len; j++) {
+      final firstCode = text.codeUnitAt(i);
+      var current = root.children[firstCode];
+      if (current == null) continue;
+      if (current.isEnd) return true;
+      for (var j = i + 1; j < len; j++) {
         final code = text.codeUnitAt(j);
-        final next = current.children[code];
+        final next = current!.children[code];
         if (next == null) break;
         if (next.isEnd) return true;
         current = next;
@@ -69,35 +76,30 @@ class _PathTrie {
 }
 
 class AdBlockFilterUpdater {
-  // ── Singleton ─────────────────────────────────────────────────────────────
-  // CRITICAL FIX: Without a singleton, every AdBlockFilterUpdater() call
-  // created a fresh instance with empty _downloadedDomains, making the entire
-  // filter download pipeline useless for runtime URL blocking. Every caller
-  // (shouldBlock, allowListedDomains, cosmeticRulesForHost) now shares the
-  // same in-memory state that was populated by init() / updateIfNeeded().
   static final AdBlockFilterUpdater _instance =
       AdBlockFilterUpdater._internal();
   AdBlockFilterUpdater._internal();
   factory AdBlockFilterUpdater() => _instance;
+  static AdBlockFilterUpdater get instance => _instance;
 
   static final _log = Logger('AdBlockFilterUpdater');
   static final _lock = Lock();
 
   // ── Filter sources with CDN fallbacks ─────────────────────────────────────
-  // Primary URLs are the canonical hosts; fallbackUrl is a CDN/jsDelivr mirror
-  // used when the primary returns an error or times out.
   static const _sources = [
     _FilterSource(
       name: 'EasyList',
       url: 'https://easylist.to/easylist/easylist.txt',
       fallbackUrl: 'https://easylist-downloads.adblockplus.org/easylist.txt',
       type: FilterType.ads,
+      regressionThreshold: 0.30, // Allows valid rule consolidations
     ),
     _FilterSource(
       name: 'EasyPrivacy',
       url: 'https://easylist.to/easylist/easyprivacy.txt',
       fallbackUrl: 'https://easylist-downloads.adblockplus.org/easyprivacy.txt',
       type: FilterType.tracking,
+      regressionThreshold: 0.30,
     ),
     _FilterSource(
       name: 'EasyList-AntiAdblock',
@@ -160,7 +162,6 @@ class AdBlockFilterUpdater {
   static const _enabledKey = 'adblock_auto_update_enabled';
   static const _updateIntervalDays = 7;
   static const _maxDomains = 150000;
-  static const _maxLineLength = 500;
 
   static const _patternsKey = 'adblock_url_patterns';
   static const _cosmeticKey = 'adblock_cosmetic_rules_v2';
@@ -181,6 +182,21 @@ class AdBlockFilterUpdater {
   final Map<String, Set<String>> _cosmeticExceptions = {};
   final Set<String> _globalCosmeticExceptions = {};
   final Set<String> _scriptletRules = {};
+  final Map<String, RegExp> _compiledWildcardPatterns = {};
+
+  void _rebuildWildcardPatterns() {
+    _compiledWildcardPatterns.clear();
+    for (final pattern in _urlPatterns) {
+      if (pattern.contains('*')) {
+        try {
+          final regexStr =
+              '^${RegExp.escape(pattern).replaceAll(r'\*', '.*')}\$';
+          _compiledWildcardPatterns[pattern] =
+              RegExp(regexStr, caseSensitive: false);
+        } catch (_) {}
+      }
+    }
+  }
 
   // PERF (TASK 4): LRU cache for cosmeticRulesForHost.
   // Keyed by lowercase host; evicts the oldest entry when capacity is reached.
@@ -194,16 +210,35 @@ class AdBlockFilterUpdater {
 
   Set<String> _allowListedDomains = {};
   Completer<bool>? _inFlightUpdate;
-  static const double regressionThreshold = 0.50;
 
   Set<String> get allBlockedDomains => _downloadedDomains;
   Set<String> get allTrackingDomains => _downloadedTrackingDomains;
-  Set<String> get allowListedDomains => _allowListedDomains;
+  Set<String> get allowListedDomains => Set.unmodifiable(_allowListedDomains);
   int get downloadedDomainCount => _downloadedDomains.length;
   int get downloadedTrackingCount => _downloadedTrackingDomains.length;
   Set<String> get cosmeticRules => _cosmeticRules;
   Set<String> get urlPatterns => _urlPatterns;
   Set<String> get scriptletRules => _scriptletRules;
+
+  Future<void> persistAllowList() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      '${_domainsKey}_excepted',
+      _allowListedDomains.take(_maxDomains).toList(),
+    );
+  }
+
+  void addAllowListDomain(String domain) {
+    if (domain.isEmpty) return;
+    _allowListedDomains.add(domain.toLowerCase());
+    unawaited(persistAllowList());
+  }
+
+  void removeAllowListDomain(String domain) {
+    if (domain.isEmpty) return;
+    _allowListedDomains.remove(domain.toLowerCase());
+    unawaited(persistAllowList());
+  }
 
   Future<void> init() async {
     if (_initialized) return;
@@ -225,6 +260,7 @@ class AdBlockFilterUpdater {
     for (final p in cachedPatterns) {
       _urlPatternsTrie.insert(p);
     }
+    _rebuildWildcardPatterns();
     _cosmeticRules.addAll(cachedCosmetics);
     _scriptletRules.addAll(cachedScriptlets);
 
@@ -412,83 +448,91 @@ class AdBlockFilterUpdater {
     final tempDir = await getTemporaryDirectory();
     bool allSourcesSucceeded = true;
 
-    for (final source in _sources) {
-      try {
-        final tempPath = p.join(tempDir.path, '${source.name}.txt');
+    // P4: Concurrency-limited parallel downloading of sources
+    final chunks = <List<_FilterSource>>[];
+    for (var i = 0; i < _sources.length; i += 3) {
+      chunks.add(_sources.sublist(i, (i + 3 > _sources.length) ? _sources.length : i + 3));
+    }
 
-        // Try primary URL, fall back to mirror if it fails
-        bool ok = await _httpDownload(source.url, tempPath);
-        if (!ok && source.fallbackUrl != null) {
-          _log.fine('Retrying ${source.name} with fallback URL');
-          ok = await _httpDownload(source.fallbackUrl!, tempPath);
-        }
-        if (!ok) {
-          _log.warning(
-              'Failed to download source ${source.name} (all URLs failed)');
-          allSourcesSucceeded = false;
-          continue;
-        }
+    for (final chunk in chunks) {
+      await Future.wait(chunk.map((source) async {
+        try {
+          final tempPath = p.join(tempDir.path, '${source.name}.txt');
 
-        final file = File(tempPath);
+          // Try primary URL, fall back to mirror if it fails
+          bool ok = await _httpDownload(source.url, tempPath);
+          if (!ok && source.fallbackUrl != null) {
+            _log.fine('Retrying ${source.name} with fallback URL');
+            ok = await _httpDownload(source.fallbackUrl!, tempPath);
+          }
+          if (!ok) {
+            _log.warning(
+                'Failed to download source ${source.name} (all URLs failed)');
+            allSourcesSucceeded = false;
+            return;
+          }
 
-        // ── Integrity check 1: reject empty files ──────────────────────────
-        final fileSize = await file.length();
-        if (fileSize == 0) {
-          _log.warning('Filter ${source.name}: rejected empty file');
-          if (await file.exists()) await file.delete();
-          continue;
-        }
+          final file = File(tempPath);
 
-        // ── Integrity check 2: reject binary content (null bytes) ──────────
-        final sample = await file.openRead(0, 1024).expand((b) => b).toList();
-        if (sample.contains(0x00)) {
-          _log.warning('Filter ${source.name}: rejected binary content');
-          if (await file.exists()) await file.delete();
-          continue;
-        }
+          // ── Integrity check 1: reject empty files ──────────────────────────
+          final fileSize = await file.length();
+          if (fileSize == 0) {
+            _log.warning('Filter ${source.name}: rejected empty file');
+            if (await file.exists()) await file.delete();
+            return;
+          }
 
-        // ── Integrity check 3: reject suspicious size regressions ──────────
-        final sizeKey = 'adblock_last_size_${source.name}';
-        final lastSize = prefs.getInt(sizeKey) ?? 0;
-        if (lastSize > 0 &&
-            fileSize < (lastSize * regressionThreshold).round()) {
-          _log.warning(
-            'Filter ${source.name}: rejected suspiciously small file '
-            '($fileSize bytes vs last good $lastSize bytes)',
+          // ── Integrity check 2: reject binary content (null bytes) ──────────
+          final sample = await file.openRead(0, 1024).expand((b) => b).toList();
+          if (sample.contains(0x00)) {
+            _log.warning('Filter ${source.name}: rejected binary content');
+            if (await file.exists()) await file.delete();
+            return;
+          }
+
+          // ── Integrity check 3: reject suspicious size regressions ──────────
+          final sizeKey = 'adblock_last_size_${source.name}';
+          final lastSize = prefs.getInt(sizeKey) ?? 0;
+          if (lastSize > 0 &&
+              fileSize < (lastSize * source.regressionThreshold).round()) {
+            _log.warning(
+              'Filter ${source.name}: rejected suspiciously small file '
+              '($fileSize bytes vs last good $lastSize bytes)',
+            );
+            if (await file.exists()) await file.delete();
+            return;
+          }
+
+          final lines = await file.readAsLines();
+          if (!_isValidFilterSyntax(lines)) {
+            _log.warning(
+                'Filter ${source.name}: rejected due to invalid syntax (looks like HTML/JSON or corrupted)');
+            if (await file.exists()) await file.delete();
+            return;
+          }
+
+          final result = await _parseFilterLines(lines, source.type);
+
+          // Save size of the successfully validated file for future comparisons
+          await prefs.setInt(sizeKey, fileSize);
+
+          // Save successfully parsed sets for this specific source
+          await prefs.setStringList(
+            'adblock_domains_blocked_${source.name}',
+            result.blocked.toList(),
           );
-          if (await file.exists()) await file.delete();
-          continue;
+          await prefs.setStringList(
+            'adblock_domains_excepted_${source.name}',
+            result.excepted.toList(),
+          );
+
+          if (await file.exists()) {
+            await file.delete();
+          }
+        } catch (e) {
+          _log.warning('Failed to download or parse source ${source.name}', e);
         }
-
-        final lines = await file.readAsLines();
-        if (!_isValidFilterSyntax(lines)) {
-          _log.warning(
-              'Filter ${source.name}: rejected due to invalid syntax (looks like HTML/JSON or corrupted)');
-          if (await file.exists()) await file.delete();
-          continue;
-        }
-
-        final result = await _parseFilterLines(lines, source.type);
-
-        // Save size of the successfully validated file for future comparisons
-        await prefs.setInt(sizeKey, fileSize);
-
-        // Save successfully parsed sets for this specific source
-        await prefs.setStringList(
-          'adblock_domains_blocked_${source.name}',
-          result.blocked.toList(),
-        );
-        await prefs.setStringList(
-          'adblock_domains_excepted_${source.name}',
-          result.excepted.toList(),
-        );
-
-        if (await file.exists()) {
-          await file.delete();
-        }
-      } catch (e) {
-        _log.warning('Failed to download or parse source ${source.name}', e);
-      }
+      }));
     }
 
     // Now re-combine all cached source sets (using whatever currently exists in cache)
@@ -567,6 +611,7 @@ class AdBlockFilterUpdater {
         _scriptletsKey,
         _scriptletRules.take(1000).toList(),
       );
+      _rebuildWildcardPatterns();
     } else {
       _log.warning(
           'Some filter sources failed to download. Pattern and cosmetic rule updates were skipped to prevent data loss.');
@@ -585,6 +630,7 @@ class AdBlockFilterUpdater {
       for (final p in cachedPatterns) {
         _urlPatternsTrie.insert(p);
       }
+      _rebuildWildcardPatterns();
       _cosmeticRules.addAll(cachedCosmetics);
       _scriptletRules.addAll(cachedScriptlets);
 
@@ -628,186 +674,29 @@ class AdBlockFilterUpdater {
 
   Future<({Set<String> blocked, Set<String> excepted})> _parseFilterLines(
       List<String> lines, FilterType type) async {
-    final blocked = <String>{};
-    final excepted = <String>{};
+    final parsed = FilterLineParser.parse(lines, type);
 
-    for (final line in lines) {
-      // FIX: Do not break early. Breaking causes exception rules (@@||) and
-      // cosmetic rules (##.ad) later in the file to be silently ignored.
-      // The _maxDomains limit is already safely enforced during the final
-      if (line.isEmpty || line.length > _maxLineLength) continue;
-      final trimmed = line.trim();
+    _scriptletRules.addAll(parsed.scriptletRules);
+    _cosmeticRules.addAll(parsed.cosmeticRules);
+    _globalCosmeticExceptions.addAll(parsed.globalCosmeticExceptions);
 
-      // ABP Exception rules (@@||domain^)
-      if (trimmed.startsWith('@@')) {
-        final exceptionMatch = RegExp(
-          r'^@@\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9])\^',
-        ).firstMatch(trimmed);
-        if (exceptionMatch != null) {
-          excepted.add(exceptionMatch.group(1)!.toLowerCase());
-          continue;
-        }
-      }
-
-      // Parse hosts file line format: "127.0.0.1 domain.com" or "0.0.0.0 domain.com"
-      if (trimmed.startsWith('127.0.0.1') || trimmed.startsWith('0.0.0.0')) {
-        var cleanLine = trimmed;
-        final commentIdx = cleanLine.indexOf('#');
-        if (commentIdx != -1) {
-          cleanLine = cleanLine.substring(0, commentIdx).trim();
-        }
-        final parts = cleanLine.split(RegExp(r'\s+'));
-        for (var i = 1; i < parts.length; i++) {
-          var domain = parts[i].trim().toLowerCase();
-          if (domain.endsWith('.')) {
-            domain = domain.substring(0, domain.length - 1);
-          }
-          if (RegExp(r'^[a-z0-9][a-z0-9.-]*\.[a-z0-9]+$').hasMatch(domain)) {
-            blocked.add(domain);
-          }
-        }
-        continue;
-      }
-
-      // Comments (ABP format uses !, hosts/plain lists use #)
-      // NB: `##.class` cosmetic rules also start with '#', so only treat
-      // lines that start with a bare '#' (not '##') as comments.
-      if (line.startsWith('!') ||
-          line.startsWith('[') ||
-          (line.startsWith('#') &&
-              !line.startsWith('##') &&
-              !line.startsWith('#@#'))) {
-        continue;
-      }
-
-      // Scriptlet rules: ##+js(...) or site.com##+js(...)
-      if (line.contains('##+js(')) {
-        final idx = line.indexOf('##+js(');
-        final firstPart = line.substring(0, idx);
-        final afterPrefix = line.substring(idx + 6);
-        final closeIdx = afterPrefix.lastIndexOf(')');
-        final scriptlet =
-            (closeIdx != -1 ? afterPrefix.substring(0, closeIdx) : afterPrefix)
-                .trim();
-        if (scriptlet.isNotEmpty) {
-          // A bare `##+js(...)` applies globally; a `domain##+js(...)`
-          // prefix only applies to that site, so it must NOT land in the
-          // global scriptlet set (which runs on every page).
-          if (firstPart.isEmpty) {
-            _scriptletRules.add(scriptlet);
-          } else {
-            final domainsList = firstPart.split(',');
-            for (var domain in domainsList) {
-              domain = domain.trim().toLowerCase();
-              if (domain.isEmpty || domain.startsWith('~')) continue;
-              _siteCosmeticRules
-                  .putIfAbsent(domain, () => <String>{})
-                  .add(scriptlet);
-            }
-          }
-        }
-        continue;
-      }
-
-      // Cosmetic exception rules: #@#.ad-container, site.com#@#.ad-container
-      if (line.contains('#@#')) {
-        final idx = line.indexOf('#@#');
-        final firstPart = line.substring(0, idx);
-        final secondPart = line.substring(idx + 3);
-        if (secondPart.isNotEmpty && secondPart.length < 100) {
-          final selector = secondPart;
-          if (firstPart.isEmpty) {
-            _cosmeticRules.remove(selector);
-            _globalCosmeticExceptions.add(selector);
-          } else {
-            final domainsList = firstPart.split(',');
-            for (var domain in domainsList) {
-              domain = domain.trim().toLowerCase();
-              if (domain.isEmpty) continue;
-              _cosmeticExceptions
-                  .putIfAbsent(domain, () => <String>{})
-                  .add(selector);
-            }
-          }
-        }
-        continue;
-      }
-
-      // Cosmetic rules: ##.ad-container, ###sidebar-ad, site.com##.ad
-      if (line.contains('##')) {
-        final idx = line.indexOf('##');
-        final firstPart = line.substring(0, idx);
-        final secondPart = line.substring(idx + 2);
-        if (secondPart.isNotEmpty && secondPart.length < 100) {
-          final selector = secondPart;
-          if (firstPart.isEmpty) {
-            _cosmeticRules.add(selector);
-          } else {
-            final domainsList = firstPart.split(',');
-            for (var domain in domainsList) {
-              domain = domain.trim().toLowerCase();
-              if (domain.isEmpty) continue;
-              if (domain.startsWith('~')) {
-                final excDomain = domain.substring(1).trim();
-                if (excDomain.isNotEmpty) {
-                  _cosmeticExceptions
-                      .putIfAbsent(excDomain, () => <String>{})
-                      .add(selector);
-                }
-              } else {
-                _siteCosmeticRules
-                    .putIfAbsent(domain, () => <String>{})
-                    .add(selector);
-              }
-            }
-          }
-        }
-        continue;
-      }
-
-      // ABP-style ||domain^ rules
-      final domainMatch = RegExp(
-        r'^\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9])\^',
-      ).firstMatch(line);
-      if (domainMatch != null) {
-        final domain = domainMatch.group(1)!.toLowerCase();
-        if (domain.contains('.') && !domain.startsWith('.')) {
-          blocked.add(domain);
-        }
-        continue;
-      }
-
-      // Plain domain-per-line format (Peter Lowe list, hosts files, etc.)
-      // Accept lines that look like bare hostnames: e.g. "ads.example.com"
-      var plainDomain = trimmed;
-      if (plainDomain.contains('#') &&
-          !plainDomain.startsWith('##') &&
-          !plainDomain.startsWith('#@#')) {
-        plainDomain = plainDomain.substring(0, plainDomain.indexOf('#')).trim();
-      }
-      if (plainDomain.endsWith('.')) {
-        plainDomain = plainDomain.substring(0, plainDomain.length - 1);
-      }
-      if (RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z0-9]+$')
-          .hasMatch(plainDomain)) {
-        final domain = plainDomain.toLowerCase();
-        if (!domain.startsWith('.')) {
-          blocked.add(domain);
-        }
-        continue;
-      }
-
-      // URL path patterns: /ads/banner
-      if (line.startsWith('/') && !line.startsWith('//')) {
-        _urlPatterns.add(line);
-        if (!line.contains('*')) {
-          _urlPatternsTrie.insert(line);
-        }
-        continue;
-      }
+    for (final entry in parsed.siteCosmeticRules.entries) {
+      _siteCosmeticRules
+          .putIfAbsent(entry.key, () => <String>{})
+          .addAll(entry.value);
+    }
+    for (final entry in parsed.cosmeticExceptions.entries) {
+      _cosmeticExceptions
+          .putIfAbsent(entry.key, () => <String>{})
+          .addAll(entry.value);
     }
 
-    return (blocked: blocked, excepted: excepted);
+    _urlPatterns.addAll(parsed.urlPatterns);
+    for (final p in parsed.exactPathPatterns) {
+      _urlPatternsTrie.insert(p);
+    }
+
+    return (blocked: parsed.blocked, excepted: parsed.excepted);
   }
 
   @visibleForTesting
@@ -835,20 +724,11 @@ class AdBlockFilterUpdater {
       path = hostnameOrUrl.substring(idx);
     }
 
-    // FIX #9: Check collected URL path patterns
-    if (path.isNotEmpty && _urlPatterns.isNotEmpty) {
-      for (final pattern in _urlPatterns) {
-        if (pattern.contains('*')) {
-          final regexStr =
-              '^${RegExp.escape(pattern).replaceAll(r'\*', '.*')}\$';
-          try {
-            if (RegExp(regexStr, caseSensitive: false).hasMatch(path)) {
-              return true;
-            }
-          } catch (e, st) {
-            LoggingService.logger('AdblockFilterUpdater')
-                .warning('Operation failed', e, st);
-          }
+    // FIX #9 & PERF P2: Check collected URL path patterns using pre-compiled wildcard patterns and Trie
+    if (path.isNotEmpty) {
+      for (final regex in _compiledWildcardPatterns.values) {
+        if (regex.hasMatch(path)) {
+          return true;
         }
       }
       if (_urlPatternsTrie.searchSubstrings(path)) return true;

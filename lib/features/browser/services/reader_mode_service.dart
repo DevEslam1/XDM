@@ -154,13 +154,13 @@ class ReaderModeService {
     final stripped = htmlText
         .replaceAll(
             RegExp(
-                r'<\s*(script|iframe|object|embed|style|form|link)\b[^>]*>.*?<\s*/\s*\1\s*>',
+                r'<\s*(script|iframe|object|embed|style|form|link|applet|base|meta)\b[^>]*>.*?<\s*/\s*\1\s*>',
                 caseSensitive: false,
                 dotAll: true),
             '')
         .replaceAll(
             RegExp(
-                r'<\s*(script|iframe|object|embed|style|form|link)\b[^>]*/?>',
+                r'<\s*(script|iframe|object|embed|style|form|link|applet|base|meta)\b[^>]*/?>',
                 caseSensitive: false),
             '')
         .replaceAll(
@@ -176,8 +176,14 @@ class ReaderModeService {
                 caseSensitive: false, dotAll: true),
             '<a>')
         .replaceAll(
-            RegExp(r'href\s*=\s*"?\s*javascript\s*:', caseSensitive: false),
-            'href="#"');
+            RegExp(r'href\s*=\s*"?\s*javascript\s*:[^" >]*', caseSensitive: false),
+            'href="#"')
+        .replaceAll(
+            RegExp(r'src\s*=\s*"?\s*javascript\s*:[^" >]*', caseSensitive: false),
+            'src=""')
+        .replaceAll(
+            RegExp(r'<\s*img\b[^>]*\bonerror\b[^>]*>', caseSensitive: false),
+            '');
     return stripped;
   }
 

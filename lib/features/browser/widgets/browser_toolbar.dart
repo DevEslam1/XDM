@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
 import '../../settings/provider/settings_provider.dart';
+import '../services/browser_controller.dart';
+import 'browser_menu_button.dart';
 import 'smart_url_bar.dart';
 
 /// Extracted toolbar component for the in-app browser screen.
 class BrowserToolbar extends StatelessWidget {
+  final BrowserController controller;
   final TextEditingController urlController;
   final FocusNode focusNode;
   final bool isDark;
@@ -24,8 +27,6 @@ class BrowserToolbar extends StatelessWidget {
   final ValueChanged<String> onNavigate;
   final VoidCallback onReload;
   final VoidCallback onStopLoading;
-  final PopupMenuItemBuilder<String> menuItemBuilder;
-  final PopupMenuItemSelected<String> onMenuSelected;
   final VoidCallback onQuitPressed;
   final VoidCallback? onShieldPressed;
   final bool isHttps;
@@ -33,6 +34,7 @@ class BrowserToolbar extends StatelessWidget {
 
   const BrowserToolbar({
     super.key,
+    required this.controller,
     required this.urlController,
     required this.focusNode,
     required this.isDark,
@@ -50,8 +52,6 @@ class BrowserToolbar extends StatelessWidget {
     required this.onNavigate,
     required this.onReload,
     required this.onStopLoading,
-    required this.menuItemBuilder,
-    required this.onMenuSelected,
     required this.onQuitPressed,
     this.youtubeGrabButton,
     this.onShieldPressed,
@@ -99,7 +99,7 @@ class BrowserToolbar extends StatelessWidget {
               onPressed: (canGoBack || !isHomeTab) ? onGoBack : null,
             ),
 
-            // Desktop mode indicator indicator icon
+            // Desktop mode indicator icon
             if (desktopMode)
               const Tooltip(
                 message: 'Desktop mode active',
@@ -157,12 +157,12 @@ class BrowserToolbar extends StatelessWidget {
               onPressed: onShowTabSwitcher,
             ),
 
-            // Overflow menu button
-            PopupMenuButton<String>(
-              icon: Icon(Icons.more_vert, size: 18, color: textClr),
-              color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-              onSelected: onMenuSelected,
-              itemBuilder: menuItemBuilder,
+            // Extracted full 17-action menu button
+            BrowserMenuButton(
+              controller: controller,
+              settings: settings,
+              isDark: isDark,
+              textClr: textClr,
             ),
 
             // Quit browser button

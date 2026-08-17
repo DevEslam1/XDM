@@ -136,4 +136,22 @@ class BrowserHistoryManager {
       _log.warning('[DMX Browser] Failed to add browser history: $e');
     }
   }
+
+  void recordVisit({
+    required String url,
+    String? title,
+    bool isIncognito = false,
+  }) {
+    if (isIncognito) return;
+    recordHistory(url, title: title);
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentHistory({int limit = 30}) async {
+    try {
+      final db = resolveDatabase();
+      return await db.loadBrowserHistory(max: limit);
+    } catch (_) {
+      return [];
+    }
+  }
 }
