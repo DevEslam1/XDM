@@ -474,7 +474,11 @@ class DownloadTask {
   int get combinedTotalSize {
     if (hasMergedAudio && audioSize > 0) {
       if (videoStreamSize > 0) return videoStreamSize + audioSize;
-      if (fileSize > 0) return fileSize;
+      if (fileSize > audioSize) return fileSize;
+      if (fileSize > 0 && fileSize <= audioSize) {
+        // fileSize only covers audio so far; total still unknown
+        return downloadedBytes + audioSize;
+      }
       if (downloadedBytes > 0) return downloadedBytes + audioSize;
       return 0;
     }

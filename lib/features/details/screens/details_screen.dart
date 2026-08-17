@@ -1162,7 +1162,7 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
         ? task.videoStreamSize
         : (task.fileSize > task.audioSize && task.audioSize > 0
             ? task.fileSize - task.audioSize
-            : task.fileSize);
+            : (task.audioSize <= 0 ? task.fileSize : 0));
     final videoProgress =
         videoSize > 0 ? (videoDl / videoSize).clamp(0.0, 1.0) : 0.0;
 
@@ -2463,7 +2463,6 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
   final DownloadTask task;
   final DownloadProvider provider;
   final SettingsProvider settings;
-
   const _TorrentFilesPanel({
     required this.task,
     required this.provider,
@@ -2477,7 +2476,6 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
   ) async {
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
-
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2510,16 +2508,12 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
         ],
       ),
     );
-
     if (confirm != true) return;
-
     try {
       final relPath = task.torrentFiles![fileIndex]['name'] as String? ?? '';
-
       if (relPath.isNotEmpty) {
         final normalizedSave = p.normalize(p.absolute(task.savePath));
         final fullPath = p.normalize(p.absolute(task.savePath, relPath));
-
         if (!p.isWithin(normalizedSave, fullPath) &&
             !p.equals(fullPath, normalizedSave)) {
           debugPrint(
@@ -2527,7 +2521,6 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
             'attempt. relPath="$relPath", resolved="$fullPath", '
             'savePath="$normalizedSave"',
           );
-
           if (context.mounted) {
             final isRtlLocal = L10n.isRtl(context);
             ThemedSnackbar.show(
@@ -2542,29 +2535,24 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
           }
           return;
         }
-
         final file = File(fullPath);
         if (await file.exists()) {
           await file.delete();
         }
       }
-
       final updatedFiles = List<Map<String, dynamic>>.from(
         task.torrentFiles!,
       );
-
       updatedFiles[fileIndex] = {
         ...updatedFiles[fileIndex],
         'selected': false,
         'priority': 0,
         'downloadedBytes': 0,
       };
-
       await provider.updateTorrentTaskFiles(
         task.id,
         updatedFiles,
       );
-
       if (context.mounted) {
         ThemedSnackbar.show(
           context,
@@ -2591,11 +2579,19 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
         for (int i = 0; i < prev.length; i++) {
           final p = prev[i];
           final n = next[i];
+          // FIX: Added 'length' and 'name' to the diff so that
+          // metadata-fetched size changes and file renames trigger
+          // a UI rebuild. Previously, only downloadedBytes/progress/
+          // selected/priority/progressEstimated were checked, which
+          // meant size changes after metadata fetch were silently
+          // ignored by the Selector.
           if (p['downloadedBytes'] != n['downloadedBytes'] ||
               p['progressEstimated'] != n['progressEstimated'] ||
               p['progress'] != n['progress'] ||
               p['selected'] != n['selected'] ||
-              p['priority'] != n['priority']) {
+              p['priority'] != n['priority'] ||
+              p['length'] != n['length'] ||
+              p['name'] != n['name']) {
             return true;
           }
         }
@@ -2603,18 +2599,15 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
       },
       builder: (context, dynamicTorrentFiles, _) {
         final currentTask = provider.taskById(task.id) ?? task;
-
         if (!currentTask.isTorrent ||
             dynamicTorrentFiles == null ||
             dynamicTorrentFiles.isEmpty) {
           return const SizedBox.shrink();
         }
-
         final files = dynamicTorrentFiles;
         final isDark = settings.isDarkMode;
         final isRtl = L10n.isRtl(context);
         final isDownloading = currentTask.status == DownloadStatus.downloading;
-
         return TorrentFilesPanel(
           torrentFiles: files,
           isDark: isDark,
@@ -2690,7 +2683,6 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
     );
   }
 }
-
 // ─────────────────────────────────────────────────────────────
 
 // Metadata Spec Sheet
@@ -3087,10 +3079,10 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
     final isRtl = L10n.isRtl(context);
 
     final textController = TextEditingController(text: task.url);
-    final hasAudio = task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty;
-    final audioTextController = hasAudio
-        ? TextEditingController(text: task.mergedAudioUrl)
-        : null;
+    final hasAudio =
+        task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty;
+    final audioTextController =
+        hasAudio ? TextEditingController(text: task.mergedAudioUrl) : null;
 
     try {
       await showDialog(
