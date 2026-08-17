@@ -559,12 +559,53 @@ class DownloadProvider extends ChangeNotifier
   final List<DownloadTask> _tasks = [];
   final Map<String, CancelToken> _cancelTokens = {};
   final Map<String, ({CancelToken video, CancelToken audio})> _orchestratorTokens = {};
+  final List<Future<void>> _pendingDeleteCleanups = [];
   final Map<String, bool> _resumeRejectionRestarts = {};
   final Map<String, Queue<double>> _speedHistories = {};
   final Map<String, Queue<double>> _uploadSpeedHistories = {};
   // FIX-M7: Periodic timer for cleaning up inactive speed histories
   Timer? _speedHistoryCleanupTimer;
   final Map<String, Future<void>> _dbSaveQueues = {};
+
+  /// Resolves the engine torrent ID for a task.
+  /// Priority: 1) cached map  2) info-hash match  3) name/tracker fallback.
+  int? _resolveTorrentId(DownloadTask task) {
+    // 1. Cached mapping
+    final mapped = _torrentIds[task.id];
+    if (mapped != null) return mapped;
+
+    // 2. Info-hash match for magnets (most reliable)
+    if (task.url.startsWith('magnet:')) {
+      try {
+        final parsed = parseMagnetUrl(task.url);
+        final infoHash = parsed['infoHash']?.toString().toLowerCase();
+        if (infoHash != null) {
+          for (final tid in TorrentService.activeTorrentIds) {
+            final stats = TorrentService.latestStats[tid];
+            if (stats?.infoHash?.toLowerCase() == infoHash) {
+              _torrentIds[task.id] = tid; // cache for future calls
+              return tid;
+            }
+          }
+        }
+      } catch (e) {
+        _log.warning('Info-hash resolution failed for ${task.id}: $e');
+      }
+    }
+
+    // 3. Name/tracker fallback (log a warning since it's ambiguous)
+    _log.warning(
+      'Using name-match fallback for torrent ID resolution on ${task.id}. '
+      'This may match the wrong torrent if names collide.',
+    );
+    return TorrentService.activeTorrentIds.cast<int?>().firstWhere(
+      (tid) =>
+          tid != null &&
+          (TorrentService.latestStats[tid]?.name == task.fileName ||
+              TorrentService.latestStats[tid]?.currentTracker == task.url),
+      orElse: () => null,
+    );
+  }
 
   void _cleanupInactiveSpeedHistories([String? completedTaskId]) {
     if (completedTaskId != null) {
@@ -1907,6 +1948,37 @@ class DownloadProvider extends ChangeNotifier
       throw Exception('This download is already active in the queue.');
     }
 
+    if (url.trim().toLowerCase().startsWith('magnet:')) {
+      try {
+        final parsed = parseMagnetUrl(url.trim());
+        final newHash = parsed['infoHash']?.toString().toLowerCase();
+        if (newHash != null) {
+          final duplicate = _tasks.any((t) {
+            if (t.status == DownloadStatus.failed ||
+                t.status == DownloadStatus.completed ||
+                t.status == DownloadStatus.paused) {
+              return false;
+            }
+            if (!t.url.startsWith('magnet:')) return false;
+            try {
+              final existingParsed = parseMagnetUrl(t.url);
+              return existingParsed['infoHash']?.toString().toLowerCase() ==
+                  newHash;
+            } catch (_) {
+              return false;
+            }
+          });
+          if (duplicate && !isAppUpdate) {
+            throw Exception(
+                'This torrent (same info-hash) is already active in the queue.');
+          }
+        }
+      } catch (e) {
+        if (e is Exception && e.toString().contains('already active')) rethrow;
+        _log.warning('Magnet dedup check failed: $e');
+      }
+    }
+
     final targetSaveDir = savePath.isNotEmpty
         ? savePath
         : (_settingsProvider.customDownloadPath?.isNotEmpty == true
@@ -2231,14 +2303,17 @@ class DownloadProvider extends ChangeNotifier
 
       final wasDownloading = task.status == DownloadStatus.downloading;
 
-      // Optimistic UI Update: immediately mark as paused, speed = 0, clear eta
-      final updated = task.copyWith(
-        status: DownloadStatus.paused,
-        pausedByUser: reason == PauseReason.userRequested,
-        speed: 0,
-        clearEta: true,
-      );
-      await _setTask(updated);
+      // For seeding torrents, only disable seeding — do NOT change status yet.
+      // _pauseTaskInternal will handle the engine pause and set status after.
+      if (!isSeedingTorrent) {
+        final updated = task.copyWith(
+          status: DownloadStatus.paused,
+          pausedByUser: reason == PauseReason.userRequested,
+          speed: 0,
+          clearEta: true,
+        );
+        await _setTask(updated);
+      }
 
       // Fire-and-forget the engine pause/cancel execution in the background
       unawaited(
@@ -2283,27 +2358,14 @@ class DownloadProvider extends ChangeNotifier
     final isSeedingTorrent = wasSeeding;
 
     if (wasDownloading || isSeedingTorrent) {
-      int? torrentId = _torrentIds[id];
+      int? torrentId = _resolveTorrentId(task);
 
       if (task.isTorrent && torrentId == null) {
-        // Try looking up the native handle by an alternate key (task's source URL)
-        final matchingTid = TorrentService.activeTorrentIds.firstWhere(
-          (tid) =>
-              TorrentService.latestStats[tid]?.name == task.fileName ||
-              TorrentService.latestStats[tid]?.currentTracker ==
-                  task.url, // or check if latestStats has it
-          orElse: () => -1,
-        );
-        if (matchingTid != -1) {
-          torrentId = matchingTid;
-          _torrentIds[id] = matchingTid;
-        } else {
-          // Poll briefly up to 1s for the torrentId to register
-          final pollDeadline = DateTime.now().add(const Duration(seconds: 1));
-          while (torrentId == null && DateTime.now().isBefore(pollDeadline)) {
-            await Future.delayed(const Duration(milliseconds: 50));
-            torrentId = _torrentIds[id];
-          }
+        // Poll briefly up to 1s for the torrentId to register
+        final pollDeadline = DateTime.now().add(const Duration(seconds: 1));
+        while (torrentId == null && DateTime.now().isBefore(pollDeadline)) {
+          await Future.delayed(const Duration(milliseconds: 50));
+          torrentId = _resolveTorrentId(task);
         }
 
         // If still null, set a flag so as soon as it registers, it gets paused.
@@ -2312,45 +2374,70 @@ class DownloadProvider extends ChangeNotifier
               'Torrent registration pending on pause; marking needsForcedPauseOnRegister for ${task.id}');
           _needsForcedPauseOnRegister.add(task.id);
 
-          // FIX-PAUSE-5: Cancel the CancelToken even in this early-return path.
-          // Without this the orchestrator's onProgress keeps running and the
-          // native torrent session is never told to stop.
-          for (final suffix in ['::video', '::audio', '']) {
-            final k = suffix.isEmpty ? id : '$id$suffix';
+          // FIX #6: Immediately pause ALL active torrents that match this task's
+          // magnet URI to close the race window.
+          if (task.url.startsWith('magnet:')) {
             try {
-              _cancelTokens[k]?.cancel('paused:${reason.name}');
-            } catch (e, st) {
-              LoggingService.logger('DownloadProvider')
-                  .warning('Operation failed', e, st);
-            }
-            _cancelTokens.remove(k);
-          }
-          final orchTokens = _orchestratorTokens.remove(id);
-          if (orchTokens != null) {
-            if (!orchTokens.video.isCancelled) {
-              try {
-                orchTokens.video.cancel('paused:${reason.name}');
-              } catch (_) {}
-            }
-            if (!orchTokens.audio.isCancelled) {
-              try {
-                orchTokens.audio.cancel('paused:${reason.name}');
-              } catch (_) {}
+              final parsed = parseMagnetUrl(task.url);
+              final infoHash = parsed['infoHash']?.toString().toLowerCase();
+              if (infoHash != null) {
+                for (final tid in TorrentService.activeTorrentIds) {
+                  final stats = TorrentService.latestStats[tid];
+                  if (stats?.infoHash?.toLowerCase() == infoHash) {
+                    await TorrentService.pauseTorrent(tid);
+                    _torrentIds[task.id] = tid; // cache it now
+                    _needsForcedPauseOnRegister.remove(task.id);
+                    torrentId = tid;
+                    break;
+                  }
+                }
+              }
+            } catch (e) {
+              _log.warning('Immediate magnet pause attempt failed: $e');
             }
           }
 
-          // Set DB status to paused so the UI reflects it immediately
-          await _setTask(task.copyWith(
-            status: DownloadStatus.paused,
-            speed: 0,
-            clearEta: true,
-            pausedByUser: reason == PauseReason.userRequested,
-          ));
-          _orchestrator.clearStartingFlag(id);
-          _orchestrator.clearPushScheduled(id);
-          _notifications.cancelForTask(id);
-          pumpQueue();
-          return;
+          if (torrentId == null) {
+            // FIX-PAUSE-5: Cancel the CancelToken even in this early-return path.
+            // Without this the orchestrator's onProgress keeps running and the
+            // native torrent session is never told to stop.
+            for (final suffix in ['::video', '::audio', '']) {
+              final k = suffix.isEmpty ? id : '$id$suffix';
+              try {
+                _cancelTokens[k]?.cancel('paused:${reason.name}');
+              } catch (e, st) {
+                LoggingService.logger('DownloadProvider')
+                    .warning('Operation failed', e, st);
+              }
+              _cancelTokens.remove(k);
+            }
+            final orchTokens = _orchestratorTokens.remove(id);
+            if (orchTokens != null) {
+              if (!orchTokens.video.isCancelled) {
+                try {
+                  orchTokens.video.cancel('paused:${reason.name}');
+                } catch (_) {}
+              }
+              if (!orchTokens.audio.isCancelled) {
+                try {
+                  orchTokens.audio.cancel('paused:${reason.name}');
+                } catch (_) {}
+              }
+            }
+
+            // Set DB status to paused so the UI reflects it immediately
+            await _setTask(task.copyWith(
+              status: DownloadStatus.paused,
+              speed: 0,
+              clearEta: true,
+              pausedByUser: reason == PauseReason.userRequested,
+            ));
+            _orchestrator.clearStartingFlag(id);
+            _orchestrator.clearPushScheduled(id);
+            _notifications.cancelForTask(id);
+            pumpQueue();
+            return;
+          }
         }
       }
 
@@ -2490,7 +2577,11 @@ class DownloadProvider extends ChangeNotifier
           }
 
           if (isPaused) {
-            TorrentSubscriptionRegistry.instance.dispose(torrentId);
+            try {
+              TorrentSubscriptionRegistry.instance.dispose(torrentId);
+            } catch (e) {
+              _log.fine('No active subscription to dispose for $torrentId: $e');
+            }
           }
 
           // Snapshot per-file bytes AFTER engine has stopped
@@ -2605,11 +2696,13 @@ class DownloadProvider extends ChangeNotifier
     if (isSeedingTorrent) {
       await _setTask(
         task.copyWith(
+          status: DownloadStatus.paused,
           seedingEnabled: false,
           speed: 0,
           clearEta: true,
           clearError: true,
           clearStatusMessage: true,
+          pausedByUser: reason == PauseReason.userRequested,
         ),
       );
       updateActualTorrentUploadLimit();
@@ -3985,7 +4078,7 @@ class DownloadProvider extends ChangeNotifier
       final task = _findTask(id);
       if (task == null) return;
       final taskSnapshot = task;
-      int? resolvedTorrentId = _torrentIds[id];
+      final int? resolvedTorrentId = _resolveTorrentId(task);
 
       // FIX-X-05: Cancel notification immediately on delete
       final notifId = _notifications.idFor(id);
@@ -4022,26 +4115,14 @@ class DownloadProvider extends ChangeNotifier
 
       // 2. For torrents, pause + remove from session IMMEDIATELY
       if (task.isTorrent) {
-        // FIX-DELETE-4: Last-chance torrent ID resolve — if _torrentIds[id] is
-        // null (e.g. task deleted before 2 s subscription timer fired), try
-        // matching by file name so the native session is always halted.
-        if (resolvedTorrentId == null) {
-          resolvedTorrentId = TorrentService.activeTorrentIds.cast<int?>().firstWhere(
-            (tid) =>
-                tid != null &&
-                (TorrentService.latestStats[tid]?.name == task.fileName ||
-                    TorrentService.latestStats[tid]?.currentTracker == task.url),
-            orElse: () => null,
-          );
-          if (resolvedTorrentId != null) {
-            _log.info('[deleteTask] Resolved torrent ID $resolvedTorrentId by name-match for task $id');
-          }
-        }
-
         // FIX-P2-02: Deterministically dispose the torrent subscription on
         // delete instead of relying on WeakReference GC cleanup.
         if (resolvedTorrentId != null) {
-          TorrentSubscriptionRegistry.instance.dispose(resolvedTorrentId);
+          try {
+            TorrentSubscriptionRegistry.instance.dispose(resolvedTorrentId);
+          } catch (e) {
+            _log.fine('No active subscription to dispose for $resolvedTorrentId: $e');
+          }
         }
         if (resolvedTorrentId != null && TorrentService.isTorrentAlive(resolvedTorrentId)) {
           // FIX-B10: Guard with alive check
@@ -4069,9 +4150,23 @@ class DownloadProvider extends ChangeNotifier
           } catch (e) {
             _log.warning('[deleteTask] Torrent cleanup failed: $e');
           }
+          try {
+            await TorrentResumeStore.deleteResumeDataForSource(task.url);
+            await TorrentResumeStore.delete(resolvedTorrentId);
+          } catch (e) {
+            _log.warning('Explicit resume data cleanup failed for ${task.id}: $e');
+          }
           _torrentIds.remove(id);
           providerTorrentIds.remove(id);
         } else {
+          try {
+            await TorrentResumeStore.deleteResumeDataForSource(task.url);
+            if (resolvedTorrentId != null) {
+              await TorrentResumeStore.delete(resolvedTorrentId);
+            }
+          } catch (e) {
+            _log.warning('Explicit resume data cleanup failed for ${task.id}: $e');
+          }
           _torrentIds.remove(id);
           providerTorrentIds.remove(id);
         }
@@ -4143,9 +4238,16 @@ class DownloadProvider extends ChangeNotifier
 
       // 6. Heavy cleanup in BACKGROUND
       // FIX-DELETE-3: Pass the pre-captured future reference and torrentId
-      unawaited(_backgroundDeleteCleanup(taskSnapshot, deleteFiles, activeFuture, resolvedTorrentId).catchError((e) {
+      // FIX #7: Track pending delete cleanups
+      final cleanupFuture = _backgroundDeleteCleanup(
+              taskSnapshot, deleteFiles, activeFuture, resolvedTorrentId)
+          .catchError((e) {
         _log.warning('Background delete cleanup failed', e);
-      }));
+      });
+      _pendingDeleteCleanups.add(cleanupFuture);
+      cleanupFuture.whenComplete(() {
+        _pendingDeleteCleanups.remove(cleanupFuture);
+      });
 
       updateActualTorrentUploadLimit();
       pumpQueue();
@@ -4284,6 +4386,23 @@ class DownloadProvider extends ChangeNotifier
             );
           }
         }
+      }
+
+      // Remove empty torrent directory
+      try {
+        final torrentDirPath = p.normalize(p.join(root, task.fileName));
+        if (p.isWithin(root, torrentDirPath)) {
+          final torrentDir = Directory(torrentDirPath);
+          if (await torrentDir.exists()) {
+            final remaining = await torrentDir.list().toList();
+            if (remaining.isEmpty) {
+              await torrentDir.delete();
+              _log.info('Deleted empty torrent directory: $torrentDirPath');
+            }
+          }
+        }
+      } catch (e) {
+        _log.warning('Failed to delete empty torrent directory: $e');
       }
     }
   }
@@ -4530,18 +4649,31 @@ class DownloadProvider extends ChangeNotifier
     final prev = _tasks[index];
     if (prev.status == DownloadStatus.completed &&
         updated.status != DownloadStatus.completed) {
-      _log.warning(
-        'Blocked stale update for completed task ${updated.id}: '
-        '${prev.status} -> ${updated.status}.',
-      );
-      return;
+      // Allow completed → paused ONLY for seeding torrents being paused
+      final isSeedingPause = prev.isTorrent &&
+          prev.seedingEnabled &&
+          updated.status == DownloadStatus.paused;
+
+      // Allow completed → queued/downloading for explicit retry/re-download
+      final isExplicitRestart = updated.status == DownloadStatus.queued ||
+          updated.status == DownloadStatus.downloading;
+
+      if (!isSeedingPause && !isExplicitRestart) {
+        _log.warning(
+          'Blocked stale update for completed task ${updated.id}: '
+          '${prev.status} -> ${updated.status}.',
+        );
+        return;
+      }
     }
     if (prev.status != updated.status) {
       if (!DownloadStateMachine.canTransitionStatus(
           prev.status, updated.status)) {
-        _log.warning(
-          'Blocked illegal status transition for task ${updated.id}: '
-          '${prev.status} -> ${updated.status}. Retaining status ${prev.status}.',
+        // Seeding pause is now allowed (Fix #1), so this should not fire.
+        // Keep as fine-level for any other unexpected transitions.
+        _log.fine(
+          'Blocked status transition for task ${updated.id}: '
+          '${prev.status} -> ${updated.status}. Retaining ${prev.status}.',
         );
         updated = updated.copyWith(status: prev.status);
       }
@@ -6215,6 +6347,15 @@ class DownloadProvider extends ChangeNotifier
   @override
   void dispose() {
     _disposed = true;
+
+    if (_pendingDeleteCleanups.isNotEmpty) {
+      _log.info(
+          'Waiting for ${_pendingDeleteCleanups.length} pending delete cleanups');
+      // Best-effort: give cleanups 3 seconds to finish
+      Future.wait(_pendingDeleteCleanups)
+          .timeout(const Duration(seconds: 3))
+          .catchError((_) => <void>[]);
+    }
 
     AppLifecycleCoordinator.removeOnResumedCallback(forceEmitAllProgress);
     _settingsProvider.removeListener(_onSettingsChanged);

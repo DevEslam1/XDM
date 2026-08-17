@@ -108,6 +108,7 @@ class DownloadStateMachine {
       DownloadState.queued, // re-download / seed
       DownloadState.downloading,
       DownloadState.idle,
+      DownloadState.paused, // required for pausing seeding torrents
     },
     DownloadState.failed: {
       DownloadState.queued,

@@ -16,7 +16,7 @@ void main() {
       );
 
       // In unit test environment without native webview binding, getter safely returns null and catches failure
-      final controller = tab.findInteractionController;
+      tab.findInteractionController;
       // Resetting clears the failed state
       tab.resetFindController();
       expect(tab.isDisposed, isFalse);

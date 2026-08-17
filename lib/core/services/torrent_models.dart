@@ -47,6 +47,7 @@ class TorrentUpdateInfo {
   final double distributedCopies;
   final List<int> fileProgress;
   final List<int> filePriorities;
+  final String? infoHash;
 
   TorrentUpdateInfo({
     required this.id,
@@ -70,6 +71,7 @@ class TorrentUpdateInfo {
     this.currentTracker = '',
     this.nextAnnounceSeconds = 0,
     this.distributedCopies = 0.0,
+    this.infoHash,
     List<int> fileProgress = const [],
     List<int> filePriorities = const [],
   })  : fileProgress = List.unmodifiable(fileProgress),
