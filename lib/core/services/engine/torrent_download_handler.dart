@@ -404,18 +404,18 @@ class TorrentDownloadHandler {
         // let estimation distribute them.
         final est = (len * progress).clamp(0.0, len.toDouble()).toInt();
         f['downloadedBytes'] = est;
-        f['progress'] = len > 0 ? (est / len).clamp(0.0, 1.0) : 1.0;
-        f['isComplete'] = est >= len;
+        f['progress'] = len > 0 ? (est / len).clamp(0.0, 1.0) : 0.0;
+        f['isComplete'] = len > 0 && est >= len;
         f['progressEstimated'] = true;
       } else if (dl >= 0 && dl <= len) {
-        f['progress'] = (dl / len).clamp(0.0, 1.0);
-        f['isComplete'] = dl >= len;
+        f['progress'] = len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0;
+        f['isComplete'] = len > 0 && dl >= len;
         f['progressEstimated'] = false;
       } else {
         final est = (len * progress).clamp(0.0, len.toDouble()).toInt();
         f['downloadedBytes'] = est;
-        f['progress'] = len > 0 ? (est / len).clamp(0.0, 1.0) : 1.0;
-        f['isComplete'] = est >= len;
+        f['progress'] = len > 0 ? (est / len).clamp(0.0, 1.0) : 0.0;
+        f['isComplete'] = len > 0 && est >= len;
         f['progressEstimated'] = true;
       }
     }
@@ -437,8 +437,8 @@ class TorrentDownloadHandler {
       final calculatedDl = remaining >= len ? len : remaining;
       final dl = math.max(priorDl, calculatedDl).clamp(0, len);
       f['downloadedBytes'] = dl;
-      f['progress'] = len > 0 ? (dl / len).clamp(0.0, 1.0) : 1.0;
-      f['isComplete'] = dl >= len;
+      f['progress'] = len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0;
+      f['isComplete'] = len > 0 && dl >= len;
       f['progressEstimated'] = true;
       remaining -= calculatedDl;
       if (remaining <= 0) remaining = 0;
@@ -497,8 +497,8 @@ class TorrentDownloadHandler {
         final est = (evenShare + extra).clamp(0, length);
         f['downloadedBytes'] = est;
         f['progressEstimated'] = true;
-        f['progress'] = length > 0 ? (est / length).clamp(0.0, 1.0) : 1.0;
-        f['isComplete'] = est >= length;
+        f['progress'] = length > 0 ? (est / length).clamp(0.0, 1.0) : 0.0;
+        f['isComplete'] = length > 0 && est >= length;
       }
       _reconcileEstimatedFiles(files, totalDownloadedBytes);
       return;
@@ -517,8 +517,8 @@ class TorrentDownloadHandler {
       final est = (weight * remaining).round().clamp(0, length);
       f['downloadedBytes'] = est;
       f['progressEstimated'] = true;
-      f['progress'] = length > 0 ? (est / length).clamp(0.0, 1.0) : 1.0;
-      f['isComplete'] = est >= length;
+      f['progress'] = length > 0 ? (est / length).clamp(0.0, 1.0) : 0.0;
+      f['isComplete'] = length > 0 && est >= length;
     }
     _reconcileEstimatedFiles(files, totalDownloadedBytes);
   }
@@ -1332,8 +1332,15 @@ class TorrentDownloadHandler {
         final rawDownloaded = torrent.totalWantedDone > 0
             ? torrent.totalWantedDone
             : (torrent.totalDone > 0 ? torrent.totalDone : 0);
-        final safeProgress =
-            torrent.progress.isFinite ? torrent.progress.clamp(0.0, 1.0) : 0.0;
+        // FIX: Guard against libtorrent emitting progress == 1.0 before metadata
+        // is fetched or when totalWanted == 0.
+        final bool isProgressValid = torrent.hasMetadata &&
+            (torrent.totalWanted > 0 || rawDownloaded > 0 || stateLabel == 'seeding');
+        final safeProgress = (isProgressValid && torrent.progress.isFinite)
+            ? torrent.progress.clamp(0.0, 1.0)
+            : (rawDownloaded > 0 && totalSize > 0
+                ? (rawDownloaded / totalSize).clamp(0.0, 1.0)
+                : 0.0);
         final filesToUpdate = resolvedFiles ?? cachedAccurateFiles;
         if (filesToUpdate != null && filesToUpdate.isNotEmpty) {
           bool pieceMapped = false;

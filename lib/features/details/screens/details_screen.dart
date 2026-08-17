@@ -1174,6 +1174,9 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
         ? (audioDl / audioSize).clamp(0.0, 1.0)
         : task.audioProgressPercent;
 
+    final activeChunks = task.sanitizedChunks;
+    final completedChannels = activeChunks.where((c) => c >= 1.0).length;
+
     return DmxCardShell(
       accent: statusColor,
       showRail: false,
@@ -1241,7 +1244,7 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
                   style: AppTheme.microLabel(isDark: isDark, size: 10),
                 ),
                 Text(
-                  '${task.chunks.length} ${isRtl ? 'قنوات' : 'CH'}',
+                  '$completedChannels/${activeChunks.length} ${isRtl ? 'قنوات' : 'CH'}',
                   style: AppTheme.dataStyle(
                     isDark: isDark,
                     size: 11,
@@ -1327,8 +1330,8 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
             // Channel bars
 
             Column(
-              children: List.generate(task.chunks.length, (index) {
-                final chunkProgress = task.chunks[index].clamp(0.0, 1.0);
+              children: List.generate(activeChunks.length, (index) {
+                final chunkProgress = activeChunks[index].clamp(0.0, 1.0);
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10.0),

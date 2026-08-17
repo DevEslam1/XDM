@@ -1713,36 +1713,36 @@ class TorrentService {
     Duration retryDelay = const Duration(seconds: 10),
   }) async {
     _injectDhtNodes();
+    final id = addMagnet(magnetUri, savePath);
+    if (id < 0) return -1;
+
+    // Immediately register default public trackers and announce
+    for (final tracker in TrackerManager.defaultTrackers) {
+      addTracker(id, tracker);
+    }
+    try {
+      announceNow(id);
+    } catch (_) {}
+
+    // Resume so metadata transfer can proceed
+    try {
+      LibtorrentFlutter.instance.resumeTorrent(id);
+    } catch (_) {}
+
+    // Check if metadata is already available in cache
+    final initialStats = _latestStats[id];
+    if (initialStats != null && initialStats.hasMetadata) {
+      _log.info('Metadata already cached for magnet $id.');
+      return id;
+    }
+
+    final perAttemptTimeout = Duration(
+      seconds: (timeout.inSeconds / (maxRetries + 1)).clamp(30, 120).toInt(),
+    );
+
     int attempt = 0;
-
-    // FIX #2 Part C: Cap metadata timeout to 60 seconds
-    final effectiveTimeout = timeout > const Duration(seconds: 60)
-        ? const Duration(seconds: 60)
-        : timeout;
-
     while (attempt <= maxRetries) {
       attempt++;
-      final id = addMagnet(magnetUri, savePath);
-      if (id < 0) return -1;
-
-      // FIX v2.0.0-BugRace: addMagnet now pauses the torrent to prevent
-      // downloading before resume data is loaded by the caller. Resume here
-      // so the torrent can fetch metadata. The caller (handleTorrentDownload)
-      // will load resume data after metadata is received, then resume again
-      // (which is a no-op if already resumed). For magnets, this is safe
-      // because no pieces can be downloaded until metadata is received.
-      try {
-        LibtorrentFlutter.instance.resumeTorrent(id);
-      } catch (_) {}
-
-      // FIX #2 Part B: Post-add metadata check (immediate check if already cached)
-      final stats = _latestStats[id];
-      if (stats != null && stats.hasMetadata) {
-        _log.info(
-            'Metadata already cached for magnet $id. Skipping metadata wait.');
-        return id;
-      }
-
       final stopwatch = Stopwatch()..start();
       final completer = Completer<int>();
       Timer? messageTimer;
@@ -1750,11 +1750,10 @@ class TorrentService {
 
       messageTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         final elapsedSec = stopwatch.elapsed.inSeconds;
-        final msg = 'Fetching metadata... (${elapsedSec}s elapsed)';
+        final msg = 'Fetching metadata… (${elapsedSec}s elapsed)';
         onStatusUpdate?.call(msg);
         _log.fine('Magnet $id: $msg');
 
-        // FIX #2 Part B: Poll hasMetadata as a fallback
         final currentStats = _latestStats[id];
         if (currentStats != null && currentStats.hasMetadata) {
           _log.info('Metadata detected via polling fallback for magnet $id.');
@@ -1776,17 +1775,15 @@ class TorrentService {
       });
 
       try {
-        return await completer.future.timeout(effectiveTimeout);
+        return await completer.future.timeout(perAttemptTimeout);
       } on TimeoutException {
         messageTimer.cancel();
         sub.cancel();
         stopwatch.stop();
 
-        // FIX #2 Part C: Check hasMetadata one final time on timeout
         final finalStats = _latestStats[id];
         if (finalStats != null && finalStats.hasMetadata) {
-          _log.info(
-              'Metadata detected on final timeout check for magnet $id. Proceeding.');
+          _log.info('Metadata detected on timeout check for magnet $id.');
           return id;
         }
 
@@ -1796,11 +1793,14 @@ class TorrentService {
 
         if (attempt <= maxRetries) {
           onStatusUpdate?.call(
-            'Retrying metadata fetch with additional default trackers (Attempt ${attempt + 1})...',
+            'Retrying metadata fetch with additional default trackers (Attempt ${attempt + 1})…',
           );
           for (final tracker in TrackerManager.defaultTrackers) {
             addTracker(id, tracker);
           }
+          try {
+            announceNow(id);
+          } catch (_) {}
           await Future.delayed(retryDelay);
           continue;
         }
@@ -1809,8 +1809,9 @@ class TorrentService {
         onStatusUpdate
             ?.call('Metadata fetch failed. Try adding trackers manually.');
         throw TimeoutException(
-            'Magnet metadata fetch timed out after $maxRetries retries',
-            timeout);
+          'Magnet metadata fetch timed out after $maxRetries retries',
+          timeout,
+        );
       }
     }
     return -1;
@@ -2167,7 +2168,15 @@ class TorrentService {
       final stats = _latestStats[id];
       final double fallbackProgress = stats?.progress ?? 0.0;
       return List.generate(files.length, (i) {
-        final f = files[i];
+        // ignore: avoid_dynamic_calls
+        final dynamic rawFile = files[i];
+        // ignore: avoid_dynamic_calls
+        final int fileIndex = (rawFile.index as num?)?.toInt() ?? i;
+        // ignore: avoid_dynamic_calls
+        final String fileName = rawFile.name?.toString() ?? 'file_$i';
+        // ignore: avoid_dynamic_calls
+        final int fileSize = (rawFile.size as num?)?.toInt() ?? 0;
+
         int resolvedDownloadedBytes;
         if (progress != null && i < progress.length) {
           final rawValue = progress[i] as num?;
@@ -2198,10 +2207,10 @@ class TorrentService {
                 intVal > 1) {
               // Integer > 1 in [0,1] range is impossible for ratio
               isLikelyRatio = false;
-            } else if (intVal == 1 && f.size > 1) {
+            } else if (intVal == 1 && fileSize > 1) {
               // Value is 1 but file is larger than 1 byte → ratio (100%)
               isLikelyRatio = true;
-            } else if (intVal == 1 && f.size <= 1) {
+            } else if (intVal == 1 && fileSize <= 1) {
               // Ambiguous: could be 1 byte downloaded or 100% ratio.
               // Use fallback progress to decide.
               isLikelyRatio = fallbackProgress >= 0.99;
@@ -2212,16 +2221,16 @@ class TorrentService {
             if (isLikelyRatio) {
               final ratio = doubleVal.clamp(0.0, 1.0);
               resolvedDownloadedBytes =
-                  (f.size * ratio).round().clamp(0, f.size).toInt();
+                  (fileSize * ratio).round().clamp(0, fileSize).toInt();
             } else if (intVal >= 0) {
-              resolvedDownloadedBytes = intVal.clamp(0, f.size).toInt();
+              resolvedDownloadedBytes = intVal.clamp(0, fileSize).toInt();
             } else {
               resolvedDownloadedBytes = -1;
             }
           }
-        } else if (fallbackProgress > 0 && f.size > 0) {
+        } else if (fallbackProgress > 0 && fileSize > 0) {
           resolvedDownloadedBytes =
-              (f.size * fallbackProgress).round().clamp(0, f.size).toInt();
+              (fileSize * fallbackProgress).round().clamp(0, fileSize).toInt();
         } else {
           resolvedDownloadedBytes = -1;
         }
@@ -2231,14 +2240,14 @@ class TorrentService {
                 : 4;
         final bool fileSelected = filePriority > 0;
         return TorrentFileItem(
-          index: f.index,
-          name: f.name,
-          size: f.size,
+          index: fileIndex,
+          name: fileName,
+          size: fileSize,
           downloadedBytes: resolvedDownloadedBytes,
           priority: filePriority,
           selected: fileSelected,
-          progressRatio: resolvedDownloadedBytes >= 0 && f.size > 0
-              ? (resolvedDownloadedBytes / f.size).clamp(0.0, 1.0)
+          progressRatio: resolvedDownloadedBytes >= 0 && fileSize > 0
+              ? (resolvedDownloadedBytes / fileSize).clamp(0.0, 1.0)
               : null,
         );
       });

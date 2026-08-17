@@ -14,19 +14,17 @@ class TorrentFileNormalizer {
   static Map<String, dynamic> normalizeTorrentFile(Map<String, dynamic> f) {
     final len = (f['length'] as num?)?.toInt() ?? 0;
     var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-          // Clamp downloaded bytes to [0, length]
-      dl = len > 0 ? dl.clamp(0, len) : 0;
-      // FIX: If length is unknown (<= 0), progress should be 0.0, not 1.0 (100%)
-      final progress = len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0;
-      f['name'] = f['name'] as String? ?? 'file';
-      f['length'] = len;
-      f['downloadedBytes'] = dl;
-      f['selected'] = f['selected'] as bool? ?? true;
-      f['priority'] = (f['priority'] as num?)?.toInt() ?? 4;
-      f['speed'] = (f['speed'] as num?)?.toDouble() ?? 0.0;
-      f['progress'] = progress;
-      // FIX: A file is only complete if we know its length and have downloaded all of it
-      f['isComplete'] = len > 0 && dl >= len;
+    // Clamp downloaded bytes to [0, length]
+    dl = len > 0 ? dl.clamp(0, len) : 0;
+    final progress = len > 0 ? (dl / len).clamp(0.0, 1.0) : (len == 0 ? 1.0 : 0.0);
+    f['name'] = f['name'] as String? ?? 'file';
+    f['length'] = len;
+    f['downloadedBytes'] = dl;
+    f['selected'] = f['selected'] as bool? ?? true;
+    f['priority'] = (f['priority'] as num?)?.toInt() ?? 4;
+    f['speed'] = (f['speed'] as num?)?.toDouble() ?? 0.0;
+    f['progress'] = progress;
+    f['isComplete'] = len == 0 || (len > 0 && dl >= len);
     f['progressEstimated'] = (f['progressEstimated'] as bool?) ?? false;
     return f;
   }
@@ -153,7 +151,7 @@ class TorrentFileNormalizer {
   static double computeFileProgress(Map<String, dynamic> f) {
     final len = (f['length'] as num?)?.toInt() ?? 0;
     final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-    if (len <= 0) return 1.0;
+    if (len <= 0) return 0.0;
     return (dl / len).clamp(0.0, 1.0);
   }
 }
