@@ -3979,14 +3979,20 @@ class DownloadOrchestrator {
         if (task.isTorrent) {
           final tid = _host.providerTorrentIds[task.id];
           if (tid != null && TorrentService.isTorrentAlive(tid)) {
+            // For retryable/transient errors keep the handle (just pause)
+            // so the next attempt resumes instantly without re-adding.
+            final transientFailure = isRetryableError(realError);
             try {
               TorrentService.pauseTorrent(tid);
-              TorrentService.removeTorrent(tid, deleteFiles: false);
+              if (!transientFailure) {
+                TorrentService.removeTorrent(tid, deleteFiles: false);
+                _host.providerTorrentIds.remove(task.id);
+              }
             } catch (e, st) {
               LoggingService.logger('DownloadOrchestrator')
                   .warning('Operation failed', e, st);
+              _host.providerTorrentIds.remove(task.id);
             }
-            _host.providerTorrentIds.remove(task.id);
           }
         }
 
