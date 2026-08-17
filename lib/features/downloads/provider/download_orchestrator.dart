@@ -3064,21 +3064,60 @@ class DownloadOrchestrator {
                 if (!youtubeMimeCompatible(task.url, refreshedUrl)) {
                   rethrow;
                 }
-                task = task.copyWith(
-                  url: refreshedUrl,
-                  mergedAudioUrl: refreshedAudioUrl ?? task.mergedAudioUrl,
-                );
-                final idx = _host.providerTasks.indexWhere(
-                  (x) => x.id == task.id,
-                );
-                if (idx != -1) {
-                  _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
+                // Full identity check: itag / mime / clen — not just top-level mime.
+                final identityChanged = DownloadProvider
+                    .youtubeStreamIdentityChanged(task.url, refreshedUrl);
+                if (identityChanged) {
+                  debugPrint('[DMX] FIX-3: Stream identity changed during inline '
+                      'refresh (${task.id}). Resetting all progress.');
+                  for (final path in [
+                    task.tempFilePath,
+                    '${task.tempFilePath}.dmxstate',
+                    '${task.tempFilePath}.dmxstate.tmp',
+                    '${task.tempFilePath}.journal',
+                    '${task.tempFilePath}.audio',
+                    '${task.tempFilePath}.audio.dmxstate',
+                    '${task.tempFilePath}.audio.journal',
+                    '${task.tempFilePath}.audio.itag',
+                  ]) {
+                    try {
+                      final f = File(path);
+                      if (await f.exists()) await f.delete();
+                    } catch (e, st) {
+                      debugPrint('[DMX] FIX-3 cleanup failed for $path: $e');
+                    }
+                  }
+                  videoBytesSoFar = 0;
+                  audioBytesSoFar = 0;
+                  videoSizeSoFar = 0;
+                  audioDone = false;
+                  task = task.copyWith(
+                    url: refreshedUrl,
+                    mergedAudioUrl: refreshedAudioUrl ?? task.mergedAudioUrl,
+                    downloadedBytes: 0,
+                    chunks: List<double>.filled(
+                        task.threadCount > 0 ? task.threadCount : 1, 0.0),
+                    audioProgress: 0.0,
+                    audioDownloadedBytes: 0,
+                    videoStreamSize: 0,
+                  );
+                } else {
+                  task = task.copyWith(
                     url: refreshedUrl,
                     mergedAudioUrl: refreshedAudioUrl ?? task.mergedAudioUrl,
                   );
-                  await _host.providerDatabaseService.saveTask(
-                    _host.providerTasks[idx],
+                }
+                final idx = _host.providerTasks.indexWhere((x) => x.id == task.id);
+                if (idx != -1) {
+                  _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
+                    url: task.url,
+                    mergedAudioUrl: task.mergedAudioUrl,
+                    downloadedBytes: task.downloadedBytes,
+                    audioProgress: task.audioProgress,
+                    audioDownloadedBytes: task.audioDownloadedBytes,
                   );
+                  await _host.providerDatabaseService.saveTask(
+                      _host.providerTasks[idx]);
                 }
                 await _host.setTaskState(task);
                 continue;
