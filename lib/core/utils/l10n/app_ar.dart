@@ -119,6 +119,12 @@ const Map<String, String> arTranslations = {
   'browser_mobile_view': 'عرض الهاتف',
   'browser_sniffer_on': 'كاشف الوسائط (مفعّل)',
   'browser_sniffer_off': 'كاشف الوسائط (معطل)',
+  'browser_force_dark_mode': 'الوضع الداكن الإجباري',
+  'browser_force_dark_mode_sub': 'تطبيق النمط الداكن على صفحات الويب',
+  'browser_force_dark_on': 'الوضع الداكن الإجباري (مفعل)',
+  'browser_force_dark_off': 'الوضع الداكن الإجباري (معطل)',
+  'browser_force_dark_enabled': 'تم تفعيل الوضع الداكن الإجباري',
+  'browser_force_dark_disabled': 'تم تعطيل الوضع الداكن الإجباري',
   'settings_title': 'الإعدادات',
   'browser_js_css_warning':
       'تنبيه: هذا الكود يُنفذ على صفحات الويب. لا تُدخل بيانات حساسة.',

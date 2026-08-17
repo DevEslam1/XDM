@@ -62,20 +62,27 @@ class ScriptInjector {
     :root {
       color-scheme: dark !important;
     }
-    html {
+    html.xdm-dark-applied {
       filter: invert(0.92) hue-rotate(180deg) !important;
       background-color: #121212 !important;
     }
-    body {
+    html.xdm-dark-applied body {
       background-color: #121212 !important;
       color: #e0e0e0 !important;
     }
     /* Preserve natural appearance of multimedia, embedded objects, canvases and photos */
-    img, video, iframe, canvas, svg, [style*="background-image"] {
+    html.xdm-dark-applied img,
+    html.xdm-dark-applied video,
+    html.xdm-dark-applied iframe,
+    html.xdm-dark-applied canvas,
+    html.xdm-dark-applied svg,
+    html.xdm-dark-applied [style*="background-image"] {
       filter: invert(1.08) hue-rotate(180deg) !important;
     }
     /* Prevent double inversion on nested media */
-    img img, video video, iframe iframe {
+    html.xdm-dark-applied img img,
+    html.xdm-dark-applied video video,
+    html.xdm-dark-applied iframe iframe {
       filter: none !important;
     }
     /* Darken scrollbars */
@@ -87,6 +94,134 @@ class ScriptInjector {
       background-color: #333333 !important;
     }
   ''';
+
+  /// High-quality, smart Dark Mode script that dynamically detects background luminance
+  /// and only inverts light/white pages while leaving already-dark or non-white pages untouched.
+  static String buildSmartForceDarkScript() {
+    final css = buildForceDarkCss();
+    final jsonCss = jsonEncode(css);
+    return '''
+(function() {
+  if (window.__xdmForceDarkRunning) {
+    if (typeof window.__xdmApplySmartDark === 'function') {
+      window.__xdmApplySmartDark();
+    }
+    return;
+  }
+  window.__xdmForceDarkRunning = true;
+
+  var STYLE_ID = 'xdm-force-dark';
+
+  function parseRgb(colorStr) {
+    if (!colorStr || colorStr === 'transparent' || colorStr === 'inherit') return null;
+    var m = colorStr.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*([\\d.]+))?\\)/i);
+    if (!m) return null;
+    var r = parseInt(m[1], 10);
+    var g = parseInt(m[2], 10);
+    var b = parseInt(m[3], 10);
+    var a = m[4] !== undefined ? parseFloat(m[4]) : 1.0;
+    if (a < 0.1) return null;
+    return { r: r, g: g, b: b, a: a };
+  }
+
+  function getLuminance(rgb) {
+    return 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
+  }
+
+  function isPageAlreadyDark() {
+    try {
+      var htmlStyle = window.getComputedStyle(document.documentElement);
+      var bodyStyle = document.body ? window.getComputedStyle(document.body) : null;
+
+      var htmlBg = parseRgb(htmlStyle.backgroundColor);
+      if (htmlBg && getLuminance(htmlBg) < 130) {
+        return true;
+      }
+
+      if (bodyStyle) {
+        var bodyBg = parseRgb(bodyStyle.backgroundColor);
+        if (bodyBg && getLuminance(bodyBg) < 130) {
+          return true;
+        }
+      }
+
+      if ((!htmlBg || htmlBg.a < 0.5) && (!bodyStyle || !parseRgb(bodyStyle.backgroundColor))) {
+        var mainEl = document.querySelector('main, #app, #root, #__next, .app, #content, body > div:first-child');
+        if (mainEl) {
+          var mainBg = parseRgb(window.getComputedStyle(mainEl).backgroundColor);
+          if (mainBg && getLuminance(mainBg) < 130) {
+            return true;
+          }
+        }
+      }
+
+      if (bodyStyle) {
+        var textColor = parseRgb(bodyStyle.color);
+        if (textColor && getLuminance(textColor) > 190) {
+          var bBg = parseRgb(bodyStyle.backgroundColor) || htmlBg;
+          if (!bBg || getLuminance(bBg) < 150) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function applySmartDark() {
+    var style = document.getElementById(STYLE_ID);
+    if (!style) {
+      style = document.createElement('style');
+      style.id = STYLE_ID;
+      style.textContent = $jsonCss;
+      (document.head || document.documentElement).appendChild(style);
+    }
+
+    if (isPageAlreadyDark()) {
+      document.documentElement.classList.remove('xdm-dark-applied');
+    } else {
+      document.documentElement.classList.add('xdm-dark-applied');
+    }
+  }
+
+  window.__xdmApplySmartDark = applySmartDark;
+  applySmartDark();
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applySmartDark);
+  }
+  window.addEventListener('load', applySmartDark);
+
+  try {
+    var observer = new MutationObserver(function() {
+      applySmartDark();
+    });
+    if (document.body) {
+      observer.observe(document.body, { attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'theme'] });
+    } else {
+      document.addEventListener('DOMContentLoaded', function() {
+        if (document.body) {
+          observer.observe(document.body, { attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'theme'] });
+        }
+      });
+    }
+  } catch(e) {}
+})();
+''';
+  }
+
+  /// Script to remove force dark mode styles and classes cleanly.
+  static String buildRemoveForceDarkScript() => '''
+(function() {
+  window.__xdmForceDarkRunning = false;
+  var s = document.getElementById('xdm-force-dark');
+  if (s) s.remove();
+  document.documentElement.classList.remove('xdm-dark-applied');
+})();
+''';
 
   /// CSS that hides all `<img>` and `<picture>` elements (image blocking).
   static String buildBlockImagesCss() => '''
@@ -405,18 +540,10 @@ $customJs
       scripts.add(kDesktopModeScript);
     }
 
-    // Force-dark CSS. Enabled whenever the dedicated force-dark switch is on.
+    // Smart Force-dark. Enabled whenever the dedicated force-dark switch is on.
+    // Dynamically skips non-white / already dark pages to prevent double inversion.
     if (settings.forceDarkMode) {
-      final css = buildForceDarkCss();
-      scripts.add('(function() {'
-          '  var s = document.getElementById("xdm-force-dark");'
-          '  if (!s) {'
-          '    s = document.createElement("style");'
-          '    s.id = "xdm-force-dark";'
-          '    (document.head || document.documentElement).appendChild(s);'
-          '  }'
-          '  s.textContent = ${jsonEncode(css)};'
-          '})();');
+      scripts.add(buildSmartForceDarkScript());
     }
 
     // Image blocking

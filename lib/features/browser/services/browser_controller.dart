@@ -639,18 +639,9 @@ class BrowserController extends ChangeNotifier {
         }
       }
       if (settingsProvider.forceDarkMode) {
-        final css = ScriptInjector.buildForceDarkCss();
-        tab.controller?.evaluateJavascript(source: '''
-(function() {
-  var s = document.getElementById("xdm-force-dark");
-  if (!s) {
-    s = document.createElement("style");
-    s.id = "xdm-force-dark";
-    (document.head || document.documentElement).appendChild(s);
-  }
-  s.textContent = ${jsonEncode(css)};
-})();
-''');
+        tab.controller?.evaluateJavascript(
+          source: ScriptInjector.buildSmartForceDarkScript(),
+        );
       }
       tab.controller
           ?.evaluateJavascript(source: ScriptInjector.kLongPressScript);

@@ -119,6 +119,12 @@ const Map<String, String> esTranslations = {
   'browser_mobile_view': 'Modo móvil',
   'browser_sniffer_on': 'Detector de medios (ACT)',
   'browser_sniffer_off': 'Detector de medios (DES)',
+  'browser_force_dark_mode': 'Forzar modo oscuro',
+  'browser_force_dark_mode_sub': 'Aplicar temas oscuros al contenido web',
+  'browser_force_dark_on': 'Forzar modo oscuro (Activado)',
+  'browser_force_dark_off': 'Forzar modo oscuro (Desactivado)',
+  'browser_force_dark_enabled': 'Modo oscuro forzado activado',
+  'browser_force_dark_disabled': 'Modo oscuro forzado desactivado',
   'settings_title': 'Ajustes',
   'browser_js_css_warning':
       'ADVERTENCIA: El código se ejecuta en las páginas web.',

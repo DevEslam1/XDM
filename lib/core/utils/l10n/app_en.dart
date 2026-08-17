@@ -119,6 +119,12 @@ const Map<String, String> enTranslations = {
   'browser_mobile_view': 'Mobile View',
   'browser_sniffer_on': 'Media Sniffer (ON)',
   'browser_sniffer_off': 'Media Sniffer (OFF)',
+  'browser_force_dark_mode': 'Force Dark Mode',
+  'browser_force_dark_mode_sub': 'Apply dark themes to web content',
+  'browser_force_dark_on': 'Force Dark Mode (On)',
+  'browser_force_dark_off': 'Force Dark Mode (Off)',
+  'browser_force_dark_enabled': 'Force Dark Mode enabled',
+  'browser_force_dark_disabled': 'Force Dark Mode disabled',
   'settings_title': 'Settings',
   'browser_js_css_warning':
       'WARNING: Code runs on web pages. Do not enter sensitive data.',

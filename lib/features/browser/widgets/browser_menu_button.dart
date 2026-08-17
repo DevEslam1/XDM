@@ -117,6 +117,16 @@ class BrowserMenuButton extends StatelessWidget {
         ),
         _buildItem(
           ctx,
+          value: 'force_dark_mode',
+          icon: settings.forceDarkMode
+              ? Icons.dark_mode_rounded
+              : Icons.light_mode_outlined,
+          title: settings.forceDarkMode
+              ? L10n.of(ctx, 'browser_force_dark_on')
+              : L10n.of(ctx, 'browser_force_dark_off'),
+        ),
+        _buildItem(
+          ctx,
           value: 'media_sniffer',
           icon: controller.isSnifferEnabled
               ? Icons.radar_rounded
@@ -272,6 +282,21 @@ class BrowserMenuButton extends StatelessWidget {
       case 'desktop_mode':
         settings.setDesktopMode(!settings.desktopMode);
         controller.reload();
+        break;
+      case 'force_dark_mode':
+        final nextState = !settings.forceDarkMode;
+        settings.setForceDarkMode(nextState);
+        ThemedSnackbar.show(
+          context,
+          message: nextState
+              ? L10n.of(context, 'browser_force_dark_enabled')
+              : L10n.of(context, 'browser_force_dark_disabled'),
+          color: nextState ? AppTheme.neonBlue : AppTheme.neonAmber,
+          icon: nextState
+              ? Icons.dark_mode_rounded
+              : Icons.light_mode_outlined,
+          isDarkMode: isDark,
+        );
         break;
       case 'media_sniffer':
         final nextState = !controller.isSnifferEnabled;

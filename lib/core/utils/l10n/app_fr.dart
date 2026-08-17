@@ -119,6 +119,12 @@ const Map<String, String> frTranslations = {
   'browser_mobile_view': 'Mode mobile',
   'browser_sniffer_on': 'Détecteur de médias (ACT)',
   'browser_sniffer_off': 'Détecteur de médias (DÉS)',
+  'browser_force_dark_mode': 'Forcer le mode sombre',
+  'browser_force_dark_mode_sub': 'Appliquer un thème sombre aux pages web',
+  'browser_force_dark_on': 'Forcer le mode sombre (Activé)',
+  'browser_force_dark_off': 'Forcer le mode sombre (Désactivé)',
+  'browser_force_dark_enabled': 'Mode sombre forcé activé',
+  'browser_force_dark_disabled': 'Mode sombre forcé désactivé',
   'settings_title': 'Paramètres',
   'browser_js_css_warning':
       'AVERTISSEMENT : Le code s\'exécute sur les pages web.',

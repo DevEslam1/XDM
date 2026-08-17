@@ -489,12 +489,8 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                 icon: settings.forceDarkMode
                     ? Icons.dark_mode_rounded
                     : Icons.light_mode_outlined,
-                title: L10n.isRtl(context)
-                    ? 'الوضع الداكن الإجباري'
-                    : 'Force Dark Mode',
-                subtitle: L10n.isRtl(context)
-                    ? 'تطبيق خلفية داكنة على جميع صفحات الويب'
-                    : 'Apply dark themes to web content',
+                title: L10n.of(context, 'browser_force_dark_mode'),
+                subtitle: L10n.of(context, 'browser_force_dark_mode_sub'),
                 value: settings.forceDarkMode,
                 accent: accent,
                 textClr: textClr,

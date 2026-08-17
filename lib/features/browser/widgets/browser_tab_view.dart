@@ -58,30 +58,19 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
         settings: InAppWebViewSettings(
           forceDark: isDark ? ForceDark.ON : ForceDark.OFF,
           algorithmicDarkeningAllowed: isDark,
-          forceDarkStrategy: ForceDarkStrategy.USER_AGENT_DARKENING_ONLY,
+          forceDarkStrategy:
+              ForceDarkStrategy.PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING,
         ),
       );
     } catch (_) {}
     if (widget.settings.forceDarkMode) {
-      final css = ScriptInjector.buildForceDarkCss();
-      controller.evaluateJavascript(source: '''
-(function() {
-  var s = document.getElementById("xdm-force-dark");
-  if (!s) {
-    s = document.createElement("style");
-    s.id = "xdm-force-dark";
-    (document.head || document.documentElement).appendChild(s);
-  }
-  s.textContent = ${jsonEncode(css)};
-})();
-''');
+      controller.evaluateJavascript(
+        source: ScriptInjector.buildSmartForceDarkScript(),
+      );
     } else {
-      controller.evaluateJavascript(source: '''
-(function() {
-  var s = document.getElementById("xdm-force-dark");
-  if (s) s.remove();
-})();
-''');
+      controller.evaluateJavascript(
+        source: ScriptInjector.buildRemoveForceDarkScript(),
+      );
     }
   }
 
@@ -171,7 +160,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                 : ForceDark.OFF,
             algorithmicDarkeningAllowed:
                 settings.forceDarkMode || settings.isDarkMode,
-            forceDarkStrategy: ForceDarkStrategy.USER_AGENT_DARKENING_ONLY,
+            forceDarkStrategy:
+                ForceDarkStrategy.PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING,
             useHybridComposition: true, // FIX #6: Use hybrid composition to avoid TextureView/Virtual Display bitmap crashes
           ),
           onWebViewCreated: (controller) {
