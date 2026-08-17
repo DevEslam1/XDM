@@ -2852,20 +2852,22 @@ class DownloadProvider extends ChangeNotifier
       }
     }
 
-    // Sync DB bytes with the authoritative state file
-    // FIX-AUDIT-A3: Retry state read if it returns 0 but we know progress existed
-    // FIX-AUDIT-A3: Retry state read if it returns 0 but we know progress existed
     var stateBytes = await _readDmxStateBytes(
-      latest.tempFilePath,
-      threadCount: latest.threadCount,
-    );
+      latest.tempFilePath, threadCount: latest.threadCount);
     if (stateBytes == 0 && latest.downloadedBytes > 0) {
-      await Future.delayed(const Duration(milliseconds: 500));
-      stateBytes = await _readDmxStateBytes(
-        latest.tempFilePath,
-        threadCount: latest.threadCount,
-      );
-      if (stateBytes == 0) stateBytes = latest.downloadedBytes;
+      // Engine saves state via scheduleMicrotask; under background mode
+      // the save interval is 120s. Retry up to 3×300ms before falling
+      // back to the last in-memory value.
+      for (var attempt = 0; attempt < 3 && stateBytes == 0; attempt++) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        stateBytes = await _readDmxStateBytes(
+          latest.tempFilePath, threadCount: latest.threadCount);
+      }
+      if (stateBytes == 0) {
+        stateBytes = latest.downloadedBytes;
+        debugPrint('[DMX] FIX-5: state file empty after 3 retries; '
+            'falling back to in-memory bytes ($stateBytes)');
+      }
     }
 
     // FIX-9: Re-read the audio sidecar so the persisted audioProgress
