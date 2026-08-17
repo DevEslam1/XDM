@@ -1806,19 +1806,40 @@ class DownloadOrchestrator {
           // FIX-MERGE-5: Guard pushCombinedProgress against cancelled tasks
           if (base.status != DownloadStatus.downloading) return;
 
+          int torrentDerivedSize = 0;
+          if (base.isTorrent) {
+            final files = torrentFilesOverride ?? base.torrentFiles;
+            if (files != null && files.isNotEmpty) {
+              torrentDerivedSize = files
+                  .where((f) => isTorrentFileSelected(f))
+                  .fold<int>(0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
+            }
+            if (torrentDerivedSize == 0) {
+              final tid = _host.providerTorrentIds[task.id];
+              if (tid != null) {
+                final stats = TorrentService.latestStats[tid];
+                if (stats != null && stats.totalWanted > 0) {
+                  torrentDerivedSize = stats.totalWanted;
+                }
+              }
+            }
+          }
+
           // FIX YT-S1: When both runtime sizes are unknown, subtract audioSize
           // from fileSize to avoid double-counting the audio contribution.
           // Prefer live engine size → persisted videoStreamSize → derived → fileSize.
-          final effectiveVideoSize = videoSizeSoFar > 0
-              ? videoSizeSoFar
-              : (base.videoStreamSize > 0
-                  ? base.videoStreamSize
-                  : (videoTransferSize > 0
-                      ? videoTransferSize
-                      : (hasAudio && base.audioSize > 0
-                          ? (base.fileSize - base.audioSize)
-                              .clamp(0, base.fileSize)
-                          : base.fileSize)));
+          final effectiveVideoSize = base.isTorrent && torrentDerivedSize > 0
+              ? torrentDerivedSize
+              : (videoSizeSoFar > 0
+                  ? videoSizeSoFar
+                  : (base.videoStreamSize > 0
+                      ? base.videoStreamSize
+                      : (videoTransferSize > 0
+                          ? videoTransferSize
+                          : (hasAudio && base.audioSize > 0
+                              ? (base.fileSize - base.audioSize)
+                                  .clamp(0, base.fileSize)
+                              : base.fileSize))));
           // FIX-2: When audioSize is still unknown, use the larger of
           // audioBytesSoFar and the task's stored audioDownloadedBytes so
           // the denominator doesn't shrink between ticks.  Once the engine
@@ -1830,7 +1851,7 @@ class DownloadOrchestrator {
               ? (base.audioSize > 0 ? base.audioSize : base.audioDownloadedBytes)
               : 0;
           var calculatedTotal = effectiveVideoSize + audioContribution;
-          if (base.fileSize > 0 && calculatedTotal > base.fileSize) {
+          if (!base.isTorrent && base.fileSize > 0 && calculatedTotal > base.fileSize) {
             calculatedTotal = base.fileSize;
           }
           final cachedMax = _sessionCachedTotalSize[task.id] ?? 0;
@@ -2488,18 +2509,23 @@ class DownloadOrchestrator {
                     return;
                   }
                   videoBytesSoFar = progress.downloadedBytes;
-                  videoSpeedNow = progress.speed;
                   if (progress.fileSize > 0) {
                     videoSizeSoFar = progress.fileSize;
-                    final idx =
-                        _host.providerTasks.indexWhere((t) => t.id == task.id);
-                    if (idx != -1 &&
-                        _host.providerTasks[idx].videoStreamSize == 0) {
-                      _host.providerTasks[idx] =
-                          _host.providerTasks[idx].copyWith(
-                        videoStreamSize: progress.fileSize,
-                      );
-                    }
+                  }
+                  final idx =
+                      _host.providerTasks.indexWhere((t) => t.id == task.id);
+                  if (idx != -1) {
+                    _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
+                      videoStreamSize: progress.fileSize > 0
+                          ? progress.fileSize
+                          : _host.providerTasks[idx].videoStreamSize,
+                      fileSize: progress.fileSize > 0
+                          ? progress.fileSize
+                          : _host.providerTasks[idx].fileSize,
+                      downloadedBytes: progress.downloadedBytes,
+                      torrentFiles: progress.torrentFiles ??
+                          _host.providerTasks[idx].torrentFiles,
+                    );
                   }
 
                   final isCellularOrSlow = _host.networkMonitor.isCellular;

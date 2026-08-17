@@ -16,6 +16,7 @@ import '../../../core/services/power_monitor.dart';
 import '../../../core/services/protocol_cache.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/services/undo_service.dart';
+import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/file_opener.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
@@ -688,18 +689,28 @@ class _TelemetryStrip extends StatelessWidget {
     final secClr =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
-    final proto = ProtocolCache.get(task.url);
-    final protoLabel = switch (proto) {
-      ProtocolSupport.http3 => 'H3',
-      ProtocolSupport.http2 => 'H2',
-      _ => 'H1.1',
-    };
+    final String protoLabel;
+    final Color badgeClr;
+    if (task.isTorrent) {
+      protoLabel = 'P2P';
+      badgeClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+    } else if (YoutubeService.isYoutubeUrl(task.url) || task.hasMergedAudio) {
+      protoLabel = 'DASH';
+      badgeClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+    } else {
+      final proto = ProtocolCache.get(task.url);
+      protoLabel = switch (proto) {
+        ProtocolSupport.http3 => 'H3',
+        ProtocolSupport.http2 => 'H2',
+        _ => 'H1.1',
+      };
+      badgeClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    }
 
     final protoBadge = Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-            .withValues(alpha: 0.12),
+        color: badgeClr.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
@@ -708,7 +719,7 @@ class _TelemetryStrip extends StatelessWidget {
           fontSize: responsiveFontSize(context, 10),
           fontWeight: FontWeight.bold,
           fontFamily: 'Space Grotesk',
-          color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+          color: badgeClr,
         ),
       ),
     );
@@ -2059,12 +2070,13 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                                 spacing: 6,
                                 runSpacing: 4,
                                 children: [
-                                  // FIX-UI-04: Show "Fetching metadata…" for magnets with fileSize == 0
+                                  // FIX-UI-04: Show "Fetching metadata…" for magnets with fileSize == 0 and 0 downloaded bytes
                                   _StatusChip(
                                     task: widget.task,
                                     isDark: isDark,
                                     overrideLabel: (widget.task.isTorrent &&
                                             widget.task.resolvedFileSize == 0 &&
+                                            widget.task.downloadedBytes == 0 &&
                                             widget.task.status ==
                                                 DownloadStatus.downloading)
                                         ? (isRtl
@@ -3007,15 +3019,16 @@ void _showAdvancedControls(
     context: context,
     backgroundColor: Colors.transparent,
     builder: (context) {
-      return Container(
-        decoration: BoxDecoration(
-          color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+      return Material(
+        color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+        shape: RoundedRectangleBorder(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border.all(
+          side: BorderSide(
             color: AppTheme.accent(isDark).withValues(alpha: 0.3),
             width: 1,
           ),
         ),
+        clipBehavior: Clip.antiAlias,
         child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,

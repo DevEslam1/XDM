@@ -55,27 +55,23 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
     final theme = Theme.of(context);
     final count = widget.selectedTaskIds.length;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(50),
-            blurRadius: 16,
-            spreadRadius: 2,
-          ),
-        ],
+    return Material(
+      color: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      padding: EdgeInsetsDirectional.only(
-        start: 20,
-        end: 20,
-        top: 16,
-        bottom: MediaQuery.of(context).padding.bottom + 20,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+      elevation: 16,
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: EdgeInsetsDirectional.only(
+          start: 20,
+          end: 20,
+          top: 16,
+          bottom: MediaQuery.of(context).padding.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
           // Drag handle
           Center(
             child: Container(
@@ -228,7 +224,7 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
           ],
         ],
       ),
-    );
+    ));
   }
 
   Future<String?> _showCategoryDialog(BuildContext context) {
