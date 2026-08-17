@@ -4298,10 +4298,15 @@ class DownloadOrchestrator {
     }
     if (msg.contains('merge') ||
         msg.contains('ffmpeg') ||
-        msg.contains('missing') ||
+        msg.contains('file missing') ||
+        msg.contains('video file missing') ||
+        msg.contains('audio file missing') ||
+        msg.contains('output file missing') ||
+        msg.contains('temporary download file missing') ||
         (msg.contains('not found') &&
-            !msg.contains('stream') &&
-            !msg.contains('youtube'))) {
+         !msg.contains('stream') &&
+         !msg.contains('youtube') &&
+         !msg.contains('mirror'))) {
       return false;
     }
     // FIX-10: YouTube stream expiry and bot detection are transient
