@@ -486,8 +486,8 @@ class DownloadProvider extends ChangeNotifier
               : (info.totalDone > 0
                   ? info.totalDone
                   : task.downloadedBytes);
-          final newSize = (info.totalWanted > 0 &&
-                  (task.fileSize <= 0 || task.fileSize < info.totalWanted))
+          // FIX: Always use info.totalWanted as authoritative fileSize when available.
+          final newSize = (info.totalWanted > 0)
               ? info.totalWanted
               : task.fileSize;
           final newSpeed = (task.status == DownloadStatus.downloading ||
@@ -502,15 +502,13 @@ class DownloadProvider extends ChangeNotifier
             seedingEnabled: task.seedingEnabled,
           );
 
-          // FIX v2.0.0: Sync torrentFiles from the engine so the
-          // details screen shows files even before onProgress fires.
+          // FIX v2.0.0: Sync torrentFiles from the engine whenever metadata is available.
           List<Map<String, dynamic>>? syncedFiles = task.torrentFiles;
-          if (info.hasMetadata &&
-              (syncedFiles == null || syncedFiles.isEmpty)) {
+          if (info.hasMetadata) {
             try {
               final nativeFiles = TorrentService.getFiles(tid);
               if (nativeFiles.isNotEmpty) {
-                syncedFiles = nativeFiles.map((f) {
+                final newSynced = nativeFiles.map((f) {
                   final dl = f.safeDownloadedBytes;
                   return <String, dynamic>{
                     'name': f.name,
@@ -524,17 +522,23 @@ class DownloadProvider extends ChangeNotifier
                     'progressEstimated': dl < 0,
                   };
                 }).toList();
+                // Only update if the list has changed to avoid unnecessary rebuilds.
+                if (_fileListsDiffer(syncedFiles, newSynced)) {
+                  syncedFiles = newSynced;
+                }
               }
             } catch (e) {
               _log.fine('Failed to sync torrent files for $taskId: $e');
             }
           }
 
+          bool filesChanged = _fileListsDiffer(task.torrentFiles, syncedFiles);
+
           if (task.downloadedBytes != liveDone ||
               task.fileSize != newSize ||
               task.speed != newSpeed ||
               task.cycleState != newCycleState ||
-              syncedFiles != task.torrentFiles) {
+              filesChanged) {
             _tasks[taskIdx] = task.copyWith(
               downloadedBytes: liveDone,
               fileSize: newSize,
@@ -6589,6 +6593,8 @@ class DownloadProvider extends ChangeNotifier
 
     var updatedAny = false;
     for (var task in candidates) {
+      // FIX v2.0.0: Torrents use libtorrent fast-resume, not .dmxstate.
+      if (task.isTorrent) continue;
       var realBytesOnDisk = task.downloadedBytes;
       if (task.tempFilePath.isNotEmpty) {
         final stateFile = File('${task.tempFilePath}.dmxstate');
@@ -6673,5 +6679,27 @@ class DownloadProvider extends ChangeNotifier
           .warning('Operation failed with fallback', e, st);
       return false;
     }
+  }
+
+  /// Compares two torrent file lists for structural equality.
+  bool _fileListsDiffer(
+    List<Map<String, dynamic>>? a,
+    List<Map<String, dynamic>>? b,
+  ) {
+    if (a == null && b == null) return false;
+    if (a == null || b == null) return true;
+    if (a.length != b.length) return true;
+    for (int i = 0; i < a.length; i++) {
+      final am = a[i];
+      final bm = b[i];
+      if (am['name'] != bm['name'] ||
+          am['length'] != bm['length'] ||
+          am['downloadedBytes'] != bm['downloadedBytes'] ||
+          am['selected'] != bm['selected'] ||
+          am['priority'] != bm['priority']) {
+        return true;
+      }
+    }
+    return false;
   }
 }

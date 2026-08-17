@@ -43,8 +43,7 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
   @override
   void didUpdateWidget(BrowserTabView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.settings.forceDarkMode != widget.settings.forceDarkMode ||
-        oldWidget.settings.isDarkMode != widget.settings.isDarkMode) {
+    if (oldWidget.settings.forceDarkMode != widget.settings.forceDarkMode) {
       _applyForceDarkMode();
     }
   }
@@ -52,12 +51,11 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
   void _applyForceDarkMode() {
     final controller = widget.tab.controller;
     if (controller == null) return;
-    final isDark = widget.settings.forceDarkMode || widget.settings.isDarkMode;
     try {
       controller.setSettings(
         settings: InAppWebViewSettings(
-          forceDark: isDark ? ForceDark.ON : ForceDark.OFF,
-          algorithmicDarkeningAllowed: isDark,
+          forceDark: widget.settings.forceDarkMode ? ForceDark.ON : ForceDark.OFF,
+          algorithmicDarkeningAllowed: widget.settings.forceDarkMode,
           forceDarkStrategy:
               ForceDarkStrategy.PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING,
         ),
@@ -155,11 +153,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
             builtInZoomControls: true,
             displayZoomControls: false,
             isInspectable: kDebugMode,
-            forceDark: (settings.forceDarkMode || settings.isDarkMode)
-                ? ForceDark.ON
-                : ForceDark.OFF,
-            algorithmicDarkeningAllowed:
-                settings.forceDarkMode || settings.isDarkMode,
+            forceDark: settings.forceDarkMode ? ForceDark.ON : ForceDark.OFF,
+            algorithmicDarkeningAllowed: settings.forceDarkMode,
             forceDarkStrategy:
                 ForceDarkStrategy.PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING,
             useHybridComposition: true, // FIX #6: Use hybrid composition to avoid TextureView/Virtual Display bitmap crashes

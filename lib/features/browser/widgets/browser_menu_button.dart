@@ -286,6 +286,7 @@ class BrowserMenuButton extends StatelessWidget {
       case 'force_dark_mode':
         final nextState = !settings.forceDarkMode;
         settings.setForceDarkMode(nextState);
+        controller.reload();
         ThemedSnackbar.show(
           context,
           message: nextState

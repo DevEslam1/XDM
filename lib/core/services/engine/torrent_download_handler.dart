@@ -291,6 +291,28 @@ class TorrentDownloadHandler {
     return false;
   }
 
+  /// Compares two torrent file lists for structural equality.
+  static bool _torrentFileListsDiffer(
+    List<Map<String, dynamic>>? a,
+    List<Map<String, dynamic>>? b,
+  ) {
+    if (a == null && b == null) return false;
+    if (a == null || b == null) return true;
+    if (a.length != b.length) return true;
+    for (int i = 0; i < a.length; i++) {
+      final am = a[i];
+      final bm = b[i];
+      if (am['name'] != bm['name'] ||
+          am['length'] != bm['length'] ||
+          am['downloadedBytes'] != bm['downloadedBytes'] ||
+          am['selected'] != bm['selected'] ||
+          am['priority'] != bm['priority']) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static Map<String, dynamic> normalizeTorrentFile(Map<String, dynamic> f) =>
       TorrentFileNormalizer.normalizeTorrentFile(f);
 
@@ -1165,14 +1187,13 @@ class TorrentDownloadHandler {
           lastTorrentProgressTime = now;
         }
         List<Map<String, dynamic>>? resolvedFiles = getTorrentFiles?.call();
-        // FIX v2.0.0: Fetch files even when hasMetadata is borderline.
-        // Also treat downloadedBytes == 0 as estimated when the engine
-        // hasn't provided real per-file data yet.
-        if (torrent.hasMetadata || resolvedFiles == null) {
+        // FIX v2.0.0: Always fetch files from engine when metadata is available,
+        // and only update if the list has changed.
+        if (torrent.hasMetadata) {
           try {
             final nativeFiles = _torrentService.getFiles(id);
             if (nativeFiles.isNotEmpty) {
-              resolvedFiles = nativeFiles.map((f) {
+              final newResolved = nativeFiles.map((f) {
                 final bool isEstimated = f.downloadedBytes < 0 ||
                     (f.downloadedBytes == 0 && f.size > 0);
                 final dl =
@@ -1184,14 +1205,17 @@ class TorrentDownloadHandler {
                   'selected': f.selected,
                   'priority': f.priority,
                   // FIX v2.0.0-Bug1: size==0 means unknown, NOT 100% complete.
-                  // Was 1.0 which caused files to show as 100% complete
-                  // when the engine reported 0-size during metadata phase.
                   'progress': f.size > 0 ? (dl / f.size).clamp(0.0, 1.0) : 0.0,
                   'isComplete': f.size > 0 && dl >= f.size,
                   'progressEstimated': isEstimated,
                 };
               }).toList();
-              cachedAccurateFiles = resolvedFiles;
+              // Only update if different from cached or resolvedFiles
+              if (cachedAccurateFiles == null ||
+                  _torrentFileListsDiffer(cachedAccurateFiles, newResolved)) {
+                resolvedFiles = newResolved;
+                cachedAccurateFiles = resolvedFiles;
+              }
             }
           } catch (e, st) {
             _log.fine('Failed to fetch native file list: $e', e, st);
