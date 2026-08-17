@@ -15,13 +15,6 @@ import '../services/search_engine_config.dart';
 
 enum SuggestionType { url, search, bookmark, history }
 
-enum UrlSecurityLevel {
-  secure,
-  insecure,
-  dangerous,
-  unknown,
-}
-
 class _Suggestion {
   final SuggestionType type;
   final String title;
@@ -50,9 +43,6 @@ class SmartUrlBar extends StatefulWidget {
   final VoidCallback? onStopLoading;
   final VoidCallback? onShieldPressed;
   final bool isHttps;
-  final UrlSecurityLevel? securityLevel;
-  final bool hasActiveDownloads;
-  final List<String> suggestions;
 
   const SmartUrlBar({
     super.key,
@@ -66,9 +56,6 @@ class SmartUrlBar extends StatefulWidget {
     this.onStopLoading,
     this.onShieldPressed,
     this.isHttps = false,
-    this.securityLevel,
-    this.hasActiveDownloads = false,
-    this.suggestions = const [],
   });
 
   @override
@@ -83,6 +70,12 @@ class _SmartUrlBarState extends State<SmartUrlBar>
   OverlayEntry? _overlayEntry;
   int _searchCount = 0;
   late AnimationController _progressAnimController;
+
+  // FIX(P9): Cache the last suggestion query + results so a new query that is
+  // simply an extension of the previous one can be filtered from cache instead
+  // of re-querying the database.
+  String _lastCachedQuery = '';
+  List<_Suggestion> _cachedSuggestions = [];
 
   @override
   void initState() {
@@ -152,7 +145,8 @@ class _SmartUrlBarState extends State<SmartUrlBar>
 
   void _onTextChanged() {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 150), () {
+    // FIX(P9): 250ms debounce so rapidly-typed queries don't hammer the DB.
+    _debounce = Timer(const Duration(milliseconds: 250), () {
       if (mounted) {
         _generateSuggestions(widget.controller.text);
       }
@@ -180,44 +174,64 @@ class _SmartUrlBarState extends State<SmartUrlBar>
       ));
     }
 
-    // 2. Fetch matching bookmarks and history from DatabaseService
-    try {
-      final db = context.read<DatabaseService>();
-      final lowerQuery = query.toLowerCase();
+    // FIX(P9): If the new query extends the previously cached query, reuse the
+    // cached bookmark/history results (filtered to the new prefix) instead of
+    // hitting the database again.
+    final isPrefixOfCached = query.length > _lastCachedQuery.length &&
+        _lastCachedQuery.isNotEmpty &&
+        query.startsWith(_lastCachedQuery);
 
-      // Bookmarks match
-      final matchingBookmarks = await db.searchBookmarks(lowerQuery, limit: 3);
-
-      for (final bm in matchingBookmarks) {
-        suggestions.add(_Suggestion(
-          type: SuggestionType.bookmark,
-          title: bm.title.isNotEmpty ? bm.title : bm.url,
-          url: bm.url,
-          icon: Icons.bookmark_rounded,
-        ));
-      }
-
-      // History match
-      final historyRows = await db.loadBrowserHistory(
-        searchQuery: query,
-        max: 5,
-      );
-
-      for (final h in historyRows) {
-        final url = h['url'] as String? ?? '';
-        final title = h['title'] as String? ?? url;
-        if (url.isNotEmpty &&
-            !suggestions.any((s) => s.url.toLowerCase() == url.toLowerCase())) {
-          suggestions.add(_Suggestion(
-            type: SuggestionType.history,
-            title: title.isNotEmpty ? title : url,
-            url: url,
-            icon: Icons.history_rounded,
-          ));
+    if (isPrefixOfCached) {
+      for (final cached in _cachedSuggestions) {
+        if (cached.type == SuggestionType.bookmark ||
+            cached.type == SuggestionType.history) {
+          final title = cached.title.toLowerCase();
+          final url = cached.url.toLowerCase();
+          if (title.contains(query) || url.contains(query)) {
+            suggestions.add(cached);
+          }
         }
       }
-    } catch (e, st) {
-      LoggingService.logger('SmartUrlBar').warning('Operation failed', e, st);
+    } else {
+      // 2. Fetch matching bookmarks and history from DatabaseService
+      try {
+        final db = context.read<DatabaseService>();
+        final lowerQuery = query.toLowerCase();
+
+        // Bookmarks match
+        final matchingBookmarks = await db.searchBookmarks(lowerQuery, limit: 3);
+
+        for (final bm in matchingBookmarks) {
+          suggestions.add(_Suggestion(
+            type: SuggestionType.bookmark,
+            title: bm.title.isNotEmpty ? bm.title : bm.url,
+            url: bm.url,
+            icon: Icons.bookmark_rounded,
+          ));
+        }
+
+        // History match
+        final historyRows = await db.loadBrowserHistory(
+          searchQuery: query,
+          max: 5,
+        );
+
+        for (final h in historyRows) {
+          final url = h['url'] as String? ?? '';
+          final title = h['title'] as String? ?? url;
+          if (url.isNotEmpty &&
+              !suggestions.any((s) => s.url.toLowerCase() == url.toLowerCase())) {
+            suggestions.add(_Suggestion(
+              type: SuggestionType.history,
+              title: title.isNotEmpty ? title : url,
+              url: url,
+              icon: Icons.history_rounded,
+            ));
+          }
+        }
+      } catch (e, st) {
+        LoggingService.logger('SmartUrlBar').warning('Operation failed', e, st);
+      }
     }
 
     if (!mounted) return;
@@ -234,6 +248,14 @@ class _SmartUrlBarState extends State<SmartUrlBar>
 
     // Stale search check
     if (currentId != _searchCount || !mounted) return;
+
+    // FIX(P9): Update the suggestion cache only when this query hit the DB
+    // (not a prefix-filtered reuse), keeping the cache aligned with the
+    // freshest query.
+    if (!isPrefixOfCached) {
+      _lastCachedQuery = query;
+      _cachedSuggestions = List<_Suggestion>.from(suggestions);
+    }
 
     // Cap total suggestions at 5
     _suggestions = suggestions.take(5).toList();
@@ -506,7 +528,17 @@ class _SmartUrlBarState extends State<SmartUrlBar>
             ? (isAmoled ? AppTheme.amoledBorder : AppTheme.glassBorder)
             : AppTheme.lightBorder);
 
-    return CompositedTransformTarget(
+    // FIX(U14): Dismiss the suggestion overlay whenever the surrounding
+    // scrollable scrolls, so the dropdown never floats over scrolled content.
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (_overlayEntry != null &&
+            notification is UserScrollNotification) {
+          _removeOverlay();
+        }
+        return false;
+      },
+      child: CompositedTransformTarget(
       link: _layerLink,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -711,6 +743,7 @@ class _SmartUrlBarState extends State<SmartUrlBar>
             ],
           ),
         ),
+      ),
       ),
     );
   }

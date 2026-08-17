@@ -676,9 +676,9 @@ class AdBlockerService {
       '#antiadblock',
     ];
 
-    // Custom user-defined host-based CSS rules (block by hostname)
-    // CustomAdBlockStore.hosts contains hostnames, not CSS rules, so we skip them here.
-    const customCss = '';
+    // Custom user-defined CSS rules (e.g. element-picker rules) appended so
+    // they apply on every page load.
+    final customCss = _customRules.join('\n');
 
     final selectorBlock = blockedSelectors.join(',\n');
     // Fix #13: Use display:none instead of visibility:hidden.

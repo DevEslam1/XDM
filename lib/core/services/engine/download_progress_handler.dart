@@ -11,8 +11,6 @@ import 'cycle_state_resolver.dart';
 import 'engine_utils.dart';
 import 'torrent_file_normalizer.dart';
 
-/// Encapsulates progress state management and throttling for download tasks.
-/// Non-locking throttle using plain timestamps and scheduled timers.
 class DownloadProgressHandler {
   final String taskId;
   final ValueChangedProgress onProgress;
@@ -25,20 +23,13 @@ class DownloadProgressHandler {
   final bool isTorrent;
   final int? torrentId;
   final int Function() getEffectiveIntervalMs;
-
   int lastDownloadedBytes;
   int lastFileSize;
-
-  // FIX-B: Delta-trigger tracking. The UI must update even when the cycleState
-  // is unchanged — torrents legitimately emit repeated "downloading" states
-  // while bytes accumulate. Emit on >=1% of size OR >=1MiB progress, plus any
-  // peer/seed/state-label change.
   int _lastEmittedBytes = 0;
   int _lastEmittedFileSize = 0;
   String _lastEmittedStatusMessage = '';
   int _lastEmittedPeerCount = 0;
   int _lastEmittedSeedCount = 0;
-
   List<ChunkDetail>? lastChunkDetails;
   int? lastTotalChunks;
   int? lastCompletedChunks;
@@ -49,7 +40,6 @@ class DownloadProgressHandler {
   int? lastDownloadedFileBytes;
   bool? lastHasEstimatedFileProgress;
   DateTime? lastProgressEmitTime;
-
   Timer? _throttleTimer;
   DownloadProgress? _pendingProgress;
   CycleState? _lastEmittedCycleState;
@@ -64,24 +54,18 @@ class DownloadProgressHandler {
 
   @visibleForTesting
   DateTime? get counterpartWaitStartForTesting => _counterpartWaitStart;
-
   @visibleForTesting
   set counterpartWaitStartForTesting(DateTime? val) =>
       _counterpartWaitStart = val;
-
   @visibleForTesting
   int get urlExpireCountForTesting => _urlExpireCount;
-
   @visibleForTesting
   set urlExpireCountForTesting(int val) => _urlExpireCount = val;
-
   @visibleForTesting
   set urlExpireWindowStartForTesting(DateTime? val) =>
       _urlExpireWindowStart = val;
-
   @visibleForTesting
   bool get selfActuallyFinalizedForTesting => _selfActuallyFinalized;
-
   @visibleForTesting
   set selfActuallyFinalizedForTesting(bool val) => _selfActuallyFinalized = val;
 
@@ -98,6 +82,11 @@ class DownloadProgressHandler {
   @visibleForTesting
   void handleUrlExpired() => _handleUrlExpired();
 
+  /// Handles URL expiration with a rolling 5-minute window.
+  /// After 3 expirations within the window, emits [CycleState.failed]
+  /// and throws [DownloadIntegrityException] (terminal).
+  /// On the 1st and 2nd, returns normally so the caller can emit
+  /// [CycleState.updatingLinks] and throw [UrlExpiredException] (recoverable).
   void _handleUrlExpired() {
     final now = DateTime.now();
     if (_urlExpireWindowStart == null ||
@@ -134,7 +123,6 @@ class DownloadProgressHandler {
 
   YtCounterpartCoordinator? _cachedYtCoordinator;
   bool _ytCoordinatorResolved = false;
-
   static final _log = Logger('DownloadProgressHandler');
 
   YtCounterpartCoordinator? get _ytCoordinator {
@@ -240,6 +228,11 @@ class DownloadProgressHandler {
     );
   }
 
+  /// Main progress processing entry point.
+  ///
+  /// The [isCounterpartStale] parameter was removed — it was never passed
+  /// by any caller and its only effect was a dead assignment to
+  /// [lastHasEstimatedFileProgress].
   Future<void> handleWorkerProgress(
     Map<String, dynamic> p, {
     int? ytCounterpartDownloadedOverride,
@@ -247,7 +240,6 @@ class DownloadProgressHandler {
     int effectiveThreadCount = 1,
     HttpDownloadEngine? httpEngine,
     bool isCounterpartUnregistered = false,
-    bool isCounterpartStale = false,
   }) async {
     if (cancelToken.isCancelled) return;
 
@@ -258,7 +250,6 @@ class DownloadProgressHandler {
       }
     }
 
-    // Chunk details mapping
     List<ChunkDetail>? chunkDetails;
     if (p['chunkDetails'] is List) {
       chunkDetails = (p['chunkDetails'] as List)
@@ -271,7 +262,6 @@ class DownloadProgressHandler {
         (p['downloadedBytes'] as num?)?.toInt() ?? lastDownloadedBytes;
     lastFileSize = (p['fileSize'] as num?)?.toInt() ?? lastFileSize;
 
-    // Torrent file handling
     final pTorrentFiles = p['torrentFiles'];
     if (pTorrentFiles is List && pTorrentFiles.isNotEmpty) {
       _handleTorrentFiles(pTorrentFiles);
@@ -279,6 +269,7 @@ class DownloadProgressHandler {
 
     var sm = p['statusMessage'] as String?;
     CycleState? cycle;
+
     if (cancelToken.isCancelled) {
       cycle = CycleState.paused;
     } else if (p['cycleState'] is CycleState) {
@@ -288,14 +279,16 @@ class DownloadProgressHandler {
       cycle = CycleState.fromName(p['cycleState'] as String);
       if (cycle == CycleState.completed) _selfActuallyFinalized = true;
     }
+
     if (p['done'] == true ||
         p['isDone'] == true ||
         p['selfActuallyFinalized'] == true) {
       _selfActuallyFinalized = true;
     }
+
     cycle ??= deriveCycleState(sm, cancelToken.isCancelled, isTorrent);
 
-    // Fix 1: Live lookup for YouTube counterpart downloaded bytes regardless of registration status
+    // ── YouTube counterpart coordination ──────────────────────────────
     if (ytStreamKind != null && ytStreamKind != YtStreamKind.combined) {
       try {
         final coord = _ytCoordinator;
@@ -314,7 +307,6 @@ class DownloadProgressHandler {
       }
     }
 
-    // Fix 2: Dynamic YouTube counterpart size & downloaded resolution
     final dynamicYtCounterpartSize =
         (p['ytCounterpartSize'] as num?)?.toInt() ?? ytCounterpartSize;
     final dynamicYtCounterpartDownloaded = ytCounterpartDownloadedOverride ??
@@ -325,15 +317,11 @@ class DownloadProgressHandler {
         cycle == CycleState.starting ||
         cycle == CycleState.resuming;
 
-    if (isCounterpartStale) {
-      lastHasEstimatedFileProgress = true;
-    }
-
     if (isCounterpartUnregistered && ytStreamKind != null && isWaitingCycle) {
       _counterpartWaitStart ??= DateTime.now();
       final waitDiff = DateTime.now().difference(_counterpartWaitStart!);
 
-      // Trigger re-check of counterpart task ID via YtCounterpartCoordinator if accessible
+      // Try to refresh counterpart task ID from coordinator
       try {
         final coord = _ytCoordinator;
         if (coord != null) {
@@ -353,10 +341,15 @@ class DownloadProgressHandler {
       if (!isCounterpartUnregistered) {
         _counterpartWaitStart = null;
       } else {
-        // Decouple slow-start: extend timeout to 5 minutes before throwing UrlExpiredException
         if (waitDiff > const Duration(minutes: 5)) {
           _counterpartWaitStart = null;
-          _handleUrlExpired();
+
+          // FIX: Emit updatingLinks BEFORE _handleUrlExpired() so the UI
+          // shows a consistent "Refreshing links…" transition even on the
+          // final retry before failure. Previously, on the 3rd expiration,
+          // _handleUrlExpired() would emit CycleState.failed and throw
+          // DownloadIntegrityException, causing the UI to jump directly
+          // from downloading → failed without ever showing updatingLinks.
           emit(DownloadProgress(
             downloadedBytes: lastDownloadedBytes,
             fileSize: lastFileSize,
@@ -364,12 +357,20 @@ class DownloadProgressHandler {
             eta: null,
             cycleState: CycleState.updatingLinks,
             statusMessage: 'Refreshing links…',
+            ytStreamKind: ytStreamKind,
+            ytCounterpartSize: dynamicYtCounterpartSize,
+            ytCounterpartDownloadedBytes: dynamicYtCounterpartDownloaded,
           ));
+
+          // May throw DownloadIntegrityException if 3 retries exhausted
+          _handleUrlExpired();
+
           throw const UrlExpiredException(
             'Counterpart stream lost — refresh required',
             refreshAllMirrors: true,
           );
         }
+
         final cpSize = dynamicYtCounterpartSize;
         final cpDone = cpSize != null &&
             cpSize > 0 &&
@@ -397,26 +398,24 @@ class DownloadProgressHandler {
       _counterpartWaitStart = null;
     }
 
-    // YT Combined Sync Check
+    // ── Completion gate for dual-stream YT ───────────────────────────
     if (cycle == CycleState.completed &&
         ytStreamKind != null &&
         ytStreamKind != YtStreamKind.combined) {
       final cpSize = dynamicYtCounterpartSize;
       final cpLive = dynamicYtCounterpartDownloaded ?? 0;
-
       final bool counterpartResolved = cpSize != null && cpSize > 0;
       final bool counterpartDone = counterpartResolved && cpLive >= cpSize;
       final bool selfFinalized = _selfActuallyFinalized ||
           (lastFileSize > 0 && lastDownloadedBytes >= lastFileSize);
-
       if (!selfFinalized || !counterpartDone) {
         cycle = counterpartDone ? CycleState.merging : CycleState.downloading;
       }
     }
 
+    // ── Chunk detail aggregation (HTTP only) ─────────────────────────
     final pTotalChunks = (p['totalChunks'] as num?)?.toInt();
     final pCompletedChunks = (p['completedChunks'] as num?)?.toInt();
-
     final chunkList = chunkDetails;
     final totalParts =
         chunkList?.length ?? pTotalChunks ?? lastTotalChunks ?? 0;
@@ -496,8 +495,7 @@ class DownloadProgressHandler {
       chunkFingerprint: _lastChunkDetailsHash,
     );
 
-    // FIX-B: Torrents use 500ms foreground / 3s background intervals. HTTP
-    // keeps its injected (typically 500ms) interval.
+    // ── Throttled emission ────────────────────────────────────────────
     final int intervalMs = isTorrent
         ? (DownloadEngine.isInBackground ? 3000 : 500)
         : getEffectiveIntervalMs();
@@ -510,23 +508,22 @@ class DownloadProgressHandler {
         cycle == CycleState.paused;
     final isCycleStateChange = cycle != _lastEmittedCycleState;
 
-    // FIX-B: Substantial-delta trigger. Emits even when the cycleState and
-    // interval gate say "no" if real progress accumulated (>=1% of size or
-    // >=1MiB) or the peer/seed/state label changed.
     bool isSubstantialDelta = false;
     if (isTorrent) {
       final size = progress.fileSize > 0 ? progress.fileSize : lastFileSize;
       final deltaBytes = (progress.downloadedBytes - _lastEmittedBytes).abs();
       final minTrigger = size > 0 ? (size * 0.01).ceil() : (1024 * 1024);
-      isSubstantialDelta =
-          deltaBytes >= math.max(minTrigger, 1024 * 1024) ||
-              (sm != _lastEmittedStatusMessage) ||
-              progress.fileSize != _lastEmittedFileSize ||
-              ((p['numPeers'] as num?)?.toInt() ?? 0) != _lastEmittedPeerCount ||
-              ((p['numSeeds'] as num?)?.toInt() ?? 0) != _lastEmittedSeedCount;
+      isSubstantialDelta = deltaBytes >= math.max(minTrigger, 1024 * 1024) ||
+          (sm != _lastEmittedStatusMessage) ||
+          progress.fileSize != _lastEmittedFileSize ||
+          ((p['numPeers'] as num?)?.toInt() ?? 0) != _lastEmittedPeerCount ||
+          ((p['numSeeds'] as num?)?.toInt() ?? 0) != _lastEmittedSeedCount;
     }
 
-    if (canEmitNow || isTerminalChange || isCycleStateChange || isSubstantialDelta) {
+    if (canEmitNow ||
+        isTerminalChange ||
+        isCycleStateChange ||
+        isSubstantialDelta) {
       _throttleTimer?.cancel();
       _throttleTimer = null;
       _pendingProgress = null;

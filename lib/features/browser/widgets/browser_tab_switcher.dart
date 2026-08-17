@@ -256,49 +256,83 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
 
                                   // Tab card thumbnail preview / placeholder
                                   Expanded(
-                                    child: Center(
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            tab.isHome
-                                                ? Icons.dashboard_outlined
-                                                : (tab.isSuspended
-                                                    ? Icons.pause_circle_outline_rounded
-                                                    : Icons.language_rounded),
-                                            size: 32,
-                                            color: textClr.withValues(alpha: 0.25),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            tab.isSuspended
-                                                ? L10n.of(context, 'browser_tab_paused')
-                                                : (tab.isHome ? 'Home' : tab.domain),
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: textClr.withValues(alpha: 0.5),
-                                            ),
-                                          ),
-                                          if (tab.isSuspended) ...[
-                                            const SizedBox(height: 4),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: accent.withValues(alpha: 0.1),
-                                                borderRadius: BorderRadius.circular(4),
+                                    child: ClipRRect(
+                                      borderRadius: const BorderRadius.vertical(
+                                          bottom: Radius.circular(11)),
+                                      child: tab.previewBytes != null
+                                          ? Image.memory(
+                                              tab.previewBytes!,
+                                              fit: BoxFit.cover,
+                                              width: double.infinity,
+                                              height: double.infinity,
+                                              gaplessPlayback: true,
+                                            )
+                                          : Center(
+                                              child: Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(
+                                                    tab.isHome
+                                                        ? Icons
+                                                            .dashboard_outlined
+                                                        : (tab.isSuspended
+                                                            ? Icons
+                                                                .pause_circle_outline_rounded
+                                                            : Icons
+                                                                .language_rounded),
+                                                    size: 32,
+                                                    color: textClr
+                                                        .withValues(alpha: 0.25),
+                                                  ),
+                                                  const SizedBox(height: 6),
+                                                  Text(
+                                                    tab.isSuspended
+                                                        ? L10n.of(
+                                                            context,
+                                                            'browser_tab_paused',
+                                                          )
+                                                        : (tab.isHome
+                                                            ? 'Home'
+                                                            : tab.domain),
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: textClr
+                                                          .withValues(alpha: 0.5),
+                                                    ),
+                                                  ),
+                                                  if (tab.isSuspended) ...[
+                                                    const SizedBox(height: 4),
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets
+                                                              .symmetric(
+                                                              horizontal: 6,
+                                                              vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: accent
+                                                            .withValues(
+                                                                alpha: 0.1),
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(4),
+                                                      ),
+                                                      child: Text(
+                                                        L10n.isRtl(context)
+                                                            ? 'انقر للاستئناف'
+                                                            : 'Tap to resume',
+                                                        style: TextStyle(
+                                                          fontSize: 8,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: accent,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
                                               ),
-                                              child: Text(
-                                                L10n.isRtl(context) ? 'انقر للاستئناف' : 'Tap to resume',
-                                                style: TextStyle(
-                                                  fontSize: 8,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: accent,
-                                                ),
-                                              ),
                                             ),
-                                          ],
-                                        ],
-                                      ),
                                     ),
                                   ),
                                 ],

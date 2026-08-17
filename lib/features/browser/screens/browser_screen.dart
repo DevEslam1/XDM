@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +18,7 @@ import '../../settings/provider/settings_provider.dart';
 import '../models/browser_tab.dart';
 import '../services/browser_controller.dart';
 import '../services/media_sniffer.dart';
+import '../services/picture_in_picture_service.dart';
 import '../widgets/browser_find_panel.dart';
 import '../widgets/browser_home_dashboard.dart';
 import '../widgets/browser_misc_dialogs.dart';
@@ -97,179 +99,226 @@ class _BrowserScreenState extends State<BrowserScreen>
     return ChangeNotifierProvider<BrowserController>.value(
       value: controller,
       child: Shortcuts(
-      shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.keyT, control: true):
-            _NewTabIntent(),
-        SingleActivator(LogicalKeyboardKey.keyW, control: true):
-            _CloseTabIntent(),
-        SingleActivator(LogicalKeyboardKey.keyR, control: true):
-            _ReloadIntent(),
-        SingleActivator(LogicalKeyboardKey.keyF, control: true):
-            _FindIntent(),
-        SingleActivator(LogicalKeyboardKey.keyL, control: true):
-            _FocusUrlIntent(),
-        SingleActivator(LogicalKeyboardKey.tab, control: true):
-            _NextTabIntent(),
-      },
-      child: Actions(
-        actions: <Type, Action<Intent>>{
-          _NewTabIntent: CallbackAction<_NewTabIntent>(
-            onInvoke: (_) => controller.openInNewTab('about:blank', switchTo: true),
-          ),
-          _CloseTabIntent: CallbackAction<_CloseTabIntent>(
-            onInvoke: (_) {
-              if (controller.activeTab != null) {
-                controller.closeTab(controller.activeTab!.id);
-              }
-              return null;
-            },
-          ),
-          _ReloadIntent: CallbackAction<_ReloadIntent>(
-            onInvoke: (_) => controller.reload(),
-          ),
-          _FindIntent: CallbackAction<_FindIntent>(
-            onInvoke: (_) => controller.openFindPanel(),
-          ),
-          _FocusUrlIntent: CallbackAction<_FocusUrlIntent>(
-            onInvoke: (_) => controller.focusNode.requestFocus(),
-          ),
-          _NextTabIntent: CallbackAction<_NextTabIntent>(
-            onInvoke: (_) {
-              if (controller.tabs.length > 1) {
-                final nextIdx = (controller.currentIndex + 1) % controller.tabs.length;
-                controller.switchTab(nextIdx);
-              }
-              return null;
-            },
-          ),
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.keyT, control: true):
+              _NewTabIntent(),
+          SingleActivator(LogicalKeyboardKey.keyW, control: true):
+              _CloseTabIntent(),
+          SingleActivator(LogicalKeyboardKey.keyR, control: true):
+              _ReloadIntent(),
+          SingleActivator(LogicalKeyboardKey.keyF, control: true):
+              _FindIntent(),
+          SingleActivator(LogicalKeyboardKey.keyL, control: true):
+              _FocusUrlIntent(),
+          SingleActivator(LogicalKeyboardKey.tab, control: true):
+              _NextTabIntent(),
         },
-        child: RepaintBoundary(
-          child: GeometricGridBackground(
-            child: Scaffold(
-              backgroundColor: Colors.transparent,
-              body: SafeArea(
-                child: Column(
-                  children: [
-                    // FIX(P1): ONE ListenableBuilder drives the whole chrome.
-                    // Inner Selectors in _BrowserChrome rebuild only the
-                    // sections whose specific data actually changed.
-                    ListenableBuilder(
-                      listenable: controller,
-                      builder: (context, _) => _BrowserChrome(
-                        controller: controller,
-                        settings: settings,
-                        isDark: isDark,
-                        isRtl: isRtl,
-                        textClr: textClr,
+        child: Actions(
+          actions: <Type, Action<Intent>>{
+            _NewTabIntent: CallbackAction<_NewTabIntent>(
+              onInvoke: (_) =>
+                  controller.openInNewTab('about:blank', switchTo: true),
+            ),
+            _CloseTabIntent: CallbackAction<_CloseTabIntent>(
+              onInvoke: (_) {
+                if (controller.activeTab != null) {
+                  controller.closeTab(controller.activeTab!.id);
+                }
+                return null;
+              },
+            ),
+            _ReloadIntent: CallbackAction<_ReloadIntent>(
+              onInvoke: (_) => controller.reload(),
+            ),
+            _FindIntent: CallbackAction<_FindIntent>(
+              onInvoke: (_) => controller.openFindPanel(),
+            ),
+            _FocusUrlIntent: CallbackAction<_FocusUrlIntent>(
+              onInvoke: (_) => controller.focusNode.requestFocus(),
+            ),
+            _NextTabIntent: CallbackAction<_NextTabIntent>(
+              onInvoke: (_) {
+                if (controller.tabs.length > 1) {
+                  final nextIdx =
+                      (controller.currentIndex + 1) % controller.tabs.length;
+                  controller.switchTab(nextIdx);
+                }
+                return null;
+              },
+            ),
+          },
+          child: RepaintBoundary(
+            child: GeometricGridBackground(
+              child: Scaffold(
+                backgroundColor: Colors.transparent,
+                body: SafeArea(
+                  child: Column(
+                    children: [
+                      // FIX(P1): ONE ListenableBuilder drives the whole chrome.
+                      // Inner Selectors in _BrowserChrome rebuild only the
+                      // sections whose specific data actually changed.
+                      ListenableBuilder(
+                        listenable: controller,
+                        builder: (context, _) => _BrowserChrome(
+                          controller: controller,
+                          settings: settings,
+                          isDark: isDark,
+                          isRtl: isRtl,
+                          textClr: textClr,
+                        ),
                       ),
-                    ),
 
-                    // Content Stack
-                    Expanded(
-                      child: RepaintBoundary(
-                        child: ListenableBuilder(
-                          listenable: controller,
-                          builder: (context, _) {
-                            if (controller.isRestoring) {
-                              return Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(20),
-                                      decoration: BoxDecoration(
-                                        color: (isDark
-                                                ? AppTheme.neonBlue
-                                                : AppTheme.lightNeonBlue)
-                                            .withValues(alpha: 0.12),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        Icons.tab_rounded,
-                                        size: 40,
-                                        color: isDark
-                                            ? AppTheme.neonBlue
-                                            : AppTheme.lightNeonBlue,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 20),
-                                    Text(
-                                      L10n.of(context, 'browser_restoring_tabs'),
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                        color: textClr,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    SizedBox(
-                                      width: 140,
-                                      child: LinearProgressIndicator(
-                                        backgroundColor: (isDark
-                                                ? Colors.white
-                                                : Colors.black)
-                                            .withValues(alpha: 0.1),
-                                        valueColor: AlwaysStoppedAnimation<Color>(
-                                          isDark
+                      // Content Stack
+                      Expanded(
+                        child: RepaintBoundary(
+                          child: ListenableBuilder(
+                            listenable: controller,
+                            builder: (context, _) {
+                              if (controller.isRestoring) {
+                                return Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(20),
+                                        decoration: BoxDecoration(
+                                          color: (isDark
+                                                  ? AppTheme.neonBlue
+                                                  : AppTheme.lightNeonBlue)
+                                              .withValues(alpha: 0.12),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          Icons.tab_rounded,
+                                          size: 40,
+                                          color: isDark
                                               ? AppTheme.neonBlue
                                               : AppTheme.lightNeonBlue,
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-
-                            final tabs = controller.tabs;
-                            final currentIndex = controller.currentIndex;
-                            final activeTab = controller.activeTab;
-
-                            if (activeTab == null || activeTab.isHome) {
-                              return BrowserHomeDashboard(
-                                controller: controller,
-                                settings: settings,
-                              );
-                            }
-
-                            // FIX(P2): Only the active tab + LRU tabs are ever
-                            // built. Every other tab returns SizedBox.shrink()
-                            // so its (expensive) BrowserTabView subtree is
-                            // never created — Offstage would still build/layout
-                            // the child.
-                            final mountedTabIds = controller.lruTabIds.toSet();
-                            mountedTabIds.add(activeTab.id);
-
-                            return Stack(
-                              children: tabs.map((tab) {
-                                final isActive = (tabs.indexOf(tab) == currentIndex);
-                                final shouldMount = mountedTabIds.contains(tab.id);
-
-                                if (!shouldMount) {
-                                  return const SizedBox.shrink();
-                                }
-
-                                return Offstage(
-                                  offstage: !isActive,
-                                  child: BrowserTabView(
-                                    tab: tab,
-                                    controller: controller,
-                                    settings: settings,
+                                      const SizedBox(height: 20),
+                                      Text(
+                                        L10n.of(
+                                            context, 'browser_restoring_tabs'),
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                          color: textClr,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      SizedBox(
+                                        width: 140,
+                                        child: LinearProgressIndicator(
+                                          backgroundColor: (isDark
+                                                  ? Colors.white
+                                                  : Colors.black)
+                                              .withValues(alpha: 0.1),
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                            isDark
+                                                ? AppTheme.neonBlue
+                                                : AppTheme.lightNeonBlue,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 );
-                              }).toList(),
-                            );
-                          },
+                              }
+
+                              final tabs = controller.tabs;
+                              final currentIndex = controller.currentIndex;
+                              final activeTab = controller.activeTab;
+
+                              if (activeTab == null || activeTab.isHome) {
+                                return BrowserHomeDashboard(
+                                  controller: controller,
+                                  settings: settings,
+                                );
+                              }
+
+                              // FIX(P2): Only the active tab + LRU tabs are ever
+                              // built. Every other tab returns SizedBox.shrink()
+                              // so its (expensive) BrowserTabView subtree is
+                              // never created — Offstage would still build/layout
+                              // the child.
+                              final mountedTabIds =
+                                  controller.lruTabIds.toSet();
+                              mountedTabIds.add(activeTab.id);
+
+                              // FIX(U4): Swipe horizontally to switch between
+                              // open tabs. Only active when there is more than
+                              // one tab so a single tab never steals gestures.
+                              final hasMultipleTabs = tabs.length > 1;
+
+                              Widget tabContent = Stack(
+                                children: tabs.map((tab) {
+                                  final isActive =
+                                      (tabs.indexOf(tab) == currentIndex);
+                                  final shouldMount =
+                                      mountedTabIds.contains(tab.id);
+
+                                  if (!shouldMount) {
+                                    return const SizedBox.shrink();
+                                  }
+
+                                  return Offstage(
+                                    offstage: !isActive,
+                                    child: BrowserTabView(
+                                      tab: tab,
+                                      controller: controller,
+                                      settings: settings,
+                                    ),
+                                  );
+                                }).toList(),
+                              );
+
+                              if (hasMultipleTabs) {
+                                tabContent = RawGestureDetector(
+                                  gestures: {
+                                    HorizontalDragGestureRecognizer:
+                                        GestureRecognizerFactoryWithHandlers<
+                                            HorizontalDragGestureRecognizer>(
+                                      () => HorizontalDragGestureRecognizer(),
+                                      (instance) {
+                                        instance.onEnd = (details) {
+                                          final velocity =
+                                              details.primaryVelocity ?? 0;
+                                          // Ignore slow/ambiguous drags so web
+                                          // page gestures aren't hijacked.
+                                          if (velocity.abs() < 300) return;
+                                          if (velocity < 0) {
+                                            final next = currentIndex + 1;
+                                            if (next < tabs.length) {
+                                              controller.switchTab(next);
+                                            }
+                                          } else {
+                                            final prev = currentIndex - 1;
+                                            if (prev >= 0) {
+                                              controller.switchTab(prev);
+                                            }
+                                          }
+                                        };
+                                      },
+                                    ),
+                                  },
+                                  child: tabContent,
+                                );
+                              }
+
+                              return tabContent;
+                            },
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -314,8 +363,16 @@ class _BrowserChrome extends StatelessWidget {
             );
           },
           builder: (context, data, _) {
-            final (isHome, isLoading, canGoBack, isHttps, progress, tabCount, desktopMode, _) =
-                data;
+            final (
+              isHome,
+              isLoading,
+              canGoBack,
+              isHttps,
+              progress,
+              tabCount,
+              desktopMode,
+              _
+            ) = data;
             final activeTab = controller.activeTab;
             return BrowserToolbar(
               controller: controller,
@@ -338,6 +395,11 @@ class _BrowserChrome extends StatelessWidget {
                 activeTab,
                 isDark,
               ),
+              // FIX(D6): PiP button — only visible when the active tab has a
+              // <video> element in its DOM.
+              pipButton: (activeTab != null && activeTab.hasVideoElement)
+                  ? _buildPipButton(context, controller, activeTab, isDark)
+                  : null,
               onGoBack: () => controller.goBack(),
               onShowTabSwitcher: () => BrowserTabSwitcher.show(
                 context,
@@ -355,16 +417,19 @@ class _BrowserChrome extends StatelessWidget {
                   BrowserShieldSheet.show(
                     context: context,
                     currentUrl: activeTab.url,
-                    blockedAdsCount:
-                        controller.blockedAdsCount(activeTab.id),
+                    blockedAdsCount: controller.blockedAdsCount(activeTab.id),
                     blockedPopupsCount:
                         controller.blockedPopupsCount(activeTab.id),
                     onReloadTab: () => controller.reload(),
+                    // FIX(D8): Wire the element picker to the controller so a
+                    // picked element becomes a persistent ad-block rule.
+                    onStartElementPicker: () {
+                      controller.startElementPicker(activeTab);
+                    },
                   );
                 }
               },
-              onQuitPressed: () =>
-                  BrowserMiscDialogs.showCloseOrQuitDialog(
+              onQuitPressed: () => BrowserMiscDialogs.showCloseOrQuitDialog(
                 context,
                 settings: settings,
                 onHide: () {
@@ -541,6 +606,46 @@ class _BrowserChrome extends StatelessWidget {
     );
   }
 
+  // FIX(D6): Picture-in-Picture toolbar button. Shown only when the active tab
+  // has a <video> element; tapping it enters PiP via PictureInPictureService.
+  Widget _buildPipButton(
+    BuildContext context,
+    BrowserController controller,
+    BrowserTab activeTab,
+    bool isDark,
+  ) {
+    return IconButton(
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(
+        minWidth: 30,
+        minHeight: 36,
+      ),
+      icon: Icon(
+        Icons.picture_in_picture_alt_rounded,
+        size: 19,
+        color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+      ),
+      tooltip: L10n.of(context, 'browser_pip_tooltip'),
+      onPressed: () async {
+        final settings = context.read<SettingsProvider>();
+        HapticHelper.triggerHaptic(settings);
+        final webController = activeTab.controller;
+        if (webController == null) return;
+        final success = await PictureInPictureService.enterPiP(webController);
+        if (success) return;
+        if (context.mounted) {
+          ThemedSnackbar.show(
+            context,
+            message: L10n.of(context, 'browser_pip_unsupported'),
+            color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+            icon: Icons.picture_in_picture_alt_rounded,
+            isDarkMode: isDark,
+          );
+        }
+      },
+    );
+  }
+
   Future<void> _handleGrabButtonPressed(
     BuildContext context, {
     required String rawUrl,
@@ -568,9 +673,8 @@ class _BrowserChrome extends StatelessWidget {
         final audioSize = (stream['audioSize'] as num?)?.toInt();
         final streamType = stream['type'] as String? ?? 'muxed';
         final thumbnailUrl = stream['thumbnailUrl'] as String?;
-        final qualityPreset = streamType == 'audio'
-            ? 'audio_only'
-            : stream['quality'] as String?;
+        final qualityPreset =
+            streamType == 'audio' ? 'audio_only' : stream['quality'] as String?;
         final category = streamType == 'audio' ? 'Audio' : 'Video';
         final fileName = safeFileName('$title.$ext');
         final provider = context.read<DownloadProvider>();
@@ -604,12 +708,9 @@ class _BrowserChrome extends StatelessWidget {
             } else {
               ThemedSnackbar.show(
                 context,
-                message: L10n.isRtl(context)
-                    ? 'تم بدء التحميل'
-                    : 'Download started',
-                color: isDark
-                    ? AppTheme.neonGreen
-                    : AppTheme.lightNeonGreen,
+                message:
+                    L10n.isRtl(context) ? 'تم بدء التحميل' : 'Download started',
+                color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                 icon: Icons.check_circle_outline,
                 isDarkMode: isDark,
               );
@@ -752,19 +853,22 @@ class _ReaderControlsToolbar extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.text_decrease_rounded, size: 18),
             onPressed: () {
-              final newSize = (controller.readerFontSize - 2.0).clamp(12.0, 28.0);
+              final newSize =
+                  (controller.readerFontSize - 2.0).clamp(12.0, 28.0);
               controller.setReaderFontSize(newSize);
             },
             tooltip: 'Decrease font size',
           ),
           Text(
             '${controller.readerFontSize.round()}px',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textClr),
+            style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.bold, color: textClr),
           ),
           IconButton(
             icon: const Icon(Icons.text_increase_rounded, size: 18),
             onPressed: () {
-              final newSize = (controller.readerFontSize + 2.0).clamp(12.0, 28.0);
+              final newSize =
+                  (controller.readerFontSize + 2.0).clamp(12.0, 28.0);
               controller.setReaderFontSize(newSize);
             },
             tooltip: 'Increase font size',
@@ -811,7 +915,9 @@ class _ReaderControlsToolbar extends StatelessWidget {
           color: bg,
           shape: BoxShape.circle,
           border: Border.all(
-            color: isSelected ? AppTheme.neonBlue : Colors.grey.withValues(alpha: 0.4),
+            color: isSelected
+                ? AppTheme.neonBlue
+                : Colors.grey.withValues(alpha: 0.4),
             width: isSelected ? 2 : 1,
           ),
         ),

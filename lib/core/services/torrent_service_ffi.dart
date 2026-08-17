@@ -42,6 +42,22 @@ class _CapabilityGate {
   bool superSeedingSupported = true;
   bool pieceDeadlineSupported = true;
 
+  // Failure logging suppression flags (Fix #3)
+  bool _loggedFileProgressFailure = false;
+  bool _loggedFilePrioritiesFailure = false;
+  bool _loggedForceRecheckFailure = false;
+  bool _loggedSaveResumeDataFailure = false;
+  bool _loggedLoadResumeDataFailure = false;
+  bool _loggedTrackersFailure = false;
+  bool _loggedAddTrackerFailure = false;
+  bool _loggedRemoveTrackerFailure = false;
+  bool _loggedAnnounceNowFailure = false;
+  bool _loggedCreateTorrentFailure = false;
+  bool _loggedLoadIpFilterFailure = false;
+  bool _loggedSequentialDownloadFailure = false;
+  bool _loggedSuperSeedingFailure = false;
+  bool _loggedPieceDeadlineFailure = false;
+
   /// Probes capabilities ONCE during initialization.
   void probeCapabilities() {
     fileProgressSupported = true;
@@ -158,8 +174,12 @@ class _CapabilityGate {
       return (LibtorrentFlutter.instance as dynamic).getFileProgress(id)
           as List<dynamic>?;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi')
-          .warning('Operation failed with fallback', e, st);
+      fileProgressSupported = false;
+      if (!_loggedFileProgressFailure) {
+        _loggedFileProgressFailure = true;
+        LoggingService.logger('TorrentServiceFfi')
+            .warning('Operation fileProgress failed (suppressed): $e', e, st);
+      }
       return null;
     }
   }
@@ -171,8 +191,12 @@ class _CapabilityGate {
       return (LibtorrentFlutter.instance as dynamic).getFilePriorities(id)
           as List<dynamic>?;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi')
-          .warning('Operation failed with fallback', e, st);
+      filePrioritiesSupported = false;
+      if (!_loggedFilePrioritiesFailure) {
+        _loggedFilePrioritiesFailure = true;
+        LoggingService.logger('TorrentServiceFfi')
+            .warning('Operation filePriorities failed (suppressed): $e', e, st);
+      }
       return null;
     }
   }
@@ -182,7 +206,11 @@ class _CapabilityGate {
     try {
       LibtorrentFlutter.instance.setFilePriorities(id, priorities);
     } catch (e) {
-      _log.warning('setFilePriorities failed for id $id: $e');
+      filePrioritiesSupported = false;
+      if (!_loggedFilePrioritiesFailure) {
+        _loggedFilePrioritiesFailure = true;
+        _log.warning('setFilePriorities failed (suppressed) for id $id: $e');
+      }
     }
   }
 
@@ -192,8 +220,12 @@ class _CapabilityGate {
       // ignore: avoid_dynamic_calls
       (LibtorrentFlutter.instance as dynamic).forceReCheck(id);
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi')
-          .warning('Operation failed', e, st);
+      forceRecheckSupported = false;
+      if (!_loggedForceRecheckFailure) {
+        _loggedForceRecheckFailure = true;
+        LoggingService.logger('TorrentServiceFfi')
+            .warning('Operation forceReCheck failed (suppressed)', e, st);
+      }
     }
   }
 
@@ -204,8 +236,12 @@ class _CapabilityGate {
       return (LibtorrentFlutter.instance as dynamic).saveResumeData(id)
           as Uint8List?;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi')
-          .warning('Operation failed with fallback', e, st);
+      resumeDataSupported = false;
+      if (!_loggedSaveResumeDataFailure) {
+        _loggedSaveResumeDataFailure = true;
+        LoggingService.logger('TorrentServiceFfi')
+            .warning('Operation saveResumeData failed (suppressed)', e, st);
+      }
       return null;
     }
   }
@@ -217,8 +253,12 @@ class _CapabilityGate {
       (LibtorrentFlutter.instance as dynamic).loadResumeData(id, data);
       return true;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi')
-          .warning('Operation failed with fallback', e, st);
+      resumeDataSupported = false;
+      if (!_loggedLoadResumeDataFailure) {
+        _loggedLoadResumeDataFailure = true;
+        LoggingService.logger('TorrentServiceFfi')
+            .warning('Operation loadResumeData failed (suppressed)', e, st);
+      }
       return false;
     }
   }
@@ -242,8 +282,12 @@ class _CapabilityGate {
         );
       }).toList();
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi')
-          .warning('Operation failed with fallback', e, st);
+      trackersSupported = false;
+      if (!_loggedTrackersFailure) {
+        _loggedTrackersFailure = true;
+        LoggingService.logger('TorrentServiceFfi')
+            .warning('Operation getTrackers failed (suppressed)', e, st);
+      }
       return null;
     }
   }
@@ -255,8 +299,12 @@ class _CapabilityGate {
       (LibtorrentFlutter.instance as dynamic).addTracker(id, trackerUrl, tier);
       return true;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi')
-          .warning('Operation failed with fallback', e, st);
+      trackersSupported = false;
+      if (!_loggedAddTrackerFailure) {
+        _loggedAddTrackerFailure = true;
+        LoggingService.logger('TorrentServiceFfi')
+            .warning('Operation addTracker failed (suppressed)', e, st);
+      }
       return false;
     }
   }
@@ -268,8 +316,12 @@ class _CapabilityGate {
       (LibtorrentFlutter.instance as dynamic).removeTracker(id, trackerUrl);
       return true;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi')
-          .warning('Operation failed with fallback', e, st);
+      trackersSupported = false;
+      if (!_loggedRemoveTrackerFailure) {
+        _loggedRemoveTrackerFailure = true;
+        LoggingService.logger('TorrentServiceFfi')
+            .warning('Operation removeTracker failed (suppressed)', e, st);
+      }
       return false;
     }
   }
@@ -281,8 +333,12 @@ class _CapabilityGate {
       (LibtorrentFlutter.instance as dynamic).announceNow(id);
       return true;
     } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi')
-          .warning('Operation failed with fallback', e, st);
+      trackersSupported = false;
+      if (!_loggedAnnounceNowFailure) {
+        _loggedAnnounceNowFailure = true;
+        LoggingService.logger('TorrentServiceFfi')
+            .warning('Operation announceNow failed (suppressed)', e, st);
+      }
       return false;
     }
   }
@@ -308,7 +364,11 @@ class _CapabilityGate {
       );
       return res as String?;
     } catch (e) {
-      _log.warning('createTorrent failed: $e');
+      createTorrentSupported = false;
+      if (!_loggedCreateTorrentFailure) {
+        _loggedCreateTorrentFailure = true;
+        _log.warning('createTorrent failed (suppressed): $e');
+      }
       return null;
     }
   }
@@ -320,7 +380,11 @@ class _CapabilityGate {
       await (LibtorrentFlutter.instance as dynamic).loadIpFilter(path);
       return true;
     } catch (e) {
-      _log.warning('loadIpFilter failed: $e');
+      ipFilterSupported = false;
+      if (!_loggedLoadIpFilterFailure) {
+        _loggedLoadIpFilterFailure = true;
+        _log.warning('loadIpFilter failed (suppressed): $e');
+      }
       return false;
     }
   }
@@ -332,7 +396,11 @@ class _CapabilityGate {
       (LibtorrentFlutter.instance as dynamic)
           .setSequentialDownload(id, enabled);
     } catch (e) {
-      _log.warning('setSequentialDownload failed for id $id: $e');
+      sequentialDownloadSupported = false;
+      if (!_loggedSequentialDownloadFailure) {
+        _loggedSequentialDownloadFailure = true;
+        _log.warning('setSequentialDownload failed (suppressed) for id $id: $e');
+      }
     }
   }
 
@@ -342,7 +410,11 @@ class _CapabilityGate {
       // ignore: avoid_dynamic_calls
       (LibtorrentFlutter.instance as dynamic).setSuperSeeding(id, enabled);
     } catch (e) {
-      _log.warning('setSuperSeeding failed for id $id: $e');
+      superSeedingSupported = false;
+      if (!_loggedSuperSeedingFailure) {
+        _loggedSuperSeedingFailure = true;
+        _log.warning('setSuperSeeding failed (suppressed) for id $id: $e');
+      }
     }
   }
 
@@ -353,7 +425,11 @@ class _CapabilityGate {
       (LibtorrentFlutter.instance as dynamic)
           .setPieceDeadline(id, pieceIndex, deadlineMs);
     } catch (e) {
-      _log.warning('setPieceDeadline failed for id $id: $e');
+      pieceDeadlineSupported = false;
+      if (!_loggedPieceDeadlineFailure) {
+        _loggedPieceDeadlineFailure = true;
+        _log.warning('setPieceDeadline failed (suppressed) for id $id: $e');
+      }
     }
   }
 
@@ -456,6 +532,22 @@ class TorrentServiceImpl implements ITorrentService {
   bool get fileProgressSupported => TorrentService.fileProgressSupported;
   @override
   bool get filePrioritiesSupported => TorrentService.filePrioritiesSupported;
+  @override
+  bool get resumeDataSupported => TorrentService.resumeDataSupported;
+  @override
+  bool get forceRecheckSupported => TorrentService.forceRecheckSupported;
+  @override
+  bool get trackersSupported => TorrentService.trackersSupported;
+  @override
+  bool get createTorrentSupported => TorrentService.createTorrentSupported;
+  @override
+  bool get ipFilterSupported => TorrentService.ipFilterSupported;
+  @override
+  bool get sequentialDownloadSupported => TorrentService.sequentialDownloadSupported;
+  @override
+  bool get superSeedingSupported => TorrentService.superSeedingSupported;
+  @override
+  bool get pieceDeadlineSupported => TorrentService.pieceDeadlineSupported;
   @override
   bool get sequentialDownloadEnabled =>
       TorrentService.sequentialDownloadEnabled;
@@ -741,6 +833,30 @@ class TorrentService {
 
   static bool get filePrioritiesSupported =>
       _CapabilityGate.instance.filePrioritiesSupported;
+
+  static bool get resumeDataSupported =>
+      _CapabilityGate.instance.resumeDataSupported;
+
+  static bool get forceRecheckSupported =>
+      _CapabilityGate.instance.forceRecheckSupported;
+
+  static bool get trackersSupported =>
+      _CapabilityGate.instance.trackersSupported;
+
+  static bool get createTorrentSupported =>
+      _CapabilityGate.instance.createTorrentSupported;
+
+  static bool get ipFilterSupported =>
+      _CapabilityGate.instance.ipFilterSupported;
+
+  static bool get sequentialDownloadSupported =>
+      _CapabilityGate.instance.sequentialDownloadSupported;
+
+  static bool get superSeedingSupported =>
+      _CapabilityGate.instance.superSeedingSupported;
+
+  static bool get pieceDeadlineSupported =>
+      _CapabilityGate.instance.pieceDeadlineSupported;
 
   static final Map<int, double> _latestProgress = {};
   static final Map<int, String> _torrentSources = {};
@@ -1234,52 +1350,77 @@ class TorrentService {
     }
   }
 
+  static bool _numPiecesSupported = true;
+  static bool _loggedNumPiecesFailure = false;
+  static bool _totalWantedSupported = true;
+  static bool _loggedTotalWantedFailure = false;
+  static bool _piecesDoneSupported = true;
+  static bool _loggedPiecesDoneFailure = false;
+  static bool _progressSupported = true;
+  static bool _loggedProgressFailure = false;
+
   static int _estimatePiecesTotal(Object torrentInfo) {
-    try {
-      final dynamic raw = torrentInfo;
-      // ignore: avoid_dynamic_calls
-      final numPieces = raw.numPieces;
-      if (numPieces is int && numPieces > 0) return numPieces;
-    } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi')
-          .warning('Operation failed', e, st);
+    if (_numPiecesSupported) {
+      try {
+        final dynamic raw = torrentInfo;
+        final numPieces = raw.numPieces;
+        if (numPieces is int && numPieces > 0) return numPieces;
+      } catch (e) {
+        _numPiecesSupported = false;
+        if (!_loggedNumPiecesFailure) {
+          _loggedNumPiecesFailure = true;
+          _log.warning('numPieces property not supported (suppressed): $e');
+        }
+      }
     }
     const defaultPieceSize = 256 * 1024;
-    try {
-      final dynamic raw = torrentInfo;
-      // ignore: avoid_dynamic_calls
-      final totalWanted = (raw.totalWanted as num?)?.toInt() ?? 0;
-      if (totalWanted > 0) {
-        return (totalWanted / defaultPieceSize).ceil();
+    if (_totalWantedSupported) {
+      try {
+        final dynamic raw = torrentInfo;
+        final totalWanted = (raw.totalWanted as num?)?.toInt() ?? 0;
+        if (totalWanted > 0) {
+          return (totalWanted / defaultPieceSize).ceil();
+        }
+      } catch (e) {
+        _totalWantedSupported = false;
+        if (!_loggedTotalWantedFailure) {
+          _loggedTotalWantedFailure = true;
+          _log.warning('totalWanted property not supported (suppressed): $e');
+        }
       }
-    } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi')
-          .warning('Operation failed', e, st);
     }
     return 0;
   }
 
   static int _estimatePiecesHave(Object torrentInfo) {
-    try {
-      final dynamic raw = torrentInfo;
-      // ignore: avoid_dynamic_calls
-      final piecesDone = raw.piecesDone;
-      if (piecesDone is int && piecesDone > 0) return piecesDone;
-    } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi')
-          .warning('Operation failed', e, st);
+    if (_piecesDoneSupported) {
+      try {
+        final dynamic raw = torrentInfo;
+        final piecesDone = raw.piecesDone;
+        if (piecesDone is int && piecesDone > 0) return piecesDone;
+      } catch (e) {
+        _piecesDoneSupported = false;
+        if (!_loggedPiecesDoneFailure) {
+          _loggedPiecesDoneFailure = true;
+          _log.warning('piecesDone property not supported (suppressed): $e');
+        }
+      }
     }
     final total = _estimatePiecesTotal(torrentInfo);
-    try {
-      final dynamic raw = torrentInfo;
-      // ignore: avoid_dynamic_calls
-      final progress = (raw.progress as num?)?.toDouble() ?? 0.0;
-      if (total > 0 && progress > 0) {
-        return (progress * total).round();
+    if (_progressSupported) {
+      try {
+        final dynamic raw = torrentInfo;
+        final progress = (raw.progress as num?)?.toDouble() ?? 0.0;
+        if (total > 0 && progress > 0) {
+          return (progress * total).round();
+        }
+      } catch (e) {
+        _progressSupported = false;
+        if (!_loggedProgressFailure) {
+          _loggedProgressFailure = true;
+          _log.warning('progress property not supported (suppressed): $e');
+        }
       }
-    } catch (e, st) {
-      LoggingService.logger('TorrentServiceFfi')
-          .warning('Operation failed', e, st);
     }
     return 0;
   }
@@ -1425,10 +1566,22 @@ class TorrentService {
     _injectDhtNodes();
     int attempt = 0;
 
+    // FIX #2 Part C: Cap metadata timeout to 60 seconds
+    final effectiveTimeout = timeout > const Duration(seconds: 60)
+        ? const Duration(seconds: 60)
+        : timeout;
+
     while (attempt <= maxRetries) {
       attempt++;
       final id = addMagnet(magnetUri, savePath);
       if (id < 0) return -1;
+
+      // FIX #2 Part B: Post-add metadata check (immediate check if already cached)
+      final stats = _latestStats[id];
+      if (stats != null && stats.hasMetadata) {
+        _log.info('Metadata already cached for magnet $id. Skipping metadata wait.');
+        return id;
+      }
 
       final stopwatch = Stopwatch()..start();
       final completer = Completer<int>();
@@ -1440,6 +1593,16 @@ class TorrentService {
         final msg = 'Fetching metadata... (${elapsedSec}s elapsed)';
         onStatusUpdate?.call(msg);
         _log.fine('Magnet $id: $msg');
+
+        // FIX #2 Part B: Poll hasMetadata as a fallback
+        final currentStats = _latestStats[id];
+        if (currentStats != null && currentStats.hasMetadata) {
+          _log.info('Metadata detected via polling fallback for magnet $id.');
+          messageTimer?.cancel();
+          sub?.cancel();
+          stopwatch.stop();
+          if (!completer.isCompleted) completer.complete(id);
+        }
       });
 
       sub = torrentUpdates.listen((updateMap) {
@@ -1453,11 +1616,19 @@ class TorrentService {
       });
 
       try {
-        return await completer.future.timeout(timeout);
+        return await completer.future.timeout(effectiveTimeout);
       } on TimeoutException {
         messageTimer.cancel();
         sub.cancel();
         stopwatch.stop();
+
+        // FIX #2 Part C: Check hasMetadata one final time on timeout
+        final finalStats = _latestStats[id];
+        if (finalStats != null && finalStats.hasMetadata) {
+          _log.info('Metadata detected on final timeout check for magnet $id. Proceeding.');
+          return id;
+        }
+
         _log.warning(
           'Magnet metadata fetch timed out (attempt $attempt/${maxRetries + 1}) for $magnetUri',
         );
@@ -2223,6 +2394,22 @@ class TorrentServiceStub implements ITorrentService {
   bool get fileProgressSupported => false;
   @override
   bool get filePrioritiesSupported => false;
+  @override
+  bool get resumeDataSupported => false;
+  @override
+  bool get forceRecheckSupported => false;
+  @override
+  bool get trackersSupported => false;
+  @override
+  bool get createTorrentSupported => false;
+  @override
+  bool get ipFilterSupported => false;
+  @override
+  bool get sequentialDownloadSupported => false;
+  @override
+  bool get superSeedingSupported => false;
+  @override
+  bool get pieceDeadlineSupported => false;
   @override
   bool get sequentialDownloadEnabled => false;
   @override

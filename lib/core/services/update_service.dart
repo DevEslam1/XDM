@@ -13,6 +13,7 @@ import 'package:logging/logging.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pointycastle/asymmetric/api.dart' show RSAPublicKey;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UpdateInfo {
   final String latestVersion;
@@ -91,6 +92,7 @@ class UpdateService {
 
   static const List<String> kUpdateManifestMirrors = [
     'https://cdn.jsdelivr.net/gh/DevEslam1/XDM@main/version_manifest.json',
+    'https://fastly.jsdelivr.net/gh/DevEslam1/XDM@main/version_manifest.json',
   ];
 
   static Future<void> loadPublicKey() async {
@@ -177,18 +179,37 @@ class UpdateService {
   }
 
   Future<UpdateInfo?> checkForUpdate({String? manifestUrl}) async {
+    // FIX #8: Check cooldown in SharedPreferences first
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastFailureMs = prefs.getInt('dmx_update_last_failure_time') ?? 0;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (now - lastFailureMs < const Duration(hours: 1).inMilliseconds) {
+        _log.info(
+            'Skipping update check: within 1 hour cooldown after a failure.');
+        return null;
+      }
+    } catch (e) {
+      _log.warning(
+          'Failed to check update cooldown from SharedPreferences: $e');
+    }
+
     await loadPublicKey();
 
     final dio = Dio(
       BaseOptions(
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 15),
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(
+            seconds: 30), // FIX #8: Increase receiveTimeout to 30s
       ),
     );
 
     final primary = manifestUrl ?? kDefaultUpdateManifestUrl;
     final sources = <String>[primary, ...kUpdateManifestMirrors];
     if (manifestUrl != null) sources.removeWhere((s) => s == primary);
+
+    bool checkSucceeded = false;
+    int backoffDelaySeconds = 2;
 
     try {
       for (final url in sources) {
@@ -228,6 +249,15 @@ class UpdateService {
           final packageInfo = await PackageInfo.fromPlatform();
           final currentVersionCode = int.tryParse(packageInfo.buildNumber) ?? 0;
 
+          checkSucceeded = true;
+          // Clear failure cooldown on success
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.remove('dmx_update_last_failure_time');
+            await prefs.setInt('dmx_update_last_success_time',
+                DateTime.now().millisecondsSinceEpoch);
+          } catch (_) {}
+
           if (update.versionCode > currentVersionCode ||
               currentVersionCode < update.minSupportedVersionCode) {
             return update;
@@ -235,6 +265,12 @@ class UpdateService {
         } on DioException catch (e) {
           if (e.response?.statusCode == 404) {
             _log.warning('Update manifest not found (404): $url');
+          } else if (e.response?.statusCode == 429) {
+            _log.warning(
+                'Rate limited (429) on $url. Applying backoff of ${backoffDelaySeconds}s.');
+            // FIX #8: Exponential backoff on 429 rate limit
+            await Future.delayed(Duration(seconds: backoffDelaySeconds));
+            backoffDelaySeconds *= 2;
           } else {
             _log.warning('Failed to fetch manifest $url: $e');
           }
@@ -245,6 +281,20 @@ class UpdateService {
     } finally {
       dio.close(force: true);
     }
+
+    if (!checkSucceeded) {
+      // FIX #8: Cache failure check timestamp to skip for 1 hour
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('dmx_update_last_failure_time',
+            DateTime.now().millisecondsSinceEpoch);
+        _log.info('Update check failed. Cooldown of 1 hour applied.');
+      } catch (e) {
+        _log.warning(
+            'Failed to save update failure time to SharedPreferences: $e');
+      }
+    }
+
     return null;
   }
 

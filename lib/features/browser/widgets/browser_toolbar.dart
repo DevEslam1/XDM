@@ -1,7 +1,10 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
+import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../services/browser_controller.dart';
 import 'browser_menu_button.dart';
@@ -32,6 +35,7 @@ class BrowserToolbar extends StatelessWidget {
   final VoidCallback? onShieldPressed;
   final bool isHttps;
   final Widget? youtubeGrabButton;
+  final Widget? pipButton;
 
   const BrowserToolbar({
     super.key,
@@ -56,6 +60,7 @@ class BrowserToolbar extends StatelessWidget {
     required this.onStopLoading,
     required this.onQuitPressed,
     this.youtubeGrabButton,
+    this.pipButton,
     this.onShieldPressed,
     this.isHttps = false,
   });
@@ -66,7 +71,9 @@ class BrowserToolbar extends StatelessWidget {
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     final toolbarBg = isDark
-        ? (isAmoled ? AppTheme.amoledSurface : AppTheme.surface.withValues(alpha: 0.96))
+        ? (isAmoled
+            ? AppTheme.amoledSurface
+            : AppTheme.surface.withValues(alpha: 0.96))
         : AppTheme.lightSurface.withValues(alpha: 0.96);
 
     final toolbarBorder = isDark
@@ -172,6 +179,94 @@ class BrowserToolbar extends StatelessWidget {
                   const SizedBox(width: 2),
                 ],
 
+                // FIX(D6): Picture-in-Picture toggle — only visible when the
+                // active tab has a <video> element.
+                if (pipButton != null) ...[
+                  pipButton!,
+                  const SizedBox(width: 2),
+                ],
+
+                // FIX(U8): Mini download-activity indicator — a small spinning
+                // progress ring appears whenever downloads are in flight.
+                ListenableBuilder(
+                  listenable: context.watch<DownloadProvider>(),
+                  builder: (context, _) {
+                    final activeDownloads =
+                        context.read<DownloadProvider>().downloadingTasksCount;
+                    if (activeDownloads <= 0) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: SizedBox(
+                        width: isNarrow ? 16 : 18,
+                        height: isNarrow ? 16 : 18,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            const SizedBox(
+                              width: double.infinity,
+                              height: double.infinity,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  AppTheme.neonGreen,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '$activeDownloads',
+                              style: TextStyle(
+                                fontSize: isNarrow ? 7 : 8,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.neonGreen,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                // FIX(U15): Offline indicator — a small cloud-off chip
+                // appears in the toolbar whenever the device loses all
+                // network connectivity.
+                StreamBuilder<List<ConnectivityResult>>(
+                  stream: Connectivity().onConnectivityChanged,
+                  builder: (context, snapshot) {
+                    final results =
+                        snapshot.data ?? const <ConnectivityResult>[];
+                    final offline =
+                        results.contains(ConnectivityResult.none) ||
+                            results.isEmpty;
+                    if (!offline) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Tooltip(
+                        message: L10n.of(context, 'browser_offline_tooltip'),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppTheme.neonRed.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppTheme.neonRed.withValues(alpha: 0.5),
+                              width: 0.7,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.cloud_off_rounded,
+                            size: isNarrow ? 12 : 14,
+                            color: isDark
+                                ? AppTheme.neonRed
+                                : AppTheme.lightNeonRed,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
                 // Tabs button with badge counter
                 IconButton(
                   padding: EdgeInsets.zero,
@@ -201,6 +296,42 @@ class BrowserToolbar extends StatelessWidget {
                     ),
                   ),
                   onPressed: onShowTabSwitcher,
+                ),
+
+                // FIX(U12): Media sniffer status toggle — tap to flip the
+                // engine on/off without opening the full menu.
+                ListenableBuilder(
+                  listenable: controller,
+                  builder: (context, _) {
+                    final snifferOn = controller.isSnifferEnabled;
+                    return IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints(
+                        minWidth: isNarrow ? 28 : 32,
+                        minHeight: 36,
+                      ),
+                      icon: Icon(
+                        snifferOn
+                            ? Icons.radar_rounded
+                            : Icons.radar_rounded,
+                        size: isNarrow ? 15 : 17,
+                        color: snifferOn
+                            ? (isDark
+                                ? AppTheme.neonGreen
+                                : AppTheme.lightNeonGreen)
+                            : mutedClr,
+                      ),
+                      tooltip: L10n.of(
+                        context,
+                        snifferOn
+                            ? 'browser_sniffer_on_tooltip'
+                            : 'browser_sniffer_off_tooltip',
+                      ),
+                      onPressed: () {
+                        controller.setSnifferEnabled(!snifferOn);
+                      },
+                    );
+                  },
                 ),
 
                 // Extracted full 17-action menu button

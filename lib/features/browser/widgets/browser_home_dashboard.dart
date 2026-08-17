@@ -38,6 +38,13 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
   final List<Map<String, String>> _userCustomShortcuts = [];
   List<Map<String, String>> _topHistorySites = [];
 
+  // FIX(P8): Cache the computed top-history sites across dashboard rebuilds
+  // with a 5-minute TTL. Returning to the home screen within the TTL reuses
+  // the cached list instead of hitting the history database again.
+  static final List<Map<String, String>> _topHistorySitesCache = [];
+  static DateTime _topHistorySitesCacheTime = DateTime.fromMillisecondsSinceEpoch(0);
+  static const _topSitesCacheTtl = Duration(minutes: 5);
+
   @override
   void initState() {
     super.initState();
@@ -72,6 +79,18 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
   }
 
   Future<void> _loadTopHistorySites() async {
+    // FIX(P8): Reuse the cached result if it is still fresh (< 5 min).
+    if (_topHistorySitesCache.isNotEmpty &&
+        DateTime.now().difference(_topHistorySitesCacheTime) <
+            _topSitesCacheTtl) {
+      if (mounted) {
+        setState(() {
+          _topHistorySites = List<Map<String, String>>.from(
+              _topHistorySitesCache);
+        });
+      }
+      return;
+    }
     try {
       final history = await widget.controller.historyManager.getRecentHistory(limit: 30);
       final hostCounts = <String, int>{};
@@ -94,14 +113,20 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
         ..sort((a, b) => hostCounts[b]!.compareTo(hostCounts[a]!));
 
       if (mounted) {
+        final result = sortedHosts.take(3).map((h) {
+          return {
+            'title': hostTitles[h] ?? h,
+            'url': hostUrls[h] ?? 'https://$h',
+          };
+        }).toList();
         setState(() {
-          _topHistorySites = sortedHosts.take(3).map((h) {
-            return {
-              'title': hostTitles[h] ?? h,
-              'url': hostUrls[h] ?? 'https://$h',
-            };
-          }).toList();
+          _topHistorySites = result;
         });
+        // FIX(P8): Populate the shared cache + refresh its timestamp.
+        _topHistorySitesCache
+          ..clear()
+          ..addAll(result);
+        _topHistorySitesCacheTime = DateTime.now();
       }
     } catch (_) {}
   }

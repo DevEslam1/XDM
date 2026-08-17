@@ -1,11 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:logging/logging.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/services/permission_service.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
@@ -14,12 +19,14 @@ import '../models/bookmark.dart';
 import '../models/browser_tab.dart';
 import '../screens/browser_settings_screen.dart';
 import '../services/browser_controller.dart';
+import '../services/screenshot_service.dart';
 import 'bookmark_manager_screen.dart';
 import 'browser_history_sheet.dart';
 import 'browser_misc_dialogs.dart';
 
 /// Full-featured, hardened overflow menu button for the browser toolbar.
 class BrowserMenuButton extends StatelessWidget {
+  static final _log = Logger('BrowserMenuButton');
   final BrowserController controller;
   final SettingsProvider settings;
   final bool isDark;
@@ -149,6 +156,15 @@ class BrowserMenuButton extends StatelessWidget {
           value: 'copy_link',
           icon: Icons.copy_rounded,
           title: L10n.of(ctx, 'browser_copy_link'),
+          enabled: hasUrl,
+        ),
+        // FIX(D7): Save a full-page screenshot of the active tab to the
+        // downloads directory via ScreenshotService.
+        _buildItem(
+          ctx,
+          value: 'save_screenshot',
+          icon: Icons.photo_camera_outlined,
+          title: L10n.of(ctx, 'browser_save_screenshot'),
           enabled: hasUrl,
         ),
         _buildItem(
@@ -312,6 +328,11 @@ class BrowserMenuButton extends StatelessWidget {
           );
         }
         break;
+      case 'save_screenshot':
+        if (activeTab != null) {
+          _saveScreenshot(context, activeTab);
+        }
+        break;
       case 'js_css_injector':
         if (activeTab != null) {
           BrowserMiscDialogs.showJsCssInjectorDialog(
@@ -336,6 +357,59 @@ class BrowserMenuButton extends StatelessWidget {
           ),
         );
         break;
+    }
+  }
+
+  // FIX(D7): Capture a full-page screenshot of the active tab and save it to
+  // the downloads directory (custom path or the app default).
+  Future<void> _saveScreenshot(BuildContext context, BrowserTab tab) async {
+    final webController = tab.controller;
+    if (webController == null) return;
+    try {
+      final bytes = await ScreenshotService.captureFullPage(webController);
+      if (bytes == null || bytes.isEmpty) {
+        if (context.mounted) {
+          ThemedSnackbar.show(
+            context,
+            message: L10n.of(context, 'browser_screenshot_failed'),
+            color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+            icon: Icons.error_outline,
+            isDarkMode: isDark,
+          );
+        }
+        return;
+      }
+
+      String targetDir = settings.customDownloadPath ?? '';
+      if (targetDir.isEmpty) {
+        targetDir = await PermissionService().defaultDownloadDirectory();
+      }
+      final safeName = tab.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final stamp = DateTime.now().millisecondsSinceEpoch;
+      final file = File(p.join(targetDir, '${safeName}_$stamp.png'));
+      await file.writeAsBytes(bytes);
+
+      if (context.mounted) {
+        final dir = p.basename(targetDir);
+        ThemedSnackbar.show(
+          context,
+          message: '${L10n.of(context, 'browser_screenshot_saved')} ($dir)',
+          color: AppTheme.neonGreen,
+          icon: Icons.check_circle_outline,
+          isDarkMode: isDark,
+        );
+      }
+    } catch (e, st) {
+      _log.warning('Save screenshot error', e, st);
+      if (context.mounted) {
+        ThemedSnackbar.show(
+          context,
+          message: L10n.of(context, 'browser_screenshot_failed'),
+          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+          icon: Icons.error_outline,
+          isDarkMode: isDark,
+        );
+      }
     }
   }
 }

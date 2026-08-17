@@ -9,6 +9,7 @@ import '../../../core/app_theme.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
+import '../../../shared/widgets/skeleton_loader.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/bookmark.dart';
 
@@ -24,6 +25,7 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
   late List<Bookmark> _bookmarks;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _isLoading = true;
   final Set<String> _collapsedFolders = {};
 
   Timer? _searchDebounce;
@@ -60,11 +62,17 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
       if (!mounted) return;
       setState(() {
         _bookmarks = bms;
+        _isLoading = false;
       });
     } catch (e) {
       BookmarkManagerScreen._log
           .warning('[BookmarkManager] Failed to load bookmarks: $e');
-      if (mounted) setState(() => _bookmarks = []);
+      if (mounted) {
+        setState(() {
+          _bookmarks = [];
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -279,111 +287,146 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
           ),
 
           Expanded(
-            child: _bookmarks.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 100,
-                            height: 100,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                colors: [
-                                  accent.withValues(alpha: 0.2),
-                                  accent.withValues(alpha: 0.05),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: accent.withValues(alpha: 0.15),
-                                  blurRadius: 20,
-                                  spreadRadius: 2,
-                                ),
-                              ],
-                            ),
-                            child: Center(
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.star_rounded,
-                                    size: 48,
-                                    color: accent.withValues(alpha: 0.4),
-                                  ),
-                                  Icon(
-                                    Icons.bookmarks_rounded,
-                                    size: 36,
-                                    color: accent,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            L10n.of(context, 'browser_no_bookmarks'),
-                            style: TextStyle(
-                              color: isDark
-                                  ? AppTheme.textPrimary
-                                  : AppTheme.lightTextPrimary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            L10n.of(context, 'browser_no_bookmarks_desc'),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: isDark
-                                  ? AppTheme.textSecondary
-                                  : AppTheme.lightTextSecondary,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: accent,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 24, vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            icon: const Icon(Icons.add, size: 18),
-                            label: Text(
-                              isRtl ? 'إضافة إشارة مرجعية' : 'Add Bookmark',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            onPressed: _addBookmarkDialog,
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                : grouped.isEmpty
+            child: _isLoading
+                ? const SkeletonList(itemCount: 5, itemHeight: 72)
+                : _bookmarks.isEmpty
                     ? Center(
-                        child: Text(
-                          isRtl
-                              ? 'لا توجد نتائج متطابقة'
-                              : 'No matching bookmarks',
-                          style: TextStyle(
-                            color: isDark
-                                ? AppTheme.textMuted
-                                : AppTheme.lightTextMuted,
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 100,
+                                height: 100,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      accent.withValues(alpha: 0.2),
+                                      accent.withValues(alpha: 0.05),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: accent.withValues(alpha: 0.15),
+                                      blurRadius: 20,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.star_rounded,
+                                        size: 48,
+                                        color: accent.withValues(alpha: 0.4),
+                                      ),
+                                      Icon(
+                                        Icons.bookmarks_rounded,
+                                        size: 36,
+                                        color: accent,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              Text(
+                                _searchQuery.isNotEmpty
+                                    ? L10n.of(
+                                        context,
+                                        'browser_no_bookmarks_search',
+                                      )
+                                    : L10n.of(context, 'browser_no_bookmarks'),
+                                style: TextStyle(
+                                  color: isDark
+                                      ? AppTheme.textPrimary
+                                      : AppTheme.lightTextPrimary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _searchQuery.isNotEmpty
+                                    ? L10n.of(
+                                        context,
+                                        'browser_no_bookmarks_search_desc',
+                                      )
+                                    : L10n.of(
+                                        context,
+                                        'browser_no_bookmarks_desc',
+                                      ),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: isDark
+                                      ? AppTheme.textSecondary
+                                      : AppTheme.lightTextSecondary,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              if (_searchQuery.isNotEmpty)
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: accent,
+                                    side: BorderSide(color: accent),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 24, vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  label: Text(
+                                    L10n.of(context, 'browser_clear_search'),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: () => _searchController.clear(),
+                                )
+                              else
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: accent,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 24, vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.add, size: 18),
+                                  label: Text(
+                                    isRtl ? 'إضافة إشارة مرجعية' : 'Add Bookmark',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: _addBookmarkDialog,
+                                ),
+                            ],
                           ),
                         ),
                       )
-                    : ListView(
+                    : grouped.isEmpty
+                        ? Center(
+                            child: Text(
+                              isRtl
+                                  ? 'لا توجد نتائج متطابقة'
+                                  : 'No matching bookmarks',
+                              style: TextStyle(
+                                color: isDark
+                                    ? AppTheme.textMuted
+                                    : AppTheme.lightTextMuted,
+                              ),
+                            ),
+                          )
+                        : ListView(
                         padding: const EdgeInsets.all(12),
                         children: grouped.entries.map((entry) {
                           final folderName = entry.key;

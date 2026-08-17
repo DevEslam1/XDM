@@ -42,6 +42,14 @@ class BrowserTab {
   bool isSuspended;
   bool hasError;
   String? errorDescription;
+
+  // FIX(D6): Set by the tab view after page load — whether the DOM contains a
+  // <video> element. Used to show the PiP toolbar button.
+  bool hasVideoElement = false;
+
+  // FIX(U7): Full-page thumbnail captured after load, shown in the tab
+  // switcher grid. Kept null for home/blank tabs.
+  Uint8List? previewBytes;
   
   final ValueNotifier<double> progressNotifier;
   final ValueNotifier<bool> loadingNotifier;

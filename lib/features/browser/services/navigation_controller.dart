@@ -3,8 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
 
+import '../../../core/app_theme.dart';
+import '../../../core/services/widget_deep_link.dart';
+import '../../../core/utils/localization.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/browser_tab.dart';
+import 'page_intent_classifier.dart';
 import 'search_engine_config.dart';
 
 /// Handles URL bar state, forward/backward navigation, search prefixes, and reloads.
@@ -64,6 +68,25 @@ class NavigationController extends ChangeNotifier {
 
     final tab = getActiveTab();
     if (tab == null) {
+      onOpenInNewTab(target, switchTo: true);
+      return;
+    }
+
+    // FIX(D9): Run the page-intent classifier before navigating. Fully
+    // blocked pages get a warning dialog instead of loading; pages meant
+    // for a new tab are routed to onOpenInNewTab.
+    final classification = PageIntentClassifier.instance.classifyWithContext(
+      currentUrl: tab.url,
+      targetUrl: target,
+      isUserInitiated: true,
+      isFromClick: false,
+    );
+
+    if (classification.shouldBlock) {
+      if (!await _confirmOverrideBlockedUrl(classification)) {
+        return;
+      }
+    } else if (classification.shouldOpenNewTab) {
       onOpenInNewTab(target, switchTo: true);
       return;
     }
@@ -142,6 +165,59 @@ class NavigationController extends ChangeNotifier {
     tab.errorDescription = null;
     syncUrlController(tab);
     notifyListeners();
+  }
+
+  /// FIX(D9): Shows a warning dialog explaining why the URL was blocked.
+  /// Returns true when the user explicitly overrides the block.
+  Future<bool> _confirmOverrideBlockedUrl(PageClassification classification) {
+    final context = WidgetDeepLinkHandler.navigatorKey?.currentContext;
+    if (context == null) {
+      _log.warning(
+          'Blocked URL: ${classification.url} (${classification.reason})');
+      return Future.value(false);
+    }
+    final isDark = settingsProvider.isDarkMode;
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          L10n.of(context, 'browser_nav_blocked_title'),
+          style: TextStyle(
+            fontSize: 16,
+            color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+          ),
+        ),
+        content: Text(
+          L10n.of(
+            context,
+            'browser_nav_blocked_reason',
+            args: {'reason': classification.reason ?? 'unknown'},
+          ),
+          style: TextStyle(
+            fontSize: 14,
+            color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text(L10n.of(context, 'cancel_btn_uppercase')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonBlue,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: Text(L10n.of(context, 'browser_nav_open_anyway')),
+          ),
+        ],
+      ),
+    ).then((result) => result ?? false);
   }
 
   @override

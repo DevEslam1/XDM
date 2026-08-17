@@ -1,20 +1,20 @@
-/// Unified utility for normalizing torrent file entries, calculating aggregates,
-/// and computing progress estimation across engine handlers.
+/// Normalizes torrent file metadata for consistent progress tracking.
+///
+/// Ensures all required fields are present and properly typed.
+/// Tracks per-file progress for the torrent details screen.
 class TorrentFileNormalizer {
   const TorrentFileNormalizer._();
 
-  /// Determines if a torrent file entry is marked as selected for download.
+  /// Returns true if the file is selected for download.
   static bool isTorrentFileSelected(Map<String, dynamic> f) =>
       (f['selected'] as bool?) ?? true;
 
-  /// Normalizes a single torrent file map, ensuring:
-  /// - `downloadedBytes` is clamped to `0..length`
-  /// - `progress` is in `0.0..1.0` (or 1.0 if length is 0)
-  /// - `isComplete` is true if length == 0 or downloadedBytes >= length
-  /// - defaults for `name`, `selected`, `priority`, `speed`, and `progressEstimated`
+  /// Normalizes a single torrent file entry, ensuring all fields are present
+  /// and properly typed. Mutates the input map and returns it.
   static Map<String, dynamic> normalizeTorrentFile(Map<String, dynamic> f) {
     final len = (f['length'] as num?)?.toInt() ?? 0;
     var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+    // Clamp downloaded bytes to [0, length]
     dl = len > 0 ? dl.clamp(0, len) : 0;
     final progress = len > 0 ? (dl / len).clamp(0.0, 1.0) : 1.0;
 
@@ -30,13 +30,15 @@ class TorrentFileNormalizer {
     return f;
   }
 
-  /// Normalizes a list of raw torrent file maps and computes aggregates for selected files:
-  /// - `total`: count of selected files
-  /// - `done`: count of completed selected files
-  /// - `bytes`: total byte size of selected files
-  /// - `downloaded`: total downloaded bytes of selected files
-  /// - `hasEstimated`: true if any file in the list has `progressEstimated == true`
-  /// - `normalizedFiles`: complete normalized list of files
+  /// Normalizes a list of torrent files and computes aggregate stats.
+  ///
+  /// Returns a record with:
+  /// - [total]: count of selected files
+  /// - [done]: count of completed selected files
+  /// - [bytes]: total bytes of selected files
+  /// - [downloaded]: total downloaded bytes of selected files
+  /// - [hasEstimated]: true if any file uses estimated progress
+  /// - [normalizedFiles]: the normalized file list
   static ({
     int total,
     int done,
@@ -72,6 +74,7 @@ class TorrentFileNormalizer {
         hasEstimated = true;
       }
 
+      // Only count selected files in aggregate stats
       if (isTorrentFileSelected(map)) {
         final len = (map['length'] as num?)?.toInt() ?? 0;
         final dl = (map['downloadedBytes'] as num?)?.toInt() ?? 0;
@@ -94,7 +97,7 @@ class TorrentFileNormalizer {
     );
   }
 
-  /// Computes a structural hash of a torrent file list for fast deduplication.
+  /// Computes a hash of the torrent file list for change detection.
   static int computeFileListHash(List<dynamic>? rawList) {
     if (rawList == null || rawList.isEmpty) return 0;
     int h = 17;
@@ -107,5 +110,34 @@ class TorrentFileNormalizer {
       h = 37 * h + ((item['priority'] as num?)?.toInt() ?? 4);
     }
     return h;
+  }
+
+  /// Computes the overall percentage for a list of torrent files.
+  /// Returns a value between 0.0 and 1.0.
+  static double computeOverallProgress(List<Map<String, dynamic>>? files) {
+    if (files == null || files.isEmpty) return 0.0;
+    final selected = files.where(isTorrentFileSelected).toList();
+    if (selected.isEmpty) return 0.0;
+
+    int totalBytes = 0;
+    int downloadedBytes = 0;
+    for (final f in selected) {
+      final len = (f['length'] as num?)?.toInt() ?? 0;
+      final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+      totalBytes += len;
+      downloadedBytes += len > 0 ? dl.clamp(0, len) : 0;
+    }
+
+    if (totalBytes <= 0) return 0.0;
+    return (downloadedBytes / totalBytes).clamp(0.0, 1.0);
+  }
+
+  /// Computes the percentage for a single torrent file.
+  /// Returns a value between 0.0 and 1.0.
+  static double computeFileProgress(Map<String, dynamic> f) {
+    final len = (f['length'] as num?)?.toInt() ?? 0;
+    final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+    if (len <= 0) return 1.0;
+    return (dl / len).clamp(0.0, 1.0);
   }
 }

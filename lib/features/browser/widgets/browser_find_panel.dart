@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/app_theme.dart';
@@ -5,7 +7,7 @@ import '../../../core/utils/localization.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../services/browser_controller.dart';
 
-class BrowserFindPanel extends StatelessWidget {
+class BrowserFindPanel extends StatefulWidget {
   final BrowserController controller;
   final SettingsProvider settings;
 
@@ -16,8 +18,33 @@ class BrowserFindPanel extends StatelessWidget {
   });
 
   @override
+  State<BrowserFindPanel> createState() => _BrowserFindPanelState();
+}
+
+class _BrowserFindPanelState extends State<BrowserFindPanel> {
+  Timer? _debounce;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onChanged(String val) {
+    // FIX(U5): Debounce the live find-all call so typing doesn't hammer the
+    // webview's findInteractionController on every keystroke.
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        widget.controller.searchFindQuery(val);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isDark = settings.isDarkMode;
+    final controller = widget.controller;
+    final isDark = widget.settings.isDarkMode;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
     return Container(
@@ -45,10 +72,13 @@ class BrowserFindPanel extends StatelessWidget {
                   hintText: L10n.of(context, 'browser_find_in_page'),
                   hintStyle: TextStyle(
                     fontSize: 13,
-                    color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                    color: isDark
+                        ? AppTheme.textMuted
+                        : AppTheme.lightTextMuted,
                   ),
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   suffixIcon: controller.findTextController.text.isNotEmpty
                       ? Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -80,9 +110,7 @@ class BrowserFindPanel extends StatelessWidget {
                     ),
                   ),
                 ),
-                onChanged: (val) {
-                  controller.searchFindQuery(val);
-                },
+                onChanged: _onChanged,
               ),
             ),
             const SizedBox(width: 8),

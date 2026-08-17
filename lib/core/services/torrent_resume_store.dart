@@ -85,9 +85,13 @@ class TorrentResumeStore {
     _sourceByTorrentId.remove(torrentId);
   }
 
-  static void unregisterSource(String sourceUrl) {
-    _sourceByTorrentId.removeWhere((_, url) => url == sourceUrl);
-    _lastSavedDigest.remove(sourceUrl);
+  static void unregisterSource(dynamic identifier) {
+    if (identifier is int) {
+      _sourceByTorrentId.remove(identifier);
+    } else if (identifier is String) {
+      _sourceByTorrentId.removeWhere((_, url) => url == identifier);
+      _lastSavedDigest.remove(identifier);
+    }
   }
 
   static const String _indexKey = 'torrent_resume_index';

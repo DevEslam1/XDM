@@ -25,6 +25,7 @@ import 'ad_blocker_service.dart';
 import 'browser_download_coordinator.dart';
 import 'browser_tab_controller.dart';
 import 'download_interceptor.dart';
+import 'element_picker_service.dart';
 import 'fingerprint_manager.dart';
 import 'history_manager.dart';
 import 'inactivity_watchdog.dart';
@@ -232,8 +233,7 @@ class BrowserController extends ChangeNotifier {
 
   Future<void> _initAsyncState() async {
     try {
-      _incognitoBannerDismissed =
-          await prefsRepo.getIncognitoBannerDismissed();
+      _incognitoBannerDismissed = await prefsRepo.getIncognitoBannerDismissed();
 
       if (tabs.isEmpty) {
         await restoreTabs();
@@ -301,10 +301,10 @@ class BrowserController extends ChangeNotifier {
     TabOrigin origin = TabOrigin.userDirect,
   }) {
     final tabId = id ?? const Uuid().v4();
-    final effectiveUrl = (initialUrl.isEmpty ||
-            initialUrl == BrowserTab.canonicalBlankUrl)
-        ? BrowserTab.canonicalBlankUrl
-        : initialUrl;
+    final effectiveUrl =
+        (initialUrl.isEmpty || initialUrl == BrowserTab.canonicalBlankUrl)
+            ? BrowserTab.canonicalBlankUrl
+            : initialUrl;
 
     final tab = BrowserTab(
       id: tabId,
@@ -398,6 +398,13 @@ class BrowserController extends ChangeNotifier {
     navigationController.syncUrlController(activeTab);
   }
 
+  // FIX(D6): Public refresh so views outside the controller (e.g. tab view
+  // video detection) can push UI updates without touching notifyListeners.
+  void refreshChrome() {
+    if (_isDisposed) return;
+    notifyListeners();
+  }
+
   void updateNavState() async {
     final tab = activeTab;
     if (tab?.controller == null || _isDisposed) return;
@@ -464,6 +471,46 @@ class BrowserController extends ChangeNotifier {
   Future<void> stopLoading() => navigationController.stopLoading();
   void loadHome() => navigationController.loadHome();
 
+  // FIX(D8): Injects the element-picker script into the active tab and listens
+  // on the XdmPickerChannel JS handler. When the user clicks an element, the
+  // selector is turned into an ad-block rule, persisted, and the tab reloads.
+  Future<void> startElementPicker(BrowserTab tab) async {
+    final webController = tab.controller;
+    if (webController == null) return;
+    try {
+      webController.addJavaScriptHandler(
+        handlerName: 'XdmPickerChannel',
+        callback: (args) {
+          if (args.isEmpty) return;
+          _handlePickerMessage(args.first.toString());
+        },
+      );
+      await webController.evaluateJavascript(
+        source: ElementPickerService.pickerScript,
+      );
+    } catch (e, st) {
+      _log.warning('Element picker injection failed', e, st);
+    }
+  }
+
+  void _handlePickerMessage(String raw) {
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      if (decoded['action'] == 'cancel') return;
+      final selector = decoded['selector'] as String? ?? '';
+      if (selector.isEmpty) return;
+      final rule = ElementPickerService.blockRule(selector);
+      if (rule.isEmpty) return;
+      AdBlockerService.instance.addCustomRule(rule);
+      final tab = activeTab;
+      if (tab?.controller != null) {
+        reload();
+      }
+    } catch (e, st) {
+      _log.warning('Element picker message parse failed', e, st);
+    }
+  }
+
   Future<void> refreshTab(BrowserTab tab) async {
     if (tab.isHome || tab.url.isEmpty) {
       tab.pullToRefreshController?.endRefreshing();
@@ -512,10 +559,8 @@ class BrowserController extends ChangeNotifier {
     for (final tab in tabs) {
       if (tab.isIncognito) {
         try {
-          if (tab.url.isNotEmpty &&
-              tab.url != BrowserTab.canonicalBlankUrl) {
-            await CookieManager.instance()
-                .deleteCookies(url: WebUri(tab.url));
+          if (tab.url.isNotEmpty && tab.url != BrowserTab.canonicalBlankUrl) {
+            await CookieManager.instance().deleteCookies(url: WebUri(tab.url));
           }
           await tab.controller?.evaluateJavascript(
             source: 'localStorage.clear(); sessionStorage.clear();',
@@ -685,8 +730,7 @@ class BrowserController extends ChangeNotifier {
 
     if (siteSettings.customCss != null) {
       for (final css in siteSettings.customCss!) {
-        final escaped =
-            css.replaceAll("'", r"\'").replaceAll('\n', ' ');
+        final escaped = css.replaceAll("'", r"\'").replaceAll('\n', ' ');
         await tab.controller?.evaluateJavascript(
           source:
               "try { var s = document.createElement('style'); s.innerHTML = '$escaped'; document.head.appendChild(s); } catch(e) {}",

@@ -18,6 +18,14 @@ abstract class ITorrentService {
   Uint8List? resumeBlobFor(int id);
   bool get fileProgressSupported;
   bool get filePrioritiesSupported;
+  bool get resumeDataSupported;
+  bool get forceRecheckSupported;
+  bool get trackersSupported;
+  bool get createTorrentSupported;
+  bool get ipFilterSupported;
+  bool get sequentialDownloadSupported;
+  bool get superSeedingSupported;
+  bool get pieceDeadlineSupported;
   bool get sequentialDownloadEnabled;
   double get shareRatioLimit;
   int get maxSeedingTimeMinutes;

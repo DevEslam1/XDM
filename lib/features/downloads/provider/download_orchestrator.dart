@@ -162,10 +162,12 @@ class DownloadOrchestrator {
             },
           ).catchError(
               (e) => debugPrint('[DMX] Periodic resume save failed: $e')));
-          // FIX-C4: Save fast resume data for all active torrents
-          for (final tid in TorrentService.activeTorrentIds) {
-            unawaited(TorrentService.saveResumeData(tid).catchError(
-                (e) => debugPrint('[DMX] saveResumeData failed: $e')));
+          // FIX #4: Save fast resume data for all active torrents only if supported
+          if (TorrentService.resumeDataSupported) {
+            for (final tid in TorrentService.activeTorrentIds) {
+              unawaited(TorrentService.saveResumeData(tid).catchError(
+                  (e) => debugPrint('[DMX] saveResumeData failed: $e')));
+            }
           }
         }
       },
@@ -465,7 +467,8 @@ class DownloadOrchestrator {
     try {
       final cookieUrl = task.downloadPageUrl ?? task.url;
       final uri = Uri.tryParse(cookieUrl);
-      if (uri != null) {
+      // FIX #1: Prevent empty/malformed URL from causing FormatException in WebUri
+      if (uri != null && uri.hasScheme && uri.host.isNotEmpty) {
         final origin = '${uri.scheme}://${uri.host}';
         final now = DateTime.now();
         final cached = _cookieCache[origin];
@@ -473,12 +476,16 @@ class DownloadOrchestrator {
             now.difference(cached.timestamp) < const Duration(minutes: 5)) {
           cookieString = cached.cookie;
         } else {
-          final cookies =
-              await CookieManager.instance().getCookies(url: WebUri(origin));
-          cookieString = cookies.map((c) => '${c.name}=${c.value}').join('; ');
-          _cookieCache[origin] = (cookie: cookieString, timestamp: now);
-          if (_cookieCache.length >= _cookieCacheMaxSize) {
-            evictStaleCookies();
+          try {
+            final cookies =
+                await CookieManager.instance().getCookies(url: WebUri(origin));
+            cookieString = cookies.map((c) => '${c.name}=${c.value}').join('; ');
+            _cookieCache[origin] = (cookie: cookieString, timestamp: now);
+            if (_cookieCache.length >= _cookieCacheMaxSize) {
+              evictStaleCookies();
+            }
+          } catch (e) {
+            debugPrint('[DMX] CookieManager getCookies error for $origin: $e');
           }
         }
       }

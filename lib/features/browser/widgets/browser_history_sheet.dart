@@ -17,6 +17,7 @@ import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
+import '../../../shared/widgets/skeleton_loader.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
@@ -46,10 +47,18 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     with TickerProviderStateMixin, HapticHelper {
   int _selectedTab = 0; // 0: Surfing, 1: Downloads
   List<Map<String, dynamic>> _surfingHistory = [];
+  bool _isLoadingHistory = true;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   Timer? _debounceTimer;
   final FocusNode _focusNode = FocusNode();
+
+  // FIX(P11): Paginate the surfing-history list — render 50 entries initially
+  // and reveal more on scroll instead of building the whole list at once.
+  static const _historyPageSize = 50;
+  int _visibleHistoryCount = _historyPageSize;
+  ScrollController? _attachedScrollController;
+
   late final AnimationController _tabSlide = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 260),
@@ -75,6 +84,29 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     _focusNode.addListener(_onFocusChanged);
   }
 
+  // FIX(P11): Infinite-scroll trigger — reveal the next page when the user
+  // scrolls close to the bottom of the history list.
+  void _onScroll() {
+    final controller = _attachedScrollController;
+    if (controller == null || !controller.hasClients) return;
+    final position = controller.position;
+    final nearBottom =
+        position.maxScrollExtent - position.pixels < 400;
+    if (nearBottom) {
+      final next = _visibleHistoryCount + _historyPageSize;
+      if (mounted && next > _visibleHistoryCount) {
+        setState(() => _visibleHistoryCount = next);
+      }
+    }
+  }
+
+  void _attachPagination(ScrollController controller) {
+    if (_attachedScrollController == controller) return;
+    _attachedScrollController?.removeListener(_onScroll);
+    _attachedScrollController = controller;
+    controller.addListener(_onScroll);
+  }
+
   void _onFocusChanged() {
     if (mounted) {
       setState(() {});
@@ -83,6 +115,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
 
   @override
   void dispose() {
+    _attachedScrollController?.removeListener(_onScroll);
     _focusNode.dispose();
     _searchController.dispose();
     _debounceTimer?.cancel();
@@ -190,11 +223,20 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
         searchQuery: _searchQuery.isNotEmpty ? _searchQuery : null,
       );
       if (!mounted) return;
-      setState(() => _surfingHistory = h);
+      setState(() {
+        _surfingHistory = h;
+        // FIX(P11): Reset pagination whenever the dataset changes.
+        _visibleHistoryCount = _historyPageSize;
+        _isLoadingHistory = false;
+      });
     } catch (e) {
       BrowserHistorySheet._log.warning('[HistorySheet] Error: $e');
       if (!mounted) return;
-      setState(() => _surfingHistory = []);
+      setState(() {
+        _surfingHistory = [];
+        _visibleHistoryCount = _historyPageSize;
+        _isLoadingHistory = false;
+      });
     }
   }
 
@@ -621,6 +663,15 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     bool isDark,
     SettingsProvider settings,
   ) {
+    // FIX(P11): Bind the infinite-scroll listener to the sheet's scroll
+    // controller so the next page loads when approaching the bottom.
+    _attachPagination(controller);
+
+    // FIX(U1): Show a shimmer skeleton while the history query is running.
+    if (_isLoadingHistory) {
+      return const SkeletonList(itemCount: 6, itemHeight: 64);
+    }
+
     final filtered = _surfingHistory.where((item) {
       final title = (item['title'] as String? ?? '').toLowerCase();
       final url = (item['url'] as String? ?? '').toLowerCase();
@@ -639,13 +690,34 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       }
     }
 
+    // FIX(P11): Only render the first _visibleHistoryCount entries (counting
+    // both group headers and tiles). The "Load more" footer appears when there
+    // are still un-rendered entries, so scrolling near the bottom reveals the
+    // next page.
+    final trimmed = listItems.take(_visibleHistoryCount).toList();
+    final hasMore = listItems.length > _visibleHistoryCount;
+
     return ListView.builder(
       controller: controller,
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
-      itemCount: listItems.length,
+      itemCount: trimmed.length + (hasMore ? 1 : 0),
       itemBuilder: (context, i) {
-        final item = listItems[i];
+        if (i == trimmed.length) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: TextButton.icon(
+              onPressed: () {
+                setState(() => _visibleHistoryCount += _historyPageSize);
+              },
+              icon: const Icon(Icons.expand_more_rounded, size: 18),
+              label: Text(
+                L10n.of(context, 'browser_load_more_history'),
+              ),
+            ),
+          );
+        }
+        final item = trimmed[i];
         if (item is String) {
           return Padding(
             padding: const EdgeInsets.only(top: 14, bottom: 6, left: 4),
@@ -854,13 +926,14 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
               ),
             ),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isDark
-                  ? AppTheme.neonRed.withValues(alpha: 0.2)
-                  : AppTheme.lightNeonRed.withValues(alpha: 0.1),
+          // FIX(U11): Destructive action uses an outlined button with a red
+          // border instead of a red-filled ElevatedButton.
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
               side: BorderSide(
                 color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                width: 1.2,
               ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -872,10 +945,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
             },
             child: Text(
               L10n.of(context, 'browser_clear_btn'),
-              style: TextStyle(
-                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
         ],

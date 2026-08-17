@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
-
 import '../../../features/downloads/provider/network_monitor.dart';
 import '../../di/injection.dart';
 import '../../interfaces/i_torrent_service.dart';
@@ -16,32 +14,24 @@ import '../torrent_resume_store.dart';
 import '../torrent_service.dart';
 import 'torrent_file_normalizer.dart';
 
-// FIX: P0-01 — TorrentDownloadHandler manages BitTorrent lifecycle & progress
-
 final _log = LoggingService.logger('TorrentDownloadHandler');
 
-class _TorrentSubEntry {
-  // FIX-A: Strong reference to the handler. A WeakReference here allowed the
-  // handler to be GC'd while its native torrent kept running — the registry
-  // entry then became a zombie that could never be deterministically disposed.
-  final TorrentDownloadHandler handler;
-  final StreamSubscription subscription;
-
-  _TorrentSubEntry({required this.handler, required this.subscription});
-}
-
-/// Registry holding active TorrentDownloadHandlers so retries/lookups find
-/// live subscriptions and deleted torrents release their subscriptions
-/// deterministically.
 class TorrentSubscriptionRegistry {
   TorrentSubscriptionRegistry._();
   static final TorrentSubscriptionRegistry instance =
       TorrentSubscriptionRegistry._();
-
   final Map<int, _TorrentSubEntry> _registry = {};
 
   void register(
       int torrentId, TorrentDownloadHandler handler, StreamSubscription sub) {
+    final existing = _registry.remove(torrentId);
+    if (existing != null) {
+      try {
+        existing.subscription.cancel();
+      } catch (e, st) {
+        _log.fine('Failed to cancel existing subscription: $e', e, st);
+      }
+    }
     _registry[torrentId] = _TorrentSubEntry(
       handler: handler,
       subscription: sub,
@@ -50,8 +40,7 @@ class TorrentSubscriptionRegistry {
 
   StreamSubscription? getSubscription(int torrentId) {
     final entry = _registry[torrentId];
-    if (entry == null) return null;
-    return entry.subscription;
+    return entry?.subscription;
   }
 
   void unregister(int torrentId, TorrentDownloadHandler handler) {
@@ -61,10 +50,6 @@ class TorrentSubscriptionRegistry {
     }
   }
 
-  /// FIX-P2-02: Explicit disposal — cancels the subscription AND pauses the
-  /// native torrent deterministically instead of waiting for GC cleanup.
-  /// Called from the task-delete path so deleted torrents release their
-  /// stream subscriptions and stop transferring immediately.
   void dispose(int torrentId) {
     final entry = _registry.remove(torrentId);
     if (entry == null) return;
@@ -73,8 +58,6 @@ class TorrentSubscriptionRegistry {
     } catch (e, st) {
       _log.fine('Failed to cancel disposed subscription: $e', e, st);
     }
-    // FIX-A: Pause the native torrent even if no caller pauses it explicitly.
-    // Fire-and-forget so dispose() stays synchronous for the delete path.
     entry.handler.haltTorrent(torrentId).catchError((Object e, StackTrace st) {
       _log.warning('Failed to halt torrent $torrentId on dispose', e, st);
     });
@@ -93,14 +76,18 @@ class TorrentSubscriptionRegistry {
   }
 
   @visibleForTesting
-  int get activeCountForTesting {
-    return _registry.length;
-  }
+  int get activeCountForTesting => _registry.length;
 
   @visibleForTesting
   Map<int, StreamSubscription> get subsMapForTesting {
     return _registry.map((k, v) => MapEntry(k, v.subscription));
   }
+}
+
+class _TorrentSubEntry {
+  final TorrentDownloadHandler handler;
+  final StreamSubscription subscription;
+  _TorrentSubEntry({required this.handler, required this.subscription});
 }
 
 class TorrentDownloadHandler {
@@ -110,19 +97,19 @@ class TorrentDownloadHandler {
   Timer? _stallWatchdog;
   Timer? _alivenessWatchdog;
   Completer<void>? _completionGuard;
+  Completer<void>? _pauseCompleter;
 
   @visibleForTesting
   Map<int, StreamSubscription> get activeSubsForTesting => _activeSubs;
-
   @visibleForTesting
   static Map<int, StreamSubscription> get globalActiveSubsForTesting =>
       TorrentSubscriptionRegistry.instance.subsMapForTesting;
-
   @visibleForTesting
   Timer? get stallWatchdogForTesting => _stallWatchdog;
-
   @visibleForTesting
   Completer<void>? get completionGuardForTesting => _completionGuard;
+  @visibleForTesting
+  Completer<void>? get pauseCompleterForTesting => _pauseCompleter;
 
   DateTime lastProgressTick = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime lastAccurateSync = DateTime.fromMillisecondsSinceEpoch(0);
@@ -179,17 +166,10 @@ class TorrentDownloadHandler {
     lastStateLabel = '';
   }
 
-  /// FIX-A: Pauses a native torrent and verifies it actually stopped
-  /// transmitting, retrying with backoff up to 3 attempts. Called by the
-  /// registry's [TorrentSubscriptionRegistry.dispose] and the cancel path.
   Future<void> haltTorrent(int id) async {
-    // Clean up subscription registry
     TorrentSubscriptionRegistry.instance.unregister(id, this);
-
-    // Cancel active subscription
     final sub = _activeSubs.remove(id);
     await sub?.cancel();
-
     if (!_torrentService.isTorrentAlive(id)) {
       _activeTorrentIds.remove(id);
       return;
@@ -199,9 +179,9 @@ class TorrentDownloadHandler {
       try {
         await _torrentService.pauseTorrent(id);
       } catch (e, st) {
-        _log.warning('haltTorrent pause attempt $attempt failed for $id', e, st);
+        _log.warning(
+            'haltTorrent pause attempt $attempt failed for $id', e, st);
       }
-      // Verify the native torrent actually stopped transmitting.
       final verified = await _isTransmissionStopped(id);
       if (verified) {
         _activeTorrentIds.remove(id);
@@ -216,10 +196,16 @@ class TorrentDownloadHandler {
     _activeTorrentIds.remove(id);
   }
 
-  /// FIX-A: Polls the latest stats (up to ~1s) to confirm the native torrent
-  /// has stopped transmitting or reached a paused/stopped state.
+  Future<void> _saveResumeDataBeforePause(int id, String sourceUrl) async {
+    try {
+      await _torrentService.saveResumeData(id);
+    } catch (e, st) {
+      _log.warning('Failed to save resume data for torrent $id: $e', e, st);
+    }
+  }
+
   Future<bool> _isTransmissionStopped(int id) async {
-    final deadline = DateTime.now().add(const Duration(seconds: 1));
+    final deadline = DateTime.now().add(const Duration(seconds: 2));
     while (DateTime.now().isBefore(deadline)) {
       if (!_torrentService.isTorrentAlive(id)) return true;
       final stats = _torrentService.latestStats[id];
@@ -236,7 +222,6 @@ class TorrentDownloadHandler {
     return false;
   }
 
-  // Fix 2: Adaptive sync intervals for all file counts including >10,000 files
   @visibleForTesting
   static Duration computeAdaptiveSyncInterval(int fileCount,
       {bool inBackground = false}) {
@@ -284,7 +269,6 @@ class TorrentDownloadHandler {
     int currentSum = 0;
     final estimatedFiles = <Map<String, dynamic>>[];
     int totalRemainingNeeded = 0;
-
     for (final f in files) {
       final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
       final len = (f['length'] as num?)?.toInt() ?? 0;
@@ -295,10 +279,8 @@ class TorrentDownloadHandler {
         totalRemainingNeeded += (len - dl);
       }
     }
-
     final diff = totalDownloadedBytes - currentSum;
     if (diff == 0 || estimatedFiles.isEmpty) return;
-
     if (diff > 0 && totalRemainingNeeded > 0) {
       int applied = 0;
       for (int i = 0; i < estimatedFiles.length; i++) {
@@ -315,24 +297,9 @@ class TorrentDownloadHandler {
         f['progress'] = len > 0 ? (newDl / len).clamp(0.0, 1.0) : 1.0;
         f['isComplete'] = len == 0 || newDl >= len;
       }
-    } else {
-      int unallocated = diff;
-      for (final f in estimatedFiles) {
-        final len = (f['length'] as num?)?.toInt() ?? 0;
-        final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-        final newDl = (dl + unallocated).clamp(0, len);
-        final delta = newDl - dl;
-        unallocated -= delta;
-        f['downloadedBytes'] = newDl;
-        f['progress'] = len > 0 ? (newDl / len).clamp(0.0, 1.0) : 1.0;
-        f['isComplete'] = len == 0 || newDl >= len;
-        if (unallocated == 0) break;
-      }
     }
   }
 
-  /// Updates per-file progress in memory directly from native engine progress
-  /// without disk I/O scanning.
   static void updateFilesWithNativeProgress(
     List<Map<String, dynamic>> files,
     double progress,
@@ -349,14 +316,11 @@ class TorrentDownloadHandler {
         f['progressEstimated'] = false;
         continue;
       }
-
-      // If downloaded bytes is already set accurately by native engine, use it
       final dl = (f['downloadedBytes'] as num?)?.toInt() ?? -1;
       if (dl >= 0 && dl <= len) {
         f['progress'] = (dl / len).clamp(0.0, 1.0);
         f['isComplete'] = dl >= len;
       } else {
-        // Compute from overall progress ratio
         final est = (len * progress).clamp(0.0, len.toDouble()).toInt();
         f['downloadedBytes'] = est;
         f['progress'] = len > 0 ? (est / len).clamp(0.0, 1.0) : 1.0;
@@ -364,7 +328,6 @@ class TorrentDownloadHandler {
         f['progressEstimated'] = true;
       }
     }
-    // Fix 6 & 7: Check sequentialDownloadEnabled and distribute estimated bytes accordingly
     if (TorrentService.sequentialDownloadEnabled) {
       distributeEstimatedBytesSequential(files, totalDownloadedBytes);
     } else {
@@ -398,12 +361,19 @@ class TorrentDownloadHandler {
     return 1.0 + ((priority - 4) / 6.0);
   }
 
+  /// Distributes estimated downloaded bytes across files that need progress
+  /// estimation, weighted by file size and priority.
+  ///
+  /// FIX: When [totalWeightedNeedingSize] is zero (all needing files have
+  /// priority 0, producing zero weight via [_priorityWeight]), the previous
+  /// code would set every file's estimated bytes to 0, silently masking
+  /// all progress. This rewrite adds a fallback to even distribution when
+  /// weights sum to zero, ensuring progress is always visible.
   static void distributeEstimatedBytes(
       List<Map<String, dynamic>> files, int totalDownloadedBytes) {
     int confirmedBytes = 0;
     double totalWeightedNeedingSize = 0;
     final needing = <Map<String, dynamic>>[];
-
     for (final f in files) {
       final estimated = (f['progressEstimated'] as bool?) ?? true;
       final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
@@ -417,8 +387,33 @@ class TorrentDownloadHandler {
       }
     }
     if (needing.isEmpty) return;
-
     final remaining = math.max(0, totalDownloadedBytes - confirmedBytes);
+
+    // FIX: Fallback to even distribution when all needing files have
+    // priority 0 (weight 0). Without this, totalWeightedNeedingSize == 0
+    // would cause every file's estimated share to be 0, silently hiding
+    // all torrent progress from the UI.
+    if (totalWeightedNeedingSize <= 0) {
+      final evenShare = needing.isEmpty ? 0 : (remaining ~/ needing.length);
+      var leftover = remaining - (evenShare * needing.length);
+      for (var i = 0; i < needing.length; i++) {
+        final f = needing[i];
+        final length = (f['length'] as num?)?.toInt() ?? 0;
+        if (length <= 0) {
+          f['downloadedBytes'] = 0;
+          continue;
+        }
+        final extra = leftover > 0 ? 1 : 0;
+        if (leftover > 0) leftover--;
+        final est = (evenShare + extra).clamp(0, length);
+        f['downloadedBytes'] = est;
+        f['progressEstimated'] = true;
+        f['progress'] = length > 0 ? (est / length).clamp(0.0, 1.0) : 1.0;
+        f['isComplete'] = est >= length;
+      }
+      _reconcileEstimatedFiles(files, totalDownloadedBytes);
+      return;
+    }
 
     for (final f in needing) {
       final length = (f['length'] as num?)?.toInt() ?? 0;
@@ -427,7 +422,6 @@ class TorrentDownloadHandler {
         f['downloadedBytes'] = 0;
         continue;
       }
-
       final weight = totalWeightedNeedingSize > 0 && remaining > 0
           ? (length * _priorityWeight(priority)) / totalWeightedNeedingSize
           : 0.0;
@@ -485,9 +479,27 @@ class TorrentDownloadHandler {
 
     int id = torrentId ?? -1;
     bool hasLoadedResume = false;
+
     if (id >= 0 && !_torrentService.isTorrentAlive(id)) {
-      _log.warning('Stale torrent handle $id detected; re-adding.');
+      _log.warning('Stale torrent handle $id detected; re-adding. (FIX #2 Part A & Fix #5)');
+      try {
+        _torrentService.removeTorrent(id, deleteFiles: false);
+      } catch (e) {
+        _log.fine('Failed to remove stale torrent $id from service: $e');
+      }
+      try {
+        TorrentSubscriptionRegistry.instance.dispose(id);
+      } catch (e) {
+        _log.fine('Failed to dispose subscription registry for stale $id: $e');
+      }
+      try {
+        TorrentResumeStore.unregisterSource(id);
+      } catch (e) {
+        _log.fine('Failed to unregister source for stale $id: $e');
+      }
       _activeTorrentIds.remove(id);
+      final sub = _activeSubs.remove(id);
+      sub?.cancel();
       id = -1;
     }
 
@@ -507,7 +519,6 @@ class TorrentDownloadHandler {
           cycleState: CycleState.fetchingMetadata,
           torrentId: torrentId,
         ));
-        // Fix 3: Emit failed cycle on torrent magnet metadata timeout
         try {
           id = await TorrentService.addMagnetWithMetadataTimeout(
             url,
@@ -624,6 +635,7 @@ class TorrentDownloadHandler {
     TorrentResumeStore.registerSource(id, url);
     _activeTorrentIds.add(id);
     bool torrentCompleted = false;
+    bool pauseInitiated = false;
 
     if (id != torrentId || hasLoadedResume) {
       onProgress(DownloadProgress(
@@ -653,16 +665,27 @@ class TorrentDownloadHandler {
     }
 
     final cancelCompleter = Completer<void>();
+    _pauseCompleter = cancelCompleter;
+    final pauseHandled = <bool>[false];
+
     cancelToken.whenCancel.then((cancelReason) async {
-      if (torrentCompleted || cancelCompleter.isCompleted) return;
-      cancelCompleter.complete();
-      try {
-        await haltTorrent(id);
-      } catch (e, st) {
-        LoggingService.logger('TorrentDownloadHandler')
-            .warning('Operation failed', e, st);
+      if (pauseHandled[0] || torrentCompleted || cancelCompleter.isCompleted) {
+        return;
       }
+      pauseHandled[0] = true;
+      pauseInitiated = true;
+      _log.info(
+          'Pause/cancel requested for torrent $id — executing pause actions');
+      await _saveResumeDataBeforePause(id, url);
+      _stallWatchdog?.cancel();
+      _stallWatchdog = null;
+      _alivenessWatchdog?.cancel();
+      _alivenessWatchdog = null;
+      final sub = _activeSubs.remove(id);
+      await sub?.cancel();
+      await haltTorrent(id);
       await Future.delayed(const Duration(milliseconds: 50));
+
       List<Map<String, dynamic>>? pauseFiles = getTorrentFiles?.call();
       String normKey(String name) => name.toLowerCase().replaceAll('\\', '/');
       final previousSelectedMap = <String, bool>{
@@ -698,12 +721,18 @@ class TorrentDownloadHandler {
           ];
         }
       } catch (e, st) {
-        LoggingService.logger('TorrentDownloadHandler')
-            .warning('Operation failed', e, st);
+        // FIX: Improved warning message clarifying that the estimated
+        // snapshot is being used as a fallback, so users and developers
+        // can diagnose inaccurate pause-state progress more easily.
+        _log.warning(
+          'Accurate file progress fetch on pause failed for torrent $id; '
+          'falling back to last known file snapshot (progress may be '
+          'estimated): $e',
+          e,
+          st,
+        );
       }
       final pauseSummary = normalizeTorrentFiles(pauseFiles);
-
-      // Fix 5: Check disk space on saveDir before inferring pause reason
       PauseReason? effectivePauseReason = pauseReason;
       if (effectivePauseReason == null) {
         try {
@@ -719,7 +748,6 @@ class TorrentDownloadHandler {
           _log.fine('Disk space check before pause failed: $e', e, st);
         }
       }
-
       final String? cancelReasonStr = cancelReason.error?.toString() ??
           cancelReason.message ??
           cancelToken.cancelError?.error?.toString() ??
@@ -748,15 +776,21 @@ class TorrentDownloadHandler {
         downloadedFileBytes:
             pauseSummary.bytes > 0 ? pauseSummary.downloaded : null,
       ));
+      if (!cancelCompleter.isCompleted) {
+        cancelCompleter.complete();
+      }
     });
 
     try {
       if (cancelToken.isCancelled) {
-        try {
-          TorrentService.pauseTorrent(id);
-        } catch (e, st) {
-          LoggingService.logger('TorrentDownloadHandler')
-              .warning('Operation failed', e, st);
+        if (!pauseHandled[0]) {
+          pauseHandled[0] = true;
+          pauseInitiated = true;
+          try {
+            TorrentService.pauseTorrent(id);
+          } catch (e, st) {
+            _log.warning('Immediate pause failed: $e', e, st);
+          }
         }
         throw DioException(
           requestOptions: RequestOptions(path: url),
@@ -764,19 +798,13 @@ class TorrentDownloadHandler {
           message: 'Download paused',
         );
       }
-
-      // FIX-PAUSE-RACE: Only resume the native torrent if the cancel token
-      // hasn't already fired. Without this guard, whenCancel can pause the
-      // session (via haltTorrent) and resumeTorrent immediately re-starts it.
       if (!cancelToken.isCancelled) {
         try {
           TorrentService.resumeTorrent(id);
         } catch (e, st) {
-          LoggingService.logger('TorrentDownloadHandler')
-              .warning('Operation failed', e, st);
+          _log.warning('resumeTorrent failed: $e', e, st);
         }
       }
-
       await _listenForCompletion(
         id,
         url,
@@ -786,10 +814,28 @@ class TorrentDownloadHandler {
         getTorrentFiles: getTorrentFiles,
       );
       torrentCompleted = true;
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) {
+        if (!cancelCompleter.isCompleted) {
+          await cancelCompleter.future.timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              _log.warning('Pause handler timed out for torrent $id');
+              return null;
+            },
+          );
+        }
+      }
+      rethrow;
     } finally {
-      // Cancel the whenCancel listener if torrent completed naturally
       if (torrentCompleted && !cancelCompleter.isCompleted) {
         cancelCompleter.complete();
+      }
+      if (pauseInitiated && !cancelCompleter.isCompleted) {
+        await cancelCompleter.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => null,
+        );
       }
       final sub = _activeSubs.remove(id);
       await sub?.cancel();
@@ -799,6 +845,7 @@ class TorrentDownloadHandler {
       _alivenessWatchdog = null;
       _activeTorrentIds.remove(id);
       TorrentSubscriptionRegistry.instance.unregister(id, this);
+      _pauseCompleter = null;
       cachedAccurateFiles = null;
     }
   }
@@ -830,29 +877,18 @@ class TorrentDownloadHandler {
     ValueChangedProgress onProgress, {
     List<Map<String, dynamic>>? Function()? getTorrentFiles,
   }) async {
-    // Cancel any stale stall watchdog from a previous cycle before creating a
-    // new one. Otherwise the old Timer leaks and can double-complete the guard.
     _stallWatchdog?.cancel();
     _stallWatchdog = null;
-
-    // Guard against overlapping completion handlers: if a previous
-    // _listenForCompletion for this torrent is still running, wait on its
-    // completion future rather than starting a second subscription loop.
     if (_completionGuard != null && !_completionGuard!.isCompleted) {
       await _completionGuard!.future;
       return;
     }
-
     final completer = Completer<void>();
     StreamSubscription? sub;
-
-    // Cancel any existing subscription for this torrent ID before attaching a new one
-
     final existingSub = _activeSubs.remove(id) ??
         TorrentSubscriptionRegistry.instance.getSubscription(id);
     await existingSub?.cancel();
     TorrentSubscriptionRegistry.instance.unregister(id, this);
-
     lastProgressTick = DateTime.fromMillisecondsSinceEpoch(0);
     lastAccurateSync = DateTime.fromMillisecondsSinceEpoch(0);
     cachedAccurateFiles = null;
@@ -863,18 +899,16 @@ class TorrentDownloadHandler {
     int lastTorrentPeerCount = 0;
     int currentTotalSize = 0;
     DateTime? lastRecoveryEmit;
-
     final initialFiles = getTorrentFiles?.call();
     final initialFileCount = initialFiles?.length ?? 0;
     final watchdogInterval = initialFileCount < 1000
         ? const Duration(seconds: 30)
         : const Duration(seconds: 120);
-
     _completionGuard = completer;
-
     try {
       _stallWatchdog?.cancel();
       _stallWatchdog = Timer.periodic(watchdogInterval, (_) {
+        if (cancelToken.isCancelled) return;
         if (getIt.isRegistered<NetworkMonitor>()) {
           final networkMonitor = getIt<NetworkMonitor>();
           if (!networkMonitor.hasConnection) {
@@ -892,19 +926,16 @@ class TorrentDownloadHandler {
             return;
           }
         }
-
         final elapsed = DateTime.now().difference(lastTorrentProgressTime);
         final isTerminal = lastStateLabel == 'seeding' ||
             lastStateLabel == 'paused' ||
             lastStateLabel == 'stopped' ||
             lastStateLabel == 'error';
         if (isTerminal) return;
-
         final isNonDownloadPhase = lastStateLabel.contains('checking') ||
             lastStateLabel.contains('downloading_metadata') ||
             lastStateLabel.contains('allocating');
         if (isNonDownloadPhase) return;
-
         if (elapsed >= const Duration(minutes: 5)) {
           if (lastStateLabel == 'downloading' && lastTorrentPeerCount == 0) {
             onProgress(DownloadProgress(
@@ -937,8 +968,6 @@ class TorrentDownloadHandler {
             torrentId: id,
           ));
         }
-
-        // Force re-announce after 10 minutes of stall
         if (elapsed >= const Duration(minutes: 10)) {
           _log.warning('Torrent $id stalled for 10min — forcing reannounce');
           try {
@@ -958,12 +987,9 @@ class TorrentDownloadHandler {
           }
         }
       });
-
-      // FIX-A: 10-second aliveness poll. The event-stream can go silent even
-      // though the native handle died (or was removed out-of-band). Detect that
-      // and surface a definite error instead of hanging forever.
       _alivenessWatchdog?.cancel();
       _alivenessWatchdog = Timer.periodic(const Duration(seconds: 10), (_) {
+        if (cancelToken.isCancelled) return;
         if (!_torrentService.isTorrentAlive(id)) {
           _alivenessWatchdog?.cancel();
           _alivenessWatchdog = null;
@@ -980,8 +1006,8 @@ class TorrentDownloadHandler {
           }
         }
       });
-
       sub = _torrentService.torrentUpdates.listen((torrents) async {
+        if (cancelToken.isCancelled) return;
         final torrent = torrents[id];
         if (torrent == null) {
           if (!_torrentService.isTorrentAlive(id)) {
@@ -999,7 +1025,6 @@ class TorrentDownloadHandler {
           }
           return;
         }
-
         final stateLabel = torrent.stateLabel.toLowerCase();
         final isStateChange = stateLabel != lastStateLabel;
         final isTerminal = stateLabel == 'seeding' ||
@@ -1019,7 +1044,6 @@ class TorrentDownloadHandler {
         if (isStateChange) {
           lastTorrentProgressTime = now;
         }
-
         List<Map<String, dynamic>>? resolvedFiles = getTorrentFiles?.call();
         if ((resolvedFiles == null || resolvedFiles.isEmpty) &&
             torrent.hasMetadata) {
@@ -1044,11 +1068,9 @@ class TorrentDownloadHandler {
               cachedAccurateFiles = resolvedFiles;
             }
           } catch (e, st) {
-            LoggingService.logger('TorrentDownloadHandler')
-                .fine('Failed to fetch native file list: $e', e, st);
+            _log.fine('Failed to fetch native file list: $e', e, st);
           }
         }
-
         final selectedFiles = resolvedFiles
             ?.where((f) => (f['selected'] as bool?) ?? true)
             .toList();
@@ -1057,7 +1079,6 @@ class TorrentDownloadHandler {
                 ? selectedFiles.fold<int>(
                     0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0))
                 : 0;
-
         final totalSize = selectedFilesSum > 0
             ? selectedFilesSum
             : (torrent.totalWanted > 0
@@ -1066,13 +1087,13 @@ class TorrentDownloadHandler {
                         (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0)) ??
                     0));
         currentTotalSize = totalSize;
-
         final fileCount =
             resolvedFiles?.length ?? (cachedAccurateFiles?.length ?? 0);
         final inBg = DownloadEngine.isInBackground;
-        if (fileCount > 0 && !shouldSkipPerFileSync(fileCount, inBackground: inBg)) {
-          final syncInterval = computeAdaptiveSyncInterval(fileCount,
-              inBackground: inBg);
+        if (fileCount > 0 &&
+            !shouldSkipPerFileSync(fileCount, inBackground: inBg)) {
+          final syncInterval =
+              computeAdaptiveSyncInterval(fileCount, inBackground: inBg);
           if (now.difference(lastAccurateSync) >= syncInterval) {
             lastAccurateSync = now;
             try {
@@ -1111,17 +1132,14 @@ class TorrentDownloadHandler {
                 cachedAccurateFiles = resolvedFiles;
               }
             } catch (e, st) {
-              LoggingService.logger('TorrentDownloadHandler')
-                  .warning('Accurate file sync failed: $e', e, st);
+              _log.warning('Accurate file sync failed: $e', e, st);
             }
           }
         }
-
         final rawDownloaded =
             torrent.totalWantedDone > 0 ? torrent.totalWantedDone : 0;
         final safeProgress =
             torrent.progress.isFinite ? torrent.progress.clamp(0.0, 1.0) : 0.0;
-
         if (resolvedFiles != null && resolvedFiles.isNotEmpty) {
           bool pieceMapped = false;
           if (fileCount > 5000) {
@@ -1148,18 +1166,15 @@ class TorrentDownloadHandler {
                 resolvedFiles, safeProgress, rawDownloaded);
           }
         }
-
         final downloadedBytes = rawDownloaded;
         final speed = torrent.downloadPayloadRate.toDouble();
         lastTorrentSpeed = speed;
         lastTorrentPeerCount = torrent.numPeers;
-
         var resolvedCycleState = CycleState.fromLibtorrent(
           torrent.stateLabel,
           seedingEnabled: TorrentService.seedingEnabled,
         );
         var resolvedStatusMessage = torrent.stateLabel;
-
         if (speed > 0 || downloadedBytes != lastTorrentDownloadedBytes) {
           lastTorrentDownloadedBytes = downloadedBytes;
           lastTorrentProgressTime = DateTime.now();
@@ -1184,8 +1199,6 @@ class TorrentDownloadHandler {
             }
           }
         }
-
-        // Fix 4: Emit retrying cycle when transitioning from stalled/error back to active
         final isRecovering =
             (previousState == 'stalled' || previousState == 'error') &&
                 (stateLabel == 'downloading' ||
@@ -1207,7 +1220,6 @@ class TorrentDownloadHandler {
             torrentId: id,
           ));
         }
-
         if (lastRecoveryEmit == null ||
             DateTime.now().difference(lastRecoveryEmit!).inMilliseconds >=
                 2000) {
@@ -1224,7 +1236,6 @@ class TorrentDownloadHandler {
             torrentId: id,
           ));
         }
-
         if (stateLabel == 'seeding' ||
             (totalSize > 0 && downloadedBytes >= totalSize)) {
           final isSeedingEnabled = TorrentService.seedingEnabled;
@@ -1235,20 +1246,31 @@ class TorrentDownloadHandler {
               (stateLabel == 'seeding' && isSeedingEnabled)
                   ? 'Seeding…'
                   : 'Completed';
-
+          final List<Map<String, dynamic>>? finalFiles =
+              resolvedFiles ?? cachedAccurateFiles;
+          if (finalFiles != null && finalFiles.isNotEmpty) {
+            for (final f in finalFiles) {
+              final len = (f['length'] as num?)?.toInt() ?? 0;
+              if (len > 0) {
+                f['downloadedBytes'] = len;
+                f['progress'] = 1.0;
+                f['isComplete'] = true;
+                f['progressEstimated'] = false;
+              }
+            }
+          }
           onProgress(DownloadProgress(
             downloadedBytes: totalSize > 0 ? totalSize : downloadedBytes,
             fileSize: totalSize,
             speed: isSeedingEnabled ? speed : 0,
             eta: 0,
-            torrentFiles: resolvedFiles ?? cachedAccurateFiles,
+            torrentFiles: finalFiles,
             cycleState: finalCycleState,
             totalPieces: torrent.piecesTotal,
             completedPieces: torrent.piecesTotal,
             statusMessage: finalStatusMessage,
             torrentId: id,
           ));
-
           sub?.cancel();
           _activeSubs.remove(id);
           _activeTorrentIds.remove(id);
@@ -1258,17 +1280,8 @@ class TorrentDownloadHandler {
           }
         }
       });
-
       _activeSubs[id] = sub;
       TorrentSubscriptionRegistry.instance.register(id, this, sub);
-
-      // NOTE: No second whenCancel registration here. The outer whenCancel in
-      // handleTorrentDownload already calls haltTorrent and completes the
-      // completer via completeError; the finally block below then cancels sub
-      // and unregisters from the registry. A duplicate listener here would
-      // race: it skipped haltTorrent entirely, so if it fired first the native
-      // torrent would keep running even though the completer was completed.
-
       await completer.future;
     } finally {
       _stallWatchdog?.cancel();

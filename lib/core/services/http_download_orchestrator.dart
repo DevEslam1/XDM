@@ -191,20 +191,17 @@ class HttpDownloadOrchestrator {
         case EngineMessageType.progress:
           final data = message.data;
           int? ytCpOverride;
-          bool isCpStale = false;
           if (ytStreamKind != null) {
             final downloaded = (data['downloadedBytes'] as num?)?.toInt() ?? 0;
             _ytCoordinator.updateLiveBytes(taskId, downloaded);
             final cpId = _ytCoordinator.getCounterpartId(taskId);
             if (cpId != null) {
               ytCpOverride = _ytCoordinator.getLiveBytes(cpId);
-              isCpStale = _ytCoordinator.isLiveBytesStale(cpId);
             }
           }
           progressHandler.handleWorkerProgress(
             data,
             ytCounterpartDownloadedOverride: ytCpOverride,
-            isCounterpartStale: isCpStale,
           );
           break;
         case EngineMessageType.done:
@@ -225,6 +222,7 @@ class HttpDownloadOrchestrator {
         case EngineMessageType.job:
         case EngineMessageType.cancel:
         case EngineMessageType.shutdown:
+        case EngineMessageType.ack:
           break;
       }
     });

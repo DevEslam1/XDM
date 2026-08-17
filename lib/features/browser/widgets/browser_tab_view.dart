@@ -17,6 +17,7 @@ import '../models/browser_tab.dart';
 import '../services/browser_controller.dart';
 import '../services/download_interceptor.dart';
 import '../services/long_press_parser.dart';
+import '../services/screenshot_service.dart';
 import 'link_options_sheet.dart';
 
 class BrowserTabView extends StatefulWidget {
@@ -96,189 +97,221 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
       );
     }
 
-    final webView = InAppWebView(
-      key: ValueKey('webview_${tab.id}'),
-      initialUrlRequest: tab.url.isNotEmpty && tab.url != BrowserTab.canonicalBlankUrl
-          ? URLRequest(url: WebUri(tab.url))
-          : null,
-      pullToRefreshController: tab.pullToRefreshController,
-      initialSettings: InAppWebViewSettings(
-        useShouldOverrideUrlLoading: true,
-        useShouldInterceptRequest: true,
-        mediaPlaybackRequiresUserGesture: false,
-        allowsInlineMediaPlayback: true,
-        javaScriptEnabled: true,
-        transparentBackground: false,
-        supportZoom: true,
-        builtInZoomControls: true,
-        displayZoomControls: false,
-        isInspectable: kDebugMode,
-        forceDark: settings.isDarkMode ? ForceDark.ON : ForceDark.OFF,
-      ),
-      onWebViewCreated: (controller) {
-        tab.controller = controller;
-        _setupJsHandlers(controller);
-      },
-      onLoadStart: (controller, url) {
-        widget.controller.handlePageLoadStart(tab, url?.toString());
-        if (mounted) setState(() {});
-      },
-      onLoadStop: (controller, url) async {
-        widget.controller.handlePageLoadStop(tab, url?.toString());
-        if (mounted) setState(() {});
-      },
-      onProgressChanged: (controller, progress) {
-        // P1: Throttle progress updates to >= 5% changes or 0/100
-        if (progress == 0 || progress == 100 || (progress - tab.lastRenderedProgress).abs() >= 5) {
-          tab.lastRenderedProgress = progress;
-          tab.progress = progress / 100.0;
+    final webView = LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth <= 0 || constraints.maxHeight <= 0) {
+          // FIX #6: Ensure the WebView has non-zero layout dimensions before it is created
+          return const SizedBox.shrink();
         }
-      },
-      onUpdateVisitedHistory: (controller, url, isReload) {
-        if (url != null) {
-          tab.updateUrl(url.toString());
-          widget.controller.syncUrlController();
-          widget.controller.updateNavState();
-        }
-      },
-      onDownloadStartRequest: (controller, downloadStartRequest) async {
-        final url = downloadStartRequest.url.toString();
-        final res = await widget.controller.downloadInterceptor.startDirectDownload(
-          url,
-          suggestedName: downloadStartRequest.suggestedFilename,
-          mimeType: downloadStartRequest.mimeType,
-          contentLength: downloadStartRequest.contentLength,
-          contentDisposition: downloadStartRequest.contentDisposition,
+        return InAppWebView(
+          key: ValueKey('webview_${tab.id}'),
+          initialUrlRequest: tab.url.isNotEmpty && tab.url != BrowserTab.canonicalBlankUrl
+              ? URLRequest(url: WebUri(tab.url))
+              : null,
+          pullToRefreshController: tab.pullToRefreshController,
+          initialSettings: InAppWebViewSettings(
+            useShouldOverrideUrlLoading: true,
+            useShouldInterceptRequest: true,
+            mediaPlaybackRequiresUserGesture: false,
+            allowsInlineMediaPlayback: true,
+            javaScriptEnabled: true,
+            transparentBackground: false,
+            supportZoom: true,
+            builtInZoomControls: true,
+            displayZoomControls: false,
+            isInspectable: kDebugMode,
+            forceDark: settings.isDarkMode ? ForceDark.ON : ForceDark.OFF,
+            useHybridComposition: true, // FIX #6: Use hybrid composition to avoid TextureView/Virtual Display bitmap crashes
+          ),
+          onWebViewCreated: (controller) {
+            tab.controller = controller;
+            _setupJsHandlers(controller);
+          },
+          onLoadStart: (controller, url) {
+            widget.controller.handlePageLoadStart(tab, url?.toString());
+            if (mounted) setState(() {});
+          },
+          onLoadStop: (controller, url) async {
+            widget.controller.handlePageLoadStop(tab, url?.toString());
+            // FIX(D6): Detect <video> elements after load so the toolbar can show
+            // the Picture-in-Picture button only when the page has a video.
+            try {
+              final hasVideo = await controller.evaluateJavascript(
+                source:
+                    '!!document.querySelector("video");',
+              );
+              final bool flag = hasVideo == true || hasVideo == 'true';
+              if (tab.hasVideoElement != flag) {
+                tab.hasVideoElement = flag;
+                if (mounted) setState(() {});
+                widget.controller.refreshChrome();
+              }
+            } catch (_) {}
+            // FIX(U7): Capture a page thumbnail after load for the tab switcher.
+            if (!tab.isHome && tab.url.isNotEmpty) {
+              try {
+                final bytes = await ScreenshotService.capturePage(controller);
+                if (bytes != null && bytes.isNotEmpty && !tab.isHome) {
+                  tab.previewBytes = bytes;
+                }
+              } catch (_) {}
+            }
+            if (mounted) setState(() {});
+          },
+          onProgressChanged: (controller, progress) {
+            // P1: Throttle progress updates to >= 5% changes or 0/100
+            if (progress == 0 || progress == 100 || (progress - tab.lastRenderedProgress).abs() >= 5) {
+              tab.lastRenderedProgress = progress;
+              tab.progress = progress / 100.0;
+            }
+          },
+          onUpdateVisitedHistory: (controller, url, isReload) {
+            if (url != null) {
+              tab.updateUrl(url.toString());
+              widget.controller.syncUrlController();
+              widget.controller.updateNavState();
+            }
+          },
+          onDownloadStartRequest: (controller, downloadStartRequest) async {
+            final url = downloadStartRequest.url.toString();
+            final res = await widget.controller.downloadInterceptor.startDirectDownload(
+              url,
+              suggestedName: downloadStartRequest.suggestedFilename,
+              mimeType: downloadStartRequest.mimeType,
+              contentLength: downloadStartRequest.contentLength,
+              contentDisposition: downloadStartRequest.contentDisposition,
+            );
+            if (!mounted || !context.mounted) return;
+            if (res.status == InterceptDownloadStatus.queued) {
+              ThemedSnackbar.show(
+                context,
+                message: 'Download started: ${downloadStartRequest.suggestedFilename ?? fileNameFromUrl(url)}',
+                icon: Icons.download_done_rounded,
+                color: AppTheme.neonGreen,
+                isDarkMode: settings.isDarkMode,
+              );
+            }
+          },
+          onReceivedError: (controller, request, error) async {
+            final errUrl = request.url.toString();
+            final scheme = Uri.tryParse(errUrl)?.scheme.toLowerCase() ?? '';
+            // B12: Do not use localized error description string matching
+            if (scheme == 'magnet' || scheme == 'intent' || scheme == 'tg' || scheme == 'whatsapp') {
+              controller.stopLoading();
+              if (await controller.canGoBack()) {
+                await controller.goBack();
+              }
+              try {
+                await launchUrl(Uri.parse(errUrl), mode: LaunchMode.externalApplication);
+              } catch (_) {}
+              tab.isLoading = false;
+              if (mounted) setState(() {});
+              return;
+            }
+
+            if (request.isForMainFrame == true) {
+              widget.controller.handlePageError(tab, error.description);
+              if (mounted) setState(() {});
+            }
+          },
+          onRenderProcessGone: (controller, detail) async {
+            _log.warning('Render process gone on tab ${tab.id}: didCrash=${detail.didCrash}');
+            // FIX(B3): Use the per-tab flag so the silent reload is attempted once
+            // per crash regardless of State rebuilds.
+            if (!tab.hasAttemptedSilentReload) {
+              tab.hasAttemptedSilentReload = true;
+              try {
+                await controller.reload();
+                return;
+              } catch (e, st) {
+                _log.warning('Silent crash reload failed', e, st);
+              }
+            }
+            widget.controller.handleTabCrash(tab);
+            if (mounted) setState(() {});
+          },
+          shouldInterceptRequest: (controller, request) async {
+            if (request.isForMainFrame == true) return null;
+
+            final requestHost = request.url.host.toLowerCase();
+            final pageHost = tab.host.toLowerCase();
+
+            // FIX-B29: Whitelist core infrastructure, but restrict google ad domains to Google/YouTube page hosts
+            final isYouTubeOrGoogleHost = pageHost.endsWith('youtube.com') ||
+                pageHost.endsWith('youtu.be') ||
+                pageHost.endsWith('google.com');
+
+            if (isYouTubeOrGoogleHost) {
+              const ytGoogleDomains = [
+                'youtube.com', 'youtu.be', 'ytimg.com', 'googlevideo.com',
+                'googlesyndication.com', 'ggpht.com', 'googleapis.com', 'google.com', 'gstatic.com'
+              ];
+              for (final d in ytGoogleDomains) {
+                if (requestHost == d || requestHost.endsWith('.$d')) return null;
+              }
+            } else {
+              // General whitelist for core CDN/fonts
+              const generalWhitelisted = ['gstatic.com', 'googleapis.com', 'cloudflare.com'];
+              for (final d in generalWhitelisted) {
+                if (requestHost == d || requestHost.endsWith('.$d')) return null;
+              }
+            }
+
+            // Never block same-origin requests
+            if (pageHost.isNotEmpty && (requestHost == pageHost || requestHost.endsWith('.$pageHost'))) {
+              return null;
+            }
+
+            final url = request.url.toString();
+            if (widget.controller.adBlocker.shouldBlock(url)) {
+              widget.controller.recordBlockedAd(tab.id, url);
+
+              // FIX-B30: Return standard 404 response
+              return WebResourceResponse(
+                contentType: 'text/plain',
+                contentEncoding: 'utf-8',
+                statusCode: 404,
+                reasonPhrase: 'Blocked by AdBlocker',
+                data: Uint8List(0),
+              );
+            }
+
+            return null;
+          },
+          shouldOverrideUrlLoading: (controller, navigationAction) async {
+            final url = navigationAction.request.url?.toString() ?? '';
+            if (url.isEmpty || (widget.controller.navigatingBackForwardTabIds[tab.id] ?? false)) {
+              return NavigationActionPolicy.ALLOW;
+            }
+
+            // Check redirect guard
+            final res = await widget.controller.redirectGuard.evaluate(
+              tabId: tab.id,
+              navigatingTo: url,
+            );
+            if (res.decision == RedirectDecision.block) {
+              return NavigationActionPolicy.CANCEL;
+            }
+
+            // Scheme check for external apps
+            final uri = Uri.tryParse(url);
+            final scheme = uri?.scheme.toLowerCase() ?? '';
+            if (scheme.isNotEmpty && scheme != 'http' && scheme != 'https' && scheme != 'about') {
+              try {
+                await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                return NavigationActionPolicy.CANCEL;
+              } catch (_) {}
+            }
+
+            // Ad-block navigation check
+            if (widget.controller.adBlocker.shouldBlock(url)) {
+              widget.controller.recordBlockedAd(tab.id, url);
+              return NavigationActionPolicy.CANCEL;
+            }
+
+            return NavigationActionPolicy.ALLOW;
+          },
         );
-        if (!mounted || !context.mounted) return;
-        if (res.status == InterceptDownloadStatus.queued) {
-          ThemedSnackbar.show(
-            context,
-            message: 'Download started: ${downloadStartRequest.suggestedFilename ?? fileNameFromUrl(url)}',
-            icon: Icons.download_done_rounded,
-            color: AppTheme.neonGreen,
-            isDarkMode: settings.isDarkMode,
-          );
-        }
-      },
-      onReceivedError: (controller, request, error) async {
-        final errUrl = request.url.toString();
-        final scheme = Uri.tryParse(errUrl)?.scheme.toLowerCase() ?? '';
-        // B12: Do not use localized error description string matching
-        if (scheme == 'magnet' || scheme == 'intent' || scheme == 'tg' || scheme == 'whatsapp') {
-          controller.stopLoading();
-          if (await controller.canGoBack()) {
-            await controller.goBack();
-          }
-          try {
-            await launchUrl(Uri.parse(errUrl), mode: LaunchMode.externalApplication);
-          } catch (_) {}
-          tab.isLoading = false;
-          if (mounted) setState(() {});
-          return;
-        }
-
-        if (request.isForMainFrame == true) {
-          widget.controller.handlePageError(tab, error.description);
-          if (mounted) setState(() {});
-        }
-      },
-      onRenderProcessGone: (controller, detail) async {
-        _log.warning('Render process gone on tab ${tab.id}: didCrash=${detail.didCrash}');
-        // FIX(B3): Use the per-tab flag so the silent reload is attempted once
-        // per crash regardless of State rebuilds.
-        if (!tab.hasAttemptedSilentReload) {
-          tab.hasAttemptedSilentReload = true;
-          try {
-            await controller.reload();
-            return;
-          } catch (e, st) {
-            _log.warning('Silent crash reload failed', e, st);
-          }
-        }
-        widget.controller.handleTabCrash(tab);
-        if (mounted) setState(() {});
-      },
-      shouldInterceptRequest: (controller, request) async {
-        if (request.isForMainFrame == true) return null;
-
-        final requestHost = request.url.host.toLowerCase();
-        final pageHost = tab.host.toLowerCase();
-
-        // FIX-B29: Whitelist core infrastructure, but restrict google ad domains to Google/YouTube page hosts
-        final isYouTubeOrGoogleHost = pageHost.endsWith('youtube.com') ||
-            pageHost.endsWith('youtu.be') ||
-            pageHost.endsWith('google.com');
-
-        if (isYouTubeOrGoogleHost) {
-          const ytGoogleDomains = [
-            'youtube.com', 'youtu.be', 'ytimg.com', 'googlevideo.com',
-            'googlesyndication.com', 'ggpht.com', 'googleapis.com', 'google.com', 'gstatic.com'
-          ];
-          for (final d in ytGoogleDomains) {
-            if (requestHost == d || requestHost.endsWith('.$d')) return null;
-          }
-        } else {
-          // General whitelist for core CDN/fonts
-          const generalWhitelisted = ['gstatic.com', 'googleapis.com', 'cloudflare.com'];
-          for (final d in generalWhitelisted) {
-            if (requestHost == d || requestHost.endsWith('.$d')) return null;
-          }
-        }
-
-        // Never block same-origin requests
-        if (pageHost.isNotEmpty && (requestHost == pageHost || requestHost.endsWith('.$pageHost'))) {
-          return null;
-        }
-
-        final url = request.url.toString();
-        if (widget.controller.adBlocker.shouldBlock(url)) {
-          widget.controller.recordBlockedAd(tab.id, url);
-
-          // FIX-B30: Return standard 404 response
-          return WebResourceResponse(
-            contentType: 'text/plain',
-            contentEncoding: 'utf-8',
-            statusCode: 404,
-            reasonPhrase: 'Blocked by AdBlocker',
-            data: Uint8List(0),
-          );
-        }
-
-        return null;
-      },
-      shouldOverrideUrlLoading: (controller, navigationAction) async {
-        final url = navigationAction.request.url?.toString() ?? '';
-        if (url.isEmpty || (widget.controller.navigatingBackForwardTabIds[tab.id] ?? false)) {
-          return NavigationActionPolicy.ALLOW;
-        }
-
-        // Check redirect guard
-        final res = await widget.controller.redirectGuard.evaluate(
-          tabId: tab.id,
-          navigatingTo: url,
-        );
-        if (res.decision == RedirectDecision.block) {
-          return NavigationActionPolicy.CANCEL;
-        }
-
-        // Scheme check for external apps
-        final uri = Uri.tryParse(url);
-        final scheme = uri?.scheme.toLowerCase() ?? '';
-        if (scheme.isNotEmpty && scheme != 'http' && scheme != 'https' && scheme != 'about') {
-          try {
-            await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-            return NavigationActionPolicy.CANCEL;
-          } catch (_) {}
-        }
-
-        // Ad-block navigation check
-        if (widget.controller.adBlocker.shouldBlock(url)) {
-          widget.controller.recordBlockedAd(tab.id, url);
-          return NavigationActionPolicy.CANCEL;
-        }
-
-        return NavigationActionPolicy.ALLOW;
       },
     );
 
@@ -296,7 +329,7 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                     const Icon(Icons.error_outline_rounded, size: 54, color: Colors.orangeAccent),
                     const SizedBox(height: 12),
                     Text(
-                      'This tab crashed unexpectedly',
+                      L10n.of(context, 'browser_tab_crashed'),
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -323,7 +356,7 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                         widget.controller.reload();
                       },
                       icon: const Icon(Icons.refresh_rounded, size: 18),
-                      label: const Text('Reload Tab'),
+                      label: Text(L10n.of(context, 'browser_reload_tab')),
                     ),
                   ],
                 ),
@@ -341,7 +374,7 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                     const Icon(Icons.wifi_off_rounded, size: 48, color: Colors.grey),
                     const SizedBox(height: 16),
                     Text(
-                      'Failed to load page',
+                      L10n.of(context, 'browser_load_failed'),
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -352,7 +385,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 32),
                       child: Text(
-                        tab.errorDescription ?? 'Unknown error',
+                        tab.errorDescription ??
+                            L10n.of(context, 'browser_unknown_error'),
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 12, color: textClr.withValues(alpha: 0.6)),
                       ),
@@ -371,7 +405,7 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                         widget.controller.reload();
                       },
                       icon: const Icon(Icons.refresh_rounded, size: 18),
-                      label: const Text('Try Again'),
+                      label: Text(L10n.of(context, 'browser_try_again')),
                     ),
                   ],
                 ),
@@ -394,9 +428,9 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                       const Icon(Icons.warning_amber_rounded,
                           size: 16, color: Colors.white),
                       const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text('Page is taking long to load…',
-                            style: TextStyle(color: Colors.white, fontSize: 12)),
+                      Expanded(
+                        child: Text(L10n.of(context, 'browser_page_taking_long'),
+                            style: const TextStyle(color: Colors.white, fontSize: 12)),
                       ),
                       GestureDetector(
                         onTap: () {
@@ -404,10 +438,10 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                               ?.evaluateJavascript(source: 'window.stop();');
                           widget.controller.handlePageError(tab, 'Loading stopped');
                         },
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 6),
-                          child: Text('Stop',
-                              style: TextStyle(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(L10n.of(context, 'browser_stop'),
+                              style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12)),
@@ -415,10 +449,10 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                       ),
                       GestureDetector(
                         onTap: () => widget.controller.reload(),
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 6),
-                          child: Text('Retry',
-                              style: TextStyle(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(L10n.of(context, 'browser_retry'),
+                              style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12)),

@@ -26,8 +26,13 @@ class BrowserTabStrip extends StatelessWidget {
     final tabs = controller.tabs;
     final currentIndex = controller.currentIndex;
 
+    // FIX(U3): Scale the strip height with the system text scale factor so
+    // larger fonts don't clip tab content (clamped 40–56 px).
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+    final stripHeight = (40 * textScale).clamp(40.0, 56.0);
+
     return Container(
-      height: 40,
+      height: stripHeight,
       color: settings.isAmoledMode
           ? Colors.black
           : (isDark ? AppTheme.surface : AppTheme.lightSurface),
@@ -79,6 +84,50 @@ class BrowserTabStrip extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // FIX(U13): Shield badge with the blocked-ads count for
+                    // this tab, shown whenever any ad was blocked.
+                    ValueListenableBuilder<int>(
+                      valueListenable:
+                          controller.blockedAdsNotifier(tab.id),
+                      builder: (context, blocked, _) {
+                        if (blocked <= 0) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: AppTheme.neonGreen.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppTheme.neonGreen
+                                    .withValues(alpha: 0.5),
+                                width: 0.7,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.shield_rounded,
+                                  size: 9,
+                                  color: AppTheme.neonGreen,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '$blocked',
+                                  style: const TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.neonGreen,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                     // U10: Show small spinner on loading tabs
                     if (isLoading) ...[
                       Padding(

@@ -1,4 +1,9 @@
+import 'package:code_text_field/code_text_field.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_highlight/themes/github.dart';
+import 'package:flutter_highlight/themes/monokai-sublime.dart';
+import 'package:highlight/languages/css.dart';
+import 'package:highlight/languages/javascript.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
@@ -127,6 +132,30 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
     );
     if (confirmed == true && mounted) {
       await _manager.remove(script.id);
+      // FIX(U10): Offer an UNDO action after deleting a script.
+      if (!mounted) return;
+      final isDark = context.read<SettingsProvider>().isDarkMode;
+      final isRtl = L10n.isRtl(context);
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 4),
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          content: Text(
+            isRtl ? 'تم حذف السكربت' : 'Script deleted',
+            style: TextStyle(
+              color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+            ),
+          ),
+          action: SnackBarAction(
+            label: isRtl ? 'تراجع' : 'UNDO',
+            textColor: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            onPressed: () async {
+              await _manager.add(script);
+            },
+          ),
+        ),
+      );
     }
   }
 
@@ -625,7 +654,7 @@ class _ScriptEditorDialog extends StatefulWidget {
 class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
   late final TextEditingController _nameC;
   late final TextEditingController _urlC;
-  late final TextEditingController _codeC;
+  late final CodeController _codeC;
   late bool _isCss;
   late Set<ScriptPermission> _permissions;
 
@@ -634,7 +663,10 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
     super.initState();
     _nameC = TextEditingController(text: widget.initialName);
     _urlC = TextEditingController(text: widget.initialUrlPattern);
-    _codeC = TextEditingController(text: widget.initialCode);
+    _codeC = CodeController(
+      text: widget.initialCode,
+      language: widget.initialIsCss ? css : javascript,
+    );
     _isCss = widget.initialIsCss;
     _permissions = Set.from(widget.initialPermissions);
   }
@@ -782,7 +814,10 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
                       ],
                     ),
                     selected: !_isCss,
-                    onSelected: (_) => setState(() => _isCss = false),
+                    onSelected: (_) => setState(() {
+                      _isCss = false;
+                      _codeC.language = javascript;
+                    }),
                     selectedColor: accent.withValues(alpha: 0.15),
                   ),
                 ),
@@ -799,29 +834,71 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
                       ],
                     ),
                     selected: _isCss,
-                    onSelected: (_) => setState(() => _isCss = true),
+                    onSelected: (_) => setState(() {
+                      _isCss = true;
+                      _codeC.language = css;
+                    }),
                     selectedColor: accent.withValues(alpha: 0.15),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 10),
-            TextField(
-              controller: _codeC,
-              maxLines: 8,
-              onChanged: (_) {
-                if (_errorMessage != null) {
-                  setState(() => _errorMessage = null);
-                }
-              },
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-              decoration: InputDecoration(
-                labelText: L10n.of(context, 'browser_script_code'),
-                alignLabelWithHint: true,
-                prefixIcon: Icon(Icons.code_rounded, size: 18, color: accent),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            // FIX(U9): Syntax-highlighted code editor supporting JS/CSS.
+            Container(
+              decoration: BoxDecoration(
+                color: isDark
+                    ? (settings.isAmoledMode
+                        ? AppTheme.amoledCardBg
+                        : const Color(0xFF0D1117))
+                    : const Color(0xFFF6F8FA),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: accent.withValues(alpha: 0.25),
+                  width: 1,
                 ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    L10n.of(context, 'browser_script_code'),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: isDark
+                          ? AppTheme.textSecondary
+                          : AppTheme.lightTextSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  CodeField(
+                    controller: _codeC,
+                    minLines: 8,
+                    maxLines: 12,
+                    textStyle: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      color: isDark
+                          ? AppTheme.textPrimary
+                          : AppTheme.lightTextPrimary,
+                    ),
+                    background: Colors.transparent,
+                    lineNumberStyle: const LineNumberStyle(
+                      textStyle: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 10,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    onChanged: (_) {
+                      if (_errorMessage != null) {
+                        setState(() => _errorMessage = null);
+                      }
+                    },
+                  ),
+                ],
               ),
             ),
           ],

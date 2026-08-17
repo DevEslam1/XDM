@@ -21,7 +21,8 @@ enum EngineMessageType {
   limits,
   job,
   cancel,
-  shutdown;
+  shutdown,
+  ack;
 
   static EngineMessageType? fromWire(Object? value) {
     if (value is! String) return null;

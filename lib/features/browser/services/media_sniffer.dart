@@ -8,6 +8,7 @@ import 'package:logging/logging.dart';
 import '../../../core/services/site_intelligence/site_intelligence_service.dart';
 import '../../../core/services/youtube_service.dart';
 import '../models/browser_tab.dart';
+import 'browser_detector.dart';
 
 /// Detects downloadable media on browser pages (REFACTOR B extraction from
 /// `_BrowserScreenState`).
@@ -201,8 +202,15 @@ class MediaSniffer extends ChangeNotifier {
     if (isYoutubeHost(scannedUrl) || YoutubeService.isYoutubeUrl(scannedUrl)) {
       if (YoutubeService.isPlaylistUrl(scannedUrl)) {
         try {
-          final info = await YoutubeService.getPlaylistInfo(scannedUrl)
-              .timeout(const Duration(seconds: 15));
+          var info;
+          try {
+            info = await YoutubeService.getPlaylistInfo(scannedUrl)
+                .timeout(const Duration(seconds: 30));
+          } on TimeoutException {
+            _log.warning('YouTube playlist info timed out (30s). Retrying once...');
+            info = await YoutubeService.getPlaylistInfo(scannedUrl)
+                .timeout(const Duration(seconds: 30));
+          }
           if (info != null && isActive() && tab.url == scannedUrl) {
             final count = info['videoCount'] as int? ?? 0;
             _update(() {
@@ -215,8 +223,15 @@ class MediaSniffer extends ChangeNotifier {
         }
         if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
           try {
-            final youtubeStreams = await YoutubeService.getStreams(scannedUrl)
-                .timeout(const Duration(seconds: 15));
+            List<Map<String, dynamic>> youtubeStreams = [];
+            try {
+              youtubeStreams = await YoutubeService.getStreams(scannedUrl)
+                  .timeout(const Duration(seconds: 30));
+            } on TimeoutException {
+              _log.warning('YouTube single stream scan timed out (30s) after playlist. Retrying once...');
+              youtubeStreams = await YoutubeService.getStreams(scannedUrl)
+                  .timeout(const Duration(seconds: 30));
+            }
             if (youtubeStreams.isNotEmpty &&
                 isActive() &&
                 tab.url == scannedUrl) {
@@ -232,8 +247,15 @@ class MediaSniffer extends ChangeNotifier {
       }
       if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
         try {
-          final youtubeStreams = await YoutubeService.getStreams(scannedUrl)
-              .timeout(const Duration(seconds: 15));
+          List<Map<String, dynamic>> youtubeStreams = [];
+          try {
+            youtubeStreams = await YoutubeService.getStreams(scannedUrl)
+                .timeout(const Duration(seconds: 30));
+          } on TimeoutException {
+            _log.warning('YouTube stream detection timed out (30s). Retrying once...');
+            youtubeStreams = await YoutubeService.getStreams(scannedUrl)
+                .timeout(const Duration(seconds: 30));
+          }
           if (youtubeStreams.isNotEmpty && isActive() && tab.url == scannedUrl) {
             _update(() {
               detectedMediaSources[tab.id] = youtubeStreams;
@@ -367,7 +389,15 @@ class MediaSniffer extends ChangeNotifier {
             detectedMediaSources[tab.id] =
                 safeSources.map((e) => Map<String, dynamic>.from(e)).toList();
             if (detectedDownloadUrls[tab.id] == null) {
-              detectedDownloadUrls[tab.id] = safeSources.first['src'] as String;
+              // FIX(D11): Prefer known CDN media URLs (googlevideo.com,
+              // fbcdn.net, etc.) as the primary download source.
+              final cdnSources = safeSources.where((e) {
+                final src = e['src'] as String? ?? '';
+                return BrowserDetector.isCdnMediaUrl(src);
+              }).toList();
+              final primary =
+                  cdnSources.isNotEmpty ? cdnSources.first : safeSources.first;
+              detectedDownloadUrls[tab.id] = primary['src'] as String;
             }
           });
         }
