@@ -190,7 +190,7 @@ mixin DownloadTorrentMixin {
     if (torrentId != null) {
       final stat = providerLatestTorrentStats[torrentId];
       if (stat != null) {
-        return stat.numSeeds;
+        return stat.numSeeds < 0 ? 0 : stat.numSeeds;
       }
     }
     return 0;
@@ -201,7 +201,7 @@ mixin DownloadTorrentMixin {
     if (torrentId != null) {
       final stat = providerLatestTorrentStats[torrentId];
       if (stat != null) {
-        return stat.numPeers;
+        return stat.numPeers < 0 ? 0 : stat.numPeers;
       }
     }
     return 0;

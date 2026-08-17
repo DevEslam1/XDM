@@ -1279,10 +1279,13 @@ class TorrentService {
               _cachedPrioritiesSnapshot.remove(removedId);
             }
             final mapped = torrents.map((key, value) {
-              _latestProgress[value.id] = value.progress;
+              // FIX v2.0.0-BugFalse100: store the clamped/NaN-safe value,
+              // not the raw native one — a transient NaN/Infinity during
+              // metadata resolution must never leak into progressFor().
               final safeProgress = value.progress.isFinite
                   ? value.progress.clamp(0.0, 1.0)
                   : 0.0;
+              _latestProgress[value.id] = safeProgress;
               // FIX v2.0.0: When totalWanted is 0 (pre-metadata), fall back
               // to totalDone so progress isn't lost. Also cache resume blobs.
               final int resolvedTotalWantedDone;
@@ -1306,8 +1309,8 @@ class TorrentService {
                 totalWantedDone: resolvedTotalWantedDone,
                 hasMetadata: value.hasMetadata,
                 stateLabel: value.state.label,
-                numSeeds: value.numSeeds,
-                numPeers: value.numPeers,
+                numSeeds: value.numSeeds < 0 ? 0 : value.numSeeds,
+                numPeers: value.numPeers < 0 ? 0 : value.numPeers,
                 piecesHave: _estimatePiecesHave(value),
                 piecesTotal: _estimatePiecesTotal(value),
                 downloadPayloadRate: value.downloadRate,
@@ -1682,20 +1685,16 @@ class TorrentService {
         // FIX v2.0.0-Bug7: Pause immediately to prevent downloading before
         // fast-resume data is loaded. Load fast-resume, then resume.
         // This prevents re-downloading pieces that are already on disk.
+        // FIX v2.0.0-BugRace: Only pause here. DO NOT load resume data or
+        // resume — the caller (handleTorrentDownload) is responsible for
+        // loading resume data and resuming. Previously, both addMagnet AND
+        // handleTorrentDownload loaded resume data simultaneously, causing
+        // a race condition where the torrent started downloading before
+        // resume data was applied, leading to data loss (re-downloading
+        // pieces already on disk).
         try {
           LibtorrentFlutter.instance.pauseTorrent(id);
         } catch (_) {}
-        unawaited(_tryLoadFastResumeForSource(id, magnetUri).then((_) {
-          try {
-            LibtorrentFlutter.instance.resumeTorrent(id);
-          } catch (_) {}
-        }).catchError((e) {
-          debugPrint('[Torrent] Failed to load fast resume: $e');
-          // Resume even if fast resume failed — don't leave torrent paused
-          try {
-            LibtorrentFlutter.instance.resumeTorrent(id);
-          } catch (_) {}
-        }));
       }
       return id;
     } catch (e) {
@@ -1725,6 +1724,16 @@ class TorrentService {
       attempt++;
       final id = addMagnet(magnetUri, savePath);
       if (id < 0) return -1;
+
+      // FIX v2.0.0-BugRace: addMagnet now pauses the torrent to prevent
+      // downloading before resume data is loaded by the caller. Resume here
+      // so the torrent can fetch metadata. The caller (handleTorrentDownload)
+      // will load resume data after metadata is received, then resume again
+      // (which is a no-op if already resumed). For magnets, this is safe
+      // because no pieces can be downloaded until metadata is received.
+      try {
+        LibtorrentFlutter.instance.resumeTorrent(id);
+      } catch (_) {}
 
       // FIX #2 Part B: Post-add metadata check (immediate check if already cached)
       final stats = _latestStats[id];
@@ -1822,19 +1831,14 @@ class TorrentService {
         _torrentSources[id] = source;
         // FIX v2.0.0-Bug7: Pause immediately, load fast-resume, then resume.
         // Prevents re-downloading pieces already on disk.
+        // FIX v2.0.0-BugRace: Only pause here. DO NOT load resume data or
+        // resume — the caller (handleTorrentDownload) is responsible for
+        // loading resume data and resuming. This eliminates the race
+        // condition where both addTorrentFile and handleTorrentDownload
+        // tried to load resume data simultaneously.
         try {
           LibtorrentFlutter.instance.pauseTorrent(id);
         } catch (_) {}
-        unawaited(_tryLoadFastResumeForSource(id, source).then((_) {
-          try {
-            LibtorrentFlutter.instance.resumeTorrent(id);
-          } catch (_) {}
-        }).catchError((e) {
-          debugPrint('[Torrent] Failed to load fast resume: $e');
-          try {
-            LibtorrentFlutter.instance.resumeTorrent(id);
-          } catch (_) {}
-        }));
       }
       return id;
     } catch (e) {
@@ -2603,13 +2607,21 @@ class TorrentService {
 
   static Future<bool> reattachTorrent(String sourceUrl, String savePath) async {
     try {
+      int id;
       if (sourceUrl.startsWith('magnet:')) {
-        final id = addMagnet(sourceUrl, savePath);
-        return id >= 0;
+        id = addMagnet(sourceUrl, savePath);
       } else {
-        final id = addTorrentFile(sourceUrl, savePath);
-        return id >= 0;
+        id = addTorrentFile(sourceUrl, savePath);
       }
+      if (id < 0) return false;
+      // FIX v2.0.0-BugRace: addMagnet/addTorrentFile now pause the torrent
+      // without loading resume data. For direct callers (not going through
+      // handleTorrentDownload), we must load resume data and resume here.
+      await _tryLoadFastResumeForSource(id, sourceUrl);
+      try {
+        LibtorrentFlutter.instance.resumeTorrent(id);
+      } catch (_) {}
+      return true;
     } catch (e) {
       _log.warning('reattachTorrent failed for $sourceUrl: $e');
       return false;

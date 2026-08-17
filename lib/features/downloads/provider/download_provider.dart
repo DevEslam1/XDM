@@ -461,10 +461,22 @@ class DownloadProvider extends ChangeNotifier
           final tid = entry.key;
           final info = entry.value;
 
-          final taskId = _torrentIds.entries
+          var taskId = _torrentIds.entries
               .where((e) => e.value == tid)
               .map((e) => e.key)
               .firstOrNull;
+          if (taskId == null) {
+            final candidate = _tasks
+                .where((t) =>
+                    t.isTorrent &&
+                    (t.status == DownloadStatus.downloading ||
+                        t.status == DownloadStatus.merging))
+                .firstOrNull;
+            if (candidate != null && !_torrentIds.containsKey(candidate.id)) {
+              taskId = candidate.id;
+              _torrentIds[taskId] = tid;
+            }
+          }
           if (taskId != null) {
             final downloadQueue = _speedHistories[taskId] ??= Queue<double>();
             downloadQueue.add(info.downloadRate.toDouble());
@@ -486,21 +498,6 @@ class DownloadProvider extends ChangeNotifier
               : (info.totalDone > 0
                   ? info.totalDone
                   : task.downloadedBytes);
-          // FIX: Always use info.totalWanted as authoritative fileSize when available.
-          final newSize = (info.totalWanted > 0)
-              ? info.totalWanted
-              : task.fileSize;
-          final newSpeed = (task.status == DownloadStatus.downloading ||
-                  task.status == DownloadStatus.merging)
-              ? info.downloadRate.toDouble()
-              : (task.status == DownloadStatus.completed &&
-                      task.seedingEnabled
-                  ? info.uploadRate.toDouble()
-                  : task.speed);
-          final newCycleState = CycleState.fromLibtorrent(
-            info.stateLabel,
-            seedingEnabled: task.seedingEnabled,
-          );
 
           // FIX v2.0.0: Sync torrentFiles from the engine whenever metadata is available.
           List<Map<String, dynamic>>? syncedFiles = task.torrentFiles;
@@ -532,7 +529,27 @@ class DownloadProvider extends ChangeNotifier
             }
           }
 
-          bool filesChanged = _fileListsDiffer(task.torrentFiles, syncedFiles);
+          final filesSum = syncedFiles
+                  ?.where((f) => (f['selected'] as bool?) ?? true)
+                  .fold<int>(0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0)) ??
+              0;
+          // FIX: Always use info.totalWanted as authoritative fileSize when available, or sum of files.
+          final newSize = (info.totalWanted > 0)
+              ? info.totalWanted
+              : (filesSum > 0 ? filesSum : task.fileSize);
+          final newSpeed = (task.status == DownloadStatus.downloading ||
+                  task.status == DownloadStatus.merging)
+              ? info.downloadRate.toDouble()
+              : (task.status == DownloadStatus.completed &&
+                      task.seedingEnabled
+                  ? info.uploadRate.toDouble()
+                  : task.speed);
+          final newCycleState = CycleState.fromLibtorrent(
+            info.stateLabel,
+            seedingEnabled: task.seedingEnabled,
+          );
+
+          final filesChanged = _fileListsDiffer(task.torrentFiles, syncedFiles);
 
           if (task.downloadedBytes != liveDone ||
               task.fileSize != newSize ||

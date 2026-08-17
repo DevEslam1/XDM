@@ -260,7 +260,15 @@ class DownloadProgressHandler {
 
     lastDownloadedBytes =
         (p['downloadedBytes'] as num?)?.toInt() ?? lastDownloadedBytes;
-    lastFileSize = (p['fileSize'] as num?)?.toInt() ?? lastFileSize;
+    // FIX v2.0.0-BugFileSize: Don't overwrite a known file size with 0.
+    // v2.0.0 emits fileSize: 0 during pre-metadata/checking phases, which
+    // caused the UI to show "0 B" total size even when knownFileSize was
+    // previously set. Only update if the new value is positive or we have
+    // no previous value.
+    final newFileSize = (p['fileSize'] as num?)?.toInt();
+    if (newFileSize != null && (newFileSize > 0 || lastFileSize == 0)) {
+      lastFileSize = newFileSize;
+    }
 
     final pTorrentFiles = p['torrentFiles'];
     if (pTorrentFiles is List && pTorrentFiles.isNotEmpty) {
@@ -513,11 +521,18 @@ class DownloadProgressHandler {
       final size = progress.fileSize > 0 ? progress.fileSize : lastFileSize;
       final deltaBytes = (progress.downloadedBytes - _lastEmittedBytes).abs();
       final minTrigger = size > 0 ? (size * 0.01).ceil() : (1024 * 1024);
+      // FIX v2.0.0-BugFiles: Include torrentFiles length change in the
+      // substantial delta check. Previously, if only the file list changed
+      // (not bytes/peers/seeds/status), the progress was throttled and
+      // file info was delayed, causing "no files" on the details screen.
       isSubstantialDelta = deltaBytes >= math.max(minTrigger, 1024 * 1024) ||
           (sm != _lastEmittedStatusMessage) ||
           progress.fileSize != _lastEmittedFileSize ||
           ((p['numPeers'] as num?)?.toInt() ?? 0) != _lastEmittedPeerCount ||
-          ((p['numSeeds'] as num?)?.toInt() ?? 0) != _lastEmittedSeedCount;
+          ((p['numSeeds'] as num?)?.toInt() ?? 0) != _lastEmittedSeedCount ||
+          (progress.torrentFiles != null &&
+              progress.torrentFiles!.length !=
+                  (lastTorrentFiles?.length ?? -1));
     }
 
     if (canEmitNow ||
