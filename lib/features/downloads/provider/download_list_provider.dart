@@ -1,4 +1,3 @@
-import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/torrent_service.dart';
 import 'package:flutter/foundation.dart';
 import '../data/task_repository.dart';
@@ -41,6 +40,21 @@ class DownloadListProvider extends ChangeNotifier {
   }
 
   void setTasks(List<DownloadTask> tasks) {
+    final newIds = tasks.map((t) => t.id).toSet();
+    _progressNotifiers.removeWhere((id, notifier) {
+      if (!newIds.contains(id)) {
+        notifier.dispose();
+        return true;
+      }
+      return false;
+    });
+    _speedNotifiers.removeWhere((id, notifier) {
+      if (!newIds.contains(id)) {
+        notifier.dispose();
+        return true;
+      }
+      return false;
+    });
     _tasks.clear();
     _tasks.addAll(tasks);
     for (final task in _tasks) {
@@ -137,13 +151,8 @@ class DownloadListProvider extends ChangeNotifier {
   }
 
   DownloadTask? findTask(String id) {
-    try {
-      return _tasks.firstWhere((t) => t.id == id);
-    } catch (e, st) {
-      LoggingService.logger('DownloadListProvider')
-          .warning('Operation failed with fallback', e, st);
-      return null;
-    }
+    final index = _tasks.indexWhere((t) => t.id == id);
+    return index != -1 ? _tasks[index] : null;
   }
 
   DownloadTask? getTask(String id) => findTask(id);

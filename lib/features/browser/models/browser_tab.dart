@@ -61,6 +61,11 @@ class BrowserTab {
     return _findInteractionController;
   }
 
+  void resetFindController() {
+    _findControllerInitFailed = false;
+    _findInteractionController = null;
+  }
+
   int savedScrollY = 0;
   String? tabGroupId;
 

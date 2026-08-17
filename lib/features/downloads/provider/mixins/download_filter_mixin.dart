@@ -156,14 +156,16 @@ mixin DownloadFilterMixin {
   // ---------------------------------------------------------------------------
   List<DownloadTask> get filteredTasks {
     if (!_filteredTasksDirty && _cachedFilteredTasks != null) {
-      // Re-resolve live task objects from the cached filter/sort result.
-      // _cachedFilteredTasks holds the stable (sorted/filtered) ID order;
-      // findTaskById always returns the latest in-memory instance so progress
-      // ticks are reflected without invalidating the expensive filter cache.
-      return _cachedFilteredTasks!
-          .map((t) => findTaskById(t.id))
-          .whereType<DownloadTask>()
-          .toList();
+      final result = <DownloadTask>[];
+      for (final cached in _cachedFilteredTasks!) {
+        final task = findTaskById(cached.id);
+        if (task == null) {
+          _filteredTasksDirty = true; // Force re-filter
+          break;
+        }
+        result.add(task);
+      }
+      if (!_filteredTasksDirty) return result;
     }
     final list = providerTasks.where((task) {
       final queryLower = _searchQuery.toLowerCase();

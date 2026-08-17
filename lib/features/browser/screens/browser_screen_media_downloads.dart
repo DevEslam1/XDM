@@ -801,17 +801,19 @@ mixin _MediaDownloadsMixin on _BrowserScreenStateBase {
           final result = await tab.controller?.evaluateJavascript(
             source: 'document.documentElement.outerHTML',
           );
-          if (result is String) {
-            rawHtml = result;
-            if (rawHtml.isNotEmpty) {
+          if (result != null) {
+            final raw = result.toString();
+            if (raw.isNotEmpty && raw != 'null') {
               try {
-                final decoded = jsonDecode(rawHtml);
-                if (decoded is String) {
-                  rawHtml = decoded;
+                final decoded = jsonDecode(raw);
+                rawHtml = decoded is String ? decoded : raw;
+              } catch (_) {
+                rawHtml = raw;
+                if (rawHtml.startsWith('"') &&
+                    rawHtml.endsWith('"') &&
+                    rawHtml.length >= 2) {
+                  rawHtml = rawHtml.substring(1, rawHtml.length - 1);
                 }
-              } catch (e, st) {
-                LoggingService.logger('BrowserScreenMediaDownloads')
-                    .warning('Operation failed', e, st);
               }
             }
           }

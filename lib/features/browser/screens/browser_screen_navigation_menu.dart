@@ -598,6 +598,7 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
   }
 
   /// UX 3.1: Opens the find-in-page panel for the active tab.
+  @override
   void _openFindPanel() {
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final tab = _tabs[_currentTabIndex];
@@ -1104,67 +1105,7 @@ mixin _NavigationMenuMixin on _BrowserScreenStateBase {
     }
   }
 
-  /// UX 3.20: Keyboard shortcuts (desktop only): Ctrl+T/W/L/R/F.
-  @override
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (!_shortcutsActive || event is! KeyDownEvent) {
-      return KeyEventResult.ignored;
-    }
-    final hw = HardwareKeyboard.instance;
-    final modifierPressed = hw.isControlPressed || hw.isMetaPressed;
-    if (!modifierPressed) return KeyEventResult.ignored;
 
-    final logical = event.logicalKey;
-    if (logical == LogicalKeyboardKey.keyT) {
-      _newTabViaShortcut();
-      return KeyEventResult.handled;
-    }
-    if (logical == LogicalKeyboardKey.keyW) {
-      _closeActiveTabViaShortcut();
-      return KeyEventResult.handled;
-    }
-    if (logical == LogicalKeyboardKey.keyL) {
-      _focusUrlBar();
-      return KeyEventResult.handled;
-    }
-    if (logical == LogicalKeyboardKey.keyR) {
-      if (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length) {
-        final tab = _tabs[_currentTabIndex];
-        if (!tab.isHome) _safeReloadTab(tab);
-      }
-      return KeyEventResult.handled;
-    }
-    if (logical == LogicalKeyboardKey.keyF) {
-      _openFindPanel();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
-  void _newTabViaShortcut() {
-    if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
-    final settings = _settings;
-    if (_tabs.length >= settings.maxTabs) return;
-    final isIncog = _tabs[_currentTabIndex].isIncognito;
-    _openInNewTab('', isIncognito: isIncog, switchToTab: true);
-    _focusUrlBar();
-  }
-
-  void _closeActiveTabViaShortcut() {
-    if (_tabs.length <= 1) {
-      _goBack();
-      return;
-    }
-    if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
-    final tab = _tabs[_currentTabIndex];
-    setState(() {
-      _recordClosedTab(tab);
-      // TabManager handles removal, index recalculation, disposal, and saving.
-      _tabManager.closeTab(tab.id);
-    });
-    final active = _tabs[_currentTabIndex];
-    _urlController.text = active.isHome ? '' : active.url;
-  }
 
   /// UX 3.10: Launches app-linkable URLs in an external app when enabled.
   @override

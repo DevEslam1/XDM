@@ -183,6 +183,13 @@ class TorrentDownloadHandler {
   /// transmitting, retrying with backoff up to 3 attempts. Called by the
   /// registry's [TorrentSubscriptionRegistry.dispose] and the cancel path.
   Future<void> haltTorrent(int id) async {
+    // Clean up subscription registry
+    TorrentSubscriptionRegistry.instance.unregister(id, this);
+
+    // Cancel active subscription
+    final sub = _activeSubs.remove(id);
+    await sub?.cancel();
+
     if (!_torrentService.isTorrentAlive(id)) {
       _activeTorrentIds.remove(id);
       return;

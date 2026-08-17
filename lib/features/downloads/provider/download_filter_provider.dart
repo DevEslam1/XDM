@@ -76,7 +76,7 @@ class DownloadFilterProvider extends ChangeNotifier {
           cmp = a.progress.compareTo(b.progress);
           break;
         case SortMode.manual:
-          cmp = 0;
+          cmp = a.queueOrder.compareTo(b.queueOrder);
           break;
       }
       return _ascending ? cmp : -cmp;

@@ -194,18 +194,19 @@ class ScheduleManager {
     // Compare in UTC so device timezone changes do not affect trigger timing.
     final nowUtc = DateTime.now().toUtc();
     var hasChanges = false;
-    final saves = <Future<void>>[];
-    final tasks = _tasks();
-    final promotedIndices = <int>[];
+    final currentTasks = _tasks();
+    final candidateTasks = List<DownloadTask>.from(currentTasks);
+    final promotedTasks = <DownloadTask>[];
+    final originalTasks = <DownloadTask>[];
 
-    for (var i = 0; i < tasks.length; i++) {
+    for (var i = 0; i < candidateTasks.length; i++) {
       if (_isDisposed()) return; // SCHED-FIX-4: bail out if disposed
-      final task = tasks[i];
+      final task = candidateTasks[i];
       if (task.status == DownloadStatus.paused &&
           !task.pausedByUser &&
           task.scheduledAt != null &&
           task.scheduledAt!.toUtc().isBefore(nowUtc)) {
-        tasks[i] = task.copyWith(
+        final updated = task.copyWith(
           status: DownloadStatus.queued,
           clearError: true,
           clearCompletedAt: true,
@@ -213,48 +214,49 @@ class ScheduleManager {
           wasScheduledAt: task.scheduledAt, // SCHED-FIX-1: preserve origin
           pausedByUser: false,
         );
-        promotedIndices.add(i);
-        saves.add(_databaseService.saveTask(tasks[i]));
-        hasChanges = true;
+        originalTasks.add(task);
+        promotedTasks.add(updated);
       }
     }
 
+    if (promotedTasks.isEmpty) return;
+
     // FIX-S13: Persist each promotion atomically, isolating failures per task with rollback
     // Tasks whose save succeeded stay queued; failed tasks are reverted in-memory.
-    if (saves.isNotEmpty) {
-      final results = await Future.wait(
-        saves.asMap().entries.map((entry) async {
-          try {
-            await entry.value;
-            return true; // save at index `entry.key` succeeded
-          } catch (e) {
-            debugPrint('[ScheduleManager] Save failed for '
-                '${tasks[promotedIndices[entry.key]].id}: $e');
-            return false;
-          }
-        }),
-      );
-
-      final failedIndices = <int>[];
-      for (var s = 0; s < results.length; s++) {
-        if (!results[s]) failedIndices.add(s);
-      }
-      if (failedIndices.isNotEmpty) {
-        for (final s in failedIndices) {
-          final idx = promotedIndices[s];
-          if (idx < tasks.length) {
-            tasks[idx] = tasks[idx].copyWith(
-              status: DownloadStatus.paused,
-              scheduledAt: tasks[idx].wasScheduledAt,
-              clearWasScheduledAt: true,
-            );
-          }
+    final results = await Future.wait(
+      promotedTasks.map((task) async {
+        try {
+          await _databaseService.saveTask(task);
+          return true;
+        } catch (e) {
+          debugPrint('[ScheduleManager] Save failed for ${task.id}: $e');
+          return false;
         }
-        // SCHED-FIX-6: After reverting the in-memory state, notify listeners so
-        // the UI reflects the reverted paused/scheduled task instead of the
-        // not-yet-persisted queued promotion.
-        _notifyListeners();
-        return; // Don't pump queue with inconsistent state
+      }),
+    );
+
+    var anySaveFailed = false;
+    for (var s = 0; s < results.length; s++) {
+      final success = results[s];
+      final target = success ? promotedTasks[s] : originalTasks[s];
+      final idx = currentTasks.indexWhere((t) => t.id == target.id);
+      if (idx != -1) {
+        currentTasks[idx] = target;
+      }
+      if (success) {
+        hasChanges = true;
+      } else {
+        anySaveFailed = true;
+      }
+    }
+
+    if (anySaveFailed) {
+      // SCHED-FIX-6: After reverting the in-memory state, notify listeners so
+      // the UI reflects the reverted paused/scheduled task instead of the
+      // not-yet-persisted queued promotion.
+      _notifyListeners();
+      if (!hasChanges) {
+        return; // Don't pump queue with no successful promotions
       }
     }
 
@@ -264,10 +266,10 @@ class ScheduleManager {
       _pumpQueue();
 
       // SCHED-FIX-5: Notification when scheduled download starts
-      for (final idx in promotedIndices) {
-        if (idx < tasks.length) {
-          final t = tasks[idx];
-          if (t.wasScheduledAt != null && t.status == DownloadStatus.queued) {
+      for (var s = 0; s < results.length; s++) {
+        if (results[s]) {
+          final t = promotedTasks[s];
+          if (t.wasScheduledAt != null) {
             _onScheduledTaskStarted?.call(t.fileName, t.wasScheduledAt!);
           }
         }

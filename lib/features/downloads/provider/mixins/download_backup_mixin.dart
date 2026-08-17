@@ -36,18 +36,6 @@ mixin DownloadBackupMixin {
   // ---------------------------------------------------------------------------
   // Encryption helpers
   // ---------------------------------------------------------------------------
-  /// DEPRECATED: This legacy XOR cipher helper is insecure (XDMCRYPT v1 format).
-  /// Kept solely for backwards compatibility to allow legacy imports. New backups
-  /// must be encrypted with encryptBackup (AES-256).
-  @Deprecated('Legacy XDMCRYPT v1 XOR cipher is insecure. Use AES-256.')
-  List<int> _xorCipher(List<int> data, List<int> key) {
-    final List<int> result = List<int>.filled(data.length, 0);
-    for (int i = 0; i < data.length; i++) {
-      result[i] = data[i] ^ key[i % key.length];
-    }
-    return result;
-  }
-
   /// Derives a 256-bit key from [password] and [salt] using PBKDF2-HMAC-SHA256.
   /// 100k iterations makes brute-force cost ~hours per guess instead of instant.
   List<int> _deriveKey(String password, List<int> salt) {
@@ -133,12 +121,9 @@ mixin DownloadBackupMixin {
 
       if (isLegacy) {
         debugPrint(
-          '[XDM Security Warning] Decrypting legacy insecure XDMCRYPT v1 backup format using XOR cipher. Please re-export your backup to update to AES-GCM/CBC format.',
+          '[XDM Security Warning] Legacy insecure XDMCRYPT v1 backup format (XOR cipher) is no longer supported. Please create a new backup.',
         );
-        final cipherBytes = bytes.sublist(legacyMagic.length);
-        final keyBytes = sha256.convert(utf8.encode(password)).bytes;
-        final dataBytes = _xorCipher(cipherBytes, keyBytes);
-        return utf8.decode(dataBytes);
+        return null;
       }
 
       final magic = utf8.encode('XDMCRYPT2');
@@ -219,6 +204,11 @@ mixin DownloadBackupMixin {
     String? password,
   }) async {
     try {
+      if (content.length > 50 * 1024 * 1024) {
+        debugPrint('[Backup Import] Payload exceeds maximum size of 50MB');
+        return false;
+      }
+
       String jsonStr = content.trim();
       bool isEncrypted = false;
       try {
@@ -274,11 +264,24 @@ mixin DownloadBackupMixin {
         return false;
       }
 
+      if (list.length > 10000) {
+        debugPrint('[Backup Import] Task list exceeds maximum count of 10000');
+        return false;
+      }
+
       for (final item in list) {
         if (item is! Map) return false;
         if (!item.containsKey('id') ||
             !item.containsKey('url') ||
             !item.containsKey('fileName')) {
+          return false;
+        }
+        final id = item['id'];
+        final url = item['url'];
+        final fileName = item['fileName'];
+        if (id is! String || id.isEmpty || id.length > 256) return false;
+        if (url is! String || url.isEmpty || url.length > 4096) return false;
+        if (fileName is! String || fileName.isEmpty || fileName.length > 512) {
           return false;
         }
       }

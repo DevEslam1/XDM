@@ -746,6 +746,9 @@ mixin _BuildMixin on _BrowserScreenStateBase {
                                               'copy', textClr),
                                           _menuItem(Icons.share, 'Share URL',
                                               'share', textClr),
+                                          _menuItem(Icons.offline_pin_outlined,
+                                              'Save page offline', 'offline',
+                                              textClr),
                                           const PopupMenuDivider(),
 
                                           // Section B: Library
@@ -759,6 +762,11 @@ mixin _BuildMixin on _BrowserScreenStateBase {
                                               'Browser History',
                                               'show_history',
                                               textClr),
+                                          _menuItem(
+                                              Icons.tab_outlined,
+                                              'Recently closed tabs',
+                                              'recently_closed',
+                                              textClr),
                                           const PopupMenuDivider(),
 
                                           // Section C: Page tools
@@ -766,6 +774,13 @@ mixin _BuildMixin on _BrowserScreenStateBase {
                                               'Reader Mode', 'reader', textClr),
                                           _menuItem(Icons.search_rounded,
                                               'Find in page', 'find', textClr),
+                                          _menuItem(Icons.zoom_in_rounded,
+                                              'Page zoom', 'zoom', textClr),
+                                          _menuItem(
+                                              Icons.touch_app_outlined,
+                                              'Block element',
+                                              'picker',
+                                              textClr),
                                           _menuItem(
                                               Icons.camera_alt_outlined,
                                               'Capture page',
@@ -781,6 +796,34 @@ mixin _BuildMixin on _BrowserScreenStateBase {
                                           const PopupMenuDivider(),
 
                                           // Section D: Quick toggles
+                                          _menuItem(
+                                            settings.desktopMode
+                                                ? Icons.desktop_windows_rounded
+                                                : Icons.desktop_windows_outlined,
+                                            settings.desktopMode
+                                                ? 'Desktop mode: ON'
+                                                : 'Desktop mode: OFF',
+                                            'desktop',
+                                            settings.desktopMode
+                                                ? (isDark
+                                                    ? AppTheme.neonBlue
+                                                    : AppTheme.lightNeonBlue)
+                                                : textClr,
+                                          ),
+                                          _menuItem(
+                                            _adBlocker.isEnabled
+                                                ? Icons.shield_rounded
+                                                : Icons.shield_outlined,
+                                            _adBlocker.isEnabled
+                                                ? 'Ad blocker: ON'
+                                                : 'Ad blocker: OFF',
+                                            'adblocker',
+                                            _adBlocker.isEnabled
+                                                ? (isDark
+                                                    ? AppTheme.neonGreen
+                                                    : AppTheme.lightNeonGreen)
+                                                : textClr,
+                                          ),
                                           _menuItem(
                                             _isSnifferEnabled
                                                 ? Icons.radar_rounded
@@ -826,7 +869,7 @@ mixin _BuildMixin on _BrowserScreenStateBase {
                                           ),
                                           const PopupMenuDivider(),
 
-                                          // Section F: Session
+                                          // Section E: Privacy & Data
                                           _menuItem(
                                             settings.incognitoEnabled
                                                 ? Icons.visibility_off
@@ -837,12 +880,28 @@ mixin _BuildMixin on _BrowserScreenStateBase {
                                             'incognito',
                                             textClr,
                                           ),
+                                          _menuItem(
+                                            Icons.delete_sweep_outlined,
+                                            'Clear browsing data',
+                                            'clear_data',
+                                            textClr,
+                                          ),
                                           const PopupMenuDivider(),
+
+                                          // Section F: Settings & Exit
                                           _menuItem(
                                             Icons.settings_outlined,
                                             'Browser settings',
                                             'browser_settings',
                                             textClr,
+                                          ),
+                                          _menuItem(
+                                            Icons.exit_to_app_rounded,
+                                            'Quit browser',
+                                            'quit',
+                                            isDark
+                                                ? AppTheme.neonRed
+                                                : AppTheme.lightNeonRed,
                                           ),
                                         ],
                                       ),

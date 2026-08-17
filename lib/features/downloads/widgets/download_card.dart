@@ -1944,10 +1944,13 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
 
     return Selector<DownloadProvider,
         ({int seeds, int peers, double uploadSpeed})>(
+      // FIX-STATS-6: Rebuild on ANY change in seeds/peers (old threshold of >2
+      // silently swallowed the 0→1 transition, keeping stats frozen at zero).
+      // Upload speed threshold also lowered from 10 KB/s to 1 KB/s.
       shouldRebuild: (prev, next) {
-        return (prev.seeds - next.seeds).abs() > 2 ||
-            (prev.peers - next.peers).abs() > 2 ||
-            (prev.uploadSpeed - next.uploadSpeed).abs() > 10240;
+        return prev.seeds != next.seeds ||
+            prev.peers != next.peers ||
+            (prev.uploadSpeed - next.uploadSpeed).abs() > 1024;
       },
       selector: (context, provider) => (
         seeds: provider.getTorrentSeeds(widget.task.id),

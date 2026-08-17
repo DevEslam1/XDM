@@ -388,13 +388,13 @@ class DownloadProvider extends ChangeNotifier
     _torrentInitRetries = 0;
     _torrentUpdatesSubscription = TorrentService.torrentUpdates.listen(
       (torrents) async {
-        _latestTorrentStats = torrents;
-        // Prune stats for torrents that were removed
-        if (_latestTorrentStats.length > torrents.length + 50) {
-          _latestTorrentStats.removeWhere(
-            (id, _) => !torrents.containsKey(id),
-          );
-        }
+        // FIX-STATS-1: Merge incoming stats into the existing map instead of
+        // replacing the reference. Replacing drops entries that haven't been
+        // re-emitted yet in this tick, which makes getTorrentSeeds/Peers return
+        // 0 until the next broadcast even though data is available.
+        _latestTorrentStats
+          ..removeWhere((id, _) => !torrents.containsKey(id))
+          ..addAll(torrents);
         checkTorrentRatioLimits();
         enforceTorrentQueue();
 
@@ -537,6 +537,13 @@ class DownloadProvider extends ChangeNotifier
         }
       },
     );
+
+    // FIX-STATS-7: Also start the TorrentProvider stream so providerLatestTorrentStats
+    // is populated through the coordinator path as a fallback. This covers the
+    // window where the orchestrator's onProgress fires before this subscription
+    // processes its first tick.
+    final tp = getIt.isRegistered<TorrentProvider>() ? getIt<TorrentProvider>() : null;
+    tp?.startListening();
   }
 
   StreamSubscription? _torrentUpdatesSubscription;
@@ -551,6 +558,7 @@ class DownloadProvider extends ChangeNotifier
 
   final List<DownloadTask> _tasks = [];
   final Map<String, CancelToken> _cancelTokens = {};
+  final Map<String, ({CancelToken video, CancelToken audio})> _orchestratorTokens = {};
   final Map<String, bool> _resumeRejectionRestarts = {};
   final Map<String, Queue<double>> _speedHistories = {};
   final Map<String, Queue<double>> _uploadSpeedHistories = {};
@@ -700,7 +708,7 @@ class DownloadProvider extends ChangeNotifier
 
   final Map<String, int> _retryCounts = {};
   final Map<String, int> _dbRetryCounts = {};
-  Map<int, TorrentUpdateInfo> _latestTorrentStats = {};
+  final Map<int, TorrentUpdateInfo> _latestTorrentStats = {};
 
   List<double> getSpeedHistory(String id) =>
       _speedHistories[id]?.toList() ?? const [];
@@ -796,6 +804,10 @@ class DownloadProvider extends ChangeNotifier
   Map<String, CancelToken> get cancelTokens => _cancelTokens;
 
   @override
+  Map<String, ({CancelToken video, CancelToken audio})> get orchestratorTokens =>
+      _orchestratorTokens;
+
+  @override
   Map<String, bool> get resumeRejectionRestarts => _resumeRejectionRestarts;
 
   @override
@@ -815,6 +827,9 @@ class DownloadProvider extends ChangeNotifier
 
   @override
   Map<String, int> get lastDbSaveTimes => _lastDbSaveTimes;
+
+  @override
+  Map<String, int> get lastDbSaveBytes => _lastDbSaveBytes;
 
   @override
   Map<String, int> get lastTorrentFileDiskSync => _lastTorrentFileDiskSync;
@@ -2296,6 +2311,34 @@ class DownloadProvider extends ChangeNotifier
           _log.info(
               'Torrent registration pending on pause; marking needsForcedPauseOnRegister for ${task.id}');
           _needsForcedPauseOnRegister.add(task.id);
+
+          // FIX-PAUSE-5: Cancel the CancelToken even in this early-return path.
+          // Without this the orchestrator's onProgress keeps running and the
+          // native torrent session is never told to stop.
+          for (final suffix in ['::video', '::audio', '']) {
+            final k = suffix.isEmpty ? id : '$id$suffix';
+            try {
+              _cancelTokens[k]?.cancel('paused:${reason.name}');
+            } catch (e, st) {
+              LoggingService.logger('DownloadProvider')
+                  .warning('Operation failed', e, st);
+            }
+            _cancelTokens.remove(k);
+          }
+          final orchTokens = _orchestratorTokens.remove(id);
+          if (orchTokens != null) {
+            if (!orchTokens.video.isCancelled) {
+              try {
+                orchTokens.video.cancel('paused:${reason.name}');
+              } catch (_) {}
+            }
+            if (!orchTokens.audio.isCancelled) {
+              try {
+                orchTokens.audio.cancel('paused:${reason.name}');
+              } catch (_) {}
+            }
+          }
+
           // Set DB status to paused so the UI reflects it immediately
           await _setTask(task.copyWith(
             status: DownloadStatus.paused,
@@ -2311,52 +2354,70 @@ class DownloadProvider extends ChangeNotifier
         }
       }
 
-      // BUG 4 FIX: Cancel token and await engine future FIRST if downloading
+      // 1. For torrents, pause engine FIRST (immediate)
+      if (torrentId != null && TorrentService.isTorrentAlive(torrentId)) {
+        try {
+          await TorrentService.pauseTorrent(torrentId);
+        } catch (e) {
+          _log.warning('Failed initial pauseTorrent for $torrentId: $e');
+        }
+      }
+
+      // 2. Cancel tokens (stops orchestrator loops)
       if (wasDownloading) {
         // Flush progress BEFORE cancelling so no in-flight write is lost
         await _flushPendingProgress(id);
 
-        final hasAnyToken = _cancelTokens.containsKey(id) ||
-            _cancelTokens.containsKey('$id::video') ||
-            _cancelTokens.containsKey('$id::audio');
-        if (hasAnyToken) {
-          for (final suffix in ['::video', '::audio', '']) {
-            final k = suffix.isEmpty ? id : '$id$suffix';
-            try {
-              _cancelTokens[k]?.cancel('paused:${reason.name}');
-            } catch (e, st) {
-              LoggingService.logger('DownloadProvider')
-                  .warning('Operation failed', e, st);
-            }
-            _cancelTokens.remove(k);
+        for (final suffix in ['::video', '::audio', '']) {
+          final k = suffix.isEmpty ? id : '$id$suffix';
+          try {
+            _cancelTokens[k]?.cancel('paused:${reason.name}');
+          } catch (e, st) {
+            LoggingService.logger('DownloadProvider')
+                .warning('Operation failed', e, st);
           }
-          final fut = _activeFutures[id];
-          if (fut != null) {
-            try {
-              await fut.timeout(const Duration(seconds: 3));
-            } on TimeoutException catch (e, st) {
-              _log.warning(
-                  'Engine future timed out on pause (3s). Force-cancelling task $id.',
-                  e,
-                  st);
-              _downloadEngine.forceCancelJob(id);
-              final latest = _findTask(id) ?? task;
-              await _databaseService.saveTask(
-                latest.copyWith(
-                  status: DownloadStatus.paused,
-                  pausedByUser: true,
-                  speed: 0,
-                  clearEta: true,
-                ),
-              );
-            } catch (e, st) {
-              LoggingService.logger('DownloadProvider')
-                  .warning('Operation failed', e, st);
-            }
-          }
-
-          _activeFutures.remove(id);
+          _cancelTokens.remove(k);
         }
+        final orchTokens = _orchestratorTokens.remove(id);
+        if (orchTokens != null) {
+          if (!orchTokens.video.isCancelled) {
+            try {
+              orchTokens.video.cancel('paused:${reason.name}');
+            } catch (_) {}
+          }
+          if (!orchTokens.audio.isCancelled) {
+            try {
+              orchTokens.audio.cancel('paused:${reason.name}');
+            } catch (_) {}
+          }
+        }
+
+        final fut = _activeFutures[id];
+        if (fut != null) {
+          try {
+            await fut.timeout(const Duration(seconds: 3));
+          } on TimeoutException catch (e, st) {
+            _log.warning(
+                'Engine future timed out on pause (3s). Force-cancelling task $id.',
+                e,
+                st);
+            _downloadEngine.forceCancelJob(id);
+            final latest = _findTask(id) ?? task;
+            await _databaseService.saveTask(
+              latest.copyWith(
+                status: DownloadStatus.paused,
+                pausedByUser: true,
+                speed: 0,
+                clearEta: true,
+              ),
+            );
+          } catch (e, st) {
+            LoggingService.logger('DownloadProvider')
+                .warning('Operation failed', e, st);
+          }
+        }
+
+        _activeFutures.remove(id);
 
         // Validate engine state file after cancel completes
         try {
@@ -2377,13 +2438,18 @@ class DownloadProvider extends ChangeNotifier
         }
       }
 
-      // BUG 4 FIX: THEN handle torrent pause & snapshot AFTER engine has stopped
+      // 3. Confirm torrent pause with scaled timeout
       if (torrentId != null) {
         if (TorrentService.isTorrentAlive(torrentId)) {
-          await TorrentService.pauseTorrent(torrentId);
-
-          // B4 FIX: Poll until the torrent reports paused (max 2s timeout)
-          final pauseDeadline = DateTime.now().add(const Duration(seconds: 2));
+          final taskSize =
+              task.fileSize > 0 ? task.fileSize : 100 * 1024 * 1024;
+          final timeoutSeconds = taskSize > 1024 * 1024 * 1024
+              ? 5
+              : taskSize > 100 * 1024 * 1024
+                  ? 3
+                  : 2;
+          final pauseDeadline =
+              DateTime.now().add(Duration(seconds: timeoutSeconds));
           bool isPaused = false;
           while (!isPaused && DateTime.now().isBefore(pauseDeadline)) {
             await Future.delayed(const Duration(milliseconds: 100));
@@ -2398,17 +2464,33 @@ class DownloadProvider extends ChangeNotifier
             }
           }
           if (!isPaused) {
-            debugPrint(
-              '[DMX] B4 FIX: Torrent $torrentId did not confirm pause within 2s, proceeding anyway',
-            );
-            // FIX-C: pause did not take effect — hard-stop the handle so the
-            // engine cannot keep transferring while the task shows "paused".
+            // One more graceful attempt
             try {
-              await TorrentService.forceStopTorrent(torrentId);
-            } catch (e) {
-              _log.warning(
-                  'FIX-C: forceStopTorrent fallback failed on pause for $torrentId: $e');
+              await TorrentService.pauseTorrent(torrentId);
+              await Future.delayed(const Duration(milliseconds: 500));
+              isPaused = !TorrentService.isTorrentAlive(torrentId) ||
+                  _latestTorrentStats[torrentId]
+                          ?.stateLabel
+                          .toLowerCase()
+                          .contains('paused') ==
+                      true;
+            } catch (_) {}
+
+            if (!isPaused) {
+              debugPrint(
+                '[DMX] B4 FIX: Torrent $torrentId did not confirm pause within ${timeoutSeconds}s, force-stopping',
+              );
+              try {
+                await TorrentService.forceStopTorrent(torrentId);
+              } catch (e) {
+                _log.warning(
+                    'FIX-C: forceStopTorrent fallback failed on pause for $torrentId: $e');
+              }
             }
+          }
+
+          if (isPaused) {
+            TorrentSubscriptionRegistry.instance.dispose(torrentId);
           }
 
           // Snapshot per-file bytes AFTER engine has stopped
@@ -2936,10 +3018,20 @@ class DownloadProvider extends ChangeNotifier
 
     if (task.isTorrent) {
       final torrentId = _torrentIds[task.id];
-      if (torrentId != null && !TorrentService.isTorrentAlive(torrentId)) {
-        _torrentIds.remove(task.id);
-        debugPrint(
-            '[DMX] B1 FIX: Removed stale torrent handle $torrentId for task ${task.id}');
+      if (torrentId != null) {
+        // Check if engine still knows about it
+        final engineIds = TorrentService.activeTorrentIds;
+        if (!engineIds.contains(torrentId)) {
+          _torrentIds.remove(task.id);
+          // Try to find by name match
+          for (final tid in engineIds) {
+            final stats = TorrentService.latestStats[tid];
+            if (stats?.name == task.fileName) {
+              _torrentIds[task.id] = tid;
+              break;
+            }
+          }
+        }
       }
     }
 
@@ -3009,6 +3101,18 @@ class DownloadProvider extends ChangeNotifier
 
       if (videoBytesOnly <= 0 && task.torrentFiles != null) {
         videoBytesOnly = torrentBytesFromFiles(task.torrentFiles);
+      }
+
+      if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+        final scan = scanExistingTorrentData(task.savePath, task.torrentFiles);
+        if (scan.total < task.downloadedBytes * 0.9) {
+          // Disk has significantly less data than recorded — reset
+          task = task.copyWith(
+            downloadedBytes: scan.total,
+            torrentFiles: scan.files,
+          );
+          videoBytesOnly = scan.total;
+        }
       }
     } else {
       try {
@@ -3880,6 +3984,8 @@ class DownloadProvider extends ChangeNotifier
     return _lockFor(id).synchronized(() async {
       final task = _findTask(id);
       if (task == null) return;
+      final taskSnapshot = task;
+      int? resolvedTorrentId = _torrentIds[id];
 
       // FIX-X-05: Cancel notification immediately on delete
       final notifId = _notifications.idFor(id);
@@ -3916,20 +4022,50 @@ class DownloadProvider extends ChangeNotifier
 
       // 2. For torrents, pause + remove from session IMMEDIATELY
       if (task.isTorrent) {
-        final torrentId = _torrentIds[id];
+        // FIX-DELETE-4: Last-chance torrent ID resolve — if _torrentIds[id] is
+        // null (e.g. task deleted before 2 s subscription timer fired), try
+        // matching by file name so the native session is always halted.
+        if (resolvedTorrentId == null) {
+          resolvedTorrentId = TorrentService.activeTorrentIds.cast<int?>().firstWhere(
+            (tid) =>
+                tid != null &&
+                (TorrentService.latestStats[tid]?.name == task.fileName ||
+                    TorrentService.latestStats[tid]?.currentTracker == task.url),
+            orElse: () => null,
+          );
+          if (resolvedTorrentId != null) {
+            _log.info('[deleteTask] Resolved torrent ID $resolvedTorrentId by name-match for task $id');
+          }
+        }
+
         // FIX-P2-02: Deterministically dispose the torrent subscription on
         // delete instead of relying on WeakReference GC cleanup.
-        if (torrentId != null) {
-          TorrentSubscriptionRegistry.instance.dispose(torrentId);
+        if (resolvedTorrentId != null) {
+          TorrentSubscriptionRegistry.instance.dispose(resolvedTorrentId);
         }
-        if (torrentId != null && TorrentService.isTorrentAlive(torrentId)) {
+        if (resolvedTorrentId != null && TorrentService.isTorrentAlive(resolvedTorrentId)) {
           // FIX-B10: Guard with alive check
           try {
             // FIX-C: forceStopTorrent verifies the engine actually halted
             // before we wipe the DB row.
-            await TorrentService.forceStopTorrent(torrentId);
-            TorrentService.removeTorrent(torrentId,
-                deleteFiles: false, deleteResumeData: true);
+            await TorrentService.forceStopTorrent(resolvedTorrentId);
+
+            // WAIT for engine to confirm stop (up to 3 seconds)
+            final stopDeadline = DateTime.now().add(const Duration(seconds: 3));
+            while (DateTime.now().isBefore(stopDeadline)) {
+              if (!TorrentService.isTorrentAlive(resolvedTorrentId)) break;
+              final stats = TorrentService.latestStats[resolvedTorrentId];
+              if (stats == null) break;
+              final label = stats.stateLabel.toLowerCase();
+              if (label.contains('paused') || label.contains('stopped')) break;
+              await Future.delayed(const Duration(milliseconds: 100));
+            }
+
+            TorrentService.removeTorrent(
+              resolvedTorrentId,
+              deleteFiles: deleteFiles,
+              deleteResumeData: true,
+            );
           } catch (e) {
             _log.warning('[deleteTask] Torrent cleanup failed: $e');
           }
@@ -3944,7 +4080,19 @@ class DownloadProvider extends ChangeNotifier
       // 3. Remove from UI IMMEDIATELY (optimistic update)
       _tasks.removeWhere((t) => t.id == id);
       filteredTasksDirty = true;
-      _cancelTokens.remove(id);
+      // FIX-DELETE-2: Cancel video/audio sub-tokens too before removing.
+      // Previously only the primary token was removed (not cancelled), so
+      // whenCancel hooks in TorrentDownloadOrchestrator never fired.
+      for (final suffix in ['::video', '::audio', '']) {
+        final k = suffix.isEmpty ? id : '$id$suffix';
+        try {
+          _cancelTokens[k]?.cancel('deleted');
+        } catch (e, st) {
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
+        _cancelTokens.remove(k);
+      }
       _cleanupTaskState(id);
 
       notifyListeners();
@@ -3994,7 +4142,8 @@ class DownloadProvider extends ChangeNotifier
       }
 
       // 6. Heavy cleanup in BACKGROUND
-      unawaited(_backgroundDeleteCleanup(task, deleteFiles).catchError((e) {
+      // FIX-DELETE-3: Pass the pre-captured future reference and torrentId
+      unawaited(_backgroundDeleteCleanup(taskSnapshot, deleteFiles, activeFuture, resolvedTorrentId).catchError((e) {
         _log.warning('Background delete cleanup failed', e);
       }));
 
@@ -4011,11 +4160,24 @@ class DownloadProvider extends ChangeNotifier
   }
 
   /// Runs file cleanup without blocking the UI thread.
+  /// [capturedFuture] is the activeFuture captured BEFORE it was removed from
+  /// _activeFutures, so this method can actually await download completion.
   Future<void> _backgroundDeleteCleanup(
-      DownloadTask task, bool deleteFiles) async {
+      DownloadTask task, bool deleteFiles,
+      [Future<void>? capturedFuture, int? torrentId]) async {
     try {
-      // Wait for the active future with a HARD 5-second timeout
-      final future = _activeFutures[task.id];
+      // Verify no active torrent handle is still writing
+      final tid = torrentId ?? _torrentIds[task.id];
+      if (tid != null && TorrentService.isTorrentAlive(tid)) {
+        try {
+          await TorrentService.forceStopTorrent(tid);
+          await Future.delayed(const Duration(milliseconds: 500));
+        } catch (_) {}
+      }
+
+      // FIX-DELETE-3: Use the pre-captured future; the map entry was removed
+      // before this method is called, so _activeFutures[task.id] is always null.
+      final future = capturedFuture ?? _activeFutures[task.id];
       if (future != null) {
         await Future.any([
           future.catchError((_) {}),
@@ -4044,9 +4206,37 @@ class DownloadProvider extends ChangeNotifier
         final size = await localFile.length();
         if (size > 512 * 1024 * 1024) {
           // > 512 MB: use isolate
-          await Isolate.run(() => File(task.localFilePath).delete());
+          for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+              await Isolate.run(() => File(task.localFilePath).delete());
+              break;
+            } on FileSystemException catch (e) {
+              if (attempt < 2) {
+                await Future.delayed(const Duration(milliseconds: 300));
+                continue;
+              }
+              _log.warning('Failed to delete large file after 3 attempts: ${e.message}');
+            } catch (e) {
+              _log.warning('Failed to delete large file: $e');
+              break;
+            }
+          }
         } else {
-          await localFile.delete();
+          for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+              await localFile.delete();
+              break;
+            } on FileSystemException catch (e) {
+              if (attempt < 2) {
+                await Future.delayed(const Duration(milliseconds: 300));
+                continue;
+              }
+              _log.warning('Failed to delete after 3 attempts: ${e.message}');
+            } catch (e) {
+              _log.warning('Failed to delete localFile: $e');
+              break;
+            }
+          }
         }
       }
     } catch (e) {
@@ -4073,7 +4263,20 @@ class DownloadProvider extends ChangeNotifier
 
             final file = File(fullPath);
             if (await file.exists()) {
-              await file.delete();
+              for (int attempt = 0; attempt < 3; attempt++) {
+                try {
+                  await file.delete();
+                  break;
+                } on FileSystemException catch (e) {
+                  if (attempt < 2) {
+                    await Future.delayed(const Duration(milliseconds: 300));
+                    continue;
+                  }
+                  _log.warning('Failed to delete torrent file segment after 3 attempts: ${e.message}');
+                } catch (e) {
+                  break;
+                }
+              }
             }
           } catch (e) {
             debugPrint(
@@ -6033,7 +6236,6 @@ class DownloadProvider extends ChangeNotifier
     _dbRetryTimers.clear();
 
     _torrentInitTimer?.cancel();
-    _scheduleManager.dispose();
     _widgetTimer?.cancel();
     // FIX-M7: Cancel speed history cleanup timer
     _speedHistoryCleanupTimer?.cancel();

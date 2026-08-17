@@ -470,7 +470,6 @@ mixin _PopupsAdsMixin on _BrowserScreenStateBase {
     _lastScrollTimeMs = now;
 
     final downloadProvider = context.read<DownloadProvider>();
-    if (downloadProvider.activeTabIndex != 1) return;
 
     _showBarsNotifier.value = true;
     bool shouldShow = true;

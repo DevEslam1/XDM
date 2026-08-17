@@ -6,6 +6,9 @@ import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/core/services/torrent_service.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../core/di/injection.dart';
+import 'download_provider.dart';
+
 /// Single-responsibility provider for torrent session management and stats tracking.
 class TorrentProvider extends ChangeNotifier {
   final Map<String, int> _torrentIds = {};
@@ -40,7 +43,13 @@ class TorrentProvider extends ChangeNotifier {
   }
 
   Map<String, int> get torrentIds => Map.unmodifiable(_torrentIds);
-  Map<int, TorrentUpdateInfo> get latestStats => Map.unmodifiable(_latestStats);
+
+  Map<int, TorrentUpdateInfo> get latestStats {
+    final dp = getIt.isRegistered<DownloadProvider>()
+        ? getIt<DownloadProvider>()
+        : null;
+    return dp?.providerLatestTorrentStats ?? Map.unmodifiable(_latestStats);
+  }
 
   void registerTorrentId(String taskId, int torrentId) {
     _torrentIds[taskId] = torrentId;
@@ -63,10 +72,10 @@ class TorrentProvider extends ChangeNotifier {
   TorrentUpdateInfo? getStatsForTask(String taskId) {
     final torrentId = _torrentIds[taskId];
     if (torrentId == null) return null;
-    return _latestStats[torrentId];
+    return latestStats[torrentId];
   }
 
-  Iterable<TorrentUpdateInfo> get activeTorrents => _latestStats.values;
+  Iterable<TorrentUpdateInfo> get activeTorrents => latestStats.values;
 
   void registerTorrent(int id, TorrentUpdateInfo info) {
     _latestStats[id] = info;
@@ -83,10 +92,13 @@ class TorrentProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// FIX-E: Subscribes directly to the engine's torrentUpdates broadcast
-  /// stream (200ms debounced) so the coordinator/UI always see live metrics
-  /// even when no other consumer is listening.
+  /// FIX-E: Subscribes to updates if DownloadProvider is not available,
+  /// otherwise relies on DownloadProvider as the single source of truth.
   void startListening() {
+    if (getIt.isRegistered<DownloadProvider>()) {
+      _startStaleDetector();
+      return;
+    }
     if (_updatesSub != null) return;
     _updatesSub = TorrentService.torrentUpdates.listen((torrents) {
       for (final entry in torrents.entries) {

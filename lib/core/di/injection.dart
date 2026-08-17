@@ -36,6 +36,7 @@ import '../services/dio_client_pool.dart';
 import '../services/download_engine.dart';
 import '../services/download_journal.dart';
 import '../services/engine/server_identity_cache.dart';
+import '../services/engine/torrent_download_handler.dart';
 import '../services/engines/connection_warmer.dart';
 import '../services/http_download_orchestrator.dart';
 import '../services/metadata_probe_service.dart';
@@ -160,14 +161,21 @@ Future<void> configureDependencies() async {
     ),
   );
   getIt.registerLazySingleton<ITorrentService>(() => TorrentServiceImpl());
+  getIt.registerLazySingleton<TorrentDownloadHandler>(
+    () => TorrentDownloadHandler(),
+  );
   getIt.registerLazySingleton<TorrentDownloadOrchestrator>(
-    () => TorrentDownloadOrchestrator(getIt<DioClientPool>()),
+    () => TorrentDownloadOrchestrator(
+      getIt<DioClientPool>(),
+      getIt<TorrentDownloadHandler>(),
+    ),
   );
 
   getIt.registerLazySingleton<DownloadEngine>(
     () => DownloadEngine(
       httpOrchestrator: getIt<HttpDownloadOrchestrator>(),
       torrentOrchestrator: getIt<TorrentDownloadOrchestrator>(),
+      torrentHandler: getIt<TorrentDownloadHandler>(),
       metadataService: getIt<MetadataProbeService>(),
       ytCoordinator: getIt<YtCounterpartCoordinator>(),
       dioPool: getIt<DioClientPool>(),

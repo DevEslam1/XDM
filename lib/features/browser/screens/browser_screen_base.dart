@@ -155,6 +155,8 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
   bool _quitPersisted = false;
 
   bool _isRestoring = false;
+  int _lastRestoreAttemptTimeMs = 0;
+  bool _isNavigatingTabHistory = false;
 
   /// Tracks when a back/forward navigation is in progress so that
   /// [shouldOverrideUrlLoading] doesn't intercept it. Without this,
@@ -315,6 +317,8 @@ abstract class _BrowserScreenStateBase extends State<BrowserScreen>
   void _switchToTabRelative(int offset);
 
   void _showTabSwitcher(BuildContext context);
+
+  void _openFindPanel();
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event);
 

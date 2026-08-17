@@ -146,19 +146,16 @@ mixin DownloadQueueMixin {
     int? maxConcurrentOverride,
   }) {
     if (skipPump) return;
+    if (maxConcurrentOverride != null) {
+      _pendingMaxConcurrentOverride = maxConcurrentOverride;
+    }
 
     if (_queueProcessing) {
       _needsRePump = true;
-      if (maxConcurrentOverride != null) {
-        _pendingMaxConcurrentOverride = maxConcurrentOverride;
-      }
       return;
     }
     _queueProcessing = true;
     _needsRePump = false;
-    if (maxConcurrentOverride != null) {
-      _pendingMaxConcurrentOverride = maxConcurrentOverride;
-    }
 
     try {
       int iteration = 0;
@@ -238,9 +235,14 @@ mixin DownloadQueueMixin {
     } catch (e) {
       debugPrint('Queue pump error: $e');
     } finally {
+      final shouldRePump = _needsRePump;
+      final rePumpOverride = _pendingMaxConcurrentOverride;
       _queueProcessing = false;
       _pendingMaxConcurrentOverride = null;
       _needsRePump = false;
+      if (shouldRePump) {
+        pumpQueue(maxConcurrentOverride: rePumpOverride);
+      }
     }
   }
 

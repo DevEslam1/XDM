@@ -174,7 +174,9 @@ mixin _ShortcutsMixin on _BrowserScreenStateBase {
 
   @override
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (!_shortcutsActive || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
 
     final hw = HardwareKeyboard.instance;
     final ctrl = hw.isControlPressed || hw.isMetaPressed;
@@ -184,6 +186,7 @@ mixin _ShortcutsMixin on _BrowserScreenStateBase {
     switch (event.logicalKey) {
       case LogicalKeyboardKey.keyT:
         _openInNewTab('about:blank', switchToTab: true);
+        _focusUrlBar();
         return KeyEventResult.handled;
       case LogicalKeyboardKey.keyW:
         final active = _tabManager.activeTab;
@@ -198,13 +201,16 @@ mixin _ShortcutsMixin on _BrowserScreenStateBase {
         }
         return KeyEventResult.handled;
       case LogicalKeyboardKey.keyL:
-        _focusNode.requestFocus();
+        _focusUrlBar();
         return KeyEventResult.handled;
       case LogicalKeyboardKey.keyD:
         _openBookmarks();
         return KeyEventResult.handled;
       case LogicalKeyboardKey.keyH:
         _openHistory();
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.keyF:
+        _openFindPanel();
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowLeft:
         if (hw.isAltPressed) {

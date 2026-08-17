@@ -23,6 +23,10 @@ class _StubHost implements DownloadOrchestratorHost {
   void pushProgressTick(String taskId, double progress, double speed) {}
 
   @override
+  final Map<String, ({CancelToken video, CancelToken audio})>
+      orchestratorTokens = {};
+
+  @override
   bool get enableBackgroundTimers => false;
 
   @override
@@ -433,6 +437,9 @@ class _TestEscalationHost implements DownloadOrchestratorHost {
   final Map<String, Timer> retryTimers = {};
   @override
   final Map<String, CancelToken> cancelTokens = {};
+  @override
+  final Map<String, ({CancelToken video, CancelToken audio})>
+      orchestratorTokens = {};
   @override
   final Map<String, Future<void>> activeFutures = {};
   @override

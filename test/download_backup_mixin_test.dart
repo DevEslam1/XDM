@@ -45,7 +45,7 @@ void main() {
       expect(provider.decryptBackup(tampered, 'secret'), isNull);
     });
 
-    test('decrypts legacy XDMCRYPT v1 payloads using XOR', () {
+    test('rejects legacy insecure XDMCRYPT v1 XOR payloads', () {
       const payload = 'legacy payload';
       final keyBytes = sha256.convert(utf8.encode('legacy-password')).bytes;
       final cipherBytes = List<int>.generate(
@@ -56,7 +56,7 @@ void main() {
       final legacy = utf8.encode('XDMCRYPT');
       final encoded = base64Encode([...legacy, ...cipherBytes]);
 
-      expect(provider.decryptBackup(encoded, 'legacy-password'), payload);
+      expect(provider.decryptBackup(encoded, 'legacy-password'), isNull);
     });
 
     test('decrypts XDMCRYPT v3 backups (SHA-256 KDF, pre-PBKDF2)', () {

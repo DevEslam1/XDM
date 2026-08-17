@@ -684,8 +684,11 @@ class AdBlockFilterUpdater {
       if (line.contains('##+js(')) {
         final idx = line.indexOf('##+js(');
         final firstPart = line.substring(0, idx);
-        final scriptlet = line.substring(idx + 6).substring(
-            0, line.length - (line.endsWith(')') ? 1 : 0) - (idx + 6));
+        final afterPrefix = line.substring(idx + 6);
+        final closeIdx = afterPrefix.lastIndexOf(')');
+        final scriptlet =
+            (closeIdx != -1 ? afterPrefix.substring(0, closeIdx) : afterPrefix)
+                .trim();
         if (scriptlet.isNotEmpty) {
           // A bare `##+js(...)` applies globally; a `domain##+js(...)`
           // prefix only applies to that site, so it must NOT land in the

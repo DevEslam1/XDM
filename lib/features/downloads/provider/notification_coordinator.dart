@@ -10,6 +10,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:open_filex/open_filex.dart' as open_filex;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:synchronized/synchronized.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/services/background_service.dart';
 import '../../../core/services/download_engine.dart';
@@ -106,9 +107,10 @@ class NotificationCoordinator {
               _taskToHandle[taskId] = handle;
             }
           });
-          while (_opaqueHandles.length > 30) {
+          while (_opaqueHandles.length > 50) {
             final firstKey = _opaqueHandles.keys.first;
-            _opaqueHandles.remove(firstKey);
+            final mappedTask = _opaqueHandles.remove(firstKey);
+            if (mappedTask != null) _taskToHandle.remove(mappedTask);
           }
         });
       }
@@ -130,14 +132,22 @@ class NotificationCoordinator {
   }
 
   /// Issues an opaque handle for [taskId] to embed in a notification payload.
-  ///
-  /// FIX: We bypass the opaque handle mapping and return the real task ID.
-  /// The task ID is already strictly validated via `_isValidTaskId` in
-  /// `NotificationService`, which prevents injection attacks.
-  /// This ensures that actions survive cold starts even if the persisted
-  /// handle map is lost or corrupted.
   String opaqueHandleFor(String taskId) {
-    return taskId;
+    final existing = _taskToHandle[taskId];
+    if (existing != null) return existing;
+    final handle = const Uuid().v4();
+    _handlesLock.synchronized(() {
+      _opaqueHandles[handle] = taskId;
+      _taskToHandle[taskId] = handle;
+      while (_opaqueHandles.length > 50) {
+        final firstKey = _opaqueHandles.keys.first;
+        final mappedTask = _opaqueHandles.remove(firstKey);
+        if (mappedTask != null) _taskToHandle.remove(mappedTask);
+      }
+    }).then((_) => _persistHandles()).catchError((e) {
+      debugPrint('[NotificationCoordinator] Failed to persist handle: $e');
+    });
+    return handle;
   }
 
   Future<String?> _resolveOpaqueHandle(String? handle) async {
@@ -175,6 +185,7 @@ class NotificationCoordinator {
   void cancelForTask(String taskId) {
     final notifId = _notificationIds.remove(taskId);
     if (notifId != null) {
+      _lastProgressPostTimes.remove(notifId);
       unawaited(
         _notificationService.cancelNotification(notifId).catchError((e) {
           LoggingService.logger('NotificationCoordinator').info(
@@ -207,7 +218,11 @@ class NotificationCoordinator {
         })
         .then((_) => _persistHandles())
         .catchError((e) => debugPrint('[DMX] persistHandles failed: $e')));
-    return _notificationIds.remove(taskId);
+    final notifId = _notificationIds.remove(taskId);
+    if (notifId != null) {
+      _lastProgressPostTimes.remove(notifId);
+    }
+    return notifId;
   }
 
   void cancelNotification(int notificationId) {
@@ -263,6 +278,9 @@ class NotificationCoordinator {
       final key = '$taskId:$action';
       final lastTime = _lastNotifActionTime[key];
       final now = DateTime.now();
+      // Periodically prune action timestamps older than 5 seconds to prevent memory leak
+      _lastNotifActionTime
+          .removeWhere((_, time) => now.difference(time).inSeconds > 5);
       if (lastTime != null &&
           now.difference(lastTime) < const Duration(milliseconds: 500)) {
         debugPrint(
@@ -506,6 +524,7 @@ class NotificationCoordinator {
     _actionSubscription = null;
     _notificationIds.clear();
     _lastProgressPostTimes.clear();
+    _lastNotifActionTime.clear();
     _handlesLock.synchronized(() {
       _opaqueHandles.clear();
       _taskToHandle.clear();

@@ -14,12 +14,10 @@ class TaskQueue {
     int newIndex,
   ) {
     if (oldIndex < 0 || oldIndex >= tasks.length) return tasks;
-    var targetIndex = newIndex;
-    if (targetIndex > oldIndex) targetIndex -= 1;
-    targetIndex = targetIndex.clamp(0, tasks.length - 1);
-
     final list = List<DownloadTask>.from(tasks);
     final moved = list.removeAt(oldIndex);
+    var targetIndex = newIndex > oldIndex ? newIndex - 1 : newIndex;
+    targetIndex = targetIndex.clamp(0, list.length);
     list.insert(targetIndex, moved);
     return list;
   }

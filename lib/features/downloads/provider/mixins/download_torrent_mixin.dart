@@ -323,6 +323,9 @@ mixin DownloadTorrentMixin {
   /// Updates the in-memory `speed` field on all seeding tasks from live
   /// torrent stats. Returns `true` if any task was modified.
   bool updateSeedingSpeeds() {
+    final activeIds = providerTasks.map((t) => t.id).toSet();
+    _lastSeedingCheck.removeWhere((id, _) => !activeIds.contains(id));
+
     var changed = false;
     final now = DateTime.now();
     for (var i = 0; i < providerTasks.length; i++) {
@@ -408,13 +411,12 @@ mixin DownloadTorrentMixin {
               (e) => debugPrint('[DMX] startSeedingTorrent failed: $e')));
         }
       } else {
-        // Only pause/remove the torrent session if the task has already
-        // finished downloading (status == completed).  Calling pauseTorrent
+        // Only pause the torrent session if the task has already
+        // finished downloading (status == completed). Calling pauseTorrent
         // while still downloading would abort the in-progress transfer.
+        // Don't remove the handle — keep it for potential re-enable.
         if (torrentId != null && oldTask.status == DownloadStatus.completed) {
           TorrentService.pauseTorrent(torrentId);
-          TorrentService.removeTorrent(torrentId, deleteFiles: false);
-          providerTorrentIds.remove(taskId);
         }
         // Snap downloadedBytes to fileSize so the Completed tab shows 100%.
         final updatedIdx = providerTasks.indexWhere((t) => t.id == taskId);

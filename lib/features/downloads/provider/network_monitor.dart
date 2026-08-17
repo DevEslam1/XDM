@@ -180,8 +180,8 @@ class NetworkMonitor {
       (task) =>
           task.status == DownloadStatus.downloading ||
           task.status == DownloadStatus.queued,
-    );
-    for (final task in active.toList()) {
+    ).toList();
+    await Future.wait(active.map((task) async {
       _tasksPausedDueToDisconnect.add(task.id);
       if (task.status == DownloadStatus.downloading) {
         final torrentId = _torrentIds()[task.id];
@@ -209,7 +209,7 @@ class NetworkMonitor {
           errorMessage: DownloadStatusMessages.waitingNetwork,
         ),
       );
-    }
+    }));
   }
 
   Future<void> _resumeFromNetworkDisconnect({bool skipPump = false}) async {
@@ -242,8 +242,8 @@ class NetworkMonitor {
       (task) =>
           task.status == DownloadStatus.downloading ||
           task.status == DownloadStatus.queued,
-    );
-    for (final task in active.toList()) {
+    ).toList();
+    await Future.wait(active.map((task) async {
       _tasksPausedDueToWifiOnly.add(task.id);
       if (task.status == DownloadStatus.downloading) {
         final torrentId = _torrentIds()[task.id];
@@ -262,7 +262,7 @@ class NetworkMonitor {
           errorMessage: DownloadStatusMessages.waitingWifi,
         ),
       );
-    }
+    }));
   }
 
   Future<void> _resumeWaitingForWifi({bool skipPump = false}) async {

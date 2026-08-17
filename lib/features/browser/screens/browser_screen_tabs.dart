@@ -10,7 +10,9 @@ mixin _TabsMixin on _BrowserScreenStateBase {
           _tabs.length > _currentTabIndex && _currentTabIndex >= 0
               ? _tabs[_currentTabIndex]
               : null;
-      if (oldActiveTab != null && oldActiveTab.id != _tabs[value].id) {
+      if (!_isNavigatingTabHistory &&
+          oldActiveTab != null &&
+          oldActiveTab.id != _tabs[value].id) {
         if (_tabIdHistory.isEmpty || _tabIdHistory.last != oldActiveTab.id) {
           _tabIdHistory.add(oldActiveTab.id);
           if (_tabIdHistory.length > 50) {
@@ -155,11 +157,17 @@ mixin _TabsMixin on _BrowserScreenStateBase {
   }
 
   Future<void> _restoreTabs() async {
-    assert(!_isRestoring, 'restoreTabs re-entered');
-    if (_isRestoring) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (_isRestoring || (now - _lastRestoreAttemptTimeMs < 3000)) return;
+    _lastRestoreAttemptTimeMs = now;
     _isRestoring = true;
     try {
       await _tabManager.restoreTabs();
+    } catch (e, st) {
+      Logger('browser_screen').warning('[Browser] restoreTabs error', e, st);
+      if (_tabs.isEmpty) {
+        _tabManager.addTab(_createNewTab(initialUrl: ''), switchToTab: true);
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -528,8 +536,13 @@ mixin _TabsMixin on _BrowserScreenStateBase {
       final prevId = _tabIdHistory.removeLast();
       final idx = _tabs.indexWhere((t) => t.id == prevId);
       if (idx != -1) {
-        _switchTab(
-            idx); // Fix: Delegate to _switchTab to handle all side effects
+        _isNavigatingTabHistory = true;
+        try {
+          _switchTab(
+              idx); // Fix: Delegate to _switchTab to handle all side effects
+        } finally {
+          _isNavigatingTabHistory = false;
+        }
         return true;
       }
     }

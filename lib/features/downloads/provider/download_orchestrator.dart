@@ -51,12 +51,14 @@ abstract class DownloadOrchestratorHost {
   // Shared task/tracking state (owned by the provider).
   List<DownloadTask> get providerTasks;
   Map<String, CancelToken> get cancelTokens;
+  Map<String, ({CancelToken video, CancelToken audio})> get orchestratorTokens;
   Map<String, Future<void>> get activeFutures;
   Map<String, Timer> get retryTimers;
   Map<String, int> get retryCounts;
   Map<String, Queue<double>> get speedHistories;
   Map<String, int> get lastProgressUpdateTimes;
   Map<String, int> get lastDbSaveTimes;
+  Map<String, int> get lastDbSaveBytes;
   Map<String, int> get lastTorrentFileDiskSync;
   Set<String> get pendingProgressUpdates;
   Map<String, int> get ytLowSpeedCounts;
@@ -205,10 +207,21 @@ class DownloadOrchestrator {
     _startingTaskIds.remove(taskId);
     _ytRefreshAttempts.remove(taskId);
     _pushScheduled.remove(taskId);
+    _lastAudioStateSaveMs.remove(taskId);
     StateStore.removeCachedPayload(taskId);
     _host.speedHistories.remove(taskId);
     _host.lastProgressUpdateTimes.remove(taskId);
     _host.lastDbSaveTimes.remove(taskId);
+    _host.lastDbSaveBytes.remove(taskId);
+    _host.pendingProgressUpdates.remove(taskId);
+
+    final task = _host.findTaskById(taskId);
+    if (task != null) {
+      final uri = Uri.tryParse(task.url);
+      if (uri != null && uri.hasScheme && uri.host.isNotEmpty) {
+        _cookieCache.remove('${uri.scheme}://${uri.host}');
+      }
+    }
   }
 
   void clearPushScheduled(String taskId) {
@@ -226,6 +239,12 @@ class DownloadOrchestrator {
   void dispose() {
     _periodicResumeSaveTimer?.cancel();
     _periodicResumeSaveTimer = null;
+    _sessionCachedTotalSize.clear();
+    _startingTaskIds.clear();
+    _ytRefreshAttempts.clear();
+    _pushScheduled.clear();
+    _lastAudioStateSaveMs.clear();
+    _cookieCache.clear();
   }
 
   @visibleForTesting
@@ -483,12 +502,11 @@ class DownloadOrchestrator {
         YoutubeService.signIn(cookieString);
       }
       // Acquire semaphore before hitting the backend (10s timeout)
-      await _streamResolveSemaphore.acquire().timeout(
-            const Duration(seconds: 10),
-            onTimeout: () =>
-                throw TimeoutException('Stream resolution timeout'),
-          );
+      bool acquired = false;
       try {
+        await _streamResolveSemaphore
+            .acquireWithTimeout(const Duration(seconds: 10));
+        acquired = true;
         final videoId = YoutubeService.extractVideoId(youtubeUrl);
         if (videoId != null) {
           // Directly return stored task URL for download start if it's already a resolved stream URL
@@ -723,7 +741,9 @@ class DownloadOrchestrator {
           return null;
         }
       } finally {
-        _streamResolveSemaphore.release();
+        if (acquired) {
+          _streamResolveSemaphore.release();
+        }
       }
     }
     return task;
@@ -1757,159 +1777,169 @@ class DownloadOrchestrator {
       String? categoryOverride,
       String? statusMessageOverride,
     }) {
-      // FIX-BG-01: Skip UI updates when in background
-      if (!DownloadEngine.appInForeground || PowerMonitor.screenOff) {
-        return;
-      }
+      // FIX-BG-08: When backgrounded, still update the in-memory task model so
+      // stats are current the moment the app returns to foreground. Only skip
+      // the microtask scheduling (and thus notifyListeners). Previously the
+      // entire function returned early on background, leaving zeros in the task
+      // model that the UI would show for the first few frames after resuming.
+      final isBackground = !DownloadEngine.appInForeground || PowerMonitor.screenOff;
       // FIX-AUDIT-10: Microtask coalescing guard to prevent interleaved reads
       if (_pushScheduled[task.id] == true) return;
       _pushScheduled[task.id] = true;
       scheduleMicrotask(() {
-        _pushScheduled[task.id] = false;
-        final index = _host.providerTasks.indexWhere((t) => t.id == task.id);
-        if (index == -1) return;
-        final base = _host.providerTasks[index];
+        try {
+          final index = _host.providerTasks.indexWhere((t) => t.id == task.id);
+          if (index == -1) return;
+          final base = _host.providerTasks[index];
 
-        // FIX-MERGE-5: Guard pushCombinedProgress against cancelled tasks
-        if (base.status != DownloadStatus.downloading) return;
+          // FIX-MERGE-5: Guard pushCombinedProgress against cancelled tasks
+          if (base.status != DownloadStatus.downloading) return;
 
-        // FIX YT-S1: When both runtime sizes are unknown, subtract audioSize
-        // from fileSize to avoid double-counting the audio contribution.
-        // Prefer live engine size → persisted videoStreamSize → derived → fileSize.
-        final effectiveVideoSize = videoSizeSoFar > 0
-            ? videoSizeSoFar
-            : (base.videoStreamSize > 0
-                ? base.videoStreamSize
-                : (videoTransferSize > 0
-                    ? videoTransferSize
-                    : (hasAudio && base.audioSize > 0
-                        ? (base.fileSize - base.audioSize)
-                            .clamp(0, base.fileSize)
-                        : base.fileSize)));
-        // FIX-2: When audioSize is still unknown, use the larger of
-        // audioBytesSoFar and the task's stored audioDownloadedBytes so
-        // the denominator doesn't shrink between ticks.  Once the engine
-        // reports the real size the task field is updated and this
-        // fallback is no longer reached.
-        // Use the live audioBytesSoFar first (updated on every audio tick),
-        // then fall back to the persisted audioDownloadedBytes, then 0.
-        final audioContribution = hasAudio
-            ? (base.audioSize > 0 ? base.audioSize : base.audioDownloadedBytes)
-            : 0;
-        var calculatedTotal = effectiveVideoSize + audioContribution;
-        if (base.fileSize > 0 && calculatedTotal > base.fileSize) {
-          calculatedTotal = base.fileSize;
-        }
-        final cachedMax = _sessionCachedTotalSize[task.id] ?? 0;
-        final int totalSize;
-        if (calculatedTotal > cachedMax) {
-          totalSize = calculatedTotal;
-          _sessionCachedTotalSize[task.id] = calculatedTotal;
-        } else {
-          totalSize =
-              cachedMax > 0 ? cachedMax : calculatedTotal; // never shrink
-        }
+          // FIX YT-S1: When both runtime sizes are unknown, subtract audioSize
+          // from fileSize to avoid double-counting the audio contribution.
+          // Prefer live engine size → persisted videoStreamSize → derived → fileSize.
+          final effectiveVideoSize = videoSizeSoFar > 0
+              ? videoSizeSoFar
+              : (base.videoStreamSize > 0
+                  ? base.videoStreamSize
+                  : (videoTransferSize > 0
+                      ? videoTransferSize
+                      : (hasAudio && base.audioSize > 0
+                          ? (base.fileSize - base.audioSize)
+                              .clamp(0, base.fileSize)
+                          : base.fileSize)));
+          // FIX-2: When audioSize is still unknown, use the larger of
+          // audioBytesSoFar and the task's stored audioDownloadedBytes so
+          // the denominator doesn't shrink between ticks.  Once the engine
+          // reports the real size the task field is updated and this
+          // fallback is no longer reached.
+          // Use the live audioBytesSoFar first (updated on every audio tick),
+          // then fall back to the persisted audioDownloadedBytes, then 0.
+          final audioContribution = hasAudio
+              ? (base.audioSize > 0 ? base.audioSize : base.audioDownloadedBytes)
+              : 0;
+          var calculatedTotal = effectiveVideoSize + audioContribution;
+          if (base.fileSize > 0 && calculatedTotal > base.fileSize) {
+            calculatedTotal = base.fileSize;
+          }
+          final cachedMax = _sessionCachedTotalSize[task.id] ?? 0;
+          final int totalSize;
+          if (calculatedTotal > cachedMax) {
+            totalSize = calculatedTotal;
+            _sessionCachedTotalSize[task.id] = calculatedTotal;
+          } else {
+            totalSize =
+                cachedMax > 0 ? cachedMax : calculatedTotal; // never shrink
+          }
 
-        // FIX-09: Clamp numerator totalDownloaded
-        final totalDownloaded = (audioBytesSoFar + videoBytesSoFar).clamp(
-            0, totalSize > 0 ? totalSize : (audioBytesSoFar + videoBytesSoFar));
-        final instantSpeed = audioSpeedNow + videoSpeedNow;
-        final speedQueue = _host.speedHistories[task.id];
-        if (speedQueue != null) {
-          speedQueue.add(instantSpeed);
-          if (speedQueue.length > 20) speedQueue.removeFirst();
-        }
-        final combinedSpeed = speedQueue != null && speedQueue.isNotEmpty
-            ? speedQueue.reduce((a, b) => a + b) / speedQueue.length
-            : instantSpeed;
+          // FIX-09: Clamp numerator totalDownloaded
+          final totalDownloaded = (audioBytesSoFar + videoBytesSoFar).clamp(
+              0, totalSize > 0 ? totalSize : (audioBytesSoFar + videoBytesSoFar));
+          final instantSpeed = audioSpeedNow + videoSpeedNow;
+          final speedQueue = _host.speedHistories[task.id];
+          if (speedQueue != null) {
+            speedQueue.add(instantSpeed);
+            if (speedQueue.length > 20) speedQueue.removeFirst();
+          }
+          final combinedSpeed = speedQueue != null && speedQueue.isNotEmpty
+              ? speedQueue.reduce((a, b) => a + b) / speedQueue.length
+              : instantSpeed;
 
-        int? calculatedEta;
-        if (combinedSpeed.isFinite &&
-            combinedSpeed > 0 &&
-            totalSize > totalDownloaded) {
-          final remainingBytes = max(0, totalSize - totalDownloaded);
-          final rawEta = (remainingBytes / combinedSpeed).round();
-          if (rawEta > 0 && rawEta.isFinite) {
-            final prevEta = base.eta;
-            if (prevEta != null && prevEta > 0) {
-              calculatedEta = ((0.3 * rawEta) + (0.7 * prevEta)).round();
-            } else {
-              calculatedEta = rawEta;
+          int? calculatedEta;
+          if (combinedSpeed.isFinite &&
+              combinedSpeed > 0 &&
+              totalSize > totalDownloaded) {
+            final remainingBytes = max(0, totalSize - totalDownloaded);
+            final rawEta = (remainingBytes / combinedSpeed).round();
+            if (rawEta > 0 && rawEta.isFinite) {
+              final prevEta = base.eta;
+              if (prevEta != null && prevEta > 0) {
+                calculatedEta = ((0.3 * rawEta) + (0.7 * prevEta)).round();
+              } else {
+                calculatedEta = rawEta;
+              }
             }
           }
-        }
 
-        // FIX YT-S2: When audioSize is unknown, estimate progress from the
-        // ratio of audio bytes to the total audio contribution so the bar
-        // actually moves during the session.
-        final computedAudioProgress = audioDone
-            ? 1.0
-            : ((hasAudio && base.audioSize > 0)
-                ? (audioBytesSoFar / base.audioSize).clamp(0.0, 1.0)
-                : (hasAudio && audioBytesSoFar > 0 && audioContribution > 0
-                    ? (audioBytesSoFar / audioContribution).clamp(0.0, 0.95)
-                    : base.audioProgress));
+          // FIX YT-S2: When audioSize is unknown, estimate progress from the
+          // ratio of audio bytes to the total audio contribution so the bar
+          // actually moves during the session.
+          final computedAudioProgress = audioDone
+              ? 1.0
+              : ((hasAudio && base.audioSize > 0)
+                  ? (audioBytesSoFar / base.audioSize).clamp(0.0, 1.0)
+                  : (hasAudio && audioBytesSoFar > 0 && audioContribution > 0
+                      ? (audioBytesSoFar / audioContribution).clamp(0.0, 0.95)
+                      : base.audioProgress));
 
-        final updated = base.copyWith(
-          fileName: fileNameOverride ?? base.fileName,
-          localFilePath: localFilePathOverride ?? base.localFilePath,
-          tempFilePath: tempFilePathOverride ?? base.tempFilePath,
-          category: categoryOverride ?? base.category,
-          fileSize: totalSize,
-          // FIX-B1: Store ONLY video bytes in downloadedBytes for tasks with audio
-          downloadedBytes: hasAudio ? videoBytesSoFar : totalDownloaded,
-          audioProgress: computedAudioProgress, // FIX-B14
-          speed: combinedSpeed,
-          eta: calculatedEta,
-          clearEta: calculatedEta == null,
-          chunks: normalizeChunks(
-            chunksOverride ?? base.chunks,
-            effectiveVideoSize > 0 ? effectiveVideoSize : totalSize,
-            hasAudio ? videoBytesSoFar : totalDownloaded,
-          ),
-          supportsResume: supportsResumeOverride ?? base.supportsResume,
-          torrentFiles: torrentFilesOverride ?? base.torrentFiles,
-          statusMessage: (statusMessageOverride == 'Completed' &&
-                  hasAudio &&
-                  audioBytesSoFar < audioContribution)
-              ? null
-              : statusMessageOverride,
-          clearStatusMessage: (statusMessageOverride == 'Completed' &&
-              hasAudio &&
-              audioBytesSoFar < audioContribution),
-        );
-
-        final now = DateTime.now().millisecondsSinceEpoch;
-        final lastUpdate = _host.lastProgressUpdateTimes[task.id] ?? 0;
-        final throttleMs = PowerMonitor.screenOff
-            ? 30000
-            : (DownloadEngine.isInBackground ? 5000 : 250);
-        if (now - lastUpdate >= throttleMs) {
-          _host.lastProgressUpdateTimes[task.id] = now;
-          _host.providerTasks[index] = updated;
-          _host.pushProgressTick(task.id, updated.progress, updated.speed);
-
-          final progressPercent = totalSize > 0
-              ? ((totalDownloaded / totalSize) * 100).round().clamp(0, 100)
-              : 0;
-          _host.notifications.showProgress(
-            notificationId: notificationId,
-            title: task.fileName,
-            progressPercent: progressPercent,
-            speed: updated.speedFormatted,
-            eta: updated.etaFormatted,
-            payload: _host.notifications.opaqueHandleFor(task.id),
+          final updated = base.copyWith(
+            fileName: fileNameOverride ?? base.fileName,
+            localFilePath: localFilePathOverride ?? base.localFilePath,
+            tempFilePath: tempFilePathOverride ?? base.tempFilePath,
+            category: categoryOverride ?? base.category,
+            fileSize: totalSize,
+            // FIX-B1: Store ONLY video bytes in downloadedBytes for tasks with audio
+            downloadedBytes: hasAudio ? videoBytesSoFar : totalDownloaded,
+            audioProgress: computedAudioProgress, // FIX-B14
+            speed: combinedSpeed,
+            eta: calculatedEta,
+            clearEta: calculatedEta == null,
+            chunks: normalizeChunks(
+              chunksOverride ?? base.chunks,
+              effectiveVideoSize > 0 ? effectiveVideoSize : totalSize,
+              hasAudio ? videoBytesSoFar : totalDownloaded,
+            ),
+            supportsResume: supportsResumeOverride ?? base.supportsResume,
+            torrentFiles: torrentFilesOverride ?? base.torrentFiles,
+            statusMessage: (statusMessageOverride == 'Completed' &&
+                    hasAudio &&
+                    audioBytesSoFar < audioContribution)
+                ? null
+                : statusMessageOverride,
+            clearStatusMessage: (statusMessageOverride == 'Completed' &&
+                hasAudio &&
+                audioBytesSoFar < audioContribution),
           );
-          unawaited(BackgroundService.sendHeartbeat()
-              .catchError((e) => debugPrint('[DMX] sendHeartbeat failed: $e')));
-        } else {
-          _host.providerTasks[index] = updated;
-          if (base.fileSize == 0 && updated.fileSize > 0) {
-            unawaited(_host.setTaskState(updated).catchError(
-                (e) => debugPrint('[DMX] setTaskState failed: $e')));
+
+          final now = DateTime.now().millisecondsSinceEpoch;
+          final lastUpdate = _host.lastProgressUpdateTimes[task.id] ?? 0;
+          final throttleMs = PowerMonitor.screenOff
+              ? 30000
+              : (DownloadEngine.isInBackground ? 5000 : 250);
+          if (now - lastUpdate >= throttleMs) {
+            _host.lastProgressUpdateTimes[task.id] = now;
+            _host.providerTasks[index] = updated;
+            // FIX-BG-08: Skip UI notify when backgrounded but still write model
+            if (!isBackground) {
+              _host.pushProgressTick(task.id, updated.progress, updated.speed);
+
+              final progressPercent = totalSize > 0
+                  ? ((totalDownloaded / totalSize) * 100).round().clamp(0, 100)
+                  : 0;
+              _host.notifications.showProgress(
+                notificationId: notificationId,
+                title: task.fileName,
+                progressPercent: progressPercent,
+                speed: updated.speedFormatted,
+                eta: updated.etaFormatted,
+                payload: _host.notifications.opaqueHandleFor(task.id),
+              );
+              unawaited(BackgroundService.sendHeartbeat()
+                  .catchError((e) => debugPrint('[DMX] sendHeartbeat failed: $e')));
+            }
+          } else {
+            _host.providerTasks[index] = updated;
+            if (base.fileSize == 0 && updated.fileSize > 0) {
+              unawaited(_host.setTaskState(updated).catchError(
+                  (e) => debugPrint('[DMX] setTaskState failed: $e')));
+            }
+            if (!isBackground) {
+              _host.pushProgressTick(task.id, updated.progress, updated.speed);
+            }
+            _host.pendingProgressUpdates.add(task.id);
           }
-          _host.pushProgressTick(task.id, updated.progress, updated.speed);
-          _host.pendingProgressUpdates.add(task.id);
+        } finally {
+          _pushScheduled[task.id] = false;
         }
       });
     }
@@ -1990,6 +2020,8 @@ class DownloadOrchestrator {
         final audioCancelToken = CancelToken();
         activeVideoCancelToken = videoCancelToken;
         activeAudioCancelToken = audioCancelToken;
+        _host.orchestratorTokens[task.id] =
+            (video: videoCancelToken, audio: audioCancelToken);
 
         try {
           Future<void> runAudio() async {

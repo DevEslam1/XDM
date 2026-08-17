@@ -385,6 +385,9 @@ class _MergeRetryTestHost implements DownloadOrchestratorHost {
   @override
   final Map<String, CancelToken> cancelTokens = {};
   @override
+  final Map<String, ({CancelToken video, CancelToken audio})>
+      orchestratorTokens = {};
+  @override
   final Map<String, Future<void>> activeFutures = {};
   @override
   final Map<String, Timer> retryTimers = {};
@@ -396,6 +399,8 @@ class _MergeRetryTestHost implements DownloadOrchestratorHost {
   final Map<String, int> lastProgressUpdateTimes = {};
   @override
   final Map<String, int> lastDbSaveTimes = {};
+  @override
+  final Map<String, int> lastDbSaveBytes = {};
   @override
   final Map<String, int> lastTorrentFileDiskSync = {};
   @override

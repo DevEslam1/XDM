@@ -7,6 +7,7 @@ import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../utils/bencode_decoder.dart';
 
@@ -26,6 +27,7 @@ class TorrentResumeStore {
   TorrentResumeStore._();
 
   static const String _resumeDirName = 'torrent_resume';
+  static final Lock _saveLock = Lock();
 
   /// torrentId → sourceUrl registry (populated by the engine on add).
   static final Map<int, String> _sourceByTorrentId = {};
@@ -127,69 +129,72 @@ class TorrentResumeStore {
     required FutureOr<Uint8List?> Function() fetchResumeData,
     List<Map<String, dynamic>>? files,
   }) async {
-    try {
-      if (sourceUrl.trim().isEmpty) return false;
-      final blob = await fetchResumeData();
-      if (blob == null || blob.isEmpty) return false;
+    return _saveLock.synchronized(() async {
+      try {
+        if (sourceUrl.trim().isEmpty) return false;
+        final blob = await fetchResumeData();
+        if (blob == null || blob.isEmpty) return false;
 
-      // Reject file > 1MB
-      if (blob.length > 1024 * 1024) {
-        debugPrint(
-            '[TorrentResumeStore] blob size > 1MB, rejecting as corrupt');
-        return false;
-      }
+        // Reject file > 1MB
+        if (blob.length > 1024 * 1024) {
+          debugPrint(
+              '[TorrentResumeStore] blob size > 1MB, rejecting as corrupt');
+          return false;
+        }
 
-      final digest = sha256.convert(blob).toString();
-      if (_lastSavedDigest[sourceUrl] == digest) {
-        // Content unchanged, skip redundant disk I/O
+        final digest = sha256.convert(blob).toString();
+        if (_lastSavedDigest[sourceUrl] == digest) {
+          // Content unchanged, skip redundant disk I/O
+          return true;
+        }
+
+        final dir = await _dir();
+        final key = _stableKey(sourceUrl);
+        final fileName = '$key.resume';
+        final blobFile = File('${dir.path}/$fileName');
+        final metaFile = File('${dir.path}/$key.meta.json');
+        final blobTmp = File('${dir.path}/$fileName.tmp');
+        final metaTmp = File('${dir.path}/$key.meta.json.tmp');
+
+        final meta = jsonEncode({
+          'sourceUrl': sourceUrl,
+          'torrentId': torrentId,
+          'sha256': digest,
+          'savedAt': DateTime.now().millisecondsSinceEpoch,
+          'bytes': blob.length,
+          if (files != null) 'files': files,
+        });
+
+        // Write both to temp first with fsync
+        await blobTmp.writeAsBytes(blob, flush: true);
+        final raf = await blobTmp.open(mode: FileMode.append);
+        await raf.flush();
+        await raf.close();
+
+        await metaTmp.writeAsString(meta, flush: true);
+        final mraf = await metaTmp.open(mode: FileMode.append);
+        await mraf.flush();
+        await mraf.close();
+
+        // Then rename both atomically
+        await blobTmp.rename(blobFile.path);
+        await metaTmp.rename(metaFile.path);
+
+        // FIX P1-8: Verify that renamed file actually exists on disk
+        if (!await blobFile.exists()) {
+          debugPrint('[TorrentResumeStore] rename verification failed');
+          return false;
+        }
+
+        _lastSavedDigest[sourceUrl] = digest;
+        registerSource(torrentId, sourceUrl);
+        await _updateIndex(torrentId, fileName);
         return true;
-      }
-
-      final dir = await _dir();
-      final key = _stableKey(sourceUrl);
-      final fileName = '$key.resume';
-      final blobFile = File('${dir.path}/$fileName');
-      final metaFile = File('${dir.path}/$key.meta.json');
-      final blobTmp = File('${dir.path}/$fileName.tmp');
-      final metaTmp = File('${dir.path}/$key.meta.json.tmp');
-
-      final meta = jsonEncode({
-        'sourceUrl': sourceUrl,
-        'torrentId': torrentId,
-        'sha256': digest,
-        'savedAt': DateTime.now().millisecondsSinceEpoch,
-        'bytes': blob.length,
-        if (files != null) 'files': files,
-      });
-
-      // FIX-M12: Write metadata JSON first, then binary resume blob
-      await metaTmp.writeAsString(meta, flush: true);
-      final mraf = await metaTmp.open(mode: FileMode.append);
-      await mraf.flush();
-      await mraf.close();
-
-      await blobTmp.writeAsBytes(blob, flush: true);
-      final raf = await blobTmp.open(mode: FileMode.append);
-      await raf.flush();
-      await raf.close();
-
-      await metaTmp.rename(metaFile.path);
-      await blobTmp.rename(blobFile.path);
-
-      // FIX P1-8: Verify that renamed file actually exists on disk
-      if (!await blobFile.exists()) {
-        debugPrint('[TorrentResumeStore] rename verification failed');
+      } catch (e) {
+        debugPrint('[TorrentResumeStore] saveAndWait failed: $e');
         return false;
       }
-
-      _lastSavedDigest[sourceUrl] = digest;
-      registerSource(torrentId, sourceUrl);
-      await _updateIndex(torrentId, fileName);
-      return true;
-    } catch (e) {
-      debugPrint('[TorrentResumeStore] saveAndWait failed: $e');
-      return false;
-    }
+    });
   }
 
   static final Map<int, Timer> _saveDebounceTimers = {};
@@ -351,11 +356,39 @@ class TorrentResumeStore {
     }
   }
 
-  /// Delete by torrent id (resolves via the registry).
+  /// Delete by torrent id (resolves via the registry and orphaned files).
   static Future<void> delete(int torrentId) async {
     await _removeFromIndex(torrentId);
     final source = _sourceByTorrentId.remove(torrentId);
-    if (source != null) await deleteResumeDataForSource(source);
+    if (source != null) {
+      await deleteResumeDataForSource(source);
+    }
+    // Also scan for orphaned files matching this torrentId in meta files
+    await _cleanupOrphanedFiles(torrentId);
+  }
+
+  static Future<void> _cleanupOrphanedFiles(int torrentId) async {
+    try {
+      final dir = await _dir();
+      if (!await dir.exists()) return;
+      await for (final entity in dir.list()) {
+        if (entity is File && entity.path.endsWith('.meta.json')) {
+          try {
+            final content = await entity.readAsString();
+            final meta = jsonDecode(content);
+            if (meta is Map && meta['torrentId'] == torrentId) {
+              await entity.delete();
+              final blobPath = entity.path.replaceAll('.meta.json', '.resume');
+              final blobFile = File(blobPath);
+              if (await blobFile.exists()) await blobFile.delete();
+              final legacyBinPath = entity.path.replaceAll('.meta.json', '.bin');
+              final legacyBinFile = File(legacyBinPath);
+              if (await legacyBinFile.exists()) await legacyBinFile.delete();
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
   }
 
   static const _taskIdMappingKey = 'torrent_task_id_mapping';

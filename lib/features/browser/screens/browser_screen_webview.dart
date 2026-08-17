@@ -125,6 +125,7 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
   @override
   void _configureController(BrowserTab tab, InAppWebViewController controller) {
     tab.controller = controller;
+    tab.resetFindController();
 
     // Register JS handlers (channels)
     controller.addJavaScriptHandler(
@@ -630,6 +631,7 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
   void _resumeTab(BrowserTab tab) {
     if (!tab.isSuspended) return;
     tab.isSuspended = false;
+    tab.resetFindController();
     try {
       tab.pullToRefreshController ??= PullToRefreshController(
         settings: PullToRefreshSettings(color: AppTheme.neonBlue),
@@ -692,7 +694,21 @@ mixin _WebViewMixin on _BrowserScreenStateBase {
             return l ? (l.href || '') : '';
           })();
         ''');
-        final s = res?.toString().trim() ?? '';
+        String s = '';
+        if (res != null) {
+          final raw = res.toString().trim();
+          if (raw.isNotEmpty && raw != 'null') {
+            try {
+              final decoded = jsonDecode(raw);
+              s = decoded is String ? decoded.trim() : raw;
+            } catch (_) {
+              s = raw;
+              if (s.startsWith('"') && s.endsWith('"') && s.length >= 2) {
+                s = s.substring(1, s.length - 1).trim();
+              }
+            }
+          }
+        }
         if (s.isNotEmpty && s != 'null') {
           if (s.startsWith('//')) {
             faviconUrl = 'https:$s';

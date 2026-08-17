@@ -18,6 +18,7 @@ import 'dio_client_pool.dart';
 import 'engine/engine_exceptions.dart';
 import 'engine/engine_models.dart';
 import 'engine/http_transfer_job.dart';
+import 'engine/torrent_download_handler.dart';
 import 'http_download_orchestrator.dart';
 import 'metadata_probe_service.dart';
 import 'permission_service.dart';
@@ -49,9 +50,13 @@ class DownloadEngine implements IDownloadEngine {
 
   final HttpDownloadOrchestrator _httpOrchestrator;
   final TorrentDownloadOrchestrator _torrentOrchestrator;
+  final TorrentDownloadHandler _torrentHandler;
   final MetadataProbeService _metadataService;
   final YtCounterpartCoordinator _ytCoordinator;
   final DioClientPool _dioPool;
+
+  TorrentDownloadOrchestrator get torrentOrchestrator => _torrentOrchestrator;
+  TorrentDownloadHandler get torrentHandler => _torrentHandler;
 
   DownloadIsolatePool? _pool;
   Future<DownloadIsolatePool>? _poolInit;
@@ -59,6 +64,7 @@ class DownloadEngine implements IDownloadEngine {
   DownloadEngine({
     HttpDownloadOrchestrator? httpOrchestrator,
     TorrentDownloadOrchestrator? torrentOrchestrator,
+    TorrentDownloadHandler? torrentHandler,
     MetadataProbeService? metadataService,
     YtCounterpartCoordinator? ytCoordinator,
     DioClientPool? dioPool,
@@ -71,6 +77,7 @@ class DownloadEngine implements IDownloadEngine {
         _metadataService = metadataService ??
             MetadataProbeService(dioPool ??
                 DioClientPool(enableCleanupTimer: enableCleanupTimer)),
+        _torrentHandler = torrentHandler ?? TorrentDownloadHandler(),
         _httpOrchestrator = httpOrchestrator ??
             HttpDownloadOrchestrator(
               metadataService ??
@@ -82,8 +89,10 @@ class DownloadEngine implements IDownloadEngine {
               SettingsProvider.instance,
             ),
         _torrentOrchestrator = torrentOrchestrator ??
-            TorrentDownloadOrchestrator(dioPool ??
-                DioClientPool(enableCleanupTimer: enableCleanupTimer));
+            TorrentDownloadOrchestrator(
+              dioPool ?? DioClientPool(enableCleanupTimer: enableCleanupTimer),
+              torrentHandler ?? TorrentDownloadHandler(),
+            );
 
   String buildLocalFilePath(String dir, String fileName) =>
       p.join(dir, fileName);
@@ -337,7 +346,8 @@ class DownloadEngine implements IDownloadEngine {
 
     final isTorrent = isTorrentUrl(url, fileName: p.basename(localFilePath));
     if (isTorrent) {
-      return _torrentOrchestrator.download(
+      return _torrentHandler.handleTorrentDownload(
+        taskId: taskId,
         url: url,
         currentLocalFilePath: localFilePath,
         knownFileSize: knownFileSize,
@@ -345,8 +355,9 @@ class DownloadEngine implements IDownloadEngine {
         onProgress: onProgress,
         getTorrentFiles: getTorrentFiles,
         torrentId: torrentId,
+        clientBuilder: (url) => _dioPool.acquireClient(url: url),
+        clientReleaser: (client) => _dioPool.releaseClient(client),
         isRetry: isRetry,
-        metadataTimeoutSeconds: metadataTimeoutSeconds,
       );
     }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../settings/provider/settings_provider.dart';
+import '../models/download_state_machine.dart';
 import '../models/download_task.dart';
 import 'download_list_provider.dart';
 
@@ -43,9 +44,14 @@ class DownloadQueueProvider extends ChangeNotifier {
     final queued =
         list.tasks.where((t) => t.status == DownloadStatus.queued).toList();
 
+    var currentActive = activeCount;
     for (final task in queued) {
-      if (activeCount >= maxConcurrent) break;
-      list.updateTask(task.copyWith(status: DownloadStatus.downloading));
+      if (currentActive >= maxConcurrent) break;
+      if (DownloadStateMachine.canTransitionStatus(
+          task.status, DownloadStatus.downloading)) {
+        list.updateTask(task.copyWith(status: DownloadStatus.downloading));
+        currentActive++;
+      }
     }
   }
 
@@ -54,7 +60,9 @@ class DownloadQueueProvider extends ChangeNotifier {
     final list = _listProvider;
     if (list == null) return;
     final task = list.findTask(id);
-    if (task != null && task.status == DownloadStatus.downloading) {
+    if (task != null &&
+        DownloadStateMachine.canTransitionStatus(
+            task.status, DownloadStatus.paused)) {
       await list.updateTask(
         task.copyWith(
             status: DownloadStatus.paused,
@@ -68,7 +76,9 @@ class DownloadQueueProvider extends ChangeNotifier {
     final list = _listProvider;
     if (list == null) return;
     final task = list.findTask(id);
-    if (task != null && task.status == DownloadStatus.paused) {
+    if (task != null &&
+        DownloadStateMachine.canTransitionStatus(
+            task.status, DownloadStatus.queued)) {
       await list.updateTask(
         task.copyWith(status: DownloadStatus.queued, pausedByUser: false),
       );
