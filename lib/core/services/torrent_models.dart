@@ -5,7 +5,7 @@ class TorrentFileItem {
   final int downloadedBytes;
   final int priority;
   final bool selected;
-
+  final double? progressRatio;
   TorrentFileItem({
     required this.index,
     required this.name,
@@ -13,13 +13,16 @@ class TorrentFileItem {
     this.downloadedBytes = 0,
     this.priority = 4,
     this.selected = true,
+    this.progressRatio,
   });
-
-  /// Whether the engine has actual progress data for this file.
-  bool get hasProgressData => downloadedBytes >= 0;
-
-  /// Safe byte count (0 when no data available).
-  int get safeDownloadedBytes => downloadedBytes >= 0 ? downloadedBytes : 0;
+  bool get hasProgressData => downloadedBytes >= 0 || progressRatio != null;
+  int get safeDownloadedBytes {
+    if (downloadedBytes >= 0) return downloadedBytes;
+    if (progressRatio != null && size > 0) {
+      return (size * progressRatio!.clamp(0.0, 1.0)).round().clamp(0, size);
+    }
+    return 0;
+  }
 }
 
 class TorrentUpdateInfo {

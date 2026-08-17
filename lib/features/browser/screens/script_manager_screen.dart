@@ -1,7 +1,5 @@
 import 'package:code_text_field/code_text_field.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_highlight/themes/github.dart';
-import 'package:flutter_highlight/themes/monokai-sublime.dart';
 import 'package:highlight/languages/css.dart';
 import 'package:highlight/languages/javascript.dart';
 import 'package:provider/provider.dart';

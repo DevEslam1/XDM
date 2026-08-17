@@ -2191,7 +2191,9 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
         ? task.speed
         : (task.isTorrent ? provider.getTorrentUploadSpeed(task.id) : 0.0);
 
-    final torrentId = int.tryParse(task.id) ?? 0;
+    final torrentId =
+        provider.providerTorrentIds[task.id] ?? (int.tryParse(task.id) ?? 0);
+    final stats = provider.providerLatestTorrentStats[torrentId];
 
     return DmxCardShell(
       accent: violetClr,
@@ -2211,8 +2213,8 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
                 TorrentHealthIndicator(
                   seeds: seeds,
                   peers: peers,
-                  availability: 1.0,
-                  distributedCopies: 1.0,
+                  availability: stats?.distributedCopies ?? 1.0,
+                  distributedCopies: stats?.distributedCopies ?? 1.0,
                   downloadRate: dlSpeed,
                   isDark: isDark,
                 ),
@@ -2300,7 +2302,7 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
             const SizedBox(height: 12),
             TorrentStatsDashboard(
               task: task,
-              stats: null,
+              stats: stats,
               isDark: isDark,
             ),
             const SizedBox(height: 12),

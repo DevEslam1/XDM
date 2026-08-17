@@ -3103,7 +3103,7 @@ class DownloadProvider extends ChangeNotifier
                   try {
                     final f = File(path);
                     if (await f.exists()) await f.delete();
-                  } catch (e, st) {
+                  } catch (e) {
                     debugPrint('[DMX] Resume identity-reset cleanup failed '
                         'for $path: $e');
                   }

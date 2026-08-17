@@ -66,6 +66,8 @@ void main() {
     expect(find.byIcon(Icons.add_box_outlined), findsOneWidget);
     expect(find.byIcon(Icons.bookmark_outline_rounded), findsOneWidget);
     expect(find.byIcon(Icons.history_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.radar_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.cloud_download_outlined), findsOneWidget);
     expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());

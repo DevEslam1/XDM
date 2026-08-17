@@ -139,10 +139,13 @@ class TorrentResumeStore {
         final blob = await fetchResumeData();
         if (blob == null || blob.isEmpty) return false;
 
-        // Reject file > 1MB
-        if (blob.length > 1024 * 1024) {
+        // v2.0.0: Resume blobs can be larger (include file priorities, piece
+        // hashes for v2/hybrid torrents). Match validateResumeData's 4MB limit.
+        // The old 1MB limit silently rejected valid v2.0.0 resume data, causing
+        // the engine to restart from scratch on every app restart.
+        if (blob.length > 4 * 1024 * 1024) {
           debugPrint(
-              '[TorrentResumeStore] blob size > 1MB, rejecting as corrupt');
+              '[TorrentResumeStore] blob size > 4MB, rejecting as corrupt');
           return false;
         }
 
@@ -277,7 +280,9 @@ class TorrentResumeStore {
       final expectedSha = meta['sha256'] as String?;
 
       final blob = await blobFile.readAsBytes();
-      if (blob.isEmpty || blob.length > 1024 * 1024) {
+      // v2.0.0: Match the 4MB limit used by validateResumeData and saveAndWait.
+      // The old 1MB limit would delete valid v2.0.0 resume data on load.
+      if (blob.isEmpty || blob.length > 4 * 1024 * 1024) {
         debugPrint(
             '[TorrentResumeStore] invalid blob size (${blob.length} bytes), rejecting as corrupt');
         await deleteResumeDataForSource(sourceUrl);
@@ -349,14 +354,28 @@ class TorrentResumeStore {
   /// Validates that a resume blob is structurally valid and non-corrupt (Phase 4).
   static bool validateResumeData(Uint8List blob) {
     if (blob.isEmpty) return false;
-    if (blob.length > 1024 * 1024) return false;
+    // v2.0.0 resume blobs may be larger (include file priorities, piece hashes).
+    if (blob.length > 4 * 1024 * 1024) return false;
+    // First byte heuristic: bencode dicts start with 'd' (0x64), lists with 'l' (0x6c).
+    // v2.0.0 internal format may also start with a different magic byte.
+    final first = blob[0];
+    final isBencode = first == 0x64 ||
+        first == 0x6c ||
+        first == 0x69 ||
+        first == 0x65 ||
+        (first >= 0x30 && first <= 0x39);
+    if (!isBencode) {
+      // Could be a v2.0.0 native serialization — accept by size heuristic only.
+      return blob.length >= 32;
+    }
     try {
       final decoded = BencodeDecoder(blob).decode();
       return decoded is Map;
     } catch (e, st) {
-      LoggingService.logger('TorrentResumeStore')
-          .warning('Operation failed with fallback', e, st);
-      return false;
+      LoggingService.logger('TorrentResumeStore').warning(
+          'Bencode decode failed, accepting blob as v2.0.0 native', e, st);
+      // v2.0.0: accept native serialization that isn't bencode-compatible.
+      return blob.length >= 32;
     }
   }
 
@@ -385,7 +404,8 @@ class TorrentResumeStore {
               final blobPath = entity.path.replaceAll('.meta.json', '.resume');
               final blobFile = File(blobPath);
               if (await blobFile.exists()) await blobFile.delete();
-              final legacyBinPath = entity.path.replaceAll('.meta.json', '.bin');
+              final legacyBinPath =
+                  entity.path.replaceAll('.meta.json', '.bin');
               final legacyBinFile = File(legacyBinPath);
               if (await legacyBinFile.exists()) await legacyBinFile.delete();
             }

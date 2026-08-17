@@ -267,11 +267,14 @@ class TorrentService {
   static bool get resumeDataSupported => _activeService.resumeDataSupported;
   static bool get forceRecheckSupported => _activeService.forceRecheckSupported;
   static bool get trackersSupported => _activeService.trackersSupported;
-  static bool get createTorrentSupported => _activeService.createTorrentSupported;
+  static bool get createTorrentSupported =>
+      _activeService.createTorrentSupported;
   static bool get ipFilterSupported => _activeService.ipFilterSupported;
-  static bool get sequentialDownloadSupported => _activeService.sequentialDownloadSupported;
+  static bool get sequentialDownloadSupported =>
+      _activeService.sequentialDownloadSupported;
   static bool get superSeedingSupported => _activeService.superSeedingSupported;
-  static bool get pieceDeadlineSupported => _activeService.pieceDeadlineSupported;
+  static bool get pieceDeadlineSupported =>
+      _activeService.pieceDeadlineSupported;
   static bool get sequentialDownloadEnabled =>
       _activeService.sequentialDownloadEnabled;
   static bool _seedingEnabled = true;

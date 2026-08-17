@@ -198,7 +198,13 @@ class TorrentDownloadHandler {
 
   Future<void> _saveResumeDataBeforePause(int id, String sourceUrl) async {
     try {
-      await _torrentService.saveResumeData(id);
+      // v2.0.0: must pause AFTER the alert-based resume data is fully emitted.
+      // Call saveResumeData (which now awaits the future) BEFORE calling pauseTorrent.
+      await _torrentService.saveResumeData(id).timeout(
+            const Duration(seconds: 8),
+            onTimeout: () => _log.warning(
+                'saveResumeData timed out for torrent $id — pause proceeding'),
+          );
     } catch (e, st) {
       _log.warning('Failed to save resume data for torrent $id: $e', e, st);
     }
@@ -212,8 +218,15 @@ class TorrentDownloadHandler {
       if (stats != null) {
         final label = stats.stateLabel.toLowerCase();
         if (label.contains('paused') || label.contains('stopped')) return true;
+        // v2.0.0: Do NOT use totalWantedDone <= 0 as a "stopped" signal.
+        // A brand-new torrent that just started has totalWantedDone == 0
+        // but is NOT stopped — the pause command may not have taken
+        // effect yet. Only treat non-transfer states (checking, allocating,
+        // downloading_metadata) with zero I/O as effectively stopped.
         if ((stats.downloadRate <= 0 && stats.uploadRate <= 0) &&
-            stats.totalWantedDone <= 0) {
+            (label.contains('checking') ||
+                label.contains('allocating') ||
+                label.contains('downloading_metadata'))) {
           return true;
         }
       }
@@ -318,8 +331,13 @@ class TorrentDownloadHandler {
       }
       final dl = (f['downloadedBytes'] as num?)?.toInt() ?? -1;
       if (dl >= 0 && dl <= len) {
+        // v2.0.0: Mark as accurate so distributeEstimatedBytes doesn't
+        // overwrite real progress with an estimate. Without this flag,
+        // files that were previously estimated (progressEstimated=true)
+        // would have their accurate downloadedBytes overwritten.
         f['progress'] = (dl / len).clamp(0.0, 1.0);
         f['isComplete'] = dl >= len;
+        f['progressEstimated'] = false;
       } else {
         final est = (len * progress).clamp(0.0, len.toDouble()).toInt();
         f['downloadedBytes'] = est;
@@ -481,7 +499,8 @@ class TorrentDownloadHandler {
     bool hasLoadedResume = false;
 
     if (id >= 0 && !_torrentService.isTorrentAlive(id)) {
-      _log.warning('Stale torrent handle $id detected; re-adding. (FIX #2 Part A & Fix #5)');
+      _log.warning(
+          'Stale torrent handle $id detected; re-adding. (FIX #2 Part A & Fix #5)');
       try {
         _torrentService.removeTorrent(id, deleteFiles: false);
       } catch (e) {
@@ -1045,47 +1064,52 @@ class TorrentDownloadHandler {
           lastTorrentProgressTime = now;
         }
         List<Map<String, dynamic>>? resolvedFiles = getTorrentFiles?.call();
-        if ((resolvedFiles == null || resolvedFiles.isEmpty) &&
-            torrent.hasMetadata) {
+        // v2.0.0: ALWAYS re-fetch the native file list when metadata is available
+        // — the cached snapshot may be stale and miss per-file progress.
+        if (torrent.hasMetadata) {
           try {
             final nativeFiles = _torrentService.getFiles(id);
             if (nativeFiles.isNotEmpty) {
-              resolvedFiles = nativeFiles
-                  .map((f) => {
-                        'name': f.name,
-                        'length': f.size,
-                        'downloadedBytes': f.safeDownloadedBytes,
-                        'selected': f.selected,
-                        'priority': f.priority,
-                        'progress': f.size > 0
-                            ? (f.safeDownloadedBytes / f.size).clamp(0.0, 1.0)
-                            : 1.0,
-                        'isComplete':
-                            f.size == 0 || f.safeDownloadedBytes >= f.size,
-                        'progressEstimated': false,
-                      })
-                  .toList();
+              resolvedFiles = nativeFiles.map((f) {
+                // v2.0.0: When downloadedBytes < 0, the engine couldn't
+                // provide per-file progress — safeDownloadedBytes fell back
+                // to the overall torrent progress ratio. Mark these as
+                // estimated so distributeEstimatedBytes can correct them.
+                final bool isEstimated = f.downloadedBytes < 0;
+                final dl =
+                    f.safeDownloadedBytes < 0 ? 0 : f.safeDownloadedBytes;
+                return {
+                  'name': f.name,
+                  'length': f.size,
+                  'downloadedBytes': dl,
+                  'selected': f.selected,
+                  'priority': f.priority,
+                  'progress': f.size > 0 ? (dl / f.size).clamp(0.0, 1.0) : 1.0,
+                  'isComplete': f.size == 0 || dl >= f.size,
+                  'progressEstimated': isEstimated,
+                };
+              }).toList();
               cachedAccurateFiles = resolvedFiles;
             }
           } catch (e, st) {
             _log.fine('Failed to fetch native file list: $e', e, st);
           }
         }
-        final selectedFiles = resolvedFiles
-            ?.where((f) => (f['selected'] as bool?) ?? true)
-            .toList();
-        final int selectedFilesSum =
-            selectedFiles != null && selectedFiles.isNotEmpty
-                ? selectedFiles.fold<int>(
-                    0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0))
-                : 0;
-        final totalSize = selectedFilesSum > 0
-            ? selectedFilesSum
+        // v2.0.0: total size must ALWAYS be computed from the full file list,
+        // regardless of selection state, to avoid showing 0 / wrong totals.
+        final int allFilesSum = resolvedFiles?.fold<int>(
+                0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0)) ??
+            0;
+        final int selectedFilesSum = resolvedFiles
+                ?.where((f) => (f['selected'] as bool?) ?? true)
+                .fold<int>(
+                    0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0)) ??
+            0;
+        final totalSize = allFilesSum > 0
+            ? allFilesSum
             : (torrent.totalWanted > 0
                 ? torrent.totalWanted
-                : (resolvedFiles?.fold<int>(0,
-                        (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0)) ??
-                    0));
+                : selectedFilesSum);
         currentTotalSize = totalSize;
         final fileCount =
             resolvedFiles?.length ?? (cachedAccurateFiles?.length ?? 0);

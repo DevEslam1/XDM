@@ -10,7 +10,10 @@ class TorrentSessionConfig {
     TorrentSettingsPack pack, {
     BtConfig? baseConfig,
   }) {
-    final def = baseConfig ?? LibtorrentFlutter.instance.getDefaultConfig();
+    final def = baseConfig ??
+        (LibtorrentFlutter.isInitialized
+            ? LibtorrentFlutter.instance.getDefaultConfig()
+            : const BtConfig());
     return def.copyWith(
       disableDht: !pack.enableDht,
       disableUpnp: !pack.enableUpnp,
@@ -30,7 +33,10 @@ class TorrentSessionConfig {
 
   /// Builds an optimized config adapted to device power and user settings.
   static BtConfig buildOptimizedConfig(SettingsProvider s) {
-    return LibtorrentFlutter.instance.getDefaultConfig().copyWith(
+    final base = LibtorrentFlutter.isInitialized
+        ? LibtorrentFlutter.instance.getDefaultConfig()
+        : const BtConfig();
+    return base.copyWith(
           // === CONNECTION & PROTOCOL ===
           disableDht: !s.enableDht,
           disableUpnp: !s.enableUpnp,

@@ -234,36 +234,39 @@ class AdBlockFilterUpdater {
 
   void _invalidateCosmeticCache() => _cosmeticCache.clear();
 
-  Set<String> _allowListedDomains = {};
+  static const String _userAllowlistKey = 'adblock_user_allowlist';
+  Set<String> _userAllowListedDomains = {};
+  Set<String> _downloadedExceptions = {};
   Completer<bool>? _inFlightUpdate;
 
   Set<String> get allBlockedDomains => _downloadedDomains;
   Set<String> get allTrackingDomains => _downloadedTrackingDomains;
-  Set<String> get allowListedDomains => Set.unmodifiable(_allowListedDomains);
+  Set<String> get allowListedDomains =>
+      Set.unmodifiable({..._userAllowListedDomains, ..._downloadedExceptions});
   int get downloadedDomainCount => _downloadedDomains.length;
   int get downloadedTrackingCount => _downloadedTrackingDomains.length;
   Set<String> get cosmeticRules => _cosmeticRules;
   Set<String> get urlPatterns => _urlPatterns;
   Set<String> get scriptletRules => _scriptletRules;
 
-  Future<void> persistAllowList() async {
+  Future<void> persistUserAllowList() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(
-      '${_domainsKey}_excepted',
-      _allowListedDomains.take(_maxDomains).toList(),
+      _userAllowlistKey,
+      _userAllowListedDomains.toList(),
     );
   }
 
   void addAllowListDomain(String domain) {
     if (domain.isEmpty) return;
-    _allowListedDomains.add(domain.toLowerCase());
-    unawaited(persistAllowList());
+    _userAllowListedDomains.add(domain.toLowerCase());
+    unawaited(persistUserAllowList());
   }
 
   void removeAllowListDomain(String domain) {
     if (domain.isEmpty) return;
-    _allowListedDomains.remove(domain.toLowerCase());
-    unawaited(persistAllowList());
+    _userAllowListedDomains.remove(domain.toLowerCase());
+    unawaited(persistUserAllowList());
   }
 
   Future<void> init() async {
@@ -274,13 +277,15 @@ class AdBlockFilterUpdater {
     final cachedAds = prefs.getStringList('${_domainsKey}_ads') ?? [];
     final cachedTracking = prefs.getStringList('${_domainsKey}_tracking') ?? [];
     final cachedExcepted = prefs.getStringList('${_domainsKey}_excepted') ?? [];
+    final userAllowlist = prefs.getStringList(_userAllowlistKey) ?? [];
     final cachedPatterns = prefs.getStringList(_patternsKey) ?? [];
     final cachedCosmetics = prefs.getStringList(_cosmeticKey) ?? [];
     final cachedScriptlets = prefs.getStringList(_scriptletsKey) ?? [];
 
     _downloadedDomains = cachedAds.toSet();
     _downloadedTrackingDomains = cachedTracking.toSet();
-    _allowListedDomains = cachedExcepted.toSet();
+    _downloadedExceptions = cachedExcepted.toSet();
+    _userAllowListedDomains = userAllowlist.toSet();
     _urlPatterns.addAll(cachedPatterns);
     // FIX: Populate the trie on startup so path-based blocking works immediately
     for (final p in cachedPatterns) {
@@ -590,7 +595,7 @@ class AdBlockFilterUpdater {
     _downloadedDomains = combinedAds.difference(combinedAdsExceptions);
     _downloadedTrackingDomains =
         combinedTracking.difference(combinedTrackingExceptions);
-    _allowListedDomains =
+    _downloadedExceptions =
         combinedAdsExceptions.union(combinedTrackingExceptions);
 
     // Save final merged sets
@@ -604,7 +609,7 @@ class AdBlockFilterUpdater {
     );
     await prefs.setStringList(
       '${_domainsKey}_excepted',
-      _allowListedDomains.take(_maxDomains).toList(),
+      _downloadedExceptions.take(_maxDomains).toList(),
     );
 
     final hasCachedPatterns = prefs.containsKey(_patternsKey);
@@ -778,11 +783,12 @@ class AdBlockFilterUpdater {
 
     // FIX: Check allow-list FIRST so excepted domains are never blocked,
     // even if they appear in a blocklist.
-    if (_allowListedDomains.contains(lower)) return false;
+    final allowed = allowListedDomains;
+    if (allowed.contains(lower)) return false;
     final parts = lower.split('.');
     for (var i = 1; i < parts.length - 1; i++) {
       final parent = parts.sublist(i).join('.');
-      if (_allowListedDomains.contains(parent)) return false;
+      if (allowed.contains(parent)) return false;
     }
 
     if (_downloadedDomains.contains(lower)) return true;
@@ -866,7 +872,7 @@ class AdBlockFilterUpdater {
     _invalidateCosmeticCache();
     _downloadedDomains.clear();
     _downloadedTrackingDomains.clear();
-    _allowListedDomains.clear();
+    _downloadedExceptions.clear();
     _siteCosmeticRules.clear();
     _cosmeticExceptions.clear();
     _globalCosmeticExceptions.clear();

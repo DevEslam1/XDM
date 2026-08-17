@@ -568,25 +568,22 @@ class _BrowserChrome extends StatelessWidget {
     final isYt = MediaSniffer.isYoutubeHost(rawUrl) ||
         YoutubeService.isYoutubeUrl(rawUrl);
 
-    final detectedSources =
-        controller.mediaSniffer.detectedMediaSources[activeTab.id] ?? [];
-    final hasPlaylist =
-        controller.mediaSniffer.detectedPlaylistUrls[activeTab.id] != null ||
-            YoutubeService.isPlaylistUrl(rawUrl);
-    final hasStreams = detectedSources.isNotEmpty;
-    final hasGenericDownload =
+    final detectedSources = isYt
+        ? const <Map<String, dynamic>>[]
+        : (controller.mediaSniffer.detectedMediaSources[activeTab.id] ?? []);
+    final hasPlaylist = isYt && YoutubeService.isPlaylistUrl(rawUrl);
+    final hasStreams = !isYt && detectedSources.isNotEmpty;
+    final hasGenericDownload = !isYt &&
         controller.mediaSniffer.detectedDownloadUrls[activeTab.id] != null;
 
     final shouldShow = isYt
-        ? (isYtVideoOrPlaylist || hasStreams || hasPlaylist)
+        ? isYtVideoOrPlaylist
         : (hasStreams || hasGenericDownload);
 
     if (!shouldShow) return null;
 
     final isYoutubePlaylist = hasPlaylist && isYt;
-    final badgeCount = isYoutubePlaylist
-        ? (controller.mediaSniffer.detectedPlaylistUrls[activeTab.id] ?? 0)
-        : detectedSources.length;
+    final badgeCount = isYoutubePlaylist ? 1 : detectedSources.length;
 
     return YoutubeGrabButton(
       url: rawUrl,

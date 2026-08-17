@@ -563,11 +563,23 @@ class DownloadProgressHandler {
   void _handleTorrentFiles(List pTorrentFiles) {
     final result =
         TorrentFileNormalizer.normalizeTorrentFileList(pTorrentFiles);
-    lastTorrentFiles = result.normalizedFiles;
-    lastTotalFiles = result.total;
-    lastTotalFileBytes = result.bytes;
-    lastDownloadedFileBytes = result.downloaded;
-    lastCompletedFiles = result.done;
+    // v2.0.0: never overwrite an existing non-empty file list with an empty
+    // snapshot — that was wiping the UI on transiently-empty updates.
+    if (result.normalizedFiles.isNotEmpty || lastTorrentFiles == null) {
+      lastTorrentFiles = result.normalizedFiles;
+    }
+    if (result.total > 0 || lastTotalFiles == null) {
+      lastTotalFiles = result.total;
+    }
+    if (result.bytes > 0 || lastTotalFileBytes == null) {
+      lastTotalFileBytes = result.bytes;
+    }
+    if (result.total > 0 || lastCompletedFiles == null) {
+      lastCompletedFiles = result.done;
+    }
+    lastDownloadedFileBytes = result.downloaded > 0
+        ? result.downloaded
+        : (lastDownloadedFileBytes ?? result.downloaded);
     lastHasEstimatedFileProgress = result.hasEstimated;
   }
 }

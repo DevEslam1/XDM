@@ -1,4 +1,3 @@
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -227,46 +226,6 @@ class BrowserToolbar extends StatelessWidget {
                   },
                 ),
 
-                // FIX(U15): Offline indicator — a small cloud-off chip
-                // appears in the toolbar whenever the device loses all
-                // network connectivity.
-                StreamBuilder<List<ConnectivityResult>>(
-                  stream: Connectivity().onConnectivityChanged,
-                  builder: (context, snapshot) {
-                    final results =
-                        snapshot.data ?? const <ConnectivityResult>[];
-                    final offline =
-                        results.contains(ConnectivityResult.none) ||
-                            results.isEmpty;
-                    if (!offline) return const SizedBox.shrink();
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Tooltip(
-                        message: L10n.of(context, 'browser_offline_tooltip'),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: AppTheme.neonRed.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: AppTheme.neonRed.withValues(alpha: 0.5),
-                              width: 0.7,
-                            ),
-                          ),
-                          child: Icon(
-                            Icons.cloud_off_rounded,
-                            size: isNarrow ? 12 : 14,
-                            color: isDark
-                                ? AppTheme.neonRed
-                                : AppTheme.lightNeonRed,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-
                 // Tabs button with badge counter
                 IconButton(
                   padding: EdgeInsets.zero,
@@ -296,42 +255,6 @@ class BrowserToolbar extends StatelessWidget {
                     ),
                   ),
                   onPressed: onShowTabSwitcher,
-                ),
-
-                // FIX(U12): Media sniffer status toggle — tap to flip the
-                // engine on/off without opening the full menu.
-                ListenableBuilder(
-                  listenable: controller,
-                  builder: (context, _) {
-                    final snifferOn = controller.isSnifferEnabled;
-                    return IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints: BoxConstraints(
-                        minWidth: isNarrow ? 28 : 32,
-                        minHeight: 36,
-                      ),
-                      icon: Icon(
-                        snifferOn
-                            ? Icons.radar_rounded
-                            : Icons.radar_rounded,
-                        size: isNarrow ? 15 : 17,
-                        color: snifferOn
-                            ? (isDark
-                                ? AppTheme.neonGreen
-                                : AppTheme.lightNeonGreen)
-                            : mutedClr,
-                      ),
-                      tooltip: L10n.of(
-                        context,
-                        snifferOn
-                            ? 'browser_sniffer_on_tooltip'
-                            : 'browser_sniffer_off_tooltip',
-                      ),
-                      onPressed: () {
-                        controller.setSnifferEnabled(!snifferOn);
-                      },
-                    );
-                  },
                 ),
 
                 // Extracted full 17-action menu button

@@ -57,7 +57,7 @@ class BrowserMenuButton extends StatelessWidget {
           ctx,
           value: 'reload',
           icon: Icons.refresh_rounded,
-          title: L10n.isRtl(ctx) ? 'إعادة تحميل' : 'Reload',
+          title: L10n.of(ctx, 'browser_menu_reload'),
           enabled: hasUrl,
         ),
         _buildItem(
@@ -76,7 +76,7 @@ class BrowserMenuButton extends StatelessWidget {
           ctx,
           value: 'recently_closed',
           icon: Icons.restore_page_rounded,
-          title: L10n.isRtl(ctx) ? 'التبويبات المغلقة مؤخراً' : 'Recently Closed',
+          title: L10n.of(ctx, 'browser_recently_closed'),
           enabled: controller.recentlyClosedTabs.isNotEmpty,
         ),
         const PopupMenuDivider(height: 8),
@@ -84,7 +84,7 @@ class BrowserMenuButton extends StatelessWidget {
           ctx,
           value: 'bookmark_page',
           icon: Icons.bookmark_add_outlined,
-          title: L10n.isRtl(ctx) ? 'إضافة إلى الإشارات' : 'Bookmark this page',
+          title: L10n.of(ctx, 'browser_menu_bookmark_page'),
           enabled: hasUrl,
         ),
         _buildItem(
@@ -112,13 +112,23 @@ class BrowserMenuButton extends StatelessWidget {
               ? Icons.desktop_windows_rounded
               : Icons.phone_android_rounded,
           title: settings.desktopMode
-              ? (L10n.isRtl(ctx) ? 'عرض الهاتف' : 'Mobile View')
-              : (L10n.isRtl(ctx) ? 'عرض سطح المكتب' : 'Desktop Site'),
+              ? L10n.of(ctx, 'browser_mobile_view')
+              : L10n.of(ctx, 'browser_desktop_site'),
+        ),
+        _buildItem(
+          ctx,
+          value: 'media_sniffer',
+          icon: controller.isSnifferEnabled
+              ? Icons.radar_rounded
+              : Icons.radar_outlined,
+          title: controller.isSnifferEnabled
+              ? L10n.of(ctx, 'browser_sniffer_on')
+              : L10n.of(ctx, 'browser_sniffer_off'),
         ),
         _buildItem(
           ctx,
           value: 'save_offline',
-          icon: Icons.offline_pin_outlined,
+          icon: Icons.cloud_download_outlined,
           title: L10n.of(ctx, 'browser_save_offline'),
           enabled: hasUrl,
         ),
@@ -262,6 +272,19 @@ class BrowserMenuButton extends StatelessWidget {
       case 'desktop_mode':
         settings.setDesktopMode(!settings.desktopMode);
         controller.reload();
+        break;
+      case 'media_sniffer':
+        final nextState = !controller.isSnifferEnabled;
+        controller.setSnifferEnabled(nextState);
+        ThemedSnackbar.show(
+          context,
+          message: nextState
+              ? (L10n.isRtl(context) ? 'تم تفعيل كاشف الوسائط' : 'Media sniffer enabled')
+              : (L10n.isRtl(context) ? 'تم تعطيل كاشف الوسائط' : 'Media sniffer disabled'),
+          color: nextState ? AppTheme.neonGreen : AppTheme.neonAmber,
+          icon: nextState ? Icons.radar_rounded : Icons.radar_outlined,
+          isDarkMode: isDark,
+        );
         break;
       case 'new_tab':
         controller.openInNewTab('about:blank', switchTo: true);

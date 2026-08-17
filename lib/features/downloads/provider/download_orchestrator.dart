@@ -3090,7 +3090,7 @@ class DownloadOrchestrator {
                     try {
                       final f = File(path);
                       if (await f.exists()) await f.delete();
-                    } catch (e, st) {
+                    } catch (e) {
                       debugPrint('[DMX] FIX-3 cleanup failed for $path: $e');
                     }
                   }
