@@ -7,7 +7,7 @@ import '../services/browser_controller.dart';
 import 'browser_menu_button.dart';
 import 'smart_url_bar.dart';
 
-/// Extracted toolbar component for the in-app browser screen.
+/// Responsive, theme-adaptive toolbar for the in-app browser screen.
 class BrowserToolbar extends StatelessWidget {
   final BrowserController controller;
   final TextEditingController urlController;
@@ -15,6 +15,7 @@ class BrowserToolbar extends StatelessWidget {
   final bool isDark;
   final bool isRtl;
   final bool isLoading;
+  final double progress;
   final bool canGoBack;
   final bool isHomeTab;
   final int tabCount;
@@ -40,6 +41,7 @@ class BrowserToolbar extends StatelessWidget {
     required this.isDark,
     required this.isRtl,
     required this.isLoading,
+    this.progress = 0.0,
     required this.canGoBack,
     required this.isHomeTab,
     required this.tabCount,
@@ -60,124 +62,175 @@ class BrowserToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
-            .withValues(alpha: 0.95),
-        border: Border(
-          bottom: BorderSide(
-            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-            width: 0.6,
+    final isAmoled = isDark && settings.isAmoledMode;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+
+    final toolbarBg = isDark
+        ? (isAmoled ? AppTheme.amoledSurface : AppTheme.surface.withValues(alpha: 0.96))
+        : AppTheme.lightSurface.withValues(alpha: 0.96);
+
+    final toolbarBorder = isDark
+        ? (isAmoled ? AppTheme.amoledBorder : AppTheme.glassBorder)
+        : AppTheme.lightGlassBorder;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 360;
+
+        return Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: isNarrow ? 4 : 6,
+            vertical: 4,
           ),
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Row(
-          children: [
-            // Home button
-            IconButton(
-              icon: Icon(
-                Icons.home_outlined,
-                size: 20,
-                color: textClr,
+          decoration: BoxDecoration(
+            color: toolbarBg,
+            border: Border(
+              bottom: BorderSide(
+                color: toolbarBorder,
+                width: 0.8,
               ),
-              tooltip: L10n.of(context, 'browser_home_tooltip'),
-              onPressed: onNavigateHome,
             ),
-
-            // Navigation back button
-            IconButton(
-              icon: Icon(
-                Icons.arrow_back_ios_new,
-                size: 15,
-                color: (canGoBack || !isHomeTab)
-                    ? textClr
-                    : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
-              ),
-              onPressed: (canGoBack || !isHomeTab) ? onGoBack : null,
-            ),
-
-            // Desktop mode indicator icon
-            if (desktopMode)
-              const Tooltip(
-                message: 'Desktop mode active',
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4.0),
-                  child: Icon(
-                    Icons.desktop_windows_rounded,
-                    size: 14,
-                    color: AppTheme.neonBlue,
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Row(
+              children: [
+                // Home button
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints(
+                    minWidth: isNarrow ? 30 : 34,
+                    minHeight: 36,
                   ),
-                ),
-              ),
-
-            // URL address bar
-            Expanded(
-              child: SmartUrlBar(
-                controller: urlController,
-                focusNode: focusNode,
-                isDark: isDark,
-                isLoading: isLoading,
-                onNavigate: onNavigate,
-                onReload: onReload,
-                onStopLoading: onStopLoading,
-                onShieldPressed: onShieldPressed,
-                isHttps: isHttps,
-              ),
-            ),
-
-            if (youtubeGrabButton != null) ...[
-              const SizedBox(width: 4),
-              youtubeGrabButton!,
-              const SizedBox(width: 4),
-            ],
-
-            // Tabs button
-            IconButton(
-              icon: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Icon(
-                    Icons.crop_square_rounded,
-                    size: 22,
+                  icon: Icon(
+                    Icons.home_rounded,
+                    size: isNarrow ? 18 : 20,
                     color: textClr,
                   ),
-                  Text(
-                    '$tabCount',
-                    style: TextStyle(
-                      color: textClr,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
+                  tooltip: L10n.of(context, 'browser_home_tooltip'),
+                  onPressed: onNavigateHome,
+                ),
+
+                // Navigation back button
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints(
+                    minWidth: isNarrow ? 26 : 30,
+                    minHeight: 36,
+                  ),
+                  icon: Icon(
+                    Icons.arrow_back_ios_new,
+                    size: isNarrow ? 13 : 15,
+                    color: (canGoBack || !isHomeTab) ? textClr : mutedClr,
+                  ),
+                  onPressed: (canGoBack || !isHomeTab) ? onGoBack : null,
+                ),
+
+                // Desktop mode indicator badge
+                if (desktopMode)
+                  Tooltip(
+                    message: 'Desktop mode active',
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                      child: Container(
+                        padding: const EdgeInsets.all(3.5),
+                        decoration: BoxDecoration(
+                          color: AppTheme.neonBlue.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Icon(
+                          Icons.desktop_windows_rounded,
+                          size: 12,
+                          color: AppTheme.neonBlue,
+                        ),
+                      ),
                     ),
                   ),
+
+                const SizedBox(width: 2),
+
+                // URL address bar capsule
+                Expanded(
+                  child: SmartUrlBar(
+                    controller: urlController,
+                    focusNode: focusNode,
+                    isDark: isDark,
+                    isLoading: isLoading,
+                    progress: progress,
+                    onNavigate: onNavigate,
+                    onReload: onReload,
+                    onStopLoading: onStopLoading,
+                    onShieldPressed: onShieldPressed,
+                    isHttps: isHttps,
+                  ),
+                ),
+
+                const SizedBox(width: 2),
+
+                if (youtubeGrabButton != null) ...[
+                  youtubeGrabButton!,
+                  const SizedBox(width: 2),
                 ],
-              ),
-              onPressed: onShowTabSwitcher,
-            ),
 
-            // Extracted full 17-action menu button
-            BrowserMenuButton(
-              controller: controller,
-              settings: settings,
-              isDark: isDark,
-              textClr: textClr,
-            ),
+                // Tabs button with badge counter
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints(
+                    minWidth: isNarrow ? 30 : 34,
+                    minHeight: 36,
+                  ),
+                  icon: Container(
+                    width: isNarrow ? 21 : 23,
+                    height: isNarrow ? 21 : 23,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: textClr.withValues(alpha: 0.7),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Text(
+                      '$tabCount',
+                      style: TextStyle(
+                        color: textClr,
+                        fontSize: tabCount > 9 ? 9.5 : 10.5,
+                        fontWeight: FontWeight.bold,
+                        height: 1.1,
+                      ),
+                    ),
+                  ),
+                  onPressed: onShowTabSwitcher,
+                ),
 
-            // Quit browser button
-            IconButton(
-              icon: Icon(
-                Icons.power_settings_new_rounded,
-                size: 18,
-                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-              ),
-              tooltip: L10n.of(context, 'browser_quit_tooltip'),
-              onPressed: onQuitPressed,
+                // Extracted full 17-action menu button
+                BrowserMenuButton(
+                  controller: controller,
+                  settings: settings,
+                  isDark: isDark,
+                  textClr: textClr,
+                ),
+
+                // Quit / Close browser button
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints(
+                    minWidth: isNarrow ? 28 : 32,
+                    minHeight: 36,
+                  ),
+                  icon: Icon(
+                    Icons.power_settings_new_rounded,
+                    size: isNarrow ? 16 : 18,
+                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  ),
+                  tooltip: L10n.of(context, 'browser_quit_tooltip'),
+                  onPressed: onQuitPressed,
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

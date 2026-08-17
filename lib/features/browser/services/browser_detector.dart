@@ -126,6 +126,16 @@ class BrowserDetector {
   }
 
   static DetectedMedia? detect(String url) {
+    final lower = url.toLowerCase();
+    if (lower.contains('.m3u8') || lower.contains('.mpd')) {
+      return DetectedMedia(
+        kind: DetectedMediaKind.stream,
+        url: url,
+        suggestedFileName: _suggestName(url, lower.contains('.m3u8') ? '.m3u8' : '.mpd'),
+        confidence: DetectionConfidence.high,
+      );
+    }
+
     final analysis = SiteIntelligenceService().analyzeUrl(url);
 
     if (analysis.siteType == SiteType.magnetSource) {
@@ -157,7 +167,6 @@ class BrowserDetector {
       }
     }
 
-    final lower = url.toLowerCase();
     if (lower.startsWith('magnet:')) {
       return DetectedMedia(kind: DetectedMediaKind.magnet, url: url);
     }

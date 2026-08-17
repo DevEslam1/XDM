@@ -94,7 +94,6 @@ class BrowserController extends ChangeNotifier {
   bool get findPanelVisible => _findPanelVisible;
   int _findActiveMatch = 0;
   int get findActiveMatch => _findActiveMatch;
-  int get findMatchIndex => _findActiveMatch;
   int _findMatchCount = 0;
   int get findMatchCount => _findMatchCount;
 
@@ -399,23 +398,21 @@ class BrowserController extends ChangeNotifier {
     navigationController.syncUrlController(activeTab);
   }
 
-  void updateNavState() {
+  void updateNavState() async {
     final tab = activeTab;
-    if (tab?.controller != null) {
-      tab!.controller!.canGoBack().then((can) {
-        if (!_isDisposed && tab.canGoBack != can) {
-          tab.canGoBack = can;
-          notifyListeners();
-        }
-      }).catchError((_) {});
-
-      tab.controller!.canGoForward().then((can) {
-        if (!_isDisposed && tab.canGoForward != can) {
-          tab.canGoForward = can;
-          notifyListeners();
-        }
-      }).catchError((_) {});
-    }
+    if (tab?.controller == null || _isDisposed) return;
+    final tabId = tab!.id;
+    try {
+      final results = await Future.wait([
+        tab.controller!.canGoBack(),
+        tab.controller!.canGoForward(),
+      ]);
+      if (activeTab?.id == tabId && !_isDisposed) {
+        tab.canGoBack = results[0];
+        tab.canGoForward = results[1];
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   void cleanupTabState(String tabId) {
@@ -648,6 +645,10 @@ class BrowserController extends ChangeNotifier {
       } catch (e, st) {
         _log.warning('Script injection error on page stop: $e', e, st);
       }
+
+      if (isSnifferEnabled && !tab.isHome) {
+        mediaSniffer.scheduleScan(tab, tabs: tabs);
+      }
     }
 
     tab.isLoading = false;
@@ -698,9 +699,6 @@ class BrowserController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void handlePageLoadError(BrowserTab tab, String errorDescription) =>
-      handlePageError(tab, errorDescription);
-
   void handleTabCrash(BrowserTab tab) {
     if (_isDisposed) return;
     _loadingTimeoutTimers[tab.id]?.cancel();
@@ -711,7 +709,12 @@ class BrowserController extends ChangeNotifier {
 
   void handlePageProgress(BrowserTab tab, int progress) {
     if (_isDisposed) return;
-    tab.progress = progress / 100.0;
+    final pct = progress / 100.0;
+    if ((pct - tab.progress).abs() < 0.02 && progress != 100) return;
+    tab.progress = pct;
+    if (progress == 100 || progress % 10 == 0) {
+      notifyListeners();
+    }
   }
 
   // ── Favicon Caching ──

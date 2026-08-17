@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/material.dart';
@@ -34,12 +35,16 @@ class _Suggestion {
   });
 }
 
+/// Ultra-modern, polished URL & search bar capsule with integrated progress,
+/// dynamic protocol security badges, frosted glass autocomplete overlay,
+/// and smooth focus transitions.
 class SmartUrlBar extends StatefulWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool isDark;
   final void Function(String url) onNavigate;
   final bool isLoading;
+  final double progress;
   final VoidCallback? onReload;
   final VoidCallback? onStopLoading;
   final VoidCallback? onShieldPressed;
@@ -55,6 +60,7 @@ class SmartUrlBar extends StatefulWidget {
     required this.isDark,
     required this.onNavigate,
     this.isLoading = false,
+    this.progress = 0.0,
     this.onReload,
     this.onStopLoading,
     this.onShieldPressed,
@@ -68,16 +74,22 @@ class SmartUrlBar extends StatefulWidget {
   State<SmartUrlBar> createState() => _SmartUrlBarState();
 }
 
-class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
+class _SmartUrlBarState extends State<SmartUrlBar>
+    with SingleTickerProviderStateMixin, HapticHelper {
   List<_Suggestion> _suggestions = [];
   Timer? _debounce;
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   int _searchCount = 0;
+  late AnimationController _progressAnimController;
 
   @override
   void initState() {
     super.initState();
+    _progressAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
     widget.controller.addListener(_onTextChanged);
     widget.focusNode.addListener(_onFocusChanged);
   }
@@ -93,10 +105,26 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
       oldWidget.focusNode.removeListener(_onFocusChanged);
       widget.focusNode.addListener(_onFocusChanged);
     }
+    if (widget.isLoading != oldWidget.isLoading ||
+        widget.progress != oldWidget.progress) {
+      if (widget.isLoading) {
+        _progressAnimController.animateTo(
+          widget.progress.clamp(0.05, 1.0),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        _progressAnimController.animateTo(1.0).then((_) {
+          if (mounted && !widget.isLoading) {
+            _progressAnimController.reset();
+          }
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
+    _progressAnimController.dispose();
     _debounce?.cancel();
     _removeOverlay();
     widget.controller.removeListener(_onTextChanged);
@@ -118,6 +146,7 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
     } else if (widget.controller.text.isNotEmpty) {
       _generateSuggestions(widget.controller.text);
     }
+    if (mounted) setState(() {});
   }
 
   void _onTextChanged() {
@@ -146,7 +175,7 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
         type: SuggestionType.url,
         title: query,
         url: _normalizeUrl(query),
-        icon: Icons.link_rounded,
+        icon: Icons.public_rounded,
       ));
     }
 
@@ -246,13 +275,13 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
 
     final renderBox = context.findRenderObject() as RenderBox?;
     final targetOffset = renderBox?.localToGlobal(Offset.zero) ?? Offset.zero;
-    final top = targetOffset.dy + (renderBox?.size.height ?? 40) + 6;
+    final top = targetOffset.dy + (renderBox?.size.height ?? 42) + 8;
 
     _overlayEntry = OverlayEntry(
       builder: (ctx) {
         return Stack(
           children: [
-            // Barrier behind overlay cards: tapping anywhere outside dismisses options and unfocuses
+            // Barrier behind overlay
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
@@ -264,152 +293,158 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
               ),
             ),
 
-            // Suggestion container spanning full screen width with clean responsive margins
+            // Elevated Frosted Glass Suggestion Container
             Positioned(
               top: top,
               left: 12,
               right: 12,
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 640),
-                  child: Material(
-                    elevation: 16,
-                    shadowColor: Colors.black.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(18),
-                    color: isDark
-                        ? (isAmoled
-                            ? AppTheme.surface
-                            : AppTheme.surface.withValues(alpha: 0.98))
-                        : Colors.white.withValues(alpha: 0.98),
-                    child: Container(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(ctx).size.height * 0.45,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: isDark
-                              ? (isAmoled
-                                  ? AppTheme.amoledBorder
-                                  : AppTheme.glassBorder)
-                              : AppTheme.lightGlassBorder,
-                          width: 1.0,
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(18),
-                        child: ListView.separated(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                          shrinkWrap: true,
-                          itemCount: _suggestions.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 4),
-                          itemBuilder: (context, index) {
-                            final s = _suggestions[index];
-                            final accent = isDark
-                                ? AppTheme.neonBlue
-                                : AppTheme.lightNeonBlue;
+                  constraints: const BoxConstraints(maxWidth: 680),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                      child: Material(
+                        elevation: 20,
+                        shadowColor: Colors.black.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(20),
+                        color: isDark
+                            ? (isAmoled
+                                ? const Color(0xFF0F0F14).withValues(alpha: 0.98)
+                                : const Color(0xFF1A1A26).withValues(alpha: 0.92))
+                            : Colors.white.withValues(alpha: 0.94),
+                        child: Container(
+                          constraints: BoxConstraints(
+                            maxHeight: MediaQuery.of(ctx).size.height * 0.45,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isDark
+                                  ? (isAmoled
+                                      ? AppTheme.amoledBorder
+                                      : AppTheme.glassBorder)
+                                  : AppTheme.lightGlassBorder,
+                              width: 1.0,
+                            ),
+                          ),
+                          child: ListView.separated(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 8),
+                            shrinkWrap: true,
+                            itemCount: _suggestions.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 4),
+                            itemBuilder: (context, index) {
+                              final s = _suggestions[index];
+                              final badgeColor = switch (s.type) {
+                                SuggestionType.search =>
+                                  isDark ? AppTheme.neonViolet : Colors.purple,
+                                SuggestionType.bookmark =>
+                                  isDark ? AppTheme.neonAmber : Colors.amber.shade800,
+                                SuggestionType.history =>
+                                  isDark ? AppTheme.neonBlue : Colors.blue.shade700,
+                                SuggestionType.url =>
+                                  isDark ? AppTheme.neonGreen : Colors.green.shade700,
+                              };
 
-                            return Container(
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? (isAmoled
-                                        ? AppTheme.amoledCardBg
-                                        : Colors.white.withValues(alpha: 0.05))
-                                    : Colors.black.withValues(alpha: 0.03),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isDark ? Colors.white10 : Colors.black12,
-                                  width: 0.5,
+                              return Container(
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? (isAmoled
+                                          ? AppTheme.amoledCardBg
+                                          : Colors.white.withValues(alpha: 0.04))
+                                      : Colors.black.withValues(alpha: 0.03),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.06)
+                                        : Colors.black.withValues(alpha: 0.05),
+                                    width: 0.5,
+                                  ),
                                 ),
-                              ),
-                              child: Material(
-                                color: Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
-                                clipBehavior: Clip.antiAlias,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(12),
-                                  onTap: () {
-                                    widget.focusNode.unfocus();
-                                    _removeOverlay();
-                                    widget.onNavigate(s.url);
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 10),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                accent.withValues(alpha: 0.12),
-                                            shape: BoxShape.circle,
+                                child: Material(
+                                  color: Colors.transparent,
+                                  borderRadius: BorderRadius.circular(14),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(14),
+                                    onTap: () {
+                                      widget.focusNode.unfocus();
+                                      _removeOverlay();
+                                      widget.onNavigate(s.url);
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 10),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: badgeColor.withValues(alpha: 0.14),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(
+                                              s.icon,
+                                              size: 16,
+                                              color: badgeColor,
+                                            ),
                                           ),
-                                          child: Icon(
-                                            s.icon,
-                                            size: 16,
-                                            color: accent,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Text(
-                                                s.title,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: isDark
-                                                      ? AppTheme.textPrimary
-                                                      : AppTheme
-                                                          .lightTextPrimary,
-                                                ),
-                                              ),
-                                              if (s.title != s.url &&
-                                                  s.type !=
-                                                      SuggestionType
-                                                          .search) ...[
-                                                const SizedBox(height: 2),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
                                                 Text(
-                                                  s.url,
+                                                  s.title,
                                                   maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
+                                                  overflow: TextOverflow.ellipsis,
                                                   style: TextStyle(
-                                                    fontSize: 11,
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w600,
                                                     color: isDark
-                                                        ? AppTheme.textMuted
-                                                        : AppTheme
-                                                            .lightTextMuted,
+                                                        ? AppTheme.textPrimary
+                                                        : AppTheme.lightTextPrimary,
                                                   ),
                                                 ),
+                                                if (s.title != s.url &&
+                                                    s.type != SuggestionType.search) ...[
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    s.url,
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: isDark
+                                                          ? AppTheme.textMuted
+                                                          : AppTheme.lightTextMuted,
+                                                    ),
+                                                  ),
+                                                ],
                                               ],
-                                            ],
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Icon(
-                                          Icons.north_west_rounded,
-                                          size: 14,
-                                          color: isDark
-                                              ? AppTheme.textMuted
-                                              : AppTheme.lightTextMuted,
-                                        ),
-                                      ],
+                                          const SizedBox(width: 8),
+                                          Icon(
+                                            Icons.north_west_rounded,
+                                            size: 14,
+                                            color: isDark
+                                                ? AppTheme.textMuted
+                                                : AppTheme.lightTextMuted,
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ),
@@ -437,115 +472,239 @@ class _SmartUrlBarState extends State<SmartUrlBar> with HapticHelper {
     final isRtl = L10n.isRtl(context);
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final isFocused = widget.focusNode.hasFocus;
+
+    bool isAmoled = false;
+    try {
+      final settings = context.read<SettingsProvider>();
+      isAmoled = isDark && settings.isAmoledMode;
+    } catch (_) {}
+
+    final capsuleBg = isDark
+        ? (isAmoled
+            ? (isFocused ? AppTheme.amoledSurfaceRaised : AppTheme.amoledCardBg)
+            : (isFocused
+                ? AppTheme.surfaceRaised
+                : AppTheme.surfaceRaised.withValues(alpha: 0.75)))
+        : (isFocused
+            ? Colors.white
+            : AppTheme.lightSurfaceRaised.withValues(alpha: 0.85));
+
+    final capsuleBorder = isFocused
+        ? accent.withValues(alpha: isAmoled ? 0.8 : 0.6)
+        : (isDark
+            ? (isAmoled ? AppTheme.amoledBorder : AppTheme.glassBorder)
+            : AppTheme.lightBorder);
 
     return CompositedTransformTarget(
       link: _layerLink,
-      child: ValueListenableBuilder<TextEditingValue>(
-        valueListenable: widget.controller,
-        builder: (context, value, child) {
-          final isFocused = widget.focusNode.hasFocus;
-          final hasText = value.text.isNotEmpty;
-
-          return TextField(
-            controller: widget.controller,
-            focusNode: widget.focusNode,
-            textAlignVertical: TextAlignVertical.center,
-            onTap: () {
-              if (widget.controller.text.isNotEmpty) {
-                _generateSuggestions(widget.controller.text);
-              }
-            },
-            style: TextStyle(
-              color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-              fontSize: 13,
-            ),
-            decoration: InputDecoration(
-              isDense: true,
-              hintText:
-                  isRtl ? 'ابحث أو ادخل الرابط...' : 'Search or enter URL...',
-              hintStyle: TextStyle(color: muted, fontSize: 11),
-              filled: false,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-              prefixIconConstraints:
-                  const BoxConstraints(minWidth: 28, minHeight: 28),
-              prefixIcon: widget.onShieldPressed != null
-                  ? IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 28, minHeight: 28),
-                      icon: Icon(
-                        widget.isHttps
-                            ? Icons.lock_rounded
-                            : Icons.shield_outlined,
-                        size: 15,
-                        color: widget.isHttps
-                            ? (isDark
-                                ? AppTheme.neonGreen
-                                : AppTheme.lightNeonGreen)
-                            : accent,
-                      ),
-                      tooltip: isRtl
-                          ? 'حماية الموقع والخصوصية'
-                          : 'Site Shield & Security',
-                      onPressed: widget.onShieldPressed,
-                    )
-                  : null,
-              suffixIconConstraints:
-                  const BoxConstraints(minWidth: 32, minHeight: 32),
-              suffixIcon: IconButton(
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                icon: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    widget.isLoading
-                        ? Icons.close
-                        : (isFocused && hasText)
-                            ? Icons.clear
-                            : Icons.refresh,
-                    key: ValueKey(
-                      widget.isLoading
-                          ? 'close'
-                          : (isFocused && hasText)
-                              ? 'clear'
-                              : 'refresh',
-                    ),
-                    size: 16,
-                    color: isFocused
-                        ? accent
-                        : (isDark
-                            ? AppTheme.textSecondary
-                            : AppTheme.lightTextSecondary),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        height: 40,
+        decoration: BoxDecoration(
+          color: capsuleBg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: capsuleBorder,
+            width: isFocused ? 1.4 : 0.9,
+          ),
+          boxShadow: isFocused
+              ? [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.16),
+                    blurRadius: 8,
+                    spreadRadius: 0.5,
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? (isAmoled ? 0.0 : 0.15) : 0.03),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: Stack(
+            children: [
+              // Bottom Progress Bar
+              if (widget.isLoading || _progressAnimController.value > 0.0)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: AnimatedBuilder(
+                    animation: _progressAnimController,
+                    builder: (context, _) {
+                      final val = _progressAnimController.value;
+                      if (val <= 0.0) return const SizedBox.shrink();
+                      return Container(
+                        height: 2.5,
+                        alignment: isRtl ? Alignment.centerRight : Alignment.centerLeft,
+                        child: FractionallySizedBox(
+                          widthFactor: val.clamp(0.0, 1.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  accent,
+                                  isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
-                tooltip: widget.isLoading
-                    ? (isRtl ? 'إلغاء التحميل' : 'Stop loading')
-                    : (isFocused && hasText)
-                        ? (isRtl ? 'مسح' : 'Clear')
-                        : (isRtl ? 'إعادة تحميل الصفحة' : 'Refresh page'),
-                onPressed: () {
-                  if (widget.isLoading) {
-                    widget.onStopLoading?.call();
-                  } else if (isFocused && hasText) {
-                    widget.controller.clear();
-                  } else {
-                    widget.onReload?.call();
-                  }
-                },
+
+              // Interactive Text Field & Icons
+              Center(
+                child: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: widget.controller,
+                  builder: (context, value, child) {
+                    final hasText = value.text.isNotEmpty;
+
+                    return TextField(
+                      controller: widget.controller,
+                      focusNode: widget.focusNode,
+                      textAlignVertical: TextAlignVertical.center,
+                      onTap: () {
+                        if (widget.controller.text.isNotEmpty) {
+                          _generateSuggestions(widget.controller.text);
+                        }
+                      },
+                      cursorColor: accent,
+                      cursorWidth: 1.8,
+                      cursorRadius: const Radius.circular(2),
+                      style: TextStyle(
+                        color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                        fontSize: 13.5,
+                        fontWeight: isFocused ? FontWeight.w500 : FontWeight.w400,
+                        letterSpacing: -0.1,
+                      ),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: isRtl ? 'ابحث أو أدخل عنوان URL...' : 'Search or enter URL...',
+                        hintStyle: TextStyle(
+                          color: muted.withValues(alpha: 0.8),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.normal,
+                        ),
+                        filled: false,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
+                        prefixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+                        prefixIcon: GestureDetector(
+                          onTap: () {
+                            if (widget.onShieldPressed != null) {
+                              final settings = context.read<SettingsProvider>();
+                              HapticHelper.triggerHaptic(settings);
+                              widget.onShieldPressed!();
+                            }
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 6, right: 4),
+                            padding: const EdgeInsets.all(6),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(
+                                isFocused
+                                    ? Icons.search_rounded
+                                    : (widget.isHttps
+                                        ? Icons.lock_rounded
+                                        : Icons.shield_outlined),
+                                key: ValueKey(
+                                  isFocused
+                                      ? 'search'
+                                      : (widget.isHttps ? 'https' : 'http'),
+                                ),
+                                size: 16,
+                                color: isFocused
+                                    ? accent
+                                    : (widget.isHttps
+                                        ? (isDark
+                                            ? AppTheme.neonGreen
+                                            : AppTheme.lightNeonGreen)
+                                        : muted),
+                              ),
+                            ),
+                          ),
+                        ),
+                        suffixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+                        suffixIcon: Padding(
+                          padding: const EdgeInsets.only(right: 4, left: 4),
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            child: IconButton(
+                              key: ValueKey(
+                                widget.isLoading
+                                    ? 'close'
+                                    : (isFocused && hasText)
+                                        ? 'clear'
+                                        : 'refresh',
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              icon: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: (isFocused && hasText)
+                                    ? BoxDecoration(
+                                        color: muted.withValues(alpha: 0.15),
+                                        shape: BoxShape.circle,
+                                      )
+                                    : null,
+                                child: Icon(
+                                  widget.isLoading
+                                      ? Icons.close_rounded
+                                      : (isFocused && hasText)
+                                          ? Icons.close_rounded
+                                          : Icons.refresh_rounded,
+                                  size: (isFocused && hasText) ? 14 : 17,
+                                  color: isFocused
+                                      ? (hasText ? textClr(isDark) : accent)
+                                      : muted,
+                                ),
+                              ),
+                              tooltip: widget.isLoading
+                                  ? (isRtl ? 'إلغاء التحميل' : 'Stop loading')
+                                  : (isFocused && hasText)
+                                      ? (isRtl ? 'مسح' : 'Clear')
+                                      : (isRtl ? 'إعادة تحميل' : 'Refresh'),
+                              onPressed: () {
+                                if (widget.isLoading) {
+                                  widget.onStopLoading?.call();
+                                } else if (isFocused && hasText) {
+                                  widget.controller.clear();
+                                } else {
+                                  widget.onReload?.call();
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                      onSubmitted: (val) {
+                        _removeOverlay();
+                        widget.focusNode.unfocus();
+                        widget.onNavigate(val);
+                      },
+                    );
+                  },
+                ),
               ),
-            ),
-            onSubmitted: (val) {
-              _removeOverlay();
-              widget.focusNode.unfocus();
-              widget.onNavigate(val);
-            },
-          );
-        },
+            ],
+          ),
+        ),
       ),
     );
   }
+
+  Color textClr(bool isDark) =>
+      isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 }

@@ -170,7 +170,6 @@ class MediaSniffer extends ChangeNotifier {
       return;
     }
     mediaScanFailed.remove(tab.id);
-    if (isYoutubeHost(tab.url)) return;
     final scannedUrl = tab.url;
 
     _tabUrls.putIfAbsent(tab.id, () => <String>{}).add(scannedUrl);
@@ -199,65 +198,68 @@ class MediaSniffer extends ChangeNotifier {
       final cutoff = DateTime.now().subtract(const Duration(minutes: 30));
       ytDetectionFailed.removeWhere((_, v) => v.isBefore(cutoff));
     }
-    if (YoutubeService.isPlaylistUrl(scannedUrl)) {
-      try {
-        final info = await YoutubeService.getPlaylistInfo(scannedUrl)
-            .timeout(const Duration(seconds: 15));
-        if (info != null && isActive() && tab.url == scannedUrl) {
-          final count = info['videoCount'] as int? ?? 0;
-          _update(() {
-            detectedPlaylistUrls[tab.id] = count;
-            detectedDownloadUrls[tab.id] = scannedUrl;
-          });
+    if (isYoutubeHost(scannedUrl) || YoutubeService.isYoutubeUrl(scannedUrl)) {
+      if (YoutubeService.isPlaylistUrl(scannedUrl)) {
+        try {
+          final info = await YoutubeService.getPlaylistInfo(scannedUrl)
+              .timeout(const Duration(seconds: 15));
+          if (info != null && isActive() && tab.url == scannedUrl) {
+            final count = info['videoCount'] as int? ?? 0;
+            _update(() {
+              detectedPlaylistUrls[tab.id] = count;
+              detectedDownloadUrls[tab.id] = scannedUrl;
+            });
+          }
+        } catch (e) {
+          _log.warning('YouTube playlist scan error: $e');
         }
-      } catch (e) {
-        _log.warning('YouTube playlist scan error: $e');
+        if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
+          try {
+            final youtubeStreams = await YoutubeService.getStreams(scannedUrl)
+                .timeout(const Duration(seconds: 15));
+            if (youtubeStreams.isNotEmpty &&
+                isActive() &&
+                tab.url == scannedUrl) {
+              _update(() {
+                detectedMediaSources[tab.id] = youtubeStreams;
+              });
+            }
+          } catch (e) {
+            _log.warning('YouTube single stream scan error after playlist: $e');
+          }
+        }
+        return;
       }
       if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
         try {
           final youtubeStreams = await YoutubeService.getStreams(scannedUrl)
               .timeout(const Duration(seconds: 15));
-          if (youtubeStreams.isNotEmpty &&
-              isActive() &&
-              tab.url == scannedUrl) {
+          if (youtubeStreams.isNotEmpty && isActive() && tab.url == scannedUrl) {
             _update(() {
               detectedMediaSources[tab.id] = youtubeStreams;
+              ytDetectionFailed.remove(scannedUrl);
+              if (detectedDownloadUrls[tab.id] == null) {
+                detectedDownloadUrls[tab.id] = youtubeStreams.first['src'];
+              }
             });
+            return;
           }
         } catch (e) {
-          _log.warning('YouTube single stream scan error after playlist: $e');
+          _log.warning('YouTube stream detection error: $e');
+        }
+        if (isActive() && tab.url == scannedUrl) {
+          _update(() {
+            ytDetectionFailed[scannedUrl] = DateTime.now();
+            if (ytDetectionFailed.length > 200) {
+              final oldestKey = ytDetectionFailed.entries
+                  .reduce((a, b) => a.value.isBefore(b.value) ? a : b)
+                  .key;
+              ytDetectionFailed.remove(oldestKey);
+            }
+          });
         }
       }
       return;
-    }
-    if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
-      try {
-        final youtubeStreams = await YoutubeService.getStreams(scannedUrl)
-            .timeout(const Duration(seconds: 15));
-        if (youtubeStreams.isNotEmpty && isActive() && tab.url == scannedUrl) {
-          _update(() {
-            detectedMediaSources[tab.id] = youtubeStreams;
-            ytDetectionFailed.remove(scannedUrl);
-            if (detectedDownloadUrls[tab.id] == null) {
-              detectedDownloadUrls[tab.id] = youtubeStreams.first['src'];
-            }
-          });
-          return;
-        }
-      } catch (e) {
-        _log.warning('YouTube stream detection error: $e');
-      }
-      if (isActive() && tab.url == scannedUrl) {
-        _update(() {
-          ytDetectionFailed[scannedUrl] = DateTime.now();
-          if (ytDetectionFailed.length > 200) {
-            final oldestKey = ytDetectionFailed.entries
-                .reduce((a, b) => a.value.isBefore(b.value) ? a : b)
-                .key;
-            ytDetectionFailed.remove(oldestKey);
-          }
-        });
-      }
     }
     try {
       final result = await tab.controller?.evaluateJavascript(source: '''

@@ -765,11 +765,16 @@ class TorrentDownloadHandler {
         );
       }
 
-      try {
-        TorrentService.resumeTorrent(id);
-      } catch (e, st) {
-        LoggingService.logger('TorrentDownloadHandler')
-            .warning('Operation failed', e, st);
+      // FIX-PAUSE-RACE: Only resume the native torrent if the cancel token
+      // hasn't already fired. Without this guard, whenCancel can pause the
+      // session (via haltTorrent) and resumeTorrent immediately re-starts it.
+      if (!cancelToken.isCancelled) {
+        try {
+          TorrentService.resumeTorrent(id);
+        } catch (e, st) {
+          LoggingService.logger('TorrentDownloadHandler')
+              .warning('Operation failed', e, st);
+        }
       }
 
       await _listenForCompletion(
@@ -1257,19 +1262,12 @@ class TorrentDownloadHandler {
       _activeSubs[id] = sub;
       TorrentSubscriptionRegistry.instance.register(id, this, sub);
 
-      cancelToken.whenCancel.then((_) {
-        sub?.cancel();
-        _activeSubs.remove(id);
-        _activeTorrentIds.remove(id);
-        TorrentSubscriptionRegistry.instance.unregister(id, this);
-        if (!completer.isCompleted) {
-          completer.completeError(DioException(
-            requestOptions: RequestOptions(path: url),
-            type: DioExceptionType.cancel,
-            message: 'Torrent paused',
-          ));
-        }
-      });
+      // NOTE: No second whenCancel registration here. The outer whenCancel in
+      // handleTorrentDownload already calls haltTorrent and completes the
+      // completer via completeError; the finally block below then cancels sub
+      // and unregisters from the registry. A duplicate listener here would
+      // race: it skipped haltTorrent entirely, so if it fired first the native
+      // torrent would keep running even though the completer was completed.
 
       await completer.future;
     } finally {

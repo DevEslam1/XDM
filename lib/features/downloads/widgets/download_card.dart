@@ -905,6 +905,9 @@ class _ChunkedProgressBar extends StatelessWidget {
           isTorrent: task.isTorrent,
           height: 8,
           chunkFingerprint: Object.hashAll(chunks),
+          // Use the card's status accent so the bar is always consistent:
+          // red for paused, green for completed, violet for downloading, etc.
+          color: color,
         ),
       );
     } else {

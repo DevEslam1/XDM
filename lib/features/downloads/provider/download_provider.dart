@@ -2580,12 +2580,15 @@ class DownloadProvider extends ChangeNotifier
             }
           }
 
-          if (isPaused) {
-            try {
-              TorrentSubscriptionRegistry.instance.dispose(torrentId);
-            } catch (e) {
-              _log.fine('No active subscription to dispose for $torrentId: $e');
-            }
+          // FIX-PAUSE-SUBS: Always dispose the registry entry on pause attempt.
+          // Previously this was guarded by `isPaused`, so a torrent that failed
+          // to confirm pause within the timeout kept its stream subscription
+          // alive — meaning the whenCancel callback (which halts the native
+          // session) would never fire, and downloading continued.
+          try {
+            TorrentSubscriptionRegistry.instance.dispose(torrentId);
+          } catch (e) {
+            _log.fine('No active subscription to dispose for $torrentId: $e');
           }
 
           // Snapshot per-file bytes AFTER engine has stopped

@@ -13,6 +13,9 @@ class ChannelProgressPainter extends CustomPainter {
   final bool isTorrent;
   final List<ChunkDetail> chunkDetails;
   final int chunkFingerprint;
+  /// Optional accent color override. When null, falls back to the hardcoded
+  /// neonViolet (torrent) / neonBlue (file) defaults.
+  final Color? color;
 
   ChannelProgressPainter({
     required this.progress,
@@ -20,6 +23,7 @@ class ChannelProgressPainter extends CustomPainter {
     required this.isTorrent,
     this.chunkDetails = const [],
     this.chunkFingerprint = 0,
+    this.color,
   }) : super(repaint: progress); // ← repaints ONLY when value changes
 
   @override
@@ -41,8 +45,10 @@ class ChannelProgressPainter extends CustomPainter {
       trackPaint,
     );
 
-    // Fill
-    final accent = isTorrent ? AppTheme.neonViolet : AppTheme.neonBlue;
+    // Fill — use caller-supplied color when available so the bar matches the
+    // card's status accent (e.g. red for paused, violet for downloading).
+    final accent =
+        color ?? (isTorrent ? AppTheme.neonViolet : AppTheme.neonBlue);
     if (value > 0.0) {
       final fillPaint = Paint()
         ..shader = LinearGradient(colors: [
@@ -81,7 +87,8 @@ class ChannelProgressPainter extends CustomPainter {
       return (oldDelegate.progress.value - progress.value).abs() > 0.001 ||
           oldDelegate.progress != progress ||
           oldDelegate.isDark != isDark ||
-          oldDelegate.isTorrent != isTorrent;
+          oldDelegate.isTorrent != isTorrent ||
+          oldDelegate.color != color;
     }
     if (oldDelegate.chunkDetails.length != chunkDetails.length) return true;
     for (int i = 0; i < chunkDetails.length; i++) {
@@ -95,7 +102,8 @@ class ChannelProgressPainter extends CustomPainter {
     return (oldDelegate.progress.value - progress.value).abs() > 0.001 ||
         oldDelegate.progress != progress ||
         oldDelegate.isDark != isDark ||
-        oldDelegate.isTorrent != isTorrent;
+        oldDelegate.isTorrent != isTorrent ||
+        oldDelegate.color != color;
   }
 }
 
@@ -106,6 +114,8 @@ class IsolatedProgressBar extends StatelessWidget {
   final bool isTorrent;
   final double height;
   final int chunkFingerprint;
+  /// Optional accent color override forwarded to [ChannelProgressPainter].
+  final Color? color;
 
   const IsolatedProgressBar({
     super.key,
@@ -114,6 +124,7 @@ class IsolatedProgressBar extends StatelessWidget {
     this.isTorrent = false,
     this.height = 6,
     this.chunkFingerprint = 0,
+    this.color,
   });
 
   @override
@@ -139,6 +150,7 @@ class IsolatedProgressBar extends StatelessWidget {
                 isDark: isDark,
                 isTorrent: isTorrent,
                 chunkFingerprint: chunkFingerprint,
+                color: color,
               ),
             ),
           ),

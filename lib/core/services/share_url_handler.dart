@@ -53,11 +53,13 @@ class ShareUrlHandler {
 
       final title = selected['title'] as String? ?? 'Media Download';
       final ext = selected['ext'] as String? ?? 'mp4';
-      final streamUrl = selected['src'] as String;
-      final streamSize = selected['size'] as int? ?? 0;
+      final streamUrl =
+          (selected['src'] ?? selected['url'] ?? '') as String;
+      final streamSize = (selected['size'] as num?)?.toInt() ?? 0;
       final audioUrl = selected['audioSrc'] as String?;
-      final audioSize = selected['audioSize'] as int?;
+      final audioSize = (selected['audioSize'] as num?)?.toInt();
       final streamType = selected['type'] as String? ?? 'muxed';
+      final thumbnailUrl = selected['thumbnailUrl'] as String?;
       final qualityPreset =
           streamType == 'audio' ? 'audio_only' : selected['quality'] as String?;
       final category = streamType == 'audio' ? 'Audio' : 'Video';
@@ -80,6 +82,7 @@ class ShareUrlHandler {
           youtubeQualityPreset: qualityPreset,
           mergedAudioUrl: audioUrl,
           audioSize: audioSize ?? 0,
+          thumbnailUrl: thumbnailUrl,
         );
       } catch (e) {
         debugPrint('ShareUrlHandler addDownload error: $e');

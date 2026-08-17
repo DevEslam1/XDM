@@ -180,7 +180,7 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
         }
 
         if (request.isForMainFrame == true) {
-          widget.controller.handlePageLoadError(tab, error.description);
+          widget.controller.handlePageError(tab, error.description);
           if (mounted) setState(() {});
         }
       },
@@ -375,39 +375,55 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
               ),
             ),
           ),
-        if (tab.isTimedOut && !tab.isLoading && !tab.hasCrashed && !tab.hasError)
+        if (tab.isTimedOut)
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: Container(
-              color: AppTheme.neonAmber.withValues(alpha: 0.95),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.timer_off_rounded, size: 16, color: Colors.black87),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Page load timed out',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+            child: Material(
+              color: Colors.orange.shade900.withValues(alpha: 0.95),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded,
+                          size: 16, color: Colors.white),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text('Page is taking long to load…',
+                            style: TextStyle(color: Colors.white, fontSize: 12)),
                       ),
-                    ),
+                      GestureDetector(
+                        onTap: () {
+                          tab.controller
+                              ?.evaluateJavascript(source: 'window.stop();');
+                          widget.controller.handlePageError(tab, 'Loading stopped');
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6),
+                          child: Text('Stop',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12)),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => widget.controller.reload(),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6),
+                          child: Text('Retry',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12)),
+                        ),
+                      ),
+                    ],
                   ),
-                  TextButton(
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    onPressed: () => widget.controller.reload(),
-                    child: const Text('Retry', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ],
+                ),
               ),
             ),
           ),

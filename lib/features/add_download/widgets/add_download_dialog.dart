@@ -488,7 +488,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       if (stream != null) {
         final title = stream['title'] as String? ?? 'Media Download';
         final ext = stream['ext'] as String? ?? 'mp4';
-        final streamUrl = stream['src'] as String;
+        final streamUrl =
+            (stream['src'] ?? stream['url'] ?? '') as String;
         final streamSize = (stream['size'] as num?)?.toInt() ?? 0;
         final audioUrl = stream['audioSrc'] as String?;
         final audioSize = (stream['audioSize'] as num?)?.toInt();
@@ -503,41 +504,54 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         final savePath = _pathController.text.trim().isNotEmpty
             ? _pathController.text.trim()
             : settings.customDownloadPath ?? '';
-        await provider.addDownload(
-          name: fileName,
-          url: streamUrl,
-          size: streamSize,
-          category: category,
-          savePath: savePath,
-          threadCount: _selectedThreads,
-          downloadPageUrl: url,
-          youtubeQualityPreset: qualityPreset,
-          mergedAudioUrl: audioUrl,
-          audioSize: audioSize ?? 0,
-          thumbnailUrl: thumbnailUrl,
-        );
-        if (!mounted) return;
-        if (provider.lastError != null) {
+        try {
+          await provider.addDownload(
+            name: fileName,
+            url: streamUrl,
+            size: streamSize,
+            category: category,
+            savePath: savePath,
+            threadCount: _selectedThreads,
+            downloadPageUrl: url,
+            youtubeQualityPreset: qualityPreset,
+            mergedAudioUrl: audioUrl,
+            audioSize: audioSize ?? 0,
+            thumbnailUrl: thumbnailUrl,
+          );
+          if (!mounted) return;
+          if (provider.lastError != null) {
+            final isDark = context.read<SettingsProvider>().isDarkMode;
+            ThemedSnackbar.show(
+              context,
+              message: provider.lastError!,
+              color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+              icon: Icons.error_outline,
+              isDarkMode: isDark,
+            );
+            return;
+          }
           final isDark = context.read<SettingsProvider>().isDarkMode;
           ThemedSnackbar.show(
             context,
-            message: provider.lastError!,
+            message: L10n.isRtl(context) ? 'تم بدء التحميل' : 'Download started',
+            color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+            icon: Icons.check_circle_outline,
+            isDarkMode: isDark,
+          );
+          Navigator.pop(context);
+          return;
+        } catch (e) {
+          if (!mounted) return;
+          final isDark = context.read<SettingsProvider>().isDarkMode;
+          ThemedSnackbar.show(
+            context,
+            message: 'Download failed: $e',
             color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
             icon: Icons.error_outline,
             isDarkMode: isDark,
           );
           return;
         }
-        final isDark = context.read<SettingsProvider>().isDarkMode;
-        ThemedSnackbar.show(
-          context,
-          message: L10n.isRtl(context) ? 'تم بدء التحميل' : 'Download started',
-          color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-          icon: Icons.check_circle_outline,
-          isDarkMode: isDark,
-        );
-        Navigator.pop(context);
-        return;
       }
     }
     if (!isValidTransmissionUrl(url)) {
@@ -770,10 +784,17 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       }
       return;
     }
+    final singleUrl = urls.isNotEmpty ? urls.first : '';
+    if (urls.length == 1 &&
+        YoutubeService.isExtractableMediaUrl(singleUrl) &&
+        !_isMetadataResolved) {
+      if (mounted) setState(() => _isSubmitting = false);
+      await _resolveLinkMetadata();
+      return;
+    }
     final enteredName = _nameController.text.trim();
     final enteredExt = _extController.text.trim();
     final String fullEnteredName = _composeFullName(enteredName, enteredExt);
-    final singleUrl = urls.isNotEmpty ? urls.first : '';
     final finalFileName = fullEnteredName.isNotEmpty
         ? safeFileName(fullEnteredName)
         : fileNameFromUrl(singleUrl);
