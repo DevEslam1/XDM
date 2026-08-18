@@ -11,6 +11,9 @@ class TorrentService {
   static Future<void> get ready => Future.value();
   static final ValueNotifier<bool> isAvailable = ValueNotifier(false);
   static Set<int> get activeTorrentIds => const <int>{};
+  /// FIX v2.0.0: Returns the source-URL map (always empty in the stub).
+  static Map<int, String> get activeTorrentSources => const <int, String>{};
+
   static double progressFor(int id) => 0.0;
   static Uint8List? fetchResumeBytes(int id) => null;
   static Uint8List? resumeBlobFor(int id) => null;

@@ -197,10 +197,6 @@ mixin DownloadTorrentMixin {
   }
 
   double getTorrentUploadSpeed(String taskId) {
-    final task = findTaskById(taskId);
-    if (task == null || !task.seedingEnabled) {
-      return 0.0;
-    }
     final torrentId = providerTorrentIds[taskId];
     if (torrentId != null) {
       final stat = providerLatestTorrentStats[torrentId];
@@ -399,7 +395,12 @@ mixin DownloadTorrentMixin {
         // finished downloading (status == completed).  Calling pauseTorrent
         // while still downloading would abort the in-progress transfer.
         if (torrentId != null && oldTask.status == DownloadStatus.completed) {
-          TorrentService.pauseTorrent(torrentId);
+          try {
+            await TorrentService.pauseTorrent(torrentId);
+            await TorrentService.forceStopTorrent(torrentId);
+          } catch (e) {
+            debugPrint('[DownloadTorrentMixin] forceStopTorrent failed for $taskId: $e');
+          }
           TorrentService.removeTorrent(torrentId, deleteFiles: false);
           providerTorrentIds.remove(taskId);
         }
@@ -589,7 +590,10 @@ mixin DownloadTorrentMixin {
       for (final task in toPause) {
         final id = providerTorrentIds[task.id];
         if (id != null) {
-          TorrentService.pauseTorrent(id);
+          try {
+            TorrentService.pauseTorrent(id);
+            TorrentService.forceStopTorrent(id);
+          } catch (_) {}
           // Keep the DownloadTask model in sync with the engine: a queue-cap
           // pause must transition the task to paused, otherwise the UI keeps
           // showing "downloading" while nothing is transferring and a future

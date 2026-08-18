@@ -51,7 +51,7 @@ dependencies:
   flutter_inappwebview: ^6.1.5
 
   # Media / torrent
-  libtorrent_flutter: 1.9.2 # exact pin: no saveResumeData API in this version
+  libtorrent_flutter: ^2.0.0
   ffmpeg_kit_flutter_new_min: ^3.5.5
 
   # UI / utils

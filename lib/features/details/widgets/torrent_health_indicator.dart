@@ -26,7 +26,15 @@ HealthLevel calculateHealth({
   required double distributedCopies,
   required double downloadRate,
 }) {
-  if (seeds == 0 && peers == 0) return HealthLevel.dead;
+  // FIX v2.0.0: During the metadata-fetch phase the native torrent ID hasn't
+  // been propagated to the provider yet, so seeds/peers may temporarily read
+  // 0 even though pieces are actively being downloaded. If there is measurable
+  // download throughput the torrent is clearly alive — never show DEAD.
+  if (seeds == 0 && peers == 0) {
+    if (downloadRate > 512 * 1024) return HealthLevel.fair;   // > 512 KB/s → fair
+    if (downloadRate > 0) return HealthLevel.poor;             // any speed   → poor
+    return HealthLevel.dead;
+  }
   if (availability < 1.0) return HealthLevel.poor;
   if (distributedCopies < 1.0 || seeds < 3) return HealthLevel.fair;
   if (seeds >= 10 && downloadRate > 100 * 1024) return HealthLevel.excellent;

@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/services/torrent_models.dart';
 import '../../../core/services/tracker_manager.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/file_opener.dart';
@@ -2181,22 +2182,49 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
     final amberClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
-    final seeds = provider.getTorrentSeeds(task.id);
-    final peers = provider.getTorrentPeers(task.id);
-
     final isActive = task.status == DownloadStatus.downloading;
     final isSeeding = task.status == DownloadStatus.completed &&
         task.isTorrent &&
         task.seedingEnabled;
 
-    final dlSpeed = task.speed;
-    final ulSpeed = isSeeding
-        ? task.speed
-        : (task.isTorrent ? provider.getTorrentUploadSpeed(task.id) : 0.0);
+    // FIX: Use -1 as the sentinel for an un-registered torrent ID.
+    // Using 0 was incorrect because 0 is a valid native torrent handle ID and
+    // could return stats for a completely different active torrent.
+    final torrentId = provider.providerTorrentIds[task.id] ?? -1;
+    TorrentUpdateInfo? stats = torrentId >= 0
+        ? provider.providerLatestTorrentStats[torrentId]
+        : null;
 
-    final torrentId =
-        provider.providerTorrentIds[task.id] ?? (int.tryParse(task.id) ?? 0);
-    final stats = provider.providerLatestTorrentStats[torrentId];
+    // FIX v2.0.0: During the metadata-fetch phase, torrentId hasn't been
+    // propagated yet so it stays at -1. If there's only one active torrent
+    // in the stats map (the one we just added), use it to show live speed.
+    if (stats == null && task.status == DownloadStatus.downloading) {
+      final allStats = provider.providerLatestTorrentStats;
+      if (allStats.isNotEmpty) {
+        // Pick the entry with the highest download rate — most likely ours.
+        final best = allStats.values.reduce(
+          (a, b) => a.downloadRate >= b.downloadRate ? a : b,
+        );
+        if (best.downloadRate > 0) stats = best;
+      }
+    }
+
+    // FIX v2.0.0: Read seeds/peers from the live stats when available.
+    // getTorrentSeeds/Peers go through providerTorrentIds which may be null
+    // or stale during stale-handle re-adds. Prefer stats.numSeeds/numPeers.
+    final seeds = stats?.numSeeds ?? provider.getTorrentSeeds(task.id);
+    final peers = stats?.numPeers ?? provider.getTorrentPeers(task.id);
+
+    // Upload speed: prefer live stats for both active downloads and seeding.
+    // For active downloads (leech), the engine still reports upload rate.
+    // For non-torrent tasks, fall back to 0.
+    final ulSpeed = stats != null
+        ? stats.uploadRate.toDouble()
+        : (isSeeding ? task.speed : 0.0);
+
+    // dlSpeed: use live stats download rate when available; fall back to
+    // task.speed (set by the download engine on each progress tick).
+    final dlSpeed = stats != null ? stats.downloadRate.toDouble() : task.speed;
 
     return DmxCardShell(
       accent: violetClr,
@@ -2397,7 +2425,10 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
               PeerPanel(
                 torrentId: torrentId,
                 isDark: isDark,
+                // Live peer count from stats (detail API not yet available);
+                // PeerPanel will show count-only summary when list is empty.
                 peers: const [],
+                peerCount: stats?.numPeers ?? peers,
               ),
             ],
           ],

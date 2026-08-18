@@ -1300,9 +1300,8 @@ class TorrentDownloadHandler {
         if (isStateChange) {
           lastTorrentProgressTime = now;
         }
-        List<Map<String, dynamic>>? resolvedFiles = getTorrentFiles?.call() ?? cachedAccurateFiles;
-        // FIX v2.0.0: Always fetch files from engine when metadata is available,
-        // and only update if the list has changed.
+        List<Map<String, dynamic>>? resolvedFiles;
+        // FIX v2.0.0: Only fetch and resolve files when metadata is ready.
         if (torrent.hasMetadata) {
           try {
             final nativeFiles = _torrentService.getFiles(id);
@@ -1336,8 +1335,11 @@ class TorrentDownloadHandler {
           } catch (e, st) {
             _log.fine('Failed to fetch native file list: $e', e, st);
           }
+        } else {
+          // Metadata is still fetching — keep files null so UI knows metadata is loading
+          resolvedFiles = null;
         }
-        resolvedFiles ??= cachedAccurateFiles;
+        resolvedFiles ??= (torrent.hasMetadata ? (getTorrentFiles?.call() ?? cachedAccurateFiles) : null);
         // FIX v2.0.0: total size must ALWAYS be computed from the full file list.
         // Added fallback to torrent.totalDone when totalWanted is 0 (pre-metadata).
         // FIX v2.0.0-Bug11: Prefer selectedFilesSum over allFilesSum for
@@ -1476,7 +1478,8 @@ class TorrentDownloadHandler {
         final downloadedBytes = rawDownloaded;
         final speed = torrent.downloadPayloadRate.toDouble();
         lastTorrentSpeed = speed;
-        lastTorrentPeerCount = torrent.numPeers;
+        final numPeers = torrent.numPeers < 0 ? 0 : torrent.numPeers;
+        lastTorrentPeerCount = numPeers;
         var resolvedCycleState = CycleState.fromLibtorrent(
           torrent.stateLabel,
           seedingEnabled: TorrentService.seedingEnabled,
