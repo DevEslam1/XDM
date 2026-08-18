@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../../core/di/injection.dart';
 import '../../../core/interfaces/i_torrent_service.dart';
-import '../../../core/services/database_service.dart';
 import '../../../core/services/torrent_resume_store.dart';
 import '../../../core/services/torrent_service.dart';
 import '../models/download_task.dart';
@@ -133,12 +132,7 @@ class TorrentSessionManager {
     _torrentIds.removeWhere((_, tid) => tid == torrentId);
   }
 
-  /// FIX-F: Reconciles the session's taskId→torrentId mappings and cached
-  /// stats against the engine's current handle set and the persisted tasks.
-  /// For every persisted torrent task without a live handle, attempts to
-  /// re-attach by matching the task's file name against engine stats.
-  /// Returns the number of torrent tasks that are now mapped to live handles.
-  Future<int> reconcileWithDatabase(DatabaseService dbService) async {
+  Future<int> reconcileWithDatabase(dynamic dbService) async {
     var reconciled = 0;
     try {
       _latestStats
@@ -146,7 +140,8 @@ class TorrentSessionManager {
         ..addAll(_torrentService.latestStats);
 
       final activeIds = _torrentService.activeTorrentIds.toSet();
-      final tasks = await dbService.loadTasks();
+      // ignore: avoid_dynamic_calls
+      final tasks = await dbService.loadTasks() as List<dynamic>;
       final nameToActiveId = <String, int>{};
       for (final id in activeIds) {
         final stats = _latestStats[id];
@@ -156,20 +151,23 @@ class TorrentSessionManager {
       }
 
       for (final task in tasks) {
+        // ignore: avoid_dynamic_calls
         if (!task.isTorrent) continue;
+        // ignore: avoid_dynamic_calls
         var tid = _torrentIds[task.id];
         if (tid != null && activeIds.contains(tid)) {
           reconciled++;
           continue;
         }
         if (tid != null) {
-          // Handle no longer alive — drop the stale mapping.
+          // ignore: avoid_dynamic_calls
           _torrentIds.remove(task.id);
           tid = null;
         }
-        // Re-attach by file name.
+        // ignore: avoid_dynamic_calls
         final match = nameToActiveId[task.fileName];
         if (match != null) {
+          // ignore: avoid_dynamic_calls
           _torrentIds[task.id] = match;
           reconciled++;
         }
@@ -180,3 +178,4 @@ class TorrentSessionManager {
     return reconciled;
   }
 }
+

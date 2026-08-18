@@ -5,7 +5,7 @@ class TorrentFileItem {
   final int downloadedBytes;
   final int priority;
   final bool selected;
-  final double? progressRatio;
+
   TorrentFileItem({
     required this.index,
     required this.name,
@@ -13,24 +13,13 @@ class TorrentFileItem {
     this.downloadedBytes = 0,
     this.priority = 4,
     this.selected = true,
-    this.progressRatio,
   });
-  bool get hasProgressData => downloadedBytes >= 0 || progressRatio != null;
-  /// FIX v2.0.0: When downloadedBytes is 0 and progressRatio is available,
-  /// prefer progressRatio (the engine may report 0 before first piece).
-  int get safeDownloadedBytes {
-    if (downloadedBytes > 0) return downloadedBytes;
-    if (downloadedBytes == 0 && progressRatio != null && progressRatio! > 0) {
-      if (size > 0) {
-        return (size * progressRatio!.clamp(0.0, 1.0)).round().clamp(0, size);
-      }
-    }
-    if (downloadedBytes >= 0) return downloadedBytes;
-    if (progressRatio != null && size > 0) {
-      return (size * progressRatio!.clamp(0.0, 1.0)).round().clamp(0, size);
-    }
-    return 0;
-  }
+
+  /// Whether the engine has actual progress data for this file.
+  bool get hasProgressData => downloadedBytes >= 0;
+
+  /// Safe byte count (0 when no data available).
+  int get safeDownloadedBytes => downloadedBytes >= 0 ? downloadedBytes : 0;
 }
 
 class TorrentUpdateInfo {
@@ -46,7 +35,6 @@ class TorrentUpdateInfo {
   final String stateLabel;
   final int numSeeds;
   final int numPeers;
-  int get peerCount => numPeers;
   final int piecesHave;
   final int piecesTotal;
   final int downloadPayloadRate;
@@ -55,10 +43,12 @@ class TorrentUpdateInfo {
   final int totalPayloadUpload;
   final String currentTracker;
   final int nextAnnounceSeconds;
+  final String infoHash;
   final double distributedCopies;
   final List<int> fileProgress;
   final List<int> filePriorities;
-  final String? infoHash;
+
+  int get peerCount => numPeers;
 
   TorrentUpdateInfo({
     required this.id,
@@ -71,6 +61,7 @@ class TorrentUpdateInfo {
     required this.totalWantedDone,
     required this.hasMetadata,
     required this.stateLabel,
+    this.infoHash = '',
     this.numSeeds = 0,
     this.numPeers = 0,
     this.piecesHave = 0,
@@ -82,7 +73,6 @@ class TorrentUpdateInfo {
     this.currentTracker = '',
     this.nextAnnounceSeconds = 0,
     this.distributedCopies = 0.0,
-    this.infoHash,
     List<int> fileProgress = const [],
     List<int> filePriorities = const [],
   })  : fileProgress = List.unmodifiable(fileProgress),
@@ -457,3 +447,4 @@ enum ProxyType {
     }
   }
 }
+

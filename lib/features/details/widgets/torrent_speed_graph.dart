@@ -16,51 +16,40 @@ class TorrentSpeedGraph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cappedDownload = downloadSpeeds.length > 60
-        ? downloadSpeeds.sublist(downloadSpeeds.length - 60)
-        : downloadSpeeds;
-    final cappedUpload = uploadSpeeds.length > 60
-        ? uploadSpeeds.sublist(uploadSpeeds.length - 60)
-        : uploadSpeeds;
-
-    return RepaintBoundary(
-      child: Container(
-        height: 120,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color:
-              (isDark ? AppTheme.surface : Colors.white).withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                _buildDot(AppTheme.neonBlue, 'Download'),
-                const SizedBox(width: 12),
-                _buildDot(AppTheme.neonGreen, 'Upload'),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: LineChart(
-                LineChartData(
-                  minX: 0,
-                  maxX: 29,
-                  lineBarsData: [
-                    _buildLine(cappedDownload, AppTheme.neonBlue),
-                    _buildLine(cappedUpload, AppTheme.neonGreen),
-                  ],
-                  gridData: const FlGridData(show: false),
-                  titlesData: const FlTitlesData(show: false),
-                  borderData: FlBorderData(show: false),
-                  lineTouchData: const LineTouchData(enabled: false),
-                ),
+    return Container(
+      height: 120,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color:
+            (isDark ? AppTheme.surface : Colors.white).withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _buildDot(AppTheme.neonBlue, 'Download'),
+              const SizedBox(width: 12),
+              _buildDot(AppTheme.neonGreen, 'Upload'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: LineChart(
+              LineChartData(
+                lineBarsData: [
+                  _buildLine(downloadSpeeds, AppTheme.neonBlue),
+                  _buildLine(uploadSpeeds, AppTheme.neonGreen),
+                ],
+                gridData: const FlGridData(show: false),
+                titlesData: const FlTitlesData(show: false),
+                borderData: FlBorderData(show: false),
+                lineTouchData: const LineTouchData(enabled: false),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

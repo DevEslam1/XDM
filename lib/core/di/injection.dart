@@ -9,6 +9,7 @@ import '../../features/downloads/provider/download_filter_provider.dart';
 import '../../features/downloads/provider/download_list_provider.dart';
 import '../../features/downloads/provider/download_queue_provider.dart';
 import '../../features/downloads/provider/torrent_provider.dart';
+import '../../features/downloads/services/torrent_session_manager.dart';
 import '../../features/downloads/usecases/cancel_download_usecase.dart';
 import '../../features/downloads/usecases/delete_download_usecase.dart';
 import '../../features/downloads/usecases/pause_download_usecase.dart';
@@ -235,8 +236,8 @@ Future<void> configureDependencies() async {
     dispose: (s) => AppLifecycleCoordinator.dispose(),
   );
 
-  getIt.registerLazySingleton<TorrentSeedingManager>(
-    () => TorrentSeedingManager(),
+  getIt.registerLazySingleton<TorrentSessionManager>(
+    () => TorrentSessionManager(),
   );
 
   getIt.registerLazySingleton<AmbientAnimationController>(

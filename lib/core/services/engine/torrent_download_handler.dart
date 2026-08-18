@@ -583,7 +583,7 @@ class TorrentDownloadHandler {
         _log.fine('Failed to dispose subscription registry for stale $id: $e');
       }
       try {
-        TorrentResumeStore.unregisterSource(id);
+        TorrentResumeStore.unregisterTorrent(id);
       } catch (e) {
         _log.fine('Failed to unregister source for stale $id: $e');
       }

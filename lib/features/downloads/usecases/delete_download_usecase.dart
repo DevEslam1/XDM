@@ -48,7 +48,7 @@ class DeleteDownloadUseCase {
         if (infoHash != null) {
           for (final id in TorrentService.activeTorrentIds) {
             final stats = TorrentService.latestStats[id];
-            if (stats?.infoHash?.toLowerCase() == infoHash) {
+            if (stats?.infoHash.toLowerCase() == infoHash) {
               _torrentProvider.registerTorrentId(task.id, id);
               return id;
             }

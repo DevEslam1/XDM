@@ -1,55 +1,18 @@
 import 'dart:async';
 
-import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/logging_service.dart';
-import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/core/services/torrent_service.dart';
 import 'package:flutter/foundation.dart';
-
-import '../../../core/di/injection.dart';
-import 'download_provider.dart';
 
 /// Single-responsibility provider for torrent session management and stats tracking.
 class TorrentProvider extends ChangeNotifier {
   final Map<String, int> _torrentIds = {};
   final Map<int, TorrentUpdateInfo> _latestStats = {};
-  Timer? _notifyDebounceTimer;
-  DateTime? _lastNotifyTime;
   StreamSubscription<Map<int, TorrentUpdateInfo>>? _updatesSub;
   Timer? _staleDetector;
 
-  @override
-  void notifyListeners() {
-    if (DownloadEngine.isInBackground && PowerMonitor.screenOff) return;
-    super.notifyListeners();
-  }
-
-  void _debouncedNotify() {
-    if (DownloadEngine.isInBackground && PowerMonitor.screenOff) return;
-    final now = DateTime.now();
-    if (_lastNotifyTime == null ||
-        now.difference(_lastNotifyTime!) >= const Duration(milliseconds: 300)) {
-      _lastNotifyTime = now;
-      _notifyDebounceTimer?.cancel();
-      _notifyDebounceTimer = null;
-      notifyListeners();
-    } else {
-      _notifyDebounceTimer ??= Timer(const Duration(milliseconds: 300), () {
-        _lastNotifyTime = DateTime.now();
-        _notifyDebounceTimer = null;
-        notifyListeners();
-      });
-    }
-  }
-
   Map<String, int> get torrentIds => Map.unmodifiable(_torrentIds);
-
-  Map<int, TorrentUpdateInfo> get latestStats {
-    final dp = getIt.isRegistered<DownloadProvider>()
-        ? getIt<DownloadProvider>()
-        : null;
-    return dp?.providerLatestTorrentStats ?? Map.unmodifiable(_latestStats);
-  }
+  Map<int, TorrentUpdateInfo> get latestStats => Map.unmodifiable(_latestStats);
 
   void registerTorrentId(String taskId, int torrentId) {
     _torrentIds[taskId] = torrentId;
@@ -66,16 +29,16 @@ class TorrentProvider extends ChangeNotifier {
 
   void updateStats(TorrentUpdateInfo info) {
     _latestStats[info.id] = info;
-    _debouncedNotify();
+    notifyListeners();
   }
 
   TorrentUpdateInfo? getStatsForTask(String taskId) {
     final torrentId = _torrentIds[taskId];
     if (torrentId == null) return null;
-    return latestStats[torrentId];
+    return _latestStats[torrentId];
   }
 
-  Iterable<TorrentUpdateInfo> get activeTorrents => latestStats.values;
+  Iterable<TorrentUpdateInfo> get activeTorrents => _latestStats.values;
 
   void registerTorrent(int id, TorrentUpdateInfo info) {
     _latestStats[id] = info;
@@ -84,7 +47,7 @@ class TorrentProvider extends ChangeNotifier {
 
   void updateTorrentProgress(int id, TorrentUpdateInfo info) {
     _latestStats[id] = info;
-    _debouncedNotify();
+    notifyListeners();
   }
 
   void removeTorrent(int id) {
@@ -92,19 +55,13 @@ class TorrentProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// FIX-E: Subscribes to updates if DownloadProvider is not available,
-  /// otherwise relies on DownloadProvider as the single source of truth.
   void startListening() {
-    if (getIt.isRegistered<DownloadProvider>()) {
-      _startStaleDetector();
-      return;
-    }
     if (_updatesSub != null) return;
     _updatesSub = TorrentService.torrentUpdates.listen((torrents) {
       for (final entry in torrents.entries) {
         _latestStats[entry.key] = entry.value;
       }
-      _debouncedNotify();
+      notifyListeners();
     }, onError: (Object e) {
       LoggingService.logger('TorrentProvider')
           .warning('torrentUpdates error', e as Exception);
@@ -112,9 +69,6 @@ class TorrentProvider extends ChangeNotifier {
     _startStaleDetector();
   }
 
-  /// FIX-E: Every 30s, drop stats for torrents that no longer appear in the
-  /// engine's active set (and are not registered to any task), preventing a
-  /// stale "ghost" metric from keeping the UI stuck at a non-zero value.
   void _startStaleDetector() {
     _staleDetector?.cancel();
     _staleDetector = Timer.periodic(const Duration(seconds: 30), (_) {
@@ -132,8 +86,6 @@ class TorrentProvider extends ChangeNotifier {
     _updatesSub = null;
     _staleDetector?.cancel();
     _staleDetector = null;
-    _notifyDebounceTimer?.cancel();
-    _notifyDebounceTimer = null;
     super.dispose();
   }
 }

@@ -667,7 +667,7 @@ class DownloadProvider extends ChangeNotifier
         if (infoHash != null) {
           for (final tid in TorrentService.activeTorrentIds) {
             final stats = TorrentService.latestStats[tid];
-            if (stats?.infoHash?.toLowerCase() == infoHash) {
+            if (stats?.infoHash.toLowerCase() == infoHash) {
               _torrentIds[task.id] = tid; // cache for future calls
               return tid;
             }
@@ -2471,7 +2471,7 @@ class DownloadProvider extends ChangeNotifier
               if (infoHash != null) {
                 for (final tid in TorrentService.activeTorrentIds) {
                   final stats = TorrentService.latestStats[tid];
-                  if (stats?.infoHash?.toLowerCase() == infoHash) {
+                  if (stats?.infoHash.toLowerCase() == infoHash) {
                     await TorrentService.pauseTorrent(tid);
                     _torrentIds[task.id] = tid; // cache it now
                     _needsForcedPauseOnRegister.remove(task.id);

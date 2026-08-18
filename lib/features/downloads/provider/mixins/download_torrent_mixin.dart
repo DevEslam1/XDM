@@ -1,12 +1,9 @@
 import 'dart:async';
 
-import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
 import '../../../../core/services/database_service.dart';
-import '../../../../core/services/download_engine.dart';
-import '../../../../core/services/power_monitor.dart';
 import '../../../../core/services/retry_engine.dart';
 import '../../../../core/services/torrent_service.dart';
 import '../../../../core/utils/file_utils.dart';
@@ -48,11 +45,6 @@ mixin DownloadTorrentMixin {
   void providerStartWidgetTimer();
   set filteredTasksDirty(bool value);
 
-  void safeNotify() {
-    if (DownloadEngine.isInBackground && PowerMonitor.screenOff) return;
-    providerNotifyListeners();
-  }
-
   /// Whether the device is currently on Wi-Fi / ethernet (used by the seeding
   /// ratio policy's "seed only on Wi-Fi" rule).
   bool get providerIsOnWifi;
@@ -82,10 +74,7 @@ mixin DownloadTorrentMixin {
           try {
             TorrentService.pauseTorrent(existingId);
             TorrentService.removeTorrent(existingId, deleteFiles: false);
-          } catch (e, st) {
-            LoggingService.logger('DownloadTorrentMixin')
-                .warning('Operation failed', e, st);
-          }
+          } catch (_) {}
           providerTorrentIds.remove(task.id);
           // Fall through to the add-new-handle path below
         } else {
@@ -190,7 +179,7 @@ mixin DownloadTorrentMixin {
     if (torrentId != null) {
       final stat = providerLatestTorrentStats[torrentId];
       if (stat != null) {
-        return stat.numSeeds < 0 ? 0 : stat.numSeeds;
+        return stat.numSeeds;
       }
     }
     return 0;
@@ -201,7 +190,7 @@ mixin DownloadTorrentMixin {
     if (torrentId != null) {
       final stat = providerLatestTorrentStats[torrentId];
       if (stat != null) {
-        return stat.numPeers < 0 ? 0 : stat.numPeers;
+        return stat.numPeers;
       }
     }
     return 0;
@@ -323,9 +312,6 @@ mixin DownloadTorrentMixin {
   /// Updates the in-memory `speed` field on all seeding tasks from live
   /// torrent stats. Returns `true` if any task was modified.
   bool updateSeedingSpeeds() {
-    final activeIds = providerTasks.map((t) => t.id).toSet();
-    _lastSeedingCheck.removeWhere((id, _) => !activeIds.contains(id));
-
     var changed = false;
     final now = DateTime.now();
     for (var i = 0; i < providerTasks.length; i++) {
@@ -361,8 +347,7 @@ mixin DownloadTorrentMixin {
             }
 
             if (shouldStopSeeding) {
-              unawaited(updateTaskSeeding(task.id, enabled: false).catchError(
-                  (e) => debugPrint('[DMX] updateTaskSeeding failed: $e')));
+              unawaited(updateTaskSeeding(task.id, enabled: false));
               filteredTasksDirty = true;
               changed = true;
             }
@@ -407,16 +392,16 @@ mixin DownloadTorrentMixin {
         if (torrentId != null) {
           TorrentService.resumeTorrent(torrentId);
         } else {
-          unawaited(startSeedingTorrent(providerTasks[index]).catchError(
-              (e) => debugPrint('[DMX] startSeedingTorrent failed: $e')));
+          unawaited(startSeedingTorrent(providerTasks[index]));
         }
       } else {
-        // Only pause the torrent session if the task has already
-        // finished downloading (status == completed). Calling pauseTorrent
+        // Only pause/remove the torrent session if the task has already
+        // finished downloading (status == completed).  Calling pauseTorrent
         // while still downloading would abort the in-progress transfer.
-        // Don't remove the handle — keep it for potential re-enable.
         if (torrentId != null && oldTask.status == DownloadStatus.completed) {
           TorrentService.pauseTorrent(torrentId);
+          TorrentService.removeTorrent(torrentId, deleteFiles: false);
+          providerTorrentIds.remove(taskId);
         }
         // Snap downloadedBytes to fileSize so the Completed tab shows 100%.
         final updatedIdx = providerTasks.indexWhere((t) => t.id == taskId);
@@ -618,9 +603,9 @@ mixin DownloadTorrentMixin {
             );
             pausedAny = true;
             unawaited(
-              providerDatabaseService.saveTask(providerTasks[idx]).catchError(
-                  (e) => debugPrint(
-                      '[DMX] saveTask failed on network change: $e')),
+              providerDatabaseService
+                  .saveTask(providerTasks[idx])
+                  .catchError((_) {}),
             );
           }
         }
@@ -649,12 +634,12 @@ mixin DownloadTorrentMixin {
 
   void addWebSeed(String url, int torrentId) {
     TorrentService.addWebSeed(torrentId, url);
-    safeNotify();
+    providerNotifyListeners();
   }
 
   void removeWebSeed(String url, int torrentId) {
     TorrentService.removeWebSeed(torrentId, url);
-    safeNotify();
+    providerNotifyListeners();
   }
 
   List<String> getWebSeeds(int torrentId) {
@@ -683,7 +668,7 @@ mixin DownloadTorrentMixin {
       password: password,
     );
     TorrentService.reconfigureSession();
-    safeNotify();
+    providerNotifyListeners();
   }
 
   Future<void> applySslSettings({
@@ -702,6 +687,7 @@ mixin DownloadTorrentMixin {
       dhParamsPath: dhParamsPath,
     );
     TorrentService.reconfigureSession();
-    safeNotify();
+    providerNotifyListeners();
   }
 }
+
