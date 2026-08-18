@@ -1071,8 +1071,29 @@ class TorrentService {
       // ignore: avoid_dynamic_calls
       final status =
           (LibtorrentFlutter.instance as dynamic).getTorrentStatus(id);
-      return status != null;
+      if (status != null) return true;
+      // getTorrentStatus may return null for a legitimately paused/stopped
+      // handle in libtorrent 1.9.2. A paused torrent is NOT dead — treat it
+      // as alive so the pause flow isn't treated as a handle loss (which
+      // previously triggered a spurious retry and re-queue).
+      final stats = _latestStats[id];
+      if (stats != null) {
+        final label = stats.stateLabel.toLowerCase();
+        if (label.contains('paused') || label.contains('stopped')) {
+          return true;
+        }
+      }
+      return false;
     } catch (_) {
+      // Same as above: if the last known state is paused/stopped, keep the
+      // handle registered and report alive.
+      final stats = _latestStats[id];
+      if (stats != null) {
+        final label = stats.stateLabel.toLowerCase();
+        if (label.contains('paused') || label.contains('stopped')) {
+          return true;
+        }
+      }
       _activeTorrentIds.remove(id);
       _latestProgress.remove(id);
       _latestStats.remove(id);

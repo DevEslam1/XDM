@@ -8,3 +8,5 @@
 //
 // See: test/integration/download_provider_test.dart
 //      lib/features/downloads/usecases/start_download_usecase.dart (docstring)
+
+void main() {}

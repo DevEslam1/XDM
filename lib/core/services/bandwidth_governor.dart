@@ -212,12 +212,11 @@ class BandwidthGovernor {
 
   void _refill() {
     final now = DateTime.now();
-    final nowMs = now.millisecondsSinceEpoch;
-    _lastRefillMs = nowMs;
-
     final elapsedMs = now.difference(_lastRefill).inMilliseconds;
 
     if (elapsedMs < _minRefillIntervalMs) return;
+    _lastRefill = now;
+    _lastRefillMs = now.millisecondsSinceEpoch;
 
     final share = perConsumerBytesPerSecond;
     if (share <= 0) {

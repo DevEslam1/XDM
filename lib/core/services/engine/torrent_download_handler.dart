@@ -391,17 +391,16 @@ class TorrentDownloadHandler {
           continue;
         }
       final dl = (f['downloadedBytes'] as num?)?.toInt() ?? -1;
-      final wasEstimated = (f['progressEstimated'] as bool?) ?? false;
-      // FIX v2.0.0: dl == 0 with wasEstimated means engine hasn't
-      // provided real data yet — keep it as estimated so the
-      // distribution logic can fill in from totalDownloadedBytes.
       if (dl > 0 && dl <= len) {
         f['progress'] = (dl / len).clamp(0.0, 1.0);
         f['isComplete'] = dl >= len;
         f['progressEstimated'] = false;
-      } else if (dl == 0 && !wasEstimated && totalDownloadedBytes > 0) {
-        // Engine explicitly reported 0 and we have aggregate bytes —
-        // let estimation distribute them.
+      } else if (dl == 0 && totalDownloadedBytes > 0) {
+        // Engine reported 0 (with or without prior estimation) but we have
+        // aggregate bytes — let estimation distribute them so per-file
+        // progress reflects real download activity.
+        // FIX v2.0.0: Previously `!wasEstimated` excluded files whose engine
+        // reported no per-file bytes, leaving them stuck at 0B in the UI.
         final est = (len * progress).clamp(0.0, len.toDouble()).toInt();
         f['downloadedBytes'] = est;
         f['progress'] = len > 0 ? (est / len).clamp(0.0, 1.0) : 0.0;
@@ -864,11 +863,18 @@ class TorrentDownloadHandler {
       pauseInitiated = true;
       _log.info(
           'Pause/cancel requested for torrent $id — executing pause actions');
-      await _saveResumeDataBeforePause(id, url);
+      // FIX v2.0.0-PauseRace: Cancel the watchdogs FIRST, before any
+      // blocking work. Previously they were cancelled only AFTER
+      // _saveResumeDataBeforePause, so the 10s aliveness poll could fire
+      // mid-pause (torrent already halted) and raise a spurious
+      // "Torrent handle lost (aliveness poll)" error, which the
+      // orchestrator treated as transient and retried, re-queueing the
+      // paused task until it eventually failed.
       _stallWatchdog?.cancel();
       _stallWatchdog = null;
       _alivenessWatchdog?.cancel();
       _alivenessWatchdog = null;
+      await _saveResumeDataBeforePause(id, url);
       final sub = _activeSubs.remove(id);
       await sub?.cancel();
       await haltTorrent(id);
