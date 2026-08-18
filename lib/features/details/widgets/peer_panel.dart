@@ -35,16 +35,12 @@ class PeerPanel extends StatelessWidget {
   final int torrentId;
   final bool isDark;
   final List<PeerInfo> peers;
-  /// Optional live count from the engine stats update (numPeers).
-  /// Shown in the header when [peers] detail list is empty.
-  final int? peerCount;
 
   const PeerPanel({
     super.key,
     required this.torrentId,
     required this.isDark,
     this.peers = const [],
-    this.peerCount,
   });
 
   String _formatSpeed(int bps) {
@@ -56,9 +52,6 @@ class PeerPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Use the provided peerCount (from live engine stats) when available,
-    // otherwise fall back to the length of the detailed peer list.
-    final displayCount = peerCount ?? peers.length;
     final seeds = peers.where((p) => p.isSeed).length;
     final leeches = peers.where((p) => !p.isSeed).length;
 
@@ -70,7 +63,7 @@ class PeerPanel extends StatelessWidget {
           children: [
             Flexible(
               child: Text(
-                'Peers ($displayCount)',
+                'Peers (${peers.length})',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -96,17 +89,12 @@ class PeerPanel extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         if (peers.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20.0),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20.0),
             child: Center(
               child: Text(
-                displayCount > 0
-                    ? 'Connected to $displayCount peer${displayCount == 1 ? '' : 's'} — per-peer details not yet available.'
-                    : 'No peer connections currently active.',
-                style: TextStyle(
-                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                ),
-                textAlign: TextAlign.center,
+                'No peer connections currently active.',
+                style: TextStyle(color: AppTheme.textMuted),
               ),
             ),
           )

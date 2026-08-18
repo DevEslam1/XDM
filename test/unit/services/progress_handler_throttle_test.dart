@@ -118,7 +118,7 @@ void main() {
       expect(emittedEvents.isNotEmpty, true);
       expect(emittedEvents.last.cycleState, CycleState.starting);
       expect(
-          emittedEvents.last.statusMessage, 'Preparing counterpart stream…');
+          emittedEvents.last.statusMessage, 'Waiting for counterpart stream…');
 
       handler.dispose();
     });

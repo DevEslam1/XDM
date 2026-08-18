@@ -703,18 +703,9 @@ class HttpTransferJob {
           totalSize: st.totalSize, threadCount: cmd.threadCount);
     }
 
-    final tempFile = File(cmd.tempFilePath);
-    final tempFileExists = await tempFile.exists();
-    final tempFileLen = tempFileExists ? await tempFile.length() : 0;
-    if (!tempFileExists || tempFileLen == 0) {
-      _emitProgress(0,
-          statusMessage: 'Allocating disk space…',
-          cycleStateOverride: CycleState.allocating);
-    }
-
     PositionalFileWriter writer;
     final hasPriorBytes = st.downloadedBytes > 0;
-    if (hasPriorBytes && tempFileExists) {
+    if (hasPriorBytes && await File(cmd.tempFilePath).exists()) {
       writer = await PositionalFileWriter.openForResume(cmd.tempFilePath,
           threadCount: st.threadCount, totalSize: st.totalSize);
     } else {
@@ -1269,20 +1260,13 @@ class HttpTransferJob {
     final chunk = st.chunks.first;
     final tempFile = File(cmd.tempFilePath);
     await tempFile.parent.create(recursive: true);
-    final tempFileExists = await tempFile.exists();
-    final tempFileLen = tempFileExists ? await tempFile.length() : 0;
-    if (!tempFileExists || tempFileLen == 0) {
-      _emitProgress(0,
-          statusMessage: 'Allocating disk space…',
-          cycleStateOverride: CycleState.allocating);
-    }
 
     final stateFile = File(StateStore.pathFor(cmd.tempFilePath));
     final hasUsableState = await stateFile.exists() &&
         st.downloadedBytes > 0 &&
         st.chunks.isNotEmpty;
 
-    if (tempFileExists) {
+    if (await tempFile.exists()) {
       final len = await tempFile.length();
       if (st.totalSize > 0 && len >= st.totalSize) {
         if (hasUsableState && st.isComplete) {
@@ -1828,11 +1812,9 @@ class HttpTransferJob {
     final dueReport = nowMs - _lastReportMs >= reportInterval;
 
     if (st.chunks.isNotEmpty) {
-      _chunkFingerprint = st.chunks.asMap().entries.fold<int>(
+      _chunkFingerprint = st.chunks.fold<int>(
         0,
-        (h, e) => h ^
-            Object.hash(e.key, e.value.start, e.value.end, e.value.size,
-                e.value.downloaded),
+        (h, c) => h ^ Object.hash(c.start, c.end, c.size, c.downloaded),
       );
     }
 
@@ -1863,11 +1845,8 @@ class HttpTransferJob {
 
   List<Map<String, dynamic>>? _getChunkDetails(TransferState st) {
     if (st.chunks.isEmpty) return null;
-    final chunkHash = st.chunks.asMap().entries.fold<int>(
-        0,
-        (h, e) => h ^
-            Object.hash(e.key, e.value.start, e.value.end, e.value.size,
-                e.value.downloaded));
+    final chunkHash = st.chunks.fold<int>(
+        0, (h, c) => h ^ Object.hash(c.start, c.end, c.size, c.downloaded));
     if (_cachedChunkDetails != null && chunkHash == _lastChunkDetailsHash) {
       return _cachedChunkDetails;
     }

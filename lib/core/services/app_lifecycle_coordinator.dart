@@ -121,12 +121,12 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
       getIt<AmbientAnimationController>().stopAll();
     }
 
-    // FIX 10.1: Flush database saves and torrent resume data on backgrounding/detaching
+    // Task 4.3: Flush database saves on backgrounding/detaching
     try {
       DatabaseService.instance.flushPendingSaves();
     } catch (e, st) {
       LoggingService.logger('AppLifecycleCoordinator')
-          .warning('Database flush failed', e, st);
+          .warning('Operation failed', e, st);
     }
   }
 }

@@ -82,8 +82,8 @@ void main() {
       engine.dispose();
     });
 
-    test('FIX-2: ytCombinedProgress computes ratio when counterpart unknown but self size known', () {
-      // When ytCounterpartSize is null, falls back to self-only ratio so progress displays
+    test('FIX-2: ytCombinedProgress returns null when counterpart unknown', () {
+      // When ytCounterpartSize is null, it should return null rather than 1.0 (false 100%)
       const progressUnknownCp = DownloadProgress(
         downloadedBytes: 1000,
         fileSize: 1000,
@@ -93,7 +93,7 @@ void main() {
         ytCounterpartSize: null,
         ytDownloadedBytes: 1000,
       );
-      expect(progressUnknownCp.ytCombinedProgress, equals(1.0));
+      expect(progressUnknownCp.ytCombinedProgress, isNull);
 
       // When ytCounterpartSize is known, correctly computes combined progress
       const progressWithCp = DownloadProgress(

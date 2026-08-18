@@ -1902,7 +1902,7 @@ class DownloadOrchestrator {
                   ? (audioBytesSoFar / base.audioSize).clamp(0.0, 1.0)
                   : (hasAudio && audioBytesSoFar > 0 && audioContribution > 0
                       ? (audioBytesSoFar / audioContribution).clamp(0.0, 0.95)
-                      : (base.audioProgress.isNaN ? 0.0 : base.audioProgress)));
+                      : base.audioProgress));
 
           final updated = base.copyWith(
             fileName: fileNameOverride ?? base.fileName,
@@ -1928,10 +1928,9 @@ class DownloadOrchestrator {
                     audioBytesSoFar < audioContribution)
                 ? null
                 : statusMessageOverride,
-            clearStatusMessage: statusMessageOverride == null ||
-                (statusMessageOverride == 'Completed' &&
-                    hasAudio &&
-                    audioBytesSoFar < audioContribution),
+            clearStatusMessage: (statusMessageOverride == 'Completed' &&
+                hasAudio &&
+                audioBytesSoFar < audioContribution),
           );
 
           final bool hasNewlyResolvedMetadata =
@@ -2677,9 +2676,7 @@ class DownloadOrchestrator {
                           current.localFilePath,
                           progress.torrentFiles,
                         );
-                        if (scan.total > 0 && scan.files != null) {
-                          diskVerifiedFiles = scan.files;
-                        }
+                        diskVerifiedFiles = scan.files;
                       } catch (e) {
                         debugPrint(
                             '[DMX] Disk-verify torrent files failed: $e');
@@ -2689,9 +2686,11 @@ class DownloadOrchestrator {
 
                   var resolvedFiles =
                       diskVerifiedFiles ?? progress.torrentFiles;
-                  // FIX-02: Force selected files to full length ONLY when torrent task is truly completed
+                  // FIX-02: Force selected files to full length when torrent is completed or 100%
                   if (resolvedFiles != null &&
-                      base.status == DownloadStatus.completed) {
+                      (base.status == DownloadStatus.completed ||
+                          (base.fileSize > 0 &&
+                              progress.downloadedBytes >= base.fileSize))) {
                     resolvedFiles = resolvedFiles.map((f) {
                       final copy = Map<String, dynamic>.from(f);
                       if (isTorrentFileSelected(copy)) {

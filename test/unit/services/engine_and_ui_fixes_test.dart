@@ -242,7 +242,7 @@ void main() {
       );
       expect(lastEmitted?.cycleState, equals(CycleState.retrying));
       expect(lastEmitted?.statusMessage,
-          equals('Retrying counterpart stream…'));
+          equals('Waiting for counterpart stream…'));
 
       // 200s (under 5min) -> should still be retrying, NOT throwing UrlExpiredException
       handler.counterpartWaitStartForTesting =

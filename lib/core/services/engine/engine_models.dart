@@ -192,63 +192,6 @@ class ChunkDetail {
   int get hashCode => Object.hash(index, start, end, downloaded, size, ratio);
 }
 
-// FIX 1.4: HttpPartStatus model for per-part byte tracking
-@immutable
-class HttpPartStatus {
-  final int partIndex;
-  final int startByte;
-  final int endByte;
-  final int downloadedBytes;
-  final bool isComplete;
-
-  const HttpPartStatus({
-    required this.partIndex,
-    required this.startByte,
-    required this.endByte,
-    required this.downloadedBytes,
-    required this.isComplete,
-  });
-
-  Map<String, dynamic> toMap() => {
-        'partIndex': partIndex,
-        'startByte': startByte,
-        'endByte': endByte,
-        'downloadedBytes': downloadedBytes,
-        'isComplete': isComplete,
-      };
-
-  factory HttpPartStatus.fromMap(Map<String, dynamic> map) => HttpPartStatus(
-        partIndex: (map['partIndex'] as num?)?.toInt() ?? 0,
-        startByte: (map['startByte'] as num?)?.toInt() ?? 0,
-        endByte: (map['endByte'] as num?)?.toInt() ?? 0,
-        downloadedBytes: (map['downloadedBytes'] as num?)?.toInt() ?? 0,
-        isComplete: (map['isComplete'] as bool?) ?? false,
-      );
-
-  factory HttpPartStatus.fromChunkDetail(ChunkDetail detail) => HttpPartStatus(
-        partIndex: detail.index,
-        startByte: detail.start,
-        endByte: detail.end,
-        downloadedBytes: detail.downloaded,
-        isComplete: detail.isComplete,
-      );
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is HttpPartStatus &&
-          runtimeType == other.runtimeType &&
-          partIndex == other.partIndex &&
-          startByte == other.startByte &&
-          endByte == other.endByte &&
-          downloadedBytes == other.downloadedBytes &&
-          isComplete == other.isComplete;
-
-  @override
-  int get hashCode =>
-      Object.hash(partIndex, startByte, endByte, downloadedBytes, isComplete);
-}
-
 @immutable
 class DownloadProgress {
   final int downloadedBytes;
@@ -279,15 +222,6 @@ class DownloadProgress {
   final int? ytDownloadedBytes;
   final bool? hasEstimatedFileProgress;
   final int chunkFingerprint;
-  final int? numPeers;
-  final int? numSeeds;
-  final int? numLeechers;
-  // FIX 1.1, 1.2, 1.3, 1.4: Additional stream/part/piece progress tracking
-  final int? audioDownloadedBytes;
-  final double? audioProgress;
-  final List<double>? audioChunks;
-  final List<HttpPartStatus>? httpParts;
-  final double? torrentPieceProgress;
 
   const DownloadProgress({
     required this.downloadedBytes,
@@ -317,14 +251,6 @@ class DownloadProgress {
     this.ytDownloadedBytes,
     this.hasEstimatedFileProgress,
     this.chunkFingerprint = 0,
-    this.numPeers,
-    this.numSeeds,
-    this.numLeechers,
-    this.audioDownloadedBytes,
-    this.audioProgress,
-    this.audioChunks,
-    this.httpParts,
-    this.torrentPieceProgress,
   });
 
   factory DownloadProgress.fromWorkerMap(Map<String, dynamic> p) {
@@ -335,16 +261,6 @@ class DownloadProgress {
           .map((c) => ChunkDetail.fromMap(Map<String, dynamic>.from(c)))
           .toList();
     }
-    List<HttpPartStatus>? httpParts;
-    if (p['httpParts'] is List) {
-      httpParts = (p['httpParts'] as List)
-          .whereType<Map>()
-          .map((m) => HttpPartStatus.fromMap(Map<String, dynamic>.from(m)))
-          .toList();
-    } else if (details != null) {
-      httpParts = details.map((d) => HttpPartStatus.fromChunkDetail(d)).toList();
-    }
-
     final rawCycleState = p['cycleState'];
     final CycleState? cycleState = rawCycleState is CycleState
         ? rawCycleState
@@ -354,13 +270,6 @@ class DownloadProgress {
     final PauseReason? pauseReason = rawPauseReason is PauseReason
         ? rawPauseReason
         : PauseReason.fromName(rawPauseReason as String?);
-
-    final totalPieces = (p['totalPieces'] as num?)?.toInt();
-    final completedPieces = (p['completedPieces'] as num?)?.toInt();
-    final torrentPieceProgress = (p['torrentPieceProgress'] as num?)?.toDouble() ??
-        ((totalPieces != null && totalPieces > 0 && completedPieces != null)
-            ? (completedPieces / totalPieces).clamp(0.0, 1.0)
-            : null);
 
     return DownloadProgress(
       downloadedBytes: (p['downloadedBytes'] as num?)?.toInt() ?? 0,
@@ -378,8 +287,8 @@ class DownloadProgress {
       pauseReason: pauseReason,
       totalChunks: (p['totalChunks'] as num?)?.toInt(),
       completedChunks: (p['completedChunks'] as num?)?.toInt(),
-      totalPieces: totalPieces,
-      completedPieces: completedPieces,
+      totalPieces: (p['totalPieces'] as num?)?.toInt(),
+      completedPieces: (p['completedPieces'] as num?)?.toInt(),
       totalFiles: (p['totalFiles'] as num?)?.toInt(),
       completedFiles: (p['completedFiles'] as num?)?.toInt(),
       totalFileBytes: (p['totalFileBytes'] as num?)?.toInt(),
@@ -393,16 +302,6 @@ class DownloadProgress {
       ytDownloadedBytes: (p['ytDownloadedBytes'] as num?)?.toInt(),
       hasEstimatedFileProgress: p['hasEstimatedFileProgress'] as bool?,
       chunkFingerprint: (p['chunkFingerprint'] as num?)?.toInt() ?? 0,
-      numPeers: (p['numPeers'] as num?)?.toInt(),
-      numSeeds: (p['numSeeds'] as num?)?.toInt(),
-      numLeechers: (p['numLeechers'] as num?)?.toInt(),
-      audioDownloadedBytes: (p['audioDownloadedBytes'] as num?)?.toInt(),
-      audioProgress: (p['audioProgress'] as num?)?.toDouble(),
-      audioChunks: p['audioChunks'] != null
-          ? List<double>.from(p['audioChunks'] as List)
-          : null,
-      httpParts: httpParts,
-      torrentPieceProgress: torrentPieceProgress,
     );
   }
 
@@ -434,14 +333,6 @@ class DownloadProgress {
     int? ytDownloadedBytes,
     bool? hasEstimatedFileProgress,
     int? chunkFingerprint,
-    int? numPeers,
-    int? numSeeds,
-    int? numLeechers,
-    int? audioDownloadedBytes,
-    double? audioProgress,
-    List<double>? audioChunks,
-    List<HttpPartStatus>? httpParts,
-    double? torrentPieceProgress,
   }) {
     return DownloadProgress(
       downloadedBytes: downloadedBytes ?? this.downloadedBytes,
@@ -473,14 +364,6 @@ class DownloadProgress {
       hasEstimatedFileProgress:
           hasEstimatedFileProgress ?? this.hasEstimatedFileProgress,
       chunkFingerprint: chunkFingerprint ?? this.chunkFingerprint,
-      numPeers: numPeers ?? this.numPeers,
-      numSeeds: numSeeds ?? this.numSeeds,
-      numLeechers: numLeechers ?? this.numLeechers,
-      audioDownloadedBytes: audioDownloadedBytes ?? this.audioDownloadedBytes,
-      audioProgress: audioProgress ?? this.audioProgress,
-      audioChunks: audioChunks ?? this.audioChunks,
-      httpParts: httpParts ?? this.httpParts,
-      torrentPieceProgress: torrentPieceProgress ?? this.torrentPieceProgress,
     );
   }
 

@@ -1,14 +1,12 @@
-import 'dart:convert';
 import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import '../../../core/services/crash_reporting_service.dart';
-import '../../../core/services/engine/engine_models.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
+import 'cycle_state.dart';
 import 'download_state_machine.dart';
+import 'pause_reason.dart';
 
-export '../../../core/services/engine/engine_models.dart' show HttpPartStatus;
 export 'cycle_state.dart';
 export 'pause_reason.dart';
 
@@ -141,9 +139,9 @@ enum DownloadStatus {
   completed,
   failed,
   merging
-}
+} // FIX-B11
 
-enum SortOption { dateAdded, fileSize, fileName, status, manual }
+enum SortOption { dateAdded, fileSize, fileName, status, manual } // FIX(13)
 
 @immutable
 class DownloadTaskCore {
@@ -234,9 +232,10 @@ class DownloadTask {
   final DateTime updatedAt;
   final DateTime? completedAt;
   final DateTime? scheduledAt;
-  final DateTime? wasScheduledAt;
+  final DateTime? wasScheduledAt; // SCHED-FIX-1: Preserved after schedule fires
   final bool supportsResume;
-  final int speedLimitKbps;
+  // Speed Limit and Torrent Seeding Fields
+  final int speedLimitKbps; // 0 = unlimited
   final bool seedingEnabled;
   final bool seedingLimited;
   final int seedingLimitKbps;
@@ -244,7 +243,7 @@ class DownloadTask {
   final String? downloadPageUrl;
   final String? mergedAudioUrl;
   final int audioSize;
-  final int videoStreamSize;
+  final int videoStreamSize; // FIX-B4
   final double audioProgress;
   final int audioThreadCount;
   final bool pausedByUser;
@@ -252,9 +251,9 @@ class DownloadTask {
   final String? youtubeQualityPreset;
   final String? notes;
   final bool isAppUpdate;
-  final int priority;
-  final int queueOrder;
-  final String? playlistId;
+  final int priority; // 0 = normal, 1 = high, 2 = urgent
+  final int queueOrder; // FIX(13): Lower values = higher priority
+  final String? playlistId; // groups playlist videos into one card
   final String? playlistTitle;
   final String? thumbnailUrl;
   final String? expectedSha256;
@@ -276,18 +275,7 @@ class DownloadTask {
   final int? totalFileBytes;
   final int? downloadedFileBytes;
 
-  final bool isMergeInProgress;
-
-  // FIX 1.1, FIX 1.2, FIX 1.3, FIX 1.4: Additional data tracking fields
-  final int audioDownloadedBytes;
-  final List<double> audioChunks;
-  final double? torrentPieceProgress;
-  final List<HttpPartStatus>? httpParts;
-  final int? audioChunksCompleted;
-  final int? audioChunksTotal;
-  final int? httpPartsCompleted;
-  final int? httpPartsTotal;
-  final int uploadedBytes;
+  final bool isMergeInProgress; // runtime only, not persisted
 
   DownloadTask({
     required this.id,
@@ -323,17 +311,10 @@ class DownloadTask {
     this.downloadPageUrl,
     this.mergedAudioUrl,
     this.audioSize = 0,
-    this.videoStreamSize = 0,
+    this.videoStreamSize = 0, // FIX-B4
     this.audioProgress = 0.0,
     this.audioDownloadedBytes = 0,
     this.audioThreadCount = 2,
-    List<double>? audioChunks,
-    this.torrentPieceProgress,
-    this.httpParts,
-    this.audioChunksCompleted,
-    this.audioChunksTotal,
-    this.httpPartsCompleted,
-    this.httpPartsTotal,
     this.isMergeInProgress = false,
     this.pausedByUser = false,
     this.isCancelled = false,
@@ -341,7 +322,7 @@ class DownloadTask {
     this.notes,
     this.isAppUpdate = false,
     this.priority = 0,
-    this.queueOrder = 0,
+    this.queueOrder = 0, // FIX(13)
     this.playlistId,
     this.playlistTitle,
     this.thumbnailUrl,
@@ -360,8 +341,7 @@ class DownloadTask {
     this.completedFiles,
     this.totalFileBytes,
     this.downloadedFileBytes,
-  }) : audioChunks = audioChunks ??
-            List<double>.filled(audioThreadCount > 0 ? audioThreadCount : 2, 0.0);
+  });
 
   DownloadTaskCore get core => DownloadTaskCore(
         id: id,
@@ -401,64 +381,62 @@ class DownloadTask {
 
   bool get isPlaylistItem => playlistId != null && playlistId!.isNotEmpty;
 
+  /// Total size with fallbacks: stored [fileSize] first, then the sum of the
+  /// selected torrent files (magnets only learn their size after metadata),
+  /// then 0. Every size/percentage readout must go through this getter so
+  /// torrents with a late-resolved size still render correct numbers.
+  /// FIX v2.0.0: Enhanced fallback chain for torrent file size.
+  /// When torrentFiles is null (metadata not received) AND fileSize is 0,
+  /// try totalFileBytes from the engine's aggregate stats.
   int get resolvedFileSize {
     if (fileSize < 0) return 0;
     if (isTorrent && torrentFiles != null && torrentFiles!.isNotEmpty) {
       final sum = torrentFiles!
           .where((f) => isTorrentFileSelected(f))
-          .fold<int>(0, (s, f) => s + (((f['length'] ?? f['size']) as num?)?.toInt() ?? 0));
+          .fold<int>(0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
       if (sum > 0) return sum;
     }
     if (fileSize > 0) return fileSize;
+    // FIX v2.0.0: Fall back to engine-reported aggregate if available
     if (isTorrent && totalFileBytes != null && totalFileBytes! > 0) {
       return totalFileBytes!;
     }
     return 0;
   }
 
+  // FIX(07): Track uploaded bytes for torrent seeding ratio
+  final int audioDownloadedBytes; // actual audio bytes on disk
+  final int uploadedBytes;
+
+  // FIX(01): Helper getter for indeterminate progress state
   bool get hasUnknownSize => resolvedFileSize <= 0;
 
-  // FIX 3.8: Dual-leg YouTube progress getters
-  double get videoProgressPercent {
-    final vSize = videoStreamSize > 0
-        ? videoStreamSize
-        : (fileSize > audioSize && audioSize > 0
-            ? fileSize - audioSize
-            : fileSize);
-    if (vSize <= 0) return 0.0;
-    return (downloadedBytes / vSize).clamp(0.0, 1.0);
-  }
-
+  // FIX(05): Audio progress computed getters
   double get audioProgressPercent {
+    // FIX Y-2: Prefer byte-based calculation when audioDownloadedBytes > 0
     if (audioSize > 0 && audioDownloadedBytes > 0) {
       return (audioDownloadedBytes / audioSize).clamp(0.0, 1.0);
     }
     return audioProgress.clamp(0.0, 1.0);
   }
 
-  double get combinedProgressPercent => progress.clamp(0.0, 1.0);
-
-  String get videoChunksSummary =>
-      '${chunks.where((c) => c >= 1.0).length}/${chunks.length}';
-
-  String get audioChunksSummary =>
-      '${audioChunks.where((c) => c >= 1.0).length}/${audioChunks.length}';
-
   String get audioProgressString =>
       '${(audioProgressPercent * 100).toStringAsFixed(1)}%';
-
   bool get isAudioComplete =>
       audioProgress >= 0.999 ||
       (audioSize > 0 && audioDownloadedBytes >= audioSize);
 
+  // FIX(07): Seeding ratio computed getter
   double get seedingRatio {
     if (downloadedBytes <= 0) return 0.0;
     return uploadedBytes / downloadedBytes;
   }
 
+  // FIX(17): Helper flag when video size is unknown but audio size is known
   bool get isTotalSizePartial =>
       hasMergedAudio && fileSize <= 0 && audioSize > 0;
 
+  // FIX-H6: Network status getters
   bool get waitingWifi =>
       errorMessage == DownloadStatusMessages.waitingWifi ||
       statusMessage == DownloadStatusMessages.waitingWifi;
@@ -477,7 +455,7 @@ class DownloadTask {
     int dl = 0;
     for (final f in torrentFiles!) {
       if (isTorrentFileSelected(f)) {
-        final len = ((f['length'] ?? f['size']) as num?)?.toInt() ?? 0;
+        final len = (f['length'] as num?)?.toInt() ?? 0;
         final d = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
         total += len;
         if (d >= 0) dl += d;
@@ -498,94 +476,26 @@ class DownloadTask {
     return 0.0;
   }
 
-  // FIX 1.3, FIX 4.8: Torrent Piece & File Progress getters
-  String get torrentOverallPercentString =>
-      '${(torrentOverallPercent * 100).toStringAsFixed(1)}%';
-
-  String get torrentPiecePercentString {
-    if (torrentPieceProgress != null) {
-      return '${(torrentPieceProgress! * 100).toStringAsFixed(1)}%';
-    }
-    if (totalPieces != null && totalPieces! > 0 && completedPieces != null) {
-      final frac = (completedPieces! / totalPieces!).clamp(0.0, 1.0);
-      return '${(frac * 100).toStringAsFixed(1)}%';
-    }
-    return '0.0%';
-  }
-
-  int get torrentCompletedFilesCount {
-    if (completedFiles != null) return completedFiles!;
-    if (torrentFiles != null) {
-      return torrentFiles!.where((f) {
-        final len = ((f['length'] ?? f['size']) as num?)?.toInt() ?? 0;
-        final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-        return len == 0 || dl >= len;
-      }).length;
-    }
-    return 0;
-  }
-
-  int get torrentTotalFilesCount =>
-      totalFiles ?? (torrentFiles?.length ?? 0);
-
-  List<({String fileName, int downloadedBytes, int totalBytes, double percent, bool isComplete})>
-      get torrentFileProgressSummary {
-    if (torrentFiles == null || torrentFiles!.isEmpty) return [];
-    return torrentFiles!.map((f) {
-      final name = (f['name'] as String?) ?? 'file';
-      final len = ((f['length'] ?? f['size']) as num?)?.toInt() ?? 0;
-      final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-      final percent = len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0;
-      final complete = len > 0 ? dl >= len : false;
-      return (
-        fileName: name,
-        downloadedBytes: dl,
-        totalBytes: len,
-        percent: percent,
-        isComplete: complete,
-      );
-    }).toList();
-  }
-
-  // FIX 1.4: HTTP Part Summary getter
-  ({int totalParts, int completedParts, int totalBytes, int downloadedBytes})
-      get httpPartsSummary {
-    if (httpParts != null && httpParts!.isNotEmpty) {
-      final totalP = httpParts!.length;
-      final completedP = httpParts!.where((p) => p.isComplete).length;
-      final totalB = resolvedFileSize;
-      final dlB = httpParts!.fold<int>(0, (s, p) => s + p.downloadedBytes);
-      return (
-        totalParts: totalP,
-        completedParts: completedP,
-        totalBytes: totalB,
-        downloadedBytes: dlB,
-      );
-    }
-    final chunksCount = chunks.length;
-    final completedC = chunks.where((c) => c >= 1.0).length;
-    return (
-      totalParts: chunksCount > 0 ? chunksCount : threadCount,
-      completedParts: completedC,
-      totalBytes: resolvedFileSize,
-      downloadedBytes: downloadedBytes,
-    );
-  }
-
+  // FIX-M3: combinedTotalSize fallback when videoStreamSize == 0 and fileSize == 0
   int get combinedTotalSize {
     if (hasMergedAudio && audioSize > 0) {
       if (videoStreamSize > 0) return videoStreamSize + audioSize;
       if (fileSize > audioSize) return fileSize;
-      if (fileSize > 0) return fileSize;
+      if (fileSize > 0 && fileSize <= audioSize) {
+        // fileSize only covers audio so far; total still unknown
+        return downloadedBytes + audioSize;
+      }
       if (downloadedBytes > 0) return downloadedBytes + audioSize;
       return 0;
     }
+    // FIX: when audioSize == 0 but hasMergedAudio, use fileSize as fallback
     if (hasMergedAudio && audioSize == 0 && fileSize > 0) {
       return fileSize;
     }
     return resolvedFileSize;
   }
 
+  /// Combined downloaded bytes including audio stream bytes for YouTube downloads.
   int get combinedDownloadedBytes {
     final total = combinedTotalSize;
     var raw = downloadedBytes < 0 ? 0 : downloadedBytes;
@@ -593,6 +503,8 @@ class DownloadTask {
       final videoOnly = videoStreamSize > 0
           ? videoStreamSize
           : (fileSize > audioSize ? fileSize - audioSize : 0);
+      // FIX-1: Always fold audio bytes in, even when videoOnly is still 0
+      // (audio size may be known before video size resolves).
       final audioBytes = audioDownloadedBytes > 0
           ? audioDownloadedBytes
           : (audioSize > 0 ? (audioProgress * audioSize).round() : 0);
@@ -603,6 +515,8 @@ class DownloadTask {
           raw = videoOnly + audioBytes;
         }
       } else {
+        // videoOnly unknown — add audio bytes on top of whatever
+        // video bytes we already have so progress still moves.
         raw += audioBytes;
       }
     }
@@ -610,6 +524,7 @@ class DownloadTask {
     return raw;
   }
 
+  // FIX-S8: Sanitized chunk progress ratios matching current threadCount with NaN/Inf guards
   List<double> get sanitizedChunks {
     final count = threadCount > 0 ? threadCount : 1;
     double safe(double c) =>
@@ -632,37 +547,22 @@ class DownloadTask {
         ...List.filled(count - existing.length, avg.clamp(0.0, 1.0))
       ];
     }
+    // chunks.length > threadCount → redistribute proportionally
     final totalProgress = chunks.fold<double>(0, (s, c) => s + safe(c));
     final perChunk = totalProgress / count;
     return List.generate(count, (_) => perChunk.clamp(0.0, 1.0));
   }
 
+  /// Downloaded bytes clamped to total size for safe display / ratio math.
   int get displayDownloadedBytes {
     final total = combinedTotalSize;
     final downloaded = combinedDownloadedBytes;
     return total > 0 ? downloaded.clamp(0, total) : downloaded;
   }
 
-  // FIX 1.5: Fix progress getter for YouTube dual-stream
   double get progress {
     if (status == DownloadStatus.completed) return 1.0;
     if (isTorrent && hasTorrentFiles) return torrentOverallPercent;
-
-    if (hasMergedAudio && audioSize > 0) {
-      final vSize = videoStreamSize > 0
-          ? videoStreamSize
-          : (fileSize > audioSize ? fileSize - audioSize : (fileSize > 0 ? fileSize : 0));
-      final videoDl = downloadedBytes.clamp(0, vSize > 0 ? vSize : downloadedBytes);
-      final audioDl = (audioDownloadedBytes > 0
-              ? audioDownloadedBytes
-              : (audioProgress * audioSize).round())
-          .clamp(0, audioSize);
-      final total = (vSize > 0 ? vSize : 0) + audioSize;
-      if (total > 0) {
-        return ((videoDl + audioDl) / total).clamp(0.0, 1.0);
-      }
-    }
-
     if (hasUnknownSize) return -1.0;
     final total = combinedTotalSize;
     if (total <= 0) return -1.0;
@@ -671,6 +571,7 @@ class DownloadTask {
     return ratio.clamp(0.0, 1.0);
   }
 
+  /// Transient unified progress for YouTube audio/video pair downloads.
   double? get ytCombinedProgress {
     if (!hasMergedAudio && audioSize <= 0 && youtubeQualityPreset == null) {
       return null;
@@ -695,6 +596,8 @@ class DownloadTask {
     }
     final total = combinedTotalSize;
     if (total <= 0) {
+      // Unknown total → show downloaded bytes as a byte-count badge
+      // so the UI is consistent with the indeterminate progress bar.
       final dl = combinedDownloadedBytes;
       return dl > 0 ? formatBytes(dl) : '—';
     }
@@ -706,6 +609,7 @@ class DownloadTask {
         status != DownloadStatus.completed) {
       return '0.0 KB/s';
     }
+    // Completed + torrent + seeding: speed carries the upload rate.
     if (status == DownloadStatus.completed && isTorrent && seedingEnabled) {
       return '${formatBytes(speed)}/s';
     }
@@ -740,6 +644,10 @@ class DownloadTask {
     return '${eta}s';
   }
 
+  /// Wall-clock time the download has been alive.
+  ///  - downloading / queued → up to now (ticks live while the card rebuilds)
+  ///  - paused / failed      → up to the last state change
+  ///  - completed            → total transfer time
   String get elapsedFormatted {
     final DateTime end;
     switch (status) {
@@ -778,6 +686,8 @@ class DownloadTask {
     return 'Unknown';
   }
 
+  /// Downloaded bytes, clamped so a late-resolved total can never render
+  /// "1.4 GB / 800 MB" style rows.
   String get downloadedSizeFormatted {
     final total = combinedTotalSize;
     final downloaded = combinedDownloadedBytes;
@@ -836,18 +746,9 @@ class DownloadTask {
     bool clearMergedAudioUrl = false,
     int? audioSize,
     int? audioDownloadedBytes,
-    int? videoStreamSize,
+    int? videoStreamSize, // FIX-B4
     double? audioProgress,
     int? audioThreadCount,
-    List<double>? audioChunks,
-    double? torrentPieceProgress,
-    bool clearTorrentPieceProgress = false,
-    List<HttpPartStatus>? httpParts,
-    bool clearHttpParts = false,
-    int? audioChunksCompleted,
-    int? audioChunksTotal,
-    int? httpPartsCompleted,
-    int? httpPartsTotal,
     bool? pausedByUser,
     bool? isCancelled,
     String? youtubeQualityPreset,
@@ -886,35 +787,6 @@ class DownloadTask {
         ? 0
         : (fileSize != null ? max(0, fileSize) : this.fileSize);
     final rawDownloadedBytes = max(0, downloadedBytes ?? this.downloadedBytes);
-
-    // FIX 1.6: Validate cycleState transition legality
-    CycleState? effectiveCycleState = cycleState ?? this.cycleState;
-    if (clearCycleState) {
-      effectiveCycleState = null;
-    } else if (cycleState != null &&
-        cycleState != this.cycleState &&
-        this.cycleState != null) {
-      if (!CycleState.isValidTransition(this.cycleState, cycleState)) {
-        debugPrint(
-            '[DownloadTask] Warning: Blocked illegal cycleState transition from ${this.cycleState} to $cycleState on task $id');
-        try {
-          CrashReportingService.recordError(
-            StateError(
-                'Illegal CycleState transition from ${this.cycleState} to $cycleState on task $id'),
-            StackTrace.current,
-            hint: 'recoverable',
-          );
-        } catch (_) {}
-        effectiveCycleState = this.cycleState;
-      }
-    }
-
-    final effAudioThreadCount = audioThreadCount ?? this.audioThreadCount;
-    final effAudioChunks = (audioChunks != null
-            ? List<double>.from(audioChunks)
-            : List<double>.from(this.audioChunks))
-        .map((c) => (c.isNaN || c.isInfinite) ? 0.0 : c.clamp(0.0, 1.0))
-        .toList();
 
     return DownloadTask(
       id: id,
@@ -979,22 +851,14 @@ class DownloadTask {
           clearMergedAudioUrl ? null : (mergedAudioUrl ?? this.mergedAudioUrl),
       audioSize: audioSize ?? this.audioSize,
       audioDownloadedBytes: audioDownloadedBytes ?? this.audioDownloadedBytes,
+      // FIX-B4 / FIX YT-U1: Use a sentinel so callers can explicitly
+      // reset videoStreamSize to 0.
+      // ignore: prefer_if_null_operators
       videoStreamSize: videoStreamSize ?? this.videoStreamSize,
       audioProgress: ((audioProgress ?? this.audioProgress).isNaN
           ? 0.0
           : (audioProgress ?? this.audioProgress).clamp(0.0, 1.0)),
-      audioThreadCount: effAudioThreadCount,
-      audioChunks: effAudioChunks,
-      torrentPieceProgress: clearTorrentPieceProgress
-          ? null
-          : (torrentPieceProgress ?? this.torrentPieceProgress),
-      httpParts: clearHttpParts
-          ? null
-          : (httpParts ?? this.httpParts),
-      audioChunksCompleted: audioChunksCompleted ?? this.audioChunksCompleted,
-      audioChunksTotal: audioChunksTotal ?? this.audioChunksTotal,
-      httpPartsCompleted: httpPartsCompleted ?? this.httpPartsCompleted,
-      httpPartsTotal: httpPartsTotal ?? this.httpPartsTotal,
+      audioThreadCount: audioThreadCount ?? this.audioThreadCount,
       isMergeInProgress: isMergeInProgress ?? this.isMergeInProgress,
       pausedByUser: pausedByUser ?? this.pausedByUser,
       isCancelled: isCancelled ?? this.isCancelled,
@@ -1024,7 +888,7 @@ class DownloadTask {
           : (completedPieces ?? this.completedPieces),
       ytCounterpartDownloadedBytes:
           ytCounterpartDownloadedBytes ?? this.ytCounterpartDownloadedBytes,
-      cycleState: effectiveCycleState,
+      cycleState: clearCycleState ? null : (cycleState ?? this.cycleState),
       previousCycleState: clearPreviousCycleState
           ? null
           : (previousCycleState ?? this.previousCycleState),
@@ -1035,10 +899,12 @@ class DownloadTask {
     );
   }
 
+  /// D-01: Validates if transition from [from] to [to] is legally allowed.
   static bool isValidTransition(DownloadStatus from, DownloadStatus to) {
     return DownloadStateMachine.canTransitionStatus(from, to);
   }
 
+  /// Transition to new status with validation
   DownloadTask transitionTo(DownloadStatus nextStatus) {
     if (!isValidTransition(status, nextStatus)) {
       debugPrint(
@@ -1084,16 +950,9 @@ class DownloadTask {
       'mergedAudioUrl': mergedAudioUrl,
       'audioSize': audioSize,
       'audioDownloadedBytes': audioDownloadedBytes,
-      'videoStreamSize': videoStreamSize,
+      'videoStreamSize': videoStreamSize, // FIX-B4
       'audioProgress': audioProgress,
       'audioThreadCount': audioThreadCount,
-      'audioChunks': audioChunks,
-      'torrentPieceProgress': torrentPieceProgress,
-      'httpParts': httpParts?.map((p) => p.toMap()).toList(),
-      'audioChunksCompleted': audioChunksCompleted,
-      'audioChunksTotal': audioChunksTotal,
-      'httpPartsCompleted': httpPartsCompleted,
-      'httpPartsTotal': httpPartsTotal,
       'pausedByUser': pausedByUser,
       'isCancelled': isCancelled,
       'youtubeQualityPreset': youtubeQualityPreset,
@@ -1153,6 +1012,8 @@ class DownloadTask {
     final rawChunks =
         (map['chunks'] is List ? (map['chunks'] as List) : const [0.0])
             .map((value) {
+      // FIX-M16: Guard against NaN / Infinity values that survive JSON
+      // round-trips (e.g. from `double.infinity` or `0/0` calculations).
       final raw = (value as num?)?.toDouble() ?? 0.0;
       if (raw.isNaN || raw.isInfinite) return 0.0;
       return raw.clamp(0.0, 1.0);
@@ -1205,6 +1066,7 @@ class DownloadTask {
     int? totalFileBytes = (map['totalFileBytes'] as num?)?.toInt();
     int? downloadedFileBytes = (map['downloadedFileBytes'] as num?)?.toInt();
 
+    // Fix 4: Compute torrent file aggregates directly from torrentFiles JSON array
     if (rawTorrentFiles != null && rawTorrentFiles.isNotEmpty) {
       final selected = rawTorrentFiles
           .where((f) => (f['selected'] as bool?) ?? true)
@@ -1222,43 +1084,6 @@ class DownloadTask {
         final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
         return sum + (len > 0 ? dl.clamp(0, len) : 0);
       });
-    }
-
-    final audioThreadCount = (map['audioThreadCount'] as num?)?.toInt() ?? 2;
-    List<double>? audioChunks;
-    if (map['audioChunks'] is List) {
-      audioChunks = (map['audioChunks'] as List)
-          .map((v) => (v as num?)?.toDouble() ?? 0.0)
-          .map((c) => (c.isNaN || c.isInfinite) ? 0.0 : c.clamp(0.0, 1.0))
-          .toList();
-    } else if (map['audio_chunks'] is String) {
-      try {
-        final dec = jsonDecode(map['audio_chunks'] as String);
-        if (dec is List) {
-          audioChunks = dec
-              .map((v) => (v as num?)?.toDouble() ?? 0.0)
-              .map((c) => (c.isNaN || c.isInfinite) ? 0.0 : c.clamp(0.0, 1.0))
-              .toList();
-        }
-      } catch (_) {}
-    }
-
-    List<HttpPartStatus>? httpParts;
-    if (map['httpParts'] is List) {
-      httpParts = (map['httpParts'] as List)
-          .whereType<Map>()
-          .map((m) => HttpPartStatus.fromMap(Map<String, dynamic>.from(m)))
-          .toList();
-    } else if (map['http_parts'] is String) {
-      try {
-        final dec = jsonDecode(map['http_parts'] as String);
-        if (dec is List) {
-          httpParts = dec
-              .whereType<Map>()
-              .map((m) => HttpPartStatus.fromMap(Map<String, dynamic>.from(m)))
-              .toList();
-        }
-      } catch (_) {}
     }
 
     return DownloadTask(
@@ -1302,21 +1127,9 @@ class DownloadTask {
       audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
       audioDownloadedBytes: (map['audioDownloadedBytes'] as num?)?.toInt() ?? 0,
       videoStreamSize: max(
-          0, (map['videoStreamSize'] as num?)?.toInt() ?? 0),
+          0, (map['videoStreamSize'] as num?)?.toInt() ?? 0), // FIX-B4 / FIX-M6
       audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
-      audioThreadCount: audioThreadCount,
-      audioChunks: audioChunks,
-      torrentPieceProgress: (map['torrentPieceProgress'] as num?)?.toDouble() ??
-          (map['torrent_piece_progress'] as num?)?.toDouble(),
-      httpParts: httpParts,
-      audioChunksCompleted: (map['audioChunksCompleted'] as num?)?.toInt() ??
-          (map['audio_chunks_completed'] as num?)?.toInt(),
-      audioChunksTotal: (map['audioChunksTotal'] as num?)?.toInt() ??
-          (map['audio_chunks_total'] as num?)?.toInt(),
-      httpPartsCompleted: (map['httpPartsCompleted'] as num?)?.toInt() ??
-          (map['http_parts_completed'] as num?)?.toInt(),
-      httpPartsTotal: (map['httpPartsTotal'] as num?)?.toInt() ??
-          (map['http_parts_total'] as num?)?.toInt(),
+      audioThreadCount: (map['audioThreadCount'] as num?)?.toInt() ?? 2,
       pausedByUser: map['pausedByUser'] as bool? ?? false,
       isCancelled: map['isCancelled'] as bool? ?? false,
       youtubeQualityPreset: map['youtubeQualityPreset'] as String?,
@@ -1356,6 +1169,7 @@ class DownloadTask {
     );
   }
 
+  // FIX 5: Helper getter for merged audio status
   bool get hasMergedAudio =>
       mergedAudioUrl != null && mergedAudioUrl!.isNotEmpty;
 
@@ -1370,6 +1184,8 @@ class DownloadTask {
     return null;
   }
 
+  // Identity equality based on [id] (plus playlist grouping keys) so cards
+  // animate correctly in lists.
   @override
   bool operator ==(Object other) =>
       identical(this, other) || (other is DownloadTask && other.id == id);

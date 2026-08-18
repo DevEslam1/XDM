@@ -65,7 +65,7 @@ class TorrentSessionManager {
 
   /// Pauses a torrent and waits for confirmation up to [timeout] (FIX T-5).
   Future<bool> pauseTorrentWithConfirmation(String taskId,
-      {Duration timeout = const Duration(seconds: 4)}) async {
+      {Duration timeout = const Duration(seconds: 3)}) async {
     final tid = _torrentIds[taskId];
     if (tid == null) return true;
 
@@ -89,13 +89,6 @@ class TorrentSessionManager {
       } catch (_) {
         isPaused = true;
       }
-    }
-
-    // FIX-PAUSE: If poll timed out but handle is gone, still count as paused.
-    if (!isPaused && !_torrentService.isTorrentAlive(tid)) {
-      isPaused = true;
-      debugPrint('[TorrentSessionManager] pauseTorrentWithConfirmation: '
-          'poll timed out but torrent $tid handle gone — treating as paused');
     }
 
     // Save fast-resume data

@@ -11,7 +11,6 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
-import '../../../core/services/torrent_models.dart';
 import '../../../core/services/tracker_manager.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/file_opener.dart';
@@ -1395,92 +1394,6 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
                 );
               }),
             ),
-            // FIX 9.4: Audio channels grid for YouTube dual-stream
-            if (isDualYoutube && task.audioChunks.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    isRtl ? 'قنوات الصوت' : 'AUDIO CHANNELS',
-                    style: AppTheme.microLabel(isDark: isDark, size: 10),
-                  ),
-                  Text(
-                    '${task.audioChunks.where((c) => c >= 1.0).length}/${task.audioChunks.length}',
-                    style: AppTheme.dataStyle(
-                      isDark: isDark,
-                      size: 11,
-                      color: isDark
-                          ? AppTheme.neonGreen
-                          : AppTheme.lightNeonGreen,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Column(
-                children: List.generate(task.audioChunks.length, (index) {
-                  final chunkProgress =
-                      task.audioChunks[index].clamp(0.0, 1.0);
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 44,
-                          child: Text(
-                            isRtl ? 'ص${index + 1}' : 'AU ${index + 1}',
-                            style: AppTheme.microLabel(
-                              isDark: isDark,
-                              color: mutedClr,
-                              size: 9,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Stack(
-                            children: [
-                              Container(
-                                height: 6,
-                                decoration:
-                                    AppTheme.progressTrack(isDark: isDark),
-                              ),
-                              AnimatedFractionallySizedBox(
-                                widthFactor: chunkProgress,
-                                duration: const Duration(milliseconds: 400),
-                                curve: AppTheme.motionCurve,
-                                child: Container(
-                                  height: 6,
-                                  decoration: AppTheme.progressFill(
-                                    isDark
-                                        ? AppTheme.neonGreen
-                                        : AppTheme.lightNeonGreen,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        SizedBox(
-                          width: 38,
-                          child: Text(
-                            '${(chunkProgress * 100).toStringAsFixed(0)}%',
-                            textAlign:
-                                isRtl ? TextAlign.left : TextAlign.right,
-                            style: AppTheme.dataStyle(
-                              isDark: isDark,
-                              size: 10,
-                              color: mutedClr,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-              ),
-            ],
           ],
         ),
       ),
@@ -2268,51 +2181,22 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
     final amberClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
+    final seeds = provider.getTorrentSeeds(task.id);
+    final peers = provider.getTorrentPeers(task.id);
+
     final isActive = task.status == DownloadStatus.downloading;
     final isSeeding = task.status == DownloadStatus.completed &&
         task.isTorrent &&
         task.seedingEnabled;
 
-    final torrentId = provider.providerTorrentIds[task.id] ?? -1;
-    final allStats = provider.providerLatestTorrentStats;
-    TorrentUpdateInfo? stats = torrentId >= 0 ? allStats[torrentId] : null;
+    final dlSpeed = task.speed;
+    final ulSpeed = isSeeding
+        ? task.speed
+        : (task.isTorrent ? provider.getTorrentUploadSpeed(task.id) : 0.0);
 
-    if (stats == null && allStats.isNotEmpty) {
-      // 1. Try matching by infoHash if contained in url
-      for (final s in allStats.values) {
-        if (s.infoHash.isNotEmpty &&
-            task.url.toLowerCase().contains(s.infoHash.toLowerCase())) {
-          stats = s;
-          break;
-        }
-      }
-      // 2. Try matching by name
-      if (stats == null) {
-        for (final s in allStats.values) {
-          if (s.name.isNotEmpty &&
-              (s.name == task.fileName || task.url.contains(s.name))) {
-            stats = s;
-            break;
-          }
-        }
-      }
-      // 3. If there is only one torrent in the session, it belongs to this task
-      stats ??= (allStats.length == 1 ? allStats.values.first : null);
-      if (stats != null && torrentId < 0) {
-        provider.providerTorrentIds[task.id] = stats.id;
-      }
-    }
-
-    final seeds = stats?.numSeeds ?? provider.getTorrentSeeds(task.id);
-    final peers = stats?.numPeers ?? provider.getTorrentPeers(task.id);
-
-    final ulSpeed = stats != null && stats.uploadRate > 0
-        ? stats.uploadRate.toDouble()
-        : (isSeeding ? task.speed : provider.getTorrentUploadSpeed(task.id));
-
-    final dlSpeed = stats != null && stats.downloadRate > 0
-        ? stats.downloadRate.toDouble()
-        : task.speed;
+    final torrentId =
+        provider.providerTorrentIds[task.id] ?? (int.tryParse(task.id) ?? 0);
+    final stats = provider.providerLatestTorrentStats[torrentId];
 
     return DmxCardShell(
       accent: violetClr,
@@ -2513,10 +2397,7 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
               PeerPanel(
                 torrentId: torrentId,
                 isDark: isDark,
-                // Live peer count from stats (detail API not yet available);
-                // PeerPanel will show count-only summary when list is empty.
                 peers: const [],
-                peerCount: stats?.numPeers ?? peers,
               ),
             ],
           ],
@@ -2730,15 +2611,11 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
         final isDark = settings.isDarkMode;
         final isRtl = L10n.isRtl(context);
         final isDownloading = currentTask.status == DownloadStatus.downloading;
-        final totalSize = currentTask.fileSize > 0
-            ? currentTask.fileSize
-            : currentTask.combinedTotalSize;
         return TorrentFilesPanel(
           torrentFiles: files,
           isDark: isDark,
           isRtl: isRtl,
           isDownloading: isDownloading,
-          taskTotalSize: totalSize > 0 ? totalSize : null,
           onSelectAll: () {
             triggerHaptic(settings);
             final updatedFiles = List<Map<String, dynamic>>.from(files);
