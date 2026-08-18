@@ -10,23 +10,25 @@ class TorrentFileNormalizer {
       (f['selected'] as bool?) ?? true;
 
   /// Normalizes a single torrent file entry, ensuring all fields are present
-  /// and properly typed. Mutates the input map and returns it.
+  /// and properly typed. Returns a new map without mutating the input map.
   static Map<String, dynamic> normalizeTorrentFile(Map<String, dynamic> f) {
     final len = (f['length'] as num?)?.toInt() ?? 0;
     var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
     // Clamp downloaded bytes to [0, length]
     dl = len > 0 ? dl.clamp(0, len) : 0;
-    final progress = len > 0 ? (dl / len).clamp(0.0, 1.0) : (len == 0 ? 1.0 : 0.0);
-    f['name'] = f['name'] as String? ?? 'file';
-    f['length'] = len;
-    f['downloadedBytes'] = dl;
-    f['selected'] = f['selected'] as bool? ?? true;
-    f['priority'] = (f['priority'] as num?)?.toInt() ?? 4;
-    f['speed'] = (f['speed'] as num?)?.toDouble() ?? 0.0;
-    f['progress'] = progress;
-    f['isComplete'] = len == 0 || (len > 0 && dl >= len);
-    f['progressEstimated'] = (f['progressEstimated'] as bool?) ?? false;
-    return f;
+    final progress =
+        len > 0 ? (dl / len).clamp(0.0, 1.0) : (len == 0 ? 1.0 : 0.0);
+    return <String, dynamic>{
+      'name': f['name'] as String? ?? 'file',
+      'length': len,
+      'downloadedBytes': dl,
+      'selected': f['selected'] as bool? ?? true,
+      'priority': (f['priority'] as num?)?.toInt() ?? 4,
+      'speed': (f['speed'] as num?)?.toDouble() ?? 0.0,
+      'progress': progress,
+      'isComplete': len == 0 || (len > 0 && dl >= len),
+      'progressEstimated': (f['progressEstimated'] as bool?) ?? false,
+    };
   }
 
   /// Normalizes a list of torrent files and computes aggregate stats.

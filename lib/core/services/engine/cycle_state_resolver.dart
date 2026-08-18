@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import '../../../features/downloads/models/cycle_state.dart';
+import '../../domain/cycle_state.dart';
 import '../../utils/bounded_lru_cache.dart';
 
 class CycleStateResolver {

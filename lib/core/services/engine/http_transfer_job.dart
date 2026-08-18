@@ -148,9 +148,22 @@ class HttpTransferJob {
     if (_pendingDelays.length >= maxPendingDelays) {
       _log.warning(
         'Cancellable delay queue capacity ($maxPendingDelays) reached; '
-        'falling back to direct Future.delayed',
+        'falling back to cancellable timer',
       );
-      await Future.delayed(duration);
+      final completer = Completer<void>();
+      final timer = Timer(duration, () {
+        if (!completer.isCompleted) completer.complete();
+      });
+      unawaited(_cancelToken.whenCancel.then((_) {
+        timer.cancel();
+        if (!completer.isCompleted) completer.complete();
+      }).catchError((_) {}));
+      try {
+        await completer.future;
+      } finally {
+        timer.cancel();
+        if (!completer.isCompleted) completer.complete();
+      }
       return;
     }
 
@@ -1779,11 +1792,10 @@ class HttpTransferJob {
     PositionalFileWriter? writer, {
     Future<void> Function()? preSaveFlush,
   }) async {
+    if (_stateSavePending) return;
+
     // If cancelled, force immediate save
     if (_cancelRequested || _cancelToken.isCancelled) {
-      if (_stateSavePending) {
-        _stateSavePending = false;
-      }
       final st = _state;
       if (st != null && !_stateSavedInCatch) {
         try {
@@ -1796,8 +1808,6 @@ class HttpTransferJob {
       }
       return;
     }
-
-    if (_stateSavePending) return;
     final nowMs = _stopwatch.elapsedMilliseconds;
     final st = _state!;
     final isBackground =

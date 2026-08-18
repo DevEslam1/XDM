@@ -9,97 +9,6 @@ part 'app_database.g.dart';
 
 final _dbLog = LoggingService.logger('AppDatabase');
 
-/// Binary packed format converter for chunk and torrent file detail blobs (FIX-12).
-/// Format: [int32 count, [int64 start, int64 end, int64 size, int64 downloaded, int8 isComplete] * count]
-class BinaryChunkBlobConverter {
-  const BinaryChunkBlobConverter._();
-
-  static Uint8List pack(
-    List<({int start, int end, int size, int downloaded, bool isComplete})> items,
-  ) {
-    final count = items.length;
-    final byteData = ByteData(4 + count * 33);
-    byteData.setInt32(0, count, Endian.big);
-    int offset = 4;
-    for (final item in items) {
-      byteData.setInt64(offset, item.start, Endian.big);
-      byteData.setInt64(offset + 8, item.end, Endian.big);
-      byteData.setInt64(offset + 16, item.size, Endian.big);
-      byteData.setInt64(offset + 24, item.downloaded, Endian.big);
-      byteData.setUint8(offset + 32, item.isComplete ? 1 : 0);
-      offset += 33;
-    }
-    return byteData.buffer.asUint8List();
-  }
-
-  static List<({int start, int end, int size, int downloaded, bool isComplete})>
-      unpack(Uint8List bytes) {
-    if (bytes.length < 4) {
-      return _tryParseJson(bytes);
-    }
-    // Fallback detection: if first byte is '[' or '{' (ASCII 91 or 123), it is json text
-    if (bytes[0] == 0x5B || bytes[0] == 0x7B) {
-      return _tryParseJson(bytes);
-    }
-    try {
-      final byteData = ByteData.sublistView(bytes);
-      final count = byteData.getInt32(0, Endian.big);
-      if (count <= 0 || bytes.length < 4 + count * 33) {
-        return _tryParseJson(bytes);
-      }
-      final result = <({
-        int start,
-        int end,
-        int size,
-        int downloaded,
-        bool isComplete
-      })>[];
-      int offset = 4;
-      for (int i = 0; i < count; i++) {
-        final start = byteData.getInt64(offset, Endian.big);
-        final end = byteData.getInt64(offset + 8, Endian.big);
-        final size = byteData.getInt64(offset + 16, Endian.big);
-        final downloaded = byteData.getInt64(offset + 24, Endian.big);
-        final isComplete = byteData.getUint8(offset + 32) != 0;
-        offset += 33;
-        result.add((
-          start: start,
-          end: end,
-          size: size,
-          downloaded: downloaded,
-          isComplete: isComplete,
-        ));
-      }
-      return result;
-    } catch (_) {
-      return _tryParseJson(bytes);
-    }
-  }
-
-  static List<({int start, int end, int size, int downloaded, bool isComplete})>
-      _tryParseJson(Uint8List bytes) {
-    try {
-      final text = utf8.decode(bytes);
-      final decoded = jsonDecode(text);
-      if (decoded is List) {
-        return decoded.map((e) {
-          if (e is Map) {
-            return (
-              start: (e['start'] as num?)?.toInt() ?? 0,
-              end: (e['end'] as num?)?.toInt() ?? 0,
-              size: (e['size'] as num?)?.toInt() ?? 0,
-              downloaded: (e['downloaded'] as num?)?.toInt() ?? 0,
-              isComplete: (e['isComplete'] as bool?) ?? false,
-            );
-          }
-          return (start: 0, end: 0, size: 0, downloaded: 0, isComplete: false);
-        }).toList();
-      }
-    } catch (_) {}
-    return [];
-  }
-}
-
 List<double> _recoverDoubleList(String fromDb) {
   try {
     final arrayMatch = RegExp(r'\[([\s\S]*)\]').firstMatch(fromDb);
@@ -124,17 +33,52 @@ List<double> _recoverDoubleList(String fromDb) {
 List<Map<String, dynamic>> _recoverTorrentFiles(String fromDb) {
   try {
     final result = <Map<String, dynamic>>[];
-    final regex = RegExp(r'\{[^{}]*\}');
-    final matches = regex.allMatches(fromDb);
-    for (final match in matches) {
-      final objStr = match.group(0);
-      if (objStr != null) {
-        try {
-          final obj = jsonDecode(objStr);
-          if (obj is Map) {
-            result.add(Map<String, dynamic>.from(obj));
+    int depth = 0;
+    int start = -1;
+    bool inString = false;
+    bool escaped = false;
+
+    for (int i = 0; i < fromDb.length; i++) {
+      final char = fromDb[i];
+
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (char == r'\') {
+        if (inString) {
+          escaped = true;
+        }
+        continue;
+      }
+
+      if (char == '"') {
+        inString = !inString;
+        continue;
+      }
+
+      if (!inString) {
+        if (char == '{') {
+          if (depth == 0) {
+            start = i;
           }
-        } catch (_) {}
+          depth++;
+        } else if (char == '}') {
+          if (depth > 0) {
+            depth--;
+            if (depth == 0 && start != -1) {
+              final objStr = fromDb.substring(start, i + 1);
+              try {
+                final obj = jsonDecode(objStr);
+                if (obj is Map) {
+                  result.add(Map<String, dynamic>.from(obj));
+                }
+              } catch (_) {}
+              start = -1;
+            }
+          }
+        }
       }
     }
     return result;
@@ -466,78 +410,71 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(downloadTasks, downloadTasks.notes);
           }
           if (from < 3) {
-            await customStatement('BEGIN TRANSACTION');
-            try {
-              await customStatement('''
+            await customStatement('''
             UPDATE download_tasks SET created_at =
               SUBSTR(created_at, 1, INSTR(created_at, '.') - 1)
             WHERE typeof(created_at) = 'text' AND created_at LIKE '%.%';
           ''');
-              await customStatement('''
+            await customStatement('''
             UPDATE download_tasks SET created_at = SUBSTR(created_at, 1, INSTR(created_at, '+') - 1) WHERE typeof(created_at) = 'text' AND created_at LIKE '%+%';
             UPDATE download_tasks SET updated_at = SUBSTR(updated_at, 1, INSTR(updated_at, '+') - 1) WHERE typeof(updated_at) = 'text' AND updated_at LIKE '%+%';
             UPDATE download_tasks SET completed_at = SUBSTR(completed_at, 1, INSTR(completed_at, '+') - 1) WHERE typeof(completed_at) = 'text' AND completed_at LIKE '%+%';
             UPDATE download_tasks SET scheduled_at = SUBSTR(scheduled_at, 1, INSTR(scheduled_at, '+') - 1) WHERE typeof(scheduled_at) = 'text' AND scheduled_at LIKE '%+%';
           ''');
-              await customStatement('''
+            await customStatement('''
             UPDATE download_tasks SET
               created_at = COALESCE(CAST((julianday(REPLACE(REPLACE(created_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0)
             WHERE typeof(created_at) = 'text';
           ''');
-              await customStatement('''
+            await customStatement('''
             UPDATE download_tasks SET
               updated_at = COALESCE(CAST((julianday(REPLACE(REPLACE(updated_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0)
             WHERE typeof(updated_at) = 'text';
           ''');
-              await customStatement('''
+            await customStatement('''
             UPDATE download_tasks SET
               completed_at = CASE WHEN completed_at IS NOT NULL THEN COALESCE(CAST((julianday(REPLACE(REPLACE(completed_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) ELSE NULL END
             WHERE typeof(completed_at) = 'text';
           ''');
-              await customStatement('''
+            await customStatement('''
             UPDATE download_tasks SET
               scheduled_at = CASE WHEN scheduled_at IS NOT NULL THEN COALESCE(CAST((julianday(REPLACE(REPLACE(scheduled_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) ELSE NULL END
             WHERE typeof(scheduled_at) = 'text';
           ''');
+            await customStatement(
+                'UPDATE download_tasks SET created_at = 0 WHERE created_at < 0');
+            await customStatement(
+                'UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0');
+            final badDates = await customSelect(
+                    'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0')
+                .get();
+            final badCount = badDates.first.read<int>('cnt');
+            if (badCount > 0) {
+              debugPrint(
+                  'WARNING: $badCount tasks have epoch (0) created_at after migration');
+            }
+            final recoveredFromUpdated = await customSelect(
+              'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at > 0',
+            ).get();
+            final recoverFromUpdatedCount =
+                recoveredFromUpdated.first.read<int>('cnt');
+            if (recoverFromUpdatedCount > 0) {
               await customStatement(
-                  'UPDATE download_tasks SET created_at = 0 WHERE created_at < 0');
+                  'UPDATE download_tasks SET created_at = updated_at WHERE created_at = 0 AND updated_at > 0');
+              debugPrint(
+                  '[DMX] Migration v2→v3: recovered $recoverFromUpdatedCount rows (created_at = updated_at)');
+            }
+            final recoveredFromNow = await customSelect(
+              'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0',
+            ).get();
+            final recoverFromNowCount =
+                recoveredFromNow.first.read<int>('cnt');
+            if (recoverFromNowCount > 0) {
               await customStatement(
-                  'UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0');
-              final badDates = await customSelect(
-                      'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0')
-                  .get();
-              final badCount = badDates.first.read<int>('cnt');
-              if (badCount > 0) {
-                debugPrint(
-                    'WARNING: $badCount tasks have epoch (0) created_at after migration');
-              }
-              final recoveredFromUpdated = await customSelect(
-                'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at > 0',
-              ).get();
-              final recoverFromUpdatedCount =
-                  recoveredFromUpdated.first.read<int>('cnt');
-              if (recoverFromUpdatedCount > 0) {
-                await customStatement(
-                    'UPDATE download_tasks SET created_at = updated_at WHERE created_at = 0 AND updated_at > 0');
-                debugPrint(
-                    '[DMX] Migration v2→v3: recovered $recoverFromUpdatedCount rows (created_at = updated_at)');
-              }
-              final recoveredFromNow = await customSelect(
-                'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0',
-              ).get();
-              final recoverFromNowCount =
-                  recoveredFromNow.first.read<int>('cnt');
-              if (recoverFromNowCount > 0) {
-                await customStatement(
-                  "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0",
-                );
-                debugPrint(
-                    '[DMX] Migration v2→v3: recovered $recoverFromNowCount rows (created_at = now)');
-              }
-              await customStatement('COMMIT');
-            } catch (e) {
-              await customStatement('ROLLBACK');
-              rethrow;
+                "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0",
+              );
+              debugPrint(
+                  '[DMX] Migration v2→v3: recovered $recoverFromNowCount rows (created_at = now)');
             }
           }
           if (from < 4) {
@@ -796,9 +733,7 @@ class AppDatabase extends _$AppDatabase {
           if (from < 21) {
             await _createTaskSummaryView();
           }
-          if (from < 22) {
-            _dbLog.info('Migration v21→v22: binary packed format support for chunks and torrentFiles');
-          }
+
           // FIX 7.2: Migration for new columns in schema v23
           if (from < 23) {
             try {

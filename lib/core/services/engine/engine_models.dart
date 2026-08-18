@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
-import '../../../features/downloads/models/cycle_state.dart';
-import '../../../features/downloads/models/pause_reason.dart';
+import '../../domain/cycle_state.dart';
+import '../../domain/pause_reason.dart';
 import '../download_journal.dart';
 
-export '../../../features/downloads/models/cycle_state.dart';
-export '../../../features/downloads/models/pause_reason.dart';
+export '../../domain/cycle_state.dart';
+export '../../domain/pause_reason.dart';
 
 typedef ValueChangedProgress = void Function(DownloadProgress progress);
 

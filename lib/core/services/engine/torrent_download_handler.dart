@@ -193,7 +193,12 @@ class TorrentDownloadHandler {
       }
     }
     _log.warning(
-        'haltTorrent: torrent $id still alive after $maxAttempts pause attempts; removing handle.');
+        'haltTorrent: torrent $id still alive after $maxAttempts pause attempts; forcing stop and removing handle.');
+    try {
+      await _torrentService.forceStopTorrent(id);
+    } catch (e, st) {
+      _log.warning('forceStopTorrent failed for $id: $e', e, st);
+    }
     _activeTorrentIds.remove(id);
   }
 
@@ -852,17 +857,20 @@ class TorrentDownloadHandler {
     }
 
     final cancelCompleter = Completer<void>();
+    final pauseDone = Completer<void>();
     _pauseCompleter = cancelCompleter;
     final pauseHandled = <bool>[false];
 
     cancelToken.whenCancel.then((cancelReason) async {
       if (pauseHandled[0] || torrentCompleted || cancelCompleter.isCompleted) {
+        if (!pauseDone.isCompleted) pauseDone.complete();
         return;
       }
       pauseHandled[0] = true;
       pauseInitiated = true;
-      _log.info(
-          'Pause/cancel requested for torrent $id — executing pause actions');
+      try {
+        _log.info(
+            'Pause/cancel requested for torrent $id — executing pause actions');
       // FIX v2.0.0-PauseRace: Cancel the watchdogs FIRST, before any
       // blocking work. Previously they were cancelled only AFTER
       // _saveResumeDataBeforePause, so the 10s aliveness poll could fire
@@ -973,6 +981,14 @@ class TorrentDownloadHandler {
       if (!cancelCompleter.isCompleted) {
         cancelCompleter.complete();
       }
+      } finally {
+        if (!cancelCompleter.isCompleted) {
+          cancelCompleter.complete();
+        }
+        if (!pauseDone.isCompleted) {
+          pauseDone.complete();
+        }
+      }
     });
 
     try {
@@ -1039,11 +1055,13 @@ class TorrentDownloadHandler {
       if (torrentCompleted && !cancelCompleter.isCompleted) {
         cancelCompleter.complete();
       }
-      if (pauseInitiated && !cancelCompleter.isCompleted) {
-        await cancelCompleter.future.timeout(
-          const Duration(seconds: 10),
-          onTimeout: () => null,
-        );
+      if (cancelToken.isCancelled || pauseInitiated) {
+        try {
+          await pauseDone.future.timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => null,
+          );
+        } catch (_) {}
       }
       final sub = _activeSubs.remove(id);
       await sub?.cancel();

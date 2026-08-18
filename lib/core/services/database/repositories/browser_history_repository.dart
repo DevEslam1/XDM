@@ -107,6 +107,13 @@ class BrowserHistoryRepository {
     for (final entry in entries) {
       await _writeBrowserHistoryDirect(entry);
     }
+
+    if (_pendingHistoryEntries.isNotEmpty && _historyFlushTimer == null) {
+      _historyFlushTimer = Timer(const Duration(seconds: 5), () async {
+        _historyFlushTimer = null;
+        await flushPendingHistory();
+      });
+    }
   }
 
   Future<int> _writeBrowserHistoryDirect(Map<String, dynamic> entry) async {

@@ -97,19 +97,17 @@ class DownloadProgressHandler {
       _urlExpireCount++;
     }
     if (_urlExpireCount >= 3) {
-      if (_urlExpireCount == 3) {
-        emit(DownloadProgress(
-          downloadedBytes: lastDownloadedBytes,
-          fileSize: lastFileSize,
-          speed: 0,
-          eta: null,
-          cycleState: CycleState.failed,
-          statusMessage: 'Failed: Counterpart stream lost after 3 retries',
-          ytStreamKind: ytStreamKind,
-          ytCounterpartSize: ytCounterpartSize,
-          ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
-        ));
-      }
+      emit(DownloadProgress(
+        downloadedBytes: lastDownloadedBytes,
+        fileSize: lastFileSize,
+        speed: 0,
+        eta: null,
+        cycleState: CycleState.failed,
+        statusMessage: 'Failed: Counterpart stream lost after 3 retries',
+        ytStreamKind: ytStreamKind,
+        ytCounterpartSize: ytCounterpartSize,
+        ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
+      ));
       _urlExpireCount = 0;
       _urlExpireWindowStart = null;
       throw const DownloadIntegrityException(

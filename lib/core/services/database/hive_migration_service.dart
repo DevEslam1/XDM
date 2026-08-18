@@ -168,6 +168,7 @@ class HiveMigrationService {
     final parsedValues = <dynamic>[];
     final failedItems = <dynamic>[];
     final Map<String, DownloadTask> deduplicatedTasks = {};
+    final Map<String, DownloadTask> byCompositeKey = {};
 
     for (final value in box.values) {
       if (value is Map) {
@@ -180,24 +181,25 @@ class HiveMigrationService {
             if (deduplicatedTasks.containsKey(task.id)) {
               final existing = deduplicatedTasks[task.id]!;
               if (task.updatedAt.isAfter(existing.updatedAt)) {
+                final oldCompKey = '${existing.url}|${existing.fileName}';
+                if (byCompositeKey[oldCompKey]?.id == existing.id) {
+                  byCompositeKey.remove(oldCompKey);
+                }
                 deduplicatedTasks[task.id] = task;
+                byCompositeKey[compositeKey] = task;
               }
             } else {
-              // Check collision on composite URL + fileName
-              DownloadTask? existingWithKey;
-              for (final t in deduplicatedTasks.values) {
-                if ('${t.url}|${t.fileName}' == compositeKey) {
-                  existingWithKey = t;
-                  break;
-                }
-              }
+              // Check collision on composite URL + fileName (O(1))
+              final existingWithKey = byCompositeKey[compositeKey];
               if (existingWithKey != null) {
                 if (task.updatedAt.isAfter(existingWithKey.updatedAt)) {
                   deduplicatedTasks.remove(existingWithKey.id);
                   deduplicatedTasks[task.id] = task;
+                  byCompositeKey[compositeKey] = task;
                 }
               } else {
                 deduplicatedTasks[task.id] = task;
+                byCompositeKey[compositeKey] = task;
               }
             }
             parsedValues.add(value);

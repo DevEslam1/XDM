@@ -179,11 +179,8 @@ Future<int> actualDownloadedBytes(String tempFilePath,
     }
     return math.min<int>(stateBytes, fileLen);
   }
-  // For multi-threaded downloads, missing/corrupt .dmxstate must NOT fall back to
-  // file.length() because pre-allocated sparse files falsely show 100%.
-  if (threadCount > 1) {
-    return 0;
-  }
+  // When state file is missing, fall back to actual file length on disk
+  // as a lower bound to prevent unnecessary full restarts.
   return fileLen;
 }
 

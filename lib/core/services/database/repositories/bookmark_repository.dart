@@ -53,20 +53,40 @@ class BookmarkRepository {
   }
 
   Future<void> saveBookmark(Bookmark bookmark) async {
-    final existing = await (_db.select(_db.bookmarks)
+    final existingByUrl = await (_db.select(_db.bookmarks)
           ..where((t) => t.url.equals(bookmark.url))
           ..limit(1))
         .getSingleOrNull();
-    if (existing != null) {
-      await (_db.update(_db.bookmarks)..where((t) => t.id.equals(existing.id)))
+    if (existingByUrl != null) {
+      await (_db.update(_db.bookmarks)..where((t) => t.id.equals(existingByUrl.id)))
           .write(BookmarksCompanion(
         title: drift.Value(bookmark.title),
         url: drift.Value(bookmark.url),
         folder: drift.Value(bookmark.folder),
-        createdAt: drift.Value(existing.createdAt),
+        createdAt: drift.Value(existingByUrl.createdAt),
       ));
       return;
     }
+
+    final existingById = await (_db.select(_db.bookmarks)
+          ..where((t) => t.id.equals(bookmark.id))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existingById != null) {
+      final uniqueBookmark = Bookmark(
+        id: '${bookmark.id}_${DateTime.now().millisecondsSinceEpoch}',
+        title: bookmark.title,
+        url: bookmark.url,
+        folder: bookmark.folder,
+        createdAt: bookmark.createdAt,
+      );
+      await _db.into(_db.bookmarks).insert(
+            _bookmarkToCompanion(uniqueBookmark),
+            mode: drift.InsertMode.insertOrReplace,
+          );
+      return;
+    }
+
     await _db.into(_db.bookmarks).insert(
           _bookmarkToCompanion(bookmark),
           mode: drift.InsertMode.insertOrReplace,

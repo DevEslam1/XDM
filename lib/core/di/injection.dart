@@ -113,6 +113,17 @@ Future<void> configureDependencies() async {
     ),
   );
 
+  getIt.registerLazySingleton<DownloadProvider>(
+    () => DownloadProvider(
+      databaseService: getIt<DatabaseService>(),
+      settingsProvider: getIt<SettingsProvider>(),
+      downloadEngine: getIt<DownloadEngine>(),
+      permissionService: getIt<PermissionService>(),
+      notificationService: getIt<NotificationService>(),
+    ),
+    dispose: (p) => p.dispose(),
+  );
+
   // Clean Architecture Use Cases (deprecated stubs — forward to DownloadProvider)
   getIt.registerLazySingleton<StartDownloadUseCase>(
     // ignore: deprecated_member_use_from_same_package
