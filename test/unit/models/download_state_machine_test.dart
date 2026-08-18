@@ -144,10 +144,15 @@ void main() {
               DownloadStatus.paused, DownloadStatus.downloading),
           isTrue);
 
-      // Blocked / illegal transitions
       expect(
           DownloadStateMachine.canTransitionStatus(
               DownloadStatus.completed, DownloadStatus.paused),
+          isTrue);
+
+      // Blocked / illegal transitions
+      expect(
+          DownloadStateMachine.canTransitionStatus(
+              DownloadStatus.completed, DownloadStatus.failed),
           isFalse);
       expect(
           DownloadStateMachine.canTransitionStatus(

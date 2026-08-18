@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/foundation.dart';
 import '../../../../features/downloads/models/download_task.dart';
 import '../../crash_reporting_service.dart';
 import '../app_database.dart';
+
+// FIX 7.3: TaskCompanionConverter updated with new tracking fields
 
 class TaskCompanionConverter {
   static DownloadTasksCompanion taskToCompanion(DownloadTask task) {
@@ -55,6 +58,21 @@ class TaskCompanionConverter {
       ytCounterpartDownloadedBytes:
           drift.Value(task.ytCounterpartDownloadedBytes),
       cycleState: drift.Value(task.cycleState?.name),
+      // FIX 7.3: Map new schema fields
+      audioChunks: drift.Value(task.audioChunks),
+      httpParts: drift.Value(task.httpParts != null
+          ? jsonEncode(task.httpParts!.map((p) => p.toMap()).toList())
+          : null),
+      torrentPieceProgress: drift.Value(task.torrentPieceProgress),
+      audioChunksCompleted: drift.Value(task.audioChunksCompleted ??
+          task.audioChunks.where((c) => c >= 1.0).length),
+      audioChunksTotal:
+          drift.Value(task.audioChunksTotal ?? task.audioChunks.length),
+      httpPartsCompleted: drift.Value(task.httpPartsCompleted ??
+          (task.httpParts?.where((p) => p.isComplete).length ??
+              task.chunks.where((c) => c >= 1.0).length)),
+      httpPartsTotal: drift.Value(task.httpPartsTotal ??
+          (task.httpParts?.length ?? task.chunks.length)),
     );
   }
 
@@ -136,11 +154,24 @@ class TaskCompanionConverter {
         final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
         totalFiles++;
         totalFileBytes += len;
-        if (len == 0 || dl >= len) {
+        if (len > 0 && dl >= len) {
           completedFiles++;
         }
         downloadedFileBytes += len > 0 ? dl.clamp(0, len) : 0;
       }
+    }
+
+    List<HttpPartStatus>? httpParts;
+    if (row.httpParts != null && row.httpParts!.isNotEmpty) {
+      try {
+        final dec = jsonDecode(row.httpParts!);
+        if (dec is List) {
+          httpParts = dec
+              .whereType<Map>()
+              .map((m) => HttpPartStatus.fromMap(Map<String, dynamic>.from(m)))
+              .toList();
+        }
+      } catch (_) {}
     }
 
     return DownloadTask(
@@ -196,10 +227,21 @@ class TaskCompanionConverter {
       totalFiles: files != null && files.isNotEmpty ? totalFiles : null,
       completedFiles:
           files != null && files.isNotEmpty ? completedFiles : null,
-      totalFileBytes:
-          files != null && files.isNotEmpty ? totalFileBytes : null,
+      totalFileBytes: (files != null && files.isNotEmpty && totalFileBytes > 0)
+          ? totalFileBytes
+          : (row.fileSize > 0 ? row.fileSize : null),
       downloadedFileBytes:
-          files != null && files.isNotEmpty ? downloadedFileBytes : null,
+          (files != null && files.isNotEmpty && downloadedFileBytes > 0)
+              ? downloadedFileBytes
+              : (row.downloadedBytes > 0 ? row.downloadedBytes : null),
+      // FIX 7.3: Convert row columns back into domain model fields
+      audioChunks: row.audioChunks,
+      torrentPieceProgress: row.torrentPieceProgress,
+      httpParts: httpParts,
+      audioChunksCompleted: row.audioChunksCompleted,
+      audioChunksTotal: row.audioChunksTotal,
+      httpPartsCompleted: row.httpPartsCompleted,
+      httpPartsTotal: row.httpPartsTotal,
     );
   }
 }

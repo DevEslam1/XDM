@@ -1395,6 +1395,92 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
                 );
               }),
             ),
+            // FIX 9.4: Audio channels grid for YouTube dual-stream
+            if (isDualYoutube && task.audioChunks.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isRtl ? 'قنوات الصوت' : 'AUDIO CHANNELS',
+                    style: AppTheme.microLabel(isDark: isDark, size: 10),
+                  ),
+                  Text(
+                    '${task.audioChunks.where((c) => c >= 1.0).length}/${task.audioChunks.length}',
+                    style: AppTheme.dataStyle(
+                      isDark: isDark,
+                      size: 11,
+                      color: isDark
+                          ? AppTheme.neonGreen
+                          : AppTheme.lightNeonGreen,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Column(
+                children: List.generate(task.audioChunks.length, (index) {
+                  final chunkProgress =
+                      task.audioChunks[index].clamp(0.0, 1.0);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 44,
+                          child: Text(
+                            isRtl ? 'ص${index + 1}' : 'AU ${index + 1}',
+                            style: AppTheme.microLabel(
+                              isDark: isDark,
+                              color: mutedClr,
+                              size: 9,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Stack(
+                            children: [
+                              Container(
+                                height: 6,
+                                decoration:
+                                    AppTheme.progressTrack(isDark: isDark),
+                              ),
+                              AnimatedFractionallySizedBox(
+                                widthFactor: chunkProgress,
+                                duration: const Duration(milliseconds: 400),
+                                curve: AppTheme.motionCurve,
+                                child: Container(
+                                  height: 6,
+                                  decoration: AppTheme.progressFill(
+                                    isDark
+                                        ? AppTheme.neonGreen
+                                        : AppTheme.lightNeonGreen,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: 38,
+                          child: Text(
+                            '${(chunkProgress * 100).toStringAsFixed(0)}%',
+                            textAlign:
+                                isRtl ? TextAlign.left : TextAlign.right,
+                            style: AppTheme.dataStyle(
+                              isDark: isDark,
+                              size: 10,
+                              color: mutedClr,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ),
+            ],
           ],
         ),
       ),
@@ -2187,44 +2273,46 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
         task.isTorrent &&
         task.seedingEnabled;
 
-    // FIX: Use -1 as the sentinel for an un-registered torrent ID.
-    // Using 0 was incorrect because 0 is a valid native torrent handle ID and
-    // could return stats for a completely different active torrent.
     final torrentId = provider.providerTorrentIds[task.id] ?? -1;
-    TorrentUpdateInfo? stats = torrentId >= 0
-        ? provider.providerLatestTorrentStats[torrentId]
-        : null;
+    final allStats = provider.providerLatestTorrentStats;
+    TorrentUpdateInfo? stats = torrentId >= 0 ? allStats[torrentId] : null;
 
-    // FIX v2.0.0: During the metadata-fetch phase, torrentId hasn't been
-    // propagated yet so it stays at -1. If there's only one active torrent
-    // in the stats map (the one we just added), use it to show live speed.
-    if (stats == null && task.status == DownloadStatus.downloading) {
-      final allStats = provider.providerLatestTorrentStats;
-      if (allStats.isNotEmpty) {
-        // Pick the entry with the highest download rate — most likely ours.
-        final best = allStats.values.reduce(
-          (a, b) => a.downloadRate >= b.downloadRate ? a : b,
-        );
-        if (best.downloadRate > 0) stats = best;
+    if (stats == null && allStats.isNotEmpty) {
+      // 1. Try matching by infoHash if contained in url
+      for (final s in allStats.values) {
+        if (s.infoHash.isNotEmpty &&
+            task.url.toLowerCase().contains(s.infoHash.toLowerCase())) {
+          stats = s;
+          break;
+        }
+      }
+      // 2. Try matching by name
+      if (stats == null) {
+        for (final s in allStats.values) {
+          if (s.name.isNotEmpty &&
+              (s.name == task.fileName || task.url.contains(s.name))) {
+            stats = s;
+            break;
+          }
+        }
+      }
+      // 3. If there is only one torrent in the session, it belongs to this task
+      stats ??= (allStats.length == 1 ? allStats.values.first : null);
+      if (stats != null && torrentId < 0) {
+        provider.providerTorrentIds[task.id] = stats.id;
       }
     }
 
-    // FIX v2.0.0: Read seeds/peers from the live stats when available.
-    // getTorrentSeeds/Peers go through providerTorrentIds which may be null
-    // or stale during stale-handle re-adds. Prefer stats.numSeeds/numPeers.
     final seeds = stats?.numSeeds ?? provider.getTorrentSeeds(task.id);
     final peers = stats?.numPeers ?? provider.getTorrentPeers(task.id);
 
-    // Upload speed: prefer live stats for both active downloads and seeding.
-    // For active downloads (leech), the engine still reports upload rate.
-    // For non-torrent tasks, fall back to 0.
-    final ulSpeed = stats != null
+    final ulSpeed = stats != null && stats.uploadRate > 0
         ? stats.uploadRate.toDouble()
-        : (isSeeding ? task.speed : 0.0);
+        : (isSeeding ? task.speed : provider.getTorrentUploadSpeed(task.id));
 
-    // dlSpeed: use live stats download rate when available; fall back to
-    // task.speed (set by the download engine on each progress tick).
-    final dlSpeed = stats != null ? stats.downloadRate.toDouble() : task.speed;
+    final dlSpeed = stats != null && stats.downloadRate > 0
+        ? stats.downloadRate.toDouble()
+        : task.speed;
 
     return DmxCardShell(
       accent: violetClr,
@@ -2642,11 +2730,15 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
         final isDark = settings.isDarkMode;
         final isRtl = L10n.isRtl(context);
         final isDownloading = currentTask.status == DownloadStatus.downloading;
+        final totalSize = currentTask.fileSize > 0
+            ? currentTask.fileSize
+            : currentTask.combinedTotalSize;
         return TorrentFilesPanel(
           torrentFiles: files,
           isDark: isDark,
           isRtl: isRtl,
           isDownloading: isDownloading,
+          taskTotalSize: totalSize > 0 ? totalSize : null,
           onSelectAll: () {
             triggerHaptic(settings);
             final updatedFiles = List<Map<String, dynamic>>.from(files);

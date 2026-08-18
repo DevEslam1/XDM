@@ -66,6 +66,7 @@ class TorrentService {
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
       const Stream.empty();
   static Map<int, TorrentUpdateInfo> get latestStats => const {};
+  static Map<String, dynamic>? getTorrentSnapshot(int id) => null;
   static void configureSession([SettingsProvider? settings]) {}
   static void reconfigureSession() {}
 

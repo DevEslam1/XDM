@@ -792,10 +792,10 @@ class TorrentService {
             final mapped = torrents.map((key, value) {
               final rawId = _safeInt(value, 'id', 'torrent_id', null, key);
               final progress = _safeDouble(value, 'progress', 'progress_ratio', 0.0);
-              _latestProgress[rawId] = progress;
               final safeProgress = progress.isFinite
                   ? progress.clamp(0.0, 1.0)
                   : 0.0;
+              _latestProgress[rawId] = safeProgress;
 
               final totalDone = _safeInt(value, 'totalDone', 'total_done', 'downloaded');
               final totalWanted = _safeInt(value, 'totalWanted', 'total_wanted', 'size');
@@ -827,12 +827,14 @@ class TorrentService {
               final effectiveTotalWanted = totalWanted > 0
                   ? totalWanted
                   : (cachedFilesSum > 0 ? cachedFilesSum : 0);
-              final effectiveTotalWantedDone = totalWantedDone;
+              final effectiveTotalWantedDone = totalWantedDone > 0
+                  ? totalWantedDone
+                  : totalDone;
 
               final info = TorrentUpdateInfo(
                 id: rawId,
                 name: name,
-                progress: progress,
+                progress: safeProgress,
                 downloadRate: downloadRate,
                 uploadRate: uploadRate,
                 totalDone: totalDone,
@@ -927,12 +929,29 @@ class TorrentService {
     }
   }
 
+  // ignore: avoid_dynamic_calls
   static int _estimatePiecesTotal(Object torrentInfo) {
     try {
       final dynamic raw = torrentInfo;
       // ignore: avoid_dynamic_calls
       final numPieces = raw.numPieces;
       if (numPieces is int && numPieces > 0) return numPieces;
+    } catch (_) {}
+    try {
+      final dynamic raw = torrentInfo;
+      // ignore: avoid_dynamic_calls
+      final pieceLength = (raw.pieceLength as num?)?.toInt() ??
+          // ignore: avoid_dynamic_calls
+          (raw.pieceSize as num?)?.toInt() ??
+          0;
+      // ignore: avoid_dynamic_calls
+      final totalWanted = (raw.totalWanted as num?)?.toInt() ??
+          // ignore: avoid_dynamic_calls
+          (raw.totalSize as num?)?.toInt() ??
+          0;
+      if (pieceLength > 0 && totalWanted > 0) {
+        return (totalWanted / pieceLength).ceil();
+      }
     } catch (_) {}
     const defaultPieceSize = 256 * 1024;
     try {
@@ -1418,7 +1437,13 @@ class TorrentService {
           final dynamic f = files[i];
           final index = _safeInt(f, 'index', 'file_index', null, i);
           final name = _safeString(f, 'name', 'path', 'file_$i');
-          final size = _safeInt(f, 'size', 'file_size', 'length', 0);
+          var size = _safeInt(f, 'size', 'file_size', 'length', 0);
+          final latest = _latestStats[id];
+          if (size <= 0 && latest != null && latest.totalWanted > 0 && files.isNotEmpty) {
+            size = files.length == 1 ? latest.totalWanted : (latest.totalWanted ~/ files.length);
+          } else if (size <= 0 && files.length == 1 && latest != null && latest.totalDone > 0) {
+            size = latest.totalDone;
+          }
           final priority = (priorities != null && i < priorities.length)
               ? _toInt(priorities[i], 4)
               : _safeInt(f, 'priority', null, null, 4);
@@ -1447,6 +1472,16 @@ class TorrentService {
             }
           }
 
+          if (resolvedDownloadedBytes < 0) {
+            if (files.length == 1 && latest != null && latest.totalDone > 0) {
+              resolvedDownloadedBytes = (size > 0 && latest.totalDone > size)
+                  ? size
+                  : latest.totalDone;
+            } else if (latest != null && latest.progress > 0 && size > 0) {
+              resolvedDownloadedBytes = (latest.progress * size).clamp(0, size).toInt();
+            }
+          }
+
           return TorrentFileItem(
             index: index,
             name: name,
@@ -1459,6 +1494,10 @@ class TorrentService {
         if (result.isNotEmpty) {
           _cachedFiles[id] = result;
         }
+        final sumSizes = result.fold<int>(0, (s, f) => s + f.size);
+        final latest = _latestStats[id];
+        _log.fine('[getFiles] id=$id files=${result.length} sumSizes=$sumSizes '
+            'totalWanted=${latest?.totalWanted} totalDone=${latest?.totalDone}');
         return result;
       } catch (e, st) {
         _log.fine('getFiles failed for id $id, returning cache', e, st);

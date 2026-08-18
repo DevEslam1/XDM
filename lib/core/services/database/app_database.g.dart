@@ -336,6 +336,48 @@ class $DownloadTasksTable extends DownloadTasks
       'cycle_state', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
   @override
+  late final GeneratedColumnWithTypeConverter<List<double>?, String>
+      audioChunks = GeneratedColumn<String>('audio_chunks', aliasedName, true,
+              type: DriftSqlType.string, requiredDuringInsert: false)
+          .withConverter<List<double>?>(
+              $DownloadTasksTable.$converteraudioChunks);
+  static const VerificationMeta _httpPartsMeta =
+      const VerificationMeta('httpParts');
+  @override
+  late final GeneratedColumn<String> httpParts = GeneratedColumn<String>(
+      'http_parts', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _torrentPieceProgressMeta =
+      const VerificationMeta('torrentPieceProgress');
+  @override
+  late final GeneratedColumn<double> torrentPieceProgress =
+      GeneratedColumn<double>('torrent_piece_progress', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _audioChunksCompletedMeta =
+      const VerificationMeta('audioChunksCompleted');
+  @override
+  late final GeneratedColumn<int> audioChunksCompleted = GeneratedColumn<int>(
+      'audio_chunks_completed', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _audioChunksTotalMeta =
+      const VerificationMeta('audioChunksTotal');
+  @override
+  late final GeneratedColumn<int> audioChunksTotal = GeneratedColumn<int>(
+      'audio_chunks_total', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _httpPartsCompletedMeta =
+      const VerificationMeta('httpPartsCompleted');
+  @override
+  late final GeneratedColumn<int> httpPartsCompleted = GeneratedColumn<int>(
+      'http_parts_completed', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _httpPartsTotalMeta =
+      const VerificationMeta('httpPartsTotal');
+  @override
+  late final GeneratedColumn<int> httpPartsTotal = GeneratedColumn<int>(
+      'http_parts_total', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  @override
   List<GeneratedColumn> get $columns => [
         id,
         fileName,
@@ -384,7 +426,14 @@ class $DownloadTasksTable extends DownloadTasks
         totalPieces,
         completedPieces,
         ytCounterpartDownloadedBytes,
-        cycleState
+        cycleState,
+        audioChunks,
+        httpParts,
+        torrentPieceProgress,
+        audioChunksCompleted,
+        audioChunksTotal,
+        httpPartsCompleted,
+        httpPartsTotal
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -660,6 +709,40 @@ class $DownloadTasksTable extends DownloadTasks
           cycleState.isAcceptableOrUnknown(
               data['cycle_state']!, _cycleStateMeta));
     }
+    if (data.containsKey('http_parts')) {
+      context.handle(_httpPartsMeta,
+          httpParts.isAcceptableOrUnknown(data['http_parts']!, _httpPartsMeta));
+    }
+    if (data.containsKey('torrent_piece_progress')) {
+      context.handle(
+          _torrentPieceProgressMeta,
+          torrentPieceProgress.isAcceptableOrUnknown(
+              data['torrent_piece_progress']!, _torrentPieceProgressMeta));
+    }
+    if (data.containsKey('audio_chunks_completed')) {
+      context.handle(
+          _audioChunksCompletedMeta,
+          audioChunksCompleted.isAcceptableOrUnknown(
+              data['audio_chunks_completed']!, _audioChunksCompletedMeta));
+    }
+    if (data.containsKey('audio_chunks_total')) {
+      context.handle(
+          _audioChunksTotalMeta,
+          audioChunksTotal.isAcceptableOrUnknown(
+              data['audio_chunks_total']!, _audioChunksTotalMeta));
+    }
+    if (data.containsKey('http_parts_completed')) {
+      context.handle(
+          _httpPartsCompletedMeta,
+          httpPartsCompleted.isAcceptableOrUnknown(
+              data['http_parts_completed']!, _httpPartsCompletedMeta));
+    }
+    if (data.containsKey('http_parts_total')) {
+      context.handle(
+          _httpPartsTotalMeta,
+          httpPartsTotal.isAcceptableOrUnknown(
+              data['http_parts_total']!, _httpPartsTotalMeta));
+    }
     return context;
   }
 
@@ -770,6 +853,22 @@ class $DownloadTasksTable extends DownloadTasks
           data['${effectivePrefix}yt_counterpart_downloaded_bytes']),
       cycleState: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}cycle_state']),
+      audioChunks: $DownloadTasksTable.$converteraudioChunks.fromSql(
+          attachedDatabase.typeMapping.read(
+              DriftSqlType.string, data['${effectivePrefix}audio_chunks'])),
+      httpParts: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}http_parts']),
+      torrentPieceProgress: attachedDatabase.typeMapping.read(
+          DriftSqlType.double,
+          data['${effectivePrefix}torrent_piece_progress']),
+      audioChunksCompleted: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}audio_chunks_completed']),
+      audioChunksTotal: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}audio_chunks_total']),
+      httpPartsCompleted: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}http_parts_completed']),
+      httpPartsTotal: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}http_parts_total']),
     );
   }
 
@@ -785,6 +884,8 @@ class $DownloadTasksTable extends DownloadTasks
       const NullAwareTypeConverter.wrap(TorrentFilesConverter());
   static TypeConverter<List<String>?, String?> $convertermirrorUrls =
       const NullAwareTypeConverter.wrap(StringListConverter());
+  static TypeConverter<List<double>?, String?> $converteraudioChunks =
+      const NullAwareTypeConverter.wrap(DoubleListConverter());
 }
 
 class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
@@ -836,6 +937,13 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final int? completedPieces;
   final int? ytCounterpartDownloadedBytes;
   final String? cycleState;
+  final List<double>? audioChunks;
+  final String? httpParts;
+  final double? torrentPieceProgress;
+  final int? audioChunksCompleted;
+  final int? audioChunksTotal;
+  final int? httpPartsCompleted;
+  final int? httpPartsTotal;
   const DbDownloadTask(
       {required this.id,
       required this.fileName,
@@ -884,7 +992,14 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       this.totalPieces,
       this.completedPieces,
       this.ytCounterpartDownloadedBytes,
-      this.cycleState});
+      this.cycleState,
+      this.audioChunks,
+      this.httpParts,
+      this.torrentPieceProgress,
+      this.audioChunksCompleted,
+      this.audioChunksTotal,
+      this.httpPartsCompleted,
+      this.httpPartsTotal});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -980,6 +1095,28 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     if (!nullToAbsent || cycleState != null) {
       map['cycle_state'] = Variable<String>(cycleState);
     }
+    if (!nullToAbsent || audioChunks != null) {
+      map['audio_chunks'] = Variable<String>(
+          $DownloadTasksTable.$converteraudioChunks.toSql(audioChunks));
+    }
+    if (!nullToAbsent || httpParts != null) {
+      map['http_parts'] = Variable<String>(httpParts);
+    }
+    if (!nullToAbsent || torrentPieceProgress != null) {
+      map['torrent_piece_progress'] = Variable<double>(torrentPieceProgress);
+    }
+    if (!nullToAbsent || audioChunksCompleted != null) {
+      map['audio_chunks_completed'] = Variable<int>(audioChunksCompleted);
+    }
+    if (!nullToAbsent || audioChunksTotal != null) {
+      map['audio_chunks_total'] = Variable<int>(audioChunksTotal);
+    }
+    if (!nullToAbsent || httpPartsCompleted != null) {
+      map['http_parts_completed'] = Variable<int>(httpPartsCompleted);
+    }
+    if (!nullToAbsent || httpPartsTotal != null) {
+      map['http_parts_total'] = Variable<int>(httpPartsTotal);
+    }
     return map;
   }
 
@@ -1070,6 +1207,27 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       cycleState: cycleState == null && nullToAbsent
           ? const Value.absent()
           : Value(cycleState),
+      audioChunks: audioChunks == null && nullToAbsent
+          ? const Value.absent()
+          : Value(audioChunks),
+      httpParts: httpParts == null && nullToAbsent
+          ? const Value.absent()
+          : Value(httpParts),
+      torrentPieceProgress: torrentPieceProgress == null && nullToAbsent
+          ? const Value.absent()
+          : Value(torrentPieceProgress),
+      audioChunksCompleted: audioChunksCompleted == null && nullToAbsent
+          ? const Value.absent()
+          : Value(audioChunksCompleted),
+      audioChunksTotal: audioChunksTotal == null && nullToAbsent
+          ? const Value.absent()
+          : Value(audioChunksTotal),
+      httpPartsCompleted: httpPartsCompleted == null && nullToAbsent
+          ? const Value.absent()
+          : Value(httpPartsCompleted),
+      httpPartsTotal: httpPartsTotal == null && nullToAbsent
+          ? const Value.absent()
+          : Value(httpPartsTotal),
     );
   }
 
@@ -1129,6 +1287,15 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       ytCounterpartDownloadedBytes:
           serializer.fromJson<int?>(json['ytCounterpartDownloadedBytes']),
       cycleState: serializer.fromJson<String?>(json['cycleState']),
+      audioChunks: serializer.fromJson<List<double>?>(json['audioChunks']),
+      httpParts: serializer.fromJson<String?>(json['httpParts']),
+      torrentPieceProgress:
+          serializer.fromJson<double?>(json['torrentPieceProgress']),
+      audioChunksCompleted:
+          serializer.fromJson<int?>(json['audioChunksCompleted']),
+      audioChunksTotal: serializer.fromJson<int?>(json['audioChunksTotal']),
+      httpPartsCompleted: serializer.fromJson<int?>(json['httpPartsCompleted']),
+      httpPartsTotal: serializer.fromJson<int?>(json['httpPartsTotal']),
     );
   }
   @override
@@ -1185,6 +1352,13 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'ytCounterpartDownloadedBytes':
           serializer.toJson<int?>(ytCounterpartDownloadedBytes),
       'cycleState': serializer.toJson<String?>(cycleState),
+      'audioChunks': serializer.toJson<List<double>?>(audioChunks),
+      'httpParts': serializer.toJson<String?>(httpParts),
+      'torrentPieceProgress': serializer.toJson<double?>(torrentPieceProgress),
+      'audioChunksCompleted': serializer.toJson<int?>(audioChunksCompleted),
+      'audioChunksTotal': serializer.toJson<int?>(audioChunksTotal),
+      'httpPartsCompleted': serializer.toJson<int?>(httpPartsCompleted),
+      'httpPartsTotal': serializer.toJson<int?>(httpPartsTotal),
     };
   }
 
@@ -1237,7 +1411,14 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           Value<int?> totalPieces = const Value.absent(),
           Value<int?> completedPieces = const Value.absent(),
           Value<int?> ytCounterpartDownloadedBytes = const Value.absent(),
-          Value<String?> cycleState = const Value.absent()}) =>
+          Value<String?> cycleState = const Value.absent(),
+          Value<List<double>?> audioChunks = const Value.absent(),
+          Value<String?> httpParts = const Value.absent(),
+          Value<double?> torrentPieceProgress = const Value.absent(),
+          Value<int?> audioChunksCompleted = const Value.absent(),
+          Value<int?> audioChunksTotal = const Value.absent(),
+          Value<int?> httpPartsCompleted = const Value.absent(),
+          Value<int?> httpPartsTotal = const Value.absent()}) =>
       DbDownloadTask(
         id: id ?? this.id,
         fileName: fileName ?? this.fileName,
@@ -1301,6 +1482,22 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
             ? ytCounterpartDownloadedBytes.value
             : this.ytCounterpartDownloadedBytes,
         cycleState: cycleState.present ? cycleState.value : this.cycleState,
+        audioChunks: audioChunks.present ? audioChunks.value : this.audioChunks,
+        httpParts: httpParts.present ? httpParts.value : this.httpParts,
+        torrentPieceProgress: torrentPieceProgress.present
+            ? torrentPieceProgress.value
+            : this.torrentPieceProgress,
+        audioChunksCompleted: audioChunksCompleted.present
+            ? audioChunksCompleted.value
+            : this.audioChunksCompleted,
+        audioChunksTotal: audioChunksTotal.present
+            ? audioChunksTotal.value
+            : this.audioChunksTotal,
+        httpPartsCompleted: httpPartsCompleted.present
+            ? httpPartsCompleted.value
+            : this.httpPartsCompleted,
+        httpPartsTotal:
+            httpPartsTotal.present ? httpPartsTotal.value : this.httpPartsTotal,
       );
   DbDownloadTask copyWithCompanion(DownloadTasksCompanion data) {
     return DbDownloadTask(
@@ -1408,6 +1605,24 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           : this.ytCounterpartDownloadedBytes,
       cycleState:
           data.cycleState.present ? data.cycleState.value : this.cycleState,
+      audioChunks:
+          data.audioChunks.present ? data.audioChunks.value : this.audioChunks,
+      httpParts: data.httpParts.present ? data.httpParts.value : this.httpParts,
+      torrentPieceProgress: data.torrentPieceProgress.present
+          ? data.torrentPieceProgress.value
+          : this.torrentPieceProgress,
+      audioChunksCompleted: data.audioChunksCompleted.present
+          ? data.audioChunksCompleted.value
+          : this.audioChunksCompleted,
+      audioChunksTotal: data.audioChunksTotal.present
+          ? data.audioChunksTotal.value
+          : this.audioChunksTotal,
+      httpPartsCompleted: data.httpPartsCompleted.present
+          ? data.httpPartsCompleted.value
+          : this.httpPartsCompleted,
+      httpPartsTotal: data.httpPartsTotal.present
+          ? data.httpPartsTotal.value
+          : this.httpPartsTotal,
     );
   }
 
@@ -1462,7 +1677,14 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('completedPieces: $completedPieces, ')
           ..write(
               'ytCounterpartDownloadedBytes: $ytCounterpartDownloadedBytes, ')
-          ..write('cycleState: $cycleState')
+          ..write('cycleState: $cycleState, ')
+          ..write('audioChunks: $audioChunks, ')
+          ..write('httpParts: $httpParts, ')
+          ..write('torrentPieceProgress: $torrentPieceProgress, ')
+          ..write('audioChunksCompleted: $audioChunksCompleted, ')
+          ..write('audioChunksTotal: $audioChunksTotal, ')
+          ..write('httpPartsCompleted: $httpPartsCompleted, ')
+          ..write('httpPartsTotal: $httpPartsTotal')
           ..write(')'))
         .toString();
   }
@@ -1516,7 +1738,14 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         totalPieces,
         completedPieces,
         ytCounterpartDownloadedBytes,
-        cycleState
+        cycleState,
+        audioChunks,
+        httpParts,
+        torrentPieceProgress,
+        audioChunksCompleted,
+        audioChunksTotal,
+        httpPartsCompleted,
+        httpPartsTotal
       ]);
   @override
   bool operator ==(Object other) =>
@@ -1570,7 +1799,14 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.completedPieces == this.completedPieces &&
           other.ytCounterpartDownloadedBytes ==
               this.ytCounterpartDownloadedBytes &&
-          other.cycleState == this.cycleState);
+          other.cycleState == this.cycleState &&
+          other.audioChunks == this.audioChunks &&
+          other.httpParts == this.httpParts &&
+          other.torrentPieceProgress == this.torrentPieceProgress &&
+          other.audioChunksCompleted == this.audioChunksCompleted &&
+          other.audioChunksTotal == this.audioChunksTotal &&
+          other.httpPartsCompleted == this.httpPartsCompleted &&
+          other.httpPartsTotal == this.httpPartsTotal);
 }
 
 class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
@@ -1622,6 +1858,13 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<int?> completedPieces;
   final Value<int?> ytCounterpartDownloadedBytes;
   final Value<String?> cycleState;
+  final Value<List<double>?> audioChunks;
+  final Value<String?> httpParts;
+  final Value<double?> torrentPieceProgress;
+  final Value<int?> audioChunksCompleted;
+  final Value<int?> audioChunksTotal;
+  final Value<int?> httpPartsCompleted;
+  final Value<int?> httpPartsTotal;
   final Value<int> rowid;
   const DownloadTasksCompanion({
     this.id = const Value.absent(),
@@ -1672,6 +1915,13 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.completedPieces = const Value.absent(),
     this.ytCounterpartDownloadedBytes = const Value.absent(),
     this.cycleState = const Value.absent(),
+    this.audioChunks = const Value.absent(),
+    this.httpParts = const Value.absent(),
+    this.torrentPieceProgress = const Value.absent(),
+    this.audioChunksCompleted = const Value.absent(),
+    this.audioChunksTotal = const Value.absent(),
+    this.httpPartsCompleted = const Value.absent(),
+    this.httpPartsTotal = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadTasksCompanion.insert({
@@ -1723,6 +1973,13 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.completedPieces = const Value.absent(),
     this.ytCounterpartDownloadedBytes = const Value.absent(),
     this.cycleState = const Value.absent(),
+    this.audioChunks = const Value.absent(),
+    this.httpParts = const Value.absent(),
+    this.torrentPieceProgress = const Value.absent(),
+    this.audioChunksCompleted = const Value.absent(),
+    this.audioChunksTotal = const Value.absent(),
+    this.httpPartsCompleted = const Value.absent(),
+    this.httpPartsTotal = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         fileName = Value(fileName),
@@ -1784,6 +2041,13 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<int>? completedPieces,
     Expression<int>? ytCounterpartDownloadedBytes,
     Expression<String>? cycleState,
+    Expression<String>? audioChunks,
+    Expression<String>? httpParts,
+    Expression<double>? torrentPieceProgress,
+    Expression<int>? audioChunksCompleted,
+    Expression<int>? audioChunksTotal,
+    Expression<int>? httpPartsCompleted,
+    Expression<int>? httpPartsTotal,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1838,6 +2102,16 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (ytCounterpartDownloadedBytes != null)
         'yt_counterpart_downloaded_bytes': ytCounterpartDownloadedBytes,
       if (cycleState != null) 'cycle_state': cycleState,
+      if (audioChunks != null) 'audio_chunks': audioChunks,
+      if (httpParts != null) 'http_parts': httpParts,
+      if (torrentPieceProgress != null)
+        'torrent_piece_progress': torrentPieceProgress,
+      if (audioChunksCompleted != null)
+        'audio_chunks_completed': audioChunksCompleted,
+      if (audioChunksTotal != null) 'audio_chunks_total': audioChunksTotal,
+      if (httpPartsCompleted != null)
+        'http_parts_completed': httpPartsCompleted,
+      if (httpPartsTotal != null) 'http_parts_total': httpPartsTotal,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1891,6 +2165,13 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       Value<int?>? completedPieces,
       Value<int?>? ytCounterpartDownloadedBytes,
       Value<String?>? cycleState,
+      Value<List<double>?>? audioChunks,
+      Value<String?>? httpParts,
+      Value<double?>? torrentPieceProgress,
+      Value<int?>? audioChunksCompleted,
+      Value<int?>? audioChunksTotal,
+      Value<int?>? httpPartsCompleted,
+      Value<int?>? httpPartsTotal,
       Value<int>? rowid}) {
     return DownloadTasksCompanion(
       id: id ?? this.id,
@@ -1942,6 +2223,13 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       ytCounterpartDownloadedBytes:
           ytCounterpartDownloadedBytes ?? this.ytCounterpartDownloadedBytes,
       cycleState: cycleState ?? this.cycleState,
+      audioChunks: audioChunks ?? this.audioChunks,
+      httpParts: httpParts ?? this.httpParts,
+      torrentPieceProgress: torrentPieceProgress ?? this.torrentPieceProgress,
+      audioChunksCompleted: audioChunksCompleted ?? this.audioChunksCompleted,
+      audioChunksTotal: audioChunksTotal ?? this.audioChunksTotal,
+      httpPartsCompleted: httpPartsCompleted ?? this.httpPartsCompleted,
+      httpPartsTotal: httpPartsTotal ?? this.httpPartsTotal,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2098,6 +2386,29 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     if (cycleState.present) {
       map['cycle_state'] = Variable<String>(cycleState.value);
     }
+    if (audioChunks.present) {
+      map['audio_chunks'] = Variable<String>(
+          $DownloadTasksTable.$converteraudioChunks.toSql(audioChunks.value));
+    }
+    if (httpParts.present) {
+      map['http_parts'] = Variable<String>(httpParts.value);
+    }
+    if (torrentPieceProgress.present) {
+      map['torrent_piece_progress'] =
+          Variable<double>(torrentPieceProgress.value);
+    }
+    if (audioChunksCompleted.present) {
+      map['audio_chunks_completed'] = Variable<int>(audioChunksCompleted.value);
+    }
+    if (audioChunksTotal.present) {
+      map['audio_chunks_total'] = Variable<int>(audioChunksTotal.value);
+    }
+    if (httpPartsCompleted.present) {
+      map['http_parts_completed'] = Variable<int>(httpPartsCompleted.value);
+    }
+    if (httpPartsTotal.present) {
+      map['http_parts_total'] = Variable<int>(httpPartsTotal.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2156,6 +2467,13 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write(
               'ytCounterpartDownloadedBytes: $ytCounterpartDownloadedBytes, ')
           ..write('cycleState: $cycleState, ')
+          ..write('audioChunks: $audioChunks, ')
+          ..write('httpParts: $httpParts, ')
+          ..write('torrentPieceProgress: $torrentPieceProgress, ')
+          ..write('audioChunksCompleted: $audioChunksCompleted, ')
+          ..write('audioChunksTotal: $audioChunksTotal, ')
+          ..write('httpPartsCompleted: $httpPartsCompleted, ')
+          ..write('httpPartsTotal: $httpPartsTotal, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3307,6 +3625,13 @@ typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
   Value<int?> completedPieces,
   Value<int?> ytCounterpartDownloadedBytes,
   Value<String?> cycleState,
+  Value<List<double>?> audioChunks,
+  Value<String?> httpParts,
+  Value<double?> torrentPieceProgress,
+  Value<int?> audioChunksCompleted,
+  Value<int?> audioChunksTotal,
+  Value<int?> httpPartsCompleted,
+  Value<int?> httpPartsTotal,
   Value<int> rowid,
 });
 typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
@@ -3359,6 +3684,13 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
   Value<int?> completedPieces,
   Value<int?> ytCounterpartDownloadedBytes,
   Value<String?> cycleState,
+  Value<List<double>?> audioChunks,
+  Value<String?> httpParts,
+  Value<double?> torrentPieceProgress,
+  Value<int?> audioChunksCompleted,
+  Value<int?> audioChunksTotal,
+  Value<int?> httpPartsCompleted,
+  Value<int?> httpPartsTotal,
   Value<int> rowid,
 });
 
@@ -3535,6 +3867,34 @@ class $$DownloadTasksTableFilterComposer
 
   ColumnFilters<String> get cycleState => $composableBuilder(
       column: $table.cycleState, builder: (column) => ColumnFilters(column));
+
+  ColumnWithTypeConverterFilters<List<double>?, List<double>, String>
+      get audioChunks => $composableBuilder(
+          column: $table.audioChunks,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
+
+  ColumnFilters<String> get httpParts => $composableBuilder(
+      column: $table.httpParts, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get torrentPieceProgress => $composableBuilder(
+      column: $table.torrentPieceProgress,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get audioChunksCompleted => $composableBuilder(
+      column: $table.audioChunksCompleted,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get audioChunksTotal => $composableBuilder(
+      column: $table.audioChunksTotal,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get httpPartsCompleted => $composableBuilder(
+      column: $table.httpPartsCompleted,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get httpPartsTotal => $composableBuilder(
+      column: $table.httpPartsTotal,
+      builder: (column) => ColumnFilters(column));
 }
 
 class $$DownloadTasksTableOrderingComposer
@@ -3712,6 +4072,32 @@ class $$DownloadTasksTableOrderingComposer
 
   ColumnOrderings<String> get cycleState => $composableBuilder(
       column: $table.cycleState, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get audioChunks => $composableBuilder(
+      column: $table.audioChunks, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get httpParts => $composableBuilder(
+      column: $table.httpParts, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get torrentPieceProgress => $composableBuilder(
+      column: $table.torrentPieceProgress,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get audioChunksCompleted => $composableBuilder(
+      column: $table.audioChunksCompleted,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get audioChunksTotal => $composableBuilder(
+      column: $table.audioChunksTotal,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get httpPartsCompleted => $composableBuilder(
+      column: $table.httpPartsCompleted,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get httpPartsTotal => $composableBuilder(
+      column: $table.httpPartsTotal,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -3868,6 +4254,28 @@ class $$DownloadTasksTableAnnotationComposer
 
   GeneratedColumn<String> get cycleState => $composableBuilder(
       column: $table.cycleState, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<List<double>?, String> get audioChunks =>
+      $composableBuilder(
+          column: $table.audioChunks, builder: (column) => column);
+
+  GeneratedColumn<String> get httpParts =>
+      $composableBuilder(column: $table.httpParts, builder: (column) => column);
+
+  GeneratedColumn<double> get torrentPieceProgress => $composableBuilder(
+      column: $table.torrentPieceProgress, builder: (column) => column);
+
+  GeneratedColumn<int> get audioChunksCompleted => $composableBuilder(
+      column: $table.audioChunksCompleted, builder: (column) => column);
+
+  GeneratedColumn<int> get audioChunksTotal => $composableBuilder(
+      column: $table.audioChunksTotal, builder: (column) => column);
+
+  GeneratedColumn<int> get httpPartsCompleted => $composableBuilder(
+      column: $table.httpPartsCompleted, builder: (column) => column);
+
+  GeneratedColumn<int> get httpPartsTotal => $composableBuilder(
+      column: $table.httpPartsTotal, builder: (column) => column);
 }
 
 class $$DownloadTasksTableTableManager extends RootTableManager<
@@ -3945,6 +4353,13 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<int?> completedPieces = const Value.absent(),
             Value<int?> ytCounterpartDownloadedBytes = const Value.absent(),
             Value<String?> cycleState = const Value.absent(),
+            Value<List<double>?> audioChunks = const Value.absent(),
+            Value<String?> httpParts = const Value.absent(),
+            Value<double?> torrentPieceProgress = const Value.absent(),
+            Value<int?> audioChunksCompleted = const Value.absent(),
+            Value<int?> audioChunksTotal = const Value.absent(),
+            Value<int?> httpPartsCompleted = const Value.absent(),
+            Value<int?> httpPartsTotal = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               DownloadTasksCompanion(
@@ -3996,6 +4411,13 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             completedPieces: completedPieces,
             ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
             cycleState: cycleState,
+            audioChunks: audioChunks,
+            httpParts: httpParts,
+            torrentPieceProgress: torrentPieceProgress,
+            audioChunksCompleted: audioChunksCompleted,
+            audioChunksTotal: audioChunksTotal,
+            httpPartsCompleted: httpPartsCompleted,
+            httpPartsTotal: httpPartsTotal,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -4048,6 +4470,13 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<int?> completedPieces = const Value.absent(),
             Value<int?> ytCounterpartDownloadedBytes = const Value.absent(),
             Value<String?> cycleState = const Value.absent(),
+            Value<List<double>?> audioChunks = const Value.absent(),
+            Value<String?> httpParts = const Value.absent(),
+            Value<double?> torrentPieceProgress = const Value.absent(),
+            Value<int?> audioChunksCompleted = const Value.absent(),
+            Value<int?> audioChunksTotal = const Value.absent(),
+            Value<int?> httpPartsCompleted = const Value.absent(),
+            Value<int?> httpPartsTotal = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               DownloadTasksCompanion.insert(
@@ -4099,6 +4528,13 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             completedPieces: completedPieces,
             ytCounterpartDownloadedBytes: ytCounterpartDownloadedBytes,
             cycleState: cycleState,
+            audioChunks: audioChunks,
+            httpParts: httpParts,
+            torrentPieceProgress: torrentPieceProgress,
+            audioChunksCompleted: audioChunksCompleted,
+            audioChunksTotal: audioChunksTotal,
+            httpPartsCompleted: httpPartsCompleted,
+            httpPartsTotal: httpPartsTotal,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

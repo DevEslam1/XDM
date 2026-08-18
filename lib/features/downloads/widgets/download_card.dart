@@ -1645,6 +1645,20 @@ class _FileCard extends StatelessWidget with HapticHelper {
                     task: task, isDark: isDark, accent: statusColor),
                 const SizedBox(height: 8),
                 _ProgressRow(task: task, isDark: isDark, color: statusColor),
+                // FIX 9.1: Show part-level info for HTTP
+                if (task.status == DownloadStatus.downloading ||
+                    task.status == DownloadStatus.paused)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Parts: ${task.httpPartsSummary.completedParts}/${task.httpPartsSummary.totalParts} • ${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
+                      style: AppTheme.microLabel(
+                        isDark: isDark,
+                        color: mutedClr,
+                        size: 8.5,
+                      ),
+                    ),
+                  ),
                 if (task.statusMessage != null &&
                     task.statusMessage!.isNotEmpty &&
                     task.status != DownloadStatus.completed)
@@ -1897,6 +1911,22 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                     task: task, isDark: isDark, accent: statusColor),
                 SizedBox(height: compact ? 2 : 4),
                 _ProgressRow(task: task, isDark: isDark, color: statusColor),
+                // FIX 9.2: Show dual-leg info for YouTube
+                if (task.hasMergedAudio &&
+                    (task.status == DownloadStatus.downloading ||
+                        task.status == DownloadStatus.paused ||
+                        task.status == DownloadStatus.merging))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Video: ${(task.videoProgressPercent * 100).toStringAsFixed(0)}% • Audio: ${(task.audioProgressPercent * 100).toStringAsFixed(0)}% • Combined: ${(task.combinedProgressPercent * 100).toStringAsFixed(0)}%',
+                      style: AppTheme.microLabel(
+                        isDark: isDark,
+                        color: mutedClr,
+                        size: 8.5,
+                      ),
+                    ),
+                  ),
                 if (task.statusMessage != null &&
                     task.statusMessage!.isNotEmpty &&
                     task.status != DownloadStatus.completed)
@@ -2257,6 +2287,20 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                               ),
                             ],
                           ),
+                          // FIX 9.3: Show file & piece info for Torrent
+                          if (currentTask.status == DownloadStatus.downloading ||
+                              currentTask.status == DownloadStatus.paused)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                'Files: ${currentTask.torrentCompletedFilesCount}/${currentTask.torrentTotalFilesCount} • Pieces: ${currentTask.completedPieces ?? 0}/${currentTask.totalPieces ?? 0} • ${currentTask.downloadedSizeFormatted} / ${currentTask.sizeFormatted}',
+                                style: AppTheme.microLabel(
+                                  isDark: isDark,
+                                  color: mutedClr,
+                                  size: 8.5,
+                                ),
+                              ),
+                            ),
                         ],
                       );
                     }),

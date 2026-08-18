@@ -1,5 +1,4 @@
 import 'package:dmx/core/services/engine/engine_models.dart';
-import 'package:dmx/core/services/torrent_models.dart';
 import 'package:dmx/core/services/torrent_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -103,7 +102,7 @@ void main() {
       expect(copied.numSeeds, equals(5));
       expect(copied.numLeechers, equals(7));
 
-      final fromMap = DownloadProgress.fromWorkerMap({
+      final fromMap = DownloadProgress.fromWorkerMap(const {
         'downloadedBytes': 100,
         'fileSize': 200,
         'speed': 50.0,

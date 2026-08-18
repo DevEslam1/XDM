@@ -18,12 +18,15 @@ class TorrentFilesPanel extends StatefulWidget {
   final VoidCallback? onSelectAll;
   final VoidCallback? onDeselectAll;
 
+  final int? taskTotalSize;
+
   const TorrentFilesPanel({
     super.key,
     required this.torrentFiles,
     this.isDark,
     this.isRtl,
     this.isDownloading = false,
+    this.taskTotalSize,
     this.onFileToggle,
     this.onPriorityChanged,
     this.onDeleteFile,
@@ -97,8 +100,12 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
     double calcFileProgress(Map<String, dynamic> f) {
-      final length = (f['length'] as num?)?.toInt() ?? 0;
-      final downloadedBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+      final length = (f['length'] as num?)?.toInt() ??
+          (f['size'] as num?)?.toInt() ??
+          0;
+      final downloadedBytes = (f['downloadedBytes'] as num?)?.toInt() ??
+          (f['downloaded_bytes'] as num?)?.toInt() ??
+          0;
       if (f['progress'] != null) {
         return ((f['progress'] as num).toDouble()).clamp(0.0, 1.0);
       } else if (length > 0 && downloadedBytes > 0) {
@@ -113,6 +120,15 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
       final prog = calcFileProgress(f);
       return isComp || prog >= 1.0;
     }).length;
+
+    final isMetadataPending = files.isEmpty ||
+        (files.length == 1 &&
+            (files.first['name'] == 'Torrent Download' ||
+                (files.first['name'] as String?)?.startsWith('magnet:') == true) &&
+            (((files.first['length'] as num?)?.toInt() ??
+                    (files.first['size'] as num?)?.toInt() ??
+                    0) <=
+                0));
 
     return DmxCardShell(
       showRail: false,
@@ -166,63 +182,120 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
             ),
 
             if (_isExpanded) ...[
-              // Action buttons (Select All / Deselect All) if callbacks provided
-              if (widget.onSelectAll != null ||
-                  widget.onDeselectAll != null) ...[
+              if (isMetadataPending) ...[
                 const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (widget.onSelectAll != null)
-                      _PanelActionButton(
-                        label: isRtl ? 'تحديد الكل' : 'SELECT ALL',
-                        icon: Icons.select_all_rounded,
-                        color: blueClr,
-                        onPressed: widget.onSelectAll!,
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: (isDark ? AppTheme.surface : Colors.white)
+                        .withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: blueClr.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(blueClr),
+                        ),
                       ),
-                    if (widget.onSelectAll != null &&
-                        widget.onDeselectAll != null)
-                      const SizedBox(width: 8),
-                    if (widget.onDeselectAll != null)
-                      _PanelActionButton(
-                        label: isRtl ? 'إلغاء تحديد الكل' : 'DESELECT ALL',
-                        icon: Icons.deselect_rounded,
-                        color:
-                            isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                        onPressed: widget.onDeselectAll!,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          isRtl
+                              ? 'جارٍ جلب البيانات الوصفية وهيكل الملفات من النظراء...'
+                              : 'Fetching torrent metadata & file tree from peers...',
+                          style: AppTheme.dataStyle(
+                            isDark: isDark,
+                            size: 11,
+                            color: mutedClr,
+                          ),
+                        ),
                       ),
-                  ],
+                    ],
+                  ),
                 ),
-              ],
-              const SizedBox(height: 10),
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: files.length,
-                separatorBuilder: (context, index) => Divider(
-                  height: 16,
-                  thickness: 0.3,
-                  color: isDark
-                      ? AppTheme.borderSubtle
-                      : AppTheme.lightBorderSubtle,
-                ),
+              ] else ...[
+                // Action buttons (Select All / Deselect All) if callbacks provided
+                if (widget.onSelectAll != null ||
+                    widget.onDeselectAll != null) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (widget.onSelectAll != null)
+                        _PanelActionButton(
+                          label: isRtl ? 'تحديد الكل' : 'SELECT ALL',
+                          icon: Icons.select_all_rounded,
+                          color: blueClr,
+                          onPressed: widget.onSelectAll!,
+                        ),
+                      if (widget.onSelectAll != null &&
+                          widget.onDeselectAll != null)
+                        const SizedBox(width: 8),
+                      if (widget.onDeselectAll != null)
+                        _PanelActionButton(
+                          label: isRtl ? 'إلغاء تحديد الكل' : 'DESELECT ALL',
+                          icon: Icons.deselect_rounded,
+                          color:
+                              isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                          onPressed: widget.onDeselectAll!,
+                        ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 10),
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: files.length,
+                  separatorBuilder: (context, index) => Divider(
+                    height: 16,
+                    thickness: 0.3,
+                    color: isDark
+                        ? AppTheme.borderSubtle
+                        : AppTheme.lightBorderSubtle,
+                  ),
                 itemBuilder: (context, index) {
                   final f = files[index];
                   final name = f['name'] as String? ?? 'file_${index + 1}';
-                  final length = (f['length'] as num?)?.toInt() ??
+                  var length = (f['length'] as num?)?.toInt() ??
                       (f['size'] as num?)?.toInt() ??
                       0;
+                  if (length <= 0 && (widget.taskTotalSize ?? 0) > 0) {
+                    if (files.length == 1) {
+                      length = widget.taskTotalSize!;
+                    } else {
+                      final sumKnown = files.fold<int>(
+                          0,
+                          (s, item) =>
+                              s +
+                              (((item['length'] ?? item['size']) as num?)
+                                      ?.toInt() ??
+                                  0));
+                      if (sumKnown == 0) {
+                        length = widget.taskTotalSize! ~/ files.length;
+                      }
+                    }
+                  }
                   final rawDownloaded = (f['downloadedBytes'] as num?)?.toInt() ??
                       (f['downloaded_bytes'] as num?)?.toInt() ??
                       0;
                   final downloadedBytes = length > 0
                       ? rawDownloaded.clamp(0, length)
-                      : 0;
+                      : (rawDownloaded > 0 ? rawDownloaded : 0);
                   final selected = (f['selected'] as bool?) ?? true;
                   final isEstimated = (f['progressEstimated'] as bool?) == true;
 
                   // Progress calculation: prefer explicit progress field, fallback to downloaded/length
-                  final progress = calcFileProgress(f);
+                  final progress = length > 0
+                      ? (downloadedBytes / length).clamp(0.0, 1.0)
+                      : calcFileProgress(f);
 
                   final isComplete =
                       (f['isComplete'] as bool?) == true || progress >= 1.0;
@@ -390,7 +463,7 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    '${formatBytes(downloadedBytes)} / ${formatBytes(length)}',
+                                    '${formatBytes(downloadedBytes)} / ${length > 0 ? formatBytes(length) : (widget.isDownloading ? "..." : "Unknown")}',
                                     style: AppTheme.dataStyle(
                                       isDark: isDark,
                                       size: 10,
@@ -431,9 +504,10 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
               ),
             ],
           ],
-        ),
+        ],
       ),
-    );
+    ),
+  );
   }
 }
 

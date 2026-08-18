@@ -15,6 +15,7 @@ import '../../../core/di/injection.dart';
 import '../../../core/services/app_lifecycle_coordinator.dart';
 import '../../../core/services/background_gate.dart';
 import '../../../core/services/background_service.dart';
+import '../../../core/services/data_status_verifier.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/diagnostic_service.dart';
 import '../../../core/services/download_engine.dart';
@@ -472,20 +473,19 @@ class DownloadProvider extends ChangeNotifier
                 .where((t) =>
                     t.isTorrent &&
                     (t.status == DownloadStatus.downloading ||
-                        t.status == DownloadStatus.merging))
+                        t.status == DownloadStatus.merging ||
+                        t.status == DownloadStatus.queued ||
+                        t.status == DownloadStatus.paused))
                 .firstOrNull;
             if (candidate != null && !_torrentIds.containsKey(candidate.id)) {
               taskId = candidate.id;
               _torrentIds[taskId] = tid;
             }
           }
-          if (taskId != null) {
-            final downloadQueue = _speedHistories[taskId] ??= Queue<double>();
-            downloadQueue.add(info.downloadRate.toDouble());
-            if (downloadQueue.length > 20) downloadQueue.removeFirst();
 
+          if (taskId != null) {
             final uploadQueue =
-                _uploadSpeedHistories[taskId] ??= Queue<double>();
+                _uploadSpeedHistories.putIfAbsent(taskId, () => ListQueue<double>());
             uploadQueue.add(info.uploadRate.toDouble());
             if (uploadQueue.length > 20) uploadQueue.removeFirst();
 
@@ -497,13 +497,13 @@ class DownloadProvider extends ChangeNotifier
               final task = _tasks[taskIdx];
               final liveDone = info.totalWantedDone > 0
                   ? info.totalWantedDone
-                  : (info.hasMetadata && info.totalDone > 0
+                  : (info.totalDone > 0
                       ? info.totalDone
                       : task.downloadedBytes);
 
               // FIX v2.0.0: Sync torrentFiles from the engine whenever metadata is available.
               List<Map<String, dynamic>>? syncedFiles = task.torrentFiles;
-              if (info.hasMetadata) {
+              if (info.hasMetadata || info.totalWanted > 0) {
                 try {
                   final nativeFiles = TorrentService.getFiles(tid);
                   if (nativeFiles.isNotEmpty) {
@@ -512,15 +512,41 @@ class DownloadProvider extends ChangeNotifier
                       return <String, dynamic>{
                         'name': f.name,
                         'length': f.size,
+                        'size': f.size,
                         'downloadedBytes': dl >= 0 ? dl : 0,
                         'selected': f.selected,
                         'priority': f.priority,
                         'progress':
-                            f.size > 0 ? (dl.clamp(0, f.size) / f.size) : 1.0,
-                        'isComplete': f.size == 0 || dl >= f.size,
-                        'progressEstimated': dl < 0,
+                            f.size > 0 ? (dl.clamp(0, f.size) / f.size) : (dl > 0 ? 1.0 : 0.0),
+                        'isComplete': f.size > 0 && dl >= f.size,
+                        'progressEstimated': dl < 0 || !f.hasProgressData,
                       };
                     }).toList();
+                    if (newSynced.length == 1) {
+                      final single = newSynced.first;
+                      final fLen = (single['length'] as num?)?.toInt() ?? 0;
+                      if (fLen <= 0 && info.totalWanted > 0) {
+                        single['length'] = info.totalWanted;
+                        single['size'] = info.totalWanted;
+                      }
+                      final effectiveLen = (single['length'] as num?)?.toInt() ?? 0;
+                      if (liveDone > 0) {
+                        final singleDl = effectiveLen > 0 ? min(liveDone, effectiveLen) : liveDone;
+                        single['downloadedBytes'] = singleDl;
+                        single['progress'] = effectiveLen > 0 ? (singleDl / effectiveLen).clamp(0.0, 1.0) : 0.0;
+                        single['isComplete'] = effectiveLen > 0 && singleDl >= effectiveLen;
+                      }
+                    } else if (newSynced.isNotEmpty && info.totalWanted > 0) {
+                      final sumLen = newSynced.fold<int>(
+                          0, (s, m) => s + (((m['length'] ?? m['size']) as num?)?.toInt() ?? 0));
+                      if (sumLen == 0) {
+                        final perFile = info.totalWanted ~/ newSynced.length;
+                        for (final m in newSynced) {
+                          m['length'] = perFile;
+                          m['size'] = perFile;
+                        }
+                      }
+                    }
                     // Only update if the list has changed to avoid unnecessary rebuilds.
                     if (_fileListsDiffer(syncedFiles, newSynced)) {
                       syncedFiles = newSynced;
@@ -528,6 +554,23 @@ class DownloadProvider extends ChangeNotifier
                   }
                 } catch (e) {
                   _log.fine('Failed to sync torrent files for $taskId: $e');
+                }
+              }
+
+              if (syncedFiles != null && syncedFiles.isNotEmpty && info.totalWanted > 0) {
+                final sumLen = syncedFiles.fold<int>(
+                    0, (s, m) => s + (((m['length'] ?? m['size']) as num?)?.toInt() ?? 0));
+                if (sumLen == 0) {
+                  final perFile = info.totalWanted ~/ syncedFiles.length;
+                  for (final m in syncedFiles) {
+                    m['length'] = perFile;
+                    m['size'] = perFile;
+                    if (liveDone > 0) {
+                      final singleDl = min(liveDone, perFile);
+                      m['downloadedBytes'] = singleDl;
+                      m['progress'] = perFile > 0 ? (singleDl / perFile).clamp(0.0, 1.0) : 0.0;
+                    }
+                  }
                 }
               }
 
@@ -2372,16 +2415,24 @@ class DownloadProvider extends ChangeNotifier
       final type = FileSystemEntity.typeSync(rootPath);
 
       if (type == FileSystemEntityType.file) {
-        final len = File(rootPath).lengthSync();
         final expected = (fileList?.isNotEmpty == true)
-            ? ((fileList!.first['length'] as num?)?.toInt() ?? 0)
+            ? (((fileList!.first['length'] ?? fileList.first['size']) as num?)?.toInt() ?? 0)
             : 0;
+        if (expected <= 0) {
+          // Without known expected length from torrent metadata, disk file length cannot be trusted.
+          return (total: 0, files: fileList);
+        }
+        final len = File(rootPath).lengthSync();
         // FIX(5): Pre-allocation guard: a full-size file is not proof of completion.
-        final trusted = (expected > 0 && len >= expected) ? 0 : len;
+        final trusted = (len >= expected)
+            ? ((fileList?.first['downloadedBytes'] as num?)?.toInt() ?? 0)
+            : len;
         List<Map<String, dynamic>>? files = fileList;
         if (fileList != null && fileList.length == 1) {
           files = [
             Map<String, dynamic>.from(fileList.first)
+              ..['length'] = expected
+              ..['size'] = expected
               ..['downloadedBytes'] = trusted,
           ];
         }
@@ -2656,6 +2707,8 @@ class DownloadProvider extends ChangeNotifier
             LoggingService.logger('DownloadProvider')
                 .warning('Operation failed', e, st);
           }
+          // Allow in-flight microtasks (e.g. state saves) to flush
+          await Future.delayed(const Duration(milliseconds: 50));
         }
 
         _activeFutures.remove(id);
@@ -2793,6 +2846,10 @@ class DownloadProvider extends ChangeNotifier
             }
 
             if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+              final fileSum = task.torrentFiles!.fold<int>(0, (sum, f) {
+                final len = ((f['length'] ?? f['size']) as num?)?.toInt() ?? 0;
+                return sum + (len > 0 ? len : 0);
+              });
               final recomputedTotal = task.torrentFiles!.fold<int>(0, (sum, f) {
                 if (isTorrentFileSelected(f)) {
                   final bytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
@@ -2800,12 +2857,34 @@ class DownloadProvider extends ChangeNotifier
                 }
                 return sum;
               });
-              if (recomputedTotal > 0) {
-                task = task.copyWith(downloadedBytes: recomputedTotal);
-                debugPrint(
-                  '[DMX] B7 FIX: Recomputed torrent aggregate: $recomputedTotal bytes',
-                );
+              final stats = TorrentService.latestStats[torrentId];
+              final finalDone = recomputedTotal > 0
+                  ? recomputedTotal
+                  : ((stats != null && stats.totalDone > 0)
+                      ? stats.totalDone
+                      : task.downloadedBytes);
+              final finalSize = fileSum > 0
+                  ? fileSum
+                  : ((stats != null && stats.totalWanted > 0)
+                      ? stats.totalWanted
+                      : task.fileSize);
+              List<Map<String, dynamic>>? backfilledFiles = task.torrentFiles;
+              if (fileSum == 0 && finalSize > 0 && backfilledFiles != null && backfilledFiles.isNotEmpty) {
+                final perFile = finalSize ~/ backfilledFiles.length;
+                backfilledFiles = backfilledFiles.map((f) => {
+                  ...f,
+                  'length': perFile,
+                  'size': perFile,
+                }).toList();
               }
+              task = task.copyWith(
+                downloadedBytes: finalDone,
+                fileSize: finalSize,
+                torrentFiles: backfilledFiles,
+              );
+              debugPrint(
+                '[DMX] B7 FIX: Recomputed torrent aggregate: $finalDone bytes, size: $finalSize',
+              );
             }
           } catch (e) {
             debugPrint('[DMX] B5 FIX: Failed to snapshot per-file bytes: $e');
@@ -3505,7 +3584,9 @@ class DownloadProvider extends ChangeNotifier
       clearPauseReason: true,
       clearCycleState: true,
     );
-    validatedTask = await validateAudioProgress(validatedTask);
+    if (validatedTask.hasMergedAudio) {
+      validatedTask = await validateAudioProgress(validatedTask);
+    }
 
     for (final suffix in ['::video', '::audio', '']) {
       _cancelTokens.remove('$id$suffix');
@@ -3842,13 +3923,30 @@ class DownloadProvider extends ChangeNotifier
       );
     }
 
-    // FIX-AUDIT-1: clear journal files on retry if task failed, preserving temp data and state files
+    // FIX-AUDIT-1 & FIX S-1/H-6: clear failure metadata and persist retrying cycle state on retry
     if (task.status == DownloadStatus.failed) {
       task = task.copyWith(
         clearEta: true,
         clearError: true,
         clearStatusMessage: true,
+        clearFailureCategory: true,
+        clearRecoveryHint: true,
+        cycleState: CycleState.retrying,
       );
+
+      // FIX T-10: Clear stale estimated bytes for torrent retry
+      if (task.isTorrent && task.torrentFiles != null) {
+        final clearedFiles = task.torrentFiles!.map((f) {
+          final m = Map<String, dynamic>.from(f);
+          if (m['progressEstimated'] == true) {
+            m['downloadedBytes'] = 0;
+            m['progress'] = 0.0;
+            m['isComplete'] = false;
+          }
+          return m;
+        }).toList();
+        task = task.copyWith(torrentFiles: clearedFiles);
+      }
 
       // FIX-C3: Verify main video/payload file on disk for non-torrents
       if (!task.isTorrent && task.tempFilePath.isNotEmpty) {
@@ -4736,12 +4834,13 @@ class DownloadProvider extends ChangeNotifier
   /// structural update (status change, URL edit, metadata save) carries
   /// stale progress values captured before the update was enqueued.
   DownloadTask _mergeTaskUpdate(DownloadTask live, DownloadTask incoming) {
-    // Rule 1: Completed / Failed tasks are immutable unless explicitly enqueued for retry
+    // Rule 1: Completed / Failed tasks are immutable unless explicitly enqueued for retry or paused (seeding toggle)
     if ((live.status == DownloadStatus.completed ||
             live.status == DownloadStatus.failed) &&
         incoming.status != live.status &&
         incoming.status != DownloadStatus.queued &&
-        incoming.status != DownloadStatus.downloading) {
+        incoming.status != DownloadStatus.downloading &&
+        incoming.status != DownloadStatus.paused) {
       if (incoming.downloadedBytes > live.downloadedBytes &&
           incoming.status == live.status) {
         return incoming;
@@ -4816,6 +4915,13 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> _setTask(DownloadTask updated) async {
+    // FIX 5.2: Data status consistency verification and auto-correction
+    final statusReport = DataStatusVerifier.verifyTask(updated);
+    if (!statusReport.isConsistent) {
+      _log.fine(
+          '[DownloadProvider] Inconsistencies detected for task ${updated.id}: ${statusReport.inconsistencies.join('; ')}');
+    }
+
     // FIX-H-06: Clamp downloadedBytes to fileSize
     if (updated.fileSize > 0 && updated.downloadedBytes > updated.fileSize) {
       updated = updated.copyWith(downloadedBytes: updated.fileSize);
@@ -5930,8 +6036,12 @@ class DownloadProvider extends ChangeNotifier
           }
 
           // FIX-C3: Use percentage-based tolerance and ETag mismatch check
-          final tolerance =
-              (task.fileSize * 0.01).clamp(1024.0, 10.0 * 1024 * 1024);
+          final targetComparisonSize =
+              (task.hasMergedAudio && task.videoStreamSize > 0)
+                  ? task.videoStreamSize
+                  : task.fileSize;
+          final tolerance = (targetComparisonSize * 0.01)
+              .clamp(1024.0, 10.0 * 1024 * 1024);
           String? storedEtag;
           if (task.tempFilePath.isNotEmpty) {
             final sf = File('${task.tempFilePath}.dmxstate');
@@ -5951,8 +6061,8 @@ class DownloadProvider extends ChangeNotifier
               storedEtag.isNotEmpty &&
               metadata.etag != storedEtag;
           if ((resolvedMetaSize > 0 &&
-                  task.fileSize > 0 &&
-                  (resolvedMetaSize - task.fileSize).abs() > tolerance) ||
+                  targetComparisonSize > 0 &&
+                  (resolvedMetaSize - targetComparisonSize).abs() > tolerance) ||
               etagMismatch) {
             sizeChanged = true;
 

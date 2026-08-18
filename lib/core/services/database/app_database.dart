@@ -360,6 +360,16 @@ class DownloadTasks extends Table {
   IntColumn get completedPieces => integer().nullable()();
   IntColumn get ytCounterpartDownloadedBytes => integer().nullable()();
   TextColumn get cycleState => text().nullable()();
+  // FIX 7.1: New columns for dual-stream, parts, and pieces tracking
+  TextColumn get audioChunks => text()
+      .map(const NullAwareTypeConverter.wrap(DoubleListConverter()))
+      .nullable()();
+  TextColumn get httpParts => text().nullable()();
+  RealColumn get torrentPieceProgress => real().nullable()();
+  IntColumn get audioChunksCompleted => integer().nullable()();
+  IntColumn get audioChunksTotal => integer().nullable()();
+  IntColumn get httpPartsCompleted => integer().nullable()();
+  IntColumn get httpPartsTotal => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -424,7 +434,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e) : dbPath = null;
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -789,9 +799,54 @@ class AppDatabase extends _$AppDatabase {
           if (from < 22) {
             _dbLog.info('Migration v21→v22: binary packed format support for chunks and torrentFiles');
           }
-          if (to > 22) {
+          // FIX 7.2: Migration for new columns in schema v23
+          if (from < 23) {
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN audio_chunks TEXT');
+            } catch (e) {
+              _dbLog.info('Column audio_chunks may already exist: $e');
+            }
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN http_parts TEXT');
+            } catch (e) {
+              _dbLog.info('Column http_parts may already exist: $e');
+            }
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN torrent_piece_progress REAL DEFAULT 0');
+            } catch (e) {
+              _dbLog.info('Column torrent_piece_progress may already exist: $e');
+            }
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN audio_chunks_completed INTEGER DEFAULT 0');
+            } catch (e) {
+              _dbLog.info('Column audio_chunks_completed may already exist: $e');
+            }
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN audio_chunks_total INTEGER DEFAULT 0');
+            } catch (e) {
+              _dbLog.info('Column audio_chunks_total may already exist: $e');
+            }
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN http_parts_completed INTEGER DEFAULT 0');
+            } catch (e) {
+              _dbLog.info('Column http_parts_completed may already exist: $e');
+            }
+            try {
+              await customStatement(
+                  'ALTER TABLE download_tasks ADD COLUMN http_parts_total INTEGER DEFAULT 0');
+            } catch (e) {
+              _dbLog.info('Column http_parts_total may already exist: $e');
+            }
+          }
+          if (to > 23) {
             _dbLog.warning(
-                'AppDatabase: Upgrade target version $to is higher than version 22, no specific migrations defined!');
+                'AppDatabase: Upgrade target version $to is higher than version 23, no specific migrations defined!');
           }
         },
       );
