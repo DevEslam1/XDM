@@ -256,5 +256,67 @@ void main() {
 
       expect(emittedStates.contains(CycleState.paused), isFalse);
     });
+
+    test(
+        'libtorrent false positive seeding with totalWanted=0 does not complete or corrupt files',
+        () async {
+      final emittedProgresses = <DownloadProgress>[];
+      final cancel = CancelToken();
+
+      final downloadFuture = handler.handleTorrentDownload(
+        taskId: 'test-false-seeding-task',
+        torrentId: 43,
+        url: 'magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789',
+        currentLocalFilePath:
+            '${Directory.systemTemp.path}/dmx_handler/file2.mkv',
+        knownFileSize: 0,
+        cancelToken: cancel,
+        clientBuilder: (u) => Dio(),
+        clientReleaser: (d) => d.close(force: true),
+        onProgress: (p) {
+          emittedProgresses.add(p);
+        },
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      // Emit false positive: seeding + progress 1.0 but 0 bytes / no metadata
+      controller.add({
+        43: TorrentUpdateInfo(
+          id: 43,
+          name: '',
+          progress: 1.0,
+          downloadRate: 0,
+          uploadRate: 0,
+          totalDone: 0,
+          totalWanted: 0,
+          totalWantedDone: 0,
+          hasMetadata: false,
+          stateLabel: 'seeding',
+          downloadPayloadRate: 0,
+        )
+      });
+
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(emittedProgresses, isNotEmpty);
+      final lastProgress = emittedProgresses.last;
+      expect(lastProgress.cycleState, isNot(CycleState.completed));
+      expect(lastProgress.cycleState, isNot(CycleState.seeding));
+      expect(lastProgress.cycleState, CycleState.fetchingMetadata);
+
+      // Now emit true completion update
+      controller.add({43: seedingInfo(43)});
+
+      await downloadFuture.timeout(const Duration(seconds: 5));
+
+      final completedProgress = emittedProgresses.last;
+      expect(
+        completedProgress.cycleState,
+        isIn([CycleState.completed, CycleState.seeding]),
+      );
+      expect(completedProgress.downloadedBytes, 1000);
+      expect(completedProgress.fileSize, 1000);
+    });
   });
 }

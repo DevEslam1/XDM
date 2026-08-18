@@ -612,200 +612,144 @@ class TorrentService {
 
   static void _configureSessionFromSettings() => configureSession();
 
+  // --- Safe Type Conversion Helpers ---
+  static int _toInt(dynamic v, [int defaultVal = 0]) {
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v) ?? defaultVal;
+    return defaultVal;
+  }
+
+  static double _toDouble(dynamic v, [double defaultVal = 0.0]) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? defaultVal;
+    return defaultVal;
+  }
+
+  static bool _toBool(dynamic v, [bool defaultVal = false]) {
+    if (v is bool) return v;
+    if (v is num) return v != 0;
+    if (v is String) return v.toLowerCase() == 'true' || v == '1';
+    return defaultVal;
+  }
+
+  static dynamic _readField(dynamic obj, String k) {
+    try {
+      switch (k) {
+        case 'id': return (obj as dynamic).id;
+        case 'name': return (obj as dynamic).name;
+        case 'path': return (obj as dynamic).path;
+        case 'torrent_name':
+        case 'torrentName': return (obj as dynamic).torrentName;
+        case 'file_name':
+        case 'fileName': return (obj as dynamic).fileName;
+        case 'downloadRate':
+        case 'download_rate': return (obj as dynamic).downloadRate;
+        case 'uploadRate':
+        case 'upload_rate': return (obj as dynamic).uploadRate;
+        case 'totalDone':
+        case 'total_done': return (obj as dynamic).totalDone;
+        case 'totalWanted':
+        case 'total_wanted':
+        case 'wanted_size':
+        case 'wantedSize': return (obj as dynamic).totalWanted;
+        case 'totalWantedDone':
+        case 'total_wanted_done': return (obj as dynamic).totalWantedDone;
+        case 'totalUploaded':
+        case 'total_uploaded': return (obj as dynamic).totalUploaded;
+        case 'numSeeds':
+        case 'num_seeds': return (obj as dynamic).numSeeds;
+        case 'seeds': return (obj as dynamic).seeds;
+        case 'numPeers':
+        case 'num_peers': return (obj as dynamic).numPeers;
+        case 'peers': return (obj as dynamic).peers;
+        case 'size': return (obj as dynamic).size;
+        case 'file_size': return (obj as dynamic).file_size;
+        case 'length': return (obj as dynamic).length;
+        case 'downloadedBytes':
+        case 'downloaded_bytes': return (obj as dynamic).downloadedBytes;
+        case 'downloaded': return (obj as dynamic).downloaded;
+        case 'priority': return (obj as dynamic).priority;
+        case 'selected': return (obj as dynamic).selected;
+        case 'index': return (obj as dynamic).index;
+        case 'progress': return (obj as dynamic).progress;
+        case 'distributedCopies':
+        case 'distributed_copies': return (obj as dynamic).distributedCopies;
+        case 'state':
+          final st = (obj as dynamic).state;
+          try {
+            // ignore: avoid_dynamic_calls
+            return st?.label?.toString() ?? st?.toString();
+          } catch (_) {
+            return st?.toString();
+          }
+        case 'stateLabel':
+        case 'state_label': return (obj as dynamic).stateLabel;
+        case 'hasMetadata':
+        case 'has_metadata': return (obj as dynamic).hasMetadata;
+        case 'isPaused':
+        case 'is_paused': return (obj as dynamic).isPaused;
+        case 'isFinished':
+        case 'is_finished': return (obj as dynamic).isFinished;
+        default:
+          try {
+            // ignore: avoid_dynamic_calls
+            return (obj as dynamic).toJson()[k];
+          } catch (_) {
+            return null;
+          }
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
   static int _safeInt(dynamic obj, String key1, [String? key2, String? key3, int defaultVal = 0]) {
     if (obj == null) return defaultVal;
-    int val = defaultVal;
+    dynamic v;
     if (obj is Map) {
-      if (obj.containsKey(key1)) {
-        val = (obj[key1] as num?)?.toInt() ?? defaultVal;
-      } else if (key2 != null && obj.containsKey(key2)) {
-        val = (obj[key2] as num?)?.toInt() ?? defaultVal;
-      } else if (key3 != null && obj.containsKey(key3)) {
-        val = (obj[key3] as num?)?.toInt() ?? defaultVal;
-      }
+      v = obj[key1];
+      if (v == null && key2 != null) v = obj[key2];
+      if (v == null && key3 != null) v = obj[key3];
     } else {
-      dynamic readField(String k) {
-        try {
-          switch (k) {
-            case 'id': return (obj as dynamic).id;
-            case 'name': return (obj as dynamic).name;
-            case 'downloadRate':
-            case 'download_rate': return (obj as dynamic).downloadRate;
-            case 'uploadRate':
-            case 'upload_rate': return (obj as dynamic).uploadRate;
-            case 'totalDone':
-            case 'total_done': return (obj as dynamic).totalDone;
-            case 'totalWanted':
-            case 'total_wanted': return (obj as dynamic).totalWanted;
-            case 'totalWantedDone':
-            case 'total_wanted_done': return (obj as dynamic).totalWantedDone;
-            case 'totalUploaded':
-            case 'total_uploaded': return (obj as dynamic).totalUploaded;
-            case 'numSeeds':
-            case 'num_seeds': return (obj as dynamic).numSeeds;
-            case 'seeds': return (obj as dynamic).seeds;
-            case 'numPeers':
-            case 'num_peers': return (obj as dynamic).numPeers;
-            case 'peers': return (obj as dynamic).peers;
-            case 'size': return (obj as dynamic).size;
-            case 'file_size': return (obj as dynamic).file_size;
-            case 'length': return (obj as dynamic).length;
-            case 'downloadedBytes':
-            case 'downloaded_bytes': return (obj as dynamic).downloadedBytes;
-            case 'downloaded': return (obj as dynamic).downloaded;
-            case 'priority': return (obj as dynamic).priority;
-            case 'selected': return (obj as dynamic).selected;
-            case 'index': return (obj as dynamic).index;
-            default:
-              try {
-                // ignore: avoid_dynamic_calls
-                return (obj as dynamic).toJson()[k];
-              } catch (_) {
-                return null;
-              }
-          }
-        } catch (_) {
-          return null;
-        }
-      }
-
-      final v1 = readField(key1);
-      if (v1 is num) {
-        val = v1.toInt();
-      } else if (key2 != null) {
-        final v2 = readField(key2);
-        if (v2 is num) {
-          val = v2.toInt();
-        } else if (key3 != null) {
-          final v3 = readField(key3);
-          if (v3 is num) {
-            val = v3.toInt();
-          }
-        }
-      }
+      v = _readField(obj, key1) ?? (key2 != null ? _readField(obj, key2) : null) ?? (key3 != null ? _readField(obj, key3) : null);
     }
-    return val < 0 ? 0 : val;
+    return _toInt(v, defaultVal);
   }
 
   static double _safeDouble(dynamic obj, String key1, [String? key2, double defaultVal = 0.0]) {
     if (obj == null) return defaultVal;
+    dynamic v;
     if (obj is Map) {
-      if (obj.containsKey(key1)) return (obj[key1] as num?)?.toDouble() ?? defaultVal;
-      if (key2 != null && obj.containsKey(key2)) return (obj[key2] as num?)?.toDouble() ?? defaultVal;
+      v = obj[key1];
+      if (v == null && key2 != null) v = obj[key2];
     } else {
-      dynamic readField(String k) {
-        try {
-          switch (k) {
-            case 'progress': return (obj as dynamic).progress;
-            case 'distributedCopies':
-            case 'distributed_copies': return (obj as dynamic).distributedCopies;
-            default:
-              try {
-                // ignore: avoid_dynamic_calls
-                return (obj as dynamic).toJson()[k];
-              } catch (_) {
-                return null;
-              }
-          }
-        } catch (_) {
-          return null;
-        }
-      }
-
-      final v1 = readField(key1);
-      if (v1 is num) return v1.toDouble();
-      if (key2 != null) {
-        final v2 = readField(key2);
-        if (v2 is num) return v2.toDouble();
-      }
+      v = _readField(obj, key1) ?? (key2 != null ? _readField(obj, key2) : null);
     }
-    return defaultVal;
+    return _toDouble(v, defaultVal);
   }
 
   static bool _safeBool(dynamic obj, String key1, [String? key2, bool defaultVal = false]) {
     if (obj == null) return defaultVal;
+    dynamic v;
     if (obj is Map) {
-      if (obj.containsKey(key1)) return (obj[key1] as bool?) ?? defaultVal;
-      if (key2 != null && obj.containsKey(key2)) return (obj[key2] as bool?) ?? defaultVal;
+      v = obj[key1];
+      if (v == null && key2 != null) v = obj[key2];
     } else {
-      dynamic readField(String k) {
-        try {
-          switch (k) {
-            case 'hasMetadata':
-            case 'has_metadata': return (obj as dynamic).hasMetadata;
-            case 'isPaused':
-            case 'is_paused': return (obj as dynamic).isPaused;
-            case 'isFinished':
-            case 'is_finished': return (obj as dynamic).isFinished;
-            case 'selected': return (obj as dynamic).selected;
-            default:
-              try {
-                // ignore: avoid_dynamic_calls
-                return (obj as dynamic).toJson()[k];
-              } catch (_) {
-                return null;
-              }
-          }
-        } catch (_) {
-          return null;
-        }
-      }
-
-      final v1 = readField(key1);
-      if (v1 is bool) return v1;
-      if (key2 != null) {
-        final v2 = readField(key2);
-        if (v2 is bool) return v2;
-      }
+      v = _readField(obj, key1) ?? (key2 != null ? _readField(obj, key2) : null);
     }
-    return defaultVal;
+    return _toBool(v, defaultVal);
   }
 
   static String _safeString(dynamic obj, String key1, [String? key2, String defaultVal = '']) {
     if (obj == null) return defaultVal;
+    dynamic v;
     if (obj is Map) {
-      if (obj.containsKey(key1) && obj[key1] != null) return obj[key1].toString();
-      if (key2 != null && obj.containsKey(key2) && obj[key2] != null) return obj[key2].toString();
+      v = obj[key1];
+      if (v == null && key2 != null) v = obj[key2];
     } else {
-      dynamic readField(String k) {
-        try {
-          switch (k) {
-            case 'name': return (obj as dynamic).name;
-            case 'path': return (obj as dynamic).path;
-            case 'torrent_name':
-            case 'torrentName': return (obj as dynamic).torrentName;
-            case 'file_name':
-            case 'fileName': return (obj as dynamic).fileName;
-            case 'stateLabel':
-            case 'state_label': return (obj as dynamic).stateLabel;
-            case 'state':
-              final st = (obj as dynamic).state;
-              try {
-                // ignore: avoid_dynamic_calls
-                return st?.label?.toString() ?? st?.toString();
-              } catch (_) {
-                return st?.toString();
-              }
-            default:
-              try {
-                // ignore: avoid_dynamic_calls
-                return (obj as dynamic).toJson()[k];
-              } catch (_) {
-                return null;
-              }
-          }
-        } catch (_) {
-          return null;
-        }
-      }
-
-      final v1 = readField(key1);
-      if (v1 != null && v1.toString().isNotEmpty) return v1.toString();
-      if (key2 != null) {
-        final v2 = readField(key2);
-        if (v2 != null && v2.toString().isNotEmpty) return v2.toString();
-      }
+      v = _readField(obj, key1) ?? (key2 != null ? _readField(obj, key2) : null);
     }
+    if (v != null && v.toString().isNotEmpty) return v.toString();
     return defaultVal;
   }
 
@@ -822,6 +766,14 @@ class TorrentService {
       controller = StreamController<Map<int, TorrentUpdateInfo>>.broadcast();
       sub = LibtorrentFlutter.instance.torrentUpdates.listen(
         (torrents) {
+          if (torrents.isNotEmpty) {
+            final Object firstValue = torrents.values.first;
+            if (firstValue is Map) {
+              _log.finest('[DMX-DEBUG] torrentUpdates keys: ${firstValue.keys.toList()}');
+            } else {
+              _log.finest('[DMX-DEBUG] torrentUpdates value type: ${firstValue.runtimeType}');
+            }
+          }
           try {
             final nativeIds = Set<int>.from(torrents.keys);
             _activeTorrentIds = _activeTorrentIds.union(nativeIds);
@@ -853,18 +805,29 @@ class TorrentService {
               final uploadRate = _safeInt(value, 'uploadRate', 'upload_rate');
               final numSeeds = _safeInt(value, 'numSeeds', 'seeds', 'num_seeds').clamp(0, 999999);
               final numPeers = _safeInt(value, 'numPeers', 'peers', 'num_peers').clamp(0, 999999);
-              final hasMetadata = _safeBool(value, 'hasMetadata', 'has_metadata');
+              final rawHasMetadata = _safeBool(value, 'hasMetadata', 'has_metadata');
               final isPaused = _safeBool(value, 'isPaused', 'is_paused');
               final name = _safeString(value, 'name', 'torrent_name', 'Torrent');
               final stateLabel = isPaused ? 'Paused' : _safeString(value, 'stateLabel', 'state', 'unknown');
 
-              // FIX: Fallback for libtorrent 2.x where total_wanted is 0
-              final effectiveTotalWanted = totalWanted > 0 ? totalWanted : totalDone;
-              final effectiveTotalWantedDone = totalWantedDone > 0
-                  ? totalWantedDone
-                  : (effectiveTotalWanted > 0 && safeProgress > 0
-                      ? (safeProgress * effectiveTotalWanted).toInt()
-                      : totalDone);
+              var cached = _cachedFiles[rawId];
+              if (rawHasMetadata &&
+                  (cached == null ||
+                      cached.isEmpty ||
+                      cached.every((f) => f.size <= 0))) {
+                try {
+                  cached = getFiles(rawId);
+                } catch (_) {}
+              }
+              final int cachedFilesSum =
+                  cached?.fold<int>(0, (s, f) => s + f.size) ?? 0;
+              final hasRealFiles = cachedFilesSum > 0;
+              final hasMetadata = rawHasMetadata || hasRealFiles;
+
+              final effectiveTotalWanted = totalWanted > 0
+                  ? totalWanted
+                  : (cachedFilesSum > 0 ? cachedFilesSum : 0);
+              final effectiveTotalWantedDone = totalWantedDone;
 
               final info = TorrentUpdateInfo(
                 id: rawId,
@@ -1457,15 +1420,15 @@ class TorrentService {
           final name = _safeString(f, 'name', 'path', 'file_$i');
           final size = _safeInt(f, 'size', 'file_size', 'length', 0);
           final priority = (priorities != null && i < priorities.length)
-              ? ((priorities[i] as num?)?.toInt() ?? 4)
+              ? _toInt(priorities[i], 4)
               : _safeInt(f, 'priority', null, null, 4);
           final selected = (priorities != null && i < priorities.length)
-              ? ((priorities[i] as num?)?.toInt() ?? 1) > 0
+              ? _toInt(priorities[i], 1) > 0
               : _safeBool(f, 'selected', null, true);
 
           int resolvedDownloadedBytes;
           if (progress != null && i < progress.length) {
-            final rawBytes = (progress[i] as num?)?.toInt() ?? -1;
+            final rawBytes = _toInt(progress[i], -1);
             if (rawBytes >= 0) {
               resolvedDownloadedBytes = rawBytes.clamp(0, size);
             } else {
@@ -1476,8 +1439,9 @@ class TorrentService {
             final directBytes = (f is Map)
                 ? (f['downloaded_bytes'] ?? f['downloadedBytes'] ?? f['downloaded'])
                 : null;
-            if (directBytes is num && directBytes >= 0) {
-              resolvedDownloadedBytes = directBytes.toInt().clamp(0, size);
+            if (directBytes != null) {
+              final parsed = _toInt(directBytes, -1);
+              resolvedDownloadedBytes = parsed >= 0 ? parsed.clamp(0, size) : -1;
             } else {
               resolvedDownloadedBytes = -1;
             }
@@ -1701,7 +1665,8 @@ class TorrentService {
           }
         }
 
-        final safeDownloaded = diskBytes.clamp(0, rawSize > 0 ? rawSize : diskBytes);
+        final safeDownloaded =
+            rawSize > 0 ? diskBytes.clamp(0, rawSize) : 0;
 
         progress.add(TorrentFileProgress(
           index: i,

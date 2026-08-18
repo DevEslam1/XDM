@@ -222,6 +222,9 @@ class DownloadProgress {
   final int? ytDownloadedBytes;
   final bool? hasEstimatedFileProgress;
   final int chunkFingerprint;
+  final int? numPeers;
+  final int? numSeeds;
+  final int? numLeechers;
 
   const DownloadProgress({
     required this.downloadedBytes,
@@ -251,6 +254,9 @@ class DownloadProgress {
     this.ytDownloadedBytes,
     this.hasEstimatedFileProgress,
     this.chunkFingerprint = 0,
+    this.numPeers,
+    this.numSeeds,
+    this.numLeechers,
   });
 
   factory DownloadProgress.fromWorkerMap(Map<String, dynamic> p) {
@@ -302,6 +308,9 @@ class DownloadProgress {
       ytDownloadedBytes: (p['ytDownloadedBytes'] as num?)?.toInt(),
       hasEstimatedFileProgress: p['hasEstimatedFileProgress'] as bool?,
       chunkFingerprint: (p['chunkFingerprint'] as num?)?.toInt() ?? 0,
+      numPeers: (p['numPeers'] as num?)?.toInt(),
+      numSeeds: (p['numSeeds'] as num?)?.toInt(),
+      numLeechers: (p['numLeechers'] as num?)?.toInt(),
     );
   }
 
@@ -333,6 +342,9 @@ class DownloadProgress {
     int? ytDownloadedBytes,
     bool? hasEstimatedFileProgress,
     int? chunkFingerprint,
+    int? numPeers,
+    int? numSeeds,
+    int? numLeechers,
   }) {
     return DownloadProgress(
       downloadedBytes: downloadedBytes ?? this.downloadedBytes,
@@ -364,6 +376,9 @@ class DownloadProgress {
       hasEstimatedFileProgress:
           hasEstimatedFileProgress ?? this.hasEstimatedFileProgress,
       chunkFingerprint: chunkFingerprint ?? this.chunkFingerprint,
+      numPeers: numPeers ?? this.numPeers,
+      numSeeds: numSeeds ?? this.numSeeds,
+      numLeechers: numLeechers ?? this.numLeechers,
     );
   }
 

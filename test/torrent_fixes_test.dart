@@ -1,3 +1,4 @@
+import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:dmx/core/services/torrent_models.dart';
 import 'package:dmx/core/services/torrent_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -80,6 +81,39 @@ void main() {
         ),
         isTrue,
       );
+    });
+
+    test('DownloadProgress carries and preserves numPeers, numSeeds, and numLeechers', () {
+      const progress = DownloadProgress(
+        downloadedBytes: 1024,
+        fileSize: 2048,
+        speed: 512.0,
+        eta: 2,
+        numPeers: 12,
+        numSeeds: 5,
+        numLeechers: 7,
+      );
+
+      expect(progress.numPeers, equals(12));
+      expect(progress.numSeeds, equals(5));
+      expect(progress.numLeechers, equals(7));
+
+      final copied = progress.copyWith(numPeers: 20);
+      expect(copied.numPeers, equals(20));
+      expect(copied.numSeeds, equals(5));
+      expect(copied.numLeechers, equals(7));
+
+      final fromMap = DownloadProgress.fromWorkerMap({
+        'downloadedBytes': 100,
+        'fileSize': 200,
+        'speed': 50.0,
+        'numPeers': 15,
+        'numSeeds': 6,
+        'numLeechers': 9,
+      });
+      expect(fromMap.numPeers, equals(15));
+      expect(fromMap.numSeeds, equals(6));
+      expect(fromMap.numLeechers, equals(9));
     });
   });
 }

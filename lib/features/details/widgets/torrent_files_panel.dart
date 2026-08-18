@@ -209,9 +209,15 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                 itemBuilder: (context, index) {
                   final f = files[index];
                   final name = f['name'] as String? ?? 'file_${index + 1}';
-                  final length = (f['length'] as num?)?.toInt() ?? 0;
-                  final downloadedBytes =
-                      (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                  final length = (f['length'] as num?)?.toInt() ??
+                      (f['size'] as num?)?.toInt() ??
+                      0;
+                  final rawDownloaded = (f['downloadedBytes'] as num?)?.toInt() ??
+                      (f['downloaded_bytes'] as num?)?.toInt() ??
+                      0;
+                  final downloadedBytes = length > 0
+                      ? rawDownloaded.clamp(0, length)
+                      : 0;
                   final selected = (f['selected'] as bool?) ?? true;
                   final isEstimated = (f['progressEstimated'] as bool?) == true;
 
