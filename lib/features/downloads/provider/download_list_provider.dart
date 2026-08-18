@@ -115,7 +115,9 @@ class DownloadListProvider extends ChangeNotifier {
 
       final downloaded = stats.totalWantedDone > 0
           ? stats.totalWantedDone
-          : (stats.totalDone > 0 ? stats.totalDone : task.downloadedBytes);
+          : (stats.hasMetadata && stats.totalDone > 0
+              ? stats.totalDone
+              : task.downloadedBytes);
       final updated = task.copyWith(
         downloadedBytes: downloaded,
         speed: task.status == DownloadStatus.downloading

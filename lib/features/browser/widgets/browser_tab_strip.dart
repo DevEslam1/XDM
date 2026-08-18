@@ -144,12 +144,24 @@ class BrowserTabStrip extends StatelessWidget {
                     ] else
                       Padding(
                         padding: const EdgeInsets.only(right: 6),
-                        child: tab.faviconBytes != null
+                        child: tab.faviconBytes != null && tab.faviconBytes!.isNotEmpty
                             ? Image(
                                 image: MemoryImage(tab.faviconBytes!),
                                 width: 14,
                                 height: 14,
                                 fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Icon(
+                                  tab.isIncognito
+                                      ? Icons.visibility_off_rounded
+                                      : (tab.isHome
+                                          ? Icons.home_rounded
+                                          : Icons.public_rounded),
+                                  size: 14,
+                                  color: isActive
+                                      ? accent
+                                      : textClr.withValues(alpha: 0.6),
+                                ),
                               )
                             : Icon(
                                 tab.isIncognito

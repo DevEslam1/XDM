@@ -787,31 +787,68 @@ class TorrentDownloadHandler {
     _activeTorrentIds.add(id);
     bool torrentCompleted = false;
     bool pauseInitiated = false;
-
+    // After metadata is fetched (magnet) or torrent file is loaded, try
+    // to immediately fetch the file list so the first "Starting…" emission
+    // includes real file names and sizes instead of null/0.
+    List<Map<String, dynamic>>? postMetadataFiles = initFiles;
+    if (id >= 0 && (initFiles == null || initFiles.isEmpty)) {
+      try {
+        final nativeFiles = _torrentService.getFiles(id);
+        if (nativeFiles.isNotEmpty) {
+          postMetadataFiles = nativeFiles.map((f) {
+            final dl = f.safeDownloadedBytes < 0 ? 0 : f.safeDownloadedBytes;
+            return <String, dynamic>{
+              'name': f.name,
+              'length': f.size,
+              'downloadedBytes': dl,
+              'selected': f.selected,
+              'priority': f.priority,
+              'progress': f.size > 0
+                  ? (dl / f.size).clamp(0.0, 1.0)
+                  : 0.0,
+              'isComplete': f.size > 0 && dl >= f.size,
+              'progressEstimated': false,
+            };
+          }).toList();
+          cachedAccurateFiles = postMetadataFiles;
+        }
+      } catch (e, st) {
+        _log.fine('Post-metadata file fetch failed: $e', e, st);
+      }
+    }
+    final postMetadataSummary = normalizeTorrentFiles(postMetadataFiles);
     if (id != torrentId || hasLoadedResume) {
       onProgress(DownloadProgress(
-        downloadedBytes: initSummary.downloaded,
-        fileSize: initSummary.bytes > 0 ? initSummary.bytes : knownFileSize,
+        downloadedBytes: postMetadataSummary.downloaded > 0
+            ? postMetadataSummary.downloaded
+            : initSummary.downloaded,
+        fileSize: postMetadataSummary.bytes > 0
+            ? postMetadataSummary.bytes
+            : (initSummary.bytes > 0 ? initSummary.bytes : knownFileSize),
         speed: 0,
         eta: null,
         supportsResume: true,
-        torrentFiles: initFiles,
+        torrentFiles: postMetadataFiles,
         statusMessage: isRetry
             ? 'Retrying torrent…'
-            : ((initSummary.downloaded > 0 || hasLoadedResume)
+            : ((postMetadataSummary.downloaded > 0 || hasLoadedResume)
                 ? 'Resuming torrent…'
                 : 'Starting torrent…'),
         cycleState: isRetry
             ? CycleState.retrying
-            : ((initSummary.downloaded > 0 || hasLoadedResume)
+            : ((postMetadataSummary.downloaded > 0 || hasLoadedResume)
                 ? CycleState.resuming
                 : CycleState.starting),
         torrentId: id,
-        totalFiles: initSummary.total > 0 ? initSummary.total : null,
-        completedFiles: initSummary.total > 0 ? initSummary.done : null,
-        totalFileBytes: initSummary.bytes > 0 ? initSummary.bytes : null,
-        downloadedFileBytes:
-            initSummary.bytes > 0 ? initSummary.downloaded : null,
+        totalFiles:
+            postMetadataSummary.total > 0 ? postMetadataSummary.total : null,
+        completedFiles:
+            postMetadataSummary.total > 0 ? postMetadataSummary.done : null,
+        totalFileBytes:
+            postMetadataSummary.bytes > 0 ? postMetadataSummary.bytes : null,
+        downloadedFileBytes: postMetadataSummary.bytes > 0
+            ? postMetadataSummary.downloaded
+            : null,
       ));
     }
 
@@ -955,6 +992,19 @@ class TorrentDownloadHandler {
         } catch (e, st) {
           _log.warning('resumeTorrent failed: $e', e, st);
         }
+        // FIX-MAGNET-PEERS: The orchestrator pre-add path adds magnets via
+        // plain addMagnet (paused, no default trackers), which bypasses
+        // addMagnetWithMetadataTimeout. Register default public trackers and
+        // force-announce so metadata acquisition finds peers even for magnets
+        // with no tr= trackers — otherwise the torrent can stall in
+        // downloading_metadata with no size/files/peers surfaced.
+        if (url.startsWith('magnet:')) {
+          try {
+            TorrentService.boostMagnetDiscovery(id);
+          } catch (e, st) {
+            _log.warning('boostMagnetDiscovery failed: $e', e, st);
+          }
+        }
       }
       await _listenForCompletion(
         id,
@@ -1048,6 +1098,57 @@ class TorrentDownloadHandler {
     lastAccurateSync = DateTime.fromMillisecondsSinceEpoch(0);
     cachedAccurateFiles = null;
     lastStateLabel = '';
+    // Immediately fetch file list if metadata is already available.
+    // This ensures the UI shows file names and sizes without waiting
+    // for the first torrentUpdates emission.
+    try {
+      final latest = _torrentService.latestStats[id];
+      if (latest?.hasMetadata == true) {
+        final nativeFiles = _torrentService.getFiles(id);
+        if (nativeFiles.isNotEmpty) {
+          cachedAccurateFiles = nativeFiles.map((f) {
+            final dl = f.safeDownloadedBytes < 0 ? 0 : f.safeDownloadedBytes;
+            return <String, dynamic>{
+              'name': f.name,
+              'length': f.size,
+              'downloadedBytes': dl,
+              'selected': f.selected,
+              'priority': f.priority,
+              'progress': f.size > 0
+                  ? (dl / f.size).clamp(0.0, 1.0)
+                  : 0.0,
+              'isComplete': f.size > 0 && dl >= f.size,
+              'progressEstimated': false,
+            };
+          }).toList();
+        }
+      }
+    } catch (e, st) {
+      _log.fine('Initial file list fetch failed: $e', e, st);
+    }
+    // Helper to ensure every progress emission includes torrent file
+    // summary fields (totalFiles, completedFiles, totalFileBytes,
+    // downloadedFileBytes) derived from the torrentFiles list so the
+    // UI can display file counts and sizes.
+    void emitProgress(DownloadProgress progress) {
+      final files = progress.torrentFiles;
+      if (files != null &&
+          files.isNotEmpty &&
+          (progress.totalFiles == null ||
+              progress.totalFileBytes == null)) {
+        final summary = normalizeTorrentFiles(files);
+        onProgress(progress.copyWith(
+          totalFiles: summary.total > 0 ? summary.total : null,
+          completedFiles: summary.total > 0 ? summary.done : null,
+          totalFileBytes: summary.bytes > 0 ? summary.bytes : null,
+          downloadedFileBytes:
+              summary.bytes > 0 ? summary.downloaded : null,
+        ));
+      } else {
+        onProgress(progress);
+      }
+    }
+
     DateTime lastTorrentProgressTime = DateTime.now();
     int lastTorrentDownloadedBytes = 0;
     double lastTorrentSpeed = 0.0;
@@ -1067,7 +1168,7 @@ class TorrentDownloadHandler {
         if (getIt.isRegistered<NetworkMonitor>()) {
           final networkMonitor = getIt<NetworkMonitor>();
           if (!networkMonitor.hasConnection) {
-            onProgress(DownloadProgress(
+            emitProgress(DownloadProgress(
               downloadedBytes: lastTorrentDownloadedBytes,
               fileSize: currentTotalSize,
               speed: 0,
@@ -1093,7 +1194,7 @@ class TorrentDownloadHandler {
         if (isNonDownloadPhase) return;
         if (elapsed >= const Duration(minutes: 5)) {
           if (lastStateLabel == 'downloading' && lastTorrentPeerCount == 0) {
-            onProgress(DownloadProgress(
+            emitProgress(DownloadProgress(
               downloadedBytes: lastTorrentDownloadedBytes,
               fileSize: currentTotalSize,
               speed: 0,
@@ -1112,7 +1213,7 @@ class TorrentDownloadHandler {
           }
         } else if (elapsed >= const Duration(seconds: 60) &&
             lastTorrentSpeed == 0) {
-          onProgress(DownloadProgress(
+          emitProgress(DownloadProgress(
             downloadedBytes: lastTorrentDownloadedBytes,
             fileSize: currentTotalSize,
             speed: 0,
@@ -1127,7 +1228,7 @@ class TorrentDownloadHandler {
           _log.warning('Torrent $id stalled for 10min — forcing reannounce');
           try {
             TorrentService.announceNow(id);
-            onProgress(DownloadProgress(
+            emitProgress(DownloadProgress(
               downloadedBytes: lastTorrentDownloadedBytes,
               fileSize: currentTotalSize,
               speed: 0,
@@ -1331,7 +1432,9 @@ class TorrentDownloadHandler {
         // completes, but totalDone tracks actual bytes received.
         final rawDownloaded = torrent.totalWantedDone > 0
             ? torrent.totalWantedDone
-            : (torrent.totalDone > 0 ? torrent.totalDone : 0);
+            : (torrent.hasMetadata && torrent.totalDone > 0
+                ? torrent.totalDone
+                : 0);
         // FIX: Guard against libtorrent emitting progress == 1.0 before metadata
         // is fetched or when totalWanted == 0.
         final bool isProgressValid = torrent.hasMetadata &&
@@ -1355,7 +1458,7 @@ class TorrentDownloadHandler {
                 if (piecesTotal > 0) {
                   final pieceRatio = (piecesHave / piecesTotal).clamp(0.0, 1.0);
                   updateFilesWithNativeProgress(
-                      filesToUpdate, pieceRatio, rawDownloaded);
+                       filesToUpdate, pieceRatio, rawDownloaded);
                   pieceMapped = true;
                 }
               }
@@ -1409,13 +1512,18 @@ class TorrentDownloadHandler {
                     stateLabel == 'downloading_metadata' ||
                     stateLabel == 'checking_files' ||
                     stateLabel == 'checking_resume_data');
+        final String? resolvedTorrentName =
+            (torrent.hasMetadata && torrent.name.isNotEmpty)
+                ? torrent.name
+                : null;
         if (isRecovering) {
           lastRecoveryEmit = DateTime.now();
-          onProgress(DownloadProgress(
+          emitProgress(DownloadProgress(
             downloadedBytes: downloadedBytes,
             fileSize: totalSize,
             speed: speed,
             eta: null,
+            fileName: resolvedTorrentName,
             torrentFiles: resolvedFiles ?? cachedAccurateFiles,
             cycleState: CycleState.retrying,
             totalPieces: torrent.piecesTotal,
@@ -1427,11 +1535,12 @@ class TorrentDownloadHandler {
         if (lastRecoveryEmit == null ||
             DateTime.now().difference(lastRecoveryEmit!).inMilliseconds >=
                 2000) {
-          onProgress(DownloadProgress(
+          emitProgress(DownloadProgress(
             downloadedBytes: downloadedBytes,
             fileSize: totalSize,
             speed: speed,
             eta: null,
+            fileName: resolvedTorrentName,
             torrentFiles: resolvedFiles ?? cachedAccurateFiles,
             cycleState: resolvedCycleState,
             totalPieces: torrent.piecesTotal,
@@ -1477,11 +1586,12 @@ class TorrentDownloadHandler {
               }
             }
           }
-          onProgress(DownloadProgress(
+          emitProgress(DownloadProgress(
             downloadedBytes: totalSize > 0 ? totalSize : downloadedBytes,
             fileSize: totalSize,
             speed: isSeedingEnabled ? speed : 0,
             eta: 0,
+            fileName: resolvedTorrentName,
             torrentFiles: finalFiles,
             cycleState: finalCycleState,
             totalPieces: torrent.piecesTotal,

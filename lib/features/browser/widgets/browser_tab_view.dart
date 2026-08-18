@@ -231,8 +231,17 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
           onReceivedError: (controller, request, error) async {
             final errUrl = request.url.toString();
             final scheme = Uri.tryParse(errUrl)?.scheme.toLowerCase() ?? '';
-            // B12: Do not use localized error description string matching
-            if (scheme == 'magnet' || scheme == 'intent' || scheme == 'tg' || scheme == 'whatsapp') {
+            if (scheme == 'magnet' || isMagnetUrl(errUrl) || isTorrentFileUrl(errUrl)) {
+              controller.stopLoading();
+              if (await controller.canGoBack()) {
+                await controller.goBack();
+              }
+              widget.controller.downloadInterceptor.startDirectDownload(errUrl);
+              tab.isLoading = false;
+              if (mounted) setState(() {});
+              return;
+            }
+            if (scheme == 'intent' || scheme == 'tg' || scheme == 'whatsapp') {
               controller.stopLoading();
               if (await controller.canGoBack()) {
                 await controller.goBack();
@@ -329,9 +338,13 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
               return NavigationActionPolicy.CANCEL;
             }
 
-            // Scheme check for external apps
+            // Scheme check for external apps and downloads
             final uri = Uri.tryParse(url);
             final scheme = uri?.scheme.toLowerCase() ?? '';
+            if (scheme == 'magnet' || isMagnetUrl(url) || isTorrentFileUrl(url)) {
+              widget.controller.downloadInterceptor.startDirectDownload(url);
+              return NavigationActionPolicy.CANCEL;
+            }
             if (scheme.isNotEmpty && scheme != 'http' && scheme != 'https' && scheme != 'about') {
               try {
                 await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);

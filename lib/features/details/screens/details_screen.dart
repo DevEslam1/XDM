@@ -2604,12 +2604,10 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
       },
       builder: (context, dynamicTorrentFiles, _) {
         final currentTask = provider.taskById(task.id) ?? task;
-        if (!currentTask.isTorrent ||
-            dynamicTorrentFiles == null ||
-            dynamicTorrentFiles.isEmpty) {
+        if (!currentTask.isTorrent) {
           return const SizedBox.shrink();
         }
-        final files = dynamicTorrentFiles;
+        final files = dynamicTorrentFiles ?? currentTask.torrentFiles ?? [];
         final isDark = settings.isDarkMode;
         final isRtl = L10n.isRtl(context);
         final isDownloading = currentTask.status == DownloadStatus.downloading;

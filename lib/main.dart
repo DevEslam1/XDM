@@ -304,10 +304,10 @@ Future<void> main(List<String> args) async {
             initFutures.add(() async {
               try {
                 await TorrentService.init().timeout(
-                  const Duration(seconds: 15),
+                  const Duration(seconds: 30),
                   onTimeout: () {
                     throw TimeoutException(
-                        'TorrentService.init timed out after 15s');
+                        'TorrentService.init timed out after 30s');
                   },
                 );
                 _mainLog.info('Torrent service initialized successfully');
@@ -538,6 +538,44 @@ class DmxApp extends StatelessWidget {
                               initialUrl!.trim().isNotEmpty,
                         ),
             ),
+            onGenerateRoute: (settings) {
+              final rawName = settings.name ?? '';
+              if (rawName.isEmpty || rawName == '/') return null;
+
+              String? extractedUrl;
+              if (rawName.startsWith('/?xt=') || rawName.contains('xt=urn:btih:')) {
+                // Route caused by Android intent magnet URI: "/?xt=urn:btih:..." -> "magnet:?xt=urn:btih:..."
+                extractedUrl = rawName.startsWith('/?')
+                    ? 'magnet:?${rawName.substring(2)}'
+                    : (rawName.startsWith('/') ? rawName.substring(1) : rawName);
+              } else if (rawName.startsWith('/magnet:')) {
+                extractedUrl = rawName.substring(1);
+              } else if (isMagnetUrl(rawName) ||
+                  isHttpUrl(rawName) ||
+                  isTorrentFileUrl(rawName)) {
+                extractedUrl = rawName;
+              }
+
+              if (extractedUrl != null && extractedUrl.isNotEmpty) {
+                return MaterialPageRoute<void>(
+                  settings: settings,
+                  builder: (ctx) => MainNavigationContainer(
+                    initialUrl: extractedUrl,
+                    isShareLaunch: true,
+                  ),
+                );
+              }
+              return null;
+            },
+            onUnknownRoute: (settings) {
+              return MaterialPageRoute<void>(
+                settings: settings,
+                builder: (ctx) => MainNavigationContainer(
+                  initialUrl: initialUrl,
+                  isShareLaunch: false,
+                ),
+              );
+            },
             builder: (context, child) {
               return XdmTextScaler(
                 child: AnnotatedRegion<SystemUiOverlayStyle>(

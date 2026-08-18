@@ -40,6 +40,21 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark =
+        widget.isDark ?? (Theme.of(context).brightness == Brightness.dark);
+    final bool isRtl;
+    if (widget.isRtl != null) {
+      isRtl = widget.isRtl!;
+    } else {
+      bool isRtlVal = false;
+      try {
+        isRtlVal = L10n.isRtl(context);
+      } catch (_) {
+        isRtlVal = Directionality.maybeOf(context) == TextDirection.rtl;
+      }
+      isRtl = isRtlVal;
+    }
+
     // FIX v2.0.0: Show a loading indicator instead of blank space
     // when files haven't been received yet (metadata pending).
     if (widget.torrentFiles.isEmpty) {
@@ -58,13 +73,13 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                 const SizedBox(width: 12),
                 Text(
                   widget.isDownloading
-                      ? 'Waiting for torrent metadata…'
-                      : 'No files available',
+                      ? (isRtl
+                          ? 'جاري جلب ملفات وبيانات التورنت…'
+                          : 'Waiting for torrent metadata…')
+                      : (isRtl ? 'لا توجد ملفات متاحة' : 'No files available'),
                   style: TextStyle(
                     fontSize: 12,
-                    color: widget.isDark == true
-                        ? AppTheme.textMuted
-                        : AppTheme.lightTextMuted,
+                    color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                   ),
                 ),
               ],
@@ -73,21 +88,6 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
         );
       }
       return const SizedBox.shrink();
-    }
-
-    final isDark =
-        widget.isDark ?? (Theme.of(context).brightness == Brightness.dark);
-    final bool isRtl;
-    if (widget.isRtl != null) {
-      isRtl = widget.isRtl!;
-    } else {
-      bool isRtlVal = false;
-      try {
-        isRtlVal = L10n.isRtl(context);
-      } catch (_) {
-        isRtlVal = Directionality.maybeOf(context) == TextDirection.rtl;
-      }
-      isRtl = isRtlVal;
     }
 
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;

@@ -115,15 +115,22 @@ class MainActivity : FlutterActivity() {
     private fun handleDeepLink(intent: Intent?) {
         val uri = intent?.data ?: return
         val url = uri.toString()
+        val scheme = uri.scheme?.lowercase() ?: ""
 
-        // VALIDATION: Only accept dmx:// scheme
-        if (!url.startsWith("dmx://")) {
+        val isDmx = url.startsWith("dmx://")
+        val isMagnet = url.startsWith("magnet:") || scheme == "magnet"
+        val isTorrent = url.endsWith(".torrent", ignoreCase = true) ||
+                        scheme == "file" || scheme == "content" ||
+                        (intent.type?.contains("bittorrent", ignoreCase = true) == true)
+
+        // VALIDATION: Accept dmx://, magnet:, and torrent file schemes
+        if (!isDmx && !isMagnet && !isTorrent) {
             Log.w("DMX", "Rejected deep link with invalid scheme: ${uri.scheme}")
             return
         }
 
-        // VALIDATION: Reject excessively long URLs (>2048 chars)
-        if (url.length > 2048) {
+        // VALIDATION: Reject excessively long URLs (>16384 chars for complex magnet links)
+        if (url.length > 16384) {
             Log.w("DMX", "Rejected deep link: URL too long (${url.length} chars)")
             return
         }

@@ -11,6 +11,7 @@ import '../../features/settings/screens/settings_screen.dart';
 import '../../shared/widgets/themed_snackbar.dart';
 import '../app_theme.dart';
 import '../utils/file_opener.dart';
+import '../utils/url_utils.dart';
 import 'share_url_handler.dart';
 import 'widget_data_bridge.dart';
 
@@ -71,19 +72,34 @@ class WidgetDeepLinkHandler {
 
   /// Validates whether [url] is a well-formed and recognized deep link (I-01/I-02).
   static bool isValidDeepLink(String url) {
-    if (url.trim().isEmpty) return false;
-    final uri = Uri.tryParse(url.trim());
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return false;
+    if (isMagnetUrl(trimmed) || isTorrentFileUrl(trimmed) || trimmed.startsWith('magnet:')) {
+      return true;
+    }
+    final uri = Uri.tryParse(trimmed);
     if (uri == null) return false;
     final scheme = uri.scheme.toLowerCase();
+    if (scheme == 'magnet' || scheme == 'file' || scheme == 'content') return true;
     if (scheme != 'dmx' && scheme != 'xdm') return false;
     final host = uri.host.toLowerCase();
     return validRoutes.contains(host);
   }
 
   static void handleUrl(String url) {
-    if (!isValidDeepLink(url)) return;
-    final uri = Uri.tryParse(url.trim());
+    final trimmed = url.trim();
+    if (!isValidDeepLink(trimmed)) return;
+    if (isMagnetUrl(trimmed) || isTorrentFileUrl(trimmed) || trimmed.startsWith('magnet:')) {
+      _handleAddUrl(trimmed);
+      return;
+    }
+    final uri = Uri.tryParse(trimmed);
     if (uri == null) return;
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme == 'magnet' || scheme == 'file' || scheme == 'content') {
+      _handleAddUrl(trimmed);
+      return;
+    }
 
     final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
 

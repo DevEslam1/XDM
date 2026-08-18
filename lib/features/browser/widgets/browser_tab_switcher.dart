@@ -210,12 +210,19 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                                     ),
                                     child: Row(
                                       children: [
-                                        if (tab.faviconBytes != null)
+                                        if (tab.faviconBytes != null && tab.faviconBytes!.isNotEmpty)
                                           Image(
                                             image: MemoryImage(tab.faviconBytes!),
                                             width: 14,
                                             height: 14,
                                             fit: BoxFit.cover,
+                                            errorBuilder: (context, error, stackTrace) => Icon(
+                                              tab.isIncognito
+                                                  ? Icons.visibility_off_rounded
+                                                  : (tab.isHome ? Icons.home_rounded : Icons.public_rounded),
+                                              size: 14,
+                                              color: accent,
+                                            ),
                                           )
                                         else
                                           Icon(
@@ -259,13 +266,50 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                                     child: ClipRRect(
                                       borderRadius: const BorderRadius.vertical(
                                           bottom: Radius.circular(11)),
-                                      child: tab.previewBytes != null
+                                      child: tab.previewBytes != null && tab.previewBytes!.isNotEmpty
                                           ? Image.memory(
                                               tab.previewBytes!,
                                               fit: BoxFit.cover,
                                               width: double.infinity,
                                               height: double.infinity,
                                               gaplessPlayback: true,
+                                              errorBuilder: (context, error, stackTrace) => Center(
+                                                child: Column(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(
+                                                      tab.isHome
+                                                          ? Icons
+                                                              .dashboard_outlined
+                                                          : (tab.isSuspended
+                                                              ? Icons
+                                                                  .pause_circle_outline_rounded
+                                                              : Icons
+                                                                  .language_rounded),
+                                                      size: 32,
+                                                      color: textClr
+                                                          .withValues(alpha: 0.25),
+                                                    ),
+                                                    const SizedBox(height: 6),
+                                                    Text(
+                                                      tab.isSuspended
+                                                          ? L10n.of(
+                                                              context,
+                                                              'browser_tab_paused',
+                                                            )
+                                                          : (tab.isHome
+                                                              ? 'Home'
+                                                              : tab.domain),
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: textClr
+                                                            .withValues(alpha: 0.5),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
                                             )
                                           : Center(
                                               child: Column(

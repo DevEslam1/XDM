@@ -783,8 +783,12 @@ class BrowserController extends ChangeNotifier {
       final request = await _faviconHttpClient.getUrl(Uri.parse(faviconUrl));
       final response = await request.close();
       if (response.statusCode == 200) {
+        final contentType = response.headers.contentType?.mimeType.toLowerCase() ?? '';
+        if (contentType.contains('html') || contentType.contains('text')) {
+          return;
+        }
         final bytes = await consolidateHttpClientResponseBytes(response);
-        if (bytes.isNotEmpty && bytes.length <= 10240) {
+        if (bytes.isNotEmpty && bytes.length <= 256 * 1024) {
           tab.faviconBytes = bytes;
           notifyListeners();
         }

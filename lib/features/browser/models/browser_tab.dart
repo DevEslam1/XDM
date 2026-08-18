@@ -64,14 +64,18 @@ class BrowserTab {
 
   String? faviconUrl;
   
-  // FIX-B2: Detach sublist buffer to avoid keeping giant backing buffer in memory
+  // FIX-B2: Detach buffer copy to avoid keeping giant backing buffer in memory without corrupting image data
   Uint8List? _faviconBytes;
   Uint8List? get faviconBytes => _faviconBytes;
   set faviconBytes(Uint8List? bytes) {
-    if (bytes != null && bytes.length > 10240) {
-      _faviconBytes = Uint8List.fromList(bytes.sublist(0, 10240));
+    if (bytes != null && bytes.isNotEmpty) {
+      if (bytes.length > 512 * 1024) {
+        _faviconBytes = null;
+      } else {
+        _faviconBytes = Uint8List.fromList(bytes);
+      }
     } else {
-      _faviconBytes = bytes;
+      _faviconBytes = null;
     }
   }
 

@@ -7,6 +7,7 @@ import '../../features/settings/provider/settings_provider.dart';
 import '../di/injection.dart';
 import '../interfaces/i_torrent_service.dart';
 import 'torrent_models.dart';
+import 'tracker_manager.dart';
 
 class TorrentServiceStub implements ITorrentService {
   TorrentServiceStub();
@@ -139,6 +140,8 @@ class TorrentServiceStub implements ITorrentService {
   void removeTracker(int torrentId, String trackerUrl) {}
   @override
   void announceNow(int torrentId) {}
+  @override
+  void boostMagnetDiscovery(int torrentId) {}
 
   @override
   Future<String?> createTorrent({
@@ -359,6 +362,13 @@ class TorrentService {
       _activeService.removeTracker(torrentId, trackerUrl);
   static void announceNow(int torrentId) =>
       _activeService.announceNow(torrentId);
+
+  static void boostMagnetDiscovery(int torrentId) {
+    for (final tracker in TrackerManager.defaultTrackers) {
+      addTracker(torrentId, tracker);
+    }
+    announceNow(torrentId);
+  }
 
   static Future<String?> createTorrent({
     required String sourcePath,

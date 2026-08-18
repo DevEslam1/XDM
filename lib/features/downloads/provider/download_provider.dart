@@ -496,7 +496,7 @@ class DownloadProvider extends ChangeNotifier
               final task = _tasks[taskIdx];
               final liveDone = info.totalWantedDone > 0
                   ? info.totalWantedDone
-                  : (info.totalDone > 0
+                  : (info.hasMetadata && info.totalDone > 0
                       ? info.totalDone
                       : task.downloadedBytes);
 
@@ -556,18 +556,33 @@ class DownloadProvider extends ChangeNotifier
               final filesChanged =
                   _fileListsDiffer(task.torrentFiles, syncedFiles);
 
+              final resolvedName = (info.name.isNotEmpty &&
+                      (task.fileName == 'Torrent Download' ||
+                          task.fileName.startsWith('magnet:') ||
+                          task.fileName.isEmpty))
+                  ? safeFileName(info.name)
+                  : task.fileName;
+
               if (task.downloadedBytes != liveDone ||
                   task.fileSize != newSize ||
+                  task.fileName != resolvedName ||
                   task.speed != newSpeed ||
                   task.cycleState != newCycleState ||
                   filesChanged) {
-                _tasks[taskIdx] = task.copyWith(
+                final updatedTask = task.copyWith(
+                  fileName: resolvedName,
                   downloadedBytes: liveDone,
                   fileSize: newSize,
                   speed: newSpeed,
                   cycleState: newCycleState,
                   torrentFiles: syncedFiles,
                 );
+                _tasks[taskIdx] = updatedTask;
+                if (filesChanged || (task.fileSize <= 0 && newSize > 0)) {
+                  unawaited(_databaseService
+                      .saveTask(updatedTask)
+                      .catchError((e) => null));
+                }
                 notifyListeners();
               }
             }

@@ -85,6 +85,7 @@ abstract class ITorrentService {
   void addTracker(int torrentId, String trackerUrl, {int tier = 0});
   void removeTracker(int torrentId, String trackerUrl);
   void announceNow(int torrentId);
+  void boostMagnetDiscovery(int torrentId);
 
   Future<String?> createTorrent({
     required String sourcePath,

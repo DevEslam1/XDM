@@ -5,17 +5,18 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('BrowserTab Model Tests', () {
-    test('Favicon setter detaches and bounds byte buffer to 10KB (B2)', () {
+    test('Favicon setter detaches buffer and discards oversized payloads (B2)', () {
       final tab = BrowserTab(id: 'tab-1', url: 'https://example.com');
-      final largeBytes = Uint8List(20480); // 20 KB
-      for (int i = 0; i < largeBytes.length; i++) {
-        largeBytes[i] = i % 256;
-      }
-
-      tab.faviconBytes = largeBytes;
+      final validBytes = Uint8List.fromList([1, 2, 3, 4, 5]);
+      tab.faviconBytes = validBytes;
 
       expect(tab.faviconBytes, isNotNull);
-      expect(tab.faviconBytes!.length, 10240); // Capped at 10 KB
+      expect(tab.faviconBytes!.length, 5);
+      expect(identical(tab.faviconBytes, validBytes), isFalse); // Detached copy
+
+      final oversizedBytes = Uint8List(600 * 1024); // 600 KB > 512 KB
+      tab.faviconBytes = oversizedBytes;
+      expect(tab.faviconBytes, isNull);
     });
 
     test('Host cache is invalidated on updateUrl (B3)', () {

@@ -1933,6 +1933,18 @@ class DownloadOrchestrator {
                 audioBytesSoFar < audioContribution),
           );
 
+          final bool hasNewlyResolvedMetadata =
+              (base.fileSize <= 0 && updated.fileSize > 0) ||
+                  ((base.torrentFiles == null || base.torrentFiles!.isEmpty) &&
+                      (updated.torrentFiles != null &&
+                          updated.torrentFiles!.isNotEmpty)) ||
+                  (base.fileName != updated.fileName);
+
+          if (hasNewlyResolvedMetadata) {
+            unawaited(_host.setTaskState(updated).catchError(
+                (e) => debugPrint('[DMX] setTaskState failed on metadata update: $e')));
+          }
+
           final now = DateTime.now().millisecondsSinceEpoch;
           final lastUpdate = _host.lastProgressUpdateTimes[task.id] ?? 0;
           final throttleMs = PowerMonitor.screenOff
@@ -1950,7 +1962,7 @@ class DownloadOrchestrator {
                   : 0;
               _host.notifications.showProgress(
                 notificationId: notificationId,
-                title: task.fileName,
+                title: updated.fileName,
                 progressPercent: progressPercent,
                 speed: updated.speedFormatted,
                 eta: updated.etaFormatted,
@@ -1961,10 +1973,6 @@ class DownloadOrchestrator {
             }
           } else {
             _host.providerTasks[index] = updated;
-            if (base.fileSize == 0 && updated.fileSize > 0) {
-              unawaited(_host.setTaskState(updated).catchError(
-                  (e) => debugPrint('[DMX] setTaskState failed: $e')));
-            }
             if (!isBackground) {
               _host.pushProgressTick(task.id, updated.progress, updated.speed);
             }

@@ -725,6 +725,9 @@ class TorrentServiceImpl implements ITorrentService {
       TorrentService.removeTracker(torrentId, trackerUrl);
   @override
   void announceNow(int torrentId) => TorrentService.announceNow(torrentId);
+  @override
+  void boostMagnetDiscovery(int torrentId) =>
+      TorrentService.boostMagnetDiscovery(torrentId);
 
   @override
   Future<String?> createTorrent({
@@ -1046,7 +1049,7 @@ class TorrentService {
     _initCompleter = Completer<void>();
     try {
       try {
-        await LibtorrentFlutter.init().timeout(const Duration(seconds: 10));
+        await LibtorrentFlutter.init().timeout(const Duration(seconds: 25));
         isPluginAvailable = true;
         _CapabilityGate.instance.probeCapabilities();
         _configureSessionFromSettings();
@@ -1060,11 +1063,13 @@ class TorrentService {
         getIt<TorrentSeedingManager>().startSeedingCheck();
         _state = TorrentSessionState.ready;
         isAvailable.value = true;
-      } on TimeoutException {
+        _initCompleter?.complete();
+      } on TimeoutException catch (e) {
         _log.severe('libtorrent init timed out');
         _state = TorrentSessionState.uninitialized;
         isPluginAvailable = false;
         isAvailable.value = false;
+        _initCompleter?.completeError(e);
         return;
       } catch (nativeErr) {
         _log.warning(
@@ -1073,8 +1078,8 @@ class TorrentService {
         _state = TorrentSessionState.uninitialized;
         isPluginAvailable = false;
         isAvailable.value = false;
+        _initCompleter?.completeError(nativeErr);
       }
-      _initCompleter?.complete();
     } catch (e) {
       _state = TorrentSessionState.uninitialized;
       isPluginAvailable = false;
@@ -1293,7 +1298,7 @@ class TorrentService {
                 resolvedTotalWantedDone = (safeProgress * value.totalWanted)
                     .round()
                     .clamp(0, value.totalWanted);
-              } else if (value.totalDone > 0) {
+              } else if (value.hasMetadata && value.totalDone > 0) {
                 resolvedTotalWantedDone = value.totalDone;
               } else {
                 resolvedTotalWantedDone = 0;
@@ -1501,7 +1506,9 @@ class TorrentService {
     } catch (_) {}
     final totalWanted = torrentInfo.totalWanted;
     final totalDone = torrentInfo.totalDone;
-    final effectiveTotal = totalWanted > 0 ? totalWanted : totalDone;
+    final effectiveTotal = totalWanted > 0
+        ? totalWanted
+        : (torrentInfo.hasMetadata ? totalDone : 0);
     if (effectiveTotal > 0) {
       return (effectiveTotal / pieceSize).ceil();
     }
@@ -1712,6 +1719,7 @@ class TorrentService {
     int maxRetries = 2,
     Duration retryDelay = const Duration(seconds: 10),
   }) async {
+    await _readyOrThrow();
     _injectDhtNodes();
     final id = addMagnet(magnetUri, savePath);
     if (id < 0) return -1;
@@ -2312,6 +2320,31 @@ class TorrentService {
     _CapabilityGate.instance.announceNow(torrentId);
   }
 
+  /// Registers the default public trackers on a magnet and force-announces so
+  /// metadata acquisition can find peers even when the magnet URI carries no
+  /// `tr=` trackers (the orchestrator's pre-add path skips
+  /// `addMagnetWithMetadataTimeout`, so without this the magnet relies solely
+  /// on DHT / its own trackers and can sit in `downloading_metadata` forever,
+  /// showing no size, files or peers).
+  /// Safe to call before or after resume: libtorrent persists the trackers
+  /// and announces them on the next start.
+  static void boostMagnetDiscovery(int torrentId) {
+    if (!isInitialized || torrentId < 0) return;
+    _injectDhtNodes();
+    for (final tracker in TrackerManager.defaultTrackers) {
+      try {
+        addTracker(torrentId, tracker);
+      } catch (e) {
+        _log.fine('Default tracker registration failed for $torrentId: $e');
+      }
+    }
+    try {
+      announceNow(torrentId);
+    } catch (e) {
+      _log.fine('Forced announce failed for $torrentId: $e');
+    }
+  }
+
   static Future<String?> createTorrent({
     required String sourcePath,
     required String outputPath,
@@ -2807,6 +2840,8 @@ class TorrentServiceStub implements ITorrentService {
   void removeTracker(int torrentId, String trackerUrl) {}
   @override
   void announceNow(int torrentId) {}
+  @override
+  void boostMagnetDiscovery(int torrentId) {}
 
   @override
   Future<String?> createTorrent({

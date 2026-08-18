@@ -237,10 +237,77 @@ class MetadataProbeService {
               ? safeFileName((magnetParams['name'] as String).trim())
               : 'torrent_download.zip');
 
+      if (!TorrentService.isSupported) {
+        return DownloadMetadata(
+          fileName: resolvedName,
+          category: 'Archive',
+          fileSize: 0,
+          supportsResume: true,
+        );
+      }
+
+      try {
+        await TorrentService.ready.timeout(const Duration(seconds: 10));
+      } catch (e, st) {
+        LoggingService.logger('MetadataProbeService')
+            .warning('TorrentService ready wait failed during probe: $e', e, st);
+        return DownloadMetadata(
+          fileName: resolvedName,
+          category: 'Archive',
+          fileSize: 0,
+          supportsResume: true,
+        );
+      }
+
       final tempDir = (await getTemporaryDirectory()).path;
       final torrentId = TorrentService.addMagnet(url, tempDir);
+      if (torrentId < 0) {
+        return DownloadMetadata(
+          fileName: resolvedName,
+          category: 'Archive',
+          fileSize: 0,
+          supportsResume: true,
+        );
+      }
+
+      TorrentService.boostMagnetDiscovery(torrentId);
       TorrentService.resumeTorrent(torrentId);
       TorrentResumeStore.registerSource(torrentId, url);
+
+      // Check if metadata is already available in cache
+      final initialStats = TorrentService.latestStats[torrentId];
+      if (initialStats != null && initialStats.hasMetadata) {
+        final files = TorrentService.getFiles(torrentId);
+        final resolvedFiles = files
+            .map((f) => {
+                  'name': f.name,
+                  'length': f.size,
+                  'selected': true,
+                  'priority': 4,
+                  'downloadedBytes': 0,
+                })
+            .toList();
+
+        final totalSize = resolvedFiles.fold<int>(
+            0, (sum, f) => sum + (f['length'] as int));
+
+        try {
+          TorrentService.pauseTorrent(torrentId);
+          TorrentService.removeTorrent(torrentId, deleteFiles: false);
+        } catch (_) {}
+
+        final resolvedTitle = initialStats.name.isNotEmpty
+            ? initialStats.name
+            : resolvedName;
+        return DownloadMetadata(
+          fileName: resolvedTitle,
+          category: categoryFromFileName(resolvedTitle),
+          fileSize: totalSize,
+          supportsResume: true,
+          torrentFiles: resolvedFiles,
+          torrentId: torrentId,
+        );
+      }
 
       final completer = Completer<DownloadMetadata>();
       StreamSubscription? sub;
@@ -252,12 +319,14 @@ class MetadataProbeService {
         cleanedUp = true;
         sub?.cancel();
         metadataTimer?.cancel();
-        try {
-          TorrentService.pauseTorrent(torrentId);
-          TorrentService.removeTorrent(torrentId, deleteFiles: false);
-        } catch (e, st) {
-          LoggingService.logger('MetadataProbeService')
-              .warning('Operation failed', e, st);
+        if (torrentId >= 0) {
+          try {
+            TorrentService.pauseTorrent(torrentId);
+            TorrentService.removeTorrent(torrentId, deleteFiles: false);
+          } catch (e, st) {
+            LoggingService.logger('MetadataProbeService')
+                .warning('Operation failed', e, st);
+          }
         }
       }
 
@@ -306,7 +375,7 @@ class MetadataProbeService {
         cleanup();
         completer.complete(DownloadMetadata(
           fileName: resolvedName,
-          category: 'Torrent',
+          category: 'Archive',
           fileSize: 0,
           supportsResume: true,
         ));

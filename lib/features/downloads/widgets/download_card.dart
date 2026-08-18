@@ -1949,12 +1949,13 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final provider = context.read<DownloadProvider>();
-    final statusColor = getEffectiveCardAccent(widget.task, provider, isDark);
+    final taskSnapshot = provider.findTaskById(widget.task.id) ?? widget.task;
+    final statusColor = getEffectiveCardAccent(taskSnapshot, provider, isDark);
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-    final isMagnet = widget.task.url.startsWith('magnet:');
-    final seeding = _isSeeding(widget.task);
+    final isMagnet = taskSnapshot.url.startsWith('magnet:');
+    final seeding = _isSeeding(taskSnapshot);
 
     return Selector<DownloadProvider,
         ({int seeds, int peers, double uploadSpeed})>(
@@ -1972,8 +1973,10 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
         uploadSpeed: provider.getTorrentUploadSpeed(widget.task.id),
       ),
       builder: (context, stats, _) {
-        final fileCount = widget.task.torrentFiles?.length ?? 0;
-        final selectedCount = widget.task.torrentFiles
+        final currentTask =
+            provider.findTaskById(widget.task.id) ?? widget.task;
+        final fileCount = currentTask.torrentFiles?.length ?? 0;
+        final selectedCount = currentTask.torrentFiles
                 ?.where((f) => isTorrentFileSelected(f))
                 .length ??
             0;
@@ -1993,12 +1996,12 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => DetailsScreen(taskId: widget.task.id),
+                builder: (_) => DetailsScreen(taskId: currentTask.id),
               ),
             );
           },
           onLongPress: () =>
-              _showAdvancedControls(context, widget.task, settings),
+              _showAdvancedControls(context, currentTask, settings),
           child: ClipRect(
             child: Padding(
               padding: EdgeInsets.symmetric(
@@ -2042,9 +2045,9 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                                 children: [
                                   Expanded(
                                     child: Tooltip(
-                                      message: widget.task.fileName,
+                                      message: currentTask.fileName,
                                       child: Text(
-                                        widget.task.fileName,
+                                        currentTask.fileName,
                                         textDirection: TextDirection.ltr,
                                         style: AppTheme.dataStyle(
                                           isDark: isDark,
@@ -2056,10 +2059,10 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                                       ),
                                     ),
                                   ),
-                                  if (widget.task.siteDisplayName != null) ...[
+                                  if (currentTask.siteDisplayName != null) ...[
                                     const SizedBox(width: 4),
                                     _SiteBadge(
-                                      name: widget.task.siteDisplayName!,
+                                      name: currentTask.siteDisplayName!,
                                       isDark: isDark,
                                     ),
                                   ],
@@ -2072,12 +2075,12 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                                 children: [
                                   // FIX-UI-04: Show "Fetching metadata…" for magnets with fileSize == 0 and 0 downloaded bytes
                                   _StatusChip(
-                                    task: widget.task,
+                                    task: currentTask,
                                     isDark: isDark,
-                                    overrideLabel: (widget.task.isTorrent &&
-                                            widget.task.resolvedFileSize == 0 &&
-                                            widget.task.downloadedBytes == 0 &&
-                                            widget.task.status ==
+                                    overrideLabel: (currentTask.isTorrent &&
+                                            currentTask.resolvedFileSize == 0 &&
+                                            currentTask.downloadedBytes == 0 &&
+                                            currentTask.status ==
                                                 DownloadStatus.downloading)
                                         ? (isRtl
                                             ? 'جاري جلب البيانات…'
@@ -2111,13 +2114,13 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                             ],
                           ),
                         ),
-                        Column(children: [_ControlCluster(task: widget.task)]),
+                        Column(children: [_ControlCluster(task: currentTask)]),
                       ],
                     ),
                     const SizedBox(height: 8),
                     // Telemetry: downloaded / total / elapsed / remain / speed
                     _TelemetryStrip(
-                      task: widget.task,
+                      task: currentTask,
                       isDark: isDark,
                       accent: statusColor,
                       seedingUploadSpeed: stats.uploadSpeed,
@@ -2125,8 +2128,8 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                     const SizedBox(height: 8),
                     // Total progress + total percentage
                     Builder(builder: (context) {
-                      final files = widget.task.torrentFiles ?? [];
-                      final isChecking = widget.task.statusMessage
+                      final files = currentTask.torrentFiles ?? [];
+                      final isChecking = currentTask.statusMessage
                               ?.toLowerCase()
                               .contains('checking') ==
                           true; // FIX-B10: case-insensitive
@@ -2142,7 +2145,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                             (f['progressEstimated'] as bool?) ?? false;
                         final effectiveDownloaded = isChecking
                             ? downloaded
-                            : (widget.task.status == DownloadStatus.completed &&
+                            : (currentTask.status == DownloadStatus.completed &&
                                     selected
                                 ? length
                                 : downloaded);
@@ -2174,16 +2177,16 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                       // Fall back to the provider's known totalFileBytes when the local
                       // file list is empty (e.g. first tick after a session restore).
                       final hasTorrentFiles =
-                          widget.task.torrentFiles != null &&
-                              widget.task.torrentFiles!.isNotEmpty;
+                          currentTask.torrentFiles != null &&
+                              currentTask.torrentFiles!.isNotEmpty;
                       final effectiveTotalLen = totalLen > 0
                           ? totalLen
-                          : (!hasTorrentFiles && widget.task.fileSize > 0
-                              ? widget.task.fileSize
+                          : (!hasTorrentFiles && currentTask.fileSize > 0
+                              ? currentTask.fileSize
                               : 0);
                       final overallProgress =
-                          (effectiveTotalLen > 0 || widget.task.fileSize > 0)
-                              ? widget.task.torrentOverallPercent
+                          (effectiveTotalLen > 0 || currentTask.fileSize > 0)
+                              ? currentTask.torrentOverallPercent
                               : -1.0;
                       final pctLabel = overallProgress < 0
                           ? (totalDl > 0
@@ -2258,16 +2261,18 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                       );
                     }),
                     // Per-file percentages (isolated rebuild via dedicated StatefulWidget)
-                    if (fileCount > 0) ...[
+                    if (fileCount > 0 ||
+                        (isMagnet &&
+                            currentTask.status == DownloadStatus.downloading)) ...[
                       const SizedBox(height: 12),
                       _TorrentFileListSection(
-                        task: widget.task,
+                        task: currentTask,
                         isDark: isDark,
                         accent: statusColor,
                       ),
                     ],
                     // Seeding toggle once completed
-                    if (widget.task.status == DownloadStatus.completed) ...[
+                    if (currentTask.status == DownloadStatus.completed) ...[
                       const SizedBox(height: 10),
                       Divider(
                         color: isDark
@@ -2292,10 +2297,10 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                               weight: FontWeight.w600,
                             ),
                           ),
-                          if (widget.task.seedingEnabled) ...[
+                          if (currentTask.seedingEnabled) ...[
                             const SizedBox(width: 8),
                             Text(
-                              'Ratio: ${widget.task.seedingRatio.toStringAsFixed(2)}',
+                              'Ratio: ${currentTask.seedingRatio.toStringAsFixed(2)}',
                               style: AppTheme.dataStyle(
                                 isDark: isDark,
                                 size: 10,
@@ -2306,13 +2311,13 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                           ],
                           const Spacer(),
                           Switch(
-                            value: widget.task.seedingEnabled,
+                            value: currentTask.seedingEnabled,
                             onChanged: (val) {
                               triggerHaptic(settings);
                               context
                                   .read<DownloadProvider>()
                                   .updateTaskSeeding(
-                                    widget.task.id,
+                                    currentTask.id,
                                     enabled: val,
                                   );
                             },
@@ -2321,19 +2326,19 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                         ],
                       ),
                     ],
-                    if (widget.task.status == DownloadStatus.failed &&
-                        widget.task.errorMessage != null)
+                    if (currentTask.status == DownloadStatus.failed &&
+                        currentTask.errorMessage != null)
                       _NoticeRow(
-                        text: widget.task.errorMessage!,
+                        text: currentTask.errorMessage!,
                         color: statusColor,
                         icon: Icons.error_outline,
                         isDark: isDark,
                       ),
-                    if (widget.task.status == DownloadStatus.failed &&
-                        widget.task.recoveryHint != null &&
-                        widget.task.recoveryHint!.isNotEmpty)
+                    if (currentTask.status == DownloadStatus.failed &&
+                        currentTask.recoveryHint != null &&
+                        currentTask.recoveryHint!.isNotEmpty)
                       _RecoveryHintRow(
-                        text: widget.task.recoveryHint!,
+                        text: currentTask.recoveryHint!,
                         isDark: isDark,
                       ),
                   ],
@@ -2385,7 +2390,9 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
           if (p['downloadedBytes'] != n['downloadedBytes'] ||
               p['progressEstimated'] != n['progressEstimated'] ||
               p['progress'] != n['progress'] ||
-              p['selected'] != n['selected']) {
+              p['selected'] != n['selected'] ||
+              p['length'] != n['length'] ||
+              p['name'] != n['name']) {
             return true;
           }
         }
@@ -2393,10 +2400,46 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
       },
       builder: (context, dynamicTorrentFiles, _) {
         try {
-          final files = dynamicTorrentFiles ?? widget.task.torrentFiles ?? [];
+          final liveTask =
+              context.read<DownloadProvider>().taskById(widget.task.id) ??
+                  widget.task;
+          final files = dynamicTorrentFiles ?? liveTask.torrentFiles ?? [];
+          if (files.isEmpty) {
+            if (liveTask.status == DownloadStatus.downloading) {
+              final isRtl = L10n.isRtl(context);
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: widget.accent,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      isRtl
+                          ? 'جاري جلب ملفات وبيانات التورنت…'
+                          : 'Fetching torrent files & metadata…',
+                      style: AppTheme.microLabel(
+                        isDark: widget.isDark,
+                        color: widget.accent,
+                        size: 9,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          }
+
           final isChecking =
-              widget.task.statusMessage?.contains('checking') == true ||
-                  widget.task.statusMessage?.contains('Checking') ==
+              liveTask.statusMessage?.contains('checking') == true ||
+                  liveTask.statusMessage?.contains('Checking') ==
                       true; // FIX-B10
           final displayFiles = files.map((f) {
             final selected = isTorrentFileSelected(f);
@@ -2410,7 +2453,7 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
                     : (rawBytes < 0 ? 0 : rawBytes))
                 : (length > 0 ? rawBytes.clamp(0, length) : 0);
             final resolvedBytes =
-                (widget.task.status == DownloadStatus.completed && selected)
+                (liveTask.status == DownloadStatus.completed && selected)
                     ? length
                     : downloaded;
 
