@@ -7,7 +7,6 @@ import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/design/dmx_design.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../settings/provider/settings_provider.dart';
 
 class MediaQualitySheet extends StatefulWidget {
@@ -19,6 +18,8 @@ class MediaQualitySheet extends StatefulWidget {
     this.preloadedStreams,
   });
   static bool _isShowing = false;
+  static bool _hasSeenSilentVideoWarning = false;
+
   static Future<Map<String, dynamic>?> show(
     BuildContext context,
     String videoUrl, {
@@ -54,6 +55,8 @@ class MediaQualitySheet extends StatefulWidget {
 
 class _MediaQualitySheetState extends State<MediaQualitySheet> {
   List<Map<String, dynamic>> _streams = [];
+  List<Map<String, dynamic>> _memoizedVideos = [];
+  List<Map<String, dynamic>> _memoizedAudios = [];
   bool _isLoading = true;
   String? _errorMessage;
   int _selectedTabIndex = 0;
@@ -67,15 +70,131 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
         widget.preloadedStreams!.isNotEmpty) {
       _streams = widget.preloadedStreams!;
       _isLoading = false;
+      _processAndMemoizeStreams();
     } else {
       _fetchStreams();
     }
+  }
+
+  @override
+  void didUpdateWidget(covariant MediaQualitySheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.videoUrl != widget.videoUrl ||
+        oldWidget.preloadedStreams != widget.preloadedStreams) {
+      if (widget.preloadedStreams != null &&
+          widget.preloadedStreams!.isNotEmpty) {
+        _streams = widget.preloadedStreams!;
+        _isLoading = false;
+        _processAndMemoizeStreams();
+      } else {
+        _fetchStreams();
+      }
+    }
+  }
+
+  int _parseQuality(String q) {
+    final match = RegExp(r'(\d+)').firstMatch(q);
+    return match != null ? int.parse(match.group(1)!) : 0;
+  }
+
+  void _processAndMemoizeStreams() {
+    // Process audio streams
+    final audio = _streams.where((s) => s['type'] == 'audio').toList()
+      ..sort((a, b) {
+        final aSize = (a['size'] as num? ?? 0).toInt();
+        final bSize = (b['size'] as num? ?? 0).toInt();
+        return bSize.compareTo(aSize);
+      });
+
+    // Process video streams and combine with audio if needed
+    final rawVideos = _streams
+        .where((s) =>
+            s['type'] == 'video_only' ||
+            s['type'] == 'combined' ||
+            s['type'] == 'muxed')
+        .toList();
+
+    final Map<int, Map<String, dynamic>> videosByHeight = {};
+    for (final s in rawVideos) {
+      final qStr = s['quality'] as String? ?? '';
+      final h = _parseQuality(qStr);
+      final key = h > 0 ? h : rawVideos.indexOf(s);
+      if (!videosByHeight.containsKey(key)) {
+        videosByHeight[key] = Map<String, dynamic>.from(s);
+      } else {
+        final existing = videosByHeight[key]!;
+        final existingExt = (existing['ext'] as String? ?? '').toLowerCase();
+        final currentExt = (s['ext'] as String? ?? '').toLowerCase();
+        if (currentExt == 'mp4' && existingExt != 'mp4') {
+          videosByHeight[key] = Map<String, dynamic>.from(s);
+        } else if (existingExt == 'mp4' && currentExt != 'mp4') {
+          // Keep mp4
+        } else {
+          final existingSize = (existing['videoSize'] as num? ?? 0).toInt() > 0
+              ? (existing['videoSize'] as num).toInt()
+              : (existing['size'] as num? ?? 0).toInt();
+          final currentSize = (s['videoSize'] as num? ?? 0).toInt() > 0
+              ? (s['videoSize'] as num).toInt()
+              : (s['size'] as num? ?? 0).toInt();
+          if (currentSize > existingSize) {
+            videosByHeight[key] = Map<String, dynamic>.from(s);
+          }
+        }
+      }
+    }
+
+    final videoList = videosByHeight.entries.map((entry) {
+      final h = entry.key;
+      final v = entry.value;
+      final vType = v['type'] as String? ?? 'muxed';
+      if (audio.isNotEmpty &&
+          (vType == 'video_only' ||
+              v['audioSrc'] == null ||
+              v['audioSrc'].toString().isEmpty)) {
+        Map<String, dynamic> pairedAudio;
+        if (h >= 720) {
+          pairedAudio = audio.first;
+        } else if (h == 480) {
+          pairedAudio = audio[audio.length ~/ 2];
+        } else {
+          pairedAudio = audio.last;
+        }
+        final audioUrl = pairedAudio['src'] ??
+            pairedAudio['direct_url'] ??
+            pairedAudio['url'];
+        final aSize = (pairedAudio['size'] as num? ?? 0).toInt() > 0
+            ? (pairedAudio['size'] as num).toInt()
+            : (pairedAudio['audioSize'] as num? ?? 0).toInt();
+        final vSize = (v['videoSize'] as num? ?? 0).toInt() > 0
+            ? (v['videoSize'] as num).toInt()
+            : (v['size'] as num? ?? 0).toInt();
+        v['audioSrc'] = audioUrl?.toString();
+        v['videoSize'] = vSize;
+        v['audioSize'] = aSize;
+        v['size'] = vSize + aSize;
+        v['type'] = 'combined';
+        final qLabel = v['quality']?.toString() ?? '';
+        v['label'] = (v['label'] as String?)?.isNotEmpty == true
+            ? v['label']
+            : (qLabel.isNotEmpty ? '$qLabel MP4' : 'Video MP4');
+      }
+      return v;
+    }).toList()
+      ..sort((a, b) {
+        final aHeight = _parseQuality(a['quality'] as String? ?? '');
+        final bHeight = _parseQuality(b['quality'] as String? ?? '');
+        return bHeight.compareTo(aHeight);
+      });
+
+    _memoizedVideos = videoList;
+    _memoizedAudios = audio;
   }
 
   Future<void> _fetchStreams() async {
     debugPrint('[MediaQualitySheet] Fetching streams for: ${widget.videoUrl}');
     try {
       await YoutubeService.fetchCookiesFromWebView();
+      if (!mounted) return;
       final streams = await YoutubeService.getStreamsForAnyUrl(widget.videoUrl);
       debugPrint(
         '[MediaQualitySheet] Received ${streams?.length ?? 0} streams',
@@ -88,6 +207,8 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
           _errorMessage = L10n.isRtl(context)
               ? 'لم يتم العثور على بث لهذا الرابط.'
               : 'No streams found for this URL.';
+        } else {
+          _processAndMemoizeStreams();
         }
       });
     } catch (e, st) {
@@ -131,11 +252,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     }
   }
 
-  int _parseQuality(String q) {
-    final match = RegExp(r'(\d+)').firstMatch(q);
-    return match != null ? int.parse(match.group(1)!) : 0;
-  }
-
   IconData _iconForType(String type) {
     switch (type) {
       case 'muxed':
@@ -166,6 +282,25 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     }
   }
 
+  void _onScrollNotification(ScrollNotification notification) {
+    if (notification.metrics.pixels >=
+        notification.metrics.maxScrollExtent - 150) {
+      if (_selectedTabIndex == 0 &&
+          _displayedVideoCount < _memoizedVideos.length) {
+        setState(() {
+          _displayedVideoCount =
+              (_displayedVideoCount + 20).clamp(0, _memoizedVideos.length);
+        });
+      } else if (_selectedTabIndex == 1 &&
+          _displayedAudioCount < _memoizedAudios.length) {
+        setState(() {
+          _displayedAudioCount =
+              (_displayedAudioCount + 20).clamp(0, _memoizedAudios.length);
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
@@ -178,88 +313,13 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     final glassBorder =
         isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
     final panelBg = isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9);
-    final audio = _streams.where((s) => s['type'] == 'audio').toList()
-      ..sort((a, b) {
-        final aSize = (a['size'] as num? ?? 0).toInt();
-        final bSize = (b['size'] as num? ?? 0).toInt();
-        return bSize.compareTo(aSize);
-      });
-    final rawVideos = _streams
-        .where((s) =>
-            s['type'] == 'video_only' ||
-            s['type'] == 'combined' ||
-            s['type'] == 'muxed')
-        .toList();
-    final Map<int, Map<String, dynamic>> videosByHeight = {};
-    for (final s in rawVideos) {
-      final qStr = s['quality'] as String? ?? '';
-      final h = _parseQuality(qStr);
-      final key = h > 0 ? h : rawVideos.indexOf(s);
-      if (!videosByHeight.containsKey(key)) {
-        videosByHeight[key] = Map<String, dynamic>.from(s);
-      } else {
-        final existing = videosByHeight[key]!;
-        final existingExt = (existing['ext'] as String? ?? '').toLowerCase();
-        final currentExt = (s['ext'] as String? ?? '').toLowerCase();
-        if (currentExt == 'mp4' && existingExt != 'mp4') {
-          videosByHeight[key] = Map<String, dynamic>.from(s);
-        } else if (existingExt == 'mp4' && currentExt != 'mp4') {
-        } else {
-          final existingSize = (existing['videoSize'] as num? ?? 0).toInt() > 0
-              ? (existing['videoSize'] as num).toInt()
-              : (existing['size'] as num? ?? 0).toInt();
-          final currentSize = (s['videoSize'] as num? ?? 0).toInt() > 0
-              ? (s['videoSize'] as num).toInt()
-              : (s['size'] as num? ?? 0).toInt();
-          if (currentSize > existingSize) {
-            videosByHeight[key] = Map<String, dynamic>.from(s);
-          }
-        }
-      }
-    }
-    final videoList = videosByHeight.entries.map((entry) {
-      final h = entry.key;
-      final v = entry.value;
-      final vType = v['type'] as String? ?? 'muxed';
-      if (audio.isNotEmpty &&
-          (vType == 'video_only' ||
-              v['audioSrc'] == null ||
-              v['audioSrc'].toString().isEmpty)) {
-        Map<String, dynamic> pairedAudio;
-        if (h >= 720) {
-          pairedAudio = audio.first;
-        } else if (h == 480) {
-          pairedAudio = audio[audio.length ~/ 2];
-        } else {
-          pairedAudio = audio.last;
-        }
-        final audioUrl = pairedAudio['src'] ??
-            pairedAudio['direct_url'] ??
-            pairedAudio['url'];
-        final aSize = (pairedAudio['size'] as num? ?? 0).toInt() > 0
-            ? (pairedAudio['size'] as num).toInt()
-            : (pairedAudio['audioSize'] as num? ?? 0).toInt();
-        final vSize = (v['videoSize'] as num? ?? 0).toInt() > 0
-            ? (v['videoSize'] as num).toInt()
-            : (v['size'] as num? ?? 0).toInt();
-        v['audioSrc'] = audioUrl?.toString();
-        v['videoSize'] = vSize;
-        v['audioSize'] = aSize;
-        v['size'] = vSize + aSize;
-        v['type'] = 'combined';
-        final qLabel = v['quality']?.toString() ?? '';
-        v['label'] ??= qLabel.isNotEmpty ? '$qLabel MP4' : 'Video MP4';
-      }
-      return v;
-    }).toList()
-      ..sort((a, b) {
-        final aHeight = _parseQuality(a['quality'] as String? ?? '');
-        final bHeight = _parseQuality(b['quality'] as String? ?? '');
-        return bHeight.compareTo(aHeight);
-      });
+
+    final videoList = _memoizedVideos;
+    final audio = _memoizedAudios;
     final videoTitle = _streams.isNotEmpty
         ? (_streams.first['title'] as String? ?? 'Media')
         : 'Media';
+
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.7,
@@ -268,354 +328,360 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
       builder: (context, scrollController) {
         return ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          child: DmxBackdropFilter(
-            sigmaX: 15,
-            sigmaY: 15,
-            child: Container(
-              decoration: BoxDecoration(
-                color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                    .withValues(alpha: 0.95),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
-                border: Border(
-                  top: BorderSide(
-                    color: accent.withValues(alpha: 0.4),
-                    width: 1.2,
-                  ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF13141F) : const Color(0xFFFAFBFD),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+              border: Border(
+                top: BorderSide(
+                  color: accent.withValues(alpha: 0.4),
+                  width: 1.2,
                 ),
               ),
-              child: Column(
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(top: 12, bottom: 8),
-                      decoration: BoxDecoration(
-                        color: mutedClr.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+            ),
+            child: Column(
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(top: 12, bottom: 8),
+                    decoration: BoxDecoration(
+                      color: mutedClr.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  Padding(
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 6,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: accent.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.play_circle_filled,
+                          color: accent,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              L10n.of(context, 'yt_video_quality'),
+                              style: TextStyle(
+                                color: accent,
+                                fontFamily: 'Space Grotesk',
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.0,
+                                fontSize: 14,
+                              ),
+                            ),
+                            if (!_isLoading && _streams.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 3),
+                                child: Text(
+                                  videoTitle,
+                                  style: TextStyle(
+                                    color: secClr,
+                                    fontSize: 11,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: _isLoading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                Icons.refresh_rounded,
+                                color: accent,
+                                size: 20,
+                              ),
+                        tooltip: L10n.of(context, 'retry_btn'),
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                setState(() {
+                                  _isLoading = true;
+                                  _errorMessage = null;
+                                  _streams = [];
+                                  _memoizedVideos = [];
+                                  _memoizedAudios = [];
+                                });
+                                _fetchStreams();
+                              },
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 6,
+                  ),
+                  child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
+                      horizontal: 10,
                       vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.3),
+                        width: 0.8,
+                      ),
                     ),
                     child: Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: accent.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Icon(
-                            Icons.play_circle_filled,
-                            color: accent,
-                            size: 22,
-                          ),
+                        const Icon(
+                          Icons.gavel_rounded,
+                          size: 14,
+                          color: Colors.amber,
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                L10n.of(context, 'yt_video_quality'),
-                                style: TextStyle(
-                                  color: accent,
-                                  fontFamily: 'Space Grotesk',
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.0,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              if (!_isLoading && _streams.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 3),
-                                  child: Text(
-                                    videoTitle,
-                                    style: TextStyle(
-                                      color: secClr,
-                                      fontSize: 11,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                            ],
+                          child: Text(
+                            L10n.of(context, 'yt_legal_warning'),
+                            style: TextStyle(color: secClr, fontSize: 10),
                           ),
-                        ),
-                        IconButton(
-                          icon: _isLoading
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Icon(
-                                  Icons.refresh_rounded,
-                                  color: accent,
-                                  size: 20,
-                                ),
-                          tooltip: L10n.of(context, 'retry_btn'),
-                          onPressed: _isLoading
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _isLoading = true;
-                                    _errorMessage = null;
-                                    _streams = [];
-                                  });
-                                  _fetchStreams();
-                                },
                         ),
                       ],
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 6,
+                ),
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 4,
+                  ),
+                  child: Container(
+                    height: 42,
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: panelBg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: glassBorder, width: 0.8),
                     ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: Colors.amber.withValues(alpha: 0.3),
-                          width: 0.8,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.gavel_rounded,
-                            size: 14,
-                            color: Colors.amber,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              L10n.of(context, 'yt_legal_warning'),
-                              style: TextStyle(color: secClr, fontSize: 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => setState(() => _selectedTabIndex = 0),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              curve: Curves.easeOut,
+                              decoration: BoxDecoration(
+                                color: _selectedTabIndex == 0
+                                    ? accent.withValues(alpha: 0.14)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(9),
+                                border: _selectedTabIndex == 0
+                                    ? Border.all(
+                                        color: accent.withValues(alpha: 0.4),
+                                      )
+                                    : null,
+                              ),
+                              child: Center(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.videocam_rounded,
+                                      size: 14,
+                                      color: _selectedTabIndex == 0
+                                          ? accent
+                                          : secClr,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      L10n.of(context, 'video_label'),
+                                      style: TextStyle(
+                                        color: _selectedTabIndex == 0
+                                            ? accent
+                                            : secClr,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => setState(() => _selectedTabIndex = 1),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              curve: Curves.easeOut,
+                              decoration: BoxDecoration(
+                                color: _selectedTabIndex == 1
+                                    ? green.withValues(alpha: 0.14)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(9),
+                                border: _selectedTabIndex == 1
+                                    ? Border.all(
+                                        color: green.withValues(alpha: 0.4),
+                                      )
+                                    : null,
+                              ),
+                              child: Center(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.audiotrack_rounded,
+                                      size: 14,
+                                      color: _selectedTabIndex == 1
+                                          ? green
+                                          : secClr,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      L10n.of(context, 'audio_label'),
+                                      style: TextStyle(
+                                        color: _selectedTabIndex == 1
+                                            ? green
+                                            : secClr,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (_isLoading)
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            L10n.of(context, 'fetching_streams'),
+                            style: const TextStyle(fontSize: 12),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 4,
-                    ),
-                    child: Container(
-                      height: 42,
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: panelBg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: glassBorder, width: 0.8),
-                      ),
-                      child: LayoutBuilder(
-                        builder: (_, c) {
-                          final half = c.maxWidth / 2;
-                          return Stack(
-                            children: [
-                              AnimatedPositioned(
-                                duration: const Duration(milliseconds: 220),
-                                curve: Curves.easeOutCubic,
-                                left: _selectedTabIndex == 0 ? 3 : half,
-                                top: 3,
-                                bottom: 3,
-                                width: half - 6,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: (_selectedTabIndex == 0
-                                            ? accent
-                                            : green)
-                                        .withValues(alpha: 0.14),
-                                    borderRadius: BorderRadius.circular(9),
-                                    border: Border.all(
-                                      color: (_selectedTabIndex == 0
-                                              ? accent
-                                              : green)
-                                          .withValues(alpha: 0.4),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () =>
-                                          setState(() => _selectedTabIndex = 0),
-                                      child: Center(
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.videocam_rounded,
-                                              size: 14,
-                                              color: _selectedTabIndex == 0
-                                                  ? accent
-                                                  : secClr,
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              L10n.of(context, 'video_label'),
-                                              style: TextStyle(
-                                                color: _selectedTabIndex == 0
-                                                    ? accent
-                                                    : secClr,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 11,
-                                                letterSpacing: 0.5,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.opaque,
-                                      onTap: () =>
-                                          setState(() => _selectedTabIndex = 1),
-                                      child: Center(
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.audiotrack_rounded,
-                                              size: 14,
-                                              color: _selectedTabIndex == 1
-                                                  ? green
-                                                  : secClr,
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              L10n.of(context, 'audio_label'),
-                                              style: TextStyle(
-                                                color: _selectedTabIndex == 1
-                                                    ? green
-                                                    : secClr,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 11,
-                                                letterSpacing: 0.5,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (_isLoading)
-                    Expanded(
-                      child: Center(
+                  )
+                else if (_errorMessage != null)
+                  Expanded(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const SizedBox(
-                              width: 28,
-                              height: 28,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                              ),
+                            Icon(
+                              Icons.error_outline,
+                              color: isDark
+                                  ? AppTheme.neonRed
+                                  : AppTheme.lightNeonRed,
+                              size: 40,
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 12),
                             Text(
-                              L10n.of(context, 'fetching_streams'),
-                              style: const TextStyle(fontSize: 12),
+                              _errorMessage!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: secClr, fontSize: 12),
+                            ),
+                            const SizedBox(height: 20),
+                            TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _isLoading = true;
+                                  _errorMessage = null;
+                                  _streams = [];
+                                  _memoizedVideos = [];
+                                  _memoizedAudios = [];
+                                });
+                                _fetchStreams();
+                              },
+                              icon: Icon(
+                                Icons.refresh_rounded,
+                                size: 16,
+                                color: accent,
+                              ),
+                              label: Text(
+                                L10n.of(context, 'retry_btn'),
+                                style: TextStyle(
+                                  color: accent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    )
-                  else if (_errorMessage != null)
-                    Expanded(
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.error_outline,
-                                color: isDark
-                                    ? AppTheme.neonRed
-                                    : AppTheme.lightNeonRed,
-                                size: 40,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                _errorMessage!,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: secClr, fontSize: 12),
-                              ),
-                              const SizedBox(height: 20),
-                              TextButton.icon(
-                                onPressed: () {
-                                  setState(() {
-                                    _isLoading = true;
-                                    _errorMessage = null;
-                                    _streams = [];
-                                  });
-                                  _fetchStreams();
-                                },
-                                icon: Icon(
-                                  Icons.refresh_rounded,
-                                  size: 16,
-                                  color: accent,
-                                ),
-                                label: Text(
-                                  L10n.of(context, 'retry_btn'),
-                                  style: TextStyle(
-                                    color: accent,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.0,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: ListView(
-                        controller: scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        children: [
-                          if (_selectedTabIndex == 0) ...[
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: (notification) {
+                        _onScrollNotification(notification);
+                        return false;
+                      },
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        transitionBuilder: (child, animation) =>
+                            FadeTransition(opacity: animation, child: child),
+                        child: ListView(
+                          key: ValueKey<int>(_selectedTabIndex),
+                          controller: scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          children: [
+                            if (_selectedTabIndex == 0) ...[
                             if (videoList.isNotEmpty) ...[
                               _sectionHeader(
                                 context,
@@ -627,32 +693,10 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                                 isDark,
                                 trailing: _recommendBadge(isDark),
                               ),
-                              // FIX-P2-06: Paginate video streams (first 20, load more)
                               ...videoList.take(_displayedVideoCount).map(
                                     (s) => _streamTile(
                                         context, s, isDark, settings),
                                   ),
-                              if (videoList.length > _displayedVideoCount)
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 8),
-                                  child: Center(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () {
-                                        setState(() {
-                                          _displayedVideoCount += 20;
-                                        });
-                                      },
-                                      icon: const Icon(
-                                          Icons.expand_more_rounded,
-                                          size: 18),
-                                      label: Text(
-                                        'Load more (${videoList.length - _displayedVideoCount} remaining)',
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                  ),
-                                ),
                               const SizedBox(height: 12),
                             ],
                             if (videoList.isEmpty)
@@ -677,32 +721,10 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                                 green,
                                 isDark,
                               ),
-                              // FIX-P2-06: Paginate audio streams (first 20, load more)
                               ...audio.take(_displayedAudioCount).map(
                                     (s) => _streamTile(
                                         context, s, isDark, settings),
                                   ),
-                              if (audio.length > _displayedAudioCount)
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 8),
-                                  child: Center(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () {
-                                        setState(() {
-                                          _displayedAudioCount += 20;
-                                        });
-                                      },
-                                      icon: const Icon(
-                                          Icons.expand_more_rounded,
-                                          size: 18),
-                                      label: Text(
-                                        'Load more (${audio.length - _displayedAudioCount} remaining)',
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                    ),
-                                  ),
-                                ),
                               const SizedBox(height: 12),
                             ],
                             if (audio.isEmpty)
@@ -723,8 +745,9 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                         ],
                       ),
                     ),
-                ],
-              ),
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -847,17 +870,22 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
             final hasAudio = stream['audioSrc'] != null &&
                 stream['audioSrc'].toString().isNotEmpty;
             if (type == 'video_only' && !hasAudio) {
-              final confirm = await _showConfirmDialog(
-                context: context,
-                title: L10n.isRtl(context)
-                    ? 'تنبيه فيديو بدون صوت'
-                    : 'Silent Video Warning',
-                content: L10n.isRtl(context)
-                    ? 'هذا الملف يحتوي على الفيديو فقط وبدون صوت. هل تريد المتابعة؟'
-                    : 'This file contains only video and has no audio. Do you want to proceed?',
-              );
-              if (!confirm || !context.mounted) return;
-              Navigator.pop(context, stream);
+              if (!MediaQualitySheet._hasSeenSilentVideoWarning) {
+                final confirm = await _showConfirmDialog(
+                  context: context,
+                  title: L10n.isRtl(context)
+                      ? 'تنبيه فيديو بدون صوت'
+                      : 'Silent Video Warning',
+                  content: L10n.isRtl(context)
+                      ? 'هذا الملف يحتوي على الفيديو فقط وبدون صوت. هل تريد المتابعة؟'
+                      : 'This file contains only video and has no audio. Do you want to proceed?',
+                );
+                if (!confirm || !context.mounted) return;
+                MediaQualitySheet._hasSeenSilentVideoWarning = true;
+              }
+              if (context.mounted) {
+                Navigator.pop(context, stream);
+              }
             } else {
               Navigator.pop(context, stream);
             }

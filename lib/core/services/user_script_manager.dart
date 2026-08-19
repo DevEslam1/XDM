@@ -4,6 +4,8 @@ import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../domain/repositories/script_repository.dart';
+
 enum ScriptPermission {
   domRead,
   domWrite,
@@ -85,7 +87,7 @@ class UserScript {
   }
 }
 
-class UserScriptManager extends ChangeNotifier {
+class UserScriptManager extends ChangeNotifier implements ScriptRepository {
   static const _storeKey = 'browser_user_scripts';
   static final _log = LoggingService.logger('UserScriptManager');
 
@@ -101,9 +103,11 @@ class UserScriptManager extends ChangeNotifier {
   List<UserScript> _scripts = [];
   bool _loaded = false;
 
+  @override
   List<UserScript> get scripts => List.unmodifiable(_scripts);
   bool get isLoaded => _loaded;
 
+  @override
   Future<void> load() async {
     if (_loaded) return;
     final prefs = await SharedPreferences.getInstance();
@@ -261,6 +265,7 @@ class UserScriptManager extends ChangeNotifier {
     }
   }
 
+  @override
   Future<void> add(UserScript script) async {
     _validateScript(script);
     _scripts.add(script);
@@ -268,6 +273,7 @@ class UserScriptManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
   Future<void> update(UserScript script) async {
     _validateScript(script);
     final index = _scripts.indexWhere((s) => s.id == script.id);
@@ -284,6 +290,10 @@ class UserScriptManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
+  Future<void> delete(String id) => remove(id);
+
+  @override
   Future<void> toggle(String id, bool enabled) async {
     final index = _scripts.indexWhere((s) => s.id == id);
     if (index >= 0) {
@@ -299,6 +309,7 @@ class UserScriptManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
   List<UserScript> scriptsForUrl(String url) {
     if (url.isEmpty) return const [];
     return _scripts

@@ -7,7 +7,6 @@ import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/url_utils.dart';
 import '../../../shared/mixins/pausable_loop_animation.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
@@ -101,7 +100,7 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
 
   late final AnimationController _pulse = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1400),
+    duration: const Duration(milliseconds: 2200),
   );
 
   @override
@@ -110,7 +109,9 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
   @override
   void initState() {
     super.initState();
-    startPausableLoop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) startPausableLoop();
+    });
   }
 
   @override
@@ -203,31 +204,27 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
       textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
       child: ClipRRect(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        child: DmxBackdropFilter(
-          sigmaX: 15,
-          sigmaY: 15,
-          child: Container(
-            decoration: BoxDecoration(
-              color: (isDark
-                      ? (settings.isAmoledMode
-                          ? AppTheme.amoledSurface
-                          : AppTheme.surface)
-                      : AppTheme.lightSurface)
-                  .withValues(alpha: settings.isAmoledMode ? 1.0 : 0.92),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-              border: Border(
-                top: BorderSide(
-                    color: isDark && settings.isAmoledMode
-                        ? AppTheme.amoledBorder
-                        : accent.withValues(alpha: 0.4),
-                    width: 1),
-              ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark
+                ? (settings.isAmoledMode
+                    ? AppTheme.amoledSurface
+                    : AppTheme.surface)
+                : AppTheme.lightSurface,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(28),
             ),
-            child: SafeArea(
-              top: false,
-              child: Padding(
+            border: Border(
+              top: BorderSide(
+                  color: isDark && settings.isAmoledMode
+                      ? AppTheme.amoledBorder
+                      : accent.withValues(alpha: 0.4),
+                  width: 1),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
                 // FIX-M10: Include keyboard padding to prevent layout overflow
                 padding: EdgeInsets.fromLTRB(
                   20,
@@ -269,15 +266,16 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
                                 boxShadow: settings.enableGlow
                                     ? [
                                         BoxShadow(
-                                          color: accent.withValues(
-                                            alpha: 0.15 + _pulse.value * 0.2,
-                                          ),
-                                          blurRadius: 12,
+                                          color: accent.withValues(alpha: 0.18),
+                                          blurRadius: 10,
                                         ),
                                       ]
                                     : null,
                               ),
-                              child: Icon(_icon, color: accent, size: 22),
+                              child: Opacity(
+                                opacity: (0.7 + _pulse.value * 0.3).clamp(0.0, 1.0),
+                                child: Icon(_icon, color: accent, size: 22),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -396,6 +394,15 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
                                             ),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          isRtl ? 'الحجم: غير معروف' : 'Size: Unknown',
+                                          style: TextStyle(
+                                            color: muted,
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                         ),
                                       ],
@@ -567,8 +574,7 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   Future<void> _startDownload(
@@ -627,7 +633,7 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
             isDarkMode: isDark,
           );
         }
-        if (context.mounted) Navigator.pop(context);
+        Navigator.of(context).pop();
         return;
       }
 
@@ -707,7 +713,9 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
         );
       }
     } finally {
-      _isSubmitting = false;
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
     if (context.mounted) Navigator.pop(context);
   }

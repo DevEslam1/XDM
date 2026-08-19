@@ -9,8 +9,6 @@ import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
-import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../downloads/models/download_task.dart';
@@ -71,13 +69,23 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   String? _note;
   String _qualityPreset = 'best_combined';
   String _searchQuery = '';
+  List<Map<String, dynamic>> _cachedFilteredVideos = const [];
+  bool _filterCacheDirty = true;
+
   List<Map<String, dynamic>> get _filteredVideos {
-    if (_searchQuery.isEmpty) return _videos;
-    final query = _searchQuery.toLowerCase();
-    return _videos.where((v) {
-      final title = (v['title'] as String? ?? '').toLowerCase();
-      return title.contains(query);
-    }).toList();
+    if (_filterCacheDirty) {
+      if (_searchQuery.isEmpty) {
+        _cachedFilteredVideos = _videos;
+      } else {
+        final query = _searchQuery.toLowerCase();
+        _cachedFilteredVideos = _videos.where((v) {
+          final title = (v['title'] as String? ?? '').toLowerCase();
+          return title.contains(query);
+        }).toList();
+      }
+      _filterCacheDirty = false;
+    }
+    return _cachedFilteredVideos;
   }
 
   static const List<Map<String, String>> _qualityOptions = [
@@ -120,6 +128,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
         _hasMoreVideos = videos.isNotEmpty;
         _nextPageToken = details?['nextPageToken'];
         _isLoadingMore = false;
+        _filterCacheDirty = true;
       });
     } catch (e) {
       if (!mounted) return;
@@ -149,6 +158,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
         _isLoading = false;
         _nextPageToken = details?['nextPageToken'];
         _hasMoreVideos = _nextPageToken != null || videos.length >= 50;
+        _filterCacheDirty = true;
         if (videos.isEmpty && info != null) {
           final count = info['videoCount'] as int? ?? 0;
           if (count > 0) {
@@ -181,6 +191,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
           _videos[idx] = {..._videos[idx], 'selected': selected};
         }
       }
+      _filterCacheDirty = true;
     });
   }
 
@@ -295,20 +306,16 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       builder: (context, scrollController) {
         return ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          child: DmxBackdropFilter(
-            sigmaX: 15,
-            sigmaY: 15,
-            child: Container(
-              decoration: BoxDecoration(
-                color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                    .withValues(alpha: 0.95),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
-                border: Border(top: BorderSide(color: glassBorder, width: 0.8)),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
               ),
-              child: Column(
-                children: [
+              border: Border(top: BorderSide(color: glassBorder, width: 0.8)),
+            ),
+            child: Column(
+              children: [
                   Center(
                     child: Container(
                       width: 40,
@@ -683,87 +690,135 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                             final author = video['author'] as String? ?? '';
                             final thumbnailUrl =
                                 video['thumbnailUrl'] as String?;
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 6),
-                              child: GlassCard.listItem(
-                                borderRadius: 14,
-                                padding: EdgeInsets.zero,
-                                isDarkMode: isDark,
-                                child: Material(
-                                  color: Colors.transparent,
-                                  borderRadius: BorderRadius.circular(14),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(14),
-                                    onTap: () {
-                                      runHaptic(settings);
-                                      final originalIndex = _videos.indexOf(
-                                        video,
-                                      );
-                                      if (originalIndex != -1) {
-                                        setState(() {
-                                          _videos[originalIndex] = {
-                                            ...video,
-                                            'selected': !isSelected,
-                                          };
-                                        });
-                                      }
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 8,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          SizedBox(
-                                            width: 24,
-                                            height: 24,
-                                            child: Checkbox(
-                                              value: isSelected,
-                                              activeColor: accent,
-                                              side: BorderSide(
-                                                color: glassBorder,
-                                                width: 0.8,
-                                              ),
-                                              onChanged: (val) {
-                                                if (val != null) {
-                                                  final originalIndex =
-                                                      _videos.indexOf(video);
-                                                  if (originalIndex != -1) {
-                                                    setState(() {
-                                                      _videos[originalIndex] = {
-                                                        ...video,
-                                                        'selected': val,
-                                                      };
-                                                    });
+                            return RepaintBoundary(
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  decoration: BoxDecoration(
+                                    color: (isDark
+                                            ? AppTheme.background
+                                            : AppTheme.lightBackground)
+                                        .withValues(
+                                      alpha: isSelected ? 0.6 : 0.2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? accent.withValues(alpha: 0.3)
+                                          : glassBorder.withValues(alpha: 0.4),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(12),
+                                      onTap: () {
+                                        final originalIndex =
+                                            _videos.indexOf(video);
+                                        if (originalIndex != -1) {
+                                          setState(() {
+                                            _videos[originalIndex] = {
+                                              ...video,
+                                              'selected': !isSelected,
+                                            };
+                                          });
+                                        }
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 8,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            SizedBox(
+                                              width: 24,
+                                              height: 24,
+                                              child: Checkbox(
+                                                value: isSelected,
+                                                activeColor: accent,
+                                                side: BorderSide(
+                                                  color: glassBorder,
+                                                  width: 0.8,
+                                                ),
+                                                onChanged: (val) {
+                                                  if (val != null) {
+                                                    final originalIndex =
+                                                        _videos.indexOf(video);
+                                                    if (originalIndex != -1) {
+                                                      setState(() {
+                                                        _videos[originalIndex] = {
+                                                          ...video,
+                                                          'selected': val,
+                                                        };
+                                                      });
+                                                    }
                                                   }
-                                                }
-                                              },
+                                                },
+                                              ),
                                             ),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                            child: SizedBox(
-                                              width: 72,
-                                              height: 42,
-                                              child: thumbnailUrl != null &&
-                                                      thumbnailUrl.isNotEmpty
-                                                  ? CachedNetworkImage(
-                                                      imageUrl: thumbnailUrl
-                                                              .startsWith('//')
-                                                          ? 'https:$thumbnailUrl'
-                                                          : thumbnailUrl,
-                                                      fit: BoxFit.cover,
-                                                      memCacheWidth: 144,
-                                                      placeholder: (
-                                                        context,
-                                                        url,
-                                                      ) =>
-                                                          Container(
+                                            const SizedBox(width: 10),
+                                            ClipRRect(
+                                              borderRadius: BorderRadius.circular(
+                                                8,
+                                              ),
+                                              child: SizedBox(
+                                                width: 72,
+                                                height: 42,
+                                                child: thumbnailUrl != null &&
+                                                        thumbnailUrl.isNotEmpty
+                                                    ? CachedNetworkImage(
+                                                        imageUrl: thumbnailUrl
+                                                                .startsWith('//')
+                                                            ? 'https:$thumbnailUrl'
+                                                            : thumbnailUrl,
+                                                        fit: BoxFit.cover,
+                                                        memCacheWidth: 144,
+                                                        memCacheHeight: 84,
+                                                        placeholder: (
+                                                          context,
+                                                          url,
+                                                        ) =>
+                                                            Container(
+                                                          color: (isDark
+                                                                  ? AppTheme
+                                                                      .background
+                                                                  : AppTheme
+                                                                      .lightBackground)
+                                                              .withValues(
+                                                            alpha: 0.6,
+                                                          ),
+                                                          child: Icon(
+                                                            Icons
+                                                                .play_circle_outline,
+                                                            color: mutedClr,
+                                                            size: 24,
+                                                          ),
+                                                        ),
+                                                        errorWidget: (
+                                                          context,
+                                                          url,
+                                                          error,
+                                                        ) =>
+                                                            Container(
+                                                          color: (isDark
+                                                                  ? AppTheme
+                                                                      .background
+                                                                  : AppTheme
+                                                                      .lightBackground)
+                                                              .withValues(
+                                                            alpha: 0.6,
+                                                          ),
+                                                          child: Icon(
+                                                            Icons
+                                                                .play_circle_outline,
+                                                            color: mutedClr,
+                                                            size: 24,
+                                                          ),
+                                                        ),
+                                                      )
+                                                    : Container(
                                                         color: (isDark
                                                                 ? AppTheme
                                                                     .background
@@ -779,46 +834,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                                           size: 24,
                                                         ),
                                                       ),
-                                                      errorWidget: (
-                                                        context,
-                                                        url,
-                                                        error,
-                                                      ) =>
-                                                          Container(
-                                                        color: (isDark
-                                                                ? AppTheme
-                                                                    .background
-                                                                : AppTheme
-                                                                    .lightBackground)
-                                                            .withValues(
-                                                          alpha: 0.6,
-                                                        ),
-                                                        child: Icon(
-                                                          Icons
-                                                              .play_circle_outline,
-                                                          color: mutedClr,
-                                                          size: 24,
-                                                        ),
-                                                      ),
-                                                    )
-                                                  : Container(
-                                                      color: (isDark
-                                                              ? AppTheme
-                                                                  .background
-                                                              : AppTheme
-                                                                  .lightBackground)
-                                                          .withValues(
-                                                        alpha: 0.6,
-                                                      ),
-                                                      child: Icon(
-                                                        Icons
-                                                            .play_circle_outline,
-                                                        color: mutedClr,
-                                                        size: 24,
-                                                      ),
-                                                    ),
+                                              ),
                                             ),
-                                          ),
                                           const SizedBox(width: 10),
                                           Expanded(
                                             child: Column(
@@ -1030,6 +1047,19 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                               color: accent,
                               glowColor: accent,
                             ),
+                            if (_selectedCount == 0)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  L10n.isRtl(context)
+                                      ? 'يرجى تحديد فيديو واحد على الأقل للتحميل'
+                                      : 'Select at least 1 video to start download',
+                                  style: TextStyle(
+                                    color: mutedClr,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -1038,9 +1068,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                 ],
               ),
             ),
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
+    }
   }
-}

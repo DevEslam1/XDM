@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:code_text_field/code_text_field.dart';
 import 'package:flutter/material.dart';
 import 'package:highlight/languages/css.dart';
@@ -31,18 +33,25 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
   List<UserScript> _filteredScriptsCache = const [];
   bool _cacheNeedsRebuild = true;
 
+  Timer? _searchDebounce;
+
   @override
   void initState() {
     super.initState();
     _manager.addListener(_onManagerChanged);
     _manager.load();
     _searchController.addListener(() {
-      if (mounted) {
-        setState(() {
-          _searchQuery = _searchController.text.trim().toLowerCase();
-          _cacheNeedsRebuild = true;
-        });
-      }
+      _searchDebounce?.cancel();
+      _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+        if (!mounted) return;
+        final query = _searchController.text.trim().toLowerCase();
+        if (_searchQuery != query) {
+          setState(() {
+            _searchQuery = query;
+            _cacheNeedsRebuild = true;
+          });
+        }
+      });
     });
   }
 
@@ -56,6 +65,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen>
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _manager.removeListener(_onManagerChanged);
     _searchController.dispose();
     super.dispose();

@@ -55,13 +55,21 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
     super.dispose();
   }
 
+  Set<String> _existingFoldersCache = const {};
+
   Future<void> _load() async {
     try {
       final db = context.read<DatabaseService>();
       final bms = await db.loadBookmarks(searchQuery: _searchQuery);
       if (!mounted) return;
+      final folders = bms
+          .map((b) => b.folder?.trim())
+          .where((f) => f != null && f.isNotEmpty)
+          .cast<String>()
+          .toSet();
       setState(() {
         _bookmarks = bms;
+        _existingFoldersCache = folders;
         _isLoading = false;
       });
     } catch (e) {
@@ -70,19 +78,14 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
       if (mounted) {
         setState(() {
           _bookmarks = [];
+          _existingFoldersCache = const {};
           _isLoading = false;
         });
       }
     }
   }
 
-  Set<String> get _existingFolders {
-    return _bookmarks
-        .map((b) => b.folder?.trim())
-        .where((f) => f != null && f.isNotEmpty)
-        .cast<String>()
-        .toSet();
-  }
+  Set<String> get _existingFolders => _existingFoldersCache;
 
   Future<void> _addBookmarkDialog() async {
     final result = await showDialog<_AddBookmarkResult>(
@@ -297,41 +300,21 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
-                                width: 100,
-                                height: 100,
+                                width: 84,
+                                height: 84,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      accent.withValues(alpha: 0.2),
-                                      accent.withValues(alpha: 0.05),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
+                                  color: accent.withValues(alpha: 0.1),
+                                  border: Border.all(
+                                    color: accent.withValues(alpha: 0.25),
+                                    width: 1,
                                   ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: accent.withValues(alpha: 0.15),
-                                      blurRadius: 20,
-                                      spreadRadius: 2,
-                                    ),
-                                  ],
                                 ),
                                 child: Center(
-                                  child: Stack(
-                                    alignment: Alignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.star_rounded,
-                                        size: 48,
-                                        color: accent.withValues(alpha: 0.4),
-                                      ),
-                                      Icon(
-                                        Icons.bookmarks_rounded,
-                                        size: 36,
-                                        color: accent,
-                                      ),
-                                    ],
+                                  child: Icon(
+                                    Icons.bookmarks_rounded,
+                                    size: 38,
+                                    color: accent,
                                   ),
                                 ),
                               ),

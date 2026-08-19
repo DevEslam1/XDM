@@ -153,6 +153,7 @@ class MediaSniffer extends ChangeNotifier {
       return;
     }
     mediaScanTimers[tab.id] = Timer(const Duration(milliseconds: 800), () {
+      mediaScanTimers.remove(tab.id);
       scanPageMedia(tab, tabs: tabs ?? [tab]);
     });
   }

@@ -91,8 +91,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   task.url.toLowerCase().contains(_searchQuery.toLowerCase());
             }).toList();
 
-            return GeometricGridBackground(
-              child: Scaffold(
+            return RepaintBoundary(
+              child: GeometricGridBackground(
+                child: Scaffold(
                 backgroundColor: Colors.transparent,
                 appBar: AppBar(
                   backgroundColor: isDark
@@ -348,12 +349,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ),
                 ),
               ),
-            );
-          },
-        );
-      },
-    );
-  }
+            ),
+          );
+        },
+      );
+    },
+  );
+}
 
   Widget _buildEmptyState(
     BuildContext context,

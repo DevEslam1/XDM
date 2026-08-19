@@ -422,11 +422,13 @@ class CategoriesScreen extends StatelessWidget {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    PieChart(
-                      PieChartData(
-                        sections: sections,
-                        centerSpaceRadius: 28,
-                        sectionsSpace: 2.5,
+                    RepaintBoundary(
+                      child: PieChart(
+                        PieChartData(
+                          sections: sections,
+                          centerSpaceRadius: 28,
+                          sectionsSpace: 2.5,
+                        ),
                       ),
                     ),
                     FittedBox(

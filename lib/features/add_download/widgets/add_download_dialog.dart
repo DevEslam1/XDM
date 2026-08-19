@@ -159,7 +159,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       vsync: this,
       duration: const Duration(milliseconds: 2200),
     );
-    startPausableLoop();
+    _urlFocus.addListener(_updateScanAnimation);
     final settings = context.read<SettingsProvider>();
     if (_threadsList.contains(settings.defaultThreadCount)) {
       _selectedThreads = settings.defaultThreadCount;
@@ -291,8 +291,19 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     }
   }
 
+  void _updateScanAnimation() {
+    if (!mounted) return;
+    final isDark = context.read<SettingsProvider>().isDarkMode;
+    if (_urlFocus.hasFocus && isDark) {
+      startPausableLoop();
+    } else {
+      stopPausableLoop();
+    }
+  }
+
   @override
   void dispose() {
+    _urlFocus.removeListener(_updateScanAnimation);
     _urlController.removeListener(_onUrlChanged);
     _urlController.dispose();
     _referrerController.dispose();
@@ -375,15 +386,19 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   }
 
   Future<void> _resolveLinkMetadata() async {
+    final settings = context.read<SettingsProvider>();
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+
     final url = _urlController.text.trim();
     if (url.isEmpty) {
       ThemedSnackbar.show(
         context,
         message:
-            L10n.isRtl(context) ? 'أدخل الرابط أولاً' : 'Enter a URL first',
+            isRtl ? 'أدخل الرابط أولاً' : 'Enter a URL first',
         color: AppTheme.neonRed,
         icon: Icons.error_outline,
-        isDarkMode: context.read<SettingsProvider>().isDarkMode,
+        isDarkMode: isDark,
       );
       return;
     }
@@ -393,8 +408,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         final choice = await showDialog<String>(
           context: context,
           builder: (ctx) {
-            final isDark = context.read<SettingsProvider>().isDarkMode;
-            final isRtl = L10n.isRtl(context);
             return AlertDialog(
               backgroundColor:
                   isDark ? AppTheme.surface : AppTheme.lightSurface,
@@ -447,17 +460,16 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         if (choice == 'playlist') {
           final result = await YoutubePlaylistSheet.show(context, url);
           if (result != null && mounted) {
-            final isDark = context.read<SettingsProvider>().isDarkMode;
             ThemedSnackbar.show(
               context,
-              message: L10n.isRtl(context)
+              message: isRtl
                   ? 'تم إضافة ${result.selectedVideos.length} فيديو'
                   : '${result.selectedVideos.length} videos enqueued',
               color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
               icon: Icons.playlist_add_check,
               isDarkMode: isDark,
             );
-            if (mounted) Navigator.pop(context);
+            Navigator.pop(context);
           }
           return;
         } else if (choice != 'video') {
@@ -466,17 +478,16 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       } else if (!isMixed && mounted) {
         final result = await YoutubePlaylistSheet.show(context, url);
         if (result != null && mounted) {
-          final isDark = context.read<SettingsProvider>().isDarkMode;
           ThemedSnackbar.show(
             context,
-            message: L10n.isRtl(context)
+            message: isRtl
                 ? 'تم إضافة ${result.selectedVideos.length} فيديو'
                 : '${result.selectedVideos.length} videos enqueued',
             color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
             icon: Icons.playlist_add_check,
             isDarkMode: isDark,
           );
-          if (mounted) Navigator.pop(context);
+          Navigator.pop(context);
         }
         return;
       }
@@ -690,6 +701,26 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       var addedCount = 0;
       var duplicateCount = 0;
       var invalidCount = 0;
+      String? bulkQualityPreset;
+
+      final firstExtractable = urls.firstWhere(
+        (u) => YoutubeService.isExtractableMediaUrl(u),
+        orElse: () => '',
+      );
+      if (firstExtractable.isNotEmpty && mounted) {
+        final chosenStream =
+            await MediaQualitySheet.show(context, firstExtractable);
+        if (!mounted) return;
+        if (chosenStream == null) {
+          // User explicitly dismissed quality selection — abort bulk batch
+          return;
+        }
+        final streamType = chosenStream['type'] as String? ?? 'muxed';
+        bulkQualityPreset = streamType == 'audio'
+            ? 'audio_only'
+            : chosenStream['quality'] as String?;
+      }
+
       for (final singleUrl in urls) {
         if (!isValidTransmissionUrl(singleUrl)) {
           invalidCount++;
@@ -712,6 +743,56 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           singleName = fileNameFromUrl(singleUrl);
         }
         try {
+          if (YoutubeService.isExtractableMediaUrl(singleUrl)) {
+            try {
+              final streams =
+                  await YoutubeService.getStreamsForAnyUrl(singleUrl);
+              if (streams != null && streams.isNotEmpty) {
+                final Map<String, dynamic> bestStream;
+                if (bulkQualityPreset != null) {
+                  bestStream = streams.firstWhere(
+                    (s) =>
+                        s['quality'] == bulkQualityPreset ||
+                        (bulkQualityPreset == 'audio_only' &&
+                            s['type'] == 'audio'),
+                    orElse: () => streams.first,
+                  );
+                } else {
+                  bestStream = streams.first;
+                }
+                final streamUrl =
+                    (bestStream['src'] ?? bestStream['url'] ?? '') as String;
+                final title =
+                    bestStream['title'] as String? ?? 'Video Download';
+                final ext = bestStream['ext'] as String? ?? 'mp4';
+                final sName = safeFileName('$title.$ext');
+                await provider.addDownload(
+                  name: sName,
+                  url: streamUrl,
+                  size: (bestStream['size'] as num?)?.toInt() ?? 0,
+                  category:
+                      bestStream['type'] == 'audio' ? 'Audio' : 'Video',
+                  savePath: _pathController.text.trim().isNotEmpty
+                      ? _pathController.text.trim()
+                      : settings.customDownloadPath ?? '',
+                  threadCount: _selectedThreads,
+                  downloadPageUrl: singleUrl,
+                  youtubeQualityPreset: bulkQualityPreset ??
+                      bestStream['quality'] as String?,
+                  mergedAudioUrl: bestStream['audioSrc'] as String?,
+                  audioSize: (bestStream['audioSize'] as num?)?.toInt() ?? 0,
+                  thumbnailUrl: bestStream['thumbnailUrl'] as String?,
+                );
+                addedCount++;
+                AddDownloadDialog.recordAddedUrl(singleUrl);
+                continue;
+              }
+            } catch (e, st) {
+              debugPrint(
+                '[AddDownloadDialog] Bulk media extract failed for $singleUrl: $e\n$st',
+              );
+            }
+          }
           await provider.addDownload(
             name: singleName,
             url: singleUrl,
@@ -1348,83 +1429,88 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                             ),
                           ),
                           const SizedBox(height: 8),
-                          _CornerFrame(
-                            color: _urlController.text.trim().isEmpty
-                                ? borderClr
-                                : (_urlValid
-                                    ? greenClr
-                                    : (isDark
-                                        ? AppTheme.neonRed
-                                        : AppTheme.lightNeonRed)),
-                            child: AnimatedBuilder(
-                              animation: Listenable.merge([
-                                _urlController,
-                                _urlFocus,
-                              ]),
-                              builder: (context, child) {
-                                return Container(
-                                  decoration: BoxDecoration(
-                                    color: panelBg,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Stack(
-                                    children: [
-                                      if (_urlFocus.hasFocus && isDark)
-                                        Positioned.fill(
-                                          child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            child: AnimatedBuilder(
-                                              animation: _scanController,
-                                              builder: (context, child) =>
-                                                  LayoutBuilder(
-                                                builder: (context, c) {
-                                                  final x = (c.maxWidth + 60) *
-                                                          _scanController
-                                                              .value -
-                                                      60;
-                                                  return Stack(
-                                                    children: [
-                                                      Positioned(
-                                                        left: x,
-                                                        top: 0,
-                                                        bottom: 0,
-                                                        child: Container(
-                                                          width: 40,
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            gradient:
-                                                                LinearGradient(
-                                                              colors: [
-                                                                blueClr
-                                                                    .withValues(
-                                                                  alpha: 0,
-                                                                ),
-                                                                blueClr
-                                                                    .withValues(
-                                                                  alpha: 0.06,
-                                                                ),
-                                                                blueClr
-                                                                    .withValues(
-                                                                  alpha: 0,
-                                                                ),
-                                                              ],
-                                                            ),
+                          RepaintBoundary(
+                            child: _CornerFrame(
+                              color: _urlController.text.trim().isEmpty
+                                  ? borderClr
+                                  : (_urlValid
+                                      ? greenClr
+                                      : (isDark
+                                          ? AppTheme.neonRed
+                                          : AppTheme.lightNeonRed)),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: panelBg,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: (!isDark && _urlFocus.hasFocus)
+                                      ? Border.all(
+                                          color: blueClr.withValues(alpha: 0.5),
+                                          width: 1.2,
+                                        )
+                                      : null,
+                                ),
+                                child: Stack(
+                                  children: [
+                                    if (_urlFocus.hasFocus && isDark)
+                                      Positioned.fill(
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          child: AnimatedBuilder(
+                                            animation: _scanController,
+                                            builder: (context, child) =>
+                                                LayoutBuilder(
+                                              builder: (context, c) {
+                                                final x = (c.maxWidth + 60) *
+                                                        _scanController
+                                                            .value -
+                                                    60;
+                                                return Stack(
+                                                  children: [
+                                                    Positioned(
+                                                      left: x,
+                                                      top: 0,
+                                                      bottom: 0,
+                                                      child: Container(
+                                                        width: 40,
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          gradient:
+                                                              LinearGradient(
+                                                            colors: [
+                                                              blueClr
+                                                                  .withValues(
+                                                                alpha: 0,
+                                                              ),
+                                                              blueClr
+                                                                  .withValues(
+                                                                alpha: 0.06,
+                                                              ),
+                                                              blueClr
+                                                                  .withValues(
+                                                                alpha: 0,
+                                                              ),
+                                                            ],
                                                           ),
                                                         ),
                                                       ),
-                                                    ],
-                                                  );
-                                                },
-                                              ),
+                                                    ),
+                                                  ],
+                                                );
+                                              },
                                             ),
                                           ),
                                         ),
-                                      TextFormField(
+                                      ),
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxHeight: 120,
+                                      ),
+                                      child: TextFormField(
                                         controller: _urlController,
                                         focusNode: _urlFocus,
-                                        maxLines: 3,
+                                        maxLines: null,
                                         minLines: 1,
                                         maxLength: 2048,
                                         style: TextStyle(
@@ -1537,10 +1623,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                           ),
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                );
-                              },
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                           if (_urlAnalysis != null &&

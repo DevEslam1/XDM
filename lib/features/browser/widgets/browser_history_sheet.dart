@@ -1,27 +1,21 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/skeleton_loader.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
+import '../services/history_export_service.dart';
 
 class BrowserHistorySheet extends StatefulWidget {
   static final _log = Logger('BrowserHistorySheet');
@@ -84,9 +78,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     _focusNode.addListener(_onFocusChanged);
   }
 
-  // FIX(P11): Infinite-scroll trigger — reveal the next page when the user
-  // scrolls close to the bottom of the history list.
+  // FIX(P11, N9): Infinite-scroll trigger — guarded against unmounted state.
   void _onScroll() {
+    if (!mounted) return;
     final controller = _attachedScrollController;
     if (controller == null || !controller.hasClients) return;
     final position = controller.position;
@@ -184,21 +178,14 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
           });
         }
       }
-      final jsonStr = const JsonEncoder.withIndent('  ').convert(exportData);
-      final tempDir = await getTemporaryDirectory();
       final name = _selectedTab == 0
           ? 'xdm_surfing_history.json'
           : 'xdm_download_history.json';
-      final file = File(p.join(tempDir.path, name));
-      await file.writeAsString(jsonStr);
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(file.path)],
-          subject: _selectedTab == 0
-              ? 'XDM Surfing History'
-              : 'XDM Download History',
-        ),
-      );
+      final subject = _selectedTab == 0
+          ? 'XDM Surfing History'
+          : 'XDM Download History';
+      final file = await HistoryExportService.instance.exportToJson(exportData, name);
+      await HistoryExportService.instance.shareHistoryFile(file, subject);
     } catch (e) {
       if (mounted) {
         final isDark = context.read<SettingsProvider>().isDarkMode;
@@ -279,35 +266,31 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       builder: (context, controller) {
         return ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          child: DmxBackdropFilter(
-            sigmaX: 15,
-            sigmaY: 15,
-            child: Container(
-              decoration: BoxDecoration(
-                color: (isDark
-                        ? (settings.isAmoledMode
-                            ? AppTheme.amoledSurface
-                            : AppTheme.surface)
-                        : AppTheme.lightSurface)
-                    .withValues(alpha: settings.isAmoledMode ? 1.0 : 0.95),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
-                border: Border(
-                  top: BorderSide(
-                    color: isDark
-                        ? (settings.isAmoledMode
-                            ? AppTheme.amoledBorder
-                            : AppTheme.glassBorder)
-                        : AppTheme.lightGlassBorder,
-                    width: 0.8,
-                  ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? (settings.isAmoledMode
+                      ? AppTheme.amoledSurface
+                      : AppTheme.surface)
+                  : AppTheme.lightSurface,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+              border: Border(
+                top: BorderSide(
+                  color: isDark
+                      ? (settings.isAmoledMode
+                          ? AppTheme.amoledBorder
+                          : AppTheme.glassBorder)
+                      : AppTheme.lightGlassBorder,
+                  width: 0.8,
                 ),
               ),
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  children: [
+            ),
+            child: SafeArea(
+              top: false,
+              child: Column(
+                children: [
                     // Grab handle
                     Center(
                       child: Container(
@@ -574,11 +557,10 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                 ),
               ),
             ),
-          ),
-        );
-      },
-    );
-  }
+          );
+        },
+      );
+    }
 
   Widget _tabButton(int index, String label, Color accent, bool isDark) {
     final isSelected = _selectedTab == index;
@@ -812,32 +794,22 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 90,
-              height: 90,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    accent.withValues(alpha: 0.2),
-                    accent.withValues(alpha: 0.05),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                color: accent.withValues(alpha: 0.1),
+                border: Border.all(
+                  color: accent.withValues(alpha: 0.25),
+                  width: 1,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: accent.withValues(alpha: 0.15),
-                    blurRadius: 16,
-                    spreadRadius: 2,
-                  ),
-                ],
               ),
               child: Center(
                 child: Icon(
                   isSurfing
                       ? Icons.manage_history_rounded
                       : Icons.cloud_off_rounded,
-                  size: 44,
+                  size: 38,
                   color: accent,
                 ),
               ),
@@ -969,137 +941,161 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     final timeStr = _formatTimestamp(item['visitedAt']);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: (260 + index * 30).clamp(260, 600)),
-      curve: Curves.easeOut,
-      builder: (_, t, child) => Opacity(opacity: t, child: child),
-      child: Container(
-        decoration: BoxDecoration(
+    final tileWidget = Container(
+      decoration: BoxDecoration(
+        color: isDark
+            ? (settings.isAmoledMode
+                ? AppTheme.amoledCardBg
+                : AppTheme.cardBg)
+            : AppTheme.lightCardBg,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(
           color: isDark
               ? (settings.isAmoledMode
-                  ? AppTheme.amoledCardBg
-                  : AppTheme.cardBg)
-              : AppTheme.lightCardBg,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(
-            color: isDark
-                ? (settings.isAmoledMode
-                    ? AppTheme.amoledBorder
-                    : AppTheme.border.withValues(alpha: 0.5))
-                : AppTheme.lightBorder,
-            width: 0.8,
-          ),
+                  ? AppTheme.amoledBorder
+                  : AppTheme.border.withValues(alpha: 0.5))
+              : AppTheme.lightBorder,
+          width: 0.8,
         ),
-        child: Material(
-          color: Colors.transparent,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(13),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
           borderRadius: BorderRadius.circular(13),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(13),
-            onTap: () {
-              HapticHelper.triggerHaptic(settings);
-              Navigator.pop(context, url);
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: faviconUrl != null && faviconUrl.isNotEmpty
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: CachedNetworkImage(
-                              imageUrl: faviconUrl,
+          onTap: () {
+            HapticHelper.triggerHaptic(settings);
+            Navigator.pop(context, url);
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: faviconUrl != null && faviconUrl.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: CachedNetworkImage(
+                            imageUrl: faviconUrl,
+                            width: 16,
+                            height: 16,
+                            fit: BoxFit.contain,
+                            placeholder: (context, url) => const SizedBox(
                               width: 16,
                               height: 16,
-                              fit: BoxFit.contain,
-                              placeholder: (context, url) => const SizedBox(
-                                width: 16,
-                                height: 16,
-                              ),
-                              errorWidget: (context, url, error) => Icon(
-                                Icons.language_rounded,
-                                color: accent,
-                                size: 16,
-                              ),
-                              memCacheWidth: 32,
                             ),
-                          )
-                        : Icon(
-                            Icons.language_rounded,
-                            color: accent,
-                            size: 16,
+                            errorWidget: (context, url, error) => Icon(
+                              Icons.language_rounded,
+                              color: accent,
+                              size: 16,
+                            ),
+                            memCacheWidth: 32,
                           ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: textClr,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        )
+                      : Icon(
+                          Icons.language_rounded,
+                          color: accent,
+                          size: 16,
                         ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: textClr,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        url,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isDark
+                              ? accent.withValues(alpha: 0.85)
+                              : AppTheme.lightNeonBlue,
+                          fontSize: 10.5,
+                        ),
+                      ),
+                      if (timeStr.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(
-                          url,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          timeStr,
                           style: TextStyle(
-                            color: isDark
-                                ? accent.withValues(alpha: 0.85)
-                                : AppTheme.lightNeonBlue,
-                            fontSize: 10.5,
+                            color: isDark ? Colors.white54 : Colors.black54,
+                            fontSize: 9.5,
                           ),
                         ),
-                        if (timeStr.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            timeStr,
-                            style: TextStyle(
-                              color: isDark ? Colors.white54 : Colors.black54,
-                              fontSize: 9.5,
-                            ),
-                          ),
-                        ],
                       ],
-                    ),
+                    ],
                   ),
-                  _TileAction(
-                    icon: Icons.copy_rounded,
-                    isDark: isDark,
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: url));
-                      HapticHelper.triggerHaptic(settings);
-                    },
-                  ),
-                  _TileAction(
-                    icon: Icons.close_rounded,
-                    isDark: isDark,
-                    danger: true,
-                    onTap: () {
-                      HapticHelper.triggerHaptic(settings);
-                      if (id > 0) _deleteHistoryItem(id);
-                    },
-                  ),
-                ],
-              ),
+                ),
+                _TileAction(
+                  icon: Icons.copy_rounded,
+                  isDark: isDark,
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: url));
+                    HapticHelper.triggerHaptic(settings);
+                  },
+                ),
+                _TileAction(
+                  icon: Icons.close_rounded,
+                  isDark: isDark,
+                  danger: true,
+                  onTap: () {
+                    HapticHelper.triggerHaptic(settings);
+                    if (id > 0) _deleteHistoryItem(id);
+                  },
+                ),
+              ],
             ),
           ),
         ),
       ),
+    );
+
+    if (id <= 0) return tileWidget;
+
+    return Dismissible(
+      key: ValueKey('history_item_$id'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 16),
+        decoration: BoxDecoration(
+          color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
+              .withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(
+            color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
+                .withValues(alpha: 0.3),
+          ),
+        ),
+        child: Icon(
+          Icons.delete_outline_rounded,
+          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+          size: 20,
+        ),
+      ),
+      onDismissed: (_) {
+        HapticHelper.triggerHaptic(settings);
+        _deleteHistoryItem(id);
+      },
+      child: tileWidget,
     );
   }
 
@@ -1114,29 +1110,24 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     final sizeStr = formatBytes(t.fileSize);
     final timeStr = _formatDateTime(t.completedAt ?? t.createdAt);
 
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: (260 + index * 30).clamp(260, 600)),
-      curve: Curves.easeOut,
-      builder: (_, o, child) => Opacity(opacity: o, child: child),
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDark ? AppTheme.cardBg : AppTheme.lightCardBg,
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(
-            color: isDark
-                ? AppTheme.border.withValues(alpha: 0.5)
-                : AppTheme.lightBorder,
-            width: 0.8,
-          ),
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.cardBg : AppTheme.lightCardBg,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(
+          color: isDark
+              ? AppTheme.border.withValues(alpha: 0.5)
+              : AppTheme.lightBorder,
+          width: 0.8,
         ),
-        child: Material(
-          color: Colors.transparent,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(13),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
           borderRadius: BorderRadius.circular(13),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(13),
-            onTap: () {
+          onTap: () {
               Clipboard.setData(ClipboardData(text: t.url));
               HapticHelper.triggerHaptic(context.read<SettingsProvider>());
               ThemedSnackbar.show(
@@ -1232,8 +1223,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   IconData _statusIcon(DownloadStatus s) {

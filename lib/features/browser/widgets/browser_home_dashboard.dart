@@ -10,11 +10,12 @@ import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../screens/script_manager_screen.dart';
 import '../services/browser_controller.dart';
-import '../services/search_engine_config.dart';
+import '../services/top_sites_cache_service.dart';
 import 'bookmark_manager_screen.dart';
 import 'browser_history_sheet.dart';
 import 'browser_home_page.dart';
 import 'browser_misc_dialogs.dart';
+import 'search_engine_selector_widget.dart';
 import 'shortcuts_grid_widget.dart';
 
 class BrowserHomeDashboard extends StatefulWidget {
@@ -38,18 +39,15 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
   final List<Map<String, String>> _userCustomShortcuts = [];
   List<Map<String, String>> _topHistorySites = [];
 
-  // FIX(P8): Cache the computed top-history sites across dashboard rebuilds
-  // with a 5-minute TTL. Returning to the home screen within the TTL reuses
-  // the cached list instead of hitting the history database again.
-  static final List<Map<String, String>> _topHistorySitesCache = [];
-  static DateTime _topHistorySitesCacheTime = DateTime.fromMillisecondsSinceEpoch(0);
-  static const _topSitesCacheTtl = Duration(minutes: 5);
-
   @override
   void initState() {
     super.initState();
-    _loadCustomShortcuts();
-    _loadTopHistorySites();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadCustomShortcuts();
+        _loadTopHistorySites();
+      }
+    });
   }
 
   Future<void> _loadCustomShortcuts() async {
@@ -79,54 +77,42 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
   }
 
   Future<void> _loadTopHistorySites() async {
-    // FIX(P8): Reuse the cached result if it is still fresh (< 5 min).
-    if (_topHistorySitesCache.isNotEmpty &&
-        DateTime.now().difference(_topHistorySitesCacheTime) <
-            _topSitesCacheTtl) {
-      if (mounted) {
-        setState(() {
-          _topHistorySites = List<Map<String, String>>.from(
-              _topHistorySitesCache);
-        });
-      }
-      return;
-    }
     try {
-      final history = await widget.controller.historyManager.getRecentHistory(limit: 30);
-      final hostCounts = <String, int>{};
-      final hostTitles = <String, String>{};
-      final hostUrls = <String, String>{};
+      final result = await TopSitesCacheService.instance.getTopSites(
+        loader: () async {
+          final history = await widget.controller.historyManager.getRecentHistory(limit: 30);
+          final hostCounts = <String, int>{};
+          final hostTitles = <String, String>{};
+          final hostUrls = <String, String>{};
 
-      for (final item in history) {
-        final url = item['url'] as String? ?? '';
-        final title = item['title'] as String? ?? '';
-        final uri = Uri.tryParse(url);
-        final host = uri?.host.toLowerCase() ?? '';
-        if (host.isNotEmpty && host != 'localhost') {
-          hostCounts[host] = (hostCounts[host] ?? 0) + 1;
-          hostTitles[host] ??= title.isNotEmpty ? title : host;
-          hostUrls[host] ??= url;
-        }
-      }
+          for (final item in history) {
+            final url = item['url'] as String? ?? '';
+            final title = item['title'] as String? ?? '';
+            final uri = Uri.tryParse(url);
+            final host = uri?.host.toLowerCase() ?? '';
+            if (host.isNotEmpty && host != 'localhost') {
+              hostCounts[host] = (hostCounts[host] ?? 0) + 1;
+              hostTitles[host] ??= title.isNotEmpty ? title : host;
+              hostUrls[host] ??= url;
+            }
+          }
 
-      final sortedHosts = hostCounts.keys.toList()
-        ..sort((a, b) => hostCounts[b]!.compareTo(hostCounts[a]!));
+          final sortedHosts = hostCounts.keys.toList()
+            ..sort((a, b) => hostCounts[b]!.compareTo(hostCounts[a]!));
+
+          return sortedHosts.take(3).map((h) {
+            return {
+              'title': hostTitles[h] ?? h,
+              'url': hostUrls[h] ?? 'https://$h',
+            };
+          }).toList();
+        },
+      );
 
       if (mounted) {
-        final result = sortedHosts.take(3).map((h) {
-          return {
-            'title': hostTitles[h] ?? h,
-            'url': hostUrls[h] ?? 'https://$h',
-          };
-        }).toList();
         setState(() {
           _topHistorySites = result;
         });
-        // FIX(P8): Populate the shared cache + refresh its timestamp.
-        _topHistorySitesCache
-          ..clear()
-          ..addAll(result);
-        _topHistorySitesCacheTime = DateTime.now();
       }
     } catch (_) {}
   }
@@ -242,6 +228,8 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
               active: p.downloadingTasksCount,
               speed: p.currentDownloadSpeedFormatted,
             ),
+            shouldRebuild: (prev, next) =>
+                prev.active != next.active || prev.speed != next.speed,
             builder: (context, stats, _) {
               if (stats.active == 0) return const SizedBox.shrink();
               return Container(
@@ -298,43 +286,13 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
             },
           ),
 
-          // Search engine selector
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                isRtl ? 'محرك البحث:' : 'Search engine:',
-                style: TextStyle(
-                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(width: 8),
-              DropdownButton<String>(
-                value: settings.searchEngine,
-                dropdownColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-                menuMaxHeight: 250,
-                underline: const SizedBox(),
-                style: TextStyle(
-                  color: accentColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-                icon: Icon(Icons.arrow_drop_down, color: accentColor, size: 16),
-                items: SearchEngineConfig.engines.map((e) {
-                  return DropdownMenuItem<String>(
-                    value: e.name,
-                    child: Text(e.name),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  if (val != null) {
-                    HapticHelper.triggerHaptic(settings);
-                    settings.setSearchEngine(val);
-                  }
-                },
-              ),
-            ],
+          // Search engine selector (U3)
+          Center(
+            child: SearchEngineSelectorWidget(
+              settings: settings,
+              isDark: isDark,
+              isRtl: isRtl,
+            ),
           ),
           const SizedBox(height: 20),
 

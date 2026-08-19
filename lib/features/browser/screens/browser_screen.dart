@@ -265,16 +265,19 @@ class _BrowserScreenState extends State<BrowserScreen>
 
                                   return Offstage(
                                     offstage: !isActive,
-                                    child: BrowserTabView(
-                                      tab: tab,
-                                      controller: controller,
-                                      settings: settings,
+                                    child: RepaintBoundary(
+                                      child: BrowserTabView(
+                                        tab: tab,
+                                        controller: controller,
+                                        settings: settings,
+                                      ),
                                     ),
                                   );
                                 }).toList(),
                               );
 
                               if (hasMultipleTabs) {
+                                Offset? dragStartGlobal;
                                 tabContent = RawGestureDetector(
                                   gestures: {
                                     HorizontalDragGestureRecognizer:
@@ -282,12 +285,24 @@ class _BrowserScreenState extends State<BrowserScreen>
                                             HorizontalDragGestureRecognizer>(
                                       () => HorizontalDragGestureRecognizer(),
                                       (instance) {
+                                        instance.onStart = (details) {
+                                          dragStartGlobal = details.globalPosition;
+                                        };
                                         instance.onEnd = (details) {
                                           final velocity =
                                               details.primaryVelocity ?? 0;
-                                          // Ignore slow/ambiguous drags so web
-                                          // page gestures aren't hijacked.
-                                          if (velocity.abs() < 300) return;
+                                          final start = dragStartGlobal;
+                                          dragStartGlobal = null;
+                                          // FIX(N12): Prevent tab swipe from conflicting with WebView content.
+                                          // Require swipe to originate from edge zone (< 28px or > width-28px) OR
+                                          // top toolbar area (< 64px from top), and require strong velocity/sweep.
+                                          if (start == null) return;
+                                          final screenWidth = MediaQuery.of(context).size.width;
+                                          final isEdgeSwipe = start.dx < 28 || start.dx > screenWidth - 28;
+                                          final isTopSwipe = start.dy < 64;
+                                          if (!isEdgeSwipe && !isTopSwipe) return;
+
+                                          if (velocity.abs() < 600) return;
                                           if (velocity < 0) {
                                             final next = currentIndex + 1;
                                             if (next < tabs.length) {
@@ -344,10 +359,8 @@ class _BrowserChrome extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // FIX(P1): Toolbar rebuilds only when the specific values it renders
-        // change (progress, loading, nav state, tab count), not on every notify.
-        Selector<BrowserController,
-            (bool, bool, bool, bool, double, int, bool, bool)>(
+        // FIX(B4): Split progress (frequent during load) from static toolbar state.
+        Selector<BrowserController, (bool, bool, bool, bool, int, bool)>(
           shouldRebuild: (a, b) => a != b,
           selector: (_, c) {
             final t = c.activeTab;
@@ -356,10 +369,8 @@ class _BrowserChrome extends StatelessWidget {
               t?.isLoading ?? false,
               t?.canGoBack ?? false,
               t?.isSecure ?? false,
-              t?.progress ?? 0.0,
               c.tabs.length,
               settings.desktopMode,
-              c.incognitoBannerDismissed,
             );
           },
           builder: (context, data, _) {
@@ -368,119 +379,140 @@ class _BrowserChrome extends StatelessWidget {
               isLoading,
               canGoBack,
               isHttps,
-              progress,
               tabCount,
               desktopMode,
-              _
             ) = data;
             final activeTab = controller.activeTab;
-            return BrowserToolbar(
-              controller: controller,
-              urlController: controller.urlController,
-              focusNode: controller.focusNode,
-              isDark: isDark,
-              isRtl: isRtl,
-              isLoading: isLoading,
-              progress: progress,
-              canGoBack: canGoBack,
-              isHomeTab: isHome,
-              tabCount: tabCount,
-              desktopMode: desktopMode,
-              textClr: textClr,
-              settings: settings,
-              isHttps: isHttps,
-              youtubeGrabButton: _buildYoutubeGrabButton(
-                context,
-                controller,
-                activeTab,
-                isDark,
-              ),
-              // FIX(D6): PiP button — only visible when the active tab has a
-              // <video> element in its DOM.
-              pipButton: (activeTab != null && activeTab.hasVideoElement)
-                  ? _buildPipButton(context, controller, activeTab, isDark)
-                  : null,
-              onGoBack: () => controller.goBack(),
-              onShowTabSwitcher: () => BrowserTabSwitcher.show(
-                context,
-                controller: controller,
-                settings: settings,
-                isDark: isDark,
-                textClr: textClr,
-              ),
-              onNavigateHome: () => controller.loadHome(),
-              onNavigate: (url) => controller.navigateToUrl(url),
-              onReload: () => controller.reload(),
-              onStopLoading: () => controller.stopLoading(),
-              onShieldPressed: () {
-                if (activeTab != null) {
-                  BrowserShieldSheet.show(
-                    context: context,
-                    currentUrl: activeTab.url,
-                    blockedAdsCount: controller.blockedAdsCount(activeTab.id),
-                    blockedPopupsCount:
-                        controller.blockedPopupsCount(activeTab.id),
-                    onReloadTab: () => controller.reload(),
-                    // FIX(D8): Wire the element picker to the controller so a
-                    // picked element becomes a persistent ad-block rule.
-                    onStartElementPicker: () {
-                      controller.startElementPicker(activeTab);
+
+            return Selector<BrowserController, double>(
+              selector: (_, c) => c.activeTab?.progress ?? 0.0,
+              builder: (context, progress, _) {
+                return BrowserToolbar(
+                  controller: controller,
+                  urlController: controller.urlController,
+                  focusNode: controller.focusNode,
+                  isDark: isDark,
+                  isRtl: isRtl,
+                  isLoading: isLoading,
+                  progress: progress,
+                  canGoBack: canGoBack,
+                  isHomeTab: isHome,
+                  tabCount: tabCount,
+                  desktopMode: desktopMode,
+                  textClr: textClr,
+                  settings: settings,
+                  isHttps: isHttps,
+                  youtubeGrabButton: _buildYoutubeGrabButton(
+                    context,
+                    controller,
+                    activeTab,
+                    isDark,
+                  ),
+                  pipButton: (activeTab != null && activeTab.hasVideoElement)
+                      ? _buildPipButton(context, controller, activeTab, isDark)
+                      : null,
+                  onGoBack: () => controller.goBack(),
+                  onShowTabSwitcher: () => BrowserTabSwitcher.show(
+                    context,
+                    controller: controller,
+                    settings: settings,
+                    isDark: isDark,
+                    textClr: textClr,
+                  ),
+                  onNavigateHome: () => controller.loadHome(),
+                  onNavigate: (url) => controller.navigateToUrl(url),
+                  onReload: () => controller.reload(),
+                  onStopLoading: () => controller.stopLoading(),
+                  onShieldPressed: () {
+                    if (activeTab != null) {
+                      BrowserShieldSheet.show(
+                        context: context,
+                        currentUrl: activeTab.url,
+                        blockedAdsCount: controller.blockedAdsCount(activeTab.id),
+                        blockedPopupsCount:
+                            controller.blockedPopupsCount(activeTab.id),
+                        onReloadTab: () => controller.reload(),
+                        onStartElementPicker: () {
+                          controller.startElementPicker(activeTab);
+                        },
+                      );
+                    }
+                  },
+                  onQuitPressed: () => BrowserMiscDialogs.showCloseOrQuitDialog(
+                    context,
+                    settings: settings,
+                    onHide: () {
+                      context.read<DownloadProvider>().setActiveTabIndex(0);
+                      if (Navigator.of(context).canPop()) {
+                        Navigator.of(context).pop();
+                      }
                     },
-                  );
-                }
+                    onTerminate: () async {
+                      await controller.quitBrowser(context: context);
+                    },
+                  ),
+                );
               },
-              onQuitPressed: () => BrowserMiscDialogs.showCloseOrQuitDialog(
-                context,
-                settings: settings,
-                onHide: () {
-                  context.read<DownloadProvider>().setActiveTabIndex(0);
-                  if (Navigator.of(context).canPop()) {
-                    Navigator.of(context).pop();
-                  }
-                },
-                onTerminate: () async {
-                  await controller.quitBrowser(context: context);
-                },
-              ),
             );
           },
         ),
 
-        // FIX(P1): Banner rebuilds only when incognito visibility changes.
+        // FIX(UX3): Banner with smooth AnimatedSize + AnimatedSwitcher dismiss animation.
         Selector<BrowserController, bool>(
           selector: (_, c) =>
               (c.activeTab?.isIncognito ?? false) &&
               !c.incognitoBannerDismissed,
           builder: (context, showBanner, _) {
-            if (!showBanner) return const SizedBox.shrink();
-            return Container(
-              width: double.infinity,
-              color: isDark ? const Color(0xFF1E1E2C) : const Color(0xFFE8EAF6),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.visibility_off_rounded,
-                      size: 16, color: AppTheme.neonBlue),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      isRtl
-                          ? 'وضع التصفح المتخفي: لا يتم حفظ السجل أو ملفات تعريف الارتباط'
-                          : 'Incognito Mode: History and cookies are not saved',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+            return AnimatedSize(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOutCubic,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: showBanner
+                    ? Container(
+                        key: const ValueKey('incognito_banner'),
+                        width: double.infinity,
                         color: isDark
-                            ? AppTheme.textPrimary
-                            : AppTheme.lightTextPrimary,
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => controller.dismissIncognitoBanner(),
-                    child: const Icon(Icons.close_rounded, size: 16),
-                  ),
-                ],
+                            ? const Color(0xFF1E1E2C)
+                            : const Color(0xFFE8EAF6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.visibility_off_rounded,
+                              size: 16,
+                              color: AppTheme.neonBlue,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                isRtl
+                                    ? 'وضع التصفح المتخفي: لا يتم حفظ السجل أو ملفات تعريف الارتباط'
+                                    : 'Incognito Mode: History and cookies are not saved',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark
+                                      ? AppTheme.textPrimary
+                                      : AppTheme.lightTextPrimary,
+                                ),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () =>
+                                  controller.dismissIncognitoBanner(),
+                              child: const Icon(
+                                Icons.close_rounded,
+                                size: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : const SizedBox.shrink(),
               ),
             );
           },

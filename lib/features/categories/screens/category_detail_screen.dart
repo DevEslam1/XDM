@@ -297,11 +297,13 @@ class _SummaryCard extends StatelessWidget {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    PieChart(
-                      PieChartData(
-                        sections: sections,
-                        centerSpaceRadius: 25,
-                        sectionsSpace: 2,
+                    RepaintBoundary(
+                      child: PieChart(
+                        PieChartData(
+                          sections: sections,
+                          centerSpaceRadius: 25,
+                          sectionsSpace: 2,
+                        ),
                       ),
                     ),
                     Icon(

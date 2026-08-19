@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
@@ -64,53 +65,63 @@ class _BrowserFindPanelState extends State<BrowserFindPanel> {
         child: Row(
           children: [
             Expanded(
-              child: TextField(
-                controller: controller.findTextController,
-                autofocus: true,
-                style: TextStyle(fontSize: 13, color: textClr),
-                decoration: InputDecoration(
-                  hintText: L10n.of(context, 'browser_find_in_page'),
-                  hintStyle: TextStyle(
-                    fontSize: 13,
-                    color: isDark
-                        ? AppTheme.textMuted
-                        : AppTheme.lightTextMuted,
-                  ),
-                  isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  suffixIcon: controller.findTextController.text.isNotEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Center(
-                            widthFactor: 1,
-                            child: Text(
-                              controller.findMatchCount > 0
-                                  ? '${controller.findActiveMatch}/${controller.findMatchCount}'
-                                  : (L10n.isRtl(context) ? 'لا نتائج' : '0/0'),
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: controller.findMatchCount > 0
-                                    ? (isDark
-                                        ? AppTheme.neonBlue
-                                        : AppTheme.lightNeonBlue)
-                                    : (isDark
-                                        ? AppTheme.neonRed
-                                        : AppTheme.lightNeonRed),
+              child: CallbackShortcuts(
+                bindings: <ShortcutActivator, VoidCallback>{
+                  const SingleActivator(LogicalKeyboardKey.enter): () =>
+                      controller.findNext(),
+                  const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+                      () => controller.findPrevious(),
+                },
+                child: TextField(
+                  controller: controller.findTextController,
+                  autofocus: true,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => controller.findNext(),
+                  style: TextStyle(fontSize: 13, color: textClr),
+                  decoration: InputDecoration(
+                    hintText: L10n.of(context, 'browser_find_in_page'),
+                    hintStyle: TextStyle(
+                      fontSize: 13,
+                      color: isDark
+                          ? AppTheme.textMuted
+                          : AppTheme.lightTextMuted,
+                    ),
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    suffixIcon: controller.findTextController.text.isNotEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Center(
+                              widthFactor: 1,
+                              child: Text(
+                                controller.findMatchCount > 0
+                                    ? '${controller.findActiveMatch}/${controller.findMatchCount}'
+                                    : (L10n.isRtl(context) ? 'لا نتائج' : '0/0'),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: controller.findMatchCount > 0
+                                      ? (isDark
+                                          ? AppTheme.neonBlue
+                                          : AppTheme.lightNeonBlue)
+                                      : (isDark
+                                          ? AppTheme.neonRed
+                                          : AppTheme.lightNeonRed),
+                                ),
                               ),
                             ),
-                          ),
-                        )
-                      : null,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(
-                      color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(
+                        color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                      ),
                     ),
                   ),
+                  onChanged: _onChanged,
                 ),
-                onChanged: _onChanged,
               ),
             ),
             const SizedBox(width: 8),

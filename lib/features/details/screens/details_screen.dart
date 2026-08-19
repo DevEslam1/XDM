@@ -530,55 +530,53 @@ class _TelemetryHero extends StatelessWidget {
 
                 RepaintBoundary(
                   key: const ValueKey('details_pulse_ring'),
-                  child: AnimatedBuilder(
-                    animation: pulse,
-                    builder: (context, _) {
-                      return SizedBox(
-                        width: responsiveValue(context, 110),
-                        height: responsiveValue(context, 110),
-                        child: Stack(
-                          alignment: Alignment.center,
+                  child: SizedBox(
+                    width: responsiveValue(context, 110),
+                    height: responsiveValue(context, 110),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        AnimatedBuilder(
+                          animation: pulse,
+                          builder: (context, _) {
+                            return CustomPaint(
+                              size: Size(responsiveValue(context, 110),
+                                  responsiveValue(context, 110)),
+                              painter: _RingPainter(
+                                progress: task.progress,
+                                color: statusColor,
+                                glow: pulse.value,
+                                isDark: isDark,
+                              ),
+                            );
+                          },
+                        ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            RepaintBoundary(
-                              child: CustomPaint(
-                                size: Size(responsiveValue(context, 110),
-                                    responsiveValue(context, 110)),
-                                painter: _RingPainter(
-                                  progress: task.progress,
-                                  color: statusColor,
-                                  glow: pulse.value,
-                                  isDark: isDark,
-                                ),
+                            Text(
+                              task.progressPercentString,
+                              style: AppTheme.dataStyle(
+                                isDark: isDark,
+                                size: 20,
+                                weight: FontWeight.w800,
                               ),
                             ),
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  task.progressPercentString,
-                                  style: AppTheme.dataStyle(
-                                    isDark: isDark,
-                                    size: 20,
-                                    weight: FontWeight.w800,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  task.isTorrent
-                                      ? '${task.torrentFiles?.length ?? 0} FILES'
-                                      : '${task.threadCount} CH',
-                                  style: AppTheme.microLabel(
-                                    isDark: isDark,
-                                    color: statusColor,
-                                    size: 8,
-                                  ),
-                                ),
-                              ],
+                            const SizedBox(height: 2),
+                            Text(
+                              task.isTorrent
+                                  ? '${task.torrentFiles?.length ?? 0} FILES'
+                                  : '${task.threadCount} CH',
+                              style: AppTheme.microLabel(
+                                isDark: isDark,
+                                color: statusColor,
+                                size: 8,
+                              ),
                             ),
                           ],
                         ),
-                      );
-                    },
+                      ],
+                    ),
                   ),
                 ),
 
@@ -745,7 +743,7 @@ class _RingPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RingPainter old) =>
       (old.progress - progress).abs() > 0.001 ||
-      (old.glow - glow).abs() > 0.01 ||
+      (old.glow - glow).abs() > 0.033 ||
       old.color != color ||
       old.isDark != isDark;
 }
@@ -1579,6 +1577,21 @@ class _SpeedGraphPanelState extends State<_SpeedGraphPanel> {
   List<FlSpot> _cachedUploadSpots = const [];
   int _cachedMaxLen = 1;
 
+  @override
+  void initState() {
+    super.initState();
+    _updateSpotsIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SpeedGraphPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.task.speed != widget.task.speed ||
+        oldWidget.task.status != widget.task.status) {
+      _updateSpotsIfNeeded();
+    }
+  }
+
   void _updateSpotsIfNeeded() {
     final now = DateTime.now();
     if (now.difference(_lastUpdateTime) >= const Duration(milliseconds: 1000) ||
@@ -1613,7 +1626,6 @@ class _SpeedGraphPanelState extends State<_SpeedGraphPanel> {
 
   @override
   Widget build(BuildContext context) {
-    _updateSpotsIfNeeded();
     final isDark = Provider.of<SettingsProvider>(context).isDarkMode;
     final primaryClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
@@ -1756,7 +1768,24 @@ class _SpeedGraphPanelState extends State<_SpeedGraphPanel> {
                       ),
                     ),
                     borderData: FlBorderData(show: false),
-                    lineTouchData: const LineTouchData(enabled: false),
+                    lineTouchData: LineTouchData(
+                      enabled: true,
+                      touchTooltipData: LineTouchTooltipData(
+                        getTooltipItems: (touchedSpots) {
+                          return touchedSpots.map((spot) {
+                            final isDl = spot.barIndex == 0;
+                            return LineTooltipItem(
+                              '${isDl ? 'DL: ' : 'UL: '}${formatBytes(spot.y)}/s',
+                              TextStyle(
+                                color: isDl ? primaryClr : violetClr,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                            );
+                          }).toList();
+                        },
+                      ),
+                    ),
                     minX: 0,
                     maxX: maxLen > 1 ? maxLen.toDouble() - 1 : 1.0,
                     lineBarsData: [
@@ -3304,6 +3333,7 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
         ),
       );
     } finally {
+      audioTextController?.dispose();
       textController.dispose();
     }
   }
