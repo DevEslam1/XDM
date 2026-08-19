@@ -1,3 +1,6 @@
+import 'package:dmx/core/services/shared_prefs_batcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'error_taxonomy.dart';
 
 enum CircuitBreakerState { closed, open, halfOpen }
@@ -19,12 +22,16 @@ class CircuitBreaker {
     this.failureThreshold = 3,
     this.openTimeout = const Duration(seconds: 30),
     this.halfOpenTimeout = const Duration(seconds: 5),
+    this.key,
+    this.onStateChange,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
 
   final int failureThreshold;
   final Duration openTimeout;
   final Duration halfOpenTimeout;
+  final String? key;
+  final void Function(CircuitBreakerState, String?)? onStateChange;
   final DateTime Function() _clock;
 
   CircuitBreakerState _state = CircuitBreakerState.closed;
@@ -148,8 +155,69 @@ class CircuitBreaker {
   }
 
   void _transition(CircuitBreakerState next, DateTime now) {
+    if (_state == next) return;
     _state = next;
     _lastStateChange = now;
     _lastStateChangeAt = now;
+    onStateChange?.call(next, key);
+  }
+}
+
+class CircuitBreakerRegistry {
+  static const String _prefsPrefix = 'cb_open_';
+  final Map<String, CircuitBreaker> _breakers = {};
+  
+  Future<void> restoreState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys().where((k) => k.startsWith(_prefsPrefix));
+    final now = DateTime.now().millisecondsSinceEpoch;
+    
+    for (final key in keys) {
+      final expireTime = prefs.getInt(key);
+      if (expireTime != null && expireTime > now) {
+        final hostKey = key.substring(_prefsPrefix.length);
+        final cb = getBreaker(hostKey);
+        // Pre-open the circuit breaker
+        cb._transition(CircuitBreakerState.open, DateTime.now());
+      } else {
+        SharedPrefsBatcher.instance.remove(key);
+      }
+    }
+  }
+
+  CircuitBreaker getBreaker(String hostKey, {
+    int failureThreshold = 3,
+    Duration openTimeout = const Duration(seconds: 30),
+    Duration halfOpenTimeout = const Duration(seconds: 5),
+  }) {
+    if (_breakers.containsKey(hostKey)) {
+      return _breakers[hostKey]!;
+    }
+    
+    final breaker = CircuitBreaker(
+      failureThreshold: failureThreshold,
+      openTimeout: openTimeout,
+      halfOpenTimeout: halfOpenTimeout,
+      key: hostKey,
+      onStateChange: _onStateChange,
+    );
+    _breakers[hostKey] = breaker;
+    return breaker;
+  }
+  
+  void _onStateChange(CircuitBreakerState state, String? key) {
+    if (key == null) return;
+    final prefsKey = '$_prefsPrefix$key';
+    
+    if (state == CircuitBreakerState.open) {
+      final breaker = _breakers[key];
+      if (breaker != null) {
+        final ttl = breaker.openTimeout * 3;
+        final expireTime = DateTime.now().add(ttl).millisecondsSinceEpoch;
+        SharedPrefsBatcher.instance.setInt(prefsKey, expireTime);
+      }
+    } else if (state == CircuitBreakerState.closed) {
+      SharedPrefsBatcher.instance.remove(prefsKey);
+    }
   }
 }

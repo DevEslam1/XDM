@@ -156,8 +156,38 @@ class TorrentResumeStore {
       await raf.flush();
       await raf.close();
 
-      await metaTmp.rename(metaFile.path);
-      await blobTmp.rename(blobFile.path);
+      Future<void> safeRename(File tempFile, String targetPath) async {
+        try {
+          await tempFile.rename(targetPath);
+        } catch (e) {
+          final tmp2 = File('$targetPath.tmp2');
+          try {
+            final bytes = await tempFile.readAsBytes();
+            await tmp2.writeAsBytes(bytes, flush: true);
+            final targetFile = File(targetPath);
+            if (await targetFile.exists()) {
+              try {
+                await targetFile.delete();
+              } catch (_) {}
+            }
+            await tmp2.rename(targetPath);
+          } catch (e2) {
+            final bytes = await tempFile.readAsBytes();
+            await File(targetPath).writeAsBytes(bytes, flush: true);
+          } finally {
+            try {
+              if (await tmp2.exists()) await tmp2.delete();
+            } catch (_) {}
+          }
+        } finally {
+          try {
+            if (await tempFile.exists()) await tempFile.delete();
+          } catch (_) {}
+        }
+      }
+
+      await safeRename(metaTmp, metaFile.path);
+      await safeRename(blobTmp, blobFile.path);
 
       // FIX P1-8: Verify that renamed file actually exists on disk
       if (!await blobFile.exists()) {

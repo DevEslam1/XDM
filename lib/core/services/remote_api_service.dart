@@ -158,6 +158,22 @@ class RemoteApiService {
             return;
           }
 
+          // FIX S-4: DNS rebinding protection via Host header verification
+          final hostHeader = request.headers.value('host') ?? '';
+          final hostName = hostHeader.split(':').first.toLowerCase();
+          if (hostName.isNotEmpty &&
+              hostName != 'localhost' &&
+              hostName != '127.0.0.1' &&
+              hostName != '::1' &&
+              hostName != '[::1]') {
+            request.response.statusCode = 403;
+            request.response.write(
+              jsonEncode({'error': 'Forbidden: invalid host header'}),
+            );
+            await request.response.close();
+            return;
+          }
+
           // FIX-7.3: Request size limits
           if (request.contentLength > _maxRequestSize) {
             request.response.statusCode = 413;

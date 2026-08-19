@@ -144,8 +144,12 @@ class DownloadOrchestrator {
   void _startPeriodicResumeSave() {
     _periodicResumeSaveTimer?.cancel();
     if (!_host.enableBackgroundTimers) return;
+    final isBg = PowerMonitor.screenOff ||
+        !DownloadEngine.appInForeground ||
+        DownloadEngine.isInBackground;
+    final interval = isBg ? const Duration(seconds: 60) : const Duration(seconds: 30);
     _periodicResumeSaveTimer = Timer.periodic(
-      const Duration(seconds: 30),
+      interval,
       (_) {
         if (TorrentService.activeTorrentIds.isNotEmpty) {
           unawaited(TorrentResumeStore.saveAll(
@@ -782,6 +786,7 @@ class DownloadOrchestrator {
     current = _host.findTaskById(taskId);
     if (current == null) return false;
 
+    final tempPath = current.tempFilePath;
     String? mergedPath;
     try {
       final token = _host.cancelTokens[taskId];
@@ -948,14 +953,36 @@ class DownloadOrchestrator {
         return false;
       }
 
+      final tempPath = current.tempFilePath;
+      void cleanCorruptedAudio() {
+        for (final fPath in [
+          actualAudioPath,
+          '$actualAudioPath.dmxstate',
+          '$actualAudioPath.journal',
+          '$tempPath.audio',
+          '$tempPath.audio.dmxstate',
+          '$tempPath.audio.journal',
+        ]) {
+          try {
+            final f = File(fPath);
+            if (f.existsSync()) f.deleteSync();
+          } catch (e) {
+            debugPrint('[DMX] audio cleanup failed for $fPath: $e');
+          }
+        }
+      }
+
       if (audioLen == 0) {
         debugPrint('[DMX] FIX-B4: audio file empty: $actualAudioPath');
+        cleanCorruptedAudio();
         await _host.setTaskState(
           current.copyWith(
             status: DownloadStatus.failed,
             statusMessage: DownloadStatusMessages.ffmpegMergeFailed,
             errorMessage:
                 '${DownloadStatusMessages.ffmpegMergeFailed}Audio file is empty. Please retry the download.',
+            audioProgress: 0.0,
+            audioDownloadedBytes: 0,
           ),
         );
         return false;
@@ -971,6 +998,7 @@ class DownloadOrchestrator {
           '[DMX] FIX-1: audio file incomplete: $audioLen / $expectedAudioSize '
           'bytes ($deficitPct% missing). Failing merge.',
         );
+        cleanCorruptedAudio();
         await _host.setTaskState(
           current.copyWith(
             status: DownloadStatus.failed,
@@ -979,9 +1007,25 @@ class DownloadOrchestrator {
                 '${DownloadStatusMessages.ffmpegMergeFailed}Audio file incomplete: '
                 '$audioLen / $expectedAudioSize bytes '
                 '($deficitPct% missing). Please retry the download.',
+            audioProgress: 0.0,
+            audioDownloadedBytes: 0,
           ),
         );
         return false;
+      }
+
+      // STEP 2: Write merge checkpoint
+      try {
+        final mergeCheckpointFile = File('${current.tempFilePath}.merge_checkpoint');
+        await mergeCheckpointFile.writeAsString(jsonEncode({
+          'taskId': taskId,
+          'video': actualVideoPath,
+          'audio': actualAudioPath,
+          'merged': mergedPath,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        }), flush: true);
+      } catch (e) {
+        debugPrint('[DMX] Write merge checkpoint failed: $e');
       }
 
       Duration? expectedDuration;
@@ -1167,6 +1211,10 @@ class DownloadOrchestrator {
         return false;
       }
     } finally {
+      try {
+        final cp = File('$tempPath.merge_checkpoint');
+        if (await cp.exists()) await cp.delete();
+      } catch (_) {}
       final latest = _host.findTaskById(taskId);
       if (latest != null) {
         await _host.setTaskState(latest.copyWith(isMergeInProgress: false));
@@ -4670,7 +4718,33 @@ class DownloadOrchestrator {
       final tmpPath = '$statePath.tmp';
       final tmp = File(tmpPath);
       await tmp.writeAsString(jsonEncode(state), flush: true);
-      await tmp.rename(statePath);
+      try {
+        await tmp.rename(statePath);
+      } catch (e) {
+        final tmp2 = File('$statePath.tmp2');
+        try {
+          final bytes = await tmp.readAsBytes();
+          await tmp2.writeAsBytes(bytes, flush: true);
+          final targetFile = File(statePath);
+          if (await targetFile.exists()) {
+            try {
+              await targetFile.delete();
+            } catch (_) {}
+          }
+          await tmp2.rename(statePath);
+        } catch (e2) {
+          final bytes = await tmp.readAsBytes();
+          await File(statePath).writeAsBytes(bytes, flush: true);
+        } finally {
+          try {
+            if (await tmp2.exists()) await tmp2.delete();
+          } catch (_) {}
+        }
+      } finally {
+        try {
+          if (await tmp.exists()) await tmp.delete();
+        } catch (_) {}
+      }
     } catch (e, st) {
       LoggingService.logger('DownloadOrchestrator')
           .warning('Operation failed', e, st);

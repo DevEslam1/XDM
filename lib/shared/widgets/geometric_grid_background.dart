@@ -312,7 +312,9 @@ class _AmbientBlobPainter extends CustomPainter {
   final Color violetClr;
   final Color blueClr;
 
-  final Paint _blobPaint = Paint();
+  static final Paint _bgPaint = Paint();
+  static final Paint _blobPaint = Paint();
+  static final Paint _vignettePaint = Paint();
 
   _AmbientBlobPainter({
     required this.progress,
@@ -348,13 +350,14 @@ class _AmbientBlobPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // FIX-P1: Early return if screenOff or intensity <= 0
+    _bgPaint.color = bgColor;
     if (PowerMonitor.screenOff || intensity <= 0) {
-      canvas.drawRect(Offset.zero & size, Paint()..color = bgColor);
+      canvas.drawRect(Offset.zero & size, _bgPaint);
       return;
     }
 
     // 1. Base Background
-    canvas.drawRect(Offset.zero & size, Paint()..color = bgColor);
+    canvas.drawRect(Offset.zero & size, _bgPaint);
 
     // 2. Soft Drifting Blobs (2 blobs for optimal GPU performance)
     final t = progress * 2 * math.pi;
@@ -385,18 +388,17 @@ class _AmbientBlobPainter extends CustomPainter {
 
     // 3. Subtle Vignette for Dark Mode
     if (isDark) {
-      final vignettePaint = Paint()
-        ..shader = RadialGradient(
-          center: Alignment.center,
-          radius: 0.9,
-          colors: [
-            Colors.transparent,
-            Colors.transparent,
-            Colors.black.withValues(alpha: 0.5),
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-      canvas.drawRect(Offset.zero & size, vignettePaint);
+      _vignettePaint.shader = RadialGradient(
+        center: Alignment.center,
+        radius: 0.9,
+        colors: [
+          Colors.transparent,
+          Colors.transparent,
+          Colors.black.withValues(alpha: 0.5),
+        ],
+        stops: const [0.0, 0.5, 1.0],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+      canvas.drawRect(Offset.zero & size, _vignettePaint);
     }
   }
 

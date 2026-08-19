@@ -95,11 +95,18 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
         (widget.enableBlur ?? true) && BackgroundGate.shouldAnimate;
     final isBatterySaver =
         PowerMonitor.batterySaverMode != BatterySaverMode.off;
+    bool classicOrReduced = false;
+    try {
+      classicOrReduced = SettingsProvider.instance.classicUi ||
+          SettingsProvider.instance.reduceVisuals;
+    } catch (_) {}
+
     if (!kIsWeb &&
         widget.enabled &&
         !DmxBackdropFilter.disabled &&
         !widget.forceSolid &&
         !isBatterySaver &&
+        !classicOrReduced &&
         blurEnabled &&
         !_isLowEndDevice &&
         BackgroundGate.allowHeavyOps &&
@@ -130,11 +137,23 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
     final isBatterySaver =
         PowerMonitor.batterySaverMode != BatterySaverMode.off;
     final isHighContrast = HighContrastDetector.isActive(context);
+    bool classicOrReduced = false;
+    try {
+      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      classicOrReduced = settings.classicUi || settings.reduceVisuals;
+    } catch (_) {
+      try {
+        classicOrReduced = SettingsProvider.instance.classicUi ||
+            SettingsProvider.instance.reduceVisuals;
+      } catch (_) {}
+    }
+
     if (_allocated &&
         (kIsWeb ||
             !widget.enabled ||
             DmxBackdropFilter.disabled ||
             isBatterySaver ||
+            classicOrReduced ||
             !blurEnabled ||
             _isLowEndDevice ||
             isHighContrast ||
@@ -149,6 +168,7 @@ class _DmxBackdropFilterState extends State<DmxBackdropFilter> {
         widget.enabled &&
         !DmxBackdropFilter.disabled &&
         !isBatterySaver &&
+        !classicOrReduced &&
         blurEnabled &&
         !_isLowEndDevice &&
         !isHighContrast &&

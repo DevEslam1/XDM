@@ -226,9 +226,11 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                       ? '≈${progressPercent.toStringAsFixed(0)}%'
                       : '${progressPercent.toStringAsFixed(1)}%';
 
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                  return RepaintBoundary(
+                    key: ValueKey('$name:$downloadedBytes:$selected'),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                       if (widget.onFileToggle != null) ...[
                         SizedBox(
                           width: 24,
@@ -421,8 +423,9 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                         ),
                       ),
                     ],
-                  );
-                },
+                  ),
+                );
+              },
               ),
             ],
           ],

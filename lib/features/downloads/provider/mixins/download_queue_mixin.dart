@@ -158,14 +158,16 @@ mixin DownloadQueueMixin {
         updates.add(list[i].copyWith(queueOrder: i));
       }
     }
-    // 4. Persist and notify
+    // 4. Persist asynchronously and notify
     for (final t in updates) {
       final idx = providerTasks.indexWhere((x) => x.id == t.id);
       if (idx != -1) providerTasks[idx] = t;
     }
     filteredTasksDirty = true;
-    await providerDatabaseService.saveTasks(updates);
     safeNotify();
+    if (updates.isNotEmpty) {
+      unawaited(providerDatabaseService.saveTasks(updates));
+    }
   }
 
   // ---------------------------------------------------------------------------

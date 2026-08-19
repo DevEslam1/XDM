@@ -1507,6 +1507,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                       child: TextFormField(
                                         controller: _urlController,
                                         focusNode: _urlFocus,
+                                        autocorrect: false,
+                                        enableSuggestions: false,
+                                        keyboardType: TextInputType.url,
                                         maxLines: null,
                                         minLines: 1,
                                         maxLength: 2048,
@@ -2434,6 +2437,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                 ? CrossFadeState.showSecond
                                 : CrossFadeState.showFirst,
                             duration: const Duration(milliseconds: 220),
+                            sizeCurve: Curves.easeInOut,
                           ),
                           if (_torrentFiles.isNotEmpty) ...[
                             const SizedBox(height: 16),

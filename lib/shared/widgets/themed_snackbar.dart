@@ -28,11 +28,13 @@ class ThemedSnackbar {
   }) {
     if (!context.mounted) return;
     final now = DateTime.now();
-    if (_lastMessage == message &&
+    final routeName = ModalRoute.of(context)?.settings.name ?? '';
+    final dedupKey = '$routeName:$message';
+    if (_lastMessage == dedupKey &&
         now.difference(_lastShown).inMilliseconds < 800) {
-      return; // debounce duplicate identical message
+      return; // debounce duplicate identical message on the same route
     }
-    _lastMessage = message;
+    _lastMessage = dedupKey;
     _lastShown = now;
     final isDark =
         isDarkMode ?? Theme.of(context).brightness == Brightness.dark;

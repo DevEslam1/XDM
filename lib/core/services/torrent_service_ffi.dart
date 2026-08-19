@@ -1415,7 +1415,33 @@ class TorrentService {
       if (bytes != null && bytes.isNotEmpty) {
         final tmp = File('$path.tmp');
         await tmp.writeAsBytes(bytes, flush: true);
-        await tmp.rename(path);
+        try {
+          await tmp.rename(path);
+        } catch (e) {
+          final tmp2 = File('$path.tmp2');
+          try {
+            final tmpBytes = await tmp.readAsBytes();
+            await tmp2.writeAsBytes(tmpBytes, flush: true);
+            final targetFile = File(path);
+            if (await targetFile.exists()) {
+              try {
+                await targetFile.delete();
+              } catch (_) {}
+            }
+            await tmp2.rename(path);
+          } catch (e2) {
+            final tmpBytes = await tmp.readAsBytes();
+            await File(path).writeAsBytes(tmpBytes, flush: true);
+          } finally {
+            try {
+              if (await tmp2.exists()) await tmp2.delete();
+            } catch (_) {}
+          }
+        } finally {
+          try {
+            if (await tmp.exists()) await tmp.delete();
+          } catch (_) {}
+        }
       }
     } catch (e) {
       _log.warning('saveDhtState failed: $e');

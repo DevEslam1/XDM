@@ -172,10 +172,42 @@ class StateStoreInstance {
             state ??= _migrateV2(json, threadCount);
             if (state != null) migratedFrom = 'v2';
           }
+          // FIX M-11: Log a warning when both parsers fail on non-empty valid JSON.
+          // Silent failures here cause resume-from-zero for large downloads with no
+          // diagnostic trace. Log the JSON keys so schema regressions are identifiable.
+          if (state == null && json.isNotEmpty) {
+            LoggingService.logger('DownloadJournal').warning(
+              'State file at $effectivePath is valid JSON but neither V3 nor V2 '
+              'parser could decode it. Keys: ${json.keys.toList()}. '
+              'Download will restart from zero.',
+            );
+            try {
+              final backupPath = '$effectivePath.bak';
+              await File(effectivePath).copy(backupPath);
+              LoggingService.logger('DownloadJournal').info(
+                'Corrupted state file backed up to $backupPath',
+              );
+            } catch (backupErr, st) {
+              LoggingService.logger('DownloadJournal').warning(
+                'Failed to backup corrupted state file', backupErr, st,
+              );
+            }
+          }
         }
       } catch (e) {
         debugPrint(
             '[DmxState] [WARNING] unreadable state at $effectivePath: $e');
+        try {
+          final backupPath = '$effectivePath.bak';
+          await File(effectivePath).copy(backupPath);
+          LoggingService.logger('DownloadJournal').info(
+            'Unreadable state file backed up to $backupPath',
+          );
+        } catch (backupErr, st) {
+          LoggingService.logger('DownloadJournal').warning(
+            'Failed to backup unreadable state file', backupErr, st,
+          );
+        }
         state = null;
       }
     }
@@ -523,8 +555,26 @@ class StateStoreInstance {
           try {
             await tmp.rename(targetPath);
           } catch (e) {
-            // Fallback to direct write if rename fails (e.g. file lock on Windows)
-            await File(targetPath).writeAsString(payload, flush: true);
+            final tmp2 = File('$targetPath.tmp2');
+            try {
+              final bytes = await tmp.readAsBytes();
+              await tmp2.writeAsBytes(bytes, flush: true);
+              final targetFile = File(targetPath);
+              if (await targetFile.exists()) {
+                try {
+                  await targetFile.delete();
+                } catch (_) {}
+              }
+              await tmp2.rename(targetPath);
+            } catch (e2) {
+              final bytes = await tmp.readAsBytes();
+              await File(targetPath).writeAsBytes(bytes, flush: true);
+            } finally {
+              try {
+                if (await tmp2.exists()) await tmp2.delete();
+              } catch (_) {}
+            }
+          } finally {
             try {
               if (await tmp.exists()) await tmp.delete();
             } catch (_) {}
@@ -838,7 +888,7 @@ class DownloadJournal {
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
       _sink!.writeln(line);
-      await _sink!.flush();
+      await _fsyncLocked();
       _approxBytes += line.length + 1;
       if (compactionThresholdBytes > 0 &&
           _approxBytes >= compactionThresholdBytes) {
@@ -904,18 +954,20 @@ class DownloadJournal {
               lastCheckpoint = chunks.map((e) => (e as num).toInt()).toList();
             }
             break;
-          case 'chunk':
-            if (lastCheckpoint != null) {
-              final i = event['i'] as int?;
-              final b = event['b'] as int?;
-              if (i != null &&
-                  b != null &&
-                  i >= 0 &&
-                  i < lastCheckpoint.length) {
-                lastCheckpoint[i] = b;
-              }
-            }
-            break;
+          case 'chunk': // FIX-P0-1
+            final i = event['i'] as int?; // FIX-P0-1
+            final b = event['b'] as int?; // FIX-P0-1
+            if (i != null && b != null && i >= 0) { // FIX-P0-1
+              if (lastCheckpoint == null) { // FIX-P0-1
+                lastCheckpoint = List.filled(i + 1, 0); // FIX-P0-1
+              } else if (i >= lastCheckpoint.length) { // FIX-P0-1
+                while (lastCheckpoint.length <= i) { // FIX-P0-1
+                  lastCheckpoint.add(0); // FIX-P0-1
+                } // FIX-P0-1
+              } // FIX-P0-1
+              lastCheckpoint[i] = b; // FIX-P0-1
+            } // FIX-P0-1
+            break; // FIX-P0-1
         }
       }
     } catch (e) {
@@ -935,6 +987,14 @@ class DownloadJournal {
     }
     return lastCheckpoint;
   }
+
+  /// Replays the journal file and recovers downloaded chunk progress. // FIX-P0-1
+  static Future<List<int>?> replay(String tempFilePath) async { // FIX-P0-1
+    final journalPath = tempFilePath.endsWith('.journal') // FIX-P0-1
+        ? tempFilePath // FIX-P0-1
+        : '$tempFilePath.journal'; // FIX-P0-1
+    return recover(journalPath); // FIX-P0-1
+  } // FIX-P0-1
 
   /// Best-effort synchronous close of the journal sink. Clears LRU state and
   /// fires `flush()`/`close()` on the sink without awaiting them; safe to call

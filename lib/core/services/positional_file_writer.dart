@@ -160,25 +160,30 @@ class PositionalFileWriter
     }
   }
 
+  static const int _maxHandles = 8;
+
   Future<RandomAccessFile> _getHandle(int threadIndex) async {
     if (_closed) throw const PositionalFileWriterException('writer is closed');
     final key = threadIndex < 0 ? 0 : threadIndex;
-    if (_handles.containsKey(key)) return _handles[key]!;
+    final handleKey = key % _maxHandles;
 
-    return _metaLock.synchronized(() async {
-      _checkOpen();
-      if (_handles.containsKey(key)) return _handles[key]!;
-      try {
-        final file = File(path);
-        final raf = await file.open(mode: FileMode.append);
-        _handles[key] = raf;
-        _handleLocks[key] = Lock();
-        _buffers[key] = _ChunkBuffer(_bufferSize);
-        return raf;
-      } catch (e) {
-        throw PositionalFileWriterException('failed to open thread handle: $e');
-      }
-    });
+    if (!_handles.containsKey(handleKey) || !_buffers.containsKey(key)) {
+      await _metaLock.synchronized(() async {
+        _checkOpen();
+        _buffers[key] ??= _ChunkBuffer(_bufferSize);
+        if (!_handles.containsKey(handleKey)) {
+          try {
+            final file = File(path);
+            final raf = await file.open(mode: FileMode.append);
+            _handles[handleKey] = raf;
+            _handleLocks[handleKey] = Lock();
+          } catch (e) {
+            throw PositionalFileWriterException('failed to open thread handle: $e');
+          }
+        }
+      });
+    }
+    return _handles[handleKey]!;
   }
 
   /// Writes [data] at [absolutePosition].
@@ -210,8 +215,9 @@ class PositionalFileWriter
     }
 
     final key = threadIndex < 0 ? 0 : threadIndex;
+    final handleKey = key % _maxHandles;
     final raf = await _getHandle(key);
-    final handleLock = _handleLocks[key]!;
+    final handleLock = _handleLocks[handleKey]!;
     final buffer = _buffers[key]!;
 
     try {
@@ -283,8 +289,9 @@ class PositionalFileWriter
   Future<void> flush([int threadIndex = -1]) async {
     _checkOpen();
     if (threadIndex >= 0) {
-      final handle = _handles[threadIndex];
-      final lock = _handleLocks[threadIndex];
+      final handleKey = threadIndex % _maxHandles;
+      final handle = _handles[handleKey];
+      final lock = _handleLocks[handleKey];
       final buffer = _buffers[threadIndex];
       if (handle != null && lock != null && buffer != null) {
         await lock.synchronized(() async {
@@ -301,13 +308,16 @@ class PositionalFileWriter
   Future<void> flushAll() async {
     _checkOpen();
     for (final entry in _handles.entries) {
-      final key = entry.key;
+      final handleKey = entry.key;
       final handle = entry.value;
-      final lock = _handleLocks[key]!;
-      final buffer = _buffers[key]!;
+      final lock = _handleLocks[handleKey]!;
       await lock.synchronized(() async {
         if (!_closed) {
-          await _flushBufferInternal(handle, buffer);
+          for (final bufferEntry in _buffers.entries) {
+            if (bufferEntry.key % _maxHandles == handleKey) {
+              await _flushBufferInternal(handle, bufferEntry.value);
+            }
+          }
           await handle.flush();
         }
       });
@@ -320,7 +330,7 @@ class PositionalFileWriter
       Duration(milliseconds: 2000); // was 500ms
   static const int flushByteThreshold = 4 * 1024 * 1024; // was 1MB
 
-  /// Paced flush: flushes only if 500ms has elapsed or 1MB written since last flush (F-01/F-02).
+  /// Paced flush: flushes only if 2000ms has elapsed or 4MB written since last flush (F-01/F-02).
   Future<void> flushPaced() async {
     final now = DateTime.now();
     if (now.difference(_lastPacedFlush) >= minFlushInterval ||
@@ -337,13 +347,16 @@ class PositionalFileWriter
   Future<void> flushBuffers() async {
     _checkOpen();
     for (final entry in _handles.entries) {
-      final key = entry.key;
+      final handleKey = entry.key;
       final handle = entry.value;
-      final lock = _handleLocks[key]!;
-      final buffer = _buffers[key]!;
+      final lock = _handleLocks[handleKey]!;
       await lock.synchronized(() async {
         if (!_closed) {
-          await _flushBufferInternal(handle, buffer);
+          for (final bufferEntry in _buffers.entries) {
+            if (bufferEntry.key % _maxHandles == handleKey) {
+              await _flushBufferInternal(handle, bufferEntry.value);
+            }
+          }
         }
       });
     }
@@ -406,18 +419,25 @@ class PositionalFileWriter
       } finally {
         _closed = true;
         for (final entry in _handles.entries) {
-          final key = entry.key;
+          final handleKey = entry.key;
           final handle = entry.value;
-          final lock = _handleLocks[key];
-          final buffer = _buffers[key];
+          final lock = _handleLocks[handleKey];
           try {
-            if (lock != null && buffer != null) {
+            if (lock != null) {
               await lock.synchronized(() async {
+                for (final bufferEntry in _buffers.entries) {
+                  if (bufferEntry.key % _maxHandles == handleKey) {
+                    try {
+                      await _flushBufferInternal(handle, bufferEntry.value);
+                    } catch (e, st) {
+                      _log.finest('Flush buffer during close failed', e, st);
+                    }
+                  }
+                }
                 try {
-                  await _flushBufferInternal(handle, buffer);
                   await handle.flush();
                 } catch (e, st) {
-                  _log.finest('Flush buffer during close failed', e, st);
+                  _log.finest('Flush handle during close failed', e, st);
                 }
                 try {
                   await handle.close();

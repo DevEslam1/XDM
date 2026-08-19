@@ -42,17 +42,21 @@ class TickManager {
     PowerMonitor.screenStateStream.listen((screenOn) {
       _onPowerStateChanged();
     });
+    DownloadEngine.appInForegroundNotifier.addListener(_onPowerStateChanged);
   }
 
   final Map<String, _TickSubscriber> _subscribers = {};
   Timer? _heartbeatTimer;
-  static const Duration _baseTickResolution = Duration(milliseconds: 500);
 
   bool _isPaused = false;
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(_baseTickResolution, _onHeartbeat);
+    final isBg = DownloadEngine.isInBackground || PowerMonitor.screenOff;
+    final resolution = isBg
+        ? const Duration(seconds: 5)
+        : const Duration(seconds: 1);
+    _heartbeatTimer = Timer.periodic(resolution, _onHeartbeat);
   }
 
   void registerTick({
@@ -74,8 +78,10 @@ class TickManager {
   }
 
   void _onPowerStateChanged() {
-    // Force evaluate ticks on wake
-    _onHeartbeat(_heartbeatTimer!);
+    _startHeartbeat();
+    if (_heartbeatTimer != null) {
+      _onHeartbeat(_heartbeatTimer!);
+    }
   }
 
   void _onHeartbeat(Timer timer) {

@@ -37,8 +37,12 @@ class BrowserTabView extends StatefulWidget {
   State<BrowserTabView> createState() => _BrowserTabViewState();
 }
 
-class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
+class _BrowserTabViewState extends State<BrowserTabView>
+    with HapticHelper, AutomaticKeepAliveClientMixin {
   static final _log = Logger('BrowserTabView');
+
+  @override
+  bool get wantKeepAlive => !widget.tab.isSuspended;
 
   @override
   void didUpdateWidget(BrowserTabView oldWidget) {
@@ -75,6 +79,7 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final tab = widget.tab;
     final settings = widget.settings;
     final isDark = settings.isDarkMode;

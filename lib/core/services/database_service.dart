@@ -132,7 +132,19 @@ class DatabaseService {
       _db.downloadTasks,
     )..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)]))
         .get();
-    return rows.map(_rowToTask).toList();
+    final tasks = <DownloadTask>[];
+    final corrected = <DownloadTask>[];
+    for (final r in rows) {
+      final task = _rowToTask(r);
+      tasks.add(task);
+      if (TaskCompanionConverter.isInterruptedActiveRow(r)) {
+        corrected.add(task);
+      }
+    }
+    if (corrected.isNotEmpty) {
+      unawaited(saveTasks(corrected));
+    }
+    return tasks;
   }
 
   /// Paginated load of download tasks (DB-02 / Fix 6).
@@ -158,7 +170,19 @@ class DatabaseService {
       ..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)])
       ..limit(limit, offset: offset);
     final rows = await query.get();
-    return rows.map(_rowToTask).toList();
+    final tasks = <DownloadTask>[];
+    final corrected = <DownloadTask>[];
+    for (final r in rows) {
+      final task = _rowToTask(r);
+      tasks.add(task);
+      if (TaskCompanionConverter.isInterruptedActiveRow(r)) {
+        corrected.add(task);
+      }
+    }
+    if (corrected.isNotEmpty) {
+      unawaited(saveTasks(corrected));
+    }
+    return tasks;
   }
 
   /// Get total task count with optional filters (Fix 6).

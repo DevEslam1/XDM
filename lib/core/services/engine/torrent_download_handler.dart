@@ -84,6 +84,23 @@ class TorrentSubscriptionRegistry {
     }
   }
 
+  Future<void> disposeAsync(int torrentId) async {
+    final entry = _registry.remove(torrentId);
+    if (entry == null) return;
+    try {
+      await entry.subscription.cancel();
+    } catch (e, st) {
+      _log.fine('Failed to cancel disposed subscription: $e', e, st);
+    }
+    try {
+      await entry.handler
+          .haltTorrent(torrentId)
+          .timeout(const Duration(seconds: 3));
+    } catch (e, st) {
+      _log.warning('Failed to halt torrent $torrentId on dispose', e, st);
+    }
+  }
+
   void dispose(int torrentId) {
     final entry = _registry.remove(torrentId);
     if (entry == null) return;
@@ -92,9 +109,12 @@ class TorrentSubscriptionRegistry {
     } catch (e, st) {
       _log.fine('Failed to cancel disposed subscription: $e', e, st);
     }
-    entry.handler.haltTorrent(torrentId).catchError((Object e, StackTrace st) {
+    unawaited(entry.handler
+        .haltTorrent(torrentId)
+        .timeout(const Duration(seconds: 3))
+        .catchError((e, st) {
       _log.warning('Failed to halt torrent $torrentId on dispose', e, st);
-    });
+    }));
   }
 
   @visibleForTesting
@@ -1195,7 +1215,13 @@ class TorrentDownloadHandler {
     final updated = List<Map<String, dynamic>>.from(currentList);
     for (int i = 0; i < nativeFiles.length; i++) {
       final f = nativeFiles[i];
-      final old = currentList[i];
+      // Match by name if possible, fallback to index
+      var oldIndex = i;
+      if (currentList[i]['name'] != f.name) {
+        final matchIdx = currentList.indexWhere((m) => m['name'] == f.name);
+        if (matchIdx >= 0) oldIndex = matchIdx;
+      }
+      final old = currentList[oldIndex];
       final dl = f.safeDownloadedBytes < 0 ? 0 : f.safeDownloadedBytes;
       final isEst =
           f.downloadedBytes < 0 || (f.downloadedBytes == 0 && f.size > 0);
@@ -1206,10 +1232,13 @@ class TorrentDownloadHandler {
           old['selected'] != f.selected ||
           old['priority'] != f.priority ||
           old['progress'] != prog ||
-          old['isComplete'] != isDone) {
+          old['isComplete'] != isDone ||
+          old['name'] != f.name) {
         hasDiff = true;
         updated[i] = {
           ...old,
+          'name': f.name,
+          'length': f.size,
           'downloadedBytes': dl,
           'selected': f.selected,
           'priority': f.priority,
@@ -1532,6 +1561,23 @@ class TorrentDownloadHandler {
         stateLabel == 'stopped' ||
         stateLabel == 'error';
     final now = DateTime.now();
+
+    // Fallback stall recovery independent of Timer:
+    // If timers are paused in the background, trigger announceNow if stalled > 5 minutes with zero speed.
+    if (!isTerminal &&
+        lastProgressTick.millisecondsSinceEpoch > 0 &&
+        now.difference(lastProgressTick) > const Duration(minutes: 5) &&
+        tracker.lastTorrentSpeed == 0) {
+      _log.warning(
+        'Torrent $id stalled for >5min without progress tick — triggering fallback announceNow recovery',
+      );
+      try {
+        TorrentService.announceNow(id);
+      } catch (e, st) {
+        _log.warning('Fallback stall recovery announceNow failed for $id', e, st);
+      }
+    }
+
     if (!isTerminal &&
         !isStateChange &&
         now.difference(lastProgressTick) < const Duration(milliseconds: 500)) {

@@ -63,7 +63,15 @@ class DownloadCard extends StatefulWidget {
 class _DownloadCardState extends State<DownloadCard>
     with AutomaticKeepAliveClientMixin, HapticHelper {
   @override
-  bool get wantKeepAlive => true;
+  bool get wantKeepAlive {
+    // FIX H-1: Only keep cards alive while they have live data to preserve.
+    // Completed, failed, and paused tasks can remount cheaply on scroll.
+    // Keeping ALL cards alive causes massive memory waste with large download lists.
+    final status = widget.task.status;
+    return status == DownloadStatus.downloading ||
+        status == DownloadStatus.queued ||
+        status == DownloadStatus.merging;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -166,7 +174,11 @@ class _DownloadCardState extends State<DownloadCard>
 
                 // Active / paused / queued / merging / failed → ask the user,
                 // because a partial file may be on disk.
+                // FIX M-8: Capture provider references BEFORE the async gap.
+                // After showDeleteConfirmationDialog returns, the BuildContext
+                // may be stale if the widget was disposed during the dialog.
                 final settings = context.read<SettingsProvider>();
+                final capturedProvider = provider;
                 final deleteFiles = await showDeleteConfirmationDialog(
                   context,
                   task,
@@ -178,7 +190,7 @@ class _DownloadCardState extends State<DownloadCard>
 
                 // User confirmed → delete immediately (dialog acts as gate)
                 try {
-                  await provider.deleteTask(task.id, deleteFiles: deleteFiles);
+                  await capturedProvider.deleteTask(task.id, deleteFiles: deleteFiles);
                   return true;
                 } catch (e) {
                   if (context.mounted) {
@@ -1803,6 +1815,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                                       ? 'https:${task.thumbnailUrl}'
                                       : task.thumbnailUrl!,
                                   maxWidth: 144,
+                                  maxHeight: 144,
                                 ),
                                 fit: BoxFit.cover,
                                 onError: (context, error) {
@@ -3285,7 +3298,10 @@ void _showUpdateLinkDialog(
         ),
       ],
     ),
-  );
+  ).then((_) {
+    urlController.dispose();
+    audioUrlController?.dispose();
+  });
 }
 
 // ────────────────────────────────────────────────────────────────────────────

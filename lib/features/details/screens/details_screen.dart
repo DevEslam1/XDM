@@ -167,13 +167,14 @@ class _DetailsScreenState extends State<DetailsScreen>
             },
           ),
         ),
-        body: Consumer<DownloadProvider>(
-          builder: (context, provider, child) {
-            final taskIndex = provider.tasks.indexWhere(
-              (t) => t.id == widget.taskId,
-            );
-
-            if (taskIndex == -1) {
+        body: Selector<DownloadProvider, DownloadTask?>(
+          selector: (_, provider) {
+            final idx = provider.tasks.indexWhere((t) => t.id == widget.taskId);
+            return idx != -1 ? provider.tasks[idx] : null;
+          },
+          builder: (context, task, child) {
+            final provider = context.read<DownloadProvider>();
+            if (task == null) {
               return Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -205,8 +206,6 @@ class _DetailsScreenState extends State<DetailsScreen>
                 ),
               );
             }
-
-            final task = provider.tasks[taskIndex];
 
             if (task.status == DownloadStatus.downloading) {
               if (!_pulse.isAnimating) _pulse.repeat(reverse: true);

@@ -413,6 +413,9 @@ if (!window['$marker']) {
         if (prop === 'crypto' && target.crypto) {
           return { subtle: undefined };
         }
+        if (prop === 'flutter_inappwebview' || prop === '_flutter_inappwebview' || prop === 'DmxBridge') {
+          return undefined;
+        }
         if (prop === '__proto__' || prop === 'prototype' || prop === 'constructor') {
           return null;
         }

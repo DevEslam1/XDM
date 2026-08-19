@@ -338,16 +338,38 @@ class ErrorTaxonomy {
           );
         case DioExceptionType.connectionError:
           final underlying = error.error;
+          final errStr = error.toString().toLowerCase();
+          final underlyingStr = underlying?.toString().toLowerCase() ?? '';
+          
           if (underlying is HandshakeException ||
               underlying is TlsException ||
               underlying is CertificateException ||
-              error.toString().contains('CERTIFICATE_VERIFY_FAILED') ||
-              error.toString().contains('HandshakeException')) {
+              errStr.contains('certificate_verify_failed') ||
+              errStr.contains('handshakeexception') ||
+              errStr.contains('tlsexception') ||
+              underlyingStr.contains('certificate') ||
+              underlyingStr.contains('handshake') ||
+              underlyingStr.contains('tls')) {
             return const ErrorClassification(
               family: ErrorFamily.auth,
               message: 'Secure connection failed (SSL/TLS Certificate Error)',
               severe: true,
               recoveryAction: RecoveryAction.refreshUrl,
+            );
+          }
+          if (underlying is SocketException ||
+              underlying is HttpException ||
+              underlying is OSError ||
+              errStr.contains('socketexception') ||
+              errStr.contains('oserror') ||
+              errStr.contains('connection refused') ||
+              errStr.contains('connection reset') ||
+              errStr.contains('network is unreachable')) {
+            return const ErrorClassification(
+              family: ErrorFamily.network,
+              message: 'Network connection error',
+              retryable: true,
+              recoveryAction: RecoveryAction.retryWithDelay,
             );
           }
           return const ErrorClassification(
@@ -402,6 +424,30 @@ class ErrorTaxonomy {
         family: ErrorFamily.integrity,
         message: 'File changed on server',
         recoveryAction: RecoveryAction.restartDownload,
+      );
+    }
+
+    final lowerRep = stringRep.toLowerCase();
+    if (lowerRep.contains('network') ||
+        lowerRep.contains('connection reset') ||
+        lowerRep.contains('socket')) {
+      return const ErrorClassification(
+        family: ErrorFamily.network,
+        message: 'Network error',
+        retryable: true,
+        recoveryAction: RecoveryAction.retryWithDelay,
+      );
+    }
+
+    if (lowerRep.contains('disk') ||
+        lowerRep.contains('storage') ||
+        lowerRep.contains('no space') ||
+        lowerRep.contains('space insufficient')) {
+      return const ErrorClassification(
+        family: ErrorFamily.disk,
+        message: 'Storage full',
+        severe: true,
+        recoveryAction: RecoveryAction.showSettings,
       );
     }
 

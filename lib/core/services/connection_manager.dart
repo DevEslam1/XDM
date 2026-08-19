@@ -71,6 +71,8 @@ class ConnectionManager implements DisposableService, MemoryPressureListener {
   }
 
   Future<bool> detectHttp2(String url) async {
+    final pCache = ProtocolCache.get(url);
+    if (pCache != null) return pCache == ProtocolSupport.http2;
     try {
       final uri = Uri.parse(url);
       if (uri.scheme != 'https') return false;

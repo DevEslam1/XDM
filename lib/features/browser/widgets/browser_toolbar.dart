@@ -187,11 +187,9 @@ class BrowserToolbar extends StatelessWidget {
 
                 // FIX(U8): Mini download-activity indicator — a small spinning
                 // progress ring appears whenever downloads are in flight.
-                ListenableBuilder(
-                  listenable: context.watch<DownloadProvider>(),
-                  builder: (context, _) {
-                    final activeDownloads =
-                        context.read<DownloadProvider>().downloadingTasksCount;
+                Selector<DownloadProvider, int>(
+                  selector: (_, p) => p.downloadingTasksCount,
+                  builder: (context, activeDownloads, _) {
                     if (activeDownloads <= 0) return const SizedBox.shrink();
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2),

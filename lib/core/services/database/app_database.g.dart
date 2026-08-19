@@ -383,6 +383,12 @@ class $DownloadTasksTable extends DownloadTasks
   late final GeneratedColumn<String> previousCycleState =
       GeneratedColumn<String>('previous_cycle_state', aliasedName, true,
           type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _infoHashMeta =
+      const VerificationMeta('infoHash');
+  @override
+  late final GeneratedColumn<String> infoHash = GeneratedColumn<String>(
+      'info_hash', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -440,7 +446,8 @@ class $DownloadTasksTable extends DownloadTasks
         audioChunksTotal,
         httpPartsCompleted,
         httpPartsTotal,
-        previousCycleState
+        previousCycleState,
+        infoHash
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -756,6 +763,10 @@ class $DownloadTasksTable extends DownloadTasks
           previousCycleState.isAcceptableOrUnknown(
               data['previous_cycle_state']!, _previousCycleStateMeta));
     }
+    if (data.containsKey('info_hash')) {
+      context.handle(_infoHashMeta,
+          infoHash.isAcceptableOrUnknown(data['info_hash']!, _infoHashMeta));
+    }
     return context;
   }
 
@@ -884,6 +895,8 @@ class $DownloadTasksTable extends DownloadTasks
           .read(DriftSqlType.int, data['${effectivePrefix}http_parts_total']),
       previousCycleState: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}previous_cycle_state']),
+      infoHash: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}info_hash']),
     );
   }
 
@@ -960,6 +973,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final int? httpPartsCompleted;
   final int? httpPartsTotal;
   final String? previousCycleState;
+  final String? infoHash;
   const DbDownloadTask(
       {required this.id,
       required this.fileName,
@@ -1016,7 +1030,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       this.audioChunksTotal,
       this.httpPartsCompleted,
       this.httpPartsTotal,
-      this.previousCycleState});
+      this.previousCycleState,
+      this.infoHash});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1137,6 +1152,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     if (!nullToAbsent || previousCycleState != null) {
       map['previous_cycle_state'] = Variable<String>(previousCycleState);
     }
+    if (!nullToAbsent || infoHash != null) {
+      map['info_hash'] = Variable<String>(infoHash);
+    }
     return map;
   }
 
@@ -1251,6 +1269,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       previousCycleState: previousCycleState == null && nullToAbsent
           ? const Value.absent()
           : Value(previousCycleState),
+      infoHash: infoHash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(infoHash),
     );
   }
 
@@ -1321,6 +1342,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       httpPartsTotal: serializer.fromJson<int?>(json['httpPartsTotal']),
       previousCycleState:
           serializer.fromJson<String?>(json['previousCycleState']),
+      infoHash: serializer.fromJson<String?>(json['infoHash']),
     );
   }
   @override
@@ -1385,6 +1407,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'httpPartsCompleted': serializer.toJson<int?>(httpPartsCompleted),
       'httpPartsTotal': serializer.toJson<int?>(httpPartsTotal),
       'previousCycleState': serializer.toJson<String?>(previousCycleState),
+      'infoHash': serializer.toJson<String?>(infoHash),
     };
   }
 
@@ -1445,7 +1468,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           Value<int?> audioChunksTotal = const Value.absent(),
           Value<int?> httpPartsCompleted = const Value.absent(),
           Value<int?> httpPartsTotal = const Value.absent(),
-          Value<String?> previousCycleState = const Value.absent()}) =>
+          Value<String?> previousCycleState = const Value.absent(),
+          Value<String?> infoHash = const Value.absent()}) =>
       DbDownloadTask(
         id: id ?? this.id,
         fileName: fileName ?? this.fileName,
@@ -1528,6 +1552,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         previousCycleState: previousCycleState.present
             ? previousCycleState.value
             : this.previousCycleState,
+        infoHash: infoHash.present ? infoHash.value : this.infoHash,
       );
   DbDownloadTask copyWithCompanion(DownloadTasksCompanion data) {
     return DbDownloadTask(
@@ -1656,6 +1681,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       previousCycleState: data.previousCycleState.present
           ? data.previousCycleState.value
           : this.previousCycleState,
+      infoHash: data.infoHash.present ? data.infoHash.value : this.infoHash,
     );
   }
 
@@ -1718,7 +1744,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('audioChunksTotal: $audioChunksTotal, ')
           ..write('httpPartsCompleted: $httpPartsCompleted, ')
           ..write('httpPartsTotal: $httpPartsTotal, ')
-          ..write('previousCycleState: $previousCycleState')
+          ..write('previousCycleState: $previousCycleState, ')
+          ..write('infoHash: $infoHash')
           ..write(')'))
         .toString();
   }
@@ -1780,7 +1807,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         audioChunksTotal,
         httpPartsCompleted,
         httpPartsTotal,
-        previousCycleState
+        previousCycleState,
+        infoHash
       ]);
   @override
   bool operator ==(Object other) =>
@@ -1842,7 +1870,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.audioChunksTotal == this.audioChunksTotal &&
           other.httpPartsCompleted == this.httpPartsCompleted &&
           other.httpPartsTotal == this.httpPartsTotal &&
-          other.previousCycleState == this.previousCycleState);
+          other.previousCycleState == this.previousCycleState &&
+          other.infoHash == this.infoHash);
 }
 
 class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
@@ -1902,6 +1931,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<int?> httpPartsCompleted;
   final Value<int?> httpPartsTotal;
   final Value<String?> previousCycleState;
+  final Value<String?> infoHash;
   final Value<int> rowid;
   const DownloadTasksCompanion({
     this.id = const Value.absent(),
@@ -1960,6 +1990,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.httpPartsCompleted = const Value.absent(),
     this.httpPartsTotal = const Value.absent(),
     this.previousCycleState = const Value.absent(),
+    this.infoHash = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadTasksCompanion.insert({
@@ -2019,6 +2050,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.httpPartsCompleted = const Value.absent(),
     this.httpPartsTotal = const Value.absent(),
     this.previousCycleState = const Value.absent(),
+    this.infoHash = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         fileName = Value(fileName),
@@ -2088,6 +2120,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<int>? httpPartsCompleted,
     Expression<int>? httpPartsTotal,
     Expression<String>? previousCycleState,
+    Expression<String>? infoHash,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2154,6 +2187,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (httpPartsTotal != null) 'http_parts_total': httpPartsTotal,
       if (previousCycleState != null)
         'previous_cycle_state': previousCycleState,
+      if (infoHash != null) 'info_hash': infoHash,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2215,6 +2249,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       Value<int?>? httpPartsCompleted,
       Value<int?>? httpPartsTotal,
       Value<String?>? previousCycleState,
+      Value<String?>? infoHash,
       Value<int>? rowid}) {
     return DownloadTasksCompanion(
       id: id ?? this.id,
@@ -2274,6 +2309,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       httpPartsCompleted: httpPartsCompleted ?? this.httpPartsCompleted,
       httpPartsTotal: httpPartsTotal ?? this.httpPartsTotal,
       previousCycleState: previousCycleState ?? this.previousCycleState,
+      infoHash: infoHash ?? this.infoHash,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2456,6 +2492,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     if (previousCycleState.present) {
       map['previous_cycle_state'] = Variable<String>(previousCycleState.value);
     }
+    if (infoHash.present) {
+      map['info_hash'] = Variable<String>(infoHash.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2522,6 +2561,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('httpPartsCompleted: $httpPartsCompleted, ')
           ..write('httpPartsTotal: $httpPartsTotal, ')
           ..write('previousCycleState: $previousCycleState, ')
+          ..write('infoHash: $infoHash, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4130,6 +4170,7 @@ typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
   Value<int?> httpPartsCompleted,
   Value<int?> httpPartsTotal,
   Value<String?> previousCycleState,
+  Value<String?> infoHash,
   Value<int> rowid,
 });
 typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
@@ -4190,6 +4231,7 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
   Value<int?> httpPartsCompleted,
   Value<int?> httpPartsTotal,
   Value<String?> previousCycleState,
+  Value<String?> infoHash,
   Value<int> rowid,
 });
 
@@ -4398,6 +4440,9 @@ class $$DownloadTasksTableFilterComposer
   ColumnFilters<String> get previousCycleState => $composableBuilder(
       column: $table.previousCycleState,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get infoHash => $composableBuilder(
+      column: $table.infoHash, builder: (column) => ColumnFilters(column));
 }
 
 class $$DownloadTasksTableOrderingComposer
@@ -4605,6 +4650,9 @@ class $$DownloadTasksTableOrderingComposer
   ColumnOrderings<String> get previousCycleState => $composableBuilder(
       column: $table.previousCycleState,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get infoHash => $composableBuilder(
+      column: $table.infoHash, builder: (column) => ColumnOrderings(column));
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -4786,6 +4834,9 @@ class $$DownloadTasksTableAnnotationComposer
 
   GeneratedColumn<String> get previousCycleState => $composableBuilder(
       column: $table.previousCycleState, builder: (column) => column);
+
+  GeneratedColumn<String> get infoHash =>
+      $composableBuilder(column: $table.infoHash, builder: (column) => column);
 }
 
 class $$DownloadTasksTableTableManager extends RootTableManager<
@@ -4871,6 +4922,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<int?> httpPartsCompleted = const Value.absent(),
             Value<int?> httpPartsTotal = const Value.absent(),
             Value<String?> previousCycleState = const Value.absent(),
+            Value<String?> infoHash = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               DownloadTasksCompanion(
@@ -4930,6 +4982,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             httpPartsCompleted: httpPartsCompleted,
             httpPartsTotal: httpPartsTotal,
             previousCycleState: previousCycleState,
+            infoHash: infoHash,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -4990,6 +5043,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<int?> httpPartsCompleted = const Value.absent(),
             Value<int?> httpPartsTotal = const Value.absent(),
             Value<String?> previousCycleState = const Value.absent(),
+            Value<String?> infoHash = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               DownloadTasksCompanion.insert(
@@ -5049,6 +5103,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             httpPartsCompleted: httpPartsCompleted,
             httpPartsTotal: httpPartsTotal,
             previousCycleState: previousCycleState,
+            infoHash: infoHash,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

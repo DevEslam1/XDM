@@ -375,16 +375,19 @@ class BackgroundService {
     final result = Completer<bool>();
 
     _iosBgWatchdogTimer?.cancel();
-    _iosBgWatchdogTimer = Timer(const Duration(seconds: 25), () {
+    _iosBgWatchdogTimer = Timer(const Duration(seconds: 25), () async {
       if (!result.isCompleted) {
         _log.warning(
             '[iOS BG Watchdog] iOS background call wedged for 25s; force-resetting and allowing next schedule.');
         try {
           DownloadEngine.markBackground();
-          DatabaseService.instance.flushPendingSaves();
+          await Future.wait([
+            DatabaseService.instance.flushPendingSaves(),
+            DatabaseService.instance.checkpointWal(truncate: false),
+          ]).timeout(const Duration(seconds: 3));
         } catch (e, st) {
           _log.warning(
-              'Failed to flush DB during iOS background watchdog reset: $e',
+              'Failed to flush/checkpoint DB during iOS background watchdog reset: $e',
               e,
               st);
         }
@@ -501,9 +504,12 @@ class BackgroundService {
         await onDataSyncTimeout!();
       }
       DownloadEngine.markBackground();
-      DatabaseService.instance.flushPendingSaves();
+      await Future.wait([
+        DatabaseService.instance.flushPendingSaves(),
+        DatabaseService.instance.checkpointWal(truncate: false),
+      ]).timeout(const Duration(seconds: 3));
     } catch (e, st) {
-      _log.warning('Error pausing tasks during dataSync timeout', e, st);
+      _log.warning('Error pausing tasks or flushing DB during dataSync timeout', e, st);
     }
 
     try {
@@ -556,17 +562,19 @@ class BackgroundService {
     }
   }
 
-  static Future<void> stop() async {
+  static Future<void> stop({bool force = false}) async {
     if (!isSupported) {
       _log.fine('BackgroundService.stop() skipped (unsupported platform)');
       return;
     }
 
-    // FIX: P0-04 — never stop while downloads are running
-    final activeCount = await _checkActiveDownloadCount();
-    if (activeCount > 0) {
-      _log.info('Not stopping: downloads still active ($activeCount running)');
-      return;
+    // FIX: P0-04 — never stop while downloads are running unless force=true
+    if (!force) {
+      final activeCount = await _checkActiveDownloadCount();
+      if (activeCount > 0) {
+        _log.info('Not stopping: downloads still active ($activeCount running)');
+        return;
+      }
     }
 
     await releaseWakeLock();

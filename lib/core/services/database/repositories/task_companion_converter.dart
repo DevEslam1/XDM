@@ -56,6 +56,7 @@ class TaskCompanionConverter {
           drift.Value(task.ytCounterpartDownloadedBytes),
       cycleState: drift.Value(task.cycleState?.name),
       previousCycleState: drift.Value(task.previousCycleState?.name),
+      infoHash: drift.Value(task.infoHash),
     );
   }
 
@@ -108,16 +109,7 @@ class TaskCompanionConverter {
     final rawPauseReason =
         row.pauseReason != null ? PauseReason.fromName(row.pauseReason) : null;
 
-    final isInterruptedActive = parsedStatus == DownloadStatus.downloading ||
-        rawCycleState == CycleState.starting ||
-        rawCycleState == CycleState.resuming ||
-        rawCycleState == CycleState.retrying ||
-        rawCycleState == CycleState.fetchingMetadata ||
-        rawCycleState == CycleState.merging ||
-        rawCycleState == CycleState.verifying ||
-        rawCycleState == CycleState.updatingLinks ||
-        rawCycleState == CycleState.allocating ||
-        rawCycleState == CycleState.stalled;
+    final isInterruptedActive = isInterruptedActiveRow(row);
 
     final isUpdatingLinks = rawCycleState == CycleState.updatingLinks;
     final status = isInterruptedActive ? DownloadStatus.paused : parsedStatus;
@@ -203,6 +195,28 @@ class TaskCompanionConverter {
       totalFileBytes: files != null && files.isNotEmpty ? totalFileBytes : null,
       downloadedFileBytes:
           files != null && files.isNotEmpty ? downloadedFileBytes : null,
+      infoHash: row.infoHash,
     );
+  }
+
+  static bool isInterruptedActiveRow(DbDownloadTask row) {
+    final statusName = row.status;
+    final parsedStatus = DownloadStatus.values.firstWhere(
+      (value) => value.name == statusName,
+      orElse: () => DownloadStatus.paused,
+    );
+    final rawCycleState =
+        row.cycleState != null ? CycleState.fromName(row.cycleState) : null;
+
+    return parsedStatus == DownloadStatus.downloading ||
+        rawCycleState == CycleState.starting ||
+        rawCycleState == CycleState.resuming ||
+        rawCycleState == CycleState.retrying ||
+        rawCycleState == CycleState.fetchingMetadata ||
+        rawCycleState == CycleState.merging ||
+        rawCycleState == CycleState.verifying ||
+        rawCycleState == CycleState.updatingLinks ||
+        rawCycleState == CycleState.allocating ||
+        rawCycleState == CycleState.stalled;
   }
 }

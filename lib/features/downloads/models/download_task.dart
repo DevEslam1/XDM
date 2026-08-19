@@ -274,6 +274,7 @@ class DownloadTask {
   final int? completedFiles;
   final int? totalFileBytes;
   final int? downloadedFileBytes;
+  final String? infoHash;
 
   final bool isMergeInProgress; // runtime only, not persisted
 
@@ -341,6 +342,7 @@ class DownloadTask {
     this.completedFiles,
     this.totalFileBytes,
     this.downloadedFileBytes,
+    this.infoHash,
   });
 
   DownloadTaskCore get core => DownloadTaskCore(
@@ -831,6 +833,8 @@ class DownloadTask {
     int? completedFiles,
     int? totalFileBytes,
     int? downloadedFileBytes,
+    String? infoHash,
+    bool clearInfoHash = false,
   }) {
     final effectiveFileSize = clearFileSize
         ? 0
@@ -951,6 +955,7 @@ class DownloadTask {
       completedFiles: completedFiles ?? this.completedFiles,
       totalFileBytes: totalFileBytes ?? this.totalFileBytes,
       downloadedFileBytes: downloadedFileBytes ?? this.downloadedFileBytes,
+      infoHash: clearInfoHash ? null : (infoHash ?? this.infoHash),
     );
   }
 
@@ -1022,6 +1027,7 @@ class DownloadTask {
       'completedFiles': completedFiles,
       'totalFileBytes': totalFileBytes,
       'downloadedFileBytes': downloadedFileBytes,
+      'infoHash': infoHash,
     };
   }
 
@@ -1211,6 +1217,7 @@ class DownloadTask {
       completedFiles: completedFiles,
       totalFileBytes: totalFileBytes,
       downloadedFileBytes: downloadedFileBytes,
+      infoHash: map['infoHash'] as String?,
     );
   }
 

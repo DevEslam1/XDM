@@ -90,8 +90,8 @@ class _GlassCardState extends State<GlassCard> {
         padding: widget.padding,
         decoration: BoxDecoration(
           color: widget.isDarkMode
-              ? Colors.black.withValues(alpha: 0.70)
-              : Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
+              ? AppTheme.surface.withValues(alpha: 0.70)
+              : AppTheme.lightSurface.withValues(alpha: 0.85),
           borderRadius: BorderRadius.circular(widget.borderRadius),
           border: widget.border,
         ),
@@ -110,8 +110,8 @@ class _GlassCardState extends State<GlassCard> {
         padding: widget.padding,
         decoration: BoxDecoration(
           color: isDark
-              ? Colors.black.withValues(alpha: 0.70)
-              : Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
+              ? AppTheme.surface.withValues(alpha: 0.70)
+              : AppTheme.lightSurface.withValues(alpha: 0.85),
           borderRadius: BorderRadius.circular(widget.borderRadius),
           border: widget.border ??
               Border.all(

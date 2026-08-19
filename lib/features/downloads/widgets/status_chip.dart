@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import '../../../../core/app_theme.dart';
+import '../../../../core/services/background_gate.dart';
+import '../../../../core/services/power_monitor.dart';
 import '../../../../core/utils/localization.dart';
 import '../../../shared/mixins/pausable_loop_animation.dart';
 import '../../settings/provider/settings_provider.dart';
@@ -13,6 +14,7 @@ class StatusChip extends StatelessWidget {
   const StatusChip({super.key, required this.task});
 
   bool _shouldPulse(DownloadTask task) {
+    if (PowerMonitor.screenOff || !BackgroundGate.shouldAnimate) return false;
     return task.status == DownloadStatus.downloading ||
         task.status == DownloadStatus.merging ||
         (task.status == DownloadStatus.completed &&

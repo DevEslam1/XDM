@@ -204,12 +204,24 @@ class _SettingsScreenState extends State<SettingsScreen>
     super.dispose();
   }
 
+  List<_SettingSearchEntry>? _cachedSearchIndex;
+  bool? _cachedIsDark;
+  bool? _cachedIsRtl;
+
   List<_SettingSearchEntry> _buildSearchIndex(
     BuildContext context,
     SettingsProvider settings,
     bool isDark,
     bool isRtl,
   ) {
+    if (_cachedSearchIndex != null &&
+        _cachedIsDark == isDark &&
+        _cachedIsRtl == isRtl) {
+      return _cachedSearchIndex!;
+    }
+    _cachedIsDark = isDark;
+    _cachedIsRtl = isRtl;
+
     final amber = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
     final orange = isDark ? AppTheme.neonOrange : AppTheme.lightNeonOrange;
     final blue = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
@@ -218,7 +230,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     final green = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final red = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
 
-    return [
+    final list = [
       // Category 0: Appearance
       _SettingSearchEntry(
         categoryTitle: isRtl ? 'المظهر والواجهة' : 'Appearance & UI',
@@ -531,6 +543,8 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
       ),
     ];
+    _cachedSearchIndex = list;
+    return list;
   }
 
   @override

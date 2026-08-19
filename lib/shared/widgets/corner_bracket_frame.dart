@@ -81,6 +81,9 @@ class _CornerBracketPainter extends CustomPainter {
   }
 
   @override
+  bool? hitTest(Offset position) => false;
+
+  @override
   bool shouldRepaint(covariant _CornerBracketPainter oldDelegate) {
     return oldDelegate.color != color ||
         oldDelegate.bracketSize != bracketSize ||

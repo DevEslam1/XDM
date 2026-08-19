@@ -8,12 +8,13 @@ enum PauseReason {
   scheduled,
   appRestarted,
   urlExpired,
-  permissionRevoked;
+  permissionRevoked,
+  unknown;
 
   static const PauseReason userRequested = PauseReason.user;
   static const PauseReason batteryLow = PauseReason.batterySaver;
 
-  static PauseReason? fromName(String? name, {PauseReason? fallback}) {
+  static PauseReason? fromName(String? name, {PauseReason? fallback = PauseReason.unknown}) {
     if (name == null || name.trim().isEmpty) return fallback;
     final normalized = name.trim();
     for (final v in PauseReason.values) {

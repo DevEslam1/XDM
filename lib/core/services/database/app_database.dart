@@ -336,6 +336,7 @@ class DownloadTasks extends Table {
   IntColumn get httpPartsCompleted => integer().nullable()();
   IntColumn get httpPartsTotal => integer().nullable()();
   TextColumn get previousCycleState => text().nullable()();
+  TextColumn get infoHash => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -435,9 +436,9 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e, {this.stateCriticalSynchronous = false})
       : dbPath = null;
 
-  /// Starts a periodic WAL checkpointer running every [interval] (defaults to 15m).
+  /// Starts a periodic WAL checkpointer running every [interval] (defaults to 5m).
   void startPeriodicWalCheckpointer(
-      {Duration interval = const Duration(minutes: 15)}) {
+      {Duration interval = const Duration(minutes: 5)}) {
     _checkpointTimer?.cancel();
     _checkpointTimer = Timer.periodic(interval, (_) async {
       try {
@@ -474,7 +475,9 @@ class AppDatabase extends _$AppDatabase {
     final beforeSize = getWalFileSize();
     try {
       final mode = truncate ? 'TRUNCATE' : 'PASSIVE';
-      final result = await customSelect('PRAGMA wal_checkpoint($mode);').get();
+      final result = await customSelect('PRAGMA wal_checkpoint($mode);')
+          .get()
+          .timeout(const Duration(seconds: 3));
       final afterSize = getWalFileSize();
       _dbLog.info(
           'WAL checkpoint ($mode) completed. Size: ${beforeSize}B -> ${afterSize}B');
@@ -482,7 +485,7 @@ class AppDatabase extends _$AppDatabase {
           ? (result.first.data.values.first as int? ?? 0)
           : 0;
     } catch (e, st) {
-      _dbLog.warning('WAL checkpoint failed: $e', e, st);
+      _dbLog.warning('WAL checkpoint failed or timed out: $e', e, st);
       return -1;
     }
   }
@@ -535,7 +538,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   @visibleForTesting
   Future<void> addColumnIfMissingForTesting(
@@ -604,70 +607,126 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(downloadTasks, downloadTasks.notes);
           }
           if (from < 3) {
-            await customStatement('''
-            UPDATE download_tasks SET created_at =
-              SUBSTR(created_at, 1, INSTR(created_at, '.') - 1)
-            WHERE typeof(created_at) = 'text' AND created_at LIKE '%.%';
-          ''');
-            await customStatement('''
-            UPDATE download_tasks SET created_at = SUBSTR(created_at, 1, INSTR(created_at, '+') - 1) WHERE typeof(created_at) = 'text' AND created_at LIKE '%+%';
-            UPDATE download_tasks SET updated_at = SUBSTR(updated_at, 1, INSTR(updated_at, '+') - 1) WHERE typeof(updated_at) = 'text' AND updated_at LIKE '%+%';
-            UPDATE download_tasks SET completed_at = SUBSTR(completed_at, 1, INSTR(completed_at, '+') - 1) WHERE typeof(completed_at) = 'text' AND completed_at LIKE '%+%';
-            UPDATE download_tasks SET scheduled_at = SUBSTR(scheduled_at, 1, INSTR(scheduled_at, '+') - 1) WHERE typeof(scheduled_at) = 'text' AND scheduled_at LIKE '%+%';
-          ''');
-            await customStatement('''
-            UPDATE download_tasks SET
-              created_at = COALESCE(CAST((julianday(REPLACE(REPLACE(created_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0)
-            WHERE typeof(created_at) = 'text';
-          ''');
-            await customStatement('''
-            UPDATE download_tasks SET
-              updated_at = COALESCE(CAST((julianday(REPLACE(REPLACE(updated_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0)
-            WHERE typeof(updated_at) = 'text';
-          ''');
-            await customStatement('''
-            UPDATE download_tasks SET
-              completed_at = CASE WHEN completed_at IS NOT NULL THEN COALESCE(CAST((julianday(REPLACE(REPLACE(completed_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) ELSE NULL END
-            WHERE typeof(completed_at) = 'text';
-          ''');
-            await customStatement('''
-            UPDATE download_tasks SET
-              scheduled_at = CASE WHEN scheduled_at IS NOT NULL THEN COALESCE(CAST((julianday(REPLACE(REPLACE(scheduled_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) ELSE NULL END
-            WHERE typeof(scheduled_at) = 'text';
-          ''');
-            await customStatement(
-                'UPDATE download_tasks SET created_at = 0 WHERE created_at < 0');
-            await customStatement(
-                'UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0');
-            final badDates = await customSelect(
-                    'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0')
-                .get();
-            final badCount = badDates.first.read<int>('cnt');
-            if (badCount > 0) {
-              debugPrint(
-                  'WARNING: $badCount tasks have epoch (0) created_at after migration');
+            try {
+              await customStatement('''
+              UPDATE download_tasks SET created_at =
+                SUBSTR(created_at, 1, INSTR(created_at, '.') - 1)
+              WHERE typeof(created_at) = 'text' AND created_at LIKE '%.%';
+            ''');
+            } catch (e, st) {
+              _dbLog.warning('Migration v2→v3: dot-strip failed: $e', e, st);
             }
-            final recoveredFromUpdated = await customSelect(
-              'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at > 0',
-            ).get();
-            final recoverFromUpdatedCount =
-                recoveredFromUpdated.first.read<int>('cnt');
-            if (recoverFromUpdatedCount > 0) {
-              await customStatement(
-                  'UPDATE download_tasks SET created_at = updated_at WHERE created_at = 0 AND updated_at > 0');
-              debugPrint(
-                  '[DMX] Migration v2→v3: recovered $recoverFromUpdatedCount rows (created_at = updated_at)');
+
+            try {
+              await customStatement('''
+              UPDATE download_tasks SET created_at = SUBSTR(created_at, 1, INSTR(created_at, '+') - 1) WHERE typeof(created_at) = 'text' AND created_at LIKE '%+%';
+              UPDATE download_tasks SET updated_at = SUBSTR(updated_at, 1, INSTR(updated_at, '+') - 1) WHERE typeof(updated_at) = 'text' AND updated_at LIKE '%+%';
+              UPDATE download_tasks SET completed_at = SUBSTR(completed_at, 1, INSTR(completed_at, '+') - 1) WHERE typeof(completed_at) = 'text' AND completed_at LIKE '%+%';
+              UPDATE download_tasks SET scheduled_at = SUBSTR(scheduled_at, 1, INSTR(scheduled_at, '+') - 1) WHERE typeof(scheduled_at) = 'text' AND scheduled_at LIKE '%+%';
+            ''');
+            } catch (e, st) {
+              _dbLog.warning('Migration v2→v3: timezone-strip failed: $e', e, st);
             }
-            final recoveredFromNow = await customSelect(
-              'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0',
-            ).get();
-            final recoverFromNowCount = recoveredFromNow.first.read<int>('cnt');
-            if (recoverFromNowCount > 0) {
+
+            try {
+              await customStatement('''
+              UPDATE download_tasks SET
+                created_at = COALESCE(CAST((julianday(REPLACE(REPLACE(created_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0)
+              WHERE typeof(created_at) = 'text';
+            ''');
+            } catch (e, st) {
+              _dbLog.warning('Migration v2→v3: created_at parse failed: $e', e, st);
+            }
+
+            try {
+              await customStatement('''
+              UPDATE download_tasks SET
+                updated_at = COALESCE(CAST((julianday(REPLACE(REPLACE(updated_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0)
+              WHERE typeof(updated_at) = 'text';
+            ''');
+            } catch (e, st) {
+              _dbLog.warning('Migration v2→v3: updated_at parse failed: $e', e, st);
+            }
+
+            try {
+              await customStatement('''
+              UPDATE download_tasks SET
+                completed_at = CASE WHEN completed_at IS NOT NULL THEN COALESCE(CAST((julianday(REPLACE(REPLACE(completed_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) ELSE NULL END
+              WHERE typeof(completed_at) = 'text';
+            ''');
+            } catch (e, st) {
+              _dbLog.warning('Migration v2→v3: completed_at parse failed: $e', e, st);
+            }
+
+            try {
+              await customStatement('''
+              UPDATE download_tasks SET
+                scheduled_at = CASE WHEN scheduled_at IS NOT NULL THEN COALESCE(CAST((julianday(REPLACE(REPLACE(scheduled_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) ELSE NULL END
+              WHERE typeof(scheduled_at) = 'text';
+            ''');
+            } catch (e, st) {
+              _dbLog.warning('Migration v2→v3: scheduled_at parse failed: $e', e, st);
+            }
+
+            // Straggler fallback for any text values remaining
+            try {
               await customStatement(
-                "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0",
-              );
-              debugPrint(
-                  '[DMX] Migration v2→v3: recovered $recoverFromNowCount rows (created_at = now)');
+                  "UPDATE download_tasks SET created_at = 0 WHERE typeof(created_at) = 'text'");
+              await customStatement(
+                  "UPDATE download_tasks SET updated_at = 0 WHERE typeof(updated_at) = 'text'");
+              await customStatement(
+                  "UPDATE download_tasks SET completed_at = NULL WHERE typeof(completed_at) = 'text'");
+              await customStatement(
+                  "UPDATE download_tasks SET scheduled_at = NULL WHERE typeof(scheduled_at) = 'text'");
+            } catch (e, st) {
+              _dbLog.warning('Migration v2→v3: straggler fallback failed: $e', e, st);
+            }
+
+            try {
+              await customStatement(
+                  'UPDATE download_tasks SET created_at = 0 WHERE created_at < 0');
+              await customStatement(
+                  'UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0');
+            } catch (e, st) {
+              _dbLog.warning('Migration v2→v3: negative clamp failed: $e', e, st);
+            }
+
+            try {
+              final badDates = await customSelect(
+                      'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0')
+                  .get();
+              final badCount = badDates.first.read<int>('cnt');
+              if (badCount > 0) {
+                debugPrint(
+                    'WARNING: $badCount tasks have epoch (0) created_at after migration');
+              }
+              final recoveredFromUpdated = await customSelect(
+                'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at > 0',
+              ).get();
+              final recoverFromUpdatedCount =
+                  recoveredFromUpdated.first.read<int>('cnt');
+              if (recoverFromUpdatedCount > 0) {
+                await customStatement(
+                    'UPDATE download_tasks SET created_at = updated_at WHERE created_at = 0 AND updated_at > 0');
+                debugPrint(
+                    '[DMX] Migration v2→v3: recovered $recoverFromUpdatedCount rows (created_at = updated_at)');
+              }
+              final recoveredFromNow = await customSelect(
+                'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0',
+              ).get();
+              final recoverFromNowCount = recoveredFromNow.first.read<int>('cnt');
+              if (recoverFromNowCount > 0) {
+                await customStatement(
+                  "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0",
+                );
+                debugPrint(
+                    '[DMX] Migration v2→v3: recovered $recoverFromNowCount rows (created_at = now)');
+              }
+            } catch (e, st) {
+              _dbLog.warning(
+                  'Migration v2→v3: post-migration recovery check failed: $e',
+                  e,
+                  st);
             }
           }
           if (from < 4) {
@@ -913,9 +972,14 @@ class AppDatabase extends _$AppDatabase {
             ''');
           }
 
-          if (to > 24) {
+          if (from < 25) {
+            await _addColumnIfMissing('download_tasks', 'info_hash',
+                'ALTER TABLE download_tasks ADD COLUMN info_hash TEXT');
+          }
+
+          if (to > 25) {
             _dbLog.warning(
-                'AppDatabase: Upgrade target version $to is higher than version 24, no specific migrations defined!');
+                'AppDatabase: Upgrade target version $to is higher than version 25, no specific migrations defined!');
           }
         },
       );

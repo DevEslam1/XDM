@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +9,7 @@ import '../../../core/app_theme.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../services/search_engine_config.dart';
 
@@ -335,8 +335,9 @@ class _SmartUrlBarState extends State<SmartUrlBar>
                   constraints: const BoxConstraints(maxWidth: 680),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(20),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                    child: DmxBackdropFilter(
+                      sigmaX: 16,
+                      sigmaY: 16,
                       child: Material(
                         elevation: 20,
                         shadowColor: Colors.black.withValues(alpha: 0.5),

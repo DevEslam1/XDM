@@ -31,7 +31,7 @@ const int kStateSaveMinBytes = 16 * 1024 * 1024; // 16MB
 const int kJournalCompactionThreshold = 512 * 1024;
 
 /// Foreground chunk-progress journal write threshold.
-const int kJournalForegroundWriteDelta = 512 * 1024;
+const int kJournalForegroundWriteDelta = 256 * 1024;
 
 /// Background (non-screen-off) chunk-progress journal write threshold.
 const int kJournalBackgroundWriteDelta = 1 * 1024 * 1024; // 1MB

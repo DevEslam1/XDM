@@ -51,7 +51,7 @@ class DatabaseMaintenanceService {
             '[DatabaseMaintenanceService] Active downloads in progress; skipping periodic wal_checkpoint');
       } else {
         final walRows = await _db
-            .customSelect('PRAGMA wal_checkpoint(RESTART)')
+            .customSelect('PRAGMA wal_checkpoint(PASSIVE)')
             .get()
             .timeout(const Duration(seconds: 1));
         if (walRows.isNotEmpty) {
@@ -62,7 +62,7 @@ class DatabaseMaintenanceService {
           if (checkpointed is num) checkpointedPages = checkpointed.toInt();
           if (checkpointedPages > 100) {
             _log.info(
-              '[DatabaseMaintenanceService] wal_checkpoint(RESTART) reclaimed $checkpointedPages pages ($logPages log pages)',
+              '[DatabaseMaintenanceService] wal_checkpoint(PASSIVE) reclaimed $checkpointedPages pages ($logPages log pages)',
             );
           }
         }

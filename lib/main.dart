@@ -110,6 +110,9 @@ Future<double> _getDeviceMemoryGB() async {
 }
 
 final _mainLog = LoggingService.logger('main');
+// FIX H-4/H-5: Store observer instances so they can be removed on app shutdown
+_ScreenObserver? _screenObserver;
+_AppLifecycleObserver? _appLifecycleObserver;
 
 Future<void> main(List<String> args) async {
   CrashReportingService.runWithErrorCapture(() async {
@@ -117,13 +120,8 @@ Future<void> main(List<String> args) async {
     LoggingService.init();
     CrashReportingService.captureFlutterErrors();
 
-    // ── Crash reporting: NoOp unless SENTRY_DSN is provided via
-    //    --dart-define=SENTRY_DSN=... (see crash_reporting_service.dart) ──
-    try {
-      await CrashReportingService.init();
-    } catch (e, st) {
-      _mainLog.warning('Crash reporting init failed', e, st);
-    }
+    // NOTE: CrashReportingService.init() must NOT be called here — WidgetsFlutterBinding
+    // is not yet initialized. The authoritative init happens in PHASE 3 (after ensureInitialized).
 
     WidgetsFlutterBinding.ensureInitialized();
 
@@ -164,7 +162,9 @@ Future<void> main(List<String> args) async {
     await PowerMonitor.init();
     await ProtocolCache.init();
 
-    WidgetsBinding.instance.addObserver(_ScreenObserver());
+    // FIX H-4: Store observer instance so it can be removed in _AppLifecycleObserver.detached
+    _screenObserver = _ScreenObserver();
+    WidgetsBinding.instance.addObserver(_screenObserver!);
 
     // Custom error widget builder for better UX & transient error retry
     ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
@@ -292,7 +292,9 @@ Future<void> main(List<String> args) async {
           ),
         );
       }
-      WidgetsBinding.instance.addObserver(_AppLifecycleObserver());
+      // FIX H-5: Store observer instance for proper cleanup on app detach
+      _appLifecycleObserver = _AppLifecycleObserver();
+      WidgetsBinding.instance.addObserver(_appLifecycleObserver!);
 
       // Widget deep links (dmx://) — must be registered after runApp so the
       // navigator key is attached to the MaterialApp.
@@ -626,6 +628,15 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
     }
 
     if (state == AppLifecycleState.detached) {
+      // FIX H-4/H-5: Remove stored observers to prevent leaks on re-initialization
+      if (_screenObserver != null) {
+        WidgetsBinding.instance.removeObserver(_screenObserver!);
+        _screenObserver = null;
+      }
+      if (_appLifecycleObserver != null) {
+        WidgetsBinding.instance.removeObserver(_appLifecycleObserver!);
+        _appLifecycleObserver = null;
+      }
       // App is being terminated — release wake lock and shutdown singleton services
       unawaited(shutdownDependencies().catchError((e, st) {
         _mainLog.warning('Failed to shutdown dependencies on detach', e, st);

@@ -496,7 +496,17 @@ class DownloadIsolatePool implements MemoryPressureListener {
           null,
         );
       }
-      worker.disposeResources(killPriority: Isolate.immediate);
+      // Use beforeNextEvent first to allow isolate to finish any in-flight buffer flush,
+      // with a 2-second fallback timer before hard killing.
+      worker.disposeResources(killPriority: Isolate.beforeNextEvent);
+      final isolateToKill = worker.isolate;
+      if (isolateToKill != null) {
+        Timer(const Duration(seconds: 2), () {
+          try {
+            isolateToKill.kill(priority: Isolate.immediate);
+          } catch (_) {}
+        });
+      }
       if (!_shuttingDown) {
         _workers.remove(worker);
         Future.microtask(() async {

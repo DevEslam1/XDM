@@ -148,12 +148,12 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
                 Positioned.fill(
                   child: TickerMode(
                     enabled: isTickerActive,
-                    child: AnimatedBuilder(
-                      animation: _shimmer,
-                      builder: (context, _) {
-                        return LayoutBuilder(
-                          builder: (context, c) {
-                            final w = c.maxWidth;
+                    child: LayoutBuilder(
+                      builder: (context, c) {
+                        final w = c.maxWidth;
+                        return AnimatedBuilder(
+                          animation: _shimmer,
+                          builder: (context, _) {
                             final x = (w + 60) * _shimmer.value - 60;
                             return Stack(
                               children: [

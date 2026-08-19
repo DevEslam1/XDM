@@ -55,12 +55,12 @@ class DownloadEngine implements IDownloadEngine {
 
   static const int _isolatePoolSize = 4;
 
-  final HttpDownloadOrchestrator _httpOrchestrator;
-  final TorrentDownloadOrchestrator _torrentOrchestrator;
-  final TorrentDownloadHandler _torrentHandler;
-  final MetadataProbeService _metadataService;
-  final YtCounterpartCoordinator _ytCoordinator;
-  final DioClientPool _dioPool;
+  late final HttpDownloadOrchestrator _httpOrchestrator;
+  late final TorrentDownloadOrchestrator _torrentOrchestrator;
+  late final TorrentDownloadHandler _torrentHandler;
+  late final MetadataProbeService _metadataService;
+  late final YtCounterpartCoordinator _ytCoordinator;
+  late final DioClientPool _dioPool;
 
   TorrentDownloadOrchestrator get torrentOrchestrator => _torrentOrchestrator;
   TorrentDownloadHandler get torrentHandler => _torrentHandler;
@@ -77,29 +77,31 @@ class DownloadEngine implements IDownloadEngine {
     DioClientPool? dioPool,
     Dio? dio,
     bool enableCleanupTimer = true,
-  })  : _dioPool =
-            dioPool ?? DioClientPool(enableCleanupTimer: enableCleanupTimer),
-        _ytCoordinator = ytCoordinator ??
-            YtCounterpartCoordinator(enablePeriodicTimer: enableCleanupTimer),
-        _metadataService = metadataService ??
-            MetadataProbeService(dioPool ??
-                DioClientPool(enableCleanupTimer: enableCleanupTimer)),
-        _torrentHandler = torrentHandler ?? TorrentDownloadHandler(),
-        _httpOrchestrator = httpOrchestrator ??
-            HttpDownloadOrchestrator(
-              metadataService ??
-                  MetadataProbeService(dioPool ??
-                      DioClientPool(enableCleanupTimer: enableCleanupTimer)),
-              ytCoordinator ??
-                  YtCounterpartCoordinator(
-                      enablePeriodicTimer: enableCleanupTimer),
-              SettingsProvider.instance,
-            ),
-        _torrentOrchestrator = torrentOrchestrator ??
-            TorrentDownloadOrchestrator(
-              dioPool ?? DioClientPool(enableCleanupTimer: enableCleanupTimer),
-              torrentHandler ?? TorrentDownloadHandler(),
-            );
+  }) {
+    // FIX C-4: Create a single shared DioClientPool instead of up to 3 separate
+    // instances. All sub-services share the same pool so socket handles, cleanup
+    // timers, and connection tracking are centralised.
+    final sharedPool =
+        dioPool ?? DioClientPool(enableCleanupTimer: enableCleanupTimer);
+    final sharedYtCoordinator = ytCoordinator ??
+        YtCounterpartCoordinator(enablePeriodicTimer: enableCleanupTimer);
+    final sharedMetadata =
+        metadataService ?? MetadataProbeService(sharedPool);
+    final sharedTorrentHandler = torrentHandler ?? TorrentDownloadHandler();
+
+    _dioPool = sharedPool;
+    _ytCoordinator = sharedYtCoordinator;
+    _metadataService = sharedMetadata;
+    _torrentHandler = sharedTorrentHandler;
+    _httpOrchestrator = httpOrchestrator ??
+        HttpDownloadOrchestrator(
+          sharedMetadata,
+          sharedYtCoordinator,
+          SettingsProvider.instance,
+        );
+    _torrentOrchestrator = torrentOrchestrator ??
+        TorrentDownloadOrchestrator(sharedPool, sharedTorrentHandler);
+  }
 
   String buildLocalFilePath(String dir, String fileName) =>
       p.join(dir, fileName);

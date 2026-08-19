@@ -407,7 +407,9 @@ class DownloadProgress {
           pauseReason == other.pauseReason &&
           totalChunks == other.totalChunks &&
           completedChunks == other.completedChunks &&
-          chunkFingerprint == other.chunkFingerprint;
+          chunkFingerprint == other.chunkFingerprint &&
+          listEquals(torrentFiles, other.torrentFiles) &&
+          listEquals(chunkDetails, other.chunkDetails);
 
   @override
   int get hashCode => Object.hash(
@@ -419,6 +421,8 @@ class DownloadProgress {
         totalChunks,
         completedChunks,
         chunkFingerprint,
+        torrentFiles?.length,
+        chunkDetails?.length,
       );
 }
 

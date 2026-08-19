@@ -1,14 +1,11 @@
-import 'dart:async';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/core/services/download_engine.dart';
-import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/core/services/tick_manager.dart';
+import 'package:dmx/features/downloads/data/task_repository.dart';
 import 'package:dmx/features/downloads/models/download_state_machine.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_list_provider.dart';
 import 'package:dmx/features/downloads/provider/download_stats_notifier.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:dmx/features/downloads/data/task_repository.dart';
 
 class MockTaskRepository extends Mock implements TaskRepository {}
 

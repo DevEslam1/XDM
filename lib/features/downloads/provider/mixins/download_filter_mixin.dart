@@ -86,6 +86,9 @@ mixin DownloadFilterMixin {
   bool get filteredTasksDirty => _filteredTasksDirty;
   set filteredTasksDirty(bool value) {
     _filteredTasksDirty = value;
+    if (value) {
+      _cachedFilteredTasks = null;
+    }
   }
 
   // ---------------------------------------------------------------------------

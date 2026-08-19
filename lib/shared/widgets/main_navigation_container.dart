@@ -205,11 +205,18 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     if (settings.vibration) HapticFeedback.mediumImpact();
-    final preview = url.length > 40 ? '${url.substring(0, 40)}…' : url;
+    String preview = url;
+    try {
+      final uri = Uri.parse(url);
+      if (uri.userInfo.isNotEmpty) {
+        preview = uri.replace(userInfo: '').toString();
+      }
+    } catch (_) {}
+    final safePreview = preview.length > 40 ? '${preview.substring(0, 40)}…' : preview;
     ThemedSnackbar.show(
       context,
       message: L10n.of(context, 'clipboard_link_detected'),
-      subtitle: preview,
+      subtitle: safePreview,
       color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
       icon: Icons.content_paste_go_rounded,
       isDarkMode: isDark,

@@ -8,6 +8,7 @@ import 'package:dio/io.dart';
 import 'package:dmx/core/services/download_journal.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/retry_interceptor.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 
 /// Utility classes and functions for the Download Engine.
 /// Task 1.2: Decoupled utilities.
@@ -134,19 +135,13 @@ class DebugCertOverride {
   static const bool allowDebugCert =
       bool.fromEnvironment('ALLOW_DEBUG_CERT', defaultValue: false);
 
-  /// FIX-A: Debug-only SSL/TLS bypass.
-  ///
-  /// In debug builds (asserts active) — or when the `ALLOW_DEBUG_CERT`
-  /// dart-define is set — the returned callback accepts EVERY certificate for
-  /// every host, port and cert. Host matching was removed because it broke
-  /// legitimate CDN redirects (the callback receives the redirect target host,
-  /// which never matches the original URL's host).
-  ///
-  /// In release builds without the flag, asserts are stripped so `isDebug`
-  /// stays false and this returns `null`, letting Dart's default (secure)
-  /// certificate validation apply.
+  /// Debug-only SSL/TLS bypass.
+  /// Strictly disabled in release mode (kReleaseMode) to guarantee TLS security.
   static BadCertificateCallback? getCallback(String? url,
       {bool? allowDebugCertOverride}) {
+    if (kReleaseMode && allowDebugCertOverride != true) {
+      return null;
+    }
     final enabled = allowDebugCertOverride ?? allowDebugCert;
     bool isDebug = false;
     assert(() {
@@ -180,7 +175,11 @@ Future<int> actualDownloadedBytes(String tempFilePath,
     return math.min<int>(stateBytes, fileLen);
   }
   // When state file is missing, fall back to actual file length on disk
-  // as a lower bound to prevent unnecessary full restarts.
+  // ONLY for single-threaded downloads. For multi-threaded downloads,
+  // files are pre-allocated with zeros, so return 0 to prevent over-reporting.
+  if (threadCount > 1) {
+    return 0;
+  }
   return fileLen;
 }
 

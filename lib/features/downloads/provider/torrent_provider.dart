@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/core/services/torrent_service.dart';
 import 'package:flutter/foundation.dart';
 
@@ -71,7 +73,11 @@ class TorrentProvider extends ChangeNotifier {
 
   void _startStaleDetector() {
     _staleDetector?.cancel();
-    _staleDetector = Timer.periodic(const Duration(seconds: 30), (_) {
+    final isBg = PowerMonitor.screenOff ||
+        !DownloadEngine.appInForeground ||
+        DownloadEngine.isInBackground;
+    final interval = isBg ? const Duration(seconds: 60) : const Duration(seconds: 30);
+    _staleDetector = Timer.periodic(interval, (_) {
       if (!TorrentService.isInitialized) return;
       final active = TorrentService.activeTorrentIds;
       final registeredToTasks = _torrentIds.values.toSet();

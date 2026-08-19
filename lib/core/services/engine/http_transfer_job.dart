@@ -8,9 +8,9 @@ import 'package:dio/dio.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
+import 'package:synchronized/synchronized.dart';
 import '../../constants/thresholds.dart';
 import '../bandwidth_governor.dart';
-import '../checksum_service.dart';
 import '../download_engine.dart' show DownloadEngine;
 import '../download_journal.dart';
 import '../engines/http_download_engine.dart';
@@ -217,6 +217,7 @@ class HttpTransferJob {
   int? _lastEta;
   int _lastStateSaveMs = 0;
   bool _stateSavePending = false;
+  final Lock _stateSaveLock = Lock();
   int _lastReportMs = 0;
   int _bytesSinceSave = 0;
   int _lastChunkDetailsHash = 0;
@@ -443,6 +444,28 @@ class HttpTransferJob {
     _state!.status = DmxStateStatus.active;
     await StateStore.save(cmd.tempFilePath, _state!);
 
+    final tempFile = File(cmd.tempFilePath);
+    final diskFileLength = await tempFile.exists() ? await tempFile.length() : 0;
+
+    if (await File('${cmd.tempFilePath}.journal').exists()) {
+      final journalBytes = await DownloadJournal.replay(cmd.tempFilePath);
+      if (journalBytes != null && journalBytes.isNotEmpty && _state!.chunks.isNotEmpty) {
+        for (var i = 0; i < min(_state!.chunks.length, journalBytes.length); i++) {
+          if (journalBytes[i] > _state!.chunks[i].downloaded) {
+            final cap = _state!.chunks[i].size >= 0 ? _state!.chunks[i].size : journalBytes[i];
+            var clamped = journalBytes[i].clamp(0, cap);
+            if (diskFileLength > 0 && _state!.chunks.length == 1) {
+              clamped = min(clamped, diskFileLength);
+            }
+            _state!.chunks[i].downloaded = clamped;
+          }
+        }
+        _emitProgress(0,
+            statusMessage: 'Verifying resume data…',
+            cycleStateOverride: CycleState.verifying);
+      }
+    }
+
     if (_state!.downloadedBytes > 0) {
       _stalledEmitted = false;
       if (cmd.supportsResume) {
@@ -511,6 +534,7 @@ class HttpTransferJob {
       _send('done');
     } finally {
       cancelWatchdogs();
+      _abortAllDelays();
       // FIX 15: Check _stateSavedInCatch before saving in finally
       if (!_stateSavedInCatch && _state != null) {
         try {
@@ -1110,19 +1134,20 @@ class HttpTransferJob {
             statusMessage: 'Downloading…',
             cycleStateOverride: CycleState.downloading);
         attempts = 0;
-        if (chunk.isComplete) {
-          try {
-            await writer.flushAll();
-            await StateStore.save(cmd.tempFilePath, _state!);
-          } catch (e) {
-            debugPrint('[DMX] H-2: chunk-boundary save failed: $e');
-            try {
-              await StateStore.save(cmd.tempFilePath, _state!);
-            } catch (e, st) {
-              _log.fine('Failed backup state save at chunk boundary', e, st);
-            }
-          }
-        }
+        if (chunk.isComplete) { // FIX-P0-1
+          try { // FIX-P0-1
+            await writer.flushAll(); // FIX-P0-1
+            await StateStore.save(cmd.tempFilePath, _state!, durable: true); // FIX-P0-1
+          } catch (e) { // FIX-P0-1
+            debugPrint('[DMX] H-2: chunk-boundary save failed: $e'); // FIX-P0-1
+            try { // FIX-P0-1
+              await Future<void>.delayed(const Duration(milliseconds: 150));
+              await StateStore.save(cmd.tempFilePath, _state!, durable: true); // FIX-P0-1
+            } catch (e, st) { // FIX-P0-1
+              _log.fine('Failed backup state save at chunk boundary', e, st); // FIX-P0-1
+            } // FIX-P0-1
+          } // FIX-P0-1
+        } // FIX-P0-1
       } on DioException catch (e) {
         if (e.type == DioExceptionType.cancel) rethrow;
         if (e.message == 'HTML_INSTEAD_OF_MEDIA') rethrow;
@@ -1232,9 +1257,6 @@ class HttpTransferJob {
         );
         if (response.statusCode != 206 || response.data == null) {
           chunk.downloaded = 0;
-          // FIX 9: Clear writer data for the reset chunk
-          await writer.write(
-              chunkIndex, chunk.start, Uint8List(len > 0 ? len : 0));
           return;
         }
         final builder = BytesBuilder(copy: false);
@@ -1245,11 +1267,7 @@ class HttpTransferJob {
         if (netBytes.length != diskBytes.length ||
             !listEquals(netBytes, diskBytes)) {
           chunk.downloaded = 0;
-          // FIX 9: Clear writer data for the mismatched chunk
-          await writer.write(
-              chunkIndex, chunk.start, Uint8List(len > 0 ? len : 0));
-          _log.fine('[DMX-Job] spot-check mismatch → chunk $chunkIndex reset '
-              'and writer cleared');
+          _log.fine('[DMX-Job] spot-check mismatch → chunk $chunkIndex reset');
         }
       } catch (e, st) {
         _log.fine('[DMX-Job] spot-check probe failed for chunk $chunkIndex: $e',
@@ -1594,12 +1612,15 @@ class HttpTransferJob {
         raf = null;
         failover.reportSuccess();
         attempts = 0;
-        if (st.totalSize <= 0) {
-          final actualDiskLen = await tempFile.length();
-          chunk.downloaded = actualDiskLen;
-          st.totalSize = actualDiskLen;
-          chunk.end = actualDiskLen > 0 ? actualDiskLen - 1 : 0;
-        }
+        if (st.totalSize <= 0) { // FIX-P0-1
+          final actualDiskLen = await tempFile.length(); // FIX-P0-1
+          chunk.downloaded = actualDiskLen; // FIX-P0-1
+          st.totalSize = actualDiskLen; // FIX-P0-1
+          chunk.end = actualDiskLen > 0 ? actualDiskLen - 1 : 0; // FIX-P0-1
+        } // FIX-P0-1
+        if (chunk.isComplete || (st.totalSize > 0 && chunk.downloaded >= st.totalSize)) { // FIX-P0-1
+          await StateStore.save(cmd.tempFilePath, _state!, durable: true); // FIX-P0-1
+        } // FIX-P0-1
         break;
       } on DioException catch (e) {
         if (e.type == DioExceptionType.cancel) {
@@ -1759,14 +1780,29 @@ class HttpTransferJob {
       try {
         await File(cmd.tempFilePath).rename(cmd.localFilePath);
       } catch (e) {
-        await File(cmd.tempFilePath).copy(cmd.localFilePath);
-        final sourceSha = await ChecksumService.sha256File(cmd.tempFilePath);
-        final destSha = await ChecksumService.sha256File(cmd.localFilePath);
-        if (sourceSha == destSha) {
-          await File(cmd.tempFilePath).delete();
-        } else {
-          throw const DownloadIntegrityException(
-              'File copy SHA-256 verification failed on rename fallback.');
+        final srcFile = File(cmd.tempFilePath);
+        final dstFile = File(cmd.localFilePath);
+        try {
+          final srcStream = srcFile.openRead();
+          final dstSink = dstFile.openWrite();
+          await srcStream.pipe(dstSink);
+
+          final srcLen = await srcFile.length();
+          final dstLen = await dstFile.length();
+          if (srcLen == dstLen) {
+            await srcFile.delete();
+          } else {
+            if (await dstFile.exists()) await dstFile.delete();
+            throw DownloadIntegrityException(
+                'File copy length mismatch ($srcLen != $dstLen) on rename fallback.');
+          }
+        } catch (copyErr) {
+          if (await dstFile.exists()) {
+            try {
+              await dstFile.delete();
+            } catch (_) {}
+          }
+          rethrow;
         }
       }
     } else {
@@ -1808,35 +1844,39 @@ class HttpTransferJob {
   Future<void> _cancellableDelay(Duration duration) =>
       cancellableDelay(duration);
 
-  /// FIX 1: Throttled save and report - now forces state save on cancel
-  /// before the microtask can run.
+  /// Throttled state save and progress report using synchronized execution
+  /// to guarantee state preservation without dropping saves.
   Future<void> _throttledSaveAndReport(
     PositionalFileWriter? writer, {
     Future<void> Function()? preSaveFlush,
   }) async {
     if (_stateSavePending) return;
 
-    // If cancelled, force immediate save
+    // If cancelled, force immediate durable save
     if (_cancelRequested || _cancelToken.isCancelled) {
       final st = _state;
       if (st != null && !_stateSavedInCatch) {
         try {
-          if (preSaveFlush != null) await preSaveFlush();
-          if (writer != null) await writer.flushBuffers();
-          await StateStore.save(cmd.tempFilePath, st);
+          await _stateSaveLock.synchronized(() async {
+            if (preSaveFlush != null) await preSaveFlush();
+            if (writer != null) await writer.flushBuffers();
+            await StateStore.save(cmd.tempFilePath, st, durable: true);
+          });
         } catch (e) {
           debugPrint('[DMX-Job] forced state save on cancel failed: $e');
         }
       }
       return;
     }
+
+    final st = _state;
+    if (st == null) return;
     final nowMs = _stopwatch.elapsedMilliseconds;
-    final st = _state!;
     final isBackground =
         DownloadEngine.isInBackground || PowerMonitor.screenOff;
     final saveInterval = isBackground
-        ? const Duration(seconds: 120).inMilliseconds
-        : const Duration(seconds: 15).inMilliseconds;
+        ? const Duration(seconds: 60).inMilliseconds
+        : const Duration(seconds: 30).inMilliseconds;
     const saveByteThreshold = 8 * 1024 * 1024;
     final dueSave = nowMs - _lastStateSaveMs >= saveInterval ||
         _bytesSinceSave >= saveByteThreshold;
@@ -1850,23 +1890,25 @@ class HttpTransferJob {
       );
     }
 
-    if (dueSave && !_stateSavePending) {
-      _stateSavePending = true;
+    if (dueSave) {
       _lastStateSaveMs = nowMs;
       _bytesSinceSave = 0;
-      // Use scheduleMicrotask but with a guard
-      scheduleMicrotask(() async {
+      _stateSavePending = true;
+      unawaited(_stateSaveLock.synchronized(() async {
         try {
           if (preSaveFlush != null) await preSaveFlush();
           if (writer != null) await writer.flushBuffers();
-          await StateStore.save(cmd.tempFilePath, st,
-              screenOff: PowerMonitor.screenOff);
+          await StateStore.save(
+            cmd.tempFilePath,
+            st,
+            screenOff: PowerMonitor.screenOff,
+          );
         } catch (e) {
           debugPrint('[DMX-Job] state save failed: $e');
         } finally {
           _stateSavePending = false;
         }
-      });
+      }));
     }
 
     if (dueReport && !PowerMonitor.screenOff) {

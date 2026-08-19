@@ -39,7 +39,7 @@ void main() {
   }
 
   group('DownloadListProvider', () {
-    test('Adds and removes task correctly', () {
+    test('Adds and removes task correctly', () async {
       final provider = DownloadListProvider(InMemoryTaskRepository());
       final task = createTestTask(
         id: 'task_1',
@@ -47,11 +47,11 @@ void main() {
         url: 'https://example.com/file.zip',
       );
 
-      provider.addTask(task);
+      await provider.addTask(task);
       expect(provider.count, equals(1));
       expect(provider.getTask('task_1'), equals(task));
 
-      provider.removeTask('task_1');
+      await provider.deleteTask('task_1');
       expect(provider.count, equals(0));
     });
   });
@@ -69,7 +69,7 @@ void main() {
   });
 
   group('DownloadFilterProvider', () {
-    test('Filters tasks by search query', () {
+    test('Filters tasks by search query', () async {
       final list = DownloadListProvider(InMemoryTaskRepository());
       final filter = DownloadFilterProvider(list);
       final tasks = [
@@ -78,7 +78,7 @@ void main() {
       ];
 
       for (final t in tasks) {
-        list.addTask(t);
+        await list.addTask(t);
       }
 
       filter.setSearchQuery('alpha');
@@ -89,7 +89,7 @@ void main() {
   });
 
   group('DownloadCoordinator', () {
-    test('Coordinating updates exposes filtered tasks', () {
+    test('Coordinating updates exposes filtered tasks', () async {
       final list = DownloadListProvider(InMemoryTaskRepository());
       final filter = DownloadFilterProvider(list);
       final queue = DownloadQueueProvider(listProvider: list);
@@ -110,7 +110,7 @@ void main() {
       final task =
           createTestTask(id: '1', fileName: 'doc.pdf', url: 'http://a.com');
 
-      list.addTask(task);
+      await list.addTask(task);
       expect(coordinator.filteredTasks.length, equals(1));
 
       filter.setSearchQuery('nonexistent');

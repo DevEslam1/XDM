@@ -198,6 +198,33 @@ class DownloadStateMachine {
     };
   }
 
+  /// Validates and returns a consistent [CycleState] corresponding to [status].
+  static CycleState validateConsistency(DownloadStatus status, CycleState? cycleState) {
+    switch (status) {
+      case DownloadStatus.completed:
+        if (cycleState != CycleState.seeding) {
+          return CycleState.completed;
+        }
+        return CycleState.seeding;
+      case DownloadStatus.paused:
+        return CycleState.paused;
+      case DownloadStatus.failed:
+        return CycleState.failed;
+      case DownloadStatus.merging:
+        return CycleState.merging;
+      case DownloadStatus.queued:
+        return CycleState.starting;
+      case DownloadStatus.downloading:
+        if (cycleState == null ||
+            cycleState == CycleState.completed ||
+            cycleState == CycleState.paused ||
+            cycleState == CycleState.failed) {
+          return CycleState.downloading;
+        }
+        return cycleState;
+    }
+  }
+
   void dispose() {
     _transitionController.close();
   }

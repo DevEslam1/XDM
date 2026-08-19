@@ -211,9 +211,11 @@ class _TorrentAdvancedSettingsSheetState
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final provider = context.watch<DownloadProvider>();
+    final provider = context.read<DownloadProvider>();
     final settings = context.watch<SettingsProvider>();
-    final webSeeds = provider.getWebSeeds(widget.torrentId);
+    final webSeeds = context.select<DownloadProvider, List<String>>(
+      (p) => p.getWebSeeds(widget.torrentId),
+    );
 
     final bgClr = isDark ? const Color(0xFF1E222A) : Colors.white;
     final textClr = isDark ? Colors.white : Colors.black87;

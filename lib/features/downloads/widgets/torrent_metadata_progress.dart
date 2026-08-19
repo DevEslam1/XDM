@@ -127,6 +127,19 @@ class _TorrentMetadataProgressState extends State<TorrentMetadataProgress> {
                           color: isDark ? Colors.white60 : Colors.black54,
                         ),
                       ),
+                      if (_stopwatch.elapsed.inSeconds > 60 &&
+                          widget.state != TorrentMetadataState.failed &&
+                          widget.state != TorrentMetadataState.completed)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            'Fetching metadata is taking longer than expected. Check connection or trackers.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -158,7 +171,8 @@ class _TorrentMetadataProgressState extends State<TorrentMetadataProgress> {
                 ),
               ],
             ),
-            if (widget.state == TorrentMetadataState.failed &&
+            if ((widget.state == TorrentMetadataState.failed ||
+                    (_stopwatch.elapsed.inSeconds > 60 && widget.state != TorrentMetadataState.completed)) &&
                 widget.onRetry != null) ...[
               const SizedBox(height: 12),
               SizedBox(

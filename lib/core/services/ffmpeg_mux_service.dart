@@ -26,6 +26,12 @@ class FFmpegMuxService {
   static final _log = Logger('FFmpegMuxService');
   static final Semaphore _mergeSemaphore = Semaphore(2);
 
+  static Duration dynamicTimeout(int totalBytes) {
+    final minutes =
+        (10 + (totalBytes / (100 * 1024 * 1024)).ceil()).clamp(10, 30);
+    return Duration(minutes: minutes);
+  }
+
   static Future<bool> canResumeMerge(
       String videoPath, String? audioPath) async {
     final video = File(videoPath);
@@ -62,6 +68,15 @@ class FFmpegMuxService {
       } catch (e) {
         _log.info('[FFmpegMuxService] wakelock enable skipped: $e');
       }
+      int totalBytes = 0;
+      try {
+        final vFile = File(videoPath);
+        final aFile = File(audioPath);
+        if (vFile.existsSync()) totalBytes += vFile.lengthSync();
+        if (aFile.existsSync()) totalBytes += aFile.lengthSync();
+      } catch (_) {}
+      final timeoutDuration = dynamicTimeout(totalBytes);
+
       return await _mergeLocked(
         videoPath,
         audioPath,
@@ -72,10 +87,10 @@ class FFmpegMuxService {
         expectedDuration: expectedDuration,
         sessionHolder: sessionHolder,
       ).timeout(
-        const Duration(minutes: 5),
+        timeoutDuration,
         onTimeout: () {
           _log.severe(
-            '[FFmpegMuxService] Merge job timed out after 5 minutes; cancelling session',
+            '[FFmpegMuxService] Merge job timed out after ${timeoutDuration.inMinutes} minutes; cancelling session',
           );
           try {
             if (sessionHolder.activeSession != null) {
@@ -437,6 +452,7 @@ class FFmpegMuxService {
     } catch (e) {
       _log.info('[FFmpegMuxService] deleting partial output failed: $e');
     }
+    await cleanUpInputs();
     return false;
   }
 }

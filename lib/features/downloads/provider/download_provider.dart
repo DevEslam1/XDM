@@ -392,12 +392,11 @@ class DownloadProvider extends ChangeNotifier
     _torrentUpdatesSubscription = TorrentService.torrentUpdates.listen(
       (torrents) async {
         // FIX-STATS-1: Merge incoming stats into the existing map instead of
-        // replacing the reference. Replacing drops entries that haven't been
-        // re-emitted yet in this tick, which makes getTorrentSeeds/Peers return
-        // 0 until the next broadcast even though data is available.
-        _latestTorrentStats
-          ..removeWhere((id, _) => !torrents.containsKey(id))
-          ..addAll(torrents);
+        // replacing the reference or dropping valid entries absent from current tick.
+        _latestTorrentStats.addAll(torrents);
+        final activeTids = _torrentIds.values.toSet();
+        _latestTorrentStats.removeWhere(
+            (id, _) => !activeTids.contains(id) && !torrents.containsKey(id));
         checkTorrentRatioLimits();
         enforceTorrentQueue();
 
@@ -582,7 +581,9 @@ class DownloadProvider extends ChangeNotifier
                       .saveTask(updatedTask)
                       .catchError((e) => null));
                 }
-                notifyListeners();
+                // FIX H-7: Do NOT call notifyListeners() per-torrent here.
+                // A single coalesced call after the full batch loop is sufficient.
+                filteredTasksDirty = true;
               }
             }
           }
@@ -598,6 +599,7 @@ class DownloadProvider extends ChangeNotifier
               _tasks[taskIdx] = _tasks[taskIdx].copyWith(
                 uploadedBytes: info.totalPayloadUpload,
               );
+              filteredTasksDirty = true;
             }
           }
 
@@ -616,6 +618,10 @@ class DownloadProvider extends ChangeNotifier
               }
             }
           }
+        }
+        // FIX H-7: Single coalesced notifyListeners() after the full batch loop.
+        if (filteredTasksDirty) {
+          notifyListeners();
         }
       },
     );
@@ -651,6 +657,7 @@ class DownloadProvider extends ChangeNotifier
   // FIX-M7: Periodic timer for cleaning up inactive speed histories
   Timer? _speedHistoryCleanupTimer;
   final Map<String, Future<void>> _dbSaveQueues = {};
+  final Lock _setTaskLock = Lock();
 
   /// Resolves the engine torrent ID for a task.
   /// Priority: 1) cached map  2) info-hash match  3) name/tracker fallback.
@@ -700,6 +707,12 @@ class DownloadProvider extends ChangeNotifier
     final allTaskIds = _tasks.map((t) => t.id).toSet();
     _speedHistories.removeWhere((id, _) => !allTaskIds.contains(id));
     _uploadSpeedHistories.removeWhere((id, _) => !allTaskIds.contains(id));
+    _lastProgressUpdateTimes.removeWhere((id, _) => !allTaskIds.contains(id));
+    _lastDbSaveTimes.removeWhere((id, _) => !allTaskIds.contains(id));
+    _lastDbSaveBytes.removeWhere((id, _) => !allTaskIds.contains(id));
+    _retryCounts.removeWhere((id, _) => !allTaskIds.contains(id));
+    _dbRetryCounts.removeWhere((id, _) => !allTaskIds.contains(id));
+    effectiveThreadOverrides.removeWhere((id, _) => !allTaskIds.contains(id));
 
     final activeIds = _tasks
         .where((t) =>
@@ -4760,231 +4773,240 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> _setTask(DownloadTask updated) async {
-    // FIX-P0-03: Pin completion bytes so progress is always exactly 100%
-    if (updated.status == DownloadStatus.completed) {
-      if (updated.fileSize > 0) {
+    return _setTaskLock.synchronized(() async {
+      // FIX-P0-03: Pin completion bytes so progress is always exactly 100%
+      if (updated.status == DownloadStatus.completed) {
+        if (updated.fileSize > 0) {
+          updated = updated.copyWith(
+            downloadedBytes: updated.fileSize,
+            chunks: updated.chunks.isNotEmpty
+                ? List<double>.filled(updated.chunks.length, 1.0)
+                : const [1.0],
+            audioProgress:
+                (updated.hasMergedAudio || updated.mergedAudioUrl != null)
+                    ? 1.0
+                    : updated.audioProgress,
+          );
+        } else if (updated.downloadedBytes > 0) {
+          updated = updated.copyWith(
+            fileSize: updated.downloadedBytes,
+            chunks: updated.chunks.isNotEmpty
+                ? List<double>.filled(updated.chunks.length, 1.0)
+                : const [1.0],
+            audioProgress:
+                (updated.hasMergedAudio || updated.mergedAudioUrl != null)
+                    ? 1.0
+                    : updated.audioProgress,
+          );
+        }
+      }
+
+      // FIX-H-06: Clamp downloadedBytes to fileSize
+      if (updated.fileSize > 0 && updated.downloadedBytes > updated.fileSize) {
+        updated = updated.copyWith(downloadedBytes: updated.fileSize);
+      }
+
+      // FIX-X-01: Clamp audioProgress, guarding NaN
+      if (updated.audioProgress.isNaN ||
+          updated.audioProgress < 0.0 ||
+          updated.audioProgress > 1.0) {
         updated = updated.copyWith(
-          downloadedBytes: updated.fileSize,
-          chunks: updated.chunks.isNotEmpty
-              ? List<double>.filled(updated.chunks.length, 1.0)
-              : const [1.0],
-          audioProgress:
-              (updated.hasMergedAudio || updated.mergedAudioUrl != null)
-                  ? 1.0
-                  : updated.audioProgress,
-        );
-      } else if (updated.downloadedBytes > 0) {
-        updated = updated.copyWith(
-          fileSize: updated.downloadedBytes,
-          chunks: updated.chunks.isNotEmpty
-              ? List<double>.filled(updated.chunks.length, 1.0)
-              : const [1.0],
-          audioProgress:
-              (updated.hasMergedAudio || updated.mergedAudioUrl != null)
-                  ? 1.0
-                  : updated.audioProgress,
+          audioProgress: updated.audioProgress.isNaN
+              ? 0.0
+              : updated.audioProgress.clamp(0.0, 1.0),
         );
       }
-    }
 
-    // FIX-H-06: Clamp downloadedBytes to fileSize
-    if (updated.fileSize > 0 && updated.downloadedBytes > updated.fileSize) {
-      updated = updated.copyWith(downloadedBytes: updated.fileSize);
-    }
-
-    // FIX-X-01: Clamp audioProgress, guarding NaN
-    if (updated.audioProgress.isNaN ||
-        updated.audioProgress < 0.0 ||
-        updated.audioProgress > 1.0) {
-      updated = updated.copyWith(
-        audioProgress: updated.audioProgress.isNaN
-            ? 0.0
-            : updated.audioProgress.clamp(0.0, 1.0),
-      );
-    }
-
-    // FIX-X-02: Clamp chunks
-    // FIX-09: Also sanitize NaN chunks which would otherwise survive clamp()
-    if (updated.chunks.any((c) => c < 0.0 || c > 1.0 || c.isNaN)) {
-      updated = updated.copyWith(
-        chunks: updated.chunks
-            .map((c) => c.isNaN ? 0.0 : c.clamp(0.0, 1.0))
-            .toList(),
-      );
-    }
-
-    final index = _tasks.indexWhere((task) => task.id == updated.id);
-    if (index == -1) return;
-
-    final prev = _tasks[index];
-    if (prev.status == DownloadStatus.completed &&
-        updated.status != DownloadStatus.completed) {
-      // Allow completed → paused ONLY for seeding torrents being paused
-      final isSeedingPause = prev.isTorrent &&
-          prev.seedingEnabled &&
-          updated.status == DownloadStatus.paused;
-
-      // Allow completed → queued/downloading for explicit retry/re-download
-      final isExplicitRestart = updated.status == DownloadStatus.queued ||
-          updated.status == DownloadStatus.downloading;
-
-      if (!isSeedingPause && !isExplicitRestart) {
-        _log.warning(
-          'Blocked stale update for completed task ${updated.id}: '
-          '${prev.status} -> ${updated.status}.',
+      // FIX-X-02: Clamp chunks
+      // FIX-09: Also sanitize NaN chunks which would otherwise survive clamp()
+      if (updated.chunks.any((c) => c < 0.0 || c > 1.0 || c.isNaN)) {
+        updated = updated.copyWith(
+          chunks: updated.chunks
+              .map((c) => c.isNaN ? 0.0 : c.clamp(0.0, 1.0))
+              .toList(),
         );
+      }
+
+      final index = _tasks.indexWhere((task) => task.id == updated.id);
+      if (index == -1) return;
+
+      final prev = _tasks[index];
+      if (prev.status == DownloadStatus.completed &&
+          updated.status != DownloadStatus.completed) {
+        // Allow completed → paused ONLY for seeding torrents being paused
+        final isSeedingPause = prev.isTorrent &&
+            prev.seedingEnabled &&
+            updated.status == DownloadStatus.paused;
+
+        // Allow completed → queued/downloading for explicit retry/re-download
+        final isExplicitRestart = updated.status == DownloadStatus.queued ||
+            updated.status == DownloadStatus.downloading;
+
+        if (!isSeedingPause && !isExplicitRestart) {
+          _log.warning(
+            'Blocked stale update for completed task ${updated.id}: '
+            '${prev.status} -> ${updated.status}.',
+          );
+          return;
+        }
+      }
+      if (prev.status != updated.status) {
+        if (!DownloadStateMachine.canTransitionStatus(
+            prev.status, updated.status)) {
+          _log.warning(
+            'Blocked invalid status transition for task ${updated.id}: '
+            '${prev.status} -> ${updated.status}.',
+          );
+          return;
+        }
+      }
+
+      final consistentCycle = DownloadStateMachine.validateConsistency(
+        updated.status,
+        updated.cycleState,
+      );
+      if (updated.cycleState != consistentCycle) {
+        updated = updated.copyWith(cycleState: consistentCycle);
+      }
+
+      // ERR-RESILIENCE-1.2: When a task transitions to failed, ensure it always
+      // carries a FailureCategory + recovery hint so the UI can present a
+      // consistent, actionable recovery path. Derived from the current fields so
+      // this works even when the failure came from a path that only set an
+      // errorMessage.
+      if (updated.status == DownloadStatus.failed &&
+          updated.failureCategory == null) {
+        updated = updated.copyWith(
+          failureCategory: FailureCategory.unknown,
+          recoveryHint: RecoveryHints.hintFor(FailureCategory.unknown),
+          cycleState: CycleState.failed,
+        );
+      } else if (updated.status == DownloadStatus.failed &&
+          updated.recoveryHint == null) {
+        updated = updated.copyWith(
+          recoveryHint: RecoveryHints.hintFor(updated.failureCategory!),
+          cycleState: CycleState.failed,
+        );
+      } else if (updated.status == DownloadStatus.failed) {
+        // failureCategory and recoveryHint already present — just stamp cycleState
+        if (updated.cycleState != CycleState.failed) {
+          updated = updated.copyWith(cycleState: CycleState.failed);
+        }
+      }
+
+      final protocol = updated.isTorrent
+          ? 'TORRENT'
+          : (updated.hasMergedAudio || updated.mergedAudioUrl != null
+              ? 'YOUTUBE'
+              : 'HTTP');
+      if (prev.status != updated.status ||
+          prev.statusMessage != updated.statusMessage) {
+        debugPrint(
+            '[LIFECYCLE] [$protocol] [${updated.id}] status: ${prev.status.name} -> ${updated.status.name} (msg: "${updated.statusMessage ?? ''}")');
+      }
+      // Merge structural fields from `updated` into the live in-memory task,
+      // preserving progress fields (downloadedBytes, speed, eta, chunks,
+      // audioProgress) to prevent state regression during active downloads.
+      _tasks[index] = _mergeTaskUpdate(prev, updated);
+
+      // ═══ FIX H-6: Clamp downloadedBytes to fileSize ═══
+      final currentTask = _tasks[index];
+      if (currentTask.fileSize > 0 &&
+          currentTask.downloadedBytes > currentTask.fileSize) {
+        debugPrint('[DMX] H-6 FIX: Clamping downloadedBytes from '
+            '${currentTask.downloadedBytes} to ${currentTask.fileSize}');
+        _tasks[index] =
+            currentTask.copyWith(downloadedBytes: currentTask.fileSize);
+      }
+
+      // Task 1.6: Clean up maps on terminal states (completed, failed)
+      if (updated.status == DownloadStatus.completed ||
+          updated.status == DownloadStatus.failed) {
+        final id = updated.id;
+        _speedHistories.remove(id);
+        _uploadSpeedHistories.remove(id);
+        _lastProgressUpdateTimes.remove(id);
+        _lastDbSaveTimes.remove(id);
+        _pendingProgressUpdates.remove(id);
+        _ytLowSpeedCounts.remove(id);
+        _ytThrottlingRefreshing.remove(id);
+        _lastTorrentFileDiskSync.remove(id);
+        _resumeRejectionRestarts.remove(id);
+
+        if (updated.status == DownloadStatus.failed) {
+          if (_cancelTokens.containsKey(id)) {
+            final token = _cancelTokens[id];
+            if (token != null && !token.isCancelled) {
+              try {
+                token.cancel('failed');
+              } catch (e, st) {
+                LoggingService.logger('DownloadProvider')
+                    .warning('Operation failed', e, st);
+              }
+            }
+            _cancelTokens.remove(id);
+          }
+        }
+        final torrentId = _torrentIds[id];
+        if (torrentId != null && !TorrentService.isTorrentAlive(torrentId)) {
+          _torrentIds.remove(id);
+        }
+      }
+
+      // Only invalidate the filter/sort cache when a "structural" field changes
+      // (status, category, name, URL, or fileSize). Progress-only updates (speed,
+      // downloadedBytes, chunks, eta) must NOT set filteredTasksDirty to true,
+      // otherwise the filtered list would be recomputed on every tick, wasting CPU
+      // and causing unnecessary widget rebuilds.
+      final isStructuralChange = prev.status != updated.status ||
+          prev.category != updated.category ||
+          prev.fileName != updated.fileName ||
+          prev.url != updated.url ||
+          prev.fileSize != updated.fileSize ||
+          prev.scheduledAt != updated.scheduledAt;
+
+      if (!isStructuralChange) {
+        // Task 1.6: Cap _pendingProgressUpdates at 50 entries
+        if (_pendingProgressUpdates.length >= 50 &&
+            !_pendingProgressUpdates.contains(updated.id)) {
+          _pendingProgressUpdates.remove(_pendingProgressUpdates.first);
+        }
+        _pendingProgressUpdates.add(updated.id);
+        _notifyPending = true;
+        if (_widgetTimer == null) _startWidgetTimer();
+
+        // Complete any previous queued save so the chain stays consistent.
+        final previousSave = _dbSaveQueues[updated.id];
+        if (previousSave != null) {
+          try {
+            await previousSave;
+          } catch (e, st) {
+            _log.severe('[download_provider] previous DB save failed', e, st);
+          }
+        }
         return;
       }
-    }
-    if (prev.status != updated.status) {
-      if (!DownloadStateMachine.canTransitionStatus(
-          prev.status, updated.status)) {
-        // Seeding pause is now allowed (Fix #1), so this should not fire.
-        // Keep as fine-level for any other unexpected transitions.
-        _log.fine(
-          'Blocked status transition for task ${updated.id}: '
-          '${prev.status} -> ${updated.status}. Retaining ${prev.status}.',
-        );
-        updated = updated.copyWith(status: prev.status);
-      }
-    }
 
-    // ERR-RESILIENCE-1.2: When a task transitions to failed, ensure it always
-    // carries a FailureCategory + recovery hint so the UI can present a
-    // consistent, actionable recovery path. Derived from the current fields so
-    // this works even when the failure came from a path that only set an
-    // errorMessage.
-    if (updated.status == DownloadStatus.failed &&
-        updated.failureCategory == null) {
-      updated = updated.copyWith(
-        failureCategory: FailureCategory.unknown,
-        recoveryHint: RecoveryHints.hintFor(FailureCategory.unknown),
-        cycleState: CycleState.failed,
-      );
-    } else if (updated.status == DownloadStatus.failed &&
-        updated.recoveryHint == null) {
-      updated = updated.copyWith(
-        recoveryHint: RecoveryHints.hintFor(updated.failureCategory!),
-        cycleState: CycleState.failed,
-      );
-    } else if (updated.status == DownloadStatus.failed) {
-      // failureCategory and recoveryHint already present — just stamp cycleState
-      if (updated.cycleState != CycleState.failed) {
-        updated = updated.copyWith(cycleState: CycleState.failed);
-      }
-    }
+      // Task 1.1: DB First for structural state transitions with rollback
+      final previousSnapshot = prev;
+      try {
+        await _saveTaskToDbInternal(updated);
+        _tasks[index] = updated;
+        filteredTasksDirty = true;
 
-    final protocol = updated.isTorrent
-        ? 'TORRENT'
-        : (updated.hasMergedAudio || updated.mergedAudioUrl != null
-            ? 'YOUTUBE'
-            : 'HTTP');
-    if (prev.status != updated.status ||
-        prev.statusMessage != updated.statusMessage) {
-      debugPrint(
-          '[LIFECYCLE] [$protocol] [${updated.id}] status: ${prev.status.name} -> ${updated.status.name} (msg: "${updated.statusMessage ?? ''}")');
-    }
-    // Merge structural fields from `updated` into the live in-memory task,
-    // preserving progress fields (downloadedBytes, speed, eta, chunks,
-    // audioProgress) to prevent state regression during active downloads.
-    _tasks[index] = _mergeTaskUpdate(prev, updated);
-
-    // ═══ FIX H-6: Clamp downloadedBytes to fileSize ═══
-    final currentTask = _tasks[index];
-    if (currentTask.fileSize > 0 &&
-        currentTask.downloadedBytes > currentTask.fileSize) {
-      debugPrint('[DMX] H-6 FIX: Clamping downloadedBytes from '
-          '${currentTask.downloadedBytes} to ${currentTask.fileSize}');
-      _tasks[index] =
-          currentTask.copyWith(downloadedBytes: currentTask.fileSize);
-    }
-
-    // Task 1.6: Clean up maps on terminal states (completed, failed)
-    if (updated.status == DownloadStatus.completed ||
-        updated.status == DownloadStatus.failed) {
-      final id = updated.id;
-      _speedHistories.remove(id);
-      _uploadSpeedHistories.remove(id);
-      _lastProgressUpdateTimes.remove(id);
-      _lastDbSaveTimes.remove(id);
-      _pendingProgressUpdates.remove(id);
-      _ytLowSpeedCounts.remove(id);
-      _ytThrottlingRefreshing.remove(id);
-      _lastTorrentFileDiskSync.remove(id);
-
-      if (updated.status == DownloadStatus.failed) {
-        if (_cancelTokens.containsKey(id)) {
-          final token = _cancelTokens[id];
-          if (token != null && !token.isCancelled) {
-            try {
-              token.cancel('failed');
-            } catch (e, st) {
-              LoggingService.logger('DownloadProvider')
-                  .warning('Operation failed', e, st);
-            }
-          }
-          _cancelTokens.remove(id);
+        if (prev.scheduledAt != updated.scheduledAt ||
+            prev.status != updated.status) {
+          _scheduleManager.reschedule();
         }
+
+        updateActualTorrentUploadLimit();
+        _pushTick(updated.id, updated.progress, updated.speed.toDouble());
+      } catch (e, st) {
+        _tasks[index] = previousSnapshot;
+        _log.severe('Atomic DB write failed in _setTask for ${updated.id}, rolling back in-memory state.', e, st);
+        rethrow;
       }
-      final torrentId = _torrentIds[id];
-      if (torrentId != null && !TorrentService.isTorrentAlive(torrentId)) {
-        _torrentIds.remove(id);
-      }
-    }
-
-    // Only invalidate the filter/sort cache when a "structural" field changes
-    // (status, category, name, URL, or fileSize). Progress-only updates (speed,
-    // downloadedBytes, chunks, eta) must NOT set filteredTasksDirty to true,
-    // otherwise the filtered list would be recomputed on every tick, wasting CPU
-    // and causing unnecessary widget rebuilds.
-    final isStructuralChange = prev.status != updated.status ||
-        prev.category != updated.category ||
-        prev.fileName != updated.fileName ||
-        prev.url != updated.url ||
-        prev.fileSize != updated.fileSize ||
-        prev.scheduledAt != updated.scheduledAt;
-
-    if (!isStructuralChange) {
-      // Task 1.6: Cap _pendingProgressUpdates at 50 entries
-      if (_pendingProgressUpdates.length >= 50 &&
-          !_pendingProgressUpdates.contains(updated.id)) {
-        _pendingProgressUpdates.remove(_pendingProgressUpdates.first);
-      }
-      _pendingProgressUpdates.add(updated.id);
-      _notifyPending = true;
-      if (_widgetTimer == null) _startWidgetTimer();
-
-      // Complete any previous queued save so the chain stays consistent.
-      final previousSave = _dbSaveQueues[updated.id];
-      if (previousSave != null) {
-        try {
-          await previousSave;
-        } catch (e, st) {
-          _log.severe('[download_provider] previous DB save failed', e, st);
-        }
-      }
-      return;
-    }
-
-    // Task 1.1: DB First for structural state transitions with rollback
-    final previousSnapshot = prev;
-    try {
-      await _saveTaskToDbInternal(updated);
-      _tasks[index] = updated;
-      filteredTasksDirty = true;
-
-      if (prev.scheduledAt != updated.scheduledAt ||
-          prev.status != updated.status) {
-        _scheduleManager.reschedule();
-      }
-
-      updateActualTorrentUploadLimit();
-      _pushTick(updated.id, updated.progress, updated.speed.toDouble());
-    } catch (e, st) {
-      _tasks[index] = previousSnapshot;
-      _log.severe('Atomic DB write failed in _setTask for ${updated.id}, rolling back in-memory state.', e, st);
-      rethrow;
-    }
+    });
   }
 
   Future<void> _saveTaskToDbInternal(DownloadTask updated) async {
@@ -5000,6 +5022,7 @@ class DownloadProvider extends ChangeNotifier
 
     try {
       await _databaseService.saveTask(updated);
+      _lastDbSaveTimes[updated.id] = DateTime.now().millisecondsSinceEpoch;
       lastSaveError.value = null;
 
       // Notify AFTER successful DB write to keep UI and persistence in sync.
@@ -6121,17 +6144,20 @@ class DownloadProvider extends ChangeNotifier
         clearMergedAudioUrl:
             shouldClearAudio || clearAudioUrl || isProtocolSwitch,
         fileSize: resolvedNewFileSize,
-        audioSize: (sizeChanged || isProtocolSwitch || task.audioSize <= 0)
+        audioSize: (sizeChanged || isProtocolSwitch || cleanUrl != task.url || task.audioSize <= 0)
             ? (newAudioSize ?? (isProtocolSwitch ? 0 : task.audioSize))
             : task.audioSize,
-        // FIX-03: Reset audioProgress when audioChanged OR sizeChanged
-        audioProgress: (audioChanged || sizeChanged || isProtocolSwitch)
+        // FIX-03: Reset audioProgress when audioChanged OR sizeChanged OR URL changed
+        audioProgress: (audioChanged || sizeChanged || isProtocolSwitch || cleanUrl != task.url)
             ? 0.0
             : task.audioProgress,
+        audioDownloadedBytes: (audioChanged || sizeChanged || isProtocolSwitch || cleanUrl != task.url)
+            ? 0
+            : task.audioDownloadedBytes,
         // FIX YT-U1: Reset videoStreamSize when the stream identity changed
         // so the combined size denominator is recalculated from the new stream.
         videoStreamSize:
-            (sizeChanged || isProtocolSwitch || streamIdentityChanged)
+            (sizeChanged || isProtocolSwitch || streamIdentityChanged || cleanUrl != task.url)
                 ? 0
                 : task.videoStreamSize,
         youtubeQualityPreset: (shouldClearYoutubeState || isProtocolSwitch)
@@ -6570,21 +6596,25 @@ class DownloadProvider extends ChangeNotifier
 
     _orchestrator.dispose();
 
-    // Drain pending DB saves, then always close the engine.
+    // FIX C-2: Drain pending DB saves with a bounded timeout to prevent holding
+    // the engine open indefinitely after the provider is disposed. Any save that
+    // hasn't completed within 2 seconds is abandoned — the DB WAL checkpoint on
+    // next launch will recover consistency.
     final pendingSaves = _dbSaveQueues.values.toList();
     _dbSaveQueues.clear();
 
+    Future<void> closeFn() =>
+        _downloadEngine.close().catchError((e) => _log.warning('Failed to close engine', e));
+
     if (pendingSaves.isNotEmpty) {
-      Future.wait(pendingSaves).then(
-        (_) => unawaited(_downloadEngine.close().catchError(
-            (e) => _log.warning('Failed to close engine after wait', e))),
-        onError: (_) => unawaited(_downloadEngine.close().catchError(
-            (e) => _log.warning('Failed to close engine on error', e))),
+      unawaited(
+        Future.wait(pendingSaves)
+            .timeout(const Duration(seconds: 2), onTimeout: () => <void>[])
+            .catchError((_) => <void>[])
+            .whenComplete(closeFn),
       );
     } else {
-      unawaited(_downloadEngine
-          .close()
-          .catchError((e) => _log.warning('Failed to close engine', e)));
+      unawaited(closeFn());
     }
 
     _latestTorrentStats.clear();
@@ -6622,6 +6652,8 @@ class DownloadProvider extends ChangeNotifier
         final name = p.canonicalize(entity.path);
         final isOrphan = (name.endsWith('.dmxpart') ||
                 name.endsWith('.dmxstate') ||
+                // FIX M-12: Also clean up .dmxstate.tmp left from atomic rename operations
+                name.endsWith('.dmxstate.tmp') ||
                 name.endsWith('.journal') ||
                 name.endsWith('.audio') ||
                 name.endsWith('.audio.dmxstate')) &&

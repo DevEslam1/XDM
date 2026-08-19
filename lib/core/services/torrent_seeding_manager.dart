@@ -49,10 +49,11 @@ class TorrentSeedingManager {
     return DateTime.now().difference(start);
   }
 
-  /// Calculates share ratio from download and upload stats.
-  static double calculateRatio(int uploadedBytes, int downloadedBytes) {
-    if (downloadedBytes <= 0) return 0.0;
-    return uploadedBytes / downloadedBytes;
+  /// Calculates share ratio from download and upload stats with fallback for magnet-only additions.
+  static double calculateRatio(int uploadedBytes, int downloadedBytes, {int? fallbackBytes}) {
+    final effectiveDownload = downloadedBytes > 0 ? downloadedBytes : (fallbackBytes ?? 0);
+    if (effectiveDownload <= 0) return 0.0;
+    return uploadedBytes / effectiveDownload;
   }
 
   /// Checks all active torrents against seeding policies and pauses those that exceed limits.
@@ -92,8 +93,11 @@ class TorrentSeedingManager {
           isWifi = getIt<NetworkMonitor>().hasWifiOrEthernet;
         }
       } catch (_) {}
-      final currentRatio =
-          calculateRatio(stats.totalPayloadUpload, stats.totalPayloadDownload);
+      final currentRatio = calculateRatio(
+        stats.totalPayloadUpload,
+        stats.totalPayloadDownload,
+        fallbackBytes: stats.totalDone > 0 ? stats.totalDone : null,
+      );
       final seedDuration = getSeedDuration(id);
 
       final shouldStop = policy.shouldStopSeeding(
