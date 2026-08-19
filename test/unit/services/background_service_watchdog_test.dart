@@ -10,7 +10,8 @@ class _FakeServiceInstance extends Fake implements ServiceInstance {}
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('BackgroundService iOS Watchdog Timing & Cooldown Isolation (P0-01)', () {
+  group('BackgroundService iOS Watchdog Timing & Cooldown Isolation (P0-01)',
+      () {
     const channel = MethodChannel('com.dmx.app/background_download');
 
     setUp(() {
@@ -38,14 +39,17 @@ void main() {
       });
 
       final fakeService = _FakeServiceInstance();
-      final result = await BackgroundService.onIosBackgroundForTesting(fakeService);
+      final result =
+          await BackgroundService.onIosBackgroundForTesting(fakeService);
 
       expect(result, isTrue);
       expect(BackgroundService.iosBgCallInFlightForTesting, isFalse);
       expect(BackgroundService.iosBgCooldownUntilForTesting, isNull);
     });
 
-    test('watchdog fire at 25s resets in-flight state without forcing 60s cooldown', () async {
+    test(
+        'watchdog fire at 25s resets in-flight state without forcing 60s cooldown',
+        () async {
       final fakeService = _FakeServiceInstance();
       final inFlightCompleter = Completer<bool>();
 

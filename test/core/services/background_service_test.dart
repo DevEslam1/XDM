@@ -34,13 +34,15 @@ void main() {
       // Add task 2
       await BackgroundService.setDownloadActive(true, 'task-2');
       expect(BackgroundService.activeDownloadCountForTesting, equals(2));
-      expect(BackgroundService.activeTaskIdsForTesting, containsAll(['task-1', 'task-2']));
+      expect(BackgroundService.activeTaskIdsForTesting,
+          containsAll(['task-1', 'task-2']));
 
       // Remove task 1
       await BackgroundService.setDownloadActive(false, 'task-1');
       expect(BackgroundService.activeDownloadCountForTesting, equals(1));
       expect(BackgroundService.activeTaskIdsForTesting, contains('task-2'));
-      expect(BackgroundService.activeTaskIdsForTesting, isNot(contains('task-1')));
+      expect(
+          BackgroundService.activeTaskIdsForTesting, isNot(contains('task-1')));
 
       // Remove task 1 again (idempotent)
       await BackgroundService.setDownloadActive(false, 'task-1');

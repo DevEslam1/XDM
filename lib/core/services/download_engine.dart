@@ -46,11 +46,13 @@ class DownloadEngine implements IDownloadEngine {
 
   /// Explicitly mark the engine as background. Prefer over `isInBackground = true`.
   static void markBackground() => appInForeground = false;
-  
+
   static int _activeDownloadsCount = 0;
   static bool get hasActiveDownloads => _activeDownloadsCount > 0;
-  static void setActiveDownloadsCount(int count) => _activeDownloadsCount = count;
-  
+  static int get activeDownloadsCount => _activeDownloadsCount;
+  static void setActiveDownloadsCount(int count) =>
+      _activeDownloadsCount = count;
+
   static const int _isolatePoolSize = 4;
 
   final HttpDownloadOrchestrator _httpOrchestrator;
@@ -114,7 +116,8 @@ class DownloadEngine implements IDownloadEngine {
   /// itself fails (unknown), so callers can distinguish "no space" from
   /// "could not determine". The non-nullable variant is fail-safe: it
   /// conservatively reports `false` when the check cannot complete.
-  Future<bool?> hasEnoughDiskSpaceOrNull(String saveDir, int requiredBytes) async {
+  Future<bool?> hasEnoughDiskSpaceOrNull(
+      String saveDir, int requiredBytes) async {
     try {
       if (requiredBytes <= 0) return true;
       final dir = Directory(saveDir);

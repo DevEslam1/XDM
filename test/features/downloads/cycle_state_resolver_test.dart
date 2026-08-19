@@ -14,19 +14,22 @@ void main() {
   });
 
   group('CycleStateResolver LRU Eviction (Sprint 1)', () {
-    test('LRU cache retains capacity up to 512 and evicts oldest rather than clearing all', () {
-      // Fill cache with 512 distinct messages
-      for (var i = 0; i < 512; i++) {
+    test(
+        'LRU cache retains capacity up to 256 and evicts oldest rather than clearing all',
+        () {
+      // Fill cache with 256 distinct messages
+      for (var i = 0; i < 256; i++) {
         CycleStateResolver.resolve(statusMessage: 'Downloading chunk #$i');
       }
-      expect(CycleStateResolver.cacheSizeForTesting, equals(512));
+      expect(CycleStateResolver.cacheSizeForTesting, equals(256));
 
-      // 513th entry triggers LRU eviction of the oldest entry (chunk #0)
-      CycleStateResolver.resolve(statusMessage: 'Downloading chunk #512');
-      expect(CycleStateResolver.cacheSizeForTesting, equals(512));
+      // 257th entry triggers LRU eviction of the oldest entry (chunk #0)
+      CycleStateResolver.resolve(statusMessage: 'Downloading chunk #256');
+      expect(CycleStateResolver.cacheSizeForTesting, equals(256));
 
-      // Subsequent access to #512 is cached
-      final state = CycleStateResolver.resolve(statusMessage: 'Downloading chunk #512');
+      // Subsequent access to #256 is cached
+      final state =
+          CycleStateResolver.resolve(statusMessage: 'Downloading chunk #256');
       expect(state, equals(CycleState.downloading));
     });
   });

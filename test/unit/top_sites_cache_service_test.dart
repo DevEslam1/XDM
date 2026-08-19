@@ -17,11 +17,13 @@ void main() {
         ];
       }
 
-      final res1 = await TopSitesCacheService.instance.getTopSites(loader: fakeLoader);
+      final res1 =
+          await TopSitesCacheService.instance.getTopSites(loader: fakeLoader);
       expect(loadCount, equals(1));
       expect(res1.length, equals(2));
 
-      final res2 = await TopSitesCacheService.instance.getTopSites(loader: fakeLoader);
+      final res2 =
+          await TopSitesCacheService.instance.getTopSites(loader: fakeLoader);
       expect(loadCount, equals(1)); // Reused cache
       expect(res2.length, equals(2));
     });
@@ -30,7 +32,9 @@ void main() {
       int loadCount = 0;
       Future<List<Map<String, String>>> fakeLoader() async {
         loadCount++;
-        return [{'title': 'Site $loadCount', 'url': 'https://$loadCount.com'}];
+        return [
+          {'title': 'Site $loadCount', 'url': 'https://$loadCount.com'}
+        ];
       }
 
       await TopSitesCacheService.instance.getTopSites(loader: fakeLoader);
@@ -38,7 +42,8 @@ void main() {
 
       TopSitesCacheService.instance.invalidate();
 
-      final res2 = await TopSitesCacheService.instance.getTopSites(loader: fakeLoader);
+      final res2 =
+          await TopSitesCacheService.instance.getTopSites(loader: fakeLoader);
       expect(loadCount, equals(2));
       expect(res2.first['title'], equals('Site 2'));
     });
@@ -46,12 +51,14 @@ void main() {
     test('synchronously returns cachedSites when fresh', () async {
       expect(TopSitesCacheService.instance.cachedSites, isEmpty);
 
-      await TopSitesCacheService.instance.getTopSites(loader: () async => [
-        {'title': 'Sync Site', 'url': 'https://sync.com'},
-      ]);
+      await TopSitesCacheService.instance.getTopSites(
+          loader: () async => [
+                {'title': 'Sync Site', 'url': 'https://sync.com'},
+              ]);
 
       expect(TopSitesCacheService.instance.cachedSites.length, equals(1));
-      expect(TopSitesCacheService.instance.cachedSites.first['title'], equals('Sync Site'));
+      expect(TopSitesCacheService.instance.cachedSites.first['title'],
+          equals('Sync Site'));
     });
   });
 }

@@ -45,7 +45,8 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.65, // U26: 0.65 so top address bar isn't completely covered
+      initialChildSize:
+          0.65, // U26: 0.65 so top address bar isn't completely covered
       minChildSize: 0.4,
       maxChildSize: 0.95,
       builder: (context, scrollController) {
@@ -56,7 +57,8 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                 : (isDark ? AppTheme.surface : AppTheme.lightSurface),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
             border: Border.all(
-              color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+              color:
+                  isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
               width: 1,
             ),
           ),
@@ -83,7 +85,8 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
 
                   // Header with actions
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     child: Row(
                       children: [
                         Text(
@@ -100,7 +103,8 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                         if (controller.recentlyClosedTabs.isNotEmpty)
                           IconButton(
                             icon: const Icon(Icons.history_rounded, size: 20),
-                            tooltip: L10n.of(context, 'browser_recently_closed'),
+                            tooltip:
+                                L10n.of(context, 'browser_recently_closed'),
                             onPressed: () {
                               HapticHelper.triggerHaptic(settings);
                               _showRecentlyClosedSheet(context);
@@ -109,19 +113,22 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
 
                         // New tab
                         IconButton(
-                          icon: Icon(Icons.add_rounded, color: accent, size: 22),
+                          icon:
+                              Icon(Icons.add_rounded, color: accent, size: 22),
                           tooltip: L10n.of(context, 'browser_new_tab'),
                           onPressed: () {
                             HapticHelper.triggerHaptic(settings);
                             Navigator.pop(context);
-                            controller.openInNewTab('about:blank', switchTo: true);
+                            controller.openInNewTab('about:blank',
+                                switchTo: true);
                           },
                         ),
 
                         // Close all tabs
                         if (tabs.length > 1)
                           IconButton(
-                            icon: const Icon(Icons.delete_sweep_rounded, size: 20, color: AppTheme.neonRed),
+                            icon: const Icon(Icons.delete_sweep_rounded,
+                                size: 20, color: AppTheme.neonRed),
                             tooltip: L10n.of(context, 'browser_close_all_tabs'),
                             onPressed: () {
                               HapticHelper.triggerHaptic(settings);
@@ -138,7 +145,8 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                     child: GridView.builder(
                       controller: scrollController,
                       padding: const EdgeInsets.all(12),
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
                         maxCrossAxisExtent: 220,
                         childAspectRatio: 0.85,
                         crossAxisSpacing: 10,
@@ -154,7 +162,8 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                           direction: DismissDirection.horizontal,
                           onDismissed: (_) {
                             HapticHelper.triggerHaptic(settings);
-                            final closedTitle = tab.title.isNotEmpty ? tab.title : tab.url;
+                            final closedTitle =
+                                tab.title.isNotEmpty ? tab.title : tab.url;
                             controller.closeTab(tab.id);
                             ScaffoldMessenger.of(context).hideCurrentSnackBar();
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -186,13 +195,19 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                               duration: const Duration(milliseconds: 150),
                               decoration: BoxDecoration(
                                 color: isDark
-                                    ? (isActive ? accent.withValues(alpha: 0.12) : AppTheme.cardBg)
-                                    : (isActive ? accent.withValues(alpha: 0.08) : AppTheme.lightCardBg),
+                                    ? (isActive
+                                        ? accent.withValues(alpha: 0.12)
+                                        : AppTheme.cardBg)
+                                    : (isActive
+                                        ? accent.withValues(alpha: 0.08)
+                                        : AppTheme.lightCardBg),
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: isActive
                                       ? accent
-                                      : (isDark ? AppTheme.border : AppTheme.lightBorder),
+                                      : (isDark
+                                          ? AppTheme.border
+                                          : AppTheme.lightBorder),
                                   width: isActive ? 2 : 1,
                                 ),
                               ),
@@ -201,25 +216,34 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                                 children: [
                                   // Tab card header
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 6),
                                     decoration: BoxDecoration(
                                       color: isDark
                                           ? Colors.white.withValues(alpha: 0.04)
-                                          : Colors.black.withValues(alpha: 0.03),
-                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                                          : Colors.black
+                                              .withValues(alpha: 0.03),
+                                      borderRadius: const BorderRadius.vertical(
+                                          top: Radius.circular(11)),
                                     ),
                                     child: Row(
                                       children: [
-                                        if (tab.faviconBytes != null && tab.faviconBytes!.isNotEmpty)
+                                        if (tab.faviconBytes != null &&
+                                            tab.faviconBytes!.isNotEmpty)
                                           Image(
-                                            image: MemoryImage(tab.faviconBytes!),
+                                            image:
+                                                MemoryImage(tab.faviconBytes!),
                                             width: 14,
                                             height: 14,
                                             fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) => Icon(
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    Icon(
                                               tab.isIncognito
                                                   ? Icons.visibility_off_rounded
-                                                  : (tab.isHome ? Icons.home_rounded : Icons.public_rounded),
+                                                  : (tab.isHome
+                                                      ? Icons.home_rounded
+                                                      : Icons.public_rounded),
                                               size: 14,
                                               color: accent,
                                             ),
@@ -228,7 +252,9 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                                           Icon(
                                             tab.isIncognito
                                                 ? Icons.visibility_off_rounded
-                                                : (tab.isHome ? Icons.home_rounded : Icons.public_rounded),
+                                                : (tab.isHome
+                                                    ? Icons.home_rounded
+                                                    : Icons.public_rounded),
                                             size: 14,
                                             color: accent,
                                           ),
@@ -248,13 +274,15 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                                         if (tabs.length > 1)
                                           GestureDetector(
                                             onTap: () {
-                                              HapticHelper.triggerHaptic(settings);
+                                              HapticHelper.triggerHaptic(
+                                                  settings);
                                               controller.closeTab(tab.id);
                                             },
                                             child: Icon(
                                               Icons.close_rounded,
                                               size: 16,
-                                              color: textClr.withValues(alpha: 0.6),
+                                              color: textClr.withValues(
+                                                  alpha: 0.6),
                                             ),
                                           ),
                                       ],
@@ -266,14 +294,17 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                                     child: ClipRRect(
                                       borderRadius: const BorderRadius.vertical(
                                           bottom: Radius.circular(11)),
-                                      child: tab.previewBytes != null && tab.previewBytes!.isNotEmpty
+                                      child: tab.previewBytes != null &&
+                                              tab.previewBytes!.isNotEmpty
                                           ? Image.memory(
                                               tab.previewBytes!,
                                               fit: BoxFit.cover,
                                               width: double.infinity,
                                               height: double.infinity,
                                               gaplessPlayback: true,
-                                              errorBuilder: (context, error, stackTrace) => Center(
+                                              errorBuilder: (context, error,
+                                                      stackTrace) =>
+                                                  Center(
                                                 child: Column(
                                                   mainAxisAlignment:
                                                       MainAxisAlignment.center,
@@ -288,8 +319,8 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                                                               : Icons
                                                                   .language_rounded),
                                                       size: 32,
-                                                      color: textClr
-                                                          .withValues(alpha: 0.25),
+                                                      color: textClr.withValues(
+                                                          alpha: 0.25),
                                                     ),
                                                     const SizedBox(height: 6),
                                                     Text(
@@ -303,8 +334,9 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                                                               : tab.domain),
                                                       style: TextStyle(
                                                         fontSize: 10,
-                                                        color: textClr
-                                                            .withValues(alpha: 0.5),
+                                                        color:
+                                                            textClr.withValues(
+                                                                alpha: 0.5),
                                                       ),
                                                     ),
                                                   ],
@@ -326,8 +358,8 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                                                             : Icons
                                                                 .language_rounded),
                                                     size: 32,
-                                                    color: textClr
-                                                        .withValues(alpha: 0.25),
+                                                    color: textClr.withValues(
+                                                        alpha: 0.25),
                                                   ),
                                                   const SizedBox(height: 6),
                                                   Text(
@@ -341,21 +373,20 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                                                             : tab.domain),
                                                     style: TextStyle(
                                                       fontSize: 10,
-                                                      color: textClr
-                                                          .withValues(alpha: 0.5),
+                                                      color: textClr.withValues(
+                                                          alpha: 0.5),
                                                     ),
                                                   ),
                                                   if (tab.isSuspended) ...[
                                                     const SizedBox(height: 4),
                                                     Container(
-                                                      padding:
-                                                          const EdgeInsets
-                                                              .symmetric(
-                                                              horizontal: 6,
-                                                              vertical: 2),
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 2),
                                                       decoration: BoxDecoration(
-                                                        color: accent
-                                                            .withValues(
+                                                        color:
+                                                            accent.withValues(
                                                                 alpha: 0.1),
                                                         borderRadius:
                                                             BorderRadius
@@ -436,7 +467,8 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
             mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
                     Text(
@@ -455,7 +487,8 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                         // U11: Undo snackbar after clear
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(L10n.of(context, 'browser_history_cleared')),
+                            content: Text(
+                                L10n.of(context, 'browser_history_cleared')),
                           ),
                         );
                       },
@@ -482,12 +515,15 @@ class BrowserTabSwitcher extends StatelessWidget with HapticHelper {
                       final item = recent[index];
                       return ListTile(
                         leading: const Icon(Icons.tab_unselected_rounded),
-                        title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(item.url, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        title: Text(item.title,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(item.url,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
                         onTap: () {
                           Navigator.pop(ctx);
                           Navigator.pop(context);
-                          controller.openInNewTab(item.url, isIncognito: item.isIncognito, switchTo: true);
+                          controller.openInNewTab(item.url,
+                              isIncognito: item.isIncognito, switchTo: true);
                         },
                       );
                     },

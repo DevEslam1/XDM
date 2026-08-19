@@ -498,7 +498,8 @@ class UrlValidator {
 
   /// Returns true if the given [url] is non-empty, well-formed, within length limits,
   /// contains no forbidden control characters, and uses an allowed protocol.
-  static bool isValid(String? url, {bool allowMagnet = true, bool allowFtp = true}) {
+  static bool isValid(String? url,
+      {bool allowMagnet = true, bool allowFtp = true}) {
     if (url == null) return false;
     final trimmed = url.trim();
     if (trimmed.isEmpty || trimmed.length > maxUrlLength) return false;
@@ -535,4 +536,3 @@ class UrlValidator {
     return cleaned.isEmpty ? null : cleaned;
   }
 }
-

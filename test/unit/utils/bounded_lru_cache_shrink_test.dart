@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('BoundedLruCache.shrinkForBackground', () {
-    test('shrinks cache to 1/4 capacity under memory pressure or backgrounding', () {
+    test('shrinks cache to 1/4 capacity under memory pressure or backgrounding',
+        () {
       final cache = BoundedLruCache<String, int>(maxCapacity: 20);
       for (int i = 0; i < 20; i++) {
         cache.put('key_$i', i);

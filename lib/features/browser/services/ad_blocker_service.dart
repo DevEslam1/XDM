@@ -485,7 +485,7 @@ class AdBlockerService {
     'zedo.com',
   };
 
-/// Returns true if [url] should be blocked by the ad blocker.
+  /// Returns true if [url] should be blocked by the ad blocker.
   bool shouldBlockUrl(String url) {
     if (!_enabled || url.isEmpty) return false;
     try {

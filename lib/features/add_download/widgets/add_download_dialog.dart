@@ -394,8 +394,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     if (url.isEmpty) {
       ThemedSnackbar.show(
         context,
-        message:
-            isRtl ? 'أدخل الرابط أولاً' : 'Enter a URL first',
+        message: isRtl ? 'أدخل الرابط أولاً' : 'Enter a URL first',
         color: AppTheme.neonRed,
         icon: Icons.error_outline,
         isDarkMode: isDark,
@@ -499,8 +498,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       if (stream != null) {
         final title = stream['title'] as String? ?? 'Media Download';
         final ext = stream['ext'] as String? ?? 'mp4';
-        final streamUrl =
-            (stream['src'] ?? stream['url'] ?? '') as String;
+        final streamUrl = (stream['src'] ?? stream['url'] ?? '') as String;
         final streamSize = (stream['size'] as num?)?.toInt() ?? 0;
         final audioUrl = stream['audioSrc'] as String?;
         final audioSize = (stream['audioSize'] as num?)?.toInt();
@@ -544,7 +542,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           final isDark = context.read<SettingsProvider>().isDarkMode;
           ThemedSnackbar.show(
             context,
-            message: L10n.isRtl(context) ? 'تم بدء التحميل' : 'Download started',
+            message:
+                L10n.isRtl(context) ? 'تم بدء التحميل' : 'Download started',
             color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
             icon: Icons.check_circle_outline,
             isDarkMode: isDark,
@@ -770,15 +769,14 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   name: sName,
                   url: streamUrl,
                   size: (bestStream['size'] as num?)?.toInt() ?? 0,
-                  category:
-                      bestStream['type'] == 'audio' ? 'Audio' : 'Video',
+                  category: bestStream['type'] == 'audio' ? 'Audio' : 'Video',
                   savePath: _pathController.text.trim().isNotEmpty
                       ? _pathController.text.trim()
                       : settings.customDownloadPath ?? '',
                   threadCount: _selectedThreads,
                   downloadPageUrl: singleUrl,
-                  youtubeQualityPreset: bulkQualityPreset ??
-                      bestStream['quality'] as String?,
+                  youtubeQualityPreset:
+                      bulkQualityPreset ?? bestStream['quality'] as String?,
                   mergedAudioUrl: bestStream['audioSrc'] as String?,
                   audioSize: (bestStream['audioSize'] as num?)?.toInt() ?? 0,
                   thumbnailUrl: bestStream['thumbnailUrl'] as String?,
@@ -1463,8 +1461,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                 LayoutBuilder(
                                               builder: (context, c) {
                                                 final x = (c.maxWidth + 60) *
-                                                        _scanController
-                                                            .value -
+                                                        _scanController.value -
                                                     60;
                                                 return Stack(
                                                   children: [

@@ -25,7 +25,8 @@ void main() {
   });
 
   group('DatabaseService Coalesced Completion Checkpoint (FIX-04)', () {
-    test('saving completed task schedules non-blocking wal_checkpoint(FULL)', () async {
+    test('saving completed task schedules non-blocking wal_checkpoint(FULL)',
+        () async {
       final completedTask = DownloadTask(
         id: 'completed-1',
         fileName: 'file.bin',

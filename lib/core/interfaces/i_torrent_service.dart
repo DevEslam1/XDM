@@ -57,6 +57,7 @@ abstract class ITorrentService {
     bool deleteResumeData = false,
   });
   Future<void> pauseTorrent(int id);
+
   /// FIX-C: Hard-stops a native torrent: cancels its update subscription,
   /// pauses/removes it from the session with verification, and clears all
   /// in-memory bookkeeping so the engine fully releases the handle.
@@ -72,8 +73,10 @@ abstract class ITorrentService {
   List<TorrentFileItem> getFiles(int id);
   Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates;
   Map<int, TorrentUpdateInfo> get latestStats;
+
   /// FIX-D: Point-in-time snapshot of a single torrent's engine state.
   Map<String, dynamic>? getTorrentSnapshot(int id);
+
   /// FIX-D: Best-effort native libtorrent version string.
   String get nativeVersion;
   void configureSession([SettingsProvider? settings]);

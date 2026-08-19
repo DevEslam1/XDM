@@ -19,7 +19,8 @@ void main() {
   });
 
   group('BandwidthGovernor Hardening (Sprint 1)', () {
-    test('Token bucket preserves deficit on negative balance without zeroing', () {
+    test('Token bucket preserves deficit on negative balance without zeroing',
+        () {
       final governor = BandwidthGovernor(1000, 1.0);
       governor.registerConsumer();
 

@@ -18,7 +18,8 @@ void main() {
       expect(output.toLowerCase(), isNot(contains('alert(1)')));
     });
 
-    test('strips inline event handlers (onerror, onload, onclick, onmouseover)', () {
+    test('strips inline event handlers (onerror, onload, onclick, onmouseover)',
+        () {
       const input = '''
         <img src="valid.png" onerror="alert('pwnd')">
         <button onclick="stealCookies()">Click</button>
@@ -36,7 +37,8 @@ void main() {
       expect(output, isNot(contains('javascript:')));
     });
 
-    test('strips dangerous embedded elements: iframe, object, embed, svg, form', () {
+    test('strips dangerous embedded elements: iframe, object, embed, svg, form',
+        () {
       const input = '''
         <iframe>evil</iframe>
         <object data="flash.swf"></object>

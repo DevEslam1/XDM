@@ -464,7 +464,12 @@ class MirrorFailover {
           backoffMultiplier: 2.0,
           maxDelay: const Duration(seconds: 10),
         ).execute(
-          () => action(url),
+          () async {
+            if (!circuit.allowRequest()) {
+              throw CircuitOpenException(service: url);
+            }
+            await action(url);
+          },
           onRetry: (error, attempt, delay) {
             debugPrint(
               '[MirrorFailover] mirror $url attempt $attempt failed ($error); retrying in ${delay.inMilliseconds}ms',

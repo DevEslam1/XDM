@@ -46,6 +46,9 @@ mixin HapticHelper {
 }
 
 /// Global helper functions for backward compatibility across all screens.
-void triggerHaptic(SettingsProvider settings) => HapticHelper.triggerHaptic(settings);
-void runHaptic(SettingsProvider settings) => HapticHelper.triggerHaptic(settings);
-void lightPulse(SettingsProvider settings) => HapticHelper.triggerHaptic(settings);
+void triggerHaptic(SettingsProvider settings) =>
+    HapticHelper.triggerHaptic(settings);
+void runHaptic(SettingsProvider settings) =>
+    HapticHelper.triggerHaptic(settings);
+void lightPulse(SettingsProvider settings) =>
+    HapticHelper.triggerHaptic(settings);

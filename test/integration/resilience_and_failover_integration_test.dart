@@ -10,7 +10,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('FIX-22 Integration Tests', () {
-    test('1. Background wake lock acquisition and release across app lifecycle', () async {
+    test('1. Background wake lock acquisition and release across app lifecycle',
+        () async {
       int acquireCount = 0;
       int releaseCount = 0;
 
@@ -45,7 +46,8 @@ void main() {
       BackgroundService.testMode = false;
     });
 
-    test('2. Restart state reconciliation with corrupted .dmxpart state file', () async {
+    test('2. Restart state reconciliation with corrupted .dmxpart state file',
+        () async {
       final tempDir = Directory.systemTemp.createTempSync('dmx_corrupt_test_');
       final tempFilePath = '${tempDir.path}/corrupt_sample.mp4.dmxpart';
 
@@ -79,7 +81,8 @@ void main() {
         },
       );
 
-      final summary = TorrentFileNormalizer.normalizeTorrentFileList(thousandFiles);
+      final summary =
+          TorrentFileNormalizer.normalizeTorrentFileList(thousandFiles);
       expect(summary.total, equals(1000));
       expect(summary.done, equals(1000));
       expect(summary.bytes, equals(1000 * 10 * 1024 * 1024));

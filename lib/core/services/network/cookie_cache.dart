@@ -58,11 +58,32 @@ class CookieCache implements DisposableService, MemoryPressureListener {
     return now.add(_defaultTtl);
   }
 
+  static String extractCookieName(String cookie) {
+    final firstPart = cookie.split(';').first.trim();
+    final equalsIdx = firstPart.indexOf('=');
+    return equalsIdx != -1
+        ? firstPart.substring(0, equalsIdx).trim()
+        : firstPart;
+  }
+
+  static String extractCookiePath(String cookie) {
+    final pathMatch = RegExp(r'(?:^|;\s*)Path=([^;]+)', caseSensitive: false)
+        .firstMatch(cookie);
+    return pathMatch != null ? pathMatch.group(1)!.trim() : '/';
+  }
+
+  static String buildKey(String origin, String cookie) {
+    final name = extractCookieName(cookie);
+    final path = extractCookiePath(cookie);
+    return '$origin|$name|$path';
+  }
+
   void put(String origin, String cookie) {
     final now = DateTime.now();
     final expiry = computeExpiry(cookie);
+    final key = buildKey(origin, cookie);
 
-    _cache[origin] = _CookieCacheEntry(
+    _cache[key] = _CookieCacheEntry(
       cookie: cookie,
       timestamp: now,
       expiry: expiry,
@@ -81,14 +102,30 @@ class CookieCache implements DisposableService, MemoryPressureListener {
     }
   }
 
-  String? get(String origin) {
-    final entry = _cache[origin];
-    if (entry == null) return null;
-    if (entry.isExpired) {
-      _cache.remove(origin);
-      return null;
+  String? get(String origin, {String? name, String? path}) {
+    if (name != null) {
+      final key = '$origin|$name|${path ?? '/'}';
+      final entry = _cache[key];
+      if (entry == null) return null;
+      if (entry.isExpired) {
+        _cache.remove(key);
+        return null;
+      }
+      return entry.cookie;
     }
-    return entry.cookie;
+
+    final matching = <String>[];
+    for (final entry
+        in List<MapEntry<String, _CookieCacheEntry>>.from(_cache.entries)) {
+      if (entry.key.startsWith('$origin|')) {
+        if (entry.value.isExpired) {
+          _cache.remove(entry.key);
+        } else {
+          matching.add(entry.value.cookie);
+        }
+      }
+    }
+    return matching.isNotEmpty ? matching.join('; ') : null;
   }
 
   void clear() {

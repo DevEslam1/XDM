@@ -199,7 +199,8 @@ class NavigationController extends ChangeNotifier {
           ),
           style: TextStyle(
             fontSize: 14,
-            color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+            color:
+                isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
           ),
         ),
         actions: [

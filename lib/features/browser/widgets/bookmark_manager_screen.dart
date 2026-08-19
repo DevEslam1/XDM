@@ -386,7 +386,9 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                                   ),
                                   icon: const Icon(Icons.add, size: 18),
                                   label: Text(
-                                    isRtl ? 'إضافة إشارة مرجعية' : 'Add Bookmark',
+                                    isRtl
+                                        ? 'إضافة إشارة مرجعية'
+                                        : 'Add Bookmark',
                                     style: const TextStyle(
                                         fontWeight: FontWeight.bold),
                                   ),
@@ -410,90 +412,93 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                             ),
                           )
                         : ListView(
-                        padding: const EdgeInsets.all(12),
-                        children: grouped.entries.map((entry) {
-                          final folderName = entry.key;
-                          final bmsInFolder = entry.value;
-                          final isCollapsed =
-                              _collapsedFolders.contains(folderName);
+                            padding: const EdgeInsets.all(12),
+                            children: grouped.entries.map((entry) {
+                              final folderName = entry.key;
+                              final bmsInFolder = entry.value;
+                              final isCollapsed =
+                                  _collapsedFolders.contains(folderName);
 
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Folder Header
-                              InkWell(
-                                onTap: () {
-                                  setState(() {
-                                    if (isCollapsed) {
-                                      _collapsedFolders.remove(folderName);
-                                    } else {
-                                      _collapsedFolders.add(folderName);
-                                    }
-                                  });
-                                },
-                                borderRadius: BorderRadius.circular(8),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 8, horizontal: 4),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        isCollapsed
-                                            ? Icons.folder_outlined
-                                            : Icons.folder_open_rounded,
-                                        size: 20,
-                                        color: accent,
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Folder Header
+                                  InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        if (isCollapsed) {
+                                          _collapsedFolders.remove(folderName);
+                                        } else {
+                                          _collapsedFolders.add(folderName);
+                                        }
+                                      });
+                                    },
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 8, horizontal: 4),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            isCollapsed
+                                                ? Icons.folder_outlined
+                                                : Icons.folder_open_rounded,
+                                            size: 20,
+                                            color: accent,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            folderName,
+                                            style: TextStyle(
+                                              color: isDark
+                                                  ? AppTheme.textPrimary
+                                                  : AppTheme.lightTextPrimary,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '(${bmsInFolder.length})',
+                                            style: TextStyle(
+                                              color: isDark
+                                                  ? AppTheme.textMuted
+                                                  : AppTheme.lightTextMuted,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          Icon(
+                                            isCollapsed
+                                                ? Icons
+                                                    .keyboard_arrow_down_rounded
+                                                : Icons
+                                                    .keyboard_arrow_up_rounded,
+                                            color: isDark
+                                                ? AppTheme.textMuted
+                                                : AppTheme.lightTextMuted,
+                                            size: 20,
+                                          ),
+                                        ],
                                       ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        folderName,
-                                        style: TextStyle(
-                                          color: isDark
-                                              ? AppTheme.textPrimary
-                                              : AppTheme.lightTextPrimary,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        '(${bmsInFolder.length})',
-                                        style: TextStyle(
-                                          color: isDark
-                                              ? AppTheme.textMuted
-                                              : AppTheme.lightTextMuted,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      const Spacer(),
-                                      Icon(
-                                        isCollapsed
-                                            ? Icons.keyboard_arrow_down_rounded
-                                            : Icons.keyboard_arrow_up_rounded,
-                                        color: isDark
-                                            ? AppTheme.textMuted
-                                            : AppTheme.lightTextMuted,
-                                        size: 20,
-                                      ),
-                                    ],
+                                    ),
                                   ),
-                                ),
-                              ),
 
-                              if (!isCollapsed)
-                                ...bmsInFolder.map((bm) {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 6),
-                                    child: _buildBookmarkTile(
-                                        context, bm, isDark, isAmoled, accent),
-                                  );
-                                }),
+                                  if (!isCollapsed)
+                                    ...bmsInFolder.map((bm) {
+                                      return Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 6),
+                                        child: _buildBookmarkTile(context, bm,
+                                            isDark, isAmoled, accent),
+                                      );
+                                    }),
 
-                              const SizedBox(height: 8),
-                            ],
-                          );
-                        }).toList(),
-                      ),
+                                  const SizedBox(height: 8),
+                                ],
+                              );
+                            }).toList(),
+                          ),
           ),
         ],
       ),
@@ -600,7 +605,8 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                   tooltip: L10n.of(context, 'browser_menu_copy_url'),
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: bm.url));
-                    HapticHelper.triggerHaptic(context.read<SettingsProvider>());
+                    HapticHelper.triggerHaptic(
+                        context.read<SettingsProvider>());
                   },
                 ),
                 IconButton(

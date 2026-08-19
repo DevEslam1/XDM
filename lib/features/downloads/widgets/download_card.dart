@@ -195,7 +195,6 @@ class _DownloadCardState extends State<DownloadCard>
             child: cardWidget,
           );
 
-
     final Widget wrappedCard = RepaintBoundary(
       child: Hero(
         tag: 'download_card_${task.id}',
@@ -548,10 +547,10 @@ class _StatusChipState extends State<_StatusChip> {
     final overrideLabel = widget.overrideLabel;
     final provider = context.read<DownloadProvider>();
 
-    final hasCategoryFilter = context.select(
-        (DownloadProvider p) => p.categoryFilters.isNotEmpty);
-    final hasStatusFilter = context.select(
-        (DownloadProvider p) => p.statusFilter != 'All');
+    final hasCategoryFilter =
+        context.select((DownloadProvider p) => p.categoryFilters.isNotEmpty);
+    final hasStatusFilter =
+        context.select((DownloadProvider p) => p.statusFilter != 'All');
     final filterColor = (hasCategoryFilter || hasStatusFilter)
         ? getActiveFilterColor(provider, isDark)
         : null;
@@ -561,7 +560,8 @@ class _StatusChipState extends State<_StatusChip> {
         task.errorMessage!.contains('WiFi');
     final color = isWifiWaiting
         ? (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber)
-        : getEffectiveCardAccent(task, provider, isDark, filterColor: filterColor);
+        : getEffectiveCardAccent(task, provider, isDark,
+            filterColor: filterColor);
     final label = overrideLabel ??
         (isWifiWaiting
             ? L10n.of(context, 'waiting_wifi')
@@ -2292,7 +2292,8 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                     // Per-file percentages (isolated rebuild via dedicated StatefulWidget)
                     if (fileCount > 0 ||
                         (isMagnet &&
-                            currentTask.status == DownloadStatus.downloading)) ...[
+                            currentTask.status ==
+                                DownloadStatus.downloading)) ...[
                       const SizedBox(height: 12),
                       _TorrentFileListSection(
                         task: currentTask,
@@ -2466,10 +2467,9 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
             return const SizedBox.shrink();
           }
 
-          final isChecking =
-              liveTask.statusMessage?.contains('checking') == true ||
-                  liveTask.statusMessage?.contains('Checking') ==
-                      true; // FIX-B10
+          final isChecking = liveTask.statusMessage?.contains('checking') ==
+                  true ||
+              liveTask.statusMessage?.contains('Checking') == true; // FIX-B10
           final displayFiles = files.map((f) {
             final selected = isTorrentFileSelected(f);
             final length = (f['length'] as num?)?.toInt() ?? 0;
@@ -3231,10 +3231,10 @@ void _showUpdateLinkDialog(
   DownloadProvider provider,
 ) {
   final urlController = TextEditingController(text: task.url);
-  final hasAudio = task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty;
-  final audioUrlController = hasAudio
-      ? TextEditingController(text: task.mergedAudioUrl)
-      : null;
+  final hasAudio =
+      task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty;
+  final audioUrlController =
+      hasAudio ? TextEditingController(text: task.mergedAudioUrl) : null;
 
   showDialog(
     context: context,
@@ -3247,7 +3247,8 @@ void _showUpdateLinkDialog(
         children: [
           DmxTextField(
             controller: urlController,
-            hintText: hasAudio ? 'Video URL' : L10n.of(dialogCtx, 'enter_new_url'),
+            hintText:
+                hasAudio ? 'Video URL' : L10n.of(dialogCtx, 'enter_new_url'),
             autofocus: true,
           ),
           if (hasAudio && audioUrlController != null) ...[
@@ -3277,7 +3278,8 @@ void _showUpdateLinkDialog(
             await provider.updateTaskUrlAndResume(
               task.id,
               newUrl,
-              newAudioUrl: (newAudio != null && newAudio.isNotEmpty) ? newAudio : null,
+              newAudioUrl:
+                  (newAudio != null && newAudio.isNotEmpty) ? newAudio : null,
             );
           },
         ),

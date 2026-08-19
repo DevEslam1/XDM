@@ -1,4 +1,6 @@
+import 'package:dmx/core/services/database/app_database.dart';
 import 'package:dmx/core/services/mirror/mirror_registry.dart';
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,17 +13,20 @@ void main() {
 
   group('Mirror Registry & Benchmark Hardening (Sprint 2)', () {
     test('MirrorHealthStore coalesces dirty state and flushes', () async {
-      final store = MirrorHealthStore();
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      final repo = MirrorHealthDriftRepository(db);
+      final store = MirrorHealthStore(repository: repo);
       await store.init();
 
       await store.recordFailure('https://mirror1.example.com', statusCode: 503);
       expect(store.getFailureCount('https://mirror1.example.com'), equals(1));
 
       await store.flushPending(durable: true);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('mirror_health_data'), isNotNull);
+      final rows = await repo.loadAll();
+      expect(rows.any((r) => r.url == 'https://mirror1.example.com'), isTrue);
 
       await store.clear();
+      await db.close();
     });
 
     test('ServerProfileManager evicts beyond capacity keeping newest', () {
@@ -50,8 +55,7 @@ void main() {
       manager.clear();
 
       // An old profile that just got a success must outrank idle ones.
-      manager.recordSuccess('https://active.example.com',
-          responseTimeMs: 10);
+      manager.recordSuccess('https://active.example.com', responseTimeMs: 10);
       manager.recordFailure('https://idle.example.com',
           statusCode: 503, retryAfter: null);
 

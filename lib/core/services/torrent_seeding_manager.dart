@@ -84,14 +84,14 @@ class TorrentSeedingManager {
         minSeedTimeMinutes: s.minSeedTimeMinutes,
       );
 
-    final isCharging = PowerMonitor.isCharging;
-    // FIX v2.0.0: Actually check wifi status instead of hardcoding true.
-    bool isWifi = true;
-    try {
-      if (getIt.isRegistered<NetworkMonitor>()) {
-        isWifi = getIt<NetworkMonitor>().hasWifiOrEthernet;
-      }
-    } catch (_) {}
+      final isCharging = PowerMonitor.isCharging;
+      // FIX v2.0.0: Actually check wifi status instead of hardcoding true.
+      bool isWifi = true;
+      try {
+        if (getIt.isRegistered<NetworkMonitor>()) {
+          isWifi = getIt<NetworkMonitor>().hasWifiOrEthernet;
+        }
+      } catch (_) {}
       final currentRatio =
           calculateRatio(stats.totalPayloadUpload, stats.totalPayloadDownload);
       final seedDuration = getSeedDuration(id);

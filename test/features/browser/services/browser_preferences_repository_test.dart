@@ -23,7 +23,8 @@ void main() {
       expect(await repo.getSnifferEnabled(), isTrue);
     });
 
-    test('getIncognitoBannerDismissed defaults to false and updates correctly', () async {
+    test('getIncognitoBannerDismissed defaults to false and updates correctly',
+        () async {
       expect(await repo.getIncognitoBannerDismissed(), isFalse);
 
       await repo.setIncognitoBannerDismissed(true);
@@ -49,7 +50,8 @@ void main() {
       expect(retrieved[1]['url'], equals('https://github.com'));
     });
 
-    test('Custom constructor with injected SharedPreferences instance works', () async {
+    test('Custom constructor with injected SharedPreferences instance works',
+        () async {
       final prefs = await SharedPreferences.getInstance();
       final customRepo = BrowserPreferencesRepository(prefs);
 

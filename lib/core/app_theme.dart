@@ -172,7 +172,8 @@ class AppTheme {
 
   /// Primary channel accent for the current mode.
   static Color accent(bool isDark, [double alpha = 1.0]) =>
-      (isDark ? neonBlue : lightNeonBlue).withValues(alpha: alpha.clamp(0.0, 1.0));
+      (isDark ? neonBlue : lightNeonBlue)
+          .withValues(alpha: alpha.clamp(0.0, 1.0));
 
   /// WCAG AA enforced min size 11sp for text styles
   static TextStyle dataStyle({
@@ -854,8 +855,7 @@ class CockpitNotchBorder extends ShapeBorder {
 
   Path _path(Rect r) {
     _ensureMemoryListener();
-    final key =
-        '${r.left}_${r.top}_${r.width}_${r.height}_${radius}_$notch';
+    final key = '${r.left}_${r.top}_${r.width}_${r.height}_${radius}_$notch';
     final cached = _cache[key];
     if (cached != null) {
       return cached;

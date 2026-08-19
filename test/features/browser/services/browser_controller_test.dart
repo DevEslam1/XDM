@@ -89,7 +89,8 @@ void main() {
 
       controller.closeTab(tabId);
       expect(controller.recentlyClosedTabs.isNotEmpty, isTrue);
-      expect(controller.recentlyClosedTabs.first.url, 'https://recoverable.org');
+      expect(
+          controller.recentlyClosedTabs.first.url, 'https://recoverable.org');
 
       controller.restoreRecentlyClosedTab();
       expect(controller.activeTab?.url, 'https://recoverable.org');

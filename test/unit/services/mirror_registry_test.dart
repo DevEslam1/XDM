@@ -10,7 +10,8 @@ void main() {
   });
 
   group('MirrorHealthStore / Registry Tests (FIX-21)', () {
-    test('recordFailure increments failures and trips blacklist circuit at 5', () async {
+    test('recordFailure increments failures and trips blacklist circuit at 5',
+        () async {
       final store = MirrorHealthStore();
       const url = 'https://mirror1.example.com/file.zip';
 
@@ -26,7 +27,8 @@ void main() {
       expect(store.isBlacklisted(url), isTrue);
     });
 
-    test('recordSuccess resets failure count and clears blacklist circuit', () async {
+    test('recordSuccess resets failure count and clears blacklist circuit',
+        () async {
       final store = MirrorHealthStore();
       const url = 'https://mirror2.example.com/file.zip';
 
@@ -40,14 +42,16 @@ void main() {
       expect(store.getFailureCount(url), equals(0));
     });
 
-    test('getMirrorRanking ranks mirrors by average speed descending and excludes blacklisted', () async {
+    test(
+        'getMirrorRanking ranks mirrors by average speed descending and excludes blacklisted',
+        () async {
       final store = MirrorHealthStore();
       const urlFast = 'https://fast.example.com/file.zip';
       const urlSlow = 'https://slow.example.com/file.zip';
       const urlDead = 'https://dead.example.com/file.zip';
 
       await store.recordSuccess(urlFast, speedBps: 10000000); // 10 MB/s
-      await store.recordSuccess(urlSlow, speedBps: 2000000);  // 2 MB/s
+      await store.recordSuccess(urlSlow, speedBps: 2000000); // 2 MB/s
       for (int i = 0; i < 5; i++) {
         await store.recordFailure(urlDead);
       }
@@ -64,7 +68,8 @@ void main() {
       const maxCap = MirrorHealthStore.maxEntries; // 200
 
       for (int i = 0; i < maxCap + 10; i++) {
-        await store.recordSuccess('https://mirror$i.com/file.zip', speedBps: 1000.0 * i);
+        await store.recordSuccess('https://mirror$i.com/file.zip',
+            speedBps: 1000.0 * i);
       }
 
       // Earliest mirrors (e.g. mirror0) should have been evicted

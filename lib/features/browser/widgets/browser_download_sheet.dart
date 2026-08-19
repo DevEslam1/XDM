@@ -225,356 +225,358 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
           child: SafeArea(
             top: false,
             child: Padding(
-                // FIX-M10: Include keyboard padding to prevent layout overflow
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  20,
-                  20,
-                  20 + MediaQuery.of(context).viewInsets.bottom,
-                ),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          margin: const EdgeInsets.only(bottom: 18),
-                          decoration: BoxDecoration(
-                            color: muted.withValues(alpha: 0.4),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
+              // FIX-M10: Include keyboard padding to prevent layout overflow
+              padding: EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                20 + MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 18),
+                        decoration: BoxDecoration(
+                          color: muted.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                      // ── Signal lock header ─────────────────────────
-                      Row(
-                        children: [
-                          AnimatedBuilder(
-                            animation: _pulse,
-                            builder: (context, child) => Container(
-                              padding: const EdgeInsets.all(11),
-                              decoration: BoxDecoration(
-                                color: accent.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: accent.withValues(
-                                    alpha: 0.3 + _pulse.value * 0.3,
-                                  ),
+                    ),
+                    // ── Signal lock header ─────────────────────────
+                    Row(
+                      children: [
+                        AnimatedBuilder(
+                          animation: _pulse,
+                          builder: (context, child) => Container(
+                            padding: const EdgeInsets.all(11),
+                            decoration: BoxDecoration(
+                              color: accent.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: accent.withValues(
+                                  alpha: 0.3 + _pulse.value * 0.3,
                                 ),
-                                boxShadow: settings.enableGlow
-                                    ? [
-                                        BoxShadow(
-                                          color: accent.withValues(alpha: 0.18),
-                                          blurRadius: 10,
-                                        ),
-                                      ]
-                                    : null,
                               ),
-                              child: Opacity(
-                                opacity: (0.7 + _pulse.value * 0.3).clamp(0.0, 1.0),
-                                child: Icon(_icon, color: accent, size: 22),
-                              ),
+                              boxShadow: settings.enableGlow
+                                  ? [
+                                      BoxShadow(
+                                        color: accent.withValues(alpha: 0.18),
+                                        blurRadius: 10,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Opacity(
+                              opacity:
+                                  (0.7 + _pulse.value * 0.3).clamp(0.0, 1.0),
+                              child: Icon(_icon, color: accent, size: 22),
                             ),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isRtl ? 'إشارة تحميل مرصودة' : 'SIGNAL LOCKED',
+                                style: TextStyle(
+                                  fontFamily: 'Space Grotesk',
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 15,
+                                  letterSpacing: 1.2,
+                                  color: accent,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  AnimatedBuilder(
+                                    animation: _pulse,
+                                    builder: (context, child) => Container(
+                                      width: 5,
+                                      height: 5,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: accent,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: accent.withValues(
+                                              alpha: 0.3 + _pulse.value * 0.5,
+                                            ),
+                                            blurRadius: 4,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _kindLabel(),
+                                    style: TextStyle(
+                                      fontFamily: 'Space Grotesk',
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.5,
+                                      color: muted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    if ((widget.text ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        widget.text!,
+                        style: TextStyle(color: secClr, fontSize: 12),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    // ── Filename, Host & URL readout with corner brackets (U5) ───────────
+                    Builder(
+                      builder: (context) {
+                        final detected = BrowserDetector.detect(widget.url);
+                        final displayName = widget.suggestedName ??
+                            detected?.suggestedFileName ??
+                            fileNameFromUrl(widget.url);
+                        final host = Uri.tryParse(widget.url)?.host ?? '';
+
+                        return _CornerFrame(
+                          color: accent,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(13),
+                            decoration: BoxDecoration(
+                              color: (isDark
+                                      ? AppTheme.background
+                                      : AppTheme.lightBackground)
+                                  .withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  isRtl
-                                      ? 'إشارة تحميل مرصودة'
-                                      : 'SIGNAL LOCKED',
+                                  displayName,
                                   style: TextStyle(
-                                    fontFamily: 'Space Grotesk',
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 15,
-                                    letterSpacing: 1.2,
-                                    color: accent,
+                                    color: textClr,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
                                   ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    AnimatedBuilder(
-                                      animation: _pulse,
-                                      builder: (context, child) => Container(
-                                        width: 5,
-                                        height: 5,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: accent,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: accent.withValues(
-                                                alpha: 0.3 + _pulse.value * 0.5,
-                                              ),
-                                              blurRadius: 4,
-                                            ),
-                                          ],
+                                if (host.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(Icons.language_rounded,
+                                          size: 12, color: muted),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          host,
+                                          style: TextStyle(
+                                            color: muted,
+                                            fontSize: 11,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      _kindLabel(),
-                                      style: TextStyle(
-                                        fontFamily: 'Space Grotesk',
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 1.5,
-                                        color: muted,
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        isRtl
+                                            ? 'الحجم: غير معروف'
+                                            : 'Size: Unknown',
+                                        style: TextStyle(
+                                          color: muted,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                ),
+                                    ],
+                                  ),
+                                ],
                               ],
                             ),
                           ),
-                        ],
-                      ),
-                      if ((widget.text ?? '').isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          widget.text!,
-                          style: TextStyle(color: secClr, fontSize: 12),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      const SizedBox(height: 14),
-                      // ── Filename, Host & URL readout with corner brackets (U5) ───────────
-                      Builder(
-                        builder: (context) {
-                          final detected = BrowserDetector.detect(widget.url);
-                          final displayName = widget.suggestedName ??
-                              detected?.suggestedFileName ??
-                              fileNameFromUrl(widget.url);
-                          final host = Uri.tryParse(widget.url)?.host ?? '';
-
-                          return _CornerFrame(
-                            color: accent,
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(13),
-                              decoration: BoxDecoration(
-                                color: (isDark
-                                        ? AppTheme.background
-                                        : AppTheme.lightBackground)
-                                    .withValues(alpha: 0.6),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    displayName,
-                                    style: TextStyle(
-                                      color: textClr,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  if (host.isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Icon(Icons.language_rounded, size: 12, color: muted),
-                                        const SizedBox(width: 4),
-                                        Expanded(
-                                          child: Text(
-                                            host,
-                                            style: TextStyle(
-                                              color: muted,
-                                              fontSize: 11,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          isRtl ? 'الحجم: غير معروف' : 'Size: Unknown',
-                                          style: TextStyle(
-                                            color: muted,
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 20),
-                      // ── Link Navigation Actions ────────────────────
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    // ── Link Navigation Actions ────────────────────
+                    if (widget.onOpen != null ||
+                        widget.onOpenInBackground != null ||
+                        widget.onOpenInNewTab != null ||
+                        widget.onOpenInIncognito != null) ...[
+                      // Row 1: Open + Open in background
                       if (widget.onOpen != null ||
-                          widget.onOpenInBackground != null ||
-                          widget.onOpenInNewTab != null ||
+                          widget.onOpenInBackground != null) ...[
+                        Row(
+                          children: [
+                            if (widget.onOpen != null)
+                              Expanded(
+                                child: _SheetButton(
+                                  label: isRtl ? 'فتح' : 'OPEN',
+                                  isDark: isDark,
+                                  filled: false,
+                                  accent: accent,
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    widget.onOpen!();
+                                  },
+                                ),
+                              ),
+                            if (widget.onOpen != null &&
+                                widget.onOpenInBackground != null)
+                              const SizedBox(width: 10),
+                            if (widget.onOpenInBackground != null)
+                              Expanded(
+                                child: _SheetButton(
+                                  label:
+                                      isRtl ? 'فتح في الخلفية' : 'OPEN IN BG',
+                                  isDark: isDark,
+                                  filled: false,
+                                  accent: accent,
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    widget.onOpenInBackground!();
+                                  },
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      // Row 2: Open in new tab + Open in incognito
+                      if (widget.onOpenInNewTab != null ||
                           widget.onOpenInIncognito != null) ...[
-                        // Row 1: Open + Open in background
-                        if (widget.onOpen != null ||
-                            widget.onOpenInBackground != null) ...[
-                          Row(
-                            children: [
-                              if (widget.onOpen != null)
-                                Expanded(
-                                  child: _SheetButton(
-                                    label: isRtl ? 'فتح' : 'OPEN',
-                                    isDark: isDark,
-                                    filled: false,
-                                    accent: accent,
-                                    onTap: () {
-                                      Navigator.pop(context);
-                                      widget.onOpen!();
-                                    },
-                                  ),
+                        Row(
+                          children: [
+                            if (widget.onOpenInNewTab != null)
+                              Expanded(
+                                child: _SheetButton(
+                                  label: isRtl
+                                      ? 'فتح في علامة تبويب جديدة'
+                                      : 'OPEN IN NEW TAB',
+                                  isDark: isDark,
+                                  filled: false,
+                                  accent: accent,
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    widget.onOpenInNewTab!();
+                                  },
                                 ),
-                              if (widget.onOpen != null &&
-                                  widget.onOpenInBackground != null)
-                                const SizedBox(width: 10),
-                              if (widget.onOpenInBackground != null)
-                                Expanded(
-                                  child: _SheetButton(
-                                    label:
-                                        isRtl ? 'فتح في الخلفية' : 'OPEN IN BG',
-                                    isDark: isDark,
-                                    filled: false,
-                                    accent: accent,
-                                    onTap: () {
-                                      Navigator.pop(context);
-                                      widget.onOpenInBackground!();
-                                    },
-                                  ),
+                              ),
+                            if (widget.onOpenInNewTab != null &&
+                                widget.onOpenInIncognito != null)
+                              const SizedBox(width: 10),
+                            if (widget.onOpenInIncognito != null)
+                              Expanded(
+                                child: _SheetButton(
+                                  label: isRtl
+                                      ? 'فتح في التصفح الخفي'
+                                      : 'OPEN IN INCOGNITO',
+                                  isDark: isDark,
+                                  filled: false,
+                                  accent: accent,
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    widget.onOpenInIncognito!();
+                                  },
                                 ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                        ],
-                        // Row 2: Open in new tab + Open in incognito
-                        if (widget.onOpenInNewTab != null ||
-                            widget.onOpenInIncognito != null) ...[
-                          Row(
-                            children: [
-                              if (widget.onOpenInNewTab != null)
-                                Expanded(
-                                  child: _SheetButton(
-                                    label: isRtl
-                                        ? 'فتح في علامة تبويب جديدة'
-                                        : 'OPEN IN NEW TAB',
-                                    isDark: isDark,
-                                    filled: false,
-                                    accent: accent,
-                                    onTap: () {
-                                      Navigator.pop(context);
-                                      widget.onOpenInNewTab!();
-                                    },
-                                  ),
-                                ),
-                              if (widget.onOpenInNewTab != null &&
-                                  widget.onOpenInIncognito != null)
-                                const SizedBox(width: 10),
-                              if (widget.onOpenInIncognito != null)
-                                Expanded(
-                                  child: _SheetButton(
-                                    label: isRtl
-                                        ? 'فتح في التصفح الخفي'
-                                        : 'OPEN IN INCOGNITO',
-                                    isDark: isDark,
-                                    filled: false,
-                                    accent: accent,
-                                    onTap: () {
-                                      Navigator.pop(context);
-                                      widget.onOpenInIncognito!();
-                                    },
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                        ],
-                        const SizedBox(height: 4),
-                      ],
-                      // ── Additional sources (long-press multi-source) ──
-                      if (widget.sources.isNotEmpty) ...[
-                        Text(
-                          isRtl ? 'المصادر' : 'SOURCES',
-                          style: TextStyle(
-                            fontFamily: 'Space Grotesk',
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.5,
-                            color: muted,
-                          ),
+                              ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
-                        ...widget.sources.map(
-                          (source) => _SourceTile(
-                            source: source,
-                            accent: accent,
+                        const SizedBox(height: 10),
+                      ],
+                      const SizedBox(height: 4),
+                    ],
+                    // ── Additional sources (long-press multi-source) ──
+                    if (widget.sources.isNotEmpty) ...[
+                      Text(
+                        isRtl ? 'المصادر' : 'SOURCES',
+                        style: TextStyle(
+                          fontFamily: 'Space Grotesk',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.5,
+                          color: muted,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...widget.sources.map(
+                        (source) => _SourceTile(
+                          source: source,
+                          accent: accent,
+                          isDark: isDark,
+                          onTap: () =>
+                              _startDownload(context, settings, source: source),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    // ── Actions ────────────────────────────────────
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _SheetButton(
+                            label: isRtl ? 'إغلاق' : 'DISMISS',
                             isDark: isDark,
-                            onTap: () => _startDownload(context, settings,
-                                source: source),
+                            filled: false,
+                            accent: accent,
+                            onTap: () => Navigator.pop(context),
                           ),
                         ),
-                        const SizedBox(height: 14),
-                      ],
-                      // ── Actions ────────────────────────────────────
-                      Row(
-                        children: [
+                        if (widget.onQuality != null) ...[
+                          const SizedBox(width: 10),
                           Expanded(
                             child: _SheetButton(
-                              label: isRtl ? 'إغلاق' : 'DISMISS',
+                              label: isRtl ? 'الجودة' : 'QUALITY',
                               isDark: isDark,
                               filled: false,
                               accent: accent,
-                              onTap: () => Navigator.pop(context),
-                            ),
-                          ),
-                          if (widget.onQuality != null) ...[
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _SheetButton(
-                                label: isRtl ? 'الجودة' : 'QUALITY',
-                                isDark: isDark,
-                                filled: false,
-                                accent: accent,
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  widget.onQuality!();
-                                },
-                              ),
-                            ),
-                          ],
-                          const SizedBox(width: 10),
-                          Expanded(
-                            flex: widget.type == 'video' ? 1 : 2,
-                            child: _SheetButton(
-                              label: isRtl ? 'تحميل' : 'DOWNLOAD',
-                              isDark: isDark,
-                              filled: true,
-                              accent: accent,
-                              onTap: () => _startDownload(context, settings),
+                              onTap: () {
+                                Navigator.pop(context);
+                                widget.onQuality!();
+                              },
                             ),
                           ),
                         ],
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: widget.type == 'video' ? 1 : 2,
+                          child: _SheetButton(
+                            label: isRtl ? 'تحميل' : 'DOWNLOAD',
+                            isDark: isDark,
+                            filled: true,
+                            accent: accent,
+                            onTap: () => _startDownload(context, settings),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
         ),
-      );
+      ),
+    );
   }
 
   Future<void> _startDownload(

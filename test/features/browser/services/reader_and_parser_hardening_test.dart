@@ -5,13 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('LongPressPayload & ReaderMode Hardening Tests', () {
     test('LongPressPayload parses simple and double-quoted escaped JSON', () {
-      const validJson = '{"url": "https://example.com/test.zip", "src": "https://example.com/img.png", "type": "link"}';
+      const validJson =
+          '{"url": "https://example.com/test.zip", "src": "https://example.com/img.png", "type": "link"}';
       final payload1 = LongPressPayload.tryParse(validJson);
       expect(payload1, isNotNull);
       expect(payload1?.url, 'https://example.com/test.zip');
       expect(payload1?.type, 'link');
 
-      const quotedJson = '"{\\"url\\": \\"https://example.com/escaped.mp4\\", \\"text\\": \\"Sample\\", \\"type\\": \\"video\\"}"';
+      const quotedJson =
+          '"{\\"url\\": \\"https://example.com/escaped.mp4\\", \\"text\\": \\"Sample\\", \\"type\\": \\"video\\"}"';
       final payload2 = LongPressPayload.tryParse(quotedJson);
       expect(payload2, isNotNull);
       expect(payload2?.url, 'https://example.com/escaped.mp4');

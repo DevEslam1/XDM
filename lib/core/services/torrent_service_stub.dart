@@ -204,7 +204,8 @@ class TorrentServiceImpl implements ITorrentService {
   }) async =>
       -1;
   @override
-  int addTorrentFile(String filePath, String savePath, {String? sourceKey}) => -1;
+  int addTorrentFile(String filePath, String savePath, {String? sourceKey}) =>
+      -1;
 
   @override
   void removeTorrent(int id,
@@ -232,7 +233,8 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   List<TorrentFileItem> getFiles(int id) => [];
   @override
-  Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates => const Stream.empty();
+  Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
+      const Stream.empty();
   @override
   Map<int, TorrentUpdateInfo> get latestStats => const {};
   @override
@@ -343,4 +345,3 @@ class TorrentServiceImpl implements ITorrentService {
 }
 
 class TorrentServiceStub extends TorrentServiceImpl {}
-

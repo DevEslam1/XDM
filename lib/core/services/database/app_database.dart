@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
@@ -132,6 +133,8 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
       final cached = _recoveryCache[fromDb];
       if (cached != null) return cached;
       try {
+        _dbLog.warning(
+            'Telemetry: DoubleListConverter invoked legacy regex recovery fallback for corrupted JSON cell');
         final result = _recoverDoubleList(fromDb);
         if (result.isNotEmpty) {
           if (_recoveryCache.length >= _recoveryCacheLimit) {
@@ -160,8 +163,8 @@ class TorrentFilesConverter
 
   /// Bounded cache of regex-recovered values so repeatedly reading the same
   /// corrupted cell does not re-run the recovery pass on every query.
-  static final LinkedHashMap<String, List<Map<String, dynamic>>> _recoveryCache =
-      LinkedHashMap<String, List<Map<String, dynamic>>>();
+  static final LinkedHashMap<String, List<Map<String, dynamic>>>
+      _recoveryCache = LinkedHashMap<String, List<Map<String, dynamic>>>();
   static const int _recoveryCacheLimit = 64;
 
   /// Clears the bounded recovery cache. Testing hook.
@@ -198,6 +201,8 @@ class TorrentFilesConverter
       final cached = _recoveryCache[fromDb];
       if (cached != null) return cached;
       try {
+        _dbLog.warning(
+            'Telemetry: TorrentFilesConverter invoked legacy regex recovery fallback for corrupted JSON cell');
         final result = _recoverTorrentFiles(fromDb);
         if (result.isNotEmpty) {
           if (_recoveryCache.length >= _recoveryCacheLimit) {
@@ -330,9 +335,25 @@ class DownloadTasks extends Table {
   IntColumn get audioChunksTotal => integer().nullable()();
   IntColumn get httpPartsCompleted => integer().nullable()();
   IntColumn get httpPartsTotal => integer().nullable()();
+  TextColumn get previousCycleState => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('DbMirrorHealth')
+class MirrorHealth extends Table {
+  TextColumn get url => text()();
+  IntColumn get failures => integer().withDefault(const Constant(0))();
+  IntColumn get lastFailure => integer().withDefault(const Constant(0))();
+  IntColumn get lastSuccess => integer().withDefault(const Constant(0))();
+  IntColumn get lastStatusCode => integer().withDefault(const Constant(0))();
+  IntColumn get blacklistedUntil => integer().withDefault(const Constant(0))();
+  RealColumn get averageSpeedBps => real().withDefault(const Constant(0.0))();
+  TextColumn get speedSamples => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {url};
 }
 
 @DataClassName('DbBookmark')
@@ -372,29 +393,182 @@ class BrowserTabs extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-LazyDatabase _openConnection(String path) {
+LazyDatabase _openConnection(String path,
+    {bool stateCriticalSynchronous = false}) {
   return LazyDatabase(() async {
     final file = File(path);
     return NativeDatabase.createInBackground(
       file,
       setup: (database) {
         database.execute('PRAGMA journal_mode=WAL;');
-        database.execute('PRAGMA synchronous=NORMAL;');
+        if (stateCriticalSynchronous) {
+          database.execute('PRAGMA synchronous=FULL;');
+        } else {
+          database.execute('PRAGMA synchronous=NORMAL;');
+        }
         database.execute('PRAGMA foreign_keys=ON;');
         database.execute('PRAGMA busy_timeout=5000;');
+        database.execute('PRAGMA journal_size_limit=10485760;'); // 10MB WAL cap
       },
     );
   });
 }
 
-@DriftDatabase(tables: [DownloadTasks, Bookmarks, BrowserHistory, BrowserTabs])
+@DriftDatabase(tables: [
+  DownloadTasks,
+  Bookmarks,
+  BrowserHistory,
+  BrowserTabs,
+  MirrorHealth
+])
 class AppDatabase extends _$AppDatabase {
   final String? dbPath;
-  AppDatabase(String path) : dbPath = path, super(_openConnection(path));
-  AppDatabase.forTesting(super.e) : dbPath = null;
+  final bool stateCriticalSynchronous;
+  Timer? _checkpointTimer;
+
+  static const int walMaxSizeBytes = 10 * 1024 * 1024; // 10MB
+
+  AppDatabase(String path, {this.stateCriticalSynchronous = false})
+      : dbPath = path,
+        super(_openConnection(path,
+            stateCriticalSynchronous: stateCriticalSynchronous));
+  AppDatabase.forTesting(super.e, {this.stateCriticalSynchronous = false})
+      : dbPath = null;
+
+  /// Starts a periodic WAL checkpointer running every [interval] (defaults to 15m).
+  void startPeriodicWalCheckpointer(
+      {Duration interval = const Duration(minutes: 15)}) {
+    _checkpointTimer?.cancel();
+    _checkpointTimer = Timer.periodic(interval, (_) async {
+      try {
+        final walSize = getWalFileSize();
+        if (walSize > 0) {
+          _dbLog.fine('Periodic checkpoint check: current WAL size is ${walSize}B');
+        }
+        await checkpointWal();
+      } catch (e, st) {
+        _dbLog.warning('Periodic WAL checkpoint error: $e', e, st);
+      }
+    });
+  }
+
+  /// Cancels the periodic WAL checkpointer.
+  void stopPeriodicWalCheckpointer() {
+    _checkpointTimer?.cancel();
+    _checkpointTimer = null;
+  }
+
+  /// Returns current size in bytes of the SQLite WAL file.
+  int getWalFileSize() {
+    if (dbPath == null) return 0;
+    try {
+      final walFile = File('$dbPath-wal');
+      return walFile.existsSync() ? walFile.lengthSync() : 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Checkpoints the WAL file back into the main database file.
+  Future<int> checkpointWal({bool truncate = true}) async {
+    final beforeSize = getWalFileSize();
+    try {
+      final mode = truncate ? 'TRUNCATE' : 'PASSIVE';
+      final result = await customSelect('PRAGMA wal_checkpoint($mode);').get();
+      final afterSize = getWalFileSize();
+      _dbLog.info(
+          'WAL checkpoint ($mode) completed. Size: ${beforeSize}B -> ${afterSize}B');
+      return result.isNotEmpty
+          ? (result.first.data.values.first as int? ?? 0)
+          : 0;
+    } catch (e, st) {
+      _dbLog.warning('WAL checkpoint failed: $e', e, st);
+      return -1;
+    }
+  }
+
+  /// Verifies connection pool health and cleans up stale locks.
+  Future<bool> cleanupStaleConnections() async {
+    try {
+      final result = await customSelect('SELECT 1 as alive;').get();
+      final alive =
+          result.isNotEmpty && result.first.read<int>('alive') == 1;
+      if (alive) {
+        _dbLog.fine('Database connection pool health check passed.');
+      }
+      return alive;
+    } catch (e, st) {
+      _dbLog.severe('Database connection health check failed: $e', e, st);
+      return false;
+    }
+  }
+
+  /// Closes the database cleanly with a final TRUNCATE checkpoint.
+  Future<void> closeDatabase() async {
+    stopPeriodicWalCheckpointer();
+    try {
+      await checkpointWal(truncate: true);
+    } catch (e, st) {
+      _dbLog.warning('Pre-close WAL checkpoint failed: $e', e, st);
+    }
+    await close();
+  }
+
+  /// Sets PRAGMA synchronous to FULL for state-critical write phases.
+  Future<void> setSynchronousFull() =>
+      safeCustomStatement('PRAGMA synchronous=FULL;');
+
+  /// Reverts PRAGMA synchronous to NORMAL for standard throughput.
+  Future<void> setSynchronousNormal() =>
+      safeCustomStatement('PRAGMA synchronous=NORMAL;');
+
+  /// Executes a custom SQL statement wrapped with structured logging.
+  Future<void> safeCustomStatement(String sql,
+      [List<Object?> args = const []]) async {
+    try {
+      await customStatement(sql, args);
+    } catch (e, st) {
+      _dbLog.severe(
+          'Database safeCustomStatement failed: "$sql", args: $args', e, st);
+      rethrow;
+    }
+  }
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
+
+  @visibleForTesting
+  Future<void> addColumnIfMissingForTesting(
+          String table, String column, String sql) =>
+      _addColumnIfMissing(table, column, sql);
+
+  /// Idempotent column addition helper that inspects PRAGMA table_info before altering.
+  Future<void> _addColumnIfMissing(
+    String table,
+    String column,
+    String sql,
+  ) async {
+    try {
+      final tableInfo = await customSelect('PRAGMA table_info($table)').get();
+      final exists = tableInfo.any((row) =>
+          (row.read<String>('name')).toLowerCase() == column.toLowerCase());
+      if (!exists) {
+        _dbLog.info(
+            'Column $column confirmed missing from $table. Executing: $sql');
+        await safeCustomStatement(sql);
+        _dbLog.info('Column $column successfully added to $table');
+      } else {
+        _dbLog.info(
+            'Column $column confirmed already exists in $table; skipping');
+      }
+    } catch (e, st) {
+      _dbLog.severe(
+          '_addColumnIfMissing failed for table: $table, column: $column, sql: $sql',
+          e,
+          st);
+      rethrow;
+    }
+  }
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -418,6 +592,10 @@ class AppDatabase extends _$AppDatabase {
               'CREATE INDEX IF NOT EXISTS idx_bookmarks_url ON bookmarks (url)');
           await customStatement(
               'CREATE INDEX IF NOT EXISTS idx_browser_tabs_position ON browser_tabs (position)');
+          await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_download_tasks_audio_chunks ON download_tasks (audio_chunks) WHERE audio_chunks IS NOT NULL');
+          await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_download_tasks_http_parts ON download_tasks (http_parts) WHERE http_parts IS NOT NULL');
           await _createTaskSummaryView();
         },
         onUpgrade: (m, from, to) async {
@@ -483,8 +661,7 @@ class AppDatabase extends _$AppDatabase {
             final recoveredFromNow = await customSelect(
               'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0',
             ).get();
-            final recoverFromNowCount =
-                recoveredFromNow.first.read<int>('cnt');
+            final recoverFromNowCount = recoveredFromNow.first.read<int>('cnt');
             if (recoverFromNowCount > 0) {
               await customStatement(
                 "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0",
@@ -540,12 +717,8 @@ class AppDatabase extends _$AppDatabase {
                 'CREATE INDEX IF NOT EXISTS idx_browser_history_visited_at ON browser_history (visited_at)');
           }
           if (from < 10) {
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN thumbnail_url TEXT');
-            } catch (e) {
-              _dbLog.info('Column thumbnail_url may already exist: $e');
-            }
+            await _addColumnIfMissing('download_tasks', 'thumbnail_url',
+                'ALTER TABLE download_tasks ADD COLUMN thumbnail_url TEXT');
           }
           if (from < 11) {
             await customStatement('''
@@ -629,20 +802,12 @@ class AppDatabase extends _$AppDatabase {
             }
           }
           if (from < 12) {
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN mirror_urls TEXT');
-            } catch (e) {
-              _dbLog.info('Column mirror_urls may already exist: $e');
-            }
+            await _addColumnIfMissing('download_tasks', 'mirror_urls',
+                'ALTER TABLE download_tasks ADD COLUMN mirror_urls TEXT');
           }
           if (from < 13) {
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN queue_order INTEGER NOT NULL DEFAULT 0');
-            } catch (e) {
-              _dbLog.info('Column queue_order may already exist: $e');
-            }
+            await _addColumnIfMissing('download_tasks', 'queue_order',
+                'ALTER TABLE download_tasks ADD COLUMN queue_order INTEGER NOT NULL DEFAULT 0');
             try {
               await customStatement(
                   'UPDATE download_tasks SET queue_order = (SELECT COUNT(*) FROM download_tasks t2 WHERE t2.created_at < download_tasks.created_at)');
@@ -651,57 +816,28 @@ class AppDatabase extends _$AppDatabase {
             }
           }
           if (from < 14) {
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN video_stream_size INTEGER NOT NULL DEFAULT 0');
-            } catch (e) {
-              _dbLog.info('Column video_stream_size may already exist: $e');
-            }
+            await _addColumnIfMissing('download_tasks', 'video_stream_size',
+                'ALTER TABLE download_tasks ADD COLUMN video_stream_size INTEGER NOT NULL DEFAULT 0');
           }
           if (from < 15) {
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN audio_downloaded_bytes INTEGER NOT NULL DEFAULT 0');
-            } catch (e) {
-              _dbLog
-                  .info('Column audio_downloaded_bytes may already exist: $e');
-            }
+            await _addColumnIfMissing(
+                'download_tasks',
+                'audio_downloaded_bytes',
+                'ALTER TABLE download_tasks ADD COLUMN audio_downloaded_bytes INTEGER NOT NULL DEFAULT 0');
           }
           if (from < 16) {
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN uploaded_bytes INTEGER NOT NULL DEFAULT 0');
-            } catch (e) {
-              _dbLog.info('Column uploaded_bytes may already exist: $e');
-            }
+            await _addColumnIfMissing('download_tasks', 'uploaded_bytes',
+                'ALTER TABLE download_tasks ADD COLUMN uploaded_bytes INTEGER NOT NULL DEFAULT 0');
           }
           if (from < 17) {
-            try {
-              await customStatement(
-                  'ALTER TABLE browser_history ADD COLUMN visit_count INTEGER NOT NULL DEFAULT 1');
-            } catch (e) {
-              _dbLog.info('Column visit_count may already exist: $e');
-            }
-            try {
-              await customStatement(
-                  'ALTER TABLE browser_history ADD COLUMN favicon_url TEXT');
-            } catch (e) {
-              _dbLog.info(
-                  'Column favicon_url on browser_history may already exist: $e');
-            }
-            try {
-              await customStatement(
-                  'ALTER TABLE browser_tabs ADD COLUMN last_visited_at INTEGER NOT NULL DEFAULT 0');
-            } catch (e) {
-              _dbLog.info('Column last_visited_at may already exist: $e');
-            }
-            try {
-              await customStatement(
-                  'ALTER TABLE browser_tabs ADD COLUMN favicon_url TEXT');
-            } catch (e) {
-              _dbLog.info(
-                  'Column favicon_url on browser_tabs may already exist: $e');
-            }
+            await _addColumnIfMissing('browser_history', 'visit_count',
+                'ALTER TABLE browser_history ADD COLUMN visit_count INTEGER NOT NULL DEFAULT 1');
+            await _addColumnIfMissing('browser_history', 'favicon_url',
+                'ALTER TABLE browser_history ADD COLUMN favicon_url TEXT');
+            await _addColumnIfMissing('browser_tabs', 'last_visited_at',
+                'ALTER TABLE browser_tabs ADD COLUMN last_visited_at INTEGER NOT NULL DEFAULT 0');
+            await _addColumnIfMissing('browser_tabs', 'favicon_url',
+                'ALTER TABLE browser_tabs ADD COLUMN favicon_url TEXT');
             await customStatement(
                 'CREATE INDEX IF NOT EXISTS idx_browser_history_url ON browser_history (url)');
             await customStatement(
@@ -710,100 +846,82 @@ class AppDatabase extends _$AppDatabase {
                 'CREATE INDEX IF NOT EXISTS idx_browser_tabs_position ON browser_tabs (position)');
           }
           if (from < 18) {
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN pause_reason TEXT');
-            } catch (e) {
-              _dbLog.info('Column pause_reason may already exist: $e');
-            }
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN completed_pieces INTEGER');
-            } catch (e) {
-              _dbLog.info('Column completed_pieces may already exist: $e');
-            }
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN yt_counterpart_downloaded_bytes INTEGER');
-            } catch (e) {
-              _dbLog.info(
-                  'Column yt_counterpart_downloaded_bytes may already exist: $e');
-            }
+            await _addColumnIfMissing('download_tasks', 'pause_reason',
+                'ALTER TABLE download_tasks ADD COLUMN pause_reason TEXT');
+            await _addColumnIfMissing('download_tasks', 'completed_pieces',
+                'ALTER TABLE download_tasks ADD COLUMN completed_pieces INTEGER');
+            await _addColumnIfMissing(
+                'download_tasks',
+                'yt_counterpart_downloaded_bytes',
+                'ALTER TABLE download_tasks ADD COLUMN yt_counterpart_downloaded_bytes INTEGER');
           }
           if (from < 19) {
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN cycle_state TEXT');
-            } catch (e) {
-              _dbLog.info('Column cycle_state may already exist: $e');
-            }
+            await _addColumnIfMissing('download_tasks', 'cycle_state',
+                'ALTER TABLE download_tasks ADD COLUMN cycle_state TEXT');
           }
           if (from < 20) {
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN total_pieces INTEGER');
-            } catch (e) {
-              _dbLog.info('Column total_pieces may already exist: $e');
-            }
+            await _addColumnIfMissing('download_tasks', 'total_pieces',
+                'ALTER TABLE download_tasks ADD COLUMN total_pieces INTEGER');
           }
           if (from < 21) {
             await _createTaskSummaryView();
           }
 
-          // FIX 7.2: Migration for new columns in schema v23
+          // Migration for new columns in schema v23
           if (from < 23) {
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN audio_chunks TEXT');
-            } catch (e) {
-              _dbLog.info('Column audio_chunks may already exist: $e');
-            }
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN http_parts TEXT');
-            } catch (e) {
-              _dbLog.info('Column http_parts may already exist: $e');
-            }
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN torrent_piece_progress REAL DEFAULT 0');
-            } catch (e) {
-              _dbLog.info('Column torrent_piece_progress may already exist: $e');
-            }
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN audio_chunks_completed INTEGER DEFAULT 0');
-            } catch (e) {
-              _dbLog.info('Column audio_chunks_completed may already exist: $e');
-            }
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN audio_chunks_total INTEGER DEFAULT 0');
-            } catch (e) {
-              _dbLog.info('Column audio_chunks_total may already exist: $e');
-            }
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN http_parts_completed INTEGER DEFAULT 0');
-            } catch (e) {
-              _dbLog.info('Column http_parts_completed may already exist: $e');
-            }
-            try {
-              await customStatement(
-                  'ALTER TABLE download_tasks ADD COLUMN http_parts_total INTEGER DEFAULT 0');
-            } catch (e) {
-              _dbLog.info('Column http_parts_total may already exist: $e');
-            }
+            await _addColumnIfMissing('download_tasks', 'audio_chunks',
+                'ALTER TABLE download_tasks ADD COLUMN audio_chunks TEXT');
+            await _addColumnIfMissing('download_tasks', 'http_parts',
+                'ALTER TABLE download_tasks ADD COLUMN http_parts TEXT');
+            await _addColumnIfMissing(
+                'download_tasks',
+                'torrent_piece_progress',
+                'ALTER TABLE download_tasks ADD COLUMN torrent_piece_progress REAL DEFAULT 0');
+            await _addColumnIfMissing(
+                'download_tasks',
+                'audio_chunks_completed',
+                'ALTER TABLE download_tasks ADD COLUMN audio_chunks_completed INTEGER DEFAULT 0');
+            await _addColumnIfMissing('download_tasks', 'audio_chunks_total',
+                'ALTER TABLE download_tasks ADD COLUMN audio_chunks_total INTEGER DEFAULT 0');
+            await _addColumnIfMissing('download_tasks', 'http_parts_completed',
+                'ALTER TABLE download_tasks ADD COLUMN http_parts_completed INTEGER DEFAULT 0');
+            await _addColumnIfMissing('download_tasks', 'http_parts_total',
+                'ALTER TABLE download_tasks ADD COLUMN http_parts_total INTEGER DEFAULT 0');
+
+            // For schema v23 migrations, create indexes on new columns only when populated
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_download_tasks_audio_chunks ON download_tasks (audio_chunks) WHERE audio_chunks IS NOT NULL');
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_download_tasks_http_parts ON download_tasks (http_parts) WHERE http_parts IS NOT NULL');
           }
-          if (to > 23) {
+
+          // Migration for schema v24 (previous_cycle_state and mirror_health table)
+          if (from < 24) {
+            await _addColumnIfMissing('download_tasks', 'previous_cycle_state',
+                'ALTER TABLE download_tasks ADD COLUMN previous_cycle_state TEXT');
+            await customStatement('''
+              CREATE TABLE IF NOT EXISTS mirror_health (
+                url TEXT NOT NULL PRIMARY KEY,
+                failures INTEGER NOT NULL DEFAULT 0,
+                last_failure INTEGER NOT NULL DEFAULT 0,
+                last_success INTEGER NOT NULL DEFAULT 0,
+                last_status_code INTEGER NOT NULL DEFAULT 0,
+                blacklisted_until INTEGER NOT NULL DEFAULT 0,
+                average_speed_bps REAL NOT NULL DEFAULT 0.0,
+                speed_samples TEXT
+              )
+            ''');
+          }
+
+          if (to > 24) {
             _dbLog.warning(
-                'AppDatabase: Upgrade target version $to is higher than version 23, no specific migrations defined!');
+                'AppDatabase: Upgrade target version $to is higher than version 24, no specific migrations defined!');
           }
         },
       );
 
   Future<void> _createTaskSummaryView() async {
-    await customStatement('''
+    await safeCustomStatement('''
       CREATE VIEW IF NOT EXISTS v_download_task_summary AS
       SELECT
         id,

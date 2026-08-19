@@ -412,120 +412,119 @@ class CategoriesScreen extends StatelessWidget {
         width: double.infinity,
         height: 120,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration:
-            AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
+        decoration: AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
         child: Row(
-            children: [
-              // 1. Donut PieChart
-              SizedBox(
-                width: 110,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    RepaintBoundary(
-                      child: PieChart(
-                        PieChartData(
-                          sections: sections,
-                          centerSpaceRadius: 28,
-                          sectionsSpace: 2.5,
-                        ),
+          children: [
+            // 1. Donut PieChart
+            SizedBox(
+              width: 110,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  RepaintBoundary(
+                    child: PieChart(
+                      PieChartData(
+                        sections: sections,
+                        centerSpaceRadius: 28,
+                        sectionsSpace: 2.5,
                       ),
                     ),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            isRtl ? 'الإجمالي' : 'TOTAL',
-                            style: TextStyle(
-                              color: mutedClr,
-                              fontSize: 8,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
+                  ),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          isRtl ? 'الإجمالي' : 'TOTAL',
+                          style: TextStyle(
+                            color: mutedClr,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
                           ),
-                          Text(
-                            totalSizeText,
+                        ),
+                        Text(
+                          totalSizeText,
+                          style: TextStyle(
+                            color: textClr,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            // 2. Legend / List summary of top categories sizes
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: (() {
+                  final sortedCards =
+                      List<Map<String, dynamic>>.from(categoryCards)
+                        ..sort((a, b) {
+                          final sizeA = sizes[a['name']] ?? 0.0;
+                          final sizeB = sizes[b['name']] ?? 0.0;
+                          return sizeB.compareTo(sizeA);
+                        });
+                  return sortedCards.take(3);
+                })()
+                    .map((card) {
+                  final String name = card['name'];
+                  final Color color = card['color'];
+                  final sizeMb = sizes[name] ?? 0.0;
+                  final String sizeText = sizeMb >= 1024
+                      ? '${(sizeMb / 1024).toStringAsFixed(1)}G'
+                      : '${sizeMb.toStringAsFixed(0)}M';
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _translateCategoryName(context, name),
                             style: TextStyle(
                               color: textClr,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              // 2. Legend / List summary of top categories sizes
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: (() {
-                    final sortedCards =
-                        List<Map<String, dynamic>>.from(categoryCards)
-                          ..sort((a, b) {
-                            final sizeA = sizes[a['name']] ?? 0.0;
-                            final sizeB = sizes[b['name']] ?? 0.0;
-                            return sizeB.compareTo(sizeA);
-                          });
-                    return sortedCards.take(3);
-                  })()
-                      .map((card) {
-                    final String name = card['name'];
-                    final Color color = card['color'];
-                    final sizeMb = sizes[name] ?? 0.0;
-                    final String sizeText = sizeMb >= 1024
-                        ? '${(sizeMb / 1024).toStringAsFixed(1)}G'
-                        : '${sizeMb.toStringAsFixed(0)}M';
-
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4.0),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: color,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _translateCategoryName(context, name),
-                              style: TextStyle(
-                                color: textClr,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Text(
-                            sizeText,
-                            style: TextStyle(
-                              color: color,
                               fontSize: 10,
-                              fontFamily: 'monospace',
                               fontWeight: FontWeight.bold,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
+                        ),
+                        Text(
+                          sizeText,
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 10,
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+      ),
     );
   }
 

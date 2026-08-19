@@ -65,28 +65,38 @@ class DownloadListProvider extends ChangeNotifier {
   }
 
   Future<void> addTask(DownloadTask task) async {
+    // Task 1.1: DB First — save to repository before modifying in-memory state
+    await _repository.save(task);
     _tasks.insert(0, task);
     _progressNotifiers[task.id]?.value = task.progressRatio;
     _speedNotifiers[task.id]?.value = task.speed;
-    await _repository.save(task);
     notifyListeners();
   }
 
   Future<void> updateTask(DownloadTask task) async {
     final index = _tasks.indexWhere((t) => t.id == task.id);
     if (index == -1) return;
-    _tasks[index] = task;
-    _progressNotifiers[task.id]?.value = task.progressRatio;
-    _speedNotifiers[task.id]?.value = task.speed;
-    await _repository.save(task);
-    notifyListeners();
+    final previous = _tasks[index];
+    try {
+      // Task 1.1: DB First — save to repository before committing in-memory change
+      await _repository.save(task);
+      _tasks[index] = task;
+      _progressNotifiers[task.id]?.value = task.progressRatio;
+      _speedNotifiers[task.id]?.value = task.speed;
+      notifyListeners();
+    } catch (e) {
+      // Rollback to previous state on failure
+      _tasks[index] = previous;
+      rethrow;
+    }
   }
 
   Future<void> deleteTask(String id) async {
+    // Task 1.1 & 1.2: DB Delete FIRST, UI Remove on success
+    await _repository.delete(id);
     _tasks.removeWhere((t) => t.id == id);
     _progressNotifiers.remove(id)?.dispose();
     _speedNotifiers.remove(id)?.dispose();
-    await _repository.delete(id);
     notifyListeners();
   }
 
@@ -143,12 +153,13 @@ class DownloadListProvider extends ChangeNotifier {
   }
 
   Future<void> deleteMultipleTasks(List<String> ids) async {
+    // Task 1.1: DB Delete FIRST
+    await _repository.deleteAll(ids);
     _tasks.removeWhere((t) => ids.contains(t.id));
     for (final id in ids) {
       _progressNotifiers.remove(id)?.dispose();
       _speedNotifiers.remove(id)?.dispose();
     }
-    await _repository.deleteAll(ids);
     notifyListeners();
   }
 

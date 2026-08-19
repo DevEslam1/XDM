@@ -7,7 +7,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('DownloadListProvider Granular Notifiers (Sprint 3)', () {
-    test('progressRatioFor and speedFor update when updateTask is called', () async {
+    test('progressRatioFor and speedFor update when updateTask is called',
+        () async {
       final repo = InMemoryTaskRepository();
       final provider = DownloadListProvider(repo);
 

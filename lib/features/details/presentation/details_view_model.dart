@@ -31,7 +31,8 @@ class DetailsViewModel extends ChangeNotifier {
 
   void updateSpeedSpots() {
     final now = DateTime.now();
-    if (now.difference(_lastSpeedUpdate) >= const Duration(milliseconds: 1000) ||
+    if (now.difference(_lastSpeedUpdate) >=
+            const Duration(milliseconds: 1000) ||
         _downloadSpots.isEmpty) {
       _lastSpeedUpdate = now;
       final speedHistory = downloadProvider.getSpeedHistory(taskId);

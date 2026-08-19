@@ -28,10 +28,10 @@ void main() {
 
       expect(BackgroundGate.allowHeavyOps, isFalse);
       expect(BackgroundGate.allowLightOps, isFalse);
-      // Screen off scales base interval by 20x
+      // Screen off scales base interval by 30x
       expect(
         BackgroundGate.scaleInterval(const Duration(seconds: 1)),
-        equals(const Duration(seconds: 20)),
+        equals(const Duration(seconds: 30)),
       );
     });
 
@@ -44,10 +44,10 @@ void main() {
       expect(
           PowerMonitor.batterySaverMode, equals(BatterySaverMode.aggressive));
       expect(BackgroundGate.allowHeavyOps, isFalse);
-      // Aggressive battery saver scales base interval by 8x
+      // Aggressive battery saver scales base interval by 15x
       expect(
         BackgroundGate.scaleInterval(const Duration(seconds: 1)),
-        equals(const Duration(seconds: 8)),
+        equals(const Duration(seconds: 15)),
       );
     });
   });

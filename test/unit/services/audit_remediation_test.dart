@@ -165,8 +165,7 @@ void main() {
     // superseded by DownloadProvider integration tests.
     // See: lib/features/downloads/usecases/ for migration details.
 
-    test(
-        'PauseDownloadUseCase transitions a downloading task to paused',
+    test('PauseDownloadUseCase transitions a downloading task to paused',
         () async {
       final pauseUseCase =
           PauseDownloadUseCase(queueProvider, TorrentProvider());

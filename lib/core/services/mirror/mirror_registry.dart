@@ -5,7 +5,11 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
+import 'package:dmx/core/di/injection.dart';
+import 'package:dmx/core/services/database/app_database.dart';
+import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/logging_service.dart';
+import 'package:drift/drift.dart' as drift;
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,9 +22,50 @@ import '../shared_prefs_batcher.dart';
 // Mirror Health Store & Persistence
 // ═══════════════════════════════════════════════════════════════════════════
 
+/// Drift repository for persisting mirror health data.
+class MirrorHealthDriftRepository {
+  final AppDatabase _db;
+  MirrorHealthDriftRepository([AppDatabase? db])
+      : _db = db ??
+            (getIt.isRegistered<AppDatabase>()
+                ? getIt<AppDatabase>()
+                : DatabaseService.instance.db);
+
+  Future<List<DbMirrorHealth>> loadAll() async {
+    return _db.select(_db.mirrorHealth).get();
+  }
+
+  Future<void> upsert(DbMirrorHealth entry) async {
+    await _db.into(_db.mirrorHealth).insertOnConflictUpdate(entry);
+  }
+
+  Future<void> upsertAll(List<DbMirrorHealth> entries) async {
+    await _db.batch((b) {
+      for (final e in entries) {
+        b.insert(_db.mirrorHealth, e, mode: drift.InsertMode.insertOrReplace);
+      }
+    });
+  }
+
+  Future<void> delete(String url) async {
+    await (_db.delete(_db.mirrorHealth)..where((t) => t.url.equals(url))).go();
+  }
+
+  Future<void> deleteAll(List<String> urls) async {
+    await (_db.delete(_db.mirrorHealth)..where((t) => t.url.isIn(urls))).go();
+  }
+
+  Future<void> clear() async {
+    await _db.delete(_db.mirrorHealth).go();
+  }
+}
+
 /// Persists mirror health data across app restarts with LRU cap of 200 entries.
 class MirrorHealthStore implements DisposableService {
-  MirrorHealthStore() {
+  final MirrorHealthDriftRepository? _repo;
+
+  MirrorHealthStore({MirrorHealthDriftRepository? repository})
+      : _repo = repository {
     ServiceRegistry.register(this);
   }
 
@@ -71,46 +116,107 @@ class MirrorHealthStore implements DisposableService {
     }
   }
 
-  /// Loads persisted health data from [SharedPreferences].
-  Future<void> init() async {
+  /// Loads persisted health data from Drift table with fallback legacy SharedPreferences migration.
+  Future<void> init({SharedPreferences? prefsOverride}) async {
     _cleanupTimer?.cancel();
     _cleanupTimer = Timer.periodic(const Duration(hours: 6), (_) {
       cleanupStaleEntries();
     });
-    final prefs = await SharedPreferences.getInstance();
     _cache = LinkedHashMap();
-    final urlList = prefs.getStringList(_urlsIndexKey);
-    if (urlList != null && urlList.isNotEmpty) {
-      for (final url in urlList) {
-        final raw = prefs.getString(_urlKey(url));
-        if (raw != null) {
-          try {
-            final map = jsonDecode(raw) as Map<String, dynamic>;
-            _cache![url] = PersistedMirrorState.fromJson(map);
-          } catch (e) {
-            _log.warning('Failed to decode mirror health entry for $url: $e');
+
+    final repo = _repo ??
+        (getIt.isRegistered<AppDatabase>() ||
+                DatabaseService.instance.isInitialized
+            ? MirrorHealthDriftRepository()
+            : null);
+
+    if (repo != null) {
+      try {
+        final rows = await repo.loadAll();
+        for (final row in rows) {
+          final state = PersistedMirrorState();
+          state.failures = row.failures;
+          state.lastFailure = row.lastFailure;
+          state.lastSuccess = row.lastSuccess;
+          state.lastStatusCode = row.lastStatusCode;
+          state.blacklistedUntil = row.blacklistedUntil;
+          state.averageSpeedBps = row.averageSpeedBps;
+          if (row.speedSamples != null && row.speedSamples!.isNotEmpty) {
+            try {
+              final list = jsonDecode(row.speedSamples!) as List<dynamic>;
+              state.speedSamples =
+                  list.map((e) => (e as num).toDouble()).toList();
+            } catch (_) {}
           }
+          _cache![row.url] = state;
         }
+      } catch (e, st) {
+        _log.warning('Failed to load mirror health from Drift: $e', e, st);
       }
-      await cleanupStaleEntries();
-      return;
     }
 
-    // Legacy JSON dump fallback migration
-    final raw = prefs.getString(_storeKey);
-    if (raw == null) {
-      return;
-    }
+    // Legacy migration: read legacy blob once, insert into new table, delete legacy keys
     try {
-      final map = jsonDecode(raw) as Map<String, dynamic>;
-      _cache = LinkedHashMap<String, PersistedMirrorState>.from(
-        map.map((k, v) => MapEntry(k, PersistedMirrorState.fromJson(v))),
-      );
-      await cleanupStaleEntries();
-    } catch (e) {
-      _log.warning('Failed to decode legacy mirror health data: $e');
-      _cache = LinkedHashMap();
+      final prefs = prefsOverride ?? await SharedPreferences.getInstance();
+      final legacyUrls = prefs.getStringList(_urlsIndexKey);
+      final legacyStore = prefs.getString(_storeKey);
+      final migratedStates = <String, PersistedMirrorState>{};
+
+      if (legacyUrls != null && legacyUrls.isNotEmpty) {
+        for (final url in legacyUrls) {
+          final raw = prefs.getString(_urlKey(url));
+          if (raw != null) {
+            try {
+              final map = jsonDecode(raw) as Map<String, dynamic>;
+              migratedStates[url] = PersistedMirrorState.fromJson(map);
+            } catch (_) {}
+            await prefs.remove(_urlKey(url));
+          }
+        }
+        await prefs.remove(_urlsIndexKey);
+      }
+
+      if (legacyStore != null) {
+        try {
+          final map = jsonDecode(legacyStore) as Map<String, dynamic>;
+          for (final entry in map.entries) {
+            if (!migratedStates.containsKey(entry.key)) {
+              migratedStates[entry.key] = PersistedMirrorState.fromJson(
+                entry.value as Map<String, dynamic>,
+              );
+            }
+          }
+        } catch (_) {}
+        await prefs.remove(_storeKey);
+      }
+
+      if (migratedStates.isNotEmpty) {
+        for (final entry in migratedStates.entries) {
+          _cache!.putIfAbsent(entry.key, () => entry.value);
+        }
+        if (repo != null) {
+          final dbRows = migratedStates.entries
+              .map((e) => DbMirrorHealth(
+                    url: e.key,
+                    failures: e.value.failures,
+                    lastFailure: e.value.lastFailure,
+                    lastSuccess: e.value.lastSuccess,
+                    lastStatusCode: e.value.lastStatusCode,
+                    blacklistedUntil: e.value.blacklistedUntil,
+                    averageSpeedBps: e.value.averageSpeedBps,
+                    speedSamples: jsonEncode(e.value.speedSamples),
+                  ))
+              .toList();
+          await repo.upsertAll(dbRows);
+        }
+        _log.info(
+            'Migrated ${migratedStates.length} legacy mirror health states to Drift table');
+      }
+    } catch (e, st) {
+      _log.warning('Legacy mirror health migration failed: $e', e, st);
     }
+
+    await cleanupStaleEntries();
   }
 
   /// Record a failure for a mirror URL. In-memory update only; the shared
@@ -268,7 +374,7 @@ class MirrorHealthStore implements DisposableService {
     });
   }
 
-  /// Flushes the coalesced state to SharedPreferences. Skipped while the
+  /// Flushes the coalesced state to Drift table. Skipped while the
   /// screen is off unless [durable] is set (final explicit save).
   Future<void> flushPending({bool durable = false}) async {
     if (_cache == null || !_dirty || _flushing) return;
@@ -276,7 +382,8 @@ class MirrorHealthStore implements DisposableService {
     if (!durable &&
         _lastFlushTime != null &&
         now.difference(_lastFlushTime!) < minFlushInterval) {
-      _flushTimer ??= Timer(minFlushInterval - now.difference(_lastFlushTime!), () {
+      _flushTimer ??=
+          Timer(minFlushInterval - now.difference(_lastFlushTime!), () {
         _flushTimer = null;
         if (_dirty) {
           flushPending();
@@ -291,23 +398,39 @@ class MirrorHealthStore implements DisposableService {
     }
     _flushing = true;
     try {
-      for (final url in _removedUrls) {
-        SharedPrefsBatcher.instance.remove(_urlKey(url));
-      }
-      for (final url in _dirtyUrls) {
-        final state = _cache?[url];
-        if (state != null) {
-          SharedPrefsBatcher.instance
-              .setString(_urlKey(url), jsonEncode(state.toJson()));
+      final repo = _repo ??
+          (getIt.isRegistered<AppDatabase>() ||
+                  DatabaseService.instance.isInitialized
+              ? MirrorHealthDriftRepository()
+              : null);
+
+      if (repo != null) {
+        if (_removedUrls.isNotEmpty) {
+          await repo.deleteAll(_removedUrls.toList());
+        }
+        if (_dirtyUrls.isNotEmpty) {
+          final rowsToUpsert = <DbMirrorHealth>[];
+          for (final url in _dirtyUrls) {
+            final state = _cache?[url];
+            if (state != null) {
+              rowsToUpsert.add(DbMirrorHealth(
+                url: url,
+                failures: state.failures,
+                lastFailure: state.lastFailure,
+                lastSuccess: state.lastSuccess,
+                lastStatusCode: state.lastStatusCode,
+                blacklistedUntil: state.blacklistedUntil,
+                averageSpeedBps: state.averageSpeedBps,
+                speedSamples: jsonEncode(state.speedSamples),
+              ));
+            }
+          }
+          if (rowsToUpsert.isNotEmpty) {
+            await repo.upsertAll(rowsToUpsert);
+          }
         }
       }
-      SharedPrefsBatcher.instance
-          .setStringList(_urlsIndexKey, _cache!.keys.toList());
-      SharedPrefsBatcher.instance.setString(_storeKey,
-          jsonEncode(_cache!.map((k, v) => MapEntry(k, v.toJson()))));
-      if (durable) {
-        await SharedPrefsBatcher.instance.flush();
-      }
+
       _dirty = false;
       _dirtyUrls.clear();
       _removedUrls.clear();
@@ -315,27 +438,36 @@ class MirrorHealthStore implements DisposableService {
       _flushTimer?.cancel();
       _flushTimer = null;
     } catch (e, st) {
-      _log.warning('Failed to persist mirror health data: $e', e, st);
+      _log.warning('Failed to persist mirror health data to Drift: $e', e, st);
     } finally {
       _flushing = false;
     }
   }
 
   Future<void> clear() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (_cache != null) {
-      for (final url in _cache!.keys) {
-        await prefs.remove(_urlKey(url));
+    final repo = _repo ??
+        (getIt.isRegistered<AppDatabase>() ||
+                DatabaseService.instance.isInitialized
+            ? MirrorHealthDriftRepository()
+            : null);
+    if (repo != null) {
+      try {
+        await repo.clear();
+      } catch (e, st) {
+        _log.warning('Failed to clear mirror health from Drift: $e', e, st);
       }
     }
     _cache = LinkedHashMap();
     _dirty = false;
     _dirtyUrls.clear();
     _removedUrls.clear();
-    await prefs.remove(_storeKey);
-    await prefs.remove(_urlsIndexKey);
-    await prefs.remove(_rankingCacheKey);
-    await prefs.remove(_rankingTtlKey);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_storeKey);
+      await prefs.remove(_urlsIndexKey);
+      await prefs.remove(_rankingCacheKey);
+      await prefs.remove(_rankingTtlKey);
+    } catch (_) {}
   }
 
   @override

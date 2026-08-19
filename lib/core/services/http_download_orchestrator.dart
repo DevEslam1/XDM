@@ -100,9 +100,10 @@ class HttpDownloadOrchestrator {
     bool urlExpiresHint = false;
     try {
       if (GetIt.instance.isRegistered<SiteIntelligenceService>()) {
-        final analysis = GetIt.instance<SiteIntelligenceService>().analyzeUrl(url);
-        urlExpiresHint =
-            analysis.isExpiredOrSigned || (analysis.profile?.urlsExpire == true);
+        final analysis =
+            GetIt.instance<SiteIntelligenceService>().analyzeUrl(url);
+        urlExpiresHint = analysis.isExpiredOrSigned ||
+            (analysis.profile?.urlsExpire == true);
       }
     } catch (e, st) {
       _log.fine('Failed to pre-compute urlExpiresHint: $e', e, st);

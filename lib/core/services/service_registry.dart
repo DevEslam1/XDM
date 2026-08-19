@@ -15,7 +15,8 @@ abstract class MemoryPressureListener {
 class ServiceRegistry {
   static final _log = Logger('ServiceRegistry');
   static final List<DisposableService> _services = [];
-  static final List<WeakReference<MemoryPressureListener>> _memoryListeners = [];
+  static final List<WeakReference<MemoryPressureListener>> _memoryListeners =
+      [];
 
   static int get activeServicesCount => _services.length;
   static int get activeMemoryListenersCount {
@@ -35,7 +36,8 @@ class ServiceRegistry {
 
   static void registerMemoryPressureListener(MemoryPressureListener listener) {
     _memoryListeners.removeWhere((ref) => ref.target == null);
-    final alreadyRegistered = _memoryListeners.any((ref) => ref.target == listener);
+    final alreadyRegistered =
+        _memoryListeners.any((ref) => ref.target == listener);
     if (!alreadyRegistered) {
       _memoryListeners.add(WeakReference(listener));
     }
@@ -43,14 +45,16 @@ class ServiceRegistry {
 
   static void unregisterMemoryPressureListener(
       MemoryPressureListener listener) {
-    _memoryListeners.removeWhere((ref) => ref.target == null || ref.target == listener);
+    _memoryListeners
+        .removeWhere((ref) => ref.target == null || ref.target == listener);
   }
 
   static void broadcastMemoryPressure() {
     _memoryListeners.removeWhere((ref) => ref.target == null);
     _log.info(
         'Broadcasting memory pressure event to ${_memoryListeners.length} listeners');
-    for (final ref in List<WeakReference<MemoryPressureListener>>.from(_memoryListeners)) {
+    for (final ref
+        in List<WeakReference<MemoryPressureListener>>.from(_memoryListeners)) {
       final listener = ref.target;
       if (listener != null) {
         try {

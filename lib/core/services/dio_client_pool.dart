@@ -19,7 +19,8 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
   final Set<Dio> _activeClients = {};
   final Set<Dio> _reservedClients = {};
   final Map<Dio, Set<String>> _activeDownloadsPerClient = {};
-  final LinkedHashMap<String, Dio> _idleClientsByHost = LinkedHashMap<String, Dio>();
+  final LinkedHashMap<String, Dio> _idleClientsByHost =
+      LinkedHashMap<String, Dio>();
   final Map<Dio, String> _clientHosts = {};
 
   /// FIX-P1-06: Debounce timer for stale-idle cleanup. Multiple releases in a

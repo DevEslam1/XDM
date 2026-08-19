@@ -62,7 +62,7 @@ class ChunkScheduler {
     // Guard totalSize against invalid negative ranges
     assert(totalSize >= 0, 'totalSize must not be negative');
     if (totalSize <= 0) {
-      return [ChunkState(start: 0, end: -1)];
+      return [ChunkState.indeterminate()];
     }
     var n = threadCount.clamp(1, 32);
     if (totalSize < minSizeForMultithread) n = 1;
@@ -84,10 +84,9 @@ class ChunkScheduler {
   /// Collapses any layout into a single open-ended chunk (fallback when the
   /// server turns out not to honor Range).
   static List<ChunkState> singleStream(int totalSize) => [
-        ChunkState(
-          start: 0,
-          end: totalSize > 0 ? totalSize - 1 : -1,
-        ),
+        totalSize > 0
+            ? ChunkState(start: 0, end: totalSize - 1)
+            : ChunkState.indeterminate(),
       ];
 }
 
@@ -115,6 +114,10 @@ class HttpDownloadEngine {
 
   @visibleForTesting
   Timer? get monitorTimerForTesting => _monitorTimer;
+
+  @visibleForTesting
+  static dynamic createTrackerForTesting(int threads) =>
+      _AdaptiveTracker(threads);
 
   void _ensureTimerRunning() {
     if (_trackers.isEmpty) {
@@ -167,7 +170,7 @@ class HttpDownloadEngine {
   int recommendedThreads(String taskId, int fallback) {
     final t = _trackers[taskId];
     if (t == null || t.recommendation == 0) return fallback;
-    return t.recommendation.clamp(1, fallback);
+    return t.recommendation.clamp(1, 16);
   }
 
   int get activeTrackerCount => _trackers.length;
@@ -218,6 +221,7 @@ class _AdaptiveTracker {
   // FIX: Changed from final to mutable so updateThreadCount() can refresh
   // the tracker when a task restarts with a different thread count.
   int currentThreads;
+  static const int maxThreads = 16;
 
   _AdaptiveTracker(this.currentThreads);
 
@@ -258,17 +262,40 @@ class _AdaptiveTracker {
     return sum / samplesList.length;
   }
 
-  /// Plateau detection: three consecutive samples within ±5% mean more
-  /// parallelism is not helping → recommend shedding threads on next start.
-  /// The recommendation is re-evaluated continuously: if speed improves after
-  /// a plateau was detected, the stale recommendation is cleared so the next
-  /// start uses the original (higher) thread count.
+  /// Evaluates throughput samples:
+  /// 1. If the last 6 samples show monotonically rising speed and currentThreads < maxThreads (16),
+  ///    recommend increasing threads: min(currentThreads + 1, 16).
+  /// 2. Plateau detection: three consecutive samples within ±5% mean more
+  ///    parallelism is not helping → recommend shedding threads on next start.
   void evaluate() {
     if (_samples.length < 6) {
       recommendation = 0;
       return;
     }
-    final tail = _samples.toList().sublist(_samples.length - 3);
+    final samplesList = _samples.toList();
+    final last6 = samplesList.sublist(samplesList.length - 6);
+
+    // Monotonically rising check across last 6 samples: s[0] < s[1] < ... < s[5]
+    bool isMonotonicallyRising = true;
+    for (int i = 0; i < last6.length - 1; i++) {
+      if (last6[i] >= last6[i + 1]) {
+        isMonotonicallyRising = false;
+        break;
+      }
+    }
+
+    if (isMonotonicallyRising && currentThreads < maxThreads) {
+      final newRec = (currentThreads + 1).clamp(1, maxThreads);
+      if (recommendation != newRec) {
+        recommendation = newRec;
+        debugPrint(
+            '[AdaptiveThreads] monotonic rise in speed across 6 samples with '
+            '$currentThreads threads → next start uses $recommendation');
+      }
+      return;
+    }
+
+    final tail = samplesList.sublist(samplesList.length - 3);
     final avg = tail.reduce((a, b) => a + b) / tail.length;
     if (avg <= 0) {
       recommendation = 0;

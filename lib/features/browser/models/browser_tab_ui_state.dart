@@ -41,7 +41,8 @@ class BrowserTabUiState {
     int? lastVisitedAtMs,
     this.faviconUrl,
     Uint8List? faviconBytes,
-  }) : lastVisitedAtMs = lastVisitedAtMs ?? DateTime.now().millisecondsSinceEpoch {
+  }) : lastVisitedAtMs =
+            lastVisitedAtMs ?? DateTime.now().millisecondsSinceEpoch {
     this.faviconBytes = faviconBytes;
   }
 }

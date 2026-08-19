@@ -21,10 +21,15 @@ class BackgroundTimerManager {
   VoidCallback? _foregroundListener;
   StreamSubscription<bool>? _screenSub;
   Timer? _debounceTimer;
+  Timer? _suppressionTimer;
+  bool _listenersSuppressed = false;
   final List<DateTime> _stateChangeTimestamps = [];
 
   @visibleForTesting
   Timer? get debounceTimerForTesting => _debounceTimer;
+
+  @visibleForTesting
+  bool get isSuppressedForTesting => _listenersSuppressed;
 
   @visibleForTesting
   int get stateChangeHistoryCount => _stateChangeTimestamps.length;
@@ -39,13 +44,31 @@ class BackgroundTimerManager {
   }
 
   void _onStateChanged() {
+    if (_listenersSuppressed) return;
+
     final now = DateTime.now();
     _stateChangeTimestamps.add(now);
     _stateChangeTimestamps.removeWhere(
       (ts) => now.difference(ts) > const Duration(seconds: 2),
     );
 
-    if (_stateChangeTimestamps.length >= 5) {
+    if (_stateChangeTimestamps.length >= 10) {
+      _log.severe(
+        '[BackgroundTimerManager] Severe state-change flapping detected: '
+        '${_stateChangeTimestamps.length} changes within 2s. Suppressing listeners for 5s.',
+      );
+      _listenersSuppressed = true;
+      _debounceTimer?.cancel();
+      _debounceTimer = null;
+      _suppressionTimer?.cancel();
+      _suppressionTimer = Timer(const Duration(seconds: 5), () {
+        _listenersSuppressed = false;
+        _suppressionTimer = null;
+        _stateChangeTimestamps.clear();
+        _readaptAllTimers();
+      });
+      return;
+    } else if (_stateChangeTimestamps.length >= 5) {
       _log.warning(
         '[BackgroundTimerManager] High state-change flapping detected: '
         '${_stateChangeTimestamps.length} changes within 2s.',

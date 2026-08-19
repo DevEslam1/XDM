@@ -34,6 +34,7 @@ class StartDownloadUseCase {
     // Real implementation: _downloadProvider.addDownload(url: task.url, ...)
     // Not forwarded because addDownload signature differs from DownloadTask fields.
     // Callers should migrate to DownloadProvider.addDownload() directly.
-    assert(false, 'StartDownloadUseCase is deprecated. Use DownloadProvider.addDownload() instead.');
+    assert(false,
+        'StartDownloadUseCase is deprecated. Use DownloadProvider.addDownload() instead.');
   }
 }

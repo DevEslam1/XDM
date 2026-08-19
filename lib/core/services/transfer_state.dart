@@ -11,11 +11,15 @@ enum DmxStateStatus { active, paused, complete, failed }
 class ChunkState {
   ChunkState({required this.start, required this.end, this.downloaded = 0});
 
+  factory ChunkState.indeterminate({int downloaded = 0}) =>
+      ChunkState(start: 0, end: -1, downloaded: downloaded);
+
   final int start;
   int end;
   int downloaded;
 
   int get size => end < 0 ? -1 : end - start + 1;
+  bool get isIndeterminate => end < 0;
   bool get isComplete => end >= 0 && downloaded >= size;
 
   double get ratio {

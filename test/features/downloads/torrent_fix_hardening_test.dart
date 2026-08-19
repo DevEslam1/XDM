@@ -63,8 +63,7 @@ void main() {
   });
 
   group('FIX-A: TorrentSubscriptionRegistry hard-stop on dispose', () {
-    test('dispose cancels the subscription AND halts the native torrent',
-        () {
+    test('dispose cancels the subscription AND halts the native torrent', () {
       fakeAsync((async) {
         final controller = StreamController<int>();
         final sub = controller.stream.listen((_) {});
@@ -80,8 +79,7 @@ void main() {
         TorrentSubscriptionRegistry.instance.dispose(7);
         async.flushMicrotasks();
 
-        expect(TorrentSubscriptionRegistry.instance.getSubscription(7),
-            isNull);
+        expect(TorrentSubscriptionRegistry.instance.getSubscription(7), isNull);
         expect(TorrentSubscriptionRegistry.instance.activeCountForTesting,
             equals(0));
         expect(fake.pauseCalls, greaterThanOrEqualTo(1));
@@ -89,20 +87,18 @@ void main() {
       });
     });
 
-    test('registry holds handler strongly (no WeakReference cleanup race)',
-        () {
+    test('registry holds handler strongly (no WeakReference cleanup race)', () {
       final controller = StreamController<int>();
       final sub = controller.stream.listen((_) {});
-      final handler = TorrentDownloadHandler(
-          torrentService: _FakeTorrentService());
+      final handler =
+          TorrentDownloadHandler(torrentService: _FakeTorrentService());
 
       TorrentSubscriptionRegistry.instance.register(101, handler, sub);
       expect(TorrentSubscriptionRegistry.instance.activeCountForTesting,
           equals(1));
 
       TorrentSubscriptionRegistry.instance.unregister(101, handler);
-      expect(TorrentSubscriptionRegistry.instance.getSubscription(101),
-          isNull);
+      expect(TorrentSubscriptionRegistry.instance.getSubscription(101), isNull);
       expect(TorrentSubscriptionRegistry.instance.activeCountForTesting,
           equals(0));
 
@@ -123,7 +119,8 @@ void main() {
       expect(handler.activeTorrentIds.contains(5), isFalse);
     });
 
-    test('retries up to 3 attempts, then releases the handle even if the '
+    test(
+        'retries up to 3 attempts, then releases the handle even if the '
         'engine never confirms', () async {
       final fake = _FakeTorrentService()..addAlive(9);
       fake.autoRemoveOnPause = false; // pause never stops the engine
@@ -193,8 +190,8 @@ void main() {
       expect(emissions.length, equals(2));
 
       // State-label change also forces an emit.
-      await handler.handleWorkerProgress(
-          p(1024 * 1024 + 1, 'fetching metadata'));
+      await handler
+          .handleWorkerProgress(p(1024 * 1024 + 1, 'fetching metadata'));
       expect(emissions.length, equals(3));
 
       handler.dispose();

@@ -61,7 +61,8 @@ class BrowserTabWebViewState {
         _findInteractionController = FindInteractionController();
       } catch (e) {
         _findControllerInitFailed = true;
-        _log.fine('[BrowserTabWebViewState] FindInteractionController skipped: $e');
+        _log.fine(
+            '[BrowserTabWebViewState] FindInteractionController skipped: $e');
       }
     }
     return _findInteractionController;

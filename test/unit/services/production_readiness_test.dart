@@ -60,7 +60,8 @@ void main() {
       emitter.dispose();
     });
 
-    test('Android 15 dataSync 6-hour timeout graceful pause and retry (P1-1)', () async {
+    test('Android 15 dataSync 6-hour timeout graceful pause and retry (P1-1)',
+        () async {
       BackgroundService.testMode = true;
       bool pauseCallbackInvoked = false;
 
@@ -92,7 +93,8 @@ void main() {
       expect(governor.isUnlimited, isTrue);
     });
 
-    test('TaskRepository interface compliance with in-memory implementation', () async {
+    test('TaskRepository interface compliance with in-memory implementation',
+        () async {
       final repo = InMemoryTaskRepository();
       final now = DateTime.now();
       final task = DownloadTask(

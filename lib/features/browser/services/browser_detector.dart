@@ -131,7 +131,8 @@ class BrowserDetector {
       return DetectedMedia(
         kind: DetectedMediaKind.stream,
         url: url,
-        suggestedFileName: _suggestName(url, lower.contains('.m3u8') ? '.m3u8' : '.mpd'),
+        suggestedFileName:
+            _suggestName(url, lower.contains('.m3u8') ? '.m3u8' : '.mpd'),
         confidence: DetectionConfidence.high,
       );
     }

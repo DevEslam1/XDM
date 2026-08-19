@@ -95,8 +95,17 @@ class DatabaseService {
     await HiveMigrationService(_db, prefs).migrate();
     _initialized = true;
 
+    _db.startPeriodicWalCheckpointer();
     _maintenanceService.start();
   }
+
+  /// Trigger a WAL checkpoint to truncate or merge the WAL file back to disk.
+  Future<int> checkpointWal({bool truncate = true}) =>
+      _db.checkpointWal(truncate: truncate);
+
+  /// Performs a connection pool health check.
+  Future<bool> cleanupStaleConnections() =>
+      _db.cleanupStaleConnections();
 
   @visibleForTesting
   int get maintenanceRuns => _maintenanceService.maintenanceRuns;
@@ -240,8 +249,8 @@ class DatabaseService {
             .customSelect(
                 "SELECT COUNT(*) as cnt FROM download_tasks WHERE status = 'downloading'")
             .get();
-        final hasActive = activeRows.isNotEmpty &&
-            (activeRows.first.read<int>('cnt')) > 0;
+        final hasActive =
+            activeRows.isNotEmpty && (activeRows.first.read<int>('cnt')) > 0;
         if (!hasActive) {
           await _db.customStatement('PRAGMA wal_checkpoint(FULL)');
         }
@@ -429,6 +438,6 @@ class DatabaseService {
 
     _dbBatchTimer?.cancel();
     _dbBatchTimer = null;
-    await _db.close();
+    await _db.closeDatabase();
   }
 }

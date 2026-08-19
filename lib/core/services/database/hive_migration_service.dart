@@ -21,19 +21,13 @@ final _log = LoggingService.logger('HiveMigrationService');
 class _MigratePayload {
   final String? dbPath;
   final String? hivePath;
-  final Map<String, Object> initialPrefs;
 
   _MigratePayload(
-    AppDatabase db,
-    SharedPreferences prefs, {
+    AppDatabase db, {
     String? hiveDirectoryPath,
   })  : dbPath = db.dbPath,
         hivePath = hiveDirectoryPath ??
-            (db.dbPath != null ? File(db.dbPath!).parent.path : null),
-        initialPrefs = {
-          for (final key in prefs.getKeys())
-            if (prefs.get(key) != null) key: prefs.get(key)!,
-        };
+            (db.dbPath != null ? File(db.dbPath!).parent.path : null);
 }
 
 Future<bool> _migrateIsolate(_MigratePayload payload) async {
@@ -48,8 +42,6 @@ Future<bool> _migrateIsolate(_MigratePayload payload) async {
     isolateDb = AppDatabase.forTesting(NativeDatabase.memory());
   }
 
-  // ignore: invalid_use_of_visible_for_testing_member
-  SharedPreferences.setMockInitialValues(payload.initialPrefs);
   final isolatePrefs = await SharedPreferences.getInstance();
 
   try {
@@ -123,7 +115,7 @@ class HiveMigrationService {
 
     final allSuccessful = await compute(
       _migrateIsolate,
-      _MigratePayload(db, prefs),
+      _MigratePayload(db),
     );
 
     if (allSuccessful) {

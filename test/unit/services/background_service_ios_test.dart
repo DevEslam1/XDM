@@ -69,10 +69,12 @@ void main() {
       expect(invokeCount, 1);
     });
 
-    test('cooldown survives simulated app restart via SharedPreferences', () async {
+    test('cooldown survives simulated app restart via SharedPreferences',
+        () async {
       final cooldownTime = DateTime.now().add(const Duration(minutes: 5));
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('ios_bg_cooldown_until_ms', cooldownTime.millisecondsSinceEpoch);
+      await prefs.setInt(
+          'ios_bg_cooldown_until_ms', cooldownTime.millisecondsSinceEpoch);
 
       // Reset in-memory state to simulate cold restart
       BackgroundService.iosBgCooldownUntilForTesting = null;
@@ -88,10 +90,13 @@ void main() {
       );
     });
 
-    test('expired cooldown is cleared from SharedPreferences on initialize', () async {
-      final pastCooldownTime = DateTime.now().subtract(const Duration(minutes: 5));
+    test('expired cooldown is cleared from SharedPreferences on initialize',
+        () async {
+      final pastCooldownTime =
+          DateTime.now().subtract(const Duration(minutes: 5));
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('ios_bg_cooldown_until_ms', pastCooldownTime.millisecondsSinceEpoch);
+      await prefs.setInt(
+          'ios_bg_cooldown_until_ms', pastCooldownTime.millisecondsSinceEpoch);
 
       BackgroundService.iosBgCooldownUntilForTesting = null;
 

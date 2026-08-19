@@ -19,7 +19,9 @@ class HistoryViewModel extends ChangeNotifier {
   }
 
   List<DownloadTask> get completedTasks {
-    final list = downloadProvider.tasks.where((t) => t.status == DownloadStatus.completed).toList();
+    final list = downloadProvider.tasks
+        .where((t) => t.status == DownloadStatus.completed)
+        .toList();
     if (_searchQuery.isEmpty) return list;
     final q = _searchQuery.toLowerCase();
     return list

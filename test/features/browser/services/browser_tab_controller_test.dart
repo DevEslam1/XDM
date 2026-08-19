@@ -62,7 +62,9 @@ void main() {
       controller.dispose();
     });
 
-    test('openInNewTab adds tabs and updates active index when switchTo is true', () {
+    test(
+        'openInNewTab adds tabs and updates active index when switchTo is true',
+        () {
       controller.openInNewTab('https://example.com/1', switchTo: true);
       expect(controller.tabs.length, equals(1));
       expect(controller.currentIndex, equals(0));
@@ -83,14 +85,16 @@ void main() {
       expect(controller.activeTab?.url, equals('https://example.com/1'));
     });
 
-    test('closeTab moves non-incognito non-home tabs to recentlyClosedTabs', () {
+    test('closeTab moves non-incognito non-home tabs to recentlyClosedTabs',
+        () {
       controller.openInNewTab('https://example.com/article', switchTo: true);
       final tabId = controller.activeTab!.id;
 
       controller.closeTab(tabId);
 
       expect(controller.recentlyClosedTabs.length, equals(1));
-      expect(controller.recentlyClosedTabs.first.url, equals('https://example.com/article'));
+      expect(controller.recentlyClosedTabs.first.url,
+          equals('https://example.com/article'));
     });
 
     test('restoreRecentlyClosedTab re-opens the most recent closed tab', () {
@@ -101,7 +105,8 @@ void main() {
       expect(controller.recentlyClosedTabs.isNotEmpty, isTrue);
 
       controller.restoreRecentlyClosedTab();
-      expect(controller.tabs.any((t) => t.url == 'https://example.com/first'), isTrue);
+      expect(controller.tabs.any((t) => t.url == 'https://example.com/first'),
+          isTrue);
       expect(controller.recentlyClosedTabs.isEmpty, isTrue);
     });
 

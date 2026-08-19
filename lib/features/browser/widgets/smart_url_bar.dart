@@ -199,7 +199,8 @@ class _SmartUrlBarState extends State<SmartUrlBar>
         final lowerQuery = query.toLowerCase();
 
         // Bookmarks match
-        final matchingBookmarks = await db.searchBookmarks(lowerQuery, limit: 3);
+        final matchingBookmarks =
+            await db.searchBookmarks(lowerQuery, limit: 3);
 
         for (final bm in matchingBookmarks) {
           suggestions.add(_Suggestion(
@@ -220,7 +221,8 @@ class _SmartUrlBarState extends State<SmartUrlBar>
           final url = h['url'] as String? ?? '';
           final title = h['title'] as String? ?? url;
           if (url.isNotEmpty &&
-              !suggestions.any((s) => s.url.toLowerCase() == url.toLowerCase())) {
+              !suggestions
+                  .any((s) => s.url.toLowerCase() == url.toLowerCase())) {
             suggestions.add(_Suggestion(
               type: SuggestionType.history,
               title: title.isNotEmpty ? title : url,
@@ -306,11 +308,9 @@ class _SmartUrlBarState extends State<SmartUrlBar>
         // by accounting for the keyboard inset, so the list never renders
         // underneath the keyboard when the soft input is open.
         final viewInsets = MediaQuery.of(ctx).viewInsets.bottom;
-        final visibleHeight =
-            MediaQuery.of(ctx).size.height - viewInsets;
-        final effectiveTop = viewInsets > 0
-            ? math.min(top, visibleHeight - 64)
-            : top;
+        final visibleHeight = MediaQuery.of(ctx).size.height - viewInsets;
+        final effectiveTop =
+            viewInsets > 0 ? math.min(top, visibleHeight - 64) : top;
         return Stack(
           children: [
             // Barrier behind overlay
@@ -343,8 +343,10 @@ class _SmartUrlBarState extends State<SmartUrlBar>
                         borderRadius: BorderRadius.circular(20),
                         color: isDark
                             ? (isAmoled
-                                ? const Color(0xFF0F0F14).withValues(alpha: 0.98)
-                                : const Color(0xFF1A1A26).withValues(alpha: 0.92))
+                                ? const Color(0xFF0F0F14)
+                                    .withValues(alpha: 0.98)
+                                : const Color(0xFF1A1A26)
+                                    .withValues(alpha: 0.92))
                             : Colors.white.withValues(alpha: 0.94),
                         child: Container(
                           constraints: BoxConstraints(
@@ -373,12 +375,15 @@ class _SmartUrlBarState extends State<SmartUrlBar>
                               final badgeColor = switch (s.type) {
                                 SuggestionType.search =>
                                   isDark ? AppTheme.neonViolet : Colors.purple,
-                                SuggestionType.bookmark =>
-                                  isDark ? AppTheme.neonAmber : Colors.amber.shade800,
-                                SuggestionType.history =>
-                                  isDark ? AppTheme.neonBlue : Colors.blue.shade700,
-                                SuggestionType.url =>
-                                  isDark ? AppTheme.neonGreen : Colors.green.shade700,
+                                SuggestionType.bookmark => isDark
+                                    ? AppTheme.neonAmber
+                                    : Colors.amber.shade800,
+                                SuggestionType.history => isDark
+                                    ? AppTheme.neonBlue
+                                    : Colors.blue.shade700,
+                                SuggestionType.url => isDark
+                                    ? AppTheme.neonGreen
+                                    : Colors.green.shade700,
                               };
 
                               return Container(
@@ -386,7 +391,8 @@ class _SmartUrlBarState extends State<SmartUrlBar>
                                   color: isDark
                                       ? (isAmoled
                                           ? AppTheme.amoledCardBg
-                                          : Colors.white.withValues(alpha: 0.04))
+                                          : Colors.white
+                                              .withValues(alpha: 0.04))
                                       : Colors.black.withValues(alpha: 0.03),
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
@@ -415,7 +421,8 @@ class _SmartUrlBarState extends State<SmartUrlBar>
                                           Container(
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
-                                              color: badgeColor.withValues(alpha: 0.14),
+                                              color: badgeColor.withValues(
+                                                  alpha: 0.14),
                                               shape: BoxShape.circle,
                                             ),
                                             child: Icon(
@@ -434,27 +441,33 @@ class _SmartUrlBarState extends State<SmartUrlBar>
                                                 Text(
                                                   s.title,
                                                   maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                   style: TextStyle(
                                                     fontSize: 13,
                                                     fontWeight: FontWeight.w600,
                                                     color: isDark
                                                         ? AppTheme.textPrimary
-                                                        : AppTheme.lightTextPrimary,
+                                                        : AppTheme
+                                                            .lightTextPrimary,
                                                   ),
                                                 ),
                                                 if (s.title != s.url &&
-                                                    s.type != SuggestionType.search) ...[
+                                                    s.type !=
+                                                        SuggestionType
+                                                            .search) ...[
                                                   const SizedBox(height: 2),
                                                   Text(
                                                     s.url,
                                                     maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                     style: TextStyle(
                                                       fontSize: 11,
                                                       color: isDark
                                                           ? AppTheme.textMuted
-                                                          : AppTheme.lightTextMuted,
+                                                          : AppTheme
+                                                              .lightTextMuted,
                                                     ),
                                                   ),
                                                 ],
@@ -532,218 +545,232 @@ class _SmartUrlBarState extends State<SmartUrlBar>
     // scrollable scrolls, so the dropdown never floats over scrolled content.
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
-        if (_overlayEntry != null &&
-            notification is UserScrollNotification) {
+        if (_overlayEntry != null && notification is UserScrollNotification) {
           _removeOverlay();
         }
         return false;
       },
       child: CompositedTransformTarget(
-      link: _layerLink,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-        height: 40,
-        decoration: BoxDecoration(
-          color: capsuleBg,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: capsuleBorder,
-            width: isFocused ? 1.4 : 0.9,
+        link: _layerLink,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          height: 40,
+          decoration: BoxDecoration(
+            color: capsuleBg,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: capsuleBorder,
+              width: isFocused ? 1.4 : 0.9,
+            ),
+            boxShadow: isFocused
+                ? [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.16),
+                      blurRadius: 8,
+                      spreadRadius: 0.5,
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                          alpha: isDark ? (isAmoled ? 0.0 : 0.15) : 0.03),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
           ),
-          boxShadow: isFocused
-              ? [
-                  BoxShadow(
-                    color: accent.withValues(alpha: 0.16),
-                    blurRadius: 8,
-                    spreadRadius: 0.5,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: Stack(
+              children: [
+                // Bottom Progress Bar
+                if (widget.isLoading || _progressAnimController.value > 0.0)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: AnimatedBuilder(
+                      animation: _progressAnimController,
+                      builder: (context, _) {
+                        final val = _progressAnimController.value;
+                        if (val <= 0.0) return const SizedBox.shrink();
+                        return Container(
+                          height: 2.5,
+                          alignment: isRtl
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: FractionallySizedBox(
+                            widthFactor: val.clamp(0.0, 1.0),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    accent,
+                                    isDark
+                                        ? AppTheme.neonGreen
+                                        : AppTheme.lightNeonGreen,
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? (isAmoled ? 0.0 : 0.15) : 0.03),
-                    blurRadius: 3,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(22),
-          child: Stack(
-            children: [
-              // Bottom Progress Bar
-              if (widget.isLoading || _progressAnimController.value > 0.0)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: AnimatedBuilder(
-                    animation: _progressAnimController,
-                    builder: (context, _) {
-                      final val = _progressAnimController.value;
-                      if (val <= 0.0) return const SizedBox.shrink();
-                      return Container(
-                        height: 2.5,
-                        alignment: isRtl ? Alignment.centerRight : Alignment.centerLeft,
-                        child: FractionallySizedBox(
-                          widthFactor: val.clamp(0.0, 1.0),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  accent,
-                                  isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                                ],
+
+                // Interactive Text Field & Icons
+                Center(
+                  child: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: widget.controller,
+                    builder: (context, value, child) {
+                      final hasText = value.text.isNotEmpty;
+
+                      return TextField(
+                        controller: widget.controller,
+                        focusNode: widget.focusNode,
+                        textAlignVertical: TextAlignVertical.center,
+                        onTap: () {
+                          if (widget.controller.text.isNotEmpty) {
+                            _generateSuggestions(widget.controller.text);
+                          }
+                        },
+                        cursorColor: accent,
+                        cursorWidth: 1.8,
+                        cursorRadius: const Radius.circular(2),
+                        style: TextStyle(
+                          color: isDark
+                              ? AppTheme.textPrimary
+                              : AppTheme.lightTextPrimary,
+                          fontSize: 13.5,
+                          fontWeight:
+                              isFocused ? FontWeight.w500 : FontWeight.w400,
+                          letterSpacing: -0.1,
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          hintText: isRtl
+                              ? 'ابحث أو أدخل عنوان URL...'
+                              : 'Search or enter URL...',
+                          hintStyle: TextStyle(
+                            color: muted.withValues(alpha: 0.8),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.normal,
+                          ),
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 2, vertical: 8),
+                          prefixIconConstraints:
+                              const BoxConstraints(minWidth: 38, minHeight: 38),
+                          prefixIcon: GestureDetector(
+                            onTap: () {
+                              if (widget.onShieldPressed != null) {
+                                final settings =
+                                    context.read<SettingsProvider>();
+                                HapticHelper.triggerHaptic(settings);
+                                widget.onShieldPressed!();
+                              }
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(left: 6, right: 4),
+                              padding: const EdgeInsets.all(6),
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 200),
+                                child: Icon(
+                                  isFocused
+                                      ? Icons.search_rounded
+                                      : (widget.isHttps
+                                          ? Icons.lock_rounded
+                                          : Icons.shield_outlined),
+                                  key: ValueKey(
+                                    isFocused
+                                        ? 'search'
+                                        : (widget.isHttps ? 'https' : 'http'),
+                                  ),
+                                  size: 16,
+                                  color: isFocused
+                                      ? accent
+                                      : (widget.isHttps
+                                          ? (isDark
+                                              ? AppTheme.neonGreen
+                                              : AppTheme.lightNeonGreen)
+                                          : muted),
+                                ),
+                              ),
+                            ),
+                          ),
+                          suffixIconConstraints:
+                              const BoxConstraints(minWidth: 38, minHeight: 38),
+                          suffixIcon: Padding(
+                            padding: const EdgeInsets.only(right: 4, left: 4),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: IconButton(
+                                key: ValueKey(
+                                  widget.isLoading
+                                      ? 'close'
+                                      : (isFocused && hasText)
+                                          ? 'clear'
+                                          : 'refresh',
+                                ),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                    minWidth: 32, minHeight: 32),
+                                icon: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: (isFocused && hasText)
+                                      ? BoxDecoration(
+                                          color: muted.withValues(alpha: 0.15),
+                                          shape: BoxShape.circle,
+                                        )
+                                      : null,
+                                  child: Icon(
+                                    widget.isLoading
+                                        ? Icons.close_rounded
+                                        : (isFocused && hasText)
+                                            ? Icons.close_rounded
+                                            : Icons.refresh_rounded,
+                                    size: (isFocused && hasText) ? 14 : 17,
+                                    color: isFocused
+                                        ? (hasText ? textClr(isDark) : accent)
+                                        : muted,
+                                  ),
+                                ),
+                                tooltip: widget.isLoading
+                                    ? (isRtl ? 'إلغاء التحميل' : 'Stop loading')
+                                    : (isFocused && hasText)
+                                        ? (isRtl ? 'مسح' : 'Clear')
+                                        : (isRtl ? 'إعادة تحميل' : 'Refresh'),
+                                onPressed: () {
+                                  if (widget.isLoading) {
+                                    widget.onStopLoading?.call();
+                                  } else if (isFocused && hasText) {
+                                    widget.controller.clear();
+                                  } else {
+                                    widget.onReload?.call();
+                                  }
+                                },
                               ),
                             ),
                           ),
                         ),
+                        onSubmitted: (val) {
+                          _removeOverlay();
+                          widget.focusNode.unfocus();
+                          widget.onNavigate(val);
+                        },
                       );
                     },
                   ),
                 ),
-
-              // Interactive Text Field & Icons
-              Center(
-                child: ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: widget.controller,
-                  builder: (context, value, child) {
-                    final hasText = value.text.isNotEmpty;
-
-                    return TextField(
-                      controller: widget.controller,
-                      focusNode: widget.focusNode,
-                      textAlignVertical: TextAlignVertical.center,
-                      onTap: () {
-                        if (widget.controller.text.isNotEmpty) {
-                          _generateSuggestions(widget.controller.text);
-                        }
-                      },
-                      cursorColor: accent,
-                      cursorWidth: 1.8,
-                      cursorRadius: const Radius.circular(2),
-                      style: TextStyle(
-                        color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-                        fontSize: 13.5,
-                        fontWeight: isFocused ? FontWeight.w500 : FontWeight.w400,
-                        letterSpacing: -0.1,
-                      ),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        hintText: isRtl ? 'ابحث أو أدخل عنوان URL...' : 'Search or enter URL...',
-                        hintStyle: TextStyle(
-                          color: muted.withValues(alpha: 0.8),
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.normal,
-                        ),
-                        filled: false,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
-                        prefixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38),
-                        prefixIcon: GestureDetector(
-                          onTap: () {
-                            if (widget.onShieldPressed != null) {
-                              final settings = context.read<SettingsProvider>();
-                              HapticHelper.triggerHaptic(settings);
-                              widget.onShieldPressed!();
-                            }
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.only(left: 6, right: 4),
-                            padding: const EdgeInsets.all(6),
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              child: Icon(
-                                isFocused
-                                    ? Icons.search_rounded
-                                    : (widget.isHttps
-                                        ? Icons.lock_rounded
-                                        : Icons.shield_outlined),
-                                key: ValueKey(
-                                  isFocused
-                                      ? 'search'
-                                      : (widget.isHttps ? 'https' : 'http'),
-                                ),
-                                size: 16,
-                                color: isFocused
-                                    ? accent
-                                    : (widget.isHttps
-                                        ? (isDark
-                                            ? AppTheme.neonGreen
-                                            : AppTheme.lightNeonGreen)
-                                        : muted),
-                              ),
-                            ),
-                          ),
-                        ),
-                        suffixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 38),
-                        suffixIcon: Padding(
-                          padding: const EdgeInsets.only(right: 4, left: 4),
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 200),
-                            child: IconButton(
-                              key: ValueKey(
-                                widget.isLoading
-                                    ? 'close'
-                                    : (isFocused && hasText)
-                                        ? 'clear'
-                                        : 'refresh',
-                              ),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                              icon: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: (isFocused && hasText)
-                                    ? BoxDecoration(
-                                        color: muted.withValues(alpha: 0.15),
-                                        shape: BoxShape.circle,
-                                      )
-                                    : null,
-                                child: Icon(
-                                  widget.isLoading
-                                      ? Icons.close_rounded
-                                      : (isFocused && hasText)
-                                          ? Icons.close_rounded
-                                          : Icons.refresh_rounded,
-                                  size: (isFocused && hasText) ? 14 : 17,
-                                  color: isFocused
-                                      ? (hasText ? textClr(isDark) : accent)
-                                      : muted,
-                                ),
-                              ),
-                              tooltip: widget.isLoading
-                                  ? (isRtl ? 'إلغاء التحميل' : 'Stop loading')
-                                  : (isFocused && hasText)
-                                      ? (isRtl ? 'مسح' : 'Clear')
-                                      : (isRtl ? 'إعادة تحميل' : 'Refresh'),
-                              onPressed: () {
-                                if (widget.isLoading) {
-                                  widget.onStopLoading?.call();
-                                } else if (isFocused && hasText) {
-                                  widget.controller.clear();
-                                } else {
-                                  widget.onReload?.call();
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                      onSubmitted: (val) {
-                        _removeOverlay();
-                        widget.focusNode.unfocus();
-                        widget.onNavigate(val);
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

@@ -66,12 +66,14 @@ const Map<String, String> esTranslations = {
   'browser_stop': 'Detener',
   'browser_retry': 'Reintentar',
   'browser_pip_tooltip': 'Imagen en imagen',
-  'browser_pip_unsupported': 'La imagen en imagen no está disponible en esta página',
+  'browser_pip_unsupported':
+      'La imagen en imagen no está disponible en esta página',
   'browser_save_screenshot': 'Guardar captura',
   'browser_screenshot_saved': 'Captura guardada',
   'browser_screenshot_failed': 'No se pudo capturar la pantalla',
   'browser_nav_blocked_title': 'Navegación bloqueada',
-  'browser_nav_blocked_reason': 'Esta página se bloqueó por considerarse anuncio potencial o página insegura.\n\nMotivo: {reason}',
+  'browser_nav_blocked_reason':
+      'Esta página se bloqueó por considerarse anuncio potencial o página insegura.\n\nMotivo: {reason}',
   'browser_nav_open_anyway': 'ABRIR DE TODOS MODOS',
   'browser_close': 'Cerrar navegador',
   'browser_close_btn': 'CERRAR',
@@ -156,7 +158,8 @@ const Map<String, String> esTranslations = {
   'browser_no_bookmarks': 'Aún no hay marcadores',
   'browser_no_bookmarks_desc': 'Toca + para guardar tus sitios favoritos',
   'browser_no_bookmarks_search': 'Ningún marcador coincide con tu búsqueda',
-  'browser_no_bookmarks_search_desc': 'Prueba otra palabra clave o limpia la búsqueda',
+  'browser_no_bookmarks_search_desc':
+      'Prueba otra palabra clave o limpia la búsqueda',
   'browser_no_downloads_desc': 'Los archivos descargados aparecerán aquí.',
   'browser_no_downloads_yet': 'Aún no hay descargas',
   'browser_no_history_desc': 'Los sitios web que visites aparecerán aquí.',
@@ -199,8 +202,10 @@ const Map<String, String> esTranslations = {
   'browser_status_queued': 'EN COLA',
   'browser_stop_loading': 'Detener carga',
   'browser_stream_sniffer_status': 'ESTADO DEL DETECTOR DE TRANSMISIÓN',
-  'browser_sniffer_on_tooltip': 'Detector de medios ACTIVADO — toca para apagar',
-  'browser_sniffer_off_tooltip': 'Detector de medios DESACTIVADO — toca para encender',
+  'browser_sniffer_on_tooltip':
+      'Detector de medios ACTIVADO — toca para apagar',
+  'browser_sniffer_off_tooltip':
+      'Detector de medios DESACTIVADO — toca para encender',
   'browser_offline_tooltip': 'Estás sin conexión',
   'browser_surfing_history': 'Historial de navegación',
   'browser_tabs_restored': 'Pestañas anteriores restauradas',

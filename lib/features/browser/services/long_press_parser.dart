@@ -48,7 +48,8 @@ class LongPressPayload {
           return Map<String, dynamic>.from(unescaped);
         }
       } catch (_) {
-        final stripped = str.substring(1, str.length - 1).replaceAll(r'\"', '"');
+        final stripped =
+            str.substring(1, str.length - 1).replaceAll(r'\"', '"');
         final inner = _decode(stripped);
         if (inner != null) return inner;
       }

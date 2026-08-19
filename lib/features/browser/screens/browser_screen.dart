@@ -286,7 +286,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                       () => HorizontalDragGestureRecognizer(),
                                       (instance) {
                                         instance.onStart = (details) {
-                                          dragStartGlobal = details.globalPosition;
+                                          dragStartGlobal =
+                                              details.globalPosition;
                                         };
                                         instance.onEnd = (details) {
                                           final velocity =
@@ -297,10 +298,14 @@ class _BrowserScreenState extends State<BrowserScreen>
                                           // Require swipe to originate from edge zone (< 28px or > width-28px) OR
                                           // top toolbar area (< 64px from top), and require strong velocity/sweep.
                                           if (start == null) return;
-                                          final screenWidth = MediaQuery.of(context).size.width;
-                                          final isEdgeSwipe = start.dx < 28 || start.dx > screenWidth - 28;
+                                          final screenWidth =
+                                              MediaQuery.of(context).size.width;
+                                          final isEdgeSwipe = start.dx < 28 ||
+                                              start.dx > screenWidth - 28;
                                           final isTopSwipe = start.dy < 64;
-                                          if (!isEdgeSwipe && !isTopSwipe) return;
+                                          if (!isEdgeSwipe && !isTopSwipe) {
+                                            return;
+                                          }
 
                                           if (velocity.abs() < 600) return;
                                           if (velocity < 0) {
@@ -428,7 +433,8 @@ class _BrowserChrome extends StatelessWidget {
                       BrowserShieldSheet.show(
                         context: context,
                         currentUrl: activeTab.url,
-                        blockedAdsCount: controller.blockedAdsCount(activeTab.id),
+                        blockedAdsCount:
+                            controller.blockedAdsCount(activeTab.id),
                         blockedPopupsCount:
                             controller.blockedPopupsCount(activeTab.id),
                         onReloadTab: () => controller.reload(),
@@ -502,8 +508,7 @@ class _BrowserChrome extends StatelessWidget {
                               ),
                             ),
                             GestureDetector(
-                              onTap: () =>
-                                  controller.dismissIncognitoBanner(),
+                              onTap: () => controller.dismissIncognitoBanner(),
                               child: const Icon(
                                 Icons.close_rounded,
                                 size: 16,
@@ -608,9 +613,8 @@ class _BrowserChrome extends StatelessWidget {
     final hasGenericDownload = !isYt &&
         controller.mediaSniffer.detectedDownloadUrls[activeTab.id] != null;
 
-    final shouldShow = isYt
-        ? isYtVideoOrPlaylist
-        : (hasStreams || hasGenericDownload);
+    final shouldShow =
+        isYt ? isYtVideoOrPlaylist : (hasStreams || hasGenericDownload);
 
     if (!shouldShow) return null;
 

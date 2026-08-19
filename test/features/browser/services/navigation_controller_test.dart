@@ -77,7 +77,8 @@ void main() {
       expect(activeTab!.url, equals('about:blank'));
     });
 
-    test('navigateToUrl handles search queries when text has no dots', () async {
+    test('navigateToUrl handles search queries when text has no dots',
+        () async {
       await navController.navigateToUrl('dart flutter tutorial');
       expect(activeTab!.url, contains('google.com/search?q=dart'));
     });

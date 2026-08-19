@@ -35,11 +35,13 @@ class Semaphore {
     } on TimeoutException {
       if (_waiters.remove(completer)) {
         // Successfully removed while still waiting in queue; no permit was taken.
-        throw TimeoutException('Semaphore acquisition timed out after $timeout');
+        throw TimeoutException(
+            'Semaphore acquisition timed out after $timeout');
       } else {
         // Permit was granted right at the timeout race boundary; release it back.
         release();
-        throw TimeoutException('Semaphore acquisition timed out after $timeout');
+        throw TimeoutException(
+            'Semaphore acquisition timed out after $timeout');
       }
     }
   }

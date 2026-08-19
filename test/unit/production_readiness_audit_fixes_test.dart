@@ -1,5 +1,4 @@
 import 'dart:collection';
-import 'dart:typed_data';
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:dmx/core/constants/thresholds.dart';
 import 'package:dmx/core/interfaces/i_torrent_service.dart';
@@ -33,11 +32,15 @@ class _FakeDownloadEngine extends Fake implements DownloadEngine {
   void updateSpeedLimit(int bytesPerSecond, int activeDownloads) {}
   @override
   Future<bool> hasEnoughDiskSpace(String path, int requiredBytes) async => true;
+  @override
+  Future<void> close() async {}
+  @override
+  Future<void> dispose() async {}
 }
 
 class _FakePermissionService extends Fake implements PermissionService {
   @override
-  Future<bool> hasStoragePermission() async => true;
+  Future<bool> isStoragePermissionValid() async => true;
   @override
   Future<String> defaultDownloadDirectory() async => 'build/test_downloads';
 }
@@ -92,7 +95,9 @@ void main() {
       expect(kStateSaveFgDelta, equals(2 * 1024 * 1024));
     });
 
-    test('P0-3: Completion byte pinning ensures exact 100% progress and matching sizes', () async {
+    test(
+        'P0-3: Completion byte pinning ensures exact 100% progress and matching sizes',
+        () async {
       final (database, settings) = await _setupServices();
       final provider = DownloadProvider(
         databaseService: database,
@@ -169,23 +174,27 @@ void main() {
       await provider.load();
 
       // Populate tracking maps
-      provider.speedHistories['test-mem-leak'] = Queue<double>()..addAll([100.0, 200.0]);
+      provider.speedHistories['test-mem-leak'] = Queue<double>()
+        ..addAll([100.0, 200.0]);
       provider.lastProgressUpdateTimes['test-mem-leak'] =
           DateTime.now().millisecondsSinceEpoch;
 
       expect(provider.speedHistories.containsKey('test-mem-leak'), isTrue);
-      expect(provider.lastProgressUpdateTimes.containsKey('test-mem-leak'), isTrue);
+      expect(provider.lastProgressUpdateTimes.containsKey('test-mem-leak'),
+          isTrue);
 
       await provider.deleteTask('test-mem-leak');
 
       expect(provider.speedHistories.containsKey('test-mem-leak'), isFalse);
-      expect(provider.lastProgressUpdateTimes.containsKey('test-mem-leak'), isFalse);
+      expect(provider.lastProgressUpdateTimes.containsKey('test-mem-leak'),
+          isFalse);
 
       provider.dispose();
       database.dispose();
     });
 
-    test('P1-10: PositionalFileWriter write and drain signal works properly', () async {
+    test('P1-10: PositionalFileWriter write and drain signal works properly',
+        () async {
       final path =
           'build/test_writer_${DateTime.now().millisecondsSinceEpoch}.dat';
       final writer = await PositionalFileWriter.open(

@@ -10,11 +10,15 @@ class _SpeedSample {
 class SpeedPredictor {
   final List<_SpeedSample> _samples = [];
   static const _maxSamples = 30;
+  final Stopwatch _stopwatch;
+
+  SpeedPredictor({Stopwatch? stopwatch})
+      : _stopwatch = (stopwatch ?? Stopwatch())..start();
 
   void addSample(double bytesPerSecond) {
     _samples.add(_SpeedSample(
       speed: bytesPerSecond,
-      timestamp: DateTime.now().millisecondsSinceEpoch,
+      timestamp: _stopwatch.elapsedMilliseconds,
     ));
     if (_samples.length > _maxSamples) _samples.removeAt(0);
   }

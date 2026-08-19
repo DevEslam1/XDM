@@ -161,7 +161,8 @@ class _BrowserHomePageState extends State<BrowserHomePage>
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   decoration: BoxDecoration(
                     color: isDark
                         ? Colors.white.withValues(alpha: 0.05)
@@ -225,7 +226,8 @@ class _BrowserHomePageState extends State<BrowserHomePage>
                   child: _QuickActionButton(
                     icon: Icons.history_rounded,
                     label: isRtl ? 'السجل' : 'History',
-                    color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                    color:
+                        isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
                     isDark: isDark,
                     onTap: widget.onHistoryTap,
                   ),
@@ -296,7 +298,9 @@ class _QuickActionButton extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                    color: isDark
+                        ? AppTheme.textPrimary
+                        : AppTheme.lightTextPrimary,
                   ),
                 ),
               ),

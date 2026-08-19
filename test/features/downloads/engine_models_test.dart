@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('DownloadProgress Hardening (Sprint 2)', () {
-    test('DownloadProgress equality uses chunkFingerprint and primary fields', () {
+    test('DownloadProgress equality uses chunkFingerprint and primary fields',
+        () {
       const p1 = DownloadProgress(
         downloadedBytes: 1000,
         fileSize: 2000,

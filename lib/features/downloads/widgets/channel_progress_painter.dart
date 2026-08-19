@@ -13,6 +13,7 @@ class ChannelProgressPainter extends CustomPainter {
   final bool isTorrent;
   final List<ChunkDetail> chunkDetails;
   final int chunkFingerprint;
+
   /// Optional accent color override. When null, falls back to the hardcoded
   /// neonViolet (torrent) / neonBlue (file) defaults.
   final Color? color;
@@ -114,6 +115,7 @@ class IsolatedProgressBar extends StatelessWidget {
   final bool isTorrent;
   final double height;
   final int chunkFingerprint;
+
   /// Optional accent color override forwarded to [ChannelProgressPainter].
   final Color? color;
 

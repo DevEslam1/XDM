@@ -1,4 +1,4 @@
-import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:logging/logging.dart';
 import 'download_engine.dart';
@@ -30,6 +30,9 @@ class FrameWatchdog {
   static double? _cachedRefreshRate;
   static bool _metricsListenerRegistered = false;
 
+  @visibleForTesting
+  static bool enableInReleaseForTesting = false;
+
   static Future<void> detectRefreshRate({bool force = false}) async {
     if (_cachedRefreshRate != null && !force) {
       return;
@@ -53,7 +56,7 @@ class FrameWatchdog {
             '(frame budget: ${frameBudgetMs.toStringAsFixed(2)}ms)');
       }
     } catch (e) {
-      // FIX: Always fall back to 60Hz if detection fails
+      // Always fall back to 60Hz if detection fails
       _refreshRate = 60.0;
       _cachedRefreshRate = 60.0;
       _log.fine(
@@ -69,15 +72,13 @@ class FrameWatchdog {
         if (rate > 0) return rate;
       }
     } catch (e, st) {
-      // FIX-S6: Log caught exceptions
       _log.fine('[FrameWatchdog] getDisplayRefreshRate error: $e', st);
     }
-    // FIX: Safe fallback
     return 60.0;
   }
 
   static void start() {
-    // FIX-H9: Guard start() with background and screen-off checks
+    if (!kDebugMode && !enableInReleaseForTesting) return;
     if (_isRunning ||
         PowerMonitor.screenOff ||
         !DownloadEngine.appInForeground ||

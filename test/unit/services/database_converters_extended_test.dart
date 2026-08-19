@@ -12,7 +12,8 @@ void main() {
       expect(converter.fromSql('{"not":"a list"}'), isEmpty);
     });
 
-    test('TorrentFilesConverter serializes safely even with unusual objects', () {
+    test('TorrentFilesConverter serializes safely even with unusual objects',
+        () {
       const converter = TorrentFilesConverter();
 
       final list = [

@@ -135,29 +135,31 @@ Future<void> main(List<String> args) async {
       ..maximumSize = deviceMemory <= 2 ? 60 : 100;
 
     // ── Frame performance monitoring (UI-jank diagnostics) ──
-    await FrameWatchdog.detectRefreshRate();
-    PerformanceMonitor.instance.start();
-    FrameWatchdog.start();
-    int consecutiveJankWindows = 0;
-    FrameWatchdog.onJankDetected = (jankRatio) {
-      try {
-        if (!SettingsProvider.instance.jankAutoBatterySaver) {
-          consecutiveJankWindows = 0;
-          return;
-        }
-        if (jankRatio > 0.08) {
-          consecutiveJankWindows++;
-          if (consecutiveJankWindows >= 3) {
-            SettingsProvider.instance.setBatterySaverMode(true);
+    if (kDebugMode) {
+      await FrameWatchdog.detectRefreshRate();
+      PerformanceMonitor.instance.start();
+      FrameWatchdog.start();
+      int consecutiveJankWindows = 0;
+      FrameWatchdog.onJankDetected = (jankRatio) {
+        try {
+          if (!SettingsProvider.instance.jankAutoBatterySaver) {
+            consecutiveJankWindows = 0;
+            return;
           }
-        } else {
-          consecutiveJankWindows = 0;
+          if (jankRatio > 0.08) {
+            consecutiveJankWindows++;
+            if (consecutiveJankWindows >= 3) {
+              SettingsProvider.instance.setBatterySaverMode(true);
+            }
+          } else {
+            consecutiveJankWindows = 0;
+          }
+        } catch (e, st) {
+          LoggingService.logger('main')
+              .warning('Failed to check jankAutoBatterySaver', e, st);
         }
-      } catch (e, st) {
-        LoggingService.logger('main')
-            .warning('Failed to check jankAutoBatterySaver', e, st);
-      }
-    };
+      };
+    }
 
     await PowerMonitor.init();
     await ProtocolCache.init();
@@ -551,11 +553,14 @@ class DmxApp extends StatelessWidget {
               if (rawName.isEmpty || rawName == '/') return null;
 
               String? extractedUrl;
-              if (rawName.startsWith('/?xt=') || rawName.contains('xt=urn:btih:')) {
+              if (rawName.startsWith('/?xt=') ||
+                  rawName.contains('xt=urn:btih:')) {
                 // Route caused by Android intent magnet URI: "/?xt=urn:btih:..." -> "magnet:?xt=urn:btih:..."
                 extractedUrl = rawName.startsWith('/?')
                     ? 'magnet:?${rawName.substring(2)}'
-                    : (rawName.startsWith('/') ? rawName.substring(1) : rawName);
+                    : (rawName.startsWith('/')
+                        ? rawName.substring(1)
+                        : rawName);
               } else if (rawName.startsWith('/magnet:')) {
                 extractedUrl = rawName.substring(1);
               } else if (isMagnetUrl(rawName) ||

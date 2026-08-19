@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../../../../core/services/database_service.dart';
 import '../../../../core/services/download_engine.dart';
@@ -64,6 +65,8 @@ mixin DownloadQueueMixin {
   bool _needsNotify = false;
   bool _needsRePump = false;
   int? _pendingMaxConcurrentOverride;
+  final Lock _pumpLock = Lock();
+  Timer? _pumpDebounceTimer;
 
   /// Per-task effective thread count overrides calculated by [pumpQueue] to
   /// enforce the global connection cap. The host class should check this map
@@ -99,6 +102,35 @@ mixin DownloadQueueMixin {
   /// Mark that a notification is pending for the current batch.
   void markBatchDirty() {
     _needsNotify = true;
+  }
+
+  /// Requests a notifyListeners call that will be deferred if batch mode is
+  /// active, or dispatched immediately if not.
+  void requestNotify(void Function() superNotify) {
+    if (_batchMode) {
+      _needsNotify = true;
+    } else {
+      superNotify();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Bulk state updates (single DB transaction, single notify)
+  // ---------------------------------------------------------------------------
+  Future<void> updateTasksBulk(
+    List<DownloadTask> updates, {
+    required DatabaseService providerDatabaseService,
+    required bool Function() getFilteredTasksDirty,
+    required void Function(bool) setFilteredTasksDirty,
+  }) async {
+    if (updates.isEmpty) return;
+    for (final t in updates) {
+      final idx = providerTasks.indexWhere((x) => x.id == t.id);
+      if (idx != -1) providerTasks[idx] = t;
+    }
+    setFilteredTasksDirty(true);
+    await providerDatabaseService.saveTasks(updates);
+    safeNotify();
   }
 
   /// Reorders tasks by their new index positions.
@@ -150,100 +182,110 @@ mixin DownloadQueueMixin {
       _pendingMaxConcurrentOverride = maxConcurrentOverride;
     }
 
-    if (_queueProcessing) {
-      _needsRePump = true;
-      return;
-    }
-    _queueProcessing = true;
-    _needsRePump = false;
+    _pumpDebounceTimer?.cancel();
+    _pumpDebounceTimer = Timer(const Duration(milliseconds: 50), () {
+      _executePumpLocked();
+    });
+  }
 
-    try {
-      int iteration = 0;
-      while (iteration < _maxConsecutivePumps) {
-        iteration++;
-        _needsRePump = false;
-        final effectiveOverride = _pendingMaxConcurrentOverride;
-        _pendingMaxConcurrentOverride = null;
+  void _executePumpLocked() {
+    unawaited(_pumpLock.synchronized(() {
+      if (_queueProcessing) {
+        _needsRePump = true;
+        return;
+      }
+      _queueProcessing = true;
+      _needsRePump = false;
 
-        final settings = providerSettingsProvider;
-        final activeCount = providerTasks
-            .where((t) => t.status == DownloadStatus.downloading)
-            .length;
+      try {
+        int iteration = 0;
+        while (iteration < _maxConsecutivePumps) {
+          iteration++;
+          _needsRePump = false;
+          final effectiveOverride = _pendingMaxConcurrentOverride;
+          _pendingMaxConcurrentOverride = null;
 
-        final effectiveActive = activeCount + pendingStartCount;
-        final maxActive = effectiveOverride ?? settings.maxDownloads;
+          final settings = providerSettingsProvider;
+          final activeCount = providerTasks
+              .where((t) => t.status == DownloadStatus.downloading)
+              .length;
 
-        if (effectiveActive >= maxActive) break;
+          final effectiveActive = activeCount + pendingStartCount;
+          final maxActive = effectiveOverride ?? settings.maxDownloads;
 
-        final queued = providerTasks
-            .where((task) =>
-                task.status == DownloadStatus.queued &&
-                !isTaskWaitingForRetry(task.id))
-            .toList();
+          if (effectiveActive >= maxActive) break;
 
-        if (queued.isEmpty) break;
+          final queued = providerTasks
+              .where((task) =>
+                  task.status == DownloadStatus.queued &&
+                  !isTaskWaitingForRetry(task.id))
+              .toList();
 
-        queued.sort((a, b) {
-          if (a.isAppUpdate != b.isAppUpdate) return b.isAppUpdate ? 1 : -1;
-          final prioCmp = b.priority.compareTo(a.priority);
-          if (prioCmp != 0) return prioCmp;
-          final orderCmp = a.queueOrder.compareTo(b.queueOrder);
-          if (orderCmp != 0) return orderCmp;
-          return a.createdAt.compareTo(b.createdAt);
-        });
+          if (queued.isEmpty) break;
 
-        effectiveThreadOverrides.removeWhere(
-          (id, _) => !queued.any((t) => t.id == id),
-        );
+          queued.sort((a, b) {
+            if (a.isAppUpdate != b.isAppUpdate) return b.isAppUpdate ? 1 : -1;
+            final prioCmp = b.priority.compareTo(a.priority);
+            if (prioCmp != 0) return prioCmp;
+            final orderCmp = a.queueOrder.compareTo(b.queueOrder);
+            if (orderCmp != 0) return orderCmp;
+            return a.createdAt.compareTo(b.createdAt);
+          });
 
-        var startedThisPass = 0;
-        for (final task in queued) {
-          if (effectiveActive + startedThisPass >= maxActive) break;
-
-          final isRunning = providerTasks.any(
-            (t) => t.id == task.id && t.status == DownloadStatus.downloading,
+          effectiveThreadOverrides.removeWhere(
+            (id, _) => !queued.any((t) => t.id == id),
           );
-          final hasPendingOverride =
-              effectiveThreadOverrides.containsKey(task.id);
-          final isPendingStart = isTaskPendingStart(task.id);
-          if (isRunning || hasPendingOverride || isPendingStart) continue;
 
-          final totalConcurrent = max(1, effectiveActive + startedThisPass + 1);
-          final baseLimit = min(
-            settings.maxTotalConnections ~/ totalConcurrent,
-            settings.defaultThreadCount,
-          );
-          final effectiveThreads = max(1, baseLimit);
-          final clampedThreads = min(task.threadCount, effectiveThreads);
-          effectiveThreadOverrides[task.id] = clampedThreads;
+          var startedThisPass = 0;
+          for (final task in queued) {
+            if (effectiveActive + startedThisPass >= maxActive) break;
 
-          try {
-            final started = startTaskFromQueue(task);
-            if (started) {
-              startedThisPass++;
+            final isRunning = providerTasks.any(
+              (t) => t.id == task.id && t.status == DownloadStatus.downloading,
+            );
+            final hasPendingOverride =
+                effectiveThreadOverrides.containsKey(task.id);
+            final isPendingStart = isTaskPendingStart(task.id);
+            if (isRunning || hasPendingOverride || isPendingStart) continue;
+
+            final totalConcurrent = max(1, effectiveActive + startedThisPass + 1);
+            final baseLimit = min(
+              settings.maxTotalConnections ~/ totalConcurrent,
+              settings.defaultThreadCount,
+            );
+            final effectiveThreads = max(1, baseLimit);
+            final clampedThreads = min(task.threadCount, effectiveThreads);
+            effectiveThreadOverrides[task.id] = clampedThreads;
+
+            try {
+              final started = startTaskFromQueue(task);
+              if (started) {
+                startedThisPass++;
+              } else {
+                effectiveThreadOverrides.remove(task.id);
+              }
+            } catch (_) {
+              effectiveThreadOverrides.remove(task.id);
             }
-          } catch (e) {
-            debugPrint('[Queue] startTaskFromQueue threw for ${task.id}: $e');
-            effectiveThreadOverrides.remove(task.id);
+          }
+
+          if (startedThisPass == 0 && !_needsRePump) {
+            break;
           }
         }
-
-        if (startedThisPass == 0 && !_needsRePump) {
-          break;
+      } catch (e) {
+        debugPrint('Queue pump error: $e');
+      } finally {
+        final shouldRePump = _needsRePump;
+        final rePumpOverride = _pendingMaxConcurrentOverride;
+        _queueProcessing = false;
+        _pendingMaxConcurrentOverride = null;
+        _needsRePump = false;
+        if (shouldRePump) {
+          pumpQueue(maxConcurrentOverride: rePumpOverride);
         }
       }
-    } catch (e) {
-      debugPrint('Queue pump error: $e');
-    } finally {
-      final shouldRePump = _needsRePump;
-      final rePumpOverride = _pendingMaxConcurrentOverride;
-      _queueProcessing = false;
-      _pendingMaxConcurrentOverride = null;
-      _needsRePump = false;
-      if (shouldRePump) {
-        pumpQueue(maxConcurrentOverride: rePumpOverride);
-      }
-    }
+    }));
   }
 
   Future<void> mixinPauseAllTasks(void Function() superNotify) async {

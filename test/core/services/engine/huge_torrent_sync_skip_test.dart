@@ -15,7 +15,8 @@ void main() {
       expect(TorrentDownloadHandler.shouldSkipPerFileSync(10001), isFalse);
     });
 
-    test('Sync interval is adaptive based on file count and background state', () {
+    test('Sync interval is adaptive based on file count and background state',
+        () {
       // Foreground: <= 100 files: 5s
       expect(
         TorrentDownloadHandler.computeAdaptiveSyncInterval(100),
@@ -43,24 +44,36 @@ void main() {
       // In background:
       // <= 1000 files: 90s
       expect(
-        TorrentDownloadHandler.computeAdaptiveSyncInterval(500, inBackground: true),
+        TorrentDownloadHandler.computeAdaptiveSyncInterval(500,
+            inBackground: true),
         equals(const Duration(seconds: 90)),
       );
       // > 1000 files: 3 min
       expect(
-        TorrentDownloadHandler.computeAdaptiveSyncInterval(1500, inBackground: true),
+        TorrentDownloadHandler.computeAdaptiveSyncInterval(1500,
+            inBackground: true),
         equals(const Duration(minutes: 3)),
       );
       // > 5000 files: 5 min
       expect(
-        TorrentDownloadHandler.computeAdaptiveSyncInterval(6000, inBackground: true),
+        TorrentDownloadHandler.computeAdaptiveSyncInterval(6000,
+            inBackground: true),
         equals(const Duration(minutes: 5)),
       );
 
       // Skip per file sync in background when > 5000 files
-      expect(TorrentDownloadHandler.shouldSkipPerFileSync(6000, inBackground: true), isTrue);
-      expect(TorrentDownloadHandler.shouldSkipPerFileSync(1500, inBackground: true), isFalse);
-      expect(TorrentDownloadHandler.shouldSkipPerFileSync(6000, inBackground: false), isFalse);
+      expect(
+          TorrentDownloadHandler.shouldSkipPerFileSync(6000,
+              inBackground: true),
+          isTrue);
+      expect(
+          TorrentDownloadHandler.shouldSkipPerFileSync(1500,
+              inBackground: true),
+          isFalse);
+      expect(
+          TorrentDownloadHandler.shouldSkipPerFileSync(6000,
+              inBackground: false),
+          isFalse);
     });
   });
 }

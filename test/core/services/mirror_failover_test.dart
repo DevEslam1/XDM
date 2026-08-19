@@ -89,8 +89,10 @@ void main() {
       ]);
 
       // m1 slow, m2 fast, m3 unregistered -> fast m2 wins.
-      manager.recordSuccess('https://m1.example.com/f', 100, const Duration(seconds: 1));
-      manager.recordSuccess('https://m2.example.com/f', 1000, const Duration(seconds: 1));
+      manager.recordSuccess(
+          'https://m1.example.com/f', 100, const Duration(seconds: 1));
+      manager.recordSuccess(
+          'https://m2.example.com/f', 1000, const Duration(seconds: 1));
       expect(manager.getBestMirror(), 'https://m2.example.com/f');
 
       // Fail m2 repeatedly to push it out of the healthy set.
@@ -120,7 +122,8 @@ void main() {
 
     test('recordSuccess on unknown url is a safe no-op', () {
       final manager = MirrorManager([]);
-      manager.recordSuccess('https://missing.example.com/f', 10, const Duration(seconds: 1));
+      manager.recordSuccess(
+          'https://missing.example.com/f', 10, const Duration(seconds: 1));
       manager.recordFailure('https://missing.example.com/f');
       expect(manager.isHealthy('https://missing.example.com/f'), isFalse);
     });
@@ -136,8 +139,8 @@ void main() {
   group('MirrorParallelEngine', () {
     test('raceMirrors throws for empty list', () async {
       expect(
-        () => MirrorParallelEngine.raceMirrors<int>([],
-            (url, token) async => 1),
+        () =>
+            MirrorParallelEngine.raceMirrors<int>([], (url, token) async => 1),
         throwsArgumentError,
       );
     });

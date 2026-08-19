@@ -53,7 +53,7 @@ void main() {
     test('acquireNonBlocking calculates wait correctly for probe requests', () {
       final governor = BandwidthGovernor(0, 1.0);
       governor.setTaskLimit('task-1', 1000); // 1000 bytes/sec
-      
+
       // First acquire of 1000 bytes immediately
       final wait1 = governor.acquireNonBlocking(1000, taskId: 'task-1');
       expect(wait1, equals(0));
@@ -63,9 +63,11 @@ void main() {
       expect(wait2, greaterThan(0));
     });
 
-    test('token refill and burst allowance allow temporary overshoot', () async {
+    test('token refill and burst allowance allow temporary overshoot',
+        () async {
       final governor = BandwidthGovernor(0, 1.5);
-      governor.setTaskLimit('task-burst', 1000); // 1000 B/s, burst capacity 1500 B
+      governor.setTaskLimit(
+          'task-burst', 1000); // 1000 B/s, burst capacity 1500 B
 
       // Allow 1.5s refill
       await Future.delayed(const Duration(milliseconds: 1500));

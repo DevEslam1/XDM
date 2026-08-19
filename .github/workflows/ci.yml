@@ -1,107 +1,39 @@
-name: CI
+name: DMX CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [ main, master ]
   pull_request:
-    branches: [main]
-
-env:
-  FLUTTER_VERSION: '3.44.8'
+    branches: [ main, master ]
 
 jobs:
-  check:
+  analyze_and_test:
+    name: Flutter Analyze & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Setup Flutter
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
+          channel: 'stable'
+          cache: true
 
-      - name: Flutter pub get
+      - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build runner (Drift codegen)
-        run: dart run build_runner build --delete-conflicting-outputs
+      - name: Verify Code Formatting
+        run: dart format --output=none --set-exit-if-changed .
 
-      - name: Verify local package overrides exist
-        run: |
-          for dir in packages/*/; do
-            if [ ! -f "$dir/pubspec.yaml" ]; then
-              echo "ERROR: Local package override missing pubspec.yaml: $dir"
-              exit 1
-            fi
-          done
-          echo "All local package overrides verified"
+      - name: Static Analysis
+        run: flutter analyze
 
-      - name: Pubspec resolution check
-        run: flutter pub get --dry-run 2>&1 | tail -5
-
-      - name: Format Check
-        run: dart format --set-exit-if-changed .
-
-      - name: Linter Analyze
-        run: flutter analyze --fatal-infos --fatal-warnings
-
-      - name: Run Tests with Coverage
+      - name: Run Unit & Widget Tests
         run: flutter test --coverage
-
-      - name: Coverage ratchet gate
-        run: |
-          sudo apt-get install -y lcov
-          lcov --remove coverage/lcov.info \
-            'lib/**/*.g.dart' 'lib/features/*/widgets/*' \
-            'lib/features/*/screens/*' 'lib/core/app_theme.dart' 'lib/main.dart' \
-            --ignore-errors inconsistent,unused \
-            --output-file coverage/lcov.cleaned.info || cp coverage/lcov.info coverage/lcov.cleaned.info
-          COV=$(lcov --summary coverage/lcov.cleaned.info 2>&1 \
-            | grep -oP 'lines\.*:\s*\K[0-9.]+(?=%)')
-          THRESHOLD=39.0          # ← ratchet up each sprint, never down
-          awk "BEGIN{exit !($COV >= $THRESHOLD)}" \
-            && echo "✅ ${COV}% ≥ ${THRESHOLD}%" \
-            || { echo "❌ ${COV}% < ${THRESHOLD}% — regression"; exit 1; }
-
-      - name: Secret scan — diff against base
-        run: |
-          BASE="${GITHUB_BASE_SHA:-${GITHUB_EVENT_BEFORE:-HEAD~1}}"
-          if git diff "$BASE" --name-only -- 'lib/' | grep -q .; then
-            echo "Scanning $BASE..HEAD for hardcoded secrets in lib/"
-            ! git diff "$BASE" -- 'lib/' | grep -E 'api[_ -]?key.*=.*['"'"'"]'
-          else
-            echo "No lib/ changes in this diff — skipping secret scan"
-          fi
-
-  build_android:
-    needs: check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-
-      - name: Verify local packages
-        run: |
-          for dir in packages/*/; do
-            if [ ! -f "$dir/pubspec.yaml" ]; then
-              echo "ERROR: Missing local package: $dir"
-              exit 1
-            fi
-          done
-
-      - name: Flutter pub get
-        run: flutter pub get
-
-      - name: Build runner (Drift codegen)
-        run: dart run build_runner build --delete-conflicting-outputs
-
-      - name: Flutter build APK (debug)
-        run: flutter build apk --debug

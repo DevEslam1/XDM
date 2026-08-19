@@ -157,7 +157,8 @@ void main() {
       // Opening next tab must evict the LRU inactive tab (tab0)
       tabManager.openInNewTab('https://tab$max.com', switchToTab: true);
       expect(tabManager.tabs.length, equals(max));
-      expect(tabManager.tabs.any((t) => t.url == 'https://tab$max.com'), isTrue);
+      expect(
+          tabManager.tabs.any((t) => t.url == 'https://tab$max.com'), isTrue);
       expect(tabManager.tabs.any((t) => t.url == 'https://tab0.com'), isFalse);
     });
 

@@ -23,7 +23,9 @@ void main() {
       PowerMonitor.setLowEndDevice(false);
     });
 
-    test('10 concurrent HTTP downloads + 2 torrents on low-end device assert no timer leak', () async {
+    test(
+        '10 concurrent HTTP downloads + 2 torrents on low-end device assert no timer leak',
+        () async {
       final initialServiceCount = ServiceRegistry.activeServicesCount;
       final mirrorStore = MirrorHealthStore();
       final profileManager = ServerProfileManager();
@@ -48,7 +50,8 @@ void main() {
 
       // Spawn 2 simulated Torrent downloads
       for (int i = 0; i < 2; i++) {
-        final handler = TorrentDownloadHandler(torrentService: _MockTorrentService());
+        final handler =
+            TorrentDownloadHandler(torrentService: _MockTorrentService());
         handler.cachedAccurateFiles = [
           {'name': 'torrent_$i.iso', 'length': 1000000, 'completed': 500000},
         ];

@@ -249,8 +249,8 @@ class MetadataProbeService {
       try {
         await TorrentService.ready.timeout(const Duration(seconds: 10));
       } catch (e, st) {
-        LoggingService.logger('MetadataProbeService')
-            .warning('TorrentService ready wait failed during probe: $e', e, st);
+        LoggingService.logger('MetadataProbeService').warning(
+            'TorrentService ready wait failed during probe: $e', e, st);
         return DownloadMetadata(
           fileName: resolvedName,
           category: 'Archive',
@@ -288,17 +288,16 @@ class MetadataProbeService {
                 })
             .toList();
 
-        final totalSize = resolvedFiles.fold<int>(
-            0, (sum, f) => sum + (f['length'] as int));
+        final totalSize =
+            resolvedFiles.fold<int>(0, (sum, f) => sum + (f['length'] as int));
 
         try {
           TorrentService.pauseTorrent(torrentId);
           TorrentService.removeTorrent(torrentId, deleteFiles: false);
         } catch (_) {}
 
-        final resolvedTitle = initialStats.name.isNotEmpty
-            ? initialStats.name
-            : resolvedName;
+        final resolvedTitle =
+            initialStats.name.isNotEmpty ? initialStats.name : resolvedName;
         return DownloadMetadata(
           fileName: resolvedTitle,
           category: categoryFromFileName(resolvedTitle),

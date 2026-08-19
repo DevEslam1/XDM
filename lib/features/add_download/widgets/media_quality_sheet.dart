@@ -682,71 +682,71 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           children: [
                             if (_selectedTabIndex == 0) ...[
-                            if (videoList.isNotEmpty) ...[
-                              _sectionHeader(
-                                context,
-                                L10n.of(context, 'video_label'),
-                                Icons.video_file_outlined,
-                                isDark
-                                    ? AppTheme.neonBlue
-                                    : AppTheme.lightNeonBlue,
-                                isDark,
-                                trailing: _recommendBadge(isDark),
-                              ),
-                              ...videoList.take(_displayedVideoCount).map(
-                                    (s) => _streamTile(
-                                        context, s, isDark, settings),
-                                  ),
-                              const SizedBox(height: 12),
-                            ],
-                            if (videoList.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.all(32),
-                                child: Center(
-                                  child: Text(
-                                    'No video streams found.',
-                                    style: TextStyle(
-                                      color: secClr,
-                                      fontSize: 12,
+                              if (videoList.isNotEmpty) ...[
+                                _sectionHeader(
+                                  context,
+                                  L10n.of(context, 'video_label'),
+                                  Icons.video_file_outlined,
+                                  isDark
+                                      ? AppTheme.neonBlue
+                                      : AppTheme.lightNeonBlue,
+                                  isDark,
+                                  trailing: _recommendBadge(isDark),
+                                ),
+                                ...videoList.take(_displayedVideoCount).map(
+                                      (s) => _streamTile(
+                                          context, s, isDark, settings),
+                                    ),
+                                const SizedBox(height: 12),
+                              ],
+                              if (videoList.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.all(32),
+                                  child: Center(
+                                    child: Text(
+                                      'No video streams found.',
+                                      style: TextStyle(
+                                        color: secClr,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                          ] else ...[
-                            if (audio.isNotEmpty) ...[
-                              _sectionHeader(
-                                context,
-                                L10n.of(context, 'audio_label'),
-                                Icons.audiotrack_outlined,
-                                green,
-                                isDark,
-                              ),
-                              ...audio.take(_displayedAudioCount).map(
-                                    (s) => _streamTile(
-                                        context, s, isDark, settings),
-                                  ),
-                              const SizedBox(height: 12),
-                            ],
-                            if (audio.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.all(32),
-                                child: Center(
-                                  child: Text(
-                                    'No audio streams found.',
-                                    style: TextStyle(
-                                      color: secClr,
-                                      fontSize: 12,
+                            ] else ...[
+                              if (audio.isNotEmpty) ...[
+                                _sectionHeader(
+                                  context,
+                                  L10n.of(context, 'audio_label'),
+                                  Icons.audiotrack_outlined,
+                                  green,
+                                  isDark,
+                                ),
+                                ...audio.take(_displayedAudioCount).map(
+                                      (s) => _streamTile(
+                                          context, s, isDark, settings),
+                                    ),
+                                const SizedBox(height: 12),
+                              ],
+                              if (audio.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.all(32),
+                                  child: Center(
+                                    child: Text(
+                                      'No audio streams found.',
+                                      style: TextStyle(
+                                        color: secClr,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
+                            ],
+                            const SizedBox(height: 24),
                           ],
-                          const SizedBox(height: 24),
-                        ],
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),

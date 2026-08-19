@@ -10,7 +10,8 @@ class HistoryExportService {
   HistoryExportService._();
 
   /// Encodes [items] as formatted JSON and saves to the app's temporary cache directory.
-  Future<File> exportToJson(List<Map<String, dynamic>> items, String filename) async {
+  Future<File> exportToJson(
+      List<Map<String, dynamic>> items, String filename) async {
     final jsonStr = const JsonEncoder.withIndent('  ').convert(items);
     final tempDir = await getTemporaryDirectory();
     final file = File(p.join(tempDir.path, filename));

@@ -316,760 +316,753 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
             ),
             child: Column(
               children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(top: 12, bottom: 8),
-                      decoration: BoxDecoration(
-                        color: mutedClr.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(top: 12, bottom: 8),
+                    decoration: BoxDecoration(
+                      color: mutedClr.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  Padding(
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.playlist_play_rounded,
+                          color: Colors.red,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              L10n.of(context, 'yt_playlist'),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    color: accent,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.0,
+                                    fontSize: 14,
+                                  ),
+                            ),
+                            if (_playlistInfo != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  _playlistInfo!['title'] as String? ?? '',
+                                  style: TextStyle(
+                                    color: secClr,
+                                    fontSize: 11,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 4,
+                  ),
+                  child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 8,
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.3),
+                        width: 0.8,
+                      ),
                     ),
                     child: Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.red.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: const Icon(
-                            Icons.playlist_play_rounded,
-                            color: Colors.red,
-                            size: 22,
+                        const Icon(
+                          Icons.gavel_rounded,
+                          size: 14,
+                          color: Colors.amber,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            L10n.of(context, 'yt_legal_warning'),
+                            style: TextStyle(color: secClr, fontSize: 10),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                L10n.of(context, 'yt_playlist'),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      color: accent,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.0,
-                                      fontSize: 14,
-                                    ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_isLoading)
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            L10n.of(context, 'loading_playlist'),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (_errorMessage != null)
+                  Expanded(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              color: redClr,
+                              size: 40,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _errorMessage!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: secClr, fontSize: 12),
+                            ),
+                            const SizedBox(height: 20),
+                            TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _isLoading = true;
+                                  _errorMessage = null;
+                                  _videos = [];
+                                  _playlistInfo = null;
+                                });
+                                _fetchPlaylist();
+                              },
+                              icon: Icon(
+                                Icons.refresh_rounded,
+                                size: 16,
+                                color: accent,
                               ),
-                              if (_playlistInfo != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Text(
-                                    _playlistInfo!['title'] as String? ?? '',
-                                    style: TextStyle(
-                                      color: secClr,
-                                      fontSize: 11,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                              label: Text(
+                                L10n.of(context, 'retry_btn'),
+                                style: TextStyle(
+                                  color: accent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.0,
                                 ),
-                            ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  )
+                else ...[
+                  if (_note != null && _note!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 4,
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppTheme.neonAmber.withValues(alpha: 0.15)
+                              : AppTheme.lightNeonAmber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isDark
+                                ? AppTheme.neonAmber.withValues(alpha: 0.4)
+                                : AppTheme.lightNeonAmber
+                                    .withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: isDark
+                                  ? AppTheme.neonAmber
+                                  : AppTheme.lightNeonAmber,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _note!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? AppTheme.neonAmber
+                                      : AppTheme.lightNeonAmber,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      children: [
+                        if (_playlistInfo?['author'] != null) ...[
+                          Icon(
+                            Icons.person_outline,
+                            size: 13,
+                            color: mutedClr,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _playlistInfo!['author'] as String,
+                            style: TextStyle(color: mutedClr, fontSize: 10),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                        Icon(
+                          Icons.video_library_outlined,
+                          size: 13,
+                          color: mutedClr,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${_filteredVideos.length}${_searchQuery.isNotEmpty ? ' / ${_videos.length}' : ''} videos',
+                          style: TextStyle(color: mutedClr, fontSize: 10),
+                        ),
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: () {
+                            runHaptic(settings);
+                            _toggleAll(
+                              _selectedCount < _filteredVideos.length,
+                            );
+                          },
+                          icon: Icon(
+                            _selectedCount == _filteredVideos.length &&
+                                    _filteredVideos.isNotEmpty
+                                ? Icons.deselect
+                                : Icons.select_all,
+                            size: 14,
+                            color: accent,
+                          ),
+                          label: Text(
+                            _selectedCount == _filteredVideos.length &&
+                                    _filteredVideos.isNotEmpty
+                                ? L10n.of(context, 'deselect_all')
+                                : L10n.of(context, 'select_all'),
+                            style: TextStyle(
+                              color: accent,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 4,
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: Colors.amber.withValues(alpha: 0.3),
-                          width: 0.8,
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                    child: TextField(
+                      onChanged: (val) => setState(() => _searchQuery = val),
+                      decoration: InputDecoration(
+                        hintText: L10n.of(context, 'search_videos'),
+                        hintStyle: TextStyle(color: mutedClr, fontSize: 13),
+                        prefixIcon: Icon(
+                          Icons.search,
+                          size: 16,
+                          color: mutedClr,
+                        ),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: Icon(
+                                  Icons.clear,
+                                  size: 16,
+                                  color: mutedClr,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _searchQuery = ''),
+                              )
+                            : null,
+                        filled: true,
+                        fillColor:
+                            (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                                .withValues(alpha: 0.6),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: glassBorder),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: glassBorder),
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.gavel_rounded,
-                            size: 14,
-                            color: Colors.amber,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              L10n.of(context, 'yt_legal_warning'),
-                              style: TextStyle(color: secClr, fontSize: 10),
+                      style: TextStyle(color: textClr, fontSize: 13),
+                    ),
+                  ),
+                  const Divider(height: 1, thickness: 0.5),
+                  Expanded(
+                    child: NotificationListener<ScrollNotification>(
+                      onNotification: (ScrollNotification scrollInfo) {
+                        if (scrollInfo.metrics.pixels >=
+                            scrollInfo.metrics.maxScrollExtent - 200) {
+                          _loadMoreVideos();
+                        }
+                        return false;
+                      },
+                      child: ListView.builder(
+                        controller: scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        itemCount: _filteredVideos.length +
+                            (_hasMoreVideos && _searchQuery.isEmpty ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == _filteredVideos.length) {
+                            return _isLoadingMore
+                                ? const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Center(
+                                      child: SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : const SizedBox.shrink();
+                          }
+                          final video = _filteredVideos[index];
+                          final isSelected = video['selected'] as bool? ?? true;
+                          final title =
+                              video['title'] as String? ?? 'Video ${index + 1}';
+                          final duration = video['duration'] as int? ?? 0;
+                          final author = video['author'] as String? ?? '';
+                          final thumbnailUrl = video['thumbnailUrl'] as String?;
+                          return RepaintBoundary(
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              decoration: BoxDecoration(
+                                color: (isDark
+                                        ? AppTheme.background
+                                        : AppTheme.lightBackground)
+                                    .withValues(
+                                  alpha: isSelected ? 0.6 : 0.2,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? accent.withValues(alpha: 0.3)
+                                      : glassBorder.withValues(alpha: 0.4),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(12),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: () {
+                                    final originalIndex =
+                                        _videos.indexOf(video);
+                                    if (originalIndex != -1) {
+                                      setState(() {
+                                        _videos[originalIndex] = {
+                                          ...video,
+                                          'selected': !isSelected,
+                                        };
+                                      });
+                                    }
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 8,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: Checkbox(
+                                            value: isSelected,
+                                            activeColor: accent,
+                                            side: BorderSide(
+                                              color: glassBorder,
+                                              width: 0.8,
+                                            ),
+                                            onChanged: (val) {
+                                              if (val != null) {
+                                                final originalIndex =
+                                                    _videos.indexOf(video);
+                                                if (originalIndex != -1) {
+                                                  setState(() {
+                                                    _videos[originalIndex] = {
+                                                      ...video,
+                                                      'selected': val,
+                                                    };
+                                                  });
+                                                }
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: SizedBox(
+                                            width: 72,
+                                            height: 42,
+                                            child: thumbnailUrl != null &&
+                                                    thumbnailUrl.isNotEmpty
+                                                ? CachedNetworkImage(
+                                                    imageUrl: thumbnailUrl
+                                                            .startsWith('//')
+                                                        ? 'https:$thumbnailUrl'
+                                                        : thumbnailUrl,
+                                                    fit: BoxFit.cover,
+                                                    memCacheWidth: 144,
+                                                    memCacheHeight: 84,
+                                                    placeholder: (
+                                                      context,
+                                                      url,
+                                                    ) =>
+                                                        Container(
+                                                      color: (isDark
+                                                              ? AppTheme
+                                                                  .background
+                                                              : AppTheme
+                                                                  .lightBackground)
+                                                          .withValues(
+                                                        alpha: 0.6,
+                                                      ),
+                                                      child: Icon(
+                                                        Icons
+                                                            .play_circle_outline,
+                                                        color: mutedClr,
+                                                        size: 24,
+                                                      ),
+                                                    ),
+                                                    errorWidget: (
+                                                      context,
+                                                      url,
+                                                      error,
+                                                    ) =>
+                                                        Container(
+                                                      color: (isDark
+                                                              ? AppTheme
+                                                                  .background
+                                                              : AppTheme
+                                                                  .lightBackground)
+                                                          .withValues(
+                                                        alpha: 0.6,
+                                                      ),
+                                                      child: Icon(
+                                                        Icons
+                                                            .play_circle_outline,
+                                                        color: mutedClr,
+                                                        size: 24,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : Container(
+                                                    color: (isDark
+                                                            ? AppTheme
+                                                                .background
+                                                            : AppTheme
+                                                                .lightBackground)
+                                                        .withValues(
+                                                      alpha: 0.6,
+                                                    ),
+                                                    child: Icon(
+                                                      Icons.play_circle_outline,
+                                                      color: mutedClr,
+                                                      size: 24,
+                                                    ),
+                                                  ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                title,
+                                                style: TextStyle(
+                                                  color: isSelected
+                                                      ? textClr
+                                                      : secClr,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  decoration: isSelected
+                                                      ? null
+                                                      : TextDecoration
+                                                          .lineThrough,
+                                                ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 3),
+                                              Row(
+                                                children: [
+                                                  if (author.isNotEmpty) ...[
+                                                    Flexible(
+                                                      child: Text(
+                                                        author,
+                                                        style: TextStyle(
+                                                          color: mutedClr,
+                                                          fontSize: 9,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                  ],
+                                                  Icon(
+                                                    Icons.access_time,
+                                                    size: 10,
+                                                    color: mutedClr,
+                                                  ),
+                                                  const SizedBox(width: 3),
+                                                  Text(
+                                                    YoutubeService
+                                                        .formatDuration(
+                                                      duration,
+                                                    ),
+                                                    style: TextStyle(
+                                                      color: mutedClr,
+                                                      fontSize: 9,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Text(
+                                          '#${index + 1}',
+                                          style: TextStyle(
+                                            color: mutedClr,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
+                          );
+                        },
                       ),
                     ),
                   ),
-                  if (_isLoading)
-                    Expanded(
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(
-                              width: 28,
-                              height: 28,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              L10n.of(context, 'loading_playlist'),
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ],
-                        ),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    decoration: BoxDecoration(
+                      color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                          .withValues(alpha: 0.9),
+                      border: Border(
+                        top: BorderSide(color: glassBorder, width: 0.6),
                       ),
-                    )
-                  else if (_errorMessage != null)
-                    Expanded(
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.error_outline,
-                                color: redClr,
-                                size: 40,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                _errorMessage!,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: secClr, fontSize: 12),
-                              ),
-                              const SizedBox(height: 20),
-                              TextButton.icon(
-                                onPressed: () {
-                                  setState(() {
-                                    _isLoading = true;
-                                    _errorMessage = null;
-                                    _videos = [];
-                                    _playlistInfo = null;
-                                  });
-                                  _fetchPlaylist();
-                                },
-                                icon: Icon(
-                                  Icons.refresh_rounded,
-                                  size: 16,
-                                  color: accent,
-                                ),
-                                label: Text(
-                                  L10n.of(context, 'retry_btn'),
-                                  style: TextStyle(
-                                    color: accent,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.0,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    )
-                  else ...[
-                    if (_note != null && _note!.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 4,
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? AppTheme.neonAmber.withValues(alpha: 0.15)
-                                : AppTheme.lightNeonAmber
-                                    .withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: isDark
-                                  ? AppTheme.neonAmber.withValues(alpha: 0.4)
-                                  : AppTheme.lightNeonAmber
-                                      .withValues(alpha: 0.4),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.info_outline,
-                                size: 16,
-                                color: isDark
-                                    ? AppTheme.neonAmber
-                                    : AppTheme.lightNeonAmber,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _note!,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isDark
-                                        ? AppTheme.neonAmber
-                                        : AppTheme.lightNeonAmber,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 4,
-                      ),
-                      child: Row(
+                    ),
+                    child: SafeArea(
+                      top: false,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (_playlistInfo?['author'] != null) ...[
-                            Icon(
-                              Icons.person_outline,
-                              size: 13,
-                              color: mutedClr,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _playlistInfo!['author'] as String,
-                              style: TextStyle(color: mutedClr, fontSize: 10),
-                            ),
-                            const SizedBox(width: 12),
-                          ],
-                          Icon(
-                            Icons.video_library_outlined,
-                            size: 13,
-                            color: mutedClr,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${_filteredVideos.length}${_searchQuery.isNotEmpty ? ' / ${_videos.length}' : ''} videos',
-                            style: TextStyle(color: mutedClr, fontSize: 10),
-                          ),
-                          const Spacer(),
-                          TextButton.icon(
-                            onPressed: () {
-                              runHaptic(settings);
-                              _toggleAll(
-                                _selectedCount < _filteredVideos.length,
-                              );
-                            },
-                            icon: Icon(
-                              _selectedCount == _filteredVideos.length &&
-                                      _filteredVideos.isNotEmpty
-                                  ? Icons.deselect
-                                  : Icons.select_all,
-                              size: 14,
-                              color: accent,
-                            ),
-                            label: Text(
-                              _selectedCount == _filteredVideos.length &&
-                                      _filteredVideos.isNotEmpty
-                                  ? L10n.of(context, 'deselect_all')
-                                  : L10n.of(context, 'select_all'),
-                              style: TextStyle(
-                                color: accent,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                          Row(
+                            children: [
+                              Text(
+                                L10n.of(context, 'quality_label'),
+                                style: TextStyle(
+                                  color: secClr,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
                               ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                      child: TextField(
-                        onChanged: (val) => setState(() => _searchQuery = val),
-                        decoration: InputDecoration(
-                          hintText: L10n.of(context, 'search_videos'),
-                          hintStyle: TextStyle(color: mutedClr, fontSize: 13),
-                          prefixIcon: Icon(
-                            Icons.search,
-                            size: 16,
-                            color: mutedClr,
-                          ),
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon: Icon(
-                                    Icons.clear,
-                                    size: 16,
-                                    color: mutedClr,
-                                  ),
-                                  onPressed: () =>
-                                      setState(() => _searchQuery = ''),
-                                )
-                              : null,
-                          filled: true,
-                          fillColor: (isDark
-                                  ? AppTheme.surface
-                                  : AppTheme.lightSurface)
-                              .withValues(alpha: 0.6),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: glassBorder),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: BorderSide(color: glassBorder),
-                          ),
-                        ),
-                        style: TextStyle(color: textClr, fontSize: 13),
-                      ),
-                    ),
-                    const Divider(height: 1, thickness: 0.5),
-                    Expanded(
-                      child: NotificationListener<ScrollNotification>(
-                        onNotification: (ScrollNotification scrollInfo) {
-                          if (scrollInfo.metrics.pixels >=
-                              scrollInfo.metrics.maxScrollExtent - 200) {
-                            _loadMoreVideos();
-                          }
-                          return false;
-                        },
-                        child: ListView.builder(
-                          controller: scrollController,
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          itemCount: _filteredVideos.length +
-                              (_hasMoreVideos && _searchQuery.isEmpty ? 1 : 0),
-                          itemBuilder: (context, index) {
-                            if (index == _filteredVideos.length) {
-                              return _isLoadingMore
-                                  ? const Padding(
-                                      padding: EdgeInsets.all(16),
-                                      child: Center(
-                                        child: SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                  : const SizedBox.shrink();
-                            }
-                            final video = _filteredVideos[index];
-                            final isSelected =
-                                video['selected'] as bool? ?? true;
-                            final title = video['title'] as String? ??
-                                'Video ${index + 1}';
-                            final duration = video['duration'] as int? ?? 0;
-                            final author = video['author'] as String? ?? '';
-                            final thumbnailUrl =
-                                video['thumbnailUrl'] as String?;
-                            return RepaintBoundary(
+                              const SizedBox(width: 12),
+                              Expanded(
                                 child: Container(
-                                  margin: const EdgeInsets.only(bottom: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: (isDark
                                             ? AppTheme.background
                                             : AppTheme.lightBackground)
-                                        .withValues(
-                                      alpha: isSelected ? 0.6 : 0.2,
-                                    ),
+                                        .withValues(alpha: 0.6),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: isSelected
-                                          ? accent.withValues(alpha: 0.3)
-                                          : glassBorder.withValues(alpha: 0.4),
+                                      color: glassBorder,
                                       width: 0.8,
                                     ),
                                   ),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(12),
-                                      onTap: () {
-                                        final originalIndex =
-                                            _videos.indexOf(video);
-                                        if (originalIndex != -1) {
-                                          setState(() {
-                                            _videos[originalIndex] = {
-                                              ...video,
-                                              'selected': !isSelected,
-                                            };
-                                          });
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      dropdownColor: isDark
+                                          ? AppTheme.surface
+                                          : AppTheme.lightSurface,
+                                      menuMaxHeight: 250,
+                                      value: _qualityPreset,
+                                      isExpanded: true,
+                                      icon: Icon(
+                                        Icons.arrow_drop_down,
+                                        color: secClr,
+                                      ),
+                                      style: TextStyle(
+                                        color: textClr,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      items: _qualityOptions.map((opt) {
+                                        return DropdownMenuItem<String>(
+                                          value: opt['value'],
+                                          child: Text(opt['label']!),
+                                        );
+                                      }).toList(),
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setState(
+                                            () => _qualityPreset = val,
+                                          );
                                         }
                                       },
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 8,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            SizedBox(
-                                              width: 24,
-                                              height: 24,
-                                              child: Checkbox(
-                                                value: isSelected,
-                                                activeColor: accent,
-                                                side: BorderSide(
-                                                  color: glassBorder,
-                                                  width: 0.8,
-                                                ),
-                                                onChanged: (val) {
-                                                  if (val != null) {
-                                                    final originalIndex =
-                                                        _videos.indexOf(video);
-                                                    if (originalIndex != -1) {
-                                                      setState(() {
-                                                        _videos[originalIndex] = {
-                                                          ...video,
-                                                          'selected': val,
-                                                        };
-                                                      });
-                                                    }
-                                                  }
-                                                },
-                                              ),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            ClipRRect(
-                                              borderRadius: BorderRadius.circular(
-                                                8,
-                                              ),
-                                              child: SizedBox(
-                                                width: 72,
-                                                height: 42,
-                                                child: thumbnailUrl != null &&
-                                                        thumbnailUrl.isNotEmpty
-                                                    ? CachedNetworkImage(
-                                                        imageUrl: thumbnailUrl
-                                                                .startsWith('//')
-                                                            ? 'https:$thumbnailUrl'
-                                                            : thumbnailUrl,
-                                                        fit: BoxFit.cover,
-                                                        memCacheWidth: 144,
-                                                        memCacheHeight: 84,
-                                                        placeholder: (
-                                                          context,
-                                                          url,
-                                                        ) =>
-                                                            Container(
-                                                          color: (isDark
-                                                                  ? AppTheme
-                                                                      .background
-                                                                  : AppTheme
-                                                                      .lightBackground)
-                                                              .withValues(
-                                                            alpha: 0.6,
-                                                          ),
-                                                          child: Icon(
-                                                            Icons
-                                                                .play_circle_outline,
-                                                            color: mutedClr,
-                                                            size: 24,
-                                                          ),
-                                                        ),
-                                                        errorWidget: (
-                                                          context,
-                                                          url,
-                                                          error,
-                                                        ) =>
-                                                            Container(
-                                                          color: (isDark
-                                                                  ? AppTheme
-                                                                      .background
-                                                                  : AppTheme
-                                                                      .lightBackground)
-                                                              .withValues(
-                                                            alpha: 0.6,
-                                                          ),
-                                                          child: Icon(
-                                                            Icons
-                                                                .play_circle_outline,
-                                                            color: mutedClr,
-                                                            size: 24,
-                                                          ),
-                                                        ),
-                                                      )
-                                                    : Container(
-                                                        color: (isDark
-                                                                ? AppTheme
-                                                                    .background
-                                                                : AppTheme
-                                                                    .lightBackground)
-                                                            .withValues(
-                                                          alpha: 0.6,
-                                                        ),
-                                                        child: Icon(
-                                                          Icons
-                                                              .play_circle_outline,
-                                                          color: mutedClr,
-                                                          size: 24,
-                                                        ),
-                                                      ),
-                                              ),
-                                            ),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  title,
-                                                  style: TextStyle(
-                                                    color: isSelected
-                                                        ? textClr
-                                                        : secClr,
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.bold,
-                                                    decoration: isSelected
-                                                        ? null
-                                                        : TextDecoration
-                                                            .lineThrough,
-                                                  ),
-                                                  maxLines: 2,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                                const SizedBox(height: 3),
-                                                Row(
-                                                  children: [
-                                                    if (author.isNotEmpty) ...[
-                                                      Flexible(
-                                                        child: Text(
-                                                          author,
-                                                          style: TextStyle(
-                                                            color: mutedClr,
-                                                            fontSize: 9,
-                                                          ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 8),
-                                                    ],
-                                                    Icon(
-                                                      Icons.access_time,
-                                                      size: 10,
-                                                      color: mutedClr,
-                                                    ),
-                                                    const SizedBox(width: 3),
-                                                    Text(
-                                                      YoutubeService
-                                                          .formatDuration(
-                                                        duration,
-                                                      ),
-                                                      style: TextStyle(
-                                                        color: mutedClr,
-                                                        fontSize: 9,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          Text(
-                                            '#${index + 1}',
-                                            style: TextStyle(
-                                              color: mutedClr,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            );
-                          },
-                        ),
+                            ],
+                          ),
+                          if (_qualityPreset == 'best_muxed' ||
+                              _qualityPreset == 'best_combined')
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                top: 8,
+                                left: 60,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    size: 12,
+                                    color: isDark
+                                        ? AppTheme.neonAmber
+                                        : AppTheme.lightNeonAmber,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      _qualityPreset == 'best_combined'
+                                          ? (L10n.isRtl(context)
+                                              ? 'ملاحظة: سيتم دمج أفضل جودة صوت وصورة تلقائياً.'
+                                              : 'Note: Best video and audio will be auto-merged.')
+                                          : (L10n.isRtl(context)
+                                              ? 'ملاحظة: سيتم تحميل أفضل جودة مدمجة (غالباً 360p).'
+                                              : 'Note: Best merged quality will be downloaded (usually 360p).'),
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? AppTheme.neonAmber
+                                            : AppTheme.lightNeonAmber,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          const SizedBox(height: 12),
+                          NeonGlowButton(
+                            isExpanded: true,
+                            isFilled: true,
+                            onPressed: _selectedCount == 0
+                                ? null
+                                : _startBatchDownload,
+                            text: L10n.isRtl(context)
+                                ? 'تحميل $_selectedCount فيديو'
+                                : 'DOWNLOAD $_selectedCount VIDEO${_selectedCount != 1 ? 'S' : ''}',
+                            icon: Icons.download_rounded,
+                            color: accent,
+                            glowColor: accent,
+                          ),
+                          if (_selectedCount == 0)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                L10n.isRtl(context)
+                                    ? 'يرجى تحديد فيديو واحد على الأقل للتحميل'
+                                    : 'Select at least 1 video to start download',
+                                style: TextStyle(
+                                  color: mutedClr,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                      decoration: BoxDecoration(
-                        color:
-                            (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                                .withValues(alpha: 0.9),
-                        border: Border(
-                          top: BorderSide(color: glassBorder, width: 0.6),
-                        ),
-                      ),
-                      child: SafeArea(
-                        top: false,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  L10n.of(context, 'quality_label'),
-                                  style: TextStyle(
-                                    color: secClr,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: (isDark
-                                              ? AppTheme.background
-                                              : AppTheme.lightBackground)
-                                          .withValues(alpha: 0.6),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: glassBorder,
-                                        width: 0.8,
-                                      ),
-                                    ),
-                                    child: DropdownButtonHideUnderline(
-                                      child: DropdownButton<String>(
-                                        dropdownColor: isDark
-                                            ? AppTheme.surface
-                                            : AppTheme.lightSurface,
-                                        menuMaxHeight: 250,
-                                        value: _qualityPreset,
-                                        isExpanded: true,
-                                        icon: Icon(
-                                          Icons.arrow_drop_down,
-                                          color: secClr,
-                                        ),
-                                        style: TextStyle(
-                                          color: textClr,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        items: _qualityOptions.map((opt) {
-                                          return DropdownMenuItem<String>(
-                                            value: opt['value'],
-                                            child: Text(opt['label']!),
-                                          );
-                                        }).toList(),
-                                        onChanged: (val) {
-                                          if (val != null) {
-                                            setState(
-                                              () => _qualityPreset = val,
-                                            );
-                                          }
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (_qualityPreset == 'best_muxed' ||
-                                _qualityPreset == 'best_combined')
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  top: 8,
-                                  left: 60,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.info_outline,
-                                      size: 12,
-                                      color: isDark
-                                          ? AppTheme.neonAmber
-                                          : AppTheme.lightNeonAmber,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        _qualityPreset == 'best_combined'
-                                            ? (L10n.isRtl(context)
-                                                ? 'ملاحظة: سيتم دمج أفضل جودة صوت وصورة تلقائياً.'
-                                                : 'Note: Best video and audio will be auto-merged.')
-                                            : (L10n.isRtl(context)
-                                                ? 'ملاحظة: سيتم تحميل أفضل جودة مدمجة (غالباً 360p).'
-                                                : 'Note: Best merged quality will be downloaded (usually 360p).'),
-                                        style: TextStyle(
-                                          color: isDark
-                                              ? AppTheme.neonAmber
-                                              : AppTheme.lightNeonAmber,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            const SizedBox(height: 12),
-                            NeonGlowButton(
-                              isExpanded: true,
-                              isFilled: true,
-                              onPressed: _selectedCount == 0
-                                  ? null
-                                  : _startBatchDownload,
-                              text: L10n.isRtl(context)
-                                  ? 'تحميل $_selectedCount فيديو'
-                                  : 'DOWNLOAD $_selectedCount VIDEO${_selectedCount != 1 ? 'S' : ''}',
-                              icon: Icons.download_rounded,
-                              color: accent,
-                              glowColor: accent,
-                            ),
-                            if (_selectedCount == 0)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Text(
-                                  L10n.isRtl(context)
-                                      ? 'يرجى تحديد فيديو واحد على الأقل للتحميل'
-                                      : 'Select at least 1 video to start download',
-                                  style: TextStyle(
-                                    color: mutedClr,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ],
-              ),
+              ],
             ),
-          );
-        },
-      );
-    }
+          ),
+        );
+      },
+    );
   }
+}

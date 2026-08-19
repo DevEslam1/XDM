@@ -17,6 +17,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Required to monitor network connectivity status (e.g. Wi-Fi vs mobile data) for auto-resume -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Required to request battery optimization whitelist exemption for uninterrupted background transfers -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Required to restore scheduled/interrupted tasks and background worker alarms upon device boot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:label="XDM"

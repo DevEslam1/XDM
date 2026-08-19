@@ -73,7 +73,8 @@ const Map<String, String> arTranslations = {
   'browser_screenshot_saved': 'تم حفظ لقطة الشاشة',
   'browser_screenshot_failed': 'تعذر التقاط لقطة الشاشة',
   'browser_nav_blocked_title': 'تم حظر التنقل',
-  'browser_nav_blocked_reason': 'تم حظر هذه الصفحة باعتبارها صفحة إعلان محتملة أو غير آمنة.\n\nالسبب: {reason}',
+  'browser_nav_blocked_reason':
+      'تم حظر هذه الصفحة باعتبارها صفحة إعلان محتملة أو غير آمنة.\n\nالسبب: {reason}',
   'browser_nav_open_anyway': 'فتح على أي حال',
   'browser_close': 'إغلاق المتصفح',
   'browser_close_btn': 'إغلاق',

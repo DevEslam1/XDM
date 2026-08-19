@@ -5,7 +5,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('DioClientPool Hardening (Sprint 2)', () {
-    test('Cap idle clients per host at 10 and evict oldest LRU on releaseClient', () async {
+    test(
+        'Cap idle clients per host at 10 and evict oldest LRU on releaseClient',
+        () async {
       final pool = DioClientPool(enableCleanupTimer: false);
 
       // Acquire and release for 12 different hosts
@@ -16,8 +18,10 @@ void main() {
 
       // Max 10 idle hosts cached
       expect(pool.idleClientsByHostForTesting.length, lessThanOrEqualTo(10));
-      expect(pool.idleClientsByHostForTesting.containsKey('host1.com'), isFalse);
-      expect(pool.idleClientsByHostForTesting.containsKey('host12.com'), isTrue);
+      expect(
+          pool.idleClientsByHostForTesting.containsKey('host1.com'), isFalse);
+      expect(
+          pool.idleClientsByHostForTesting.containsKey('host12.com'), isTrue);
 
       await pool.dispose();
     });

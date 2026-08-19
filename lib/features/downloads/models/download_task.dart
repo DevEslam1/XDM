@@ -701,6 +701,55 @@ class DownloadTask {
   String get audioProgressPercentString =>
       '${(audioProgressPercent * 100).toStringAsFixed(1)}%';
 
+  /// Transitions the task to [newStatus], validating legality against [DownloadStateMachine].
+  /// In debug mode, invalid transitions assert false. In release mode, invalid transitions log a warning (Task 2.3).
+  DownloadTask transitionTo(
+    DownloadStatus newStatus, {
+    String? reason,
+    String? statusMessage,
+    bool clearStatusMessage = false,
+    String? errorMessage,
+    bool clearError = false,
+    FailureCategory? failureCategory,
+    String? recoveryHint,
+    double? speed,
+    int? eta,
+    bool clearEta = false,
+    DateTime? completedAt,
+    bool clearCompletedAt = false,
+    bool? pausedByUser,
+    CycleState? cycleState,
+  }) {
+    if (status != newStatus) {
+      final isValid = DownloadStateMachine.canTransitionStatus(status, newStatus);
+      if (!isValid) {
+        assert(
+          false,
+          'Invalid state transition attempted for task $id: $status -> $newStatus (reason: $reason)',
+        );
+        debugPrint(
+          '[DownloadTask] Invalid state transition attempted for task $id: $status -> $newStatus (reason: $reason)',
+        );
+      }
+    }
+    return copyWith(
+      status: newStatus,
+      statusMessage: statusMessage,
+      clearStatusMessage: clearStatusMessage,
+      errorMessage: errorMessage,
+      clearError: clearError,
+      failureCategory: failureCategory,
+      recoveryHint: recoveryHint,
+      speed: speed,
+      eta: eta,
+      clearEta: clearEta,
+      completedAt: completedAt,
+      clearCompletedAt: clearCompletedAt,
+      pausedByUser: pausedByUser,
+      cycleState: cycleState,
+    );
+  }
+
   DownloadTask copyWith({
     String? fileName,
     String? url,
@@ -908,16 +957,6 @@ class DownloadTask {
   /// D-01: Validates if transition from [from] to [to] is legally allowed.
   static bool isValidTransition(DownloadStatus from, DownloadStatus to) {
     return DownloadStateMachine.canTransitionStatus(from, to);
-  }
-
-  /// Transition to new status with validation
-  DownloadTask transitionTo(DownloadStatus nextStatus) {
-    if (!isValidTransition(status, nextStatus)) {
-      debugPrint(
-          '[DownloadTask] Warning: Blocked illegal status transition from $status to $nextStatus on task $id');
-      return this;
-    }
-    return copyWith(status: nextStatus);
   }
 
   Map<String, dynamic> toMap() {

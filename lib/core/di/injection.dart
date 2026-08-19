@@ -209,8 +209,7 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<PermissionService>(() => PermissionService());
   getIt.registerLazySingleton<ConnectionManager>(() => ConnectionManager(),
       dispose: (c) => c.dispose());
-  getIt.registerLazySingleton<ServerIdentityCache>(
-      () => ServerIdentityCache(),
+  getIt.registerLazySingleton<ServerIdentityCache>(() => ServerIdentityCache(),
       dispose: (c) => c.dispose());
   getIt.registerLazySingleton<BandwidthGovernor>(
       () => BandwidthGovernor(BandwidthGovernor.unlimited),

@@ -58,7 +58,8 @@ class BookmarkRepository {
           ..limit(1))
         .getSingleOrNull();
     if (existingByUrl != null) {
-      await (_db.update(_db.bookmarks)..where((t) => t.id.equals(existingByUrl.id)))
+      await (_db.update(_db.bookmarks)
+            ..where((t) => t.id.equals(existingByUrl.id)))
           .write(BookmarksCompanion(
         title: drift.Value(bookmark.title),
         url: drift.Value(bookmark.url),

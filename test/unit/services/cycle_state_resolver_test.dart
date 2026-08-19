@@ -62,10 +62,12 @@ void main() {
       }
     });
 
-    test('word boundary matching prevents false positives for HTTP messages', () {
+    test('word boundary matching prevents false positives for HTTP messages',
+        () {
       // "unfailing" or "counterpart" should not match \bfail\b or \berror\b
       expect(
-        CycleStateResolver.resolve(statusMessage: 'Transferring with unfailing speed'),
+        CycleStateResolver.resolve(
+            statusMessage: 'Transferring with unfailing speed'),
         CycleState.downloading,
       );
       // Word boundary match for error
@@ -75,12 +77,14 @@ void main() {
       );
       // Word boundary match for fail
       expect(
-        CycleStateResolver.resolve(statusMessage: 'Connection fail on endpoint'),
+        CycleStateResolver.resolve(
+            statusMessage: 'Connection fail on endpoint'),
         CycleState.failed,
       );
       // Unknown state returns downloading
       expect(
-        CycleStateResolver.resolve(statusMessage: 'Some completely custom message 1234'),
+        CycleStateResolver.resolve(
+            statusMessage: 'Some completely custom message 1234'),
         CycleState.downloading,
       );
     });

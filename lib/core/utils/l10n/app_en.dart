@@ -73,7 +73,8 @@ const Map<String, String> enTranslations = {
   'browser_screenshot_saved': 'Screenshot saved',
   'browser_screenshot_failed': 'Could not capture screenshot',
   'browser_nav_blocked_title': 'Navigation Blocked',
-  'browser_nav_blocked_reason': 'This page was blocked as a potential advertisement or unsafe page.\n\nReason: {reason}',
+  'browser_nav_blocked_reason':
+      'This page was blocked as a potential advertisement or unsafe page.\n\nReason: {reason}',
   'browser_nav_open_anyway': 'OPEN ANYWAY',
   'browser_close': 'Close browser',
   'browser_close_btn': 'CLOSE',
@@ -157,7 +158,8 @@ const Map<String, String> enTranslations = {
   'browser_no_bookmarks': 'No bookmarks yet',
   'browser_no_bookmarks_desc': 'Tap + to save your favorite sites',
   'browser_no_bookmarks_search': 'No bookmarks match your search',
-  'browser_no_bookmarks_search_desc': 'Try a different keyword or clear the search',
+  'browser_no_bookmarks_search_desc':
+      'Try a different keyword or clear the search',
   'browser_no_downloads_desc':
       'Files you download from the browser will appear here.',
   'browser_no_downloads_yet': 'No downloads yet',

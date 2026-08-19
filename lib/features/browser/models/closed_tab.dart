@@ -30,7 +30,8 @@ class ClosedTab {
   }
 
   Map<String, dynamic> toJson() => toMap();
-  factory ClosedTab.fromJson(Map<String, dynamic> json) => ClosedTab.fromMap(json);
+  factory ClosedTab.fromJson(Map<String, dynamic> json) =>
+      ClosedTab.fromMap(json);
 
   @override
   bool operator ==(Object other) =>

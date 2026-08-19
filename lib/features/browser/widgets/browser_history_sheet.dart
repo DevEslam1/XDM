@@ -84,8 +84,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     final controller = _attachedScrollController;
     if (controller == null || !controller.hasClients) return;
     final position = controller.position;
-    final nearBottom =
-        position.maxScrollExtent - position.pixels < 400;
+    final nearBottom = position.maxScrollExtent - position.pixels < 400;
     if (nearBottom) {
       final next = _visibleHistoryCount + _historyPageSize;
       if (mounted && next > _visibleHistoryCount) {
@@ -181,10 +180,10 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       final name = _selectedTab == 0
           ? 'xdm_surfing_history.json'
           : 'xdm_download_history.json';
-      final subject = _selectedTab == 0
-          ? 'XDM Surfing History'
-          : 'XDM Download History';
-      final file = await HistoryExportService.instance.exportToJson(exportData, name);
+      final subject =
+          _selectedTab == 0 ? 'XDM Surfing History' : 'XDM Download History';
+      final file =
+          await HistoryExportService.instance.exportToJson(exportData, name);
       await HistoryExportService.instance.shareHistoryFile(file, subject);
     } catch (e) {
       if (mounted) {
@@ -291,276 +290,275 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
               top: false,
               child: Column(
                 children: [
-                    // Grab handle
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        margin: const EdgeInsets.only(top: 12, bottom: 10),
-                        decoration: BoxDecoration(
-                          color: muted.withValues(alpha: 0.4),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+                  // Grab handle
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(top: 12, bottom: 10),
+                      decoration: BoxDecoration(
+                        color: muted.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                    // Header
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 2, 12, 6),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: accent.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(13),
-                              border: Border.all(
-                                color: accent.withValues(alpha: 0.3),
-                              ),
-                            ),
-                            child: Icon(
-                              _selectedTab == 0
-                                  ? Icons.history_rounded
-                                  : Icons.download_rounded,
-                              color: accent,
-                              size: 20,
+                  ),
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 2, 12, 6),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(13),
+                            border: Border.all(
+                              color: accent.withValues(alpha: 0.3),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _selectedTab == 0
-                                  ? L10n.of(context, 'browser_history_title')
-                                  : L10n.of(
-                                      context,
-                                      'browser_download_history',
-                                    ),
-                              style: TextStyle(
-                                fontFamily: 'Space Grotesk',
-                                fontWeight: FontWeight.w800,
-                                fontSize: 15,
-                                letterSpacing: 1,
-                                color: textClr,
-                              ),
+                          child: Icon(
+                            _selectedTab == 0
+                                ? Icons.history_rounded
+                                : Icons.download_rounded,
+                            color: accent,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _selectedTab == 0
+                                ? L10n.of(context, 'browser_history_title')
+                                : L10n.of(
+                                    context,
+                                    'browser_download_history',
+                                  ),
+                            style: TextStyle(
+                              fontFamily: 'Space Grotesk',
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              letterSpacing: 1,
+                              color: textClr,
                             ),
                           ),
+                        ),
+                        _HeaderAction(
+                          icon: Icons.ios_share_rounded,
+                          tooltip: L10n.of(context, 'browser_export_json'),
+                          isDark: isDark,
+                          onTap: _exportHistoryToJson,
+                        ),
+                        if (_selectedTab == 0 && _surfingHistory.isNotEmpty)
                           _HeaderAction(
-                            icon: Icons.ios_share_rounded,
-                            tooltip: L10n.of(context, 'browser_export_json'),
-                            isDark: isDark,
-                            onTap: _exportHistoryToJson,
-                          ),
-                          if (_selectedTab == 0 && _surfingHistory.isNotEmpty)
-                            _HeaderAction(
-                              icon: Icons.delete_sweep_outlined,
-                              tooltip: L10n.of(
-                                context,
-                                'browser_clear_history_btn',
-                              ),
-                              isDark: isDark,
-                              danger: true,
-                              onTap: () {
-                                HapticHelper.triggerHaptic(settings);
-                                _showClearHistoryConfirmation(settings);
-                              },
+                            icon: Icons.delete_sweep_outlined,
+                            tooltip: L10n.of(
+                              context,
+                              'browser_clear_history_btn',
                             ),
-                          _HeaderAction(
-                            icon: Icons.close_rounded,
-                            tooltip: L10n.of(context, 'browser_close_btn'),
                             isDark: isDark,
+                            danger: true,
                             onTap: () {
                               HapticHelper.triggerHaptic(settings);
-                              Navigator.pop(context);
+                              _showClearHistoryConfirmation(settings);
                             },
                           ),
+                        _HeaderAction(
+                          icon: Icons.close_rounded,
+                          tooltip: L10n.of(context, 'browser_close_btn'),
+                          isDark: isDark,
+                          onTap: () {
+                            HapticHelper.triggerHaptic(settings);
+                            Navigator.pop(context);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Sliding tab selector
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Container(
+                      height: 42,
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: (isDark
+                                ? AppTheme.background
+                                : AppTheme.lightBackground)
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isDark
+                              ? AppTheme.glassBorder
+                              : AppTheme.lightGlassBorder,
+                          width: 0.8,
+                        ),
+                      ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final half = constraints.maxWidth / 2;
+                          return Stack(
+                            children: [
+                              AnimatedBuilder(
+                                animation: _tabSlide,
+                                builder: (context, child) => Positioned(
+                                  left: _tabSlide.value * half,
+                                  top: 3,
+                                  bottom: 3,
+                                  width: half - 6,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: accent.withValues(alpha: 0.14),
+                                      borderRadius: BorderRadius.circular(9),
+                                      border: Border.all(
+                                        color: accent.withValues(alpha: 0.4),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _tabButton(
+                                      0,
+                                      L10n.of(
+                                        context,
+                                        'browser_surfing_history',
+                                      ),
+                                      accent,
+                                      isDark,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _tabButton(
+                                      1,
+                                      L10n.of(
+                                        context,
+                                        'browser_downloads_tab',
+                                      ),
+                                      accent,
+                                      isDark,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  // Search field
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF0F0F16)
+                            : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(21),
+                        border: Border.all(
+                          color: _focusNode.hasFocus
+                              ? accent.withValues(alpha: 0.6)
+                              : (isDark
+                                  ? const Color(0x15FFFFFF)
+                                  : const Color(0x0D000000)),
+                          width: _focusNode.hasFocus ? 1.5 : 1.0,
+                        ),
+                        boxShadow:
+                            _focusNode.hasFocus && isDark && settings.enableGlow
+                                ? [
+                                    BoxShadow(
+                                      color: accent.withValues(alpha: 0.25),
+                                      blurRadius: 10,
+                                      spreadRadius: 0.5,
+                                    ),
+                                  ]
+                                : null,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          const SizedBox(width: 14),
+                          Icon(
+                            Icons.search_rounded,
+                            size: 18,
+                            color: _focusNode.hasFocus ? accent : muted,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: _searchController,
+                              focusNode: _focusNode,
+                              style: TextStyle(
+                                color: textClr,
+                                fontSize: 13,
+                                fontFamily: 'Inter',
+                              ),
+                              decoration: InputDecoration(
+                                isDense: true,
+                                filled: true,
+                                fillColor: Colors.transparent,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                hintText: L10n.of(
+                                  context,
+                                  'browser_search_history_hint',
+                                ),
+                                hintStyle:
+                                    TextStyle(color: muted, fontSize: 12),
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                              ),
+                            ),
+                          ),
+                          if (_searchController.text.isNotEmpty) ...[
+                            GestureDetector(
+                              onTap: _searchController.clear,
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  size: 17,
+                                  color: muted,
+                                ),
+                              ),
+                            ),
+                          ] else
+                            const SizedBox(width: 14),
                         ],
                       ),
                     ),
-                    // Sliding tab selector
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Container(
-                        height: 42,
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          color: (isDark
-                                  ? AppTheme.background
-                                  : AppTheme.lightBackground)
-                              .withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark
-                                ? AppTheme.glassBorder
-                                : AppTheme.lightGlassBorder,
-                            width: 0.8,
+                  ),
+                  // Content
+                  Expanded(
+                    child: _selectedTab == 0
+                        ? _buildSurfingList(controller, isDark, settings)
+                        : _buildDownloadsList(
+                            controller,
+                            isDark,
+                            downloadTasks,
                           ),
-                        ),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            final half = constraints.maxWidth / 2;
-                            return Stack(
-                              children: [
-                                AnimatedBuilder(
-                                  animation: _tabSlide,
-                                  builder: (context, child) => Positioned(
-                                    left: _tabSlide.value * half,
-                                    top: 3,
-                                    bottom: 3,
-                                    width: half - 6,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: accent.withValues(alpha: 0.14),
-                                        borderRadius: BorderRadius.circular(9),
-                                        border: Border.all(
-                                          color: accent.withValues(alpha: 0.4),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: _tabButton(
-                                        0,
-                                        L10n.of(
-                                          context,
-                                          'browser_surfing_history',
-                                        ),
-                                        accent,
-                                        isDark,
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: _tabButton(
-                                        1,
-                                        L10n.of(
-                                          context,
-                                          'browser_downloads_tab',
-                                        ),
-                                        accent,
-                                        isDark,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    // Search field
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 4,
-                      ),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF0F0F16)
-                              : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(21),
-                          border: Border.all(
-                            color: _focusNode.hasFocus
-                                ? accent.withValues(alpha: 0.6)
-                                : (isDark
-                                    ? const Color(0x15FFFFFF)
-                                    : const Color(0x0D000000)),
-                            width: _focusNode.hasFocus ? 1.5 : 1.0,
-                          ),
-                          boxShadow: _focusNode.hasFocus &&
-                                  isDark &&
-                                  settings.enableGlow
-                              ? [
-                                  BoxShadow(
-                                    color: accent.withValues(alpha: 0.25),
-                                    blurRadius: 10,
-                                    spreadRadius: 0.5,
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const SizedBox(width: 14),
-                            Icon(
-                              Icons.search_rounded,
-                              size: 18,
-                              color: _focusNode.hasFocus ? accent : muted,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: _searchController,
-                                focusNode: _focusNode,
-                                style: TextStyle(
-                                  color: textClr,
-                                  fontSize: 13,
-                                  fontFamily: 'Inter',
-                                ),
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  filled: true,
-                                  fillColor: Colors.transparent,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 10,
-                                  ),
-                                  hintText: L10n.of(
-                                    context,
-                                    'browser_search_history_hint',
-                                  ),
-                                  hintStyle:
-                                      TextStyle(color: muted, fontSize: 12),
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                ),
-                              ),
-                            ),
-                            if (_searchController.text.isNotEmpty) ...[
-                              GestureDetector(
-                                onTap: _searchController.clear,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12),
-                                  child: Icon(
-                                    Icons.close_rounded,
-                                    size: 17,
-                                    color: muted,
-                                  ),
-                                ),
-                              ),
-                            ] else
-                              const SizedBox(width: 14),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Content
-                    Expanded(
-                      child: _selectedTab == 0
-                          ? _buildSurfingList(controller, isDark, settings)
-                          : _buildDownloadsList(
-                              controller,
-                              isDark,
-                              downloadTasks,
-                            ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          );
-        },
-      );
-    }
+          ),
+        );
+      },
+    );
+  }
 
   Widget _tabButton(int index, String label, Color accent, bool isDark) {
     final isSelected = _selectedTab == index;
@@ -902,7 +900,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
           // border instead of a red-filled ElevatedButton.
           OutlinedButton(
             style: OutlinedButton.styleFrom(
-              foregroundColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+              foregroundColor:
+                  isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
               side: BorderSide(
                 color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                 width: 1.2,
@@ -944,9 +943,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     final tileWidget = Container(
       decoration: BoxDecoration(
         color: isDark
-            ? (settings.isAmoledMode
-                ? AppTheme.amoledCardBg
-                : AppTheme.cardBg)
+            ? (settings.isAmoledMode ? AppTheme.amoledCardBg : AppTheme.cardBg)
             : AppTheme.lightCardBg,
         borderRadius: BorderRadius.circular(13),
         border: Border.all(
@@ -1128,102 +1125,101 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
         child: InkWell(
           borderRadius: BorderRadius.circular(13),
           onTap: () {
-              Clipboard.setData(ClipboardData(text: t.url));
-              HapticHelper.triggerHaptic(context.read<SettingsProvider>());
-              ThemedSnackbar.show(
-                context,
-                message:
-                    '${L10n.of(context, 'browser_copied_url_for')} ${t.fileName}',
-                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                icon: Icons.copy,
-                isDarkMode: isDark,
-              );
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(_statusIcon(t.status), color: color, size: 16),
+            Clipboard.setData(ClipboardData(text: t.url));
+            HapticHelper.triggerHaptic(context.read<SettingsProvider>());
+            ThemedSnackbar.show(
+              context,
+              message:
+                  '${L10n.of(context, 'browser_copied_url_for')} ${t.fileName}',
+              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              icon: Icons.copy,
+              isDarkMode: isDark,
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          t.fileName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: textClr,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
+                  child: Icon(_statusIcon(t.status), color: color, size: 16),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        t.fileName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: textClr,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(height: 3),
-                        Row(
-                          children: [
-                            Text(
-                              sizeStr,
-                              style: TextStyle(
-                                color: color,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Space Grotesk',
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '• $timeStr',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color:
-                                      isDark ? Colors.white54 : Colors.black54,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: color.withValues(alpha: 0.3)),
-                    ),
-                    child: Text(
-                      _statusLabel(t.status, context),
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 8,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.6,
-                        fontFamily: 'Space Grotesk',
                       ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Text(
+                            sizeStr,
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Space Grotesk',
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '• $timeStr',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: isDark ? Colors.white54 : Colors.black54,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: color.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    _statusLabel(t.status, context),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                      fontFamily: 'Space Grotesk',
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
-      );
+      ),
+    );
   }
 
   IconData _statusIcon(DownloadStatus s) {

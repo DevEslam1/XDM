@@ -31,10 +31,12 @@ void main() {
       );
     });
 
-    test('FIX-2: State machine allows seeding pause through completed guard', () {
+    test('FIX-2: State machine allows seeding pause through completed guard',
+        () {
       final task = DownloadTask(
         id: 'seed_1',
-        url: 'magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd&dn=Test',
+        url:
+            'magnet:?xt=urn:btih:aabbccddeeff00112233445566778899aabbccdd&dn=Test',
         fileName: 'Test',
         savePath: 'build',
         localFilePath: 'build/Test',
@@ -61,10 +63,12 @@ void main() {
       );
     });
 
-    test('FIX-3: pauseTask logic transitions seeding torrent to paused status', () {
+    test('FIX-3: pauseTask logic transitions seeding torrent to paused status',
+        () {
       final task = DownloadTask(
         id: 'seed_2',
-        url: 'magnet:?xt=urn:btih:11223344556677889900aabbccddeeff00112233&dn=Ubuntu',
+        url:
+            'magnet:?xt=urn:btih:11223344556677889900aabbccddeeff00112233&dn=Ubuntu',
         fileName: 'Ubuntu.iso',
         savePath: 'build',
         localFilePath: 'build/Ubuntu.iso',
@@ -96,7 +100,8 @@ void main() {
     });
 
     test('FIX-4: deleteTask empty torrent directory deletion logic', () async {
-      final tempDir = await Directory.systemTemp.createTemp('dmx_torrent_dir_test_');
+      final tempDir =
+          await Directory.systemTemp.createTemp('dmx_torrent_dir_test_');
       try {
         final torrentDir = Directory(p.join(tempDir.path, 'MyTorrentFolder'));
         await torrentDir.create(recursive: true);
@@ -132,7 +137,9 @@ void main() {
       expect(hash, 'fedcba9876543210fedcba9876543210fedcba98');
     });
 
-    test('FIX-6: Magnet URL parse infoHash for early pause during metadata fetch', () {
+    test(
+        'FIX-6: Magnet URL parse infoHash for early pause during metadata fetch',
+        () {
       const magnetUrl =
           'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=PendingMeta';
       final parsed = parseMagnetUrl(magnetUrl);
@@ -142,7 +149,8 @@ void main() {
       expect(infoHash, '0123456789abcdef0123456789abcdef01234567');
     });
 
-    test('FIX-7: Pending delete cleanups list handles async completion', () async {
+    test('FIX-7: Pending delete cleanups list handles async completion',
+        () async {
       final pendingCleanups = <Future<void>>[];
       final completer = Completer<void>();
 
@@ -158,26 +166,33 @@ void main() {
       expect(pendingCleanups.isEmpty, isTrue);
     });
 
-    test('FIX-8: Duplicate magnet detection by info-hash with different display names', () {
+    test(
+        'FIX-8: Duplicate magnet detection by info-hash with different display names',
+        () {
       const magnet1 =
           'magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789abcdef01&dn=Name_A';
       const magnet2 =
           'magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789abcdef01&dn=Name_B';
 
-      final hash1 = parseMagnetUrl(magnet1)['infoHash']?.toString().toLowerCase();
-      final hash2 = parseMagnetUrl(magnet2)['infoHash']?.toString().toLowerCase();
+      final hash1 =
+          parseMagnetUrl(magnet1)['infoHash']?.toString().toLowerCase();
+      final hash2 =
+          parseMagnetUrl(magnet2)['infoHash']?.toString().toLowerCase();
 
       expect(hash1, equals(hash2));
     });
 
-    test('FIX-9: TorrentResumeStore delete operations complete safely', () async {
+    test('FIX-9: TorrentResumeStore delete operations complete safely',
+        () async {
       const sourceUrl = 'magnet:?xt=urn:btih:test_hash_delete&dn=Test';
       // Should execute without throw
       await TorrentResumeStore.deleteResumeDataForSource(sourceUrl);
       await TorrentResumeStore.delete(99999);
     });
 
-    test('FIX-10: State machine transition logging does not emit warning for seeding pause', () {
+    test(
+        'FIX-10: State machine transition logging does not emit warning for seeding pause',
+        () {
       final records = <LogRecord>[];
       final sub = Logger.root.onRecord.listen(records.add);
 
@@ -191,7 +206,9 @@ void main() {
       sub.cancel();
     });
 
-    test('FIX-11: TorrentSubscriptionRegistry.instance.dispose on non-existent subscription does not throw', () {
+    test(
+        'FIX-11: TorrentSubscriptionRegistry.instance.dispose on non-existent subscription does not throw',
+        () {
       expect(
         () => TorrentSubscriptionRegistry.instance.dispose(99999),
         returnsNormally,

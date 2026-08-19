@@ -18,6 +18,8 @@ class AppLockService {
   static const String _failedAttemptsKey = 'xdm_app_lock_failed_attempts';
   static const String _lockoutLevelKey = 'xdm_app_lock_lockout_level';
   static const String _lockedUntilKey = 'xdm_app_lock_locked_until';
+  static const String _lockedUntilMonotonicKey =
+      'xdm_app_lock_locked_until_monotonic';
   static const String _lockoutDurationKey = 'xdm_app_lock_lockout_duration';
   static const String _lockoutStartElapsedKey = 'xdm_app_lock_start_elapsed';
 
@@ -49,32 +51,18 @@ class AppLockService {
     return DateTime.now().millisecondsSinceEpoch;
   }
 
-  /// Detects clock jumps > 60s backward and re-derives lockout from persisted `lockedUntil`.
+  /// Detects clock jumps > 60s backward and validates monotonic state.
   static Future<void> validateMonotonicConsistency() async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (_lastObservedTimeMs > 0 && (_lastObservedTimeMs - nowMs) > 60000) {
       _log.warning(
-        'Detected backwards clock jump of ${_lastObservedTimeMs - nowMs}ms. '
-        'Re-deriving lockout from persisted lockedUntil.',
+        'Detected backwards clock jump of ${_lastObservedTimeMs - nowMs}ms.',
       );
       unawaited(CrashReportingService.addBreadcrumb(
-        'Detected backwards clock jump of ${_lastObservedTimeMs - nowMs}ms (clock rollback fallback).',
+        'Detected backwards clock jump of ${_lastObservedTimeMs - nowMs}ms.',
         category: 'security',
         data: {'jumpMs': _lastObservedTimeMs - nowMs},
       ));
-      final rawUntil = await _storage.read(key: _lockedUntilKey);
-      final rawDuration = await _storage.read(key: _lockoutDurationKey);
-      final lockedUntil = int.tryParse(rawUntil ?? '');
-      final totalDurationMs = int.tryParse(rawDuration ?? '');
-      if (lockedUntil != null && totalDurationMs != null) {
-        final remainingMs = lockedUntil - nowMs;
-        if (remainingMs > 0) {
-          _monotonicLockoutStartMs = await getMonotonicTimeMs();
-          _totalLockoutDurationMs = min(remainingMs, totalDurationMs);
-        } else {
-          await resetFailedAttempts();
-        }
-      }
     }
     _lastObservedTimeMs = nowMs;
   }
@@ -154,7 +142,8 @@ class AppLockService {
         _totalLockoutDurationMs = null;
       } else {
         final elapsedSinceStart = currentMono - _monotonicLockoutStartMs!;
-        final remainingMs = _totalLockoutDurationMs! - elapsedSinceStart;
+        final remainingMs =
+            max(0, _totalLockoutDurationMs! - elapsedSinceStart);
         if (remainingMs <= 0) {
           await resetFailedAttempts();
           return Duration.zero;
@@ -164,49 +153,28 @@ class AppLockService {
     }
 
     // 2. Storage check across process restarts
-    final rawUntil = await _storage.read(key: _lockedUntilKey);
     final rawDuration = await _storage.read(key: _lockoutDurationKey);
     final rawStartElapsed = await _storage.read(key: _lockoutStartElapsedKey);
-    final lockedUntil = int.tryParse(rawUntil ?? '');
     final totalDurationMs = int.tryParse(rawDuration ?? '');
     final startElapsed = int.tryParse(rawStartElapsed ?? '');
 
-    if (lockedUntil == null || totalDurationMs == null) {
+    if (totalDurationMs == null || startElapsed == null) {
       return Duration.zero;
     }
 
-    // If monotonic start was stored and current monotonic is available
-    if (startElapsed != null && currentMono >= startElapsed) {
+    if (currentMono >= startElapsed) {
       final elapsedSinceStart = currentMono - startElapsed;
-      if (elapsedSinceStart < totalDurationMs) {
-        _monotonicLockoutStartMs = startElapsed;
-        _totalLockoutDurationMs = totalDurationMs;
-        return Duration(milliseconds: totalDurationMs - elapsedSinceStart);
+      final remainingMs = max(0, totalDurationMs - elapsedSinceStart);
+      if (remainingMs <= 0) {
+        await resetFailedAttempts();
+        return Duration.zero;
       }
-    }
-
-    final wallRemaining = DateTime.fromMillisecondsSinceEpoch(lockedUntil)
-        .difference(DateTime.now());
-
-    // If wall clock was manipulated backwards, enforce full duration
-    if (wallRemaining.inMilliseconds > totalDurationMs + 1000) {
-      unawaited(CrashReportingService.addBreadcrumb(
-        'Wall clock rollback detected in lockoutRemaining; enforcing full lockout duration',
-        category: 'security',
-      ));
-      _monotonicLockoutStartMs = currentMono;
+      _monotonicLockoutStartMs = startElapsed;
       _totalLockoutDurationMs = totalDurationMs;
-      return Duration(milliseconds: totalDurationMs);
+      return Duration(milliseconds: remainingMs);
     }
 
-    if (wallRemaining <= Duration.zero) {
-      await resetFailedAttempts();
-      return Duration.zero;
-    }
-
-    _monotonicLockoutStartMs = currentMono;
-    _totalLockoutDurationMs = wallRemaining.inMilliseconds;
-    return wallRemaining;
+    return Duration.zero;
   }
 
   static int _lockoutSecondsForLevel(int level) {
@@ -248,19 +216,14 @@ class AppLockService {
     final nextLevel = level + 1;
     final seconds = _lockoutSecondsForLevel(nextLevel);
     final durationMs = seconds * 1000;
-    final lockedUntil =
-        DateTime.now().add(Duration(seconds: seconds)).millisecondsSinceEpoch;
-
     final monoNow = await getMonotonicTimeMs();
+    final lockedUntilMonotonic = monoNow + durationMs;
+
     _monotonicLockoutStartMs = monoNow;
     _totalLockoutDurationMs = durationMs;
 
     await _storage.write(key: _failedAttemptsKey, value: '0');
     await _storage.write(key: _lockoutLevelKey, value: nextLevel.toString());
-    await _storage.write(
-      key: _lockedUntilKey,
-      value: lockedUntil.toString(),
-    );
     await _storage.write(
       key: _lockoutDurationKey,
       value: durationMs.toString(),
@@ -268,6 +231,10 @@ class AppLockService {
     await _storage.write(
       key: _lockoutStartElapsedKey,
       value: monoNow.toString(),
+    );
+    await _storage.write(
+      key: _lockedUntilMonotonicKey,
+      value: lockedUntilMonotonic.toString(),
     );
   }
 
@@ -277,6 +244,7 @@ class AppLockService {
     await _storage.delete(key: _failedAttemptsKey);
     await _storage.delete(key: _lockoutLevelKey);
     await _storage.delete(key: _lockedUntilKey);
+    await _storage.delete(key: _lockedUntilMonotonicKey);
     await _storage.delete(key: _lockoutDurationKey);
     await _storage.delete(key: _lockoutStartElapsedKey);
   }

@@ -28,7 +28,9 @@ void main() {
       expect(success, isFalse);
     });
 
-    test('Exponential backoff increments delays on repeated failures and clears on success', () async {
+    test(
+        'Exponential backoff increments delays on repeated failures and clears on success',
+        () async {
       expect(await BackgroundService.shouldThrottleForBackoff(), isFalse);
 
       // Failure 1: 30s

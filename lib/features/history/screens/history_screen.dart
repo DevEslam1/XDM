@@ -94,231 +94,253 @@ class _HistoryScreenState extends State<HistoryScreen> {
             return RepaintBoundary(
               child: GeometricGridBackground(
                 child: Scaffold(
-                backgroundColor: Colors.transparent,
-                appBar: AppBar(
-                  backgroundColor: isDark
-                      ? (isAmoled
-                          ? AppTheme.amoledBackground
-                          : Colors.transparent)
-                      : Colors.transparent,
-                  flexibleSpace: isAmoled
-                      ? null
-                      : ClipRect(
-                          child: DmxBackdropFilter(
-                            sigmaX: 12,
-                            sigmaY: 12,
-                            child: Container(
-                              color: (isDark
-                                      ? AppTheme.surface
-                                      : AppTheme.lightSurface)
-                                  .withValues(alpha: 0.5),
+                  backgroundColor: Colors.transparent,
+                  appBar: AppBar(
+                    backgroundColor: isDark
+                        ? (isAmoled
+                            ? AppTheme.amoledBackground
+                            : Colors.transparent)
+                        : Colors.transparent,
+                    flexibleSpace: isAmoled
+                        ? null
+                        : ClipRect(
+                            child: DmxBackdropFilter(
+                              sigmaX: 12,
+                              sigmaY: 12,
+                              child: Container(
+                                color: (isDark
+                                        ? AppTheme.surface
+                                        : AppTheme.lightSurface)
+                                    .withValues(alpha: 0.5),
+                              ),
                             ),
                           ),
+                    title: Text(
+                      'XDM',
+                      style:
+                          Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                color: textClr,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.5,
+                                fontSize: 16,
+                              ),
+                    ),
+                    automaticallyImplyLeading: false,
+                    actions: [
+                      if (historyTasks.isNotEmpty)
+                        IconButton(
+                          icon: Icon(
+                            Icons.delete_sweep_outlined,
+                            color: redClr,
+                          ),
+                          tooltip: L10n.of(context, 'clear_history_logs'),
+                          onPressed: () => _showClearHistoryConfirmation(
+                            context,
+                            context.read<DownloadProvider>(),
+                            // Always pass the full (unfiltered) history list so
+                            // "Clear All" clears everything regardless of search.
+                            historyTasksFromProvider,
+                            context.read<SettingsProvider>(),
+                          ),
                         ),
-                  title: Text(
-                    'XDM',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: textClr,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.5,
-                          fontSize: 16,
-                        ),
+                      const SizedBox(width: 8),
+                    ],
                   ),
-                  automaticallyImplyLeading: false,
-                  actions: [
-                    if (historyTasks.isNotEmpty)
-                      IconButton(
-                        icon: Icon(
-                          Icons.delete_sweep_outlined,
-                          color: redClr,
-                        ),
-                        tooltip: L10n.of(context, 'clear_history_logs'),
-                        onPressed: () => _showClearHistoryConfirmation(
-                          context,
-                          context.read<DownloadProvider>(),
-                          // Always pass the full (unfiltered) history list so
-                          // "Clear All" clears everything regardless of search.
-                          historyTasksFromProvider,
-                          context.read<SettingsProvider>(),
-                        ),
-                      ),
-                    const SizedBox(width: 8),
-                  ],
-                ),
-                body: Directionality(
-                  textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-                  child: SafeArea(
-                    child: Column(
-                      children: [
-                        // Search Bar
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16.0,
-                            vertical: 8.0,
-                          ),
-                          child: Theme(
-                            data: Theme.of(context).copyWith(
-                              primaryColor: accentClr,
-                              colorScheme:
-                                  Theme.of(context).colorScheme.copyWith(
-                                        primary: accentClr,
-                                      ),
-                              textSelectionTheme: TextSelectionThemeData(
-                                cursorColor: accentClr,
-                                selectionColor:
-                                    accentClr.withValues(alpha: 0.3),
-                                selectionHandleColor: accentClr,
-                              ),
+                  body: Directionality(
+                    textDirection:
+                        isRtl ? TextDirection.rtl : TextDirection.ltr,
+                    child: SafeArea(
+                      child: Column(
+                        children: [
+                          // Search Bar
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16.0,
+                              vertical: 8.0,
                             ),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              constraints: const BoxConstraints(minHeight: 48),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppTheme.surface
-                                    : AppTheme.lightSurface,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: _searchFocusNode.hasFocus
-                                      ? accentClr
-                                      : accentClr.withValues(alpha: 0.35),
-                                  width: _searchFocusNode.hasFocus ? 1.8 : 1.0,
-                                ),
-                                boxShadow: _searchFocusNode.hasFocus
-                                    ? [
-                                        BoxShadow(
-                                          color:
-                                              accentClr.withValues(alpha: 0.3),
-                                          blurRadius: 10,
-                                          spreadRadius: 1,
+                            child: Theme(
+                              data: Theme.of(context).copyWith(
+                                primaryColor: accentClr,
+                                colorScheme:
+                                    Theme.of(context).colorScheme.copyWith(
+                                          primary: accentClr,
                                         ),
-                                      ]
-                                    : null,
+                                textSelectionTheme: TextSelectionThemeData(
+                                  cursorColor: accentClr,
+                                  selectionColor:
+                                      accentClr.withValues(alpha: 0.3),
+                                  selectionHandleColor: accentClr,
+                                ),
                               ),
-                              child: TextField(
-                                focusNode: _searchFocusNode,
-                                controller: _searchController,
-                                cursorColor: accentClr,
-                                style: TextStyle(
-                                  color: textClr,
-                                  fontSize: 13,
-                                  fontFamily: 'Inter',
-                                ),
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  hintText:
-                                      L10n.of(context, 'search_settings_hint'),
-                                  hintStyle: TextStyle(
-                                    color: mutedClr,
-                                    fontSize: 12,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                constraints:
+                                    const BoxConstraints(minHeight: 48),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? AppTheme.surface
+                                      : AppTheme.lightSurface,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: _searchFocusNode.hasFocus
+                                        ? accentClr
+                                        : accentClr.withValues(alpha: 0.35),
+                                    width:
+                                        _searchFocusNode.hasFocus ? 1.8 : 1.0,
                                   ),
-                                  prefixIcon: Icon(
-                                    Icons.search_rounded,
-                                    color: accentClr,
-                                    size: 18,
-                                  ),
-                                  suffixIcon: _searchQuery.isNotEmpty
-                                      ? IconButton(
-                                          icon: Icon(Icons.clear_rounded,
-                                              size: 16, color: accentClr),
-                                          onPressed: () {
-                                            _searchController.clear();
-                                            setState(() {
-                                              _searchQuery = '';
-                                            });
-                                          },
-                                        )
+                                  boxShadow: _searchFocusNode.hasFocus
+                                      ? [
+                                          BoxShadow(
+                                            color: accentClr.withValues(
+                                                alpha: 0.3),
+                                            blurRadius: 10,
+                                            spreadRadius: 1,
+                                          ),
+                                        ]
                                       : null,
-                                  border: InputBorder.none,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
                                 ),
-                                onChanged: (value) {
-                                  if (_debounceTimer?.isActive ?? false) {
-                                    _debounceTimer!.cancel();
-                                  }
-                                  _debounceTimer = Timer(
-                                      const Duration(milliseconds: 300), () {
-                                    if (mounted) {
-                                      setState(() {
-                                        _searchQuery = value;
-                                      });
+                                child: TextField(
+                                  focusNode: _searchFocusNode,
+                                  controller: _searchController,
+                                  cursorColor: accentClr,
+                                  style: TextStyle(
+                                    color: textClr,
+                                    fontSize: 13,
+                                    fontFamily: 'Inter',
+                                  ),
+                                  decoration: InputDecoration(
+                                    isDense: true,
+                                    hintText: L10n.of(
+                                        context, 'search_settings_hint'),
+                                    hintStyle: TextStyle(
+                                      color: mutedClr,
+                                      fontSize: 12,
+                                    ),
+                                    prefixIcon: Icon(
+                                      Icons.search_rounded,
+                                      color: accentClr,
+                                      size: 18,
+                                    ),
+                                    suffixIcon: _searchQuery.isNotEmpty
+                                        ? IconButton(
+                                            icon: Icon(Icons.clear_rounded,
+                                                size: 16, color: accentClr),
+                                            onPressed: () {
+                                              _searchController.clear();
+                                              setState(() {
+                                                _searchQuery = '';
+                                              });
+                                            },
+                                          )
+                                        : null,
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                  onChanged: (value) {
+                                    if (_debounceTimer?.isActive ?? false) {
+                                      _debounceTimer!.cancel();
                                     }
-                                  });
-                                },
+                                    _debounceTimer = Timer(
+                                        const Duration(milliseconds: 300), () {
+                                      if (mounted) {
+                                        setState(() {
+                                          _searchQuery = value;
+                                        });
+                                      }
+                                    });
+                                  },
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 8),
+                          const SizedBox(height: 8),
 
-                        // History count header
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                L10n.of(context, 'resolved_transmissions'),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelMedium
-                                    ?.copyWith(
-                                      color: secClr,
-                                      fontSize: 9,
-                                      letterSpacing: 1.0,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                              ),
-                              Text(
-                                '${historyTasks.length} ${L10n.of(context, 'records')}',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: mutedClr,
-                                      fontSize: 9,
-                                    ),
-                              ),
-                            ],
+                          // History count header
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  L10n.of(context, 'resolved_transmissions'),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelMedium
+                                      ?.copyWith(
+                                        color: secClr,
+                                        fontSize: 9,
+                                        letterSpacing: 1.0,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                ),
+                                Text(
+                                  '${historyTasks.length} ${L10n.of(context, 'records')}',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: mutedClr,
+                                        fontSize: 9,
+                                      ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 10),
+                          const SizedBox(height: 10),
 
-                        // History Tasks List
-                        Expanded(
-                          child: historyTasks.isEmpty
-                              ? _buildEmptyState(
-                                  context,
-                                  isDark,
-                                  isRtl,
-                                  hasRecords:
-                                      historyTasksFromProvider.isNotEmpty,
-                                  hasQuery: _searchQuery.trim().isNotEmpty,
-                                  onClearSearch: () {
-                                    if (mounted) {
-                                      setState(() => _searchQuery = '');
-                                    }
-                                  },
-                                )
-                              : Builder(
-                                  builder: (context) {
-                                    final isWide =
-                                        MediaQuery.sizeOf(context).width >= 600;
-                                    if (isWide) {
-                                      return GridView.builder(
+                          // History Tasks List
+                          Expanded(
+                            child: historyTasks.isEmpty
+                                ? _buildEmptyState(
+                                    context,
+                                    isDark,
+                                    isRtl,
+                                    hasRecords:
+                                        historyTasksFromProvider.isNotEmpty,
+                                    hasQuery: _searchQuery.trim().isNotEmpty,
+                                    onClearSearch: () {
+                                      if (mounted) {
+                                        setState(() => _searchQuery = '');
+                                      }
+                                    },
+                                  )
+                                : Builder(
+                                    builder: (context) {
+                                      final isWide =
+                                          MediaQuery.sizeOf(context).width >=
+                                              600;
+                                      if (isWide) {
+                                        return GridView.builder(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 16.0, vertical: 4.0),
+                                          physics:
+                                              const BouncingScrollPhysics(),
+                                          gridDelegate:
+                                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                            maxCrossAxisExtent: 540,
+                                            mainAxisExtent: 175,
+                                            crossAxisSpacing: 14,
+                                            mainAxisSpacing: 12,
+                                          ),
+                                          itemCount: historyTasks.length,
+                                          itemBuilder: (context, index) {
+                                            return DownloadCard(
+                                              task: historyTasks[index],
+                                              compact: true,
+                                            );
+                                          },
+                                        );
+                                      }
+                                      return ListView.separated(
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 16.0, vertical: 4.0),
                                         physics: const BouncingScrollPhysics(),
-                                        gridDelegate:
-                                            const SliverGridDelegateWithMaxCrossAxisExtent(
-                                          maxCrossAxisExtent: 540,
-                                          mainAxisExtent: 175,
-                                          crossAxisSpacing: 14,
-                                          mainAxisSpacing: 12,
-                                        ),
                                         itemCount: historyTasks.length,
+                                        separatorBuilder: (context, index) =>
+                                            const SizedBox(height: 8),
                                         itemBuilder: (context, index) {
                                           return DownloadCard(
                                             task: historyTasks[index],
@@ -326,36 +348,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                           );
                                         },
                                       );
-                                    }
-                                    return ListView.separated(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 16.0, vertical: 4.0),
-                                      physics: const BouncingScrollPhysics(),
-                                      itemCount: historyTasks.length,
-                                      separatorBuilder: (context, index) =>
-                                          const SizedBox(height: 8),
-                                      itemBuilder: (context, index) {
-                                        return DownloadCard(
-                                          task: historyTasks[index],
-                                          compact: true,
-                                        );
-                                      },
-                                    );
-                                  },
-                                ),
-                        ),
-                      ],
+                                    },
+                                  ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          );
-        },
-      );
-    },
-  );
-}
+            );
+          },
+        );
+      },
+    );
+  }
 
   Widget _buildEmptyState(
     BuildContext context,

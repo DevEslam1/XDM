@@ -43,8 +43,9 @@ class BackgroundService {
   static Timer? _wakeLockRenewalTimer;
   static Timer? _wakeLockSafetyTimer;
   static Timer? _heartbeatTimer;
-  static Duration get _maxWakeLockHold =>
-      Platform.isIOS ? const Duration(seconds: 30) : const Duration(minutes: 10);
+  static Duration get _maxWakeLockHold => Platform.isIOS
+      ? const Duration(seconds: 30)
+      : const Duration(minutes: 10);
   static DateTime? _lastHeartbeatTime;
   static final Lock _activeLock = Lock();
   static final Set<String> _activeTaskIds = <String>{};
@@ -55,7 +56,8 @@ class BackgroundService {
   static int get activeDownloadCountForTesting => _activeDownloadCount;
 
   @visibleForTesting
-  static Set<String> get activeTaskIdsForTesting => Set.unmodifiable(_activeTaskIds);
+  static Set<String> get activeTaskIdsForTesting =>
+      Set.unmodifiable(_activeTaskIds);
 
   @visibleForTesting
   static void resetActiveDownloadCountForTesting() {
@@ -370,9 +372,11 @@ class BackgroundService {
       return false;
     }
     _iosBgCallInFlight = true;
+    final result = Completer<bool>();
+
     _iosBgWatchdogTimer?.cancel();
     _iosBgWatchdogTimer = Timer(const Duration(seconds: 25), () {
-      if (_iosBgCallInFlight) {
+      if (!result.isCompleted) {
         _log.warning(
             '[iOS BG Watchdog] iOS background call wedged for 25s; force-resetting and allowing next schedule.');
         try {
@@ -384,33 +388,38 @@ class BackgroundService {
               e,
               st);
         }
-        _iosBgCallInFlight = false;
+        result.complete(false);
       }
     });
 
-    try {
+    Future<void> runNativeCall() async {
       try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setInt(
-          'lastScheduleAttemptAt',
-          DateTime.now().millisecondsSinceEpoch,
-        );
-      } catch (e, st) {
-        _log.fine('Failed to persist lastScheduleAttemptAt', e, st);
-      }
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt(
+            'lastScheduleAttemptAt',
+            DateTime.now().millisecondsSinceEpoch,
+          );
+        } catch (e, st) {
+          _log.fine('Failed to persist lastScheduleAttemptAt', e, st);
+        }
 
-      const channel = MethodChannel('com.dmx.app/background_download');
-      try {
+        const channel = MethodChannel('com.dmx.app/background_download');
         final nativeStart = DateTime.now();
-        final result = await channel
-            .invokeMethod<bool>('scheduleDownload')
-            .timeout(const Duration(seconds: 20));
+        final rawResult = await channel.invokeMethod<bool>('scheduleDownload');
         final nativeDuration = DateTime.now().difference(nativeStart);
         if (nativeDuration.inSeconds > 10) {
           _log.warning(
               '[iOS BG] Native scheduleDownload took ${nativeDuration.inSeconds}s — approaching limit');
         }
-        final success = result ?? false;
+
+        if (result.isCompleted) {
+          _log.warning(
+              '[iOS BG] Native call finished after watchdog completed; discarding result.');
+          return;
+        }
+
+        final success = rawResult ?? false;
         if (success) {
           await recordBackgroundSuccess();
         } else {
@@ -419,27 +428,38 @@ class BackgroundService {
           _iosBgCooldownUntil = cooldown;
           try {
             final prefs = await SharedPreferences.getInstance();
-            await prefs.setInt(_iosBgCooldownKey, cooldown.millisecondsSinceEpoch);
+            await prefs.setInt(
+                _iosBgCooldownKey, cooldown.millisecondsSinceEpoch);
           } catch (e, st) {
-            _log.fine('Failed to persist iOS background failure cooldown', e, st);
+            _log.fine(
+                'Failed to persist iOS background failure cooldown', e, st);
           }
         }
         _log.info('iOS background schedule completed. Success: $success');
-        return success;
+        result.complete(success);
       } catch (e, st) {
-        await recordBackgroundFailure();
-        final cooldown = DateTime.now().add(const Duration(seconds: 60));
-        _iosBgCooldownUntil = cooldown;
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setInt(_iosBgCooldownKey, cooldown.millisecondsSinceEpoch);
-        } catch (e, st) {
-          _log.fine('Failed to persist iOS background error cooldown', e, st);
+        if (!result.isCompleted) {
+          await recordBackgroundFailure();
+          final cooldown = DateTime.now().add(const Duration(seconds: 60));
+          _iosBgCooldownUntil = cooldown;
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setInt(
+                _iosBgCooldownKey, cooldown.millisecondsSinceEpoch);
+          } catch (e2, st2) {
+            _log.fine(
+                'Failed to persist iOS background error cooldown', e2, st2);
+          }
+          _log.fine(
+              'Failed to bridge to iOS background download controller', e, st);
+          result.complete(false);
         }
-        _log.fine(
-            'Failed to bridge to iOS background download controller', e, st);
-        return false;
       }
+    }
+
+    try {
+      await Future.any([runNativeCall(), result.future]);
+      return await result.future;
     } finally {
       _iosBgWatchdogTimer?.cancel();
       _iosBgWatchdogTimer = null;
@@ -460,10 +480,12 @@ class BackgroundService {
   static Future<void> Function()? onDataSyncTimeout;
 
   @visibleForTesting
-  static DateTime? get dataSyncSessionStartTimeForTesting => _dataSyncSessionStartTime;
+  static DateTime? get dataSyncSessionStartTimeForTesting =>
+      _dataSyncSessionStartTime;
 
   @visibleForTesting
-  static Future<void> triggerDataSyncTimeoutForTesting() => _handleDataSyncTimeout();
+  static Future<void> triggerDataSyncTimeoutForTesting() =>
+      _handleDataSyncTimeout();
 
   static Future<void> _handleDataSyncTimeout() async {
     _log.warning(
@@ -493,7 +515,8 @@ class BackgroundService {
     try {
       BackgroundScheduler.instance.scheduleBackgroundSync();
     } catch (e, st) {
-      _log.warning('Error scheduling background sync on dataSync timeout', e, st);
+      _log.warning(
+          'Error scheduling background sync on dataSync timeout', e, st);
     }
 
     try {
@@ -782,8 +805,8 @@ class BackgroundService {
           // FIX-F: For torrents, resume the live handle so the engine actually
           // keeps transferring after the OS-kill/reboot restore.
           if (resumingTask.isTorrent && TorrentService.isInitialized) {
-            final tid = getIt<TorrentSessionManager>()
-                .getTorrentId(resumingTask.id);
+            final tid =
+                getIt<TorrentSessionManager>().getTorrentId(resumingTask.id);
             if (tid != null && TorrentService.isTorrentAlive(tid)) {
               try {
                 TorrentService.resumeTorrent(tid);
@@ -814,7 +837,8 @@ class BackgroundService {
       try {
         FlutterBackgroundService().invoke('stopService');
       } catch (e, st) {
-        _log.warning('Failed to invoke stopService on all downloads complete', e, st);
+        _log.warning(
+            'Failed to invoke stopService on all downloads complete', e, st);
       }
     }
   }

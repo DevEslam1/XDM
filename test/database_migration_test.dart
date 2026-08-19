@@ -16,7 +16,7 @@ void main() {
   });
 
   test('Database migration and initial setup sanity check', () async {
-    expect(db.schemaVersion, equals(23));
+    expect(db.schemaVersion, equals(24));
 
     // Verify bookmarks table and operations work correctly
     await db.customStatement('''

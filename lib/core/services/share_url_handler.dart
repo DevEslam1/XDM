@@ -53,8 +53,7 @@ class ShareUrlHandler {
 
       final title = selected['title'] as String? ?? 'Media Download';
       final ext = selected['ext'] as String? ?? 'mp4';
-      final streamUrl =
-          (selected['src'] ?? selected['url'] ?? '') as String;
+      final streamUrl = (selected['src'] ?? selected['url'] ?? '') as String;
       final streamSize = (selected['size'] as num?)?.toInt() ?? 0;
       final audioUrl = selected['audioSrc'] as String?;
       final audioSize = (selected['audioSize'] as num?)?.toInt();

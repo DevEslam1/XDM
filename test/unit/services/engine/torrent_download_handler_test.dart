@@ -16,8 +16,7 @@ class MockTorrentService extends TorrentServiceStub {
   MockTorrentService(this._controller);
 
   @override
-  Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
-      _controller.stream;
+  Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates => _controller.stream;
 
   @override
   bool isTorrentAlive(int id) => true;
@@ -163,24 +162,9 @@ void main() {
 
     test('normalizeTorrentFiles aggregates counts correctly', () {
       final files = [
-        {
-          'name': 'f1',
-          'length': 100,
-          'downloadedBytes': 100,
-          'selected': true
-        },
-        {
-          'name': 'f2',
-          'length': 200,
-          'downloadedBytes': 100,
-          'selected': true
-        },
-        {
-          'name': 'f3',
-          'length': 300,
-          'downloadedBytes': 0,
-          'selected': false
-        },
+        {'name': 'f1', 'length': 100, 'downloadedBytes': 100, 'selected': true},
+        {'name': 'f2', 'length': 200, 'downloadedBytes': 100, 'selected': true},
+        {'name': 'f3', 'length': 300, 'downloadedBytes': 0, 'selected': false},
       ];
       final summary = TorrentDownloadHandler.normalizeTorrentFiles(files);
       expect(summary.total, 2);
@@ -234,7 +218,8 @@ void main() {
         taskId: 'test-torrent-task',
         torrentId: 42,
         url: 'magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789',
-        currentLocalFilePath: '${Directory.systemTemp.path}/dmx_handler/file.mkv',
+        currentLocalFilePath:
+            '${Directory.systemTemp.path}/dmx_handler/file.mkv',
         knownFileSize: 1000,
         cancelToken: cancel,
         clientBuilder: (u) => Dio(),

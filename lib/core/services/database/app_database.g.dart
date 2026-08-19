@@ -377,6 +377,12 @@ class $DownloadTasksTable extends DownloadTasks
   late final GeneratedColumn<int> httpPartsTotal = GeneratedColumn<int>(
       'http_parts_total', aliasedName, true,
       type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _previousCycleStateMeta =
+      const VerificationMeta('previousCycleState');
+  @override
+  late final GeneratedColumn<String> previousCycleState =
+      GeneratedColumn<String>('previous_cycle_state', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -433,7 +439,8 @@ class $DownloadTasksTable extends DownloadTasks
         audioChunksCompleted,
         audioChunksTotal,
         httpPartsCompleted,
-        httpPartsTotal
+        httpPartsTotal,
+        previousCycleState
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -743,6 +750,12 @@ class $DownloadTasksTable extends DownloadTasks
           httpPartsTotal.isAcceptableOrUnknown(
               data['http_parts_total']!, _httpPartsTotalMeta));
     }
+    if (data.containsKey('previous_cycle_state')) {
+      context.handle(
+          _previousCycleStateMeta,
+          previousCycleState.isAcceptableOrUnknown(
+              data['previous_cycle_state']!, _previousCycleStateMeta));
+    }
     return context;
   }
 
@@ -869,6 +882,8 @@ class $DownloadTasksTable extends DownloadTasks
           DriftSqlType.int, data['${effectivePrefix}http_parts_completed']),
       httpPartsTotal: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}http_parts_total']),
+      previousCycleState: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}previous_cycle_state']),
     );
   }
 
@@ -944,6 +959,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final int? audioChunksTotal;
   final int? httpPartsCompleted;
   final int? httpPartsTotal;
+  final String? previousCycleState;
   const DbDownloadTask(
       {required this.id,
       required this.fileName,
@@ -999,7 +1015,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       this.audioChunksCompleted,
       this.audioChunksTotal,
       this.httpPartsCompleted,
-      this.httpPartsTotal});
+      this.httpPartsTotal,
+      this.previousCycleState});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1117,6 +1134,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     if (!nullToAbsent || httpPartsTotal != null) {
       map['http_parts_total'] = Variable<int>(httpPartsTotal);
     }
+    if (!nullToAbsent || previousCycleState != null) {
+      map['previous_cycle_state'] = Variable<String>(previousCycleState);
+    }
     return map;
   }
 
@@ -1228,6 +1248,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       httpPartsTotal: httpPartsTotal == null && nullToAbsent
           ? const Value.absent()
           : Value(httpPartsTotal),
+      previousCycleState: previousCycleState == null && nullToAbsent
+          ? const Value.absent()
+          : Value(previousCycleState),
     );
   }
 
@@ -1296,6 +1319,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       audioChunksTotal: serializer.fromJson<int?>(json['audioChunksTotal']),
       httpPartsCompleted: serializer.fromJson<int?>(json['httpPartsCompleted']),
       httpPartsTotal: serializer.fromJson<int?>(json['httpPartsTotal']),
+      previousCycleState:
+          serializer.fromJson<String?>(json['previousCycleState']),
     );
   }
   @override
@@ -1359,6 +1384,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'audioChunksTotal': serializer.toJson<int?>(audioChunksTotal),
       'httpPartsCompleted': serializer.toJson<int?>(httpPartsCompleted),
       'httpPartsTotal': serializer.toJson<int?>(httpPartsTotal),
+      'previousCycleState': serializer.toJson<String?>(previousCycleState),
     };
   }
 
@@ -1418,7 +1444,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           Value<int?> audioChunksCompleted = const Value.absent(),
           Value<int?> audioChunksTotal = const Value.absent(),
           Value<int?> httpPartsCompleted = const Value.absent(),
-          Value<int?> httpPartsTotal = const Value.absent()}) =>
+          Value<int?> httpPartsTotal = const Value.absent(),
+          Value<String?> previousCycleState = const Value.absent()}) =>
       DbDownloadTask(
         id: id ?? this.id,
         fileName: fileName ?? this.fileName,
@@ -1498,6 +1525,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
             : this.httpPartsCompleted,
         httpPartsTotal:
             httpPartsTotal.present ? httpPartsTotal.value : this.httpPartsTotal,
+        previousCycleState: previousCycleState.present
+            ? previousCycleState.value
+            : this.previousCycleState,
       );
   DbDownloadTask copyWithCompanion(DownloadTasksCompanion data) {
     return DbDownloadTask(
@@ -1623,6 +1653,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       httpPartsTotal: data.httpPartsTotal.present
           ? data.httpPartsTotal.value
           : this.httpPartsTotal,
+      previousCycleState: data.previousCycleState.present
+          ? data.previousCycleState.value
+          : this.previousCycleState,
     );
   }
 
@@ -1684,7 +1717,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('audioChunksCompleted: $audioChunksCompleted, ')
           ..write('audioChunksTotal: $audioChunksTotal, ')
           ..write('httpPartsCompleted: $httpPartsCompleted, ')
-          ..write('httpPartsTotal: $httpPartsTotal')
+          ..write('httpPartsTotal: $httpPartsTotal, ')
+          ..write('previousCycleState: $previousCycleState')
           ..write(')'))
         .toString();
   }
@@ -1745,7 +1779,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         audioChunksCompleted,
         audioChunksTotal,
         httpPartsCompleted,
-        httpPartsTotal
+        httpPartsTotal,
+        previousCycleState
       ]);
   @override
   bool operator ==(Object other) =>
@@ -1806,7 +1841,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.audioChunksCompleted == this.audioChunksCompleted &&
           other.audioChunksTotal == this.audioChunksTotal &&
           other.httpPartsCompleted == this.httpPartsCompleted &&
-          other.httpPartsTotal == this.httpPartsTotal);
+          other.httpPartsTotal == this.httpPartsTotal &&
+          other.previousCycleState == this.previousCycleState);
 }
 
 class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
@@ -1865,6 +1901,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<int?> audioChunksTotal;
   final Value<int?> httpPartsCompleted;
   final Value<int?> httpPartsTotal;
+  final Value<String?> previousCycleState;
   final Value<int> rowid;
   const DownloadTasksCompanion({
     this.id = const Value.absent(),
@@ -1922,6 +1959,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.audioChunksTotal = const Value.absent(),
     this.httpPartsCompleted = const Value.absent(),
     this.httpPartsTotal = const Value.absent(),
+    this.previousCycleState = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadTasksCompanion.insert({
@@ -1980,6 +2018,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.audioChunksTotal = const Value.absent(),
     this.httpPartsCompleted = const Value.absent(),
     this.httpPartsTotal = const Value.absent(),
+    this.previousCycleState = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         fileName = Value(fileName),
@@ -2048,6 +2087,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<int>? audioChunksTotal,
     Expression<int>? httpPartsCompleted,
     Expression<int>? httpPartsTotal,
+    Expression<String>? previousCycleState,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2112,6 +2152,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (httpPartsCompleted != null)
         'http_parts_completed': httpPartsCompleted,
       if (httpPartsTotal != null) 'http_parts_total': httpPartsTotal,
+      if (previousCycleState != null)
+        'previous_cycle_state': previousCycleState,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2172,6 +2214,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       Value<int?>? audioChunksTotal,
       Value<int?>? httpPartsCompleted,
       Value<int?>? httpPartsTotal,
+      Value<String?>? previousCycleState,
       Value<int>? rowid}) {
     return DownloadTasksCompanion(
       id: id ?? this.id,
@@ -2230,6 +2273,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       audioChunksTotal: audioChunksTotal ?? this.audioChunksTotal,
       httpPartsCompleted: httpPartsCompleted ?? this.httpPartsCompleted,
       httpPartsTotal: httpPartsTotal ?? this.httpPartsTotal,
+      previousCycleState: previousCycleState ?? this.previousCycleState,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2409,6 +2453,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     if (httpPartsTotal.present) {
       map['http_parts_total'] = Variable<int>(httpPartsTotal.value);
     }
+    if (previousCycleState.present) {
+      map['previous_cycle_state'] = Variable<String>(previousCycleState.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2474,6 +2521,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('audioChunksTotal: $audioChunksTotal, ')
           ..write('httpPartsCompleted: $httpPartsCompleted, ')
           ..write('httpPartsTotal: $httpPartsTotal, ')
+          ..write('previousCycleState: $previousCycleState, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3560,6 +3608,454 @@ class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
   }
 }
 
+class $MirrorHealthTable extends MirrorHealth
+    with TableInfo<$MirrorHealthTable, DbMirrorHealth> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MirrorHealthTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _urlMeta = const VerificationMeta('url');
+  @override
+  late final GeneratedColumn<String> url = GeneratedColumn<String>(
+      'url', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _failuresMeta =
+      const VerificationMeta('failures');
+  @override
+  late final GeneratedColumn<int> failures = GeneratedColumn<int>(
+      'failures', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _lastFailureMeta =
+      const VerificationMeta('lastFailure');
+  @override
+  late final GeneratedColumn<int> lastFailure = GeneratedColumn<int>(
+      'last_failure', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _lastSuccessMeta =
+      const VerificationMeta('lastSuccess');
+  @override
+  late final GeneratedColumn<int> lastSuccess = GeneratedColumn<int>(
+      'last_success', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _lastStatusCodeMeta =
+      const VerificationMeta('lastStatusCode');
+  @override
+  late final GeneratedColumn<int> lastStatusCode = GeneratedColumn<int>(
+      'last_status_code', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _blacklistedUntilMeta =
+      const VerificationMeta('blacklistedUntil');
+  @override
+  late final GeneratedColumn<int> blacklistedUntil = GeneratedColumn<int>(
+      'blacklisted_until', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _averageSpeedBpsMeta =
+      const VerificationMeta('averageSpeedBps');
+  @override
+  late final GeneratedColumn<double> averageSpeedBps = GeneratedColumn<double>(
+      'average_speed_bps', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0.0));
+  static const VerificationMeta _speedSamplesMeta =
+      const VerificationMeta('speedSamples');
+  @override
+  late final GeneratedColumn<String> speedSamples = GeneratedColumn<String>(
+      'speed_samples', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        url,
+        failures,
+        lastFailure,
+        lastSuccess,
+        lastStatusCode,
+        blacklistedUntil,
+        averageSpeedBps,
+        speedSamples
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'mirror_health';
+  @override
+  VerificationContext validateIntegrity(Insertable<DbMirrorHealth> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('url')) {
+      context.handle(
+          _urlMeta, url.isAcceptableOrUnknown(data['url']!, _urlMeta));
+    } else if (isInserting) {
+      context.missing(_urlMeta);
+    }
+    if (data.containsKey('failures')) {
+      context.handle(_failuresMeta,
+          failures.isAcceptableOrUnknown(data['failures']!, _failuresMeta));
+    }
+    if (data.containsKey('last_failure')) {
+      context.handle(
+          _lastFailureMeta,
+          lastFailure.isAcceptableOrUnknown(
+              data['last_failure']!, _lastFailureMeta));
+    }
+    if (data.containsKey('last_success')) {
+      context.handle(
+          _lastSuccessMeta,
+          lastSuccess.isAcceptableOrUnknown(
+              data['last_success']!, _lastSuccessMeta));
+    }
+    if (data.containsKey('last_status_code')) {
+      context.handle(
+          _lastStatusCodeMeta,
+          lastStatusCode.isAcceptableOrUnknown(
+              data['last_status_code']!, _lastStatusCodeMeta));
+    }
+    if (data.containsKey('blacklisted_until')) {
+      context.handle(
+          _blacklistedUntilMeta,
+          blacklistedUntil.isAcceptableOrUnknown(
+              data['blacklisted_until']!, _blacklistedUntilMeta));
+    }
+    if (data.containsKey('average_speed_bps')) {
+      context.handle(
+          _averageSpeedBpsMeta,
+          averageSpeedBps.isAcceptableOrUnknown(
+              data['average_speed_bps']!, _averageSpeedBpsMeta));
+    }
+    if (data.containsKey('speed_samples')) {
+      context.handle(
+          _speedSamplesMeta,
+          speedSamples.isAcceptableOrUnknown(
+              data['speed_samples']!, _speedSamplesMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {url};
+  @override
+  DbMirrorHealth map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DbMirrorHealth(
+      url: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}url'])!,
+      failures: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}failures'])!,
+      lastFailure: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}last_failure'])!,
+      lastSuccess: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}last_success'])!,
+      lastStatusCode: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}last_status_code'])!,
+      blacklistedUntil: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}blacklisted_until'])!,
+      averageSpeedBps: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}average_speed_bps'])!,
+      speedSamples: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}speed_samples']),
+    );
+  }
+
+  @override
+  $MirrorHealthTable createAlias(String alias) {
+    return $MirrorHealthTable(attachedDatabase, alias);
+  }
+}
+
+class DbMirrorHealth extends DataClass implements Insertable<DbMirrorHealth> {
+  final String url;
+  final int failures;
+  final int lastFailure;
+  final int lastSuccess;
+  final int lastStatusCode;
+  final int blacklistedUntil;
+  final double averageSpeedBps;
+  final String? speedSamples;
+  const DbMirrorHealth(
+      {required this.url,
+      required this.failures,
+      required this.lastFailure,
+      required this.lastSuccess,
+      required this.lastStatusCode,
+      required this.blacklistedUntil,
+      required this.averageSpeedBps,
+      this.speedSamples});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['url'] = Variable<String>(url);
+    map['failures'] = Variable<int>(failures);
+    map['last_failure'] = Variable<int>(lastFailure);
+    map['last_success'] = Variable<int>(lastSuccess);
+    map['last_status_code'] = Variable<int>(lastStatusCode);
+    map['blacklisted_until'] = Variable<int>(blacklistedUntil);
+    map['average_speed_bps'] = Variable<double>(averageSpeedBps);
+    if (!nullToAbsent || speedSamples != null) {
+      map['speed_samples'] = Variable<String>(speedSamples);
+    }
+    return map;
+  }
+
+  MirrorHealthCompanion toCompanion(bool nullToAbsent) {
+    return MirrorHealthCompanion(
+      url: Value(url),
+      failures: Value(failures),
+      lastFailure: Value(lastFailure),
+      lastSuccess: Value(lastSuccess),
+      lastStatusCode: Value(lastStatusCode),
+      blacklistedUntil: Value(blacklistedUntil),
+      averageSpeedBps: Value(averageSpeedBps),
+      speedSamples: speedSamples == null && nullToAbsent
+          ? const Value.absent()
+          : Value(speedSamples),
+    );
+  }
+
+  factory DbMirrorHealth.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DbMirrorHealth(
+      url: serializer.fromJson<String>(json['url']),
+      failures: serializer.fromJson<int>(json['failures']),
+      lastFailure: serializer.fromJson<int>(json['lastFailure']),
+      lastSuccess: serializer.fromJson<int>(json['lastSuccess']),
+      lastStatusCode: serializer.fromJson<int>(json['lastStatusCode']),
+      blacklistedUntil: serializer.fromJson<int>(json['blacklistedUntil']),
+      averageSpeedBps: serializer.fromJson<double>(json['averageSpeedBps']),
+      speedSamples: serializer.fromJson<String?>(json['speedSamples']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'url': serializer.toJson<String>(url),
+      'failures': serializer.toJson<int>(failures),
+      'lastFailure': serializer.toJson<int>(lastFailure),
+      'lastSuccess': serializer.toJson<int>(lastSuccess),
+      'lastStatusCode': serializer.toJson<int>(lastStatusCode),
+      'blacklistedUntil': serializer.toJson<int>(blacklistedUntil),
+      'averageSpeedBps': serializer.toJson<double>(averageSpeedBps),
+      'speedSamples': serializer.toJson<String?>(speedSamples),
+    };
+  }
+
+  DbMirrorHealth copyWith(
+          {String? url,
+          int? failures,
+          int? lastFailure,
+          int? lastSuccess,
+          int? lastStatusCode,
+          int? blacklistedUntil,
+          double? averageSpeedBps,
+          Value<String?> speedSamples = const Value.absent()}) =>
+      DbMirrorHealth(
+        url: url ?? this.url,
+        failures: failures ?? this.failures,
+        lastFailure: lastFailure ?? this.lastFailure,
+        lastSuccess: lastSuccess ?? this.lastSuccess,
+        lastStatusCode: lastStatusCode ?? this.lastStatusCode,
+        blacklistedUntil: blacklistedUntil ?? this.blacklistedUntil,
+        averageSpeedBps: averageSpeedBps ?? this.averageSpeedBps,
+        speedSamples:
+            speedSamples.present ? speedSamples.value : this.speedSamples,
+      );
+  DbMirrorHealth copyWithCompanion(MirrorHealthCompanion data) {
+    return DbMirrorHealth(
+      url: data.url.present ? data.url.value : this.url,
+      failures: data.failures.present ? data.failures.value : this.failures,
+      lastFailure:
+          data.lastFailure.present ? data.lastFailure.value : this.lastFailure,
+      lastSuccess:
+          data.lastSuccess.present ? data.lastSuccess.value : this.lastSuccess,
+      lastStatusCode: data.lastStatusCode.present
+          ? data.lastStatusCode.value
+          : this.lastStatusCode,
+      blacklistedUntil: data.blacklistedUntil.present
+          ? data.blacklistedUntil.value
+          : this.blacklistedUntil,
+      averageSpeedBps: data.averageSpeedBps.present
+          ? data.averageSpeedBps.value
+          : this.averageSpeedBps,
+      speedSamples: data.speedSamples.present
+          ? data.speedSamples.value
+          : this.speedSamples,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DbMirrorHealth(')
+          ..write('url: $url, ')
+          ..write('failures: $failures, ')
+          ..write('lastFailure: $lastFailure, ')
+          ..write('lastSuccess: $lastSuccess, ')
+          ..write('lastStatusCode: $lastStatusCode, ')
+          ..write('blacklistedUntil: $blacklistedUntil, ')
+          ..write('averageSpeedBps: $averageSpeedBps, ')
+          ..write('speedSamples: $speedSamples')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(url, failures, lastFailure, lastSuccess,
+      lastStatusCode, blacklistedUntil, averageSpeedBps, speedSamples);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DbMirrorHealth &&
+          other.url == this.url &&
+          other.failures == this.failures &&
+          other.lastFailure == this.lastFailure &&
+          other.lastSuccess == this.lastSuccess &&
+          other.lastStatusCode == this.lastStatusCode &&
+          other.blacklistedUntil == this.blacklistedUntil &&
+          other.averageSpeedBps == this.averageSpeedBps &&
+          other.speedSamples == this.speedSamples);
+}
+
+class MirrorHealthCompanion extends UpdateCompanion<DbMirrorHealth> {
+  final Value<String> url;
+  final Value<int> failures;
+  final Value<int> lastFailure;
+  final Value<int> lastSuccess;
+  final Value<int> lastStatusCode;
+  final Value<int> blacklistedUntil;
+  final Value<double> averageSpeedBps;
+  final Value<String?> speedSamples;
+  final Value<int> rowid;
+  const MirrorHealthCompanion({
+    this.url = const Value.absent(),
+    this.failures = const Value.absent(),
+    this.lastFailure = const Value.absent(),
+    this.lastSuccess = const Value.absent(),
+    this.lastStatusCode = const Value.absent(),
+    this.blacklistedUntil = const Value.absent(),
+    this.averageSpeedBps = const Value.absent(),
+    this.speedSamples = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MirrorHealthCompanion.insert({
+    required String url,
+    this.failures = const Value.absent(),
+    this.lastFailure = const Value.absent(),
+    this.lastSuccess = const Value.absent(),
+    this.lastStatusCode = const Value.absent(),
+    this.blacklistedUntil = const Value.absent(),
+    this.averageSpeedBps = const Value.absent(),
+    this.speedSamples = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : url = Value(url);
+  static Insertable<DbMirrorHealth> custom({
+    Expression<String>? url,
+    Expression<int>? failures,
+    Expression<int>? lastFailure,
+    Expression<int>? lastSuccess,
+    Expression<int>? lastStatusCode,
+    Expression<int>? blacklistedUntil,
+    Expression<double>? averageSpeedBps,
+    Expression<String>? speedSamples,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (url != null) 'url': url,
+      if (failures != null) 'failures': failures,
+      if (lastFailure != null) 'last_failure': lastFailure,
+      if (lastSuccess != null) 'last_success': lastSuccess,
+      if (lastStatusCode != null) 'last_status_code': lastStatusCode,
+      if (blacklistedUntil != null) 'blacklisted_until': blacklistedUntil,
+      if (averageSpeedBps != null) 'average_speed_bps': averageSpeedBps,
+      if (speedSamples != null) 'speed_samples': speedSamples,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MirrorHealthCompanion copyWith(
+      {Value<String>? url,
+      Value<int>? failures,
+      Value<int>? lastFailure,
+      Value<int>? lastSuccess,
+      Value<int>? lastStatusCode,
+      Value<int>? blacklistedUntil,
+      Value<double>? averageSpeedBps,
+      Value<String?>? speedSamples,
+      Value<int>? rowid}) {
+    return MirrorHealthCompanion(
+      url: url ?? this.url,
+      failures: failures ?? this.failures,
+      lastFailure: lastFailure ?? this.lastFailure,
+      lastSuccess: lastSuccess ?? this.lastSuccess,
+      lastStatusCode: lastStatusCode ?? this.lastStatusCode,
+      blacklistedUntil: blacklistedUntil ?? this.blacklistedUntil,
+      averageSpeedBps: averageSpeedBps ?? this.averageSpeedBps,
+      speedSamples: speedSamples ?? this.speedSamples,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (url.present) {
+      map['url'] = Variable<String>(url.value);
+    }
+    if (failures.present) {
+      map['failures'] = Variable<int>(failures.value);
+    }
+    if (lastFailure.present) {
+      map['last_failure'] = Variable<int>(lastFailure.value);
+    }
+    if (lastSuccess.present) {
+      map['last_success'] = Variable<int>(lastSuccess.value);
+    }
+    if (lastStatusCode.present) {
+      map['last_status_code'] = Variable<int>(lastStatusCode.value);
+    }
+    if (blacklistedUntil.present) {
+      map['blacklisted_until'] = Variable<int>(blacklistedUntil.value);
+    }
+    if (averageSpeedBps.present) {
+      map['average_speed_bps'] = Variable<double>(averageSpeedBps.value);
+    }
+    if (speedSamples.present) {
+      map['speed_samples'] = Variable<String>(speedSamples.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MirrorHealthCompanion(')
+          ..write('url: $url, ')
+          ..write('failures: $failures, ')
+          ..write('lastFailure: $lastFailure, ')
+          ..write('lastSuccess: $lastSuccess, ')
+          ..write('lastStatusCode: $lastStatusCode, ')
+          ..write('blacklistedUntil: $blacklistedUntil, ')
+          ..write('averageSpeedBps: $averageSpeedBps, ')
+          ..write('speedSamples: $speedSamples, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3567,12 +4063,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $BookmarksTable bookmarks = $BookmarksTable(this);
   late final $BrowserHistoryTable browserHistory = $BrowserHistoryTable(this);
   late final $BrowserTabsTable browserTabs = $BrowserTabsTable(this);
+  late final $MirrorHealthTable mirrorHealth = $MirrorHealthTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [downloadTasks, bookmarks, browserHistory, browserTabs];
+      [downloadTasks, bookmarks, browserHistory, browserTabs, mirrorHealth];
 }
 
 typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
@@ -3632,6 +4129,7 @@ typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
   Value<int?> audioChunksTotal,
   Value<int?> httpPartsCompleted,
   Value<int?> httpPartsTotal,
+  Value<String?> previousCycleState,
   Value<int> rowid,
 });
 typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
@@ -3691,6 +4189,7 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
   Value<int?> audioChunksTotal,
   Value<int?> httpPartsCompleted,
   Value<int?> httpPartsTotal,
+  Value<String?> previousCycleState,
   Value<int> rowid,
 });
 
@@ -3895,6 +4394,10 @@ class $$DownloadTasksTableFilterComposer
   ColumnFilters<int> get httpPartsTotal => $composableBuilder(
       column: $table.httpPartsTotal,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get previousCycleState => $composableBuilder(
+      column: $table.previousCycleState,
+      builder: (column) => ColumnFilters(column));
 }
 
 class $$DownloadTasksTableOrderingComposer
@@ -4098,6 +4601,10 @@ class $$DownloadTasksTableOrderingComposer
   ColumnOrderings<int> get httpPartsTotal => $composableBuilder(
       column: $table.httpPartsTotal,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get previousCycleState => $composableBuilder(
+      column: $table.previousCycleState,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -4276,6 +4783,9 @@ class $$DownloadTasksTableAnnotationComposer
 
   GeneratedColumn<int> get httpPartsTotal => $composableBuilder(
       column: $table.httpPartsTotal, builder: (column) => column);
+
+  GeneratedColumn<String> get previousCycleState => $composableBuilder(
+      column: $table.previousCycleState, builder: (column) => column);
 }
 
 class $$DownloadTasksTableTableManager extends RootTableManager<
@@ -4360,6 +4870,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<int?> audioChunksTotal = const Value.absent(),
             Value<int?> httpPartsCompleted = const Value.absent(),
             Value<int?> httpPartsTotal = const Value.absent(),
+            Value<String?> previousCycleState = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               DownloadTasksCompanion(
@@ -4418,6 +4929,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             audioChunksTotal: audioChunksTotal,
             httpPartsCompleted: httpPartsCompleted,
             httpPartsTotal: httpPartsTotal,
+            previousCycleState: previousCycleState,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -4477,6 +4989,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<int?> audioChunksTotal = const Value.absent(),
             Value<int?> httpPartsCompleted = const Value.absent(),
             Value<int?> httpPartsTotal = const Value.absent(),
+            Value<String?> previousCycleState = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               DownloadTasksCompanion.insert(
@@ -4535,6 +5048,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             audioChunksTotal: audioChunksTotal,
             httpPartsCompleted: httpPartsCompleted,
             httpPartsTotal: httpPartsTotal,
+            previousCycleState: previousCycleState,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -5126,6 +5640,231 @@ typedef $$BrowserTabsTableProcessedTableManager = ProcessedTableManager<
     ),
     SavedBrowserTab,
     PrefetchHooks Function()>;
+typedef $$MirrorHealthTableCreateCompanionBuilder = MirrorHealthCompanion
+    Function({
+  required String url,
+  Value<int> failures,
+  Value<int> lastFailure,
+  Value<int> lastSuccess,
+  Value<int> lastStatusCode,
+  Value<int> blacklistedUntil,
+  Value<double> averageSpeedBps,
+  Value<String?> speedSamples,
+  Value<int> rowid,
+});
+typedef $$MirrorHealthTableUpdateCompanionBuilder = MirrorHealthCompanion
+    Function({
+  Value<String> url,
+  Value<int> failures,
+  Value<int> lastFailure,
+  Value<int> lastSuccess,
+  Value<int> lastStatusCode,
+  Value<int> blacklistedUntil,
+  Value<double> averageSpeedBps,
+  Value<String?> speedSamples,
+  Value<int> rowid,
+});
+
+class $$MirrorHealthTableFilterComposer
+    extends Composer<_$AppDatabase, $MirrorHealthTable> {
+  $$MirrorHealthTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get url => $composableBuilder(
+      column: $table.url, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get failures => $composableBuilder(
+      column: $table.failures, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get lastFailure => $composableBuilder(
+      column: $table.lastFailure, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get lastSuccess => $composableBuilder(
+      column: $table.lastSuccess, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get lastStatusCode => $composableBuilder(
+      column: $table.lastStatusCode,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get blacklistedUntil => $composableBuilder(
+      column: $table.blacklistedUntil,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get averageSpeedBps => $composableBuilder(
+      column: $table.averageSpeedBps,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get speedSamples => $composableBuilder(
+      column: $table.speedSamples, builder: (column) => ColumnFilters(column));
+}
+
+class $$MirrorHealthTableOrderingComposer
+    extends Composer<_$AppDatabase, $MirrorHealthTable> {
+  $$MirrorHealthTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get url => $composableBuilder(
+      column: $table.url, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get failures => $composableBuilder(
+      column: $table.failures, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get lastFailure => $composableBuilder(
+      column: $table.lastFailure, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get lastSuccess => $composableBuilder(
+      column: $table.lastSuccess, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get lastStatusCode => $composableBuilder(
+      column: $table.lastStatusCode,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get blacklistedUntil => $composableBuilder(
+      column: $table.blacklistedUntil,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get averageSpeedBps => $composableBuilder(
+      column: $table.averageSpeedBps,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get speedSamples => $composableBuilder(
+      column: $table.speedSamples,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$MirrorHealthTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MirrorHealthTable> {
+  $$MirrorHealthTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get url =>
+      $composableBuilder(column: $table.url, builder: (column) => column);
+
+  GeneratedColumn<int> get failures =>
+      $composableBuilder(column: $table.failures, builder: (column) => column);
+
+  GeneratedColumn<int> get lastFailure => $composableBuilder(
+      column: $table.lastFailure, builder: (column) => column);
+
+  GeneratedColumn<int> get lastSuccess => $composableBuilder(
+      column: $table.lastSuccess, builder: (column) => column);
+
+  GeneratedColumn<int> get lastStatusCode => $composableBuilder(
+      column: $table.lastStatusCode, builder: (column) => column);
+
+  GeneratedColumn<int> get blacklistedUntil => $composableBuilder(
+      column: $table.blacklistedUntil, builder: (column) => column);
+
+  GeneratedColumn<double> get averageSpeedBps => $composableBuilder(
+      column: $table.averageSpeedBps, builder: (column) => column);
+
+  GeneratedColumn<String> get speedSamples => $composableBuilder(
+      column: $table.speedSamples, builder: (column) => column);
+}
+
+class $$MirrorHealthTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $MirrorHealthTable,
+    DbMirrorHealth,
+    $$MirrorHealthTableFilterComposer,
+    $$MirrorHealthTableOrderingComposer,
+    $$MirrorHealthTableAnnotationComposer,
+    $$MirrorHealthTableCreateCompanionBuilder,
+    $$MirrorHealthTableUpdateCompanionBuilder,
+    (
+      DbMirrorHealth,
+      BaseReferences<_$AppDatabase, $MirrorHealthTable, DbMirrorHealth>
+    ),
+    DbMirrorHealth,
+    PrefetchHooks Function()> {
+  $$MirrorHealthTableTableManager(_$AppDatabase db, $MirrorHealthTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MirrorHealthTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MirrorHealthTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MirrorHealthTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> url = const Value.absent(),
+            Value<int> failures = const Value.absent(),
+            Value<int> lastFailure = const Value.absent(),
+            Value<int> lastSuccess = const Value.absent(),
+            Value<int> lastStatusCode = const Value.absent(),
+            Value<int> blacklistedUntil = const Value.absent(),
+            Value<double> averageSpeedBps = const Value.absent(),
+            Value<String?> speedSamples = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              MirrorHealthCompanion(
+            url: url,
+            failures: failures,
+            lastFailure: lastFailure,
+            lastSuccess: lastSuccess,
+            lastStatusCode: lastStatusCode,
+            blacklistedUntil: blacklistedUntil,
+            averageSpeedBps: averageSpeedBps,
+            speedSamples: speedSamples,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String url,
+            Value<int> failures = const Value.absent(),
+            Value<int> lastFailure = const Value.absent(),
+            Value<int> lastSuccess = const Value.absent(),
+            Value<int> lastStatusCode = const Value.absent(),
+            Value<int> blacklistedUntil = const Value.absent(),
+            Value<double> averageSpeedBps = const Value.absent(),
+            Value<String?> speedSamples = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              MirrorHealthCompanion.insert(
+            url: url,
+            failures: failures,
+            lastFailure: lastFailure,
+            lastSuccess: lastSuccess,
+            lastStatusCode: lastStatusCode,
+            blacklistedUntil: blacklistedUntil,
+            averageSpeedBps: averageSpeedBps,
+            speedSamples: speedSamples,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$MirrorHealthTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $MirrorHealthTable,
+    DbMirrorHealth,
+    $$MirrorHealthTableFilterComposer,
+    $$MirrorHealthTableOrderingComposer,
+    $$MirrorHealthTableAnnotationComposer,
+    $$MirrorHealthTableCreateCompanionBuilder,
+    $$MirrorHealthTableUpdateCompanionBuilder,
+    (
+      DbMirrorHealth,
+      BaseReferences<_$AppDatabase, $MirrorHealthTable, DbMirrorHealth>
+    ),
+    DbMirrorHealth,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5138,4 +5877,6 @@ class $AppDatabaseManager {
       $$BrowserHistoryTableTableManager(_db, _db.browserHistory);
   $$BrowserTabsTableTableManager get browserTabs =>
       $$BrowserTabsTableTableManager(_db, _db.browserTabs);
+  $$MirrorHealthTableTableManager get mirrorHealth =>
+      $$MirrorHealthTableTableManager(_db, _db.mirrorHealth);
 }

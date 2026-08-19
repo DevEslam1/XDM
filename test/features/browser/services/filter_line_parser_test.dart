@@ -23,7 +23,8 @@ void main() {
       final lines = ['example.com##.ad-banner', '##.global-ad'];
       final res = FilterLineParser.parse(lines, FilterType.ads);
 
-      expect(res.siteCosmeticRules['example.com']?.contains('.ad-banner'), isTrue);
+      expect(
+          res.siteCosmeticRules['example.com']?.contains('.ad-banner'), isTrue);
       expect(res.cosmeticRules.contains('.global-ad'), isTrue);
     });
 
@@ -34,8 +35,12 @@ void main() {
       ];
       final res = FilterLineParser.parse(lines, FilterType.ads);
 
-      expect(res.siteCosmeticRules['example.com']?.contains('set-constant, canRunAds, true'), isTrue);
-      expect(res.scriptletRules.contains('abort-on-property-read, I10c'), isTrue);
+      expect(
+          res.siteCosmeticRules['example.com']
+              ?.contains('set-constant, canRunAds, true'),
+          isTrue);
+      expect(
+          res.scriptletRules.contains('abort-on-property-read, I10c'), isTrue);
     });
 
     test('Parentheses balance validator', () {
@@ -45,7 +50,11 @@ void main() {
     });
 
     test('Ignores comment lines and metadata', () {
-      final lines = ['! This is a comment', '[Adblock Plus 2.0]', '# Comment line'];
+      final lines = [
+        '! This is a comment',
+        '[Adblock Plus 2.0]',
+        '# Comment line'
+      ];
       final res = FilterLineParser.parse(lines, FilterType.ads);
 
       expect(res.blocked.isEmpty, isTrue);

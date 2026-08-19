@@ -82,9 +82,8 @@ class _BrowserFindPanelState extends State<BrowserFindPanel> {
                     hintText: L10n.of(context, 'browser_find_in_page'),
                     hintStyle: TextStyle(
                       fontSize: 13,
-                      color: isDark
-                          ? AppTheme.textMuted
-                          : AppTheme.lightTextMuted,
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                     ),
                     isDense: true,
                     contentPadding:
@@ -97,7 +96,9 @@ class _BrowserFindPanelState extends State<BrowserFindPanel> {
                               child: Text(
                                 controller.findMatchCount > 0
                                     ? '${controller.findActiveMatch}/${controller.findMatchCount}'
-                                    : (L10n.isRtl(context) ? 'لا نتائج' : '0/0'),
+                                    : (L10n.isRtl(context)
+                                        ? 'لا نتائج'
+                                        : '0/0'),
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,

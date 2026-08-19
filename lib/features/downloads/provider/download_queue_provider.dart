@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_state_machine.dart';
@@ -12,6 +14,8 @@ class DownloadQueueProvider extends ChangeNotifier {
   final int? _maxConcurrentOverride;
 
   final List<String> _queuedIds = [];
+  final Lock _lock = Lock();
+  Timer? _debounceTimer;
 
   DownloadQueueProvider({
     DownloadListProvider? listProvider,
@@ -33,26 +37,33 @@ class DownloadQueueProvider extends ChangeNotifier {
   }
 
   void pumpQueue() {
-    final list = _listProvider;
-    if (list == null) return;
-    final activeCount =
-        list.tasks.where((t) => t.status == DownloadStatus.downloading).length;
-    final maxConcurrent = maxConcurrentDownloads;
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 50), () {
+      unawaited(_lock.synchronized(() async {
+        final list = _listProvider;
+        if (list == null) return;
+        final activeCount = list.tasks
+            .where((t) => t.status == DownloadStatus.downloading)
+            .length;
+        final maxConcurrent = maxConcurrentDownloads;
 
-    if (activeCount >= maxConcurrent) return;
+        if (activeCount >= maxConcurrent) return;
 
-    final queued =
-        list.tasks.where((t) => t.status == DownloadStatus.queued).toList();
+        final queued =
+            list.tasks.where((t) => t.status == DownloadStatus.queued).toList();
 
-    var currentActive = activeCount;
-    for (final task in queued) {
-      if (currentActive >= maxConcurrent) break;
-      if (DownloadStateMachine.canTransitionStatus(
-          task.status, DownloadStatus.downloading)) {
-        list.updateTask(task.copyWith(status: DownloadStatus.downloading));
-        currentActive++;
-      }
-    }
+        var currentActive = activeCount;
+        for (final task in queued) {
+          if (currentActive >= maxConcurrent) break;
+          if (DownloadStateMachine.canTransitionStatus(
+              task.status, DownloadStatus.downloading)) {
+            await list.updateTask(
+                task.copyWith(status: DownloadStatus.downloading));
+            currentActive++;
+          }
+        }
+      }));
+    });
   }
 
   Future<void> pauseTask(String id,

@@ -76,8 +76,8 @@ mixin DownloadTorrentMixin {
             TorrentService.pauseTorrent(existingId);
             TorrentService.removeTorrent(existingId, deleteFiles: false);
           } catch (e, st) {
-            LoggingService.logger('DownloadTorrentMixin')
-                .warning('Failed to remove stale error torrent $existingId', e, st);
+            LoggingService.logger('DownloadTorrentMixin').warning(
+                'Failed to remove stale error torrent $existingId', e, st);
           }
           providerTorrentIds.remove(task.id);
           // Fall through to the add-new-handle path below
@@ -694,4 +694,3 @@ mixin DownloadTorrentMixin {
     providerNotifyListeners();
   }
 }
-

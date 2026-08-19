@@ -44,7 +44,8 @@ void main() {
       expect(level1Remaining.inSeconds, lessThanOrEqualTo(30));
     });
 
-    test('Reboot scenario re-derives lockout from persisted lockedUntil', () async {
+    test('Reboot scenario re-derives lockout from persisted lockedUntil',
+        () async {
       await AppLockService.setPin('1234');
       for (var i = 0; i < 5; i++) {
         await AppLockService.verifyPin('9999');
@@ -59,7 +60,9 @@ void main() {
       expect(remainingAfterReboot.inSeconds, lessThanOrEqualTo(30));
     });
 
-    test('Clock skew backward jump > 60s detected by validateMonotonicConsistency', () async {
+    test(
+        'Clock skew backward jump > 60s detected by validateMonotonicConsistency',
+        () async {
       await AppLockService.setPin('1234');
       for (var i = 0; i < 5; i++) {
         await AppLockService.verifyPin('9999');
@@ -76,7 +79,8 @@ void main() {
       expect(remaining.inSeconds, greaterThan(0));
     });
 
-    test('Lockout expiry resets failed attempts and permits verification', () async {
+    test('Lockout expiry resets failed attempts and permits verification',
+        () async {
       await AppLockService.setPin('1234');
       for (var i = 0; i < 5; i++) {
         await AppLockService.verifyPin('9999');

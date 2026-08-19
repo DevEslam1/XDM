@@ -54,9 +54,7 @@ class BrowserPreferencesRepository {
       final raw = prefs.getString(_customShortcutsKey);
       if (raw != null && raw.isNotEmpty) {
         final decoded = jsonDecode(raw) as List;
-        return decoded
-            .map((e) => Map<String, String>.from(e as Map))
-            .toList();
+        return decoded.map((e) => Map<String, String>.from(e as Map)).toList();
       }
     } catch (_) {}
     return [];

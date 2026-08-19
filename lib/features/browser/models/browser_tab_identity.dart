@@ -23,6 +23,5 @@ class BrowserTabIdentity {
     return rawUrl;
   }
 
-  static bool isHomeUrl(String url) =>
-      url.isEmpty || url == canonicalBlankUrl;
+  static bool isHomeUrl(String url) => url.isEmpty || url == canonicalBlankUrl;
 }

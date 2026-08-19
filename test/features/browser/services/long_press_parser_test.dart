@@ -4,7 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('LongPressPayload Tests', () {
     test('Parses direct JSON payload', () {
-      const json = '{"url": "https://example.com/file.zip", "type": "link", "text": "Download File"}';
+      const json =
+          '{"url": "https://example.com/file.zip", "type": "link", "text": "Download File"}';
       final payload = LongPressPayload.tryParse(json);
 
       expect(payload, isNotNull);
@@ -14,7 +15,8 @@ void main() {
     });
 
     test('Parses double-quoted and escaped JSON string', () {
-      const doubleQuoted = '"{\\"url\\": \\"https://example.com/image.png\\", \\"type\\": \\"image\\", \\"text\\": \\"Sample Image\\"}"';
+      const doubleQuoted =
+          '"{\\"url\\": \\"https://example.com/image.png\\", \\"type\\": \\"image\\", \\"text\\": \\"Sample Image\\"}"';
       final payload = LongPressPayload.tryParse(doubleQuoted);
 
       expect(payload, isNotNull);

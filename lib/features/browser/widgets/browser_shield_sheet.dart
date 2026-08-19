@@ -101,9 +101,8 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
         : (isDark ? AppTheme.cardBg : AppTheme.lightCardBg);
     final textPrimary = isDark ? Colors.white : Colors.black87;
     final textMuted = isDark ? Colors.white54 : Colors.black54;
-    final borderClr = isDark
-        ? AppTheme.border.withValues(alpha: 0.5)
-        : AppTheme.lightBorder;
+    final borderClr =
+        isDark ? AppTheme.border.withValues(alpha: 0.5) : AppTheme.lightBorder;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final green = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
 
@@ -160,7 +159,11 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _domain.isNotEmpty ? _domain : (widget.currentUrl.isEmpty ? 'Local Page' : widget.currentUrl),
+                      _domain.isNotEmpty
+                          ? _domain
+                          : (widget.currentUrl.isEmpty
+                              ? 'Local Page'
+                              : widget.currentUrl),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -188,7 +191,8 @@ class _BrowserShieldSheetState extends State<BrowserShieldSheet>
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: _isAllowlisted
                       ? AppTheme.neonAmber.withValues(alpha: 0.12)

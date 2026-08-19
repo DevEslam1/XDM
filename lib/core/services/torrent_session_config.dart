@@ -37,19 +37,18 @@ class TorrentSessionConfig {
         ? LibtorrentFlutter.instance.getDefaultConfig()
         : const BtConfig();
     return base.copyWith(
-          // === CONNECTION & PROTOCOL ===
-          disableDht: !s.enableDht,
-          disableUpnp: !s.enableUpnp,
-          disableUtp: !s.enableUtp,
-          forceEncrypt: s.forceEncrypt,
-          connectionsLimit: adaptiveConnectionsLimit(s),
+      // === CONNECTION & PROTOCOL ===
+      disableDht: !s.enableDht,
+      disableUpnp: !s.enableUpnp,
+      disableUtp: !s.enableUtp,
+      forceEncrypt: s.forceEncrypt,
+      connectionsLimit: adaptiveConnectionsLimit(s),
 
-          // === RATE LIMITS ===
-          downloadRateLimit: s.effectiveSpeedLimitBytesPerSecond ~/ 1024,
-          uploadRateLimit: s.globalTorrentSeedingLimited
-              ? s.globalTorrentSeedingLimitKbps
-              : 0,
-        );
+      // === RATE LIMITS ===
+      downloadRateLimit: s.effectiveSpeedLimitBytesPerSecond ~/ 1024,
+      uploadRateLimit:
+          s.globalTorrentSeedingLimited ? s.globalTorrentSeedingLimitKbps : 0,
+    );
   }
 
   /// Converts SettingsProvider to a standard [TorrentSettingsPack].

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../../features/settings/provider/settings_provider.dart';
 import 'xdm_backend_client.dart';
@@ -22,6 +23,7 @@ class StreamRefreshResult {
 }
 
 class YoutubeService {
+  static final Lock _refreshLock = Lock();
   static String? _cookies;
   static String? _oauthToken;
   static const _secureStorage = FlutterSecureStorage();
@@ -1010,125 +1012,127 @@ class YoutubeService {
     String downloadPageUrl,
     String oldStreamUrl,
   ) async {
-    // Mirror getStreams' own fallback: a bare 11-character YouTube video id
-    // is a valid input here too (getStreamForVideo passes ids around, not
-    // just full URLs), so don't bail out just because extractVideoId — which
-    // only understands full URLs — returns null for it.
-    final videoId = extractVideoId(downloadPageUrl) ??
-        (downloadPageUrl.length == 11 ? downloadPageUrl : null);
-    if (videoId == null) return null;
+    return _refreshLock.synchronized(() async {
+      // Mirror getStreams' own fallback: a bare 11-character YouTube video id
+      // is a valid input here too (getStreamForVideo passes ids around, not
+      // just full URLs), so don't bail out just because extractVideoId — which
+      // only understands full URLs — returns null for it.
+      final videoId = extractVideoId(downloadPageUrl) ??
+          (downloadPageUrl.length == 11 ? downloadPageUrl : null);
+      if (videoId == null) return null;
 
-    try {
-      final streams = await getStreams(downloadPageUrl);
-      if (streams.isNotEmpty) {
-        Uri? oldUri;
-        try {
-          oldUri = Uri.parse(oldStreamUrl);
-        } catch (e) {
-          debugPrint(
-            '[YouTubeService] Failed to parse oldStreamUrl in refreshStreamUrl: $e',
-          );
-        }
-
-        final oldItag = oldUri?.queryParameters['itag'];
-
-        if (oldItag != null) {
-          final matched = streams.firstWhere(
-            (s) =>
-                s['itag']?.toString() == oldItag ||
-                (s['src'] != null &&
-                    Uri.tryParse(
-                          s['src'].toString(),
-                        )?.queryParameters['itag'] ==
-                        oldItag),
-            orElse: () => <String, dynamic>{},
-          );
-          if (matched.isNotEmpty) {
-            return {
-              'url': matched['src'] as String?,
-              'audioUrl': matched['audioSrc'] as String?,
-            };
-          }
-          debugPrint(
-            '[YouTubeService] FIX(10): refreshStreamUrl: itag "$oldItag" not found in refreshed streams. Attempting quality/type fallback.',
-          );
-        }
-
-        final oldQuality = oldUri?.queryParameters['quality'] ??
-            oldUri?.queryParameters['height'];
-
-        Map<String, dynamic>? bestMatch;
-        for (final s in streams) {
-          final sUrl = s['src']?.toString() ?? '';
-          final sUri = Uri.tryParse(sUrl);
-          final sQuality = s['quality']?.toString() ??
-              sUri?.queryParameters['quality'] ??
-              sUri?.queryParameters['height'];
-
-          if (oldQuality != null && sQuality == oldQuality) {
-            bestMatch = s;
-            break;
-          }
-        }
-
-        if (bestMatch != null) {
-          return {
-            'url': bestMatch['src'] as String?,
-            'audioUrl': bestMatch['audioSrc'] as String?,
-          };
-        }
-
+      try {
+        final streams = await getStreams(downloadPageUrl);
         if (streams.isNotEmpty) {
-          String oldType = 'combined';
-          if (oldStreamUrl.contains('mime=audio') ||
-              oldStreamUrl.contains('audio')) {
-            oldType = 'audio';
-          } else if (oldStreamUrl.contains('video')) {
-            oldType = 'video_only';
-          }
-
-          // FIX-17: Prefer same-type fallback, then closest quality.
-          // Avoids grabbing a completely different quality/type stream.
-          final sameType = streams
-              .where((s) => s['type'] == oldType && s['src'] != null)
-              .toList();
-          if (sameType.isNotEmpty) {
-            sameType.sort((a, b) =>
-                (parseQualityHeight(b['quality']?.toString() ?? '') -
-                        parseQualityHeight(oldQuality ?? ''))
-                    .abs() -
-                (parseQualityHeight(a['quality']?.toString() ?? '') -
-                        parseQualityHeight(oldQuality ?? ''))
-                    .abs());
-            return {
-              'url': sameType.first['src'] as String?,
-              'audioUrl': sameType.first['audioSrc'] as String?,
-            };
-          }
-
-          debugPrint(
-            '[YouTube] refreshStreamUrl: No itag/quality/same-type match found. '
-            'Falling back to any stream (quality may differ).',
-          );
-          final first = streams.firstWhere(
-            (s) => s['src'] != null,
-            orElse: () => <String, dynamic>{},
-          );
-          if (first.isNotEmpty) {
+          Uri? oldUri;
+          try {
+            oldUri = Uri.parse(oldStreamUrl);
+          } catch (e) {
             debugPrint(
-              '[YouTubeService] refreshStreamUrl warning: Stream type changed from "$oldType" to "${first['type']}".',
+              '[YouTubeService] Failed to parse oldStreamUrl in refreshStreamUrl: $e',
             );
+          }
+
+          final oldItag = oldUri?.queryParameters['itag'];
+
+          if (oldItag != null) {
+            final matched = streams.firstWhere(
+              (s) =>
+                  s['itag']?.toString() == oldItag ||
+                  (s['src'] != null &&
+                      Uri.tryParse(
+                            s['src'].toString(),
+                          )?.queryParameters['itag'] ==
+                          oldItag),
+              orElse: () => <String, dynamic>{},
+            );
+            if (matched.isNotEmpty) {
+              return {
+                'url': matched['src'] as String?,
+                'audioUrl': matched['audioSrc'] as String?,
+              };
+            }
+            debugPrint(
+              '[YouTubeService] FIX(10): refreshStreamUrl: itag "$oldItag" not found in refreshed streams. Attempting quality/type fallback.',
+            );
+          }
+
+          final oldQuality = oldUri?.queryParameters['quality'] ??
+              oldUri?.queryParameters['height'];
+
+          Map<String, dynamic>? bestMatch;
+          for (final s in streams) {
+            final sUrl = s['src']?.toString() ?? '';
+            final sUri = Uri.tryParse(sUrl);
+            final sQuality = s['quality']?.toString() ??
+                sUri?.queryParameters['quality'] ??
+                sUri?.queryParameters['height'];
+
+            if (oldQuality != null && sQuality == oldQuality) {
+              bestMatch = s;
+              break;
+            }
+          }
+
+          if (bestMatch != null) {
             return {
-              'url': first['src'] as String?,
-              'audioUrl': first['audioSrc'] as String?,
+              'url': bestMatch['src'] as String?,
+              'audioUrl': bestMatch['audioSrc'] as String?,
             };
+          }
+
+          if (streams.isNotEmpty) {
+            String oldType = 'combined';
+            if (oldStreamUrl.contains('mime=audio') ||
+                oldStreamUrl.contains('audio')) {
+              oldType = 'audio';
+            } else if (oldStreamUrl.contains('video')) {
+              oldType = 'video_only';
+            }
+
+            // FIX-17: Prefer same-type fallback, then closest quality.
+            // Avoids grabbing a completely different quality/type stream.
+            final sameType = streams
+                .where((s) => s['type'] == oldType && s['src'] != null)
+                .toList();
+            if (sameType.isNotEmpty) {
+              sameType.sort((a, b) =>
+                  (parseQualityHeight(b['quality']?.toString() ?? '') -
+                          parseQualityHeight(oldQuality ?? ''))
+                      .abs() -
+                  (parseQualityHeight(a['quality']?.toString() ?? '') -
+                          parseQualityHeight(oldQuality ?? ''))
+                      .abs());
+              return {
+                'url': sameType.first['src'] as String?,
+                'audioUrl': sameType.first['audioSrc'] as String?,
+              };
+            }
+
+            debugPrint(
+              '[YouTube] refreshStreamUrl: No itag/quality/same-type match found. '
+              'Falling back to any stream (quality may differ).',
+            );
+            final first = streams.firstWhere(
+              (s) => s['src'] != null,
+              orElse: () => <String, dynamic>{},
+            );
+            if (first.isNotEmpty) {
+              debugPrint(
+                '[YouTubeService] refreshStreamUrl warning: Stream type changed from "$oldType" to "${first['type']}".',
+              );
+              return {
+                'url': first['src'] as String?,
+                'audioUrl': first['audioSrc'] as String?,
+              };
+            }
           }
         }
+      } catch (e) {
+        debugPrint('[YouTubeService] refreshStreamUrl error ($e).');
       }
-    } catch (e) {
-      debugPrint('[YouTubeService] refreshStreamUrl error ($e).');
-    }
-    return null;
+      return null;
+    });
   }
 
   static Future<Map<String, String?>?> Function(String,
@@ -1138,23 +1142,39 @@ class YoutubeService {
     String downloadPageUrl, {
     String? preferredType,
   }) async {
-    if (kDebugMode && mockGetFreshStreams != null) {
-      return mockGetFreshStreams!(downloadPageUrl,
-          preferredType: preferredType);
-    }
+    return _refreshLock.synchronized(() async {
+      if (kDebugMode && mockGetFreshStreams != null) {
+        return mockGetFreshStreams!(downloadPageUrl,
+            preferredType: preferredType);
+      }
 
-    final videoId = extractVideoId(downloadPageUrl) ??
-        (downloadPageUrl.length == 11 ? downloadPageUrl : null);
-    if (videoId == null) return null;
+      final videoId = extractVideoId(downloadPageUrl) ??
+          (downloadPageUrl.length == 11 ? downloadPageUrl : null);
+      if (videoId == null) return null;
 
-    try {
-      final streams = await getStreams(downloadPageUrl);
-      if (streams.isNotEmpty) {
-        if (preferredType != null) {
-          final matched =
-              streams.where((s) => s['type'] == preferredType).toList();
-          if (matched.isNotEmpty) {
-            final best = matched.firstWhere(
+      try {
+        final streams = await getStreams(downloadPageUrl);
+        if (streams.isNotEmpty) {
+          if (preferredType != null) {
+            final matched =
+                streams.where((s) => s['type'] == preferredType).toList();
+            if (matched.isNotEmpty) {
+              final best = matched.firstWhere(
+                (s) => s['src'] != null,
+                orElse: () => <String, dynamic>{},
+              );
+              if (best.isNotEmpty) {
+                return {
+                  'url': best['src'] as String?,
+                  'audioUrl': best['audioSrc'] as String?,
+                };
+              }
+            }
+          }
+
+          final combined = streams.where((s) => s['type'] == 'combined').toList();
+          if (combined.isNotEmpty) {
+            final best = combined.firstWhere(
               (s) => s['src'] != null,
               orElse: () => <String, dynamic>{},
             );
@@ -1165,47 +1185,33 @@ class YoutubeService {
               };
             }
           }
-        }
-
-        final combined = streams.where((s) => s['type'] == 'combined').toList();
-        if (combined.isNotEmpty) {
-          final best = combined.firstWhere(
+          final muxed = streams.where((s) => s['type'] == 'muxed').toList();
+          if (muxed.isNotEmpty) {
+            final best = muxed.firstWhere(
+              (s) => s['src'] != null,
+              orElse: () => <String, dynamic>{},
+            );
+            if (best.isNotEmpty) {
+              return {'url': best['src'] as String?, 'audioUrl': null};
+            }
+          }
+          final first = streams.firstWhere(
             (s) => s['src'] != null,
             orElse: () => <String, dynamic>{},
           );
-          if (best.isNotEmpty) {
+          if (first.isNotEmpty) {
             return {
-              'url': best['src'] as String?,
-              'audioUrl': best['audioSrc'] as String?,
+              'url': first['src'] as String?,
+              'audioUrl': first['audioSrc'] as String?,
             };
           }
         }
-        final muxed = streams.where((s) => s['type'] == 'muxed').toList();
-        if (muxed.isNotEmpty) {
-          final best = muxed.firstWhere(
-            (s) => s['src'] != null,
-            orElse: () => <String, dynamic>{},
-          );
-          if (best.isNotEmpty) {
-            return {'url': best['src'] as String?, 'audioUrl': null};
-          }
-        }
-        final first = streams.firstWhere(
-          (s) => s['src'] != null,
-          orElse: () => <String, dynamic>{},
-        );
-        if (first.isNotEmpty) {
-          return {
-            'url': first['src'] as String?,
-            'audioUrl': first['audioSrc'] as String?,
-          };
-        }
+      } catch (e) {
+        debugPrint('[YouTubeService] Backend getFreshStreams error ($e).');
       }
-    } catch (e) {
-      debugPrint('[YouTubeService] Backend getFreshStreams error ($e).');
-    }
 
-    return null;
+      return null;
+    });
   }
 
   static String _parseErrorMessage(Object error) {

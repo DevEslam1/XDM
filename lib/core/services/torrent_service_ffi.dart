@@ -727,14 +727,22 @@ class TorrentService {
       return;
     }
     try {
-      final data = _CapabilityGate.instance.saveResumeData(torrentId);
-      if (data != null) {
+      Uint8List? data;
+      // Task 1.5: Retry logic with exponential backoff for FFI resume data
+      for (var attempt = 0; attempt < 3; attempt++) {
+        data = _CapabilityGate.instance.saveResumeData(torrentId);
+        if (data != null && data.isNotEmpty) break;
+        if (attempt < 2) {
+          await Future.delayed(Duration(milliseconds: 250 * (1 << attempt)));
+        }
+      }
+      if (data != null && data.isNotEmpty) {
         final source = _torrentSources[torrentId];
         if (source != null) {
           await TorrentResumeStore.saveAndWait(
             torrentId: torrentId,
             sourceUrl: source,
-            fetchResumeData: () => data,
+            fetchResumeData: () => data!,
           );
         }
       }
@@ -1460,7 +1468,8 @@ class TorrentService {
     _webSeeds[torrentId]?.remove(url.trim());
     try {
       // ignore: avoid_dynamic_calls
-      (LibtorrentFlutter.instance as dynamic).removeWebSeed(torrentId, url.trim());
+      (LibtorrentFlutter.instance as dynamic)
+          .removeWebSeed(torrentId, url.trim());
     } catch (_) {}
   }
 
@@ -1531,7 +1540,9 @@ class TorrentService {
     for (final id in _activeTorrentIds) {
       try {
         final blob = _CapabilityGate.instance.saveResumeData(id);
-        if (blob != null && blob.isNotEmpty && TorrentResumeStore.validateResumeData(blob)) {
+        if (blob != null &&
+            blob.isNotEmpty &&
+            TorrentResumeStore.validateResumeData(blob)) {
           final source = _torrentSources[id];
           if (source != null) {
             await TorrentResumeStore.saveAndWait(
@@ -1586,25 +1597,29 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   bool get pieceDeadlineSupported => true;
   @override
-  bool get sequentialDownloadEnabled => TorrentService.sequentialDownloadEnabled;
+  bool get sequentialDownloadEnabled =>
+      TorrentService.sequentialDownloadEnabled;
   @override
   double get shareRatioLimit => TorrentService.shareRatioLimit;
   @override
   int get maxSeedingTimeMinutes => TorrentService.maxSeedingTimeMinutes;
 
   @override
-  Future<bool> hasResumeData(String source) => TorrentService.hasResumeData(source);
+  Future<bool> hasResumeData(String source) =>
+      TorrentService.hasResumeData(source);
   @override
   Future<void> init() => TorrentService.init();
   @override
-  Future<void> saveResumeData(int torrentId) => TorrentService.saveResumeData(torrentId);
+  Future<void> saveResumeData(int torrentId) =>
+      TorrentService.saveResumeData(torrentId);
   @override
   Future<void> saveAllResumeData() => TorrentService.saveAllResumeData();
   @override
   Future<void> dispose() => TorrentService.dispose();
 
   @override
-  int addMagnet(String magnetUri, String savePath) => TorrentService.addMagnet(magnetUri, savePath);
+  int addMagnet(String magnetUri, String savePath) =>
+      TorrentService.addMagnet(magnetUri, savePath);
   @override
   Future<int> addMagnetWithMetadataTimeout(
     String magnetUri,
@@ -1628,8 +1643,10 @@ class TorrentServiceImpl implements ITorrentService {
       TorrentService.addTorrentFile(filePath, savePath, sourceKey: sourceKey);
 
   @override
-  void removeTorrent(int id, {bool deleteFiles = false, bool deleteResumeData = false}) =>
-      TorrentService.removeTorrent(id, deleteFiles: deleteFiles, deleteResumeData: deleteResumeData);
+  void removeTorrent(int id,
+          {bool deleteFiles = false, bool deleteResumeData = false}) =>
+      TorrentService.removeTorrent(id,
+          deleteFiles: deleteFiles, deleteResumeData: deleteResumeData);
   @override
   Future<void> pauseTorrent(int id) => TorrentService.pauseTorrent(id);
   @override
@@ -1637,7 +1654,8 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   void resumeTorrent(int id) => TorrentService.resumeTorrent(id);
   @override
-  bool loadResumeData(int id, List<int> data) => TorrentService.loadResumeData(id, data);
+  bool loadResumeData(int id, List<int> data) =>
+      TorrentService.loadResumeData(id, data);
   @override
   bool isTorrentAlive(int id) => TorrentService.isTorrentAlive(id);
   @override
@@ -1654,7 +1672,8 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   List<TorrentFileItem> getFiles(int id) => TorrentService.getFiles(id);
   @override
-  Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates => TorrentService.torrentUpdates;
+  Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
+      TorrentService.torrentUpdates;
   @override
   Map<int, TorrentUpdateInfo> get latestStats => TorrentService.latestStats;
   @override
@@ -1662,16 +1681,19 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   String get nativeVersion => '1.9.2';
   @override
-  void configureSession([SettingsProvider? settings]) => TorrentService.configureSession(settings);
+  void configureSession([SettingsProvider? settings]) =>
+      TorrentService.configureSession(settings);
   @override
   void reconfigureSession() => TorrentService.reconfigureSession();
   @override
-  void autoEnableSequentialForVideo(int torrentId) => TorrentService.autoEnableSequentialForVideo(torrentId);
+  void autoEnableSequentialForVideo(int torrentId) =>
+      TorrentService.autoEnableSequentialForVideo(torrentId);
   @override
   Future<void> autoSaveResumeData() => TorrentService.autoSaveResumeData();
 
   @override
-  List<TrackerInfo> getTrackers(int torrentId) => TorrentService.getTrackers(torrentId);
+  List<TrackerInfo> getTrackers(int torrentId) =>
+      TorrentService.getTrackers(torrentId);
   @override
   void addTracker(int torrentId, String trackerUrl, {int tier = 0}) =>
       TorrentService.addTracker(torrentId, trackerUrl, tier: tier);
@@ -1702,9 +1724,11 @@ class TorrentServiceImpl implements ITorrentService {
       );
 
   @override
-  Future<bool> loadIpFilter(String filePath) => TorrentService.loadIpFilter(filePath);
+  Future<bool> loadIpFilter(String filePath) =>
+      TorrentService.loadIpFilter(filePath);
   @override
-  Future<bool> downloadAndApplyBlocklist(String url) => TorrentService.downloadAndApplyBlocklist(url);
+  Future<bool> downloadAndApplyBlocklist(String url) =>
+      TorrentService.downloadAndApplyBlocklist(url);
 
   @override
   void enableSequentialDownload(int torrentId, bool enabled) =>
@@ -1767,11 +1791,14 @@ class TorrentServiceImpl implements ITorrentService {
       );
 
   @override
-  void addWebSeed(int torrentId, String url) => TorrentService.addWebSeed(torrentId, url);
+  void addWebSeed(int torrentId, String url) =>
+      TorrentService.addWebSeed(torrentId, url);
   @override
-  void removeWebSeed(int torrentId, String url) => TorrentService.removeWebSeed(torrentId, url);
+  void removeWebSeed(int torrentId, String url) =>
+      TorrentService.removeWebSeed(torrentId, url);
   @override
-  List<String> getWebSeeds(int torrentId) => TorrentService.getWebSeeds(torrentId);
+  List<String> getWebSeeds(int torrentId) =>
+      TorrentService.getWebSeeds(torrentId);
 
   @override
   bool shouldStopSeeding({
@@ -2003,6 +2030,3 @@ class TorrentServiceStub implements ITorrentService {
   }) =>
       false;
 }
-
-
-

@@ -157,7 +157,8 @@ class SettingsProvider extends ChangeNotifier
   static const _sendBrowserCookiesToBackendKey =
       'send_browser_cookies_to_backend';
   static const _useLocalYtFallbackKey = 'use_local_yt_fallback';
-  static const _downloadStalledTimeoutMinutesKey = 'downloadStalledTimeoutMinutes';
+  static const _downloadStalledTimeoutMinutesKey =
+      'downloadStalledTimeoutMinutes';
 
   late SharedPreferences _prefs;
   final _secureStorage = const FlutterSecureStorage();

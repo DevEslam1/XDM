@@ -64,7 +64,8 @@ void main() {
 
     testWidgets(
         'shouldRepaint returns false when chunkFingerprint is equal even if '
-        'chunk detail lists differ by construction', (WidgetTester tester) async {
+        'chunk detail lists differ by construction',
+        (WidgetTester tester) async {
       final p1 = ValueNotifier<double>(0.5);
 
       final painterA = ChannelProgressPainter(
@@ -103,8 +104,7 @@ void main() {
       expect(painterA.shouldRepaint(painterB), isFalse);
     });
 
-    testWidgets(
-        'shouldRepaint returns true when chunkFingerprint differs',
+    testWidgets('shouldRepaint returns true when chunkFingerprint differs',
         (WidgetTester tester) async {
       final p1 = ValueNotifier<double>(0.5);
 

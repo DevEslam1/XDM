@@ -205,7 +205,8 @@ void main() {
       expect(totalMirrorAttempts > maxTotalAttempts, isTrue);
     });
 
-    test('worker isolate executes without GetIt registration or access', () async {
+    test('worker isolate executes without GetIt registration or access',
+        () async {
       final poolPort = ReceivePort();
       final isolate = await Isolate.spawn(workerEntry, poolPort.sendPort);
 
@@ -219,7 +220,8 @@ void main() {
         }
       });
 
-      final cmdPort = await completer.future.timeout(const Duration(seconds: 5));
+      final cmdPort =
+          await completer.future.timeout(const Duration(seconds: 5));
       expect(cmdPort, isNotNull);
       expect(events.any((e) => e is Map && e['t'] == 'hello'), isTrue);
 

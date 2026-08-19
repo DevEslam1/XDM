@@ -47,7 +47,8 @@ void main() {
   });
 
   group('DownloadInterceptor Tests', () {
-    test('addBypass and consumeBypass correctly mark and clear bypass keys', () {
+    test('addBypass and consumeBypass correctly mark and clear bypass keys',
+        () {
       const url = 'https://example.com/download.zip?token=123';
       interceptor.addBypass(url);
 
@@ -73,14 +74,17 @@ void main() {
       );
     });
 
-    test('parseFilenameFromContentDispositionString extracts valid filenames', () {
+    test('parseFilenameFromContentDispositionString extracts valid filenames',
+        () {
       expect(
-        interceptor.parseFilenameFromContentDispositionString('attachment; filename="document.pdf"'),
+        interceptor.parseFilenameFromContentDispositionString(
+            'attachment; filename="document.pdf"'),
         equals('document.pdf'),
       );
 
       expect(
-        interceptor.parseFilenameFromContentDispositionString("attachment; filename*=UTF-8''my%20archive.zip"),
+        interceptor.parseFilenameFromContentDispositionString(
+            "attachment; filename*=UTF-8''my%20archive.zip"),
         equals('my archive.zip'),
       );
 
@@ -99,7 +103,8 @@ void main() {
       expect(interceptor.interceptedList.isEmpty, isTrue);
     });
 
-    test('startDirectDownload returns alreadyCompleted when task is completed', () async {
+    test('startDirectDownload returns alreadyCompleted when task is completed',
+        () async {
       final now = DateTime.now();
       final task = DownloadTask(
         id: 'task-1',
@@ -122,7 +127,8 @@ void main() {
       await database.saveTask(task);
       await downloadProvider.load();
 
-      final res = await interceptor.startDirectDownload('https://example.com/test.zip');
+      final res =
+          await interceptor.startDirectDownload('https://example.com/test.zip');
       expect(res.status, equals(InterceptDownloadStatus.alreadyCompleted));
     });
   });

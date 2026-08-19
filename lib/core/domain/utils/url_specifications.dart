@@ -170,7 +170,8 @@ class UrlSpecifications {
     }
 
     if (queryParams.containsKey('tr')) {
-      result['trackers'] = List<String>.from(queryParams['tr'] ?? const <String>[]);
+      result['trackers'] =
+          List<String>.from(queryParams['tr'] ?? const <String>[]);
     }
 
     return result;

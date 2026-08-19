@@ -54,7 +54,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
     try {
       controller.setSettings(
         settings: InAppWebViewSettings(
-          forceDark: widget.settings.forceDarkMode ? ForceDark.ON : ForceDark.OFF,
+          forceDark:
+              widget.settings.forceDarkMode ? ForceDark.ON : ForceDark.OFF,
           algorithmicDarkeningAllowed: widget.settings.forceDarkMode,
           forceDarkStrategy:
               ForceDarkStrategy.PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING,
@@ -115,7 +116,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: accent,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
                 ),
                 onPressed: () {
                   HapticHelper.triggerHaptic(settings);
@@ -138,9 +140,10 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
         }
         return InAppWebView(
           key: ValueKey('webview_${tab.id}'),
-          initialUrlRequest: tab.url.isNotEmpty && tab.url != BrowserTab.canonicalBlankUrl
-              ? URLRequest(url: WebUri(tab.url))
-              : null,
+          initialUrlRequest:
+              tab.url.isNotEmpty && tab.url != BrowserTab.canonicalBlankUrl
+                  ? URLRequest(url: WebUri(tab.url))
+                  : null,
           pullToRefreshController: tab.pullToRefreshController,
           initialSettings: InAppWebViewSettings(
             useShouldOverrideUrlLoading: true,
@@ -157,7 +160,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
             algorithmicDarkeningAllowed: settings.forceDarkMode,
             forceDarkStrategy:
                 ForceDarkStrategy.PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING,
-            useHybridComposition: true, // FIX #6: Use hybrid composition to avoid TextureView/Virtual Display bitmap crashes
+            useHybridComposition:
+                true, // FIX #6: Use hybrid composition to avoid TextureView/Virtual Display bitmap crashes
           ),
           onWebViewCreated: (controller) {
             tab.controller = controller;
@@ -173,8 +177,7 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
             // the Picture-in-Picture button only when the page has a video.
             try {
               final hasVideo = await controller.evaluateJavascript(
-                source:
-                    '!!document.querySelector("video");',
+                source: '!!document.querySelector("video");',
               );
               final bool flag = hasVideo == true || hasVideo == 'true';
               if (tab.hasVideoElement != flag) {
@@ -196,7 +199,9 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
           },
           onProgressChanged: (controller, progress) {
             // P1: Throttle progress updates to >= 5% changes or 0/100
-            if (progress == 0 || progress == 100 || (progress - tab.lastRenderedProgress).abs() >= 5) {
+            if (progress == 0 ||
+                progress == 100 ||
+                (progress - tab.lastRenderedProgress).abs() >= 5) {
               tab.lastRenderedProgress = progress;
               tab.progress = progress / 100.0;
             }
@@ -210,7 +215,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
           },
           onDownloadStartRequest: (controller, downloadStartRequest) async {
             final url = downloadStartRequest.url.toString();
-            final res = await widget.controller.downloadInterceptor.startDirectDownload(
+            final res =
+                await widget.controller.downloadInterceptor.startDirectDownload(
               url,
               suggestedName: downloadStartRequest.suggestedFilename,
               mimeType: downloadStartRequest.mimeType,
@@ -221,7 +227,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
             if (res.status == InterceptDownloadStatus.queued) {
               ThemedSnackbar.show(
                 context,
-                message: 'Download started: ${downloadStartRequest.suggestedFilename ?? fileNameFromUrl(url)}',
+                message:
+                    'Download started: ${downloadStartRequest.suggestedFilename ?? fileNameFromUrl(url)}',
                 icon: Icons.download_done_rounded,
                 color: AppTheme.neonGreen,
                 isDarkMode: settings.isDarkMode,
@@ -231,7 +238,9 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
           onReceivedError: (controller, request, error) async {
             final errUrl = request.url.toString();
             final scheme = Uri.tryParse(errUrl)?.scheme.toLowerCase() ?? '';
-            if (scheme == 'magnet' || isMagnetUrl(errUrl) || isTorrentFileUrl(errUrl)) {
+            if (scheme == 'magnet' ||
+                isMagnetUrl(errUrl) ||
+                isTorrentFileUrl(errUrl)) {
               controller.stopLoading();
               if (await controller.canGoBack()) {
                 await controller.goBack();
@@ -247,7 +256,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                 await controller.goBack();
               }
               try {
-                await launchUrl(Uri.parse(errUrl), mode: LaunchMode.externalApplication);
+                await launchUrl(Uri.parse(errUrl),
+                    mode: LaunchMode.externalApplication);
               } catch (_) {}
               tab.isLoading = false;
               if (mounted) setState(() {});
@@ -260,7 +270,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
             }
           },
           onRenderProcessGone: (controller, detail) async {
-            _log.warning('Render process gone on tab ${tab.id}: didCrash=${detail.didCrash}');
+            _log.warning(
+                'Render process gone on tab ${tab.id}: didCrash=${detail.didCrash}');
             // FIX(B3): Use the per-tab flag so the silent reload is attempted once
             // per crash regardless of State rebuilds.
             if (!tab.hasAttemptedSilentReload) {
@@ -288,22 +299,39 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
 
             if (isYouTubeOrGoogleHost) {
               const ytGoogleDomains = [
-                'youtube.com', 'youtu.be', 'ytimg.com', 'googlevideo.com',
-                'googlesyndication.com', 'ggpht.com', 'googleapis.com', 'google.com', 'gstatic.com'
+                'youtube.com',
+                'youtu.be',
+                'ytimg.com',
+                'googlevideo.com',
+                'googlesyndication.com',
+                'ggpht.com',
+                'googleapis.com',
+                'google.com',
+                'gstatic.com'
               ];
               for (final d in ytGoogleDomains) {
-                if (requestHost == d || requestHost.endsWith('.$d')) return null;
+                if (requestHost == d || requestHost.endsWith('.$d')) {
+                  return null;
+                }
               }
             } else {
               // General whitelist for core CDN/fonts
-              const generalWhitelisted = ['gstatic.com', 'googleapis.com', 'cloudflare.com'];
+              const generalWhitelisted = [
+                'gstatic.com',
+                'googleapis.com',
+                'cloudflare.com'
+              ];
               for (final d in generalWhitelisted) {
-                if (requestHost == d || requestHost.endsWith('.$d')) return null;
+                if (requestHost == d || requestHost.endsWith('.$d')) {
+                  return null;
+                }
               }
             }
 
             // Never block same-origin requests
-            if (pageHost.isNotEmpty && (requestHost == pageHost || requestHost.endsWith('.$pageHost'))) {
+            if (pageHost.isNotEmpty &&
+                (requestHost == pageHost ||
+                    requestHost.endsWith('.$pageHost'))) {
               return null;
             }
 
@@ -325,7 +353,9 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
           },
           shouldOverrideUrlLoading: (controller, navigationAction) async {
             final url = navigationAction.request.url?.toString() ?? '';
-            if (url.isEmpty || (widget.controller.navigatingBackForwardTabIds[tab.id] ?? false)) {
+            if (url.isEmpty ||
+                (widget.controller.navigatingBackForwardTabIds[tab.id] ??
+                    false)) {
               return NavigationActionPolicy.ALLOW;
             }
 
@@ -341,13 +371,19 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
             // Scheme check for external apps and downloads
             final uri = Uri.tryParse(url);
             final scheme = uri?.scheme.toLowerCase() ?? '';
-            if (scheme == 'magnet' || isMagnetUrl(url) || isTorrentFileUrl(url)) {
+            if (scheme == 'magnet' ||
+                isMagnetUrl(url) ||
+                isTorrentFileUrl(url)) {
               widget.controller.downloadInterceptor.startDirectDownload(url);
               return NavigationActionPolicy.CANCEL;
             }
-            if (scheme.isNotEmpty && scheme != 'http' && scheme != 'https' && scheme != 'about') {
+            if (scheme.isNotEmpty &&
+                scheme != 'http' &&
+                scheme != 'https' &&
+                scheme != 'about') {
               try {
-                await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                await launchUrl(Uri.parse(url),
+                    mode: LaunchMode.externalApplication);
                 return NavigationActionPolicy.CANCEL;
               } catch (_) {}
             }
@@ -375,7 +411,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline_rounded, size: 54, color: Colors.orangeAccent),
+                    const Icon(Icons.error_outline_rounded,
+                        size: 54, color: Colors.orangeAccent),
                     const SizedBox(height: 12),
                     Text(
                       L10n.of(context, 'browser_tab_crashed'),
@@ -388,7 +425,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                     const SizedBox(height: 8),
                     Text(
                       tab.url,
-                      style: TextStyle(fontSize: 12, color: textClr.withValues(alpha: 0.6)),
+                      style: TextStyle(
+                          fontSize: 12, color: textClr.withValues(alpha: 0.6)),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -420,7 +458,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.wifi_off_rounded, size: 48, color: Colors.grey),
+                    const Icon(Icons.wifi_off_rounded,
+                        size: 48, color: Colors.grey),
                     const SizedBox(height: 16),
                     Text(
                       L10n.of(context, 'browser_load_failed'),
@@ -437,7 +476,9 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
                         tab.errorDescription ??
                             L10n.of(context, 'browser_unknown_error'),
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: textClr.withValues(alpha: 0.6)),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: textClr.withValues(alpha: 0.6)),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -471,21 +512,25 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
               child: SafeArea(
                 bottom: false,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: Row(
                     children: [
                       const Icon(Icons.warning_amber_rounded,
                           size: 16, color: Colors.white),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(L10n.of(context, 'browser_page_taking_long'),
-                            style: const TextStyle(color: Colors.white, fontSize: 12)),
+                        child: Text(
+                            L10n.of(context, 'browser_page_taking_long'),
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 12)),
                       ),
                       GestureDetector(
                         onTap: () {
                           tab.controller
                               ?.evaluateJavascript(source: 'window.stop();');
-                          widget.controller.handlePageError(tab, 'Loading stopped');
+                          widget.controller
+                              .handlePageError(tab, 'Loading stopped');
                         },
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -522,7 +567,8 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
       handlerName: 'XDM_Autofill',
       callback: (args) {
         if (args.isNotEmpty && args.first is Map) {
-          widget.controller.handleAutofillMessage(Map<String, dynamic>.from(args.first as Map));
+          widget.controller.handleAutofillMessage(
+              Map<String, dynamic>.from(args.first as Map));
         }
       },
     );
@@ -555,13 +601,18 @@ class _BrowserTabViewState extends State<BrowserTabView> with HapticHelper {
           context,
           payload.url,
           onOpen: () => widget.controller.navigateToUrl(payload.url),
-          onOpenInNewTab: () => widget.controller.openInNewTab(payload.url, switchTo: true),
-          onOpenInBackground: () => widget.controller.openInNewTab(payload.url, switchTo: false),
-          onOpenInIncognito: () => widget.controller.openInNewTab(payload.url, isIncognito: true),
+          onOpenInNewTab: () =>
+              widget.controller.openInNewTab(payload.url, switchTo: true),
+          onOpenInBackground: () =>
+              widget.controller.openInNewTab(payload.url, switchTo: false),
+          onOpenInIncognito: () =>
+              widget.controller.openInNewTab(payload.url, isIncognito: true),
         );
       }
     } catch (_) {}
   }
 
-  Color get textClr => widget.settings.isDarkMode ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+  Color get textClr => widget.settings.isDarkMode
+      ? AppTheme.textPrimary
+      : AppTheme.lightTextPrimary;
 }

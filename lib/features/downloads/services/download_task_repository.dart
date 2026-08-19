@@ -18,7 +18,8 @@ class DownloadTaskRepository implements IDownloadTaskRepository {
 
   DownloadTaskRepository({DatabaseService? databaseService})
       : _db = databaseService ?? DatabaseService.instance,
-        _delegate = DriftTaskRepository(databaseService ?? DatabaseService.instance);
+        _delegate =
+            DriftTaskRepository(databaseService ?? DatabaseService.instance);
 
   @override
   Future<List<DownloadTask>> getAll() => _delegate.getAll();

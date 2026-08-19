@@ -149,19 +149,21 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
       vsync: this,
       duration: const Duration(seconds: 20),
     );
-    if (BackgroundGate.shouldAnimate &&
-        !PowerMonitor.isLowEndDevice &&
-        GeometricGridBackground.enabled) {
+    if (_canAnimateNow) {
       _controller.repeat();
     }
     // Listen to power state changes
     PowerMonitor.batterySaverModeNotifier.addListener(_onPowerChanged);
   }
 
+  bool get _canAnimateNow =>
+      BackgroundGate.shouldAnimate &&
+      !PowerMonitor.isLowEndDevice &&
+      GeometricGridBackground.enabled &&
+      DownloadEngine.activeDownloadsCount <= 2;
+
   void _onPowerChanged() {
-    final canAnimate = BackgroundGate.shouldAnimate &&
-        !PowerMonitor.isLowEndDevice &&
-        GeometricGridBackground.enabled;
+    final canAnimate = _canAnimateNow;
     if (canAnimate && !_controller.isAnimating) {
       _controller.repeat();
     } else if (!canAnimate && _controller.isAnimating) {
@@ -179,9 +181,7 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
         _controller.stop();
       }
     } else if (state == AppLifecycleState.resumed) {
-      final canAnimate = BackgroundGate.shouldAnimate &&
-          !PowerMonitor.isLowEndDevice &&
-          GeometricGridBackground.enabled;
+      final canAnimate = _canAnimateNow;
       if (canAnimate && !_controller.isAnimating) {
         _controller.repeat();
       }

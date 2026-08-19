@@ -35,8 +35,9 @@ class MediaQualityViewModel extends ChangeNotifier {
   int get selectedTabIndex => _selectedTabIndex;
   int get displayedVideoCount => _displayedVideoCount;
   int get displayedAudioCount => _displayedAudioCount;
-  String get videoTitle =>
-      _streams.isNotEmpty ? (_streams.first['title'] as String? ?? 'Media') : 'Media';
+  String get videoTitle => _streams.isNotEmpty
+      ? (_streams.first['title'] as String? ?? 'Media')
+      : 'Media';
 
   void setSelectedTab(int index) {
     if (_selectedTabIndex != index) {
@@ -47,14 +48,16 @@ class MediaQualityViewModel extends ChangeNotifier {
 
   void loadMoreVideos() {
     if (_displayedVideoCount < _memoizedVideos.length) {
-      _displayedVideoCount = (_displayedVideoCount + 20).clamp(0, _memoizedVideos.length);
+      _displayedVideoCount =
+          (_displayedVideoCount + 20).clamp(0, _memoizedVideos.length);
       notifyListeners();
     }
   }
 
   void loadMoreAudios() {
     if (_displayedAudioCount < _memoizedAudios.length) {
-      _displayedAudioCount = (_displayedAudioCount + 20).clamp(0, _memoizedAudios.length);
+      _displayedAudioCount =
+          (_displayedAudioCount + 20).clamp(0, _memoizedAudios.length);
       notifyListeners();
     }
   }

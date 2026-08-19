@@ -30,8 +30,7 @@ void main() {
       expect(result, isFalse);
     });
 
-    test(
-        'hasEnoughDiskSpaceOrNull returns null (unknown) when check throws',
+    test('hasEnoughDiskSpaceOrNull returns null (unknown) when check throws',
         () async {
       final engine = DownloadEngine(enableCleanupTimer: false);
       final badPath =
@@ -50,8 +49,7 @@ void main() {
           tempDir.deleteSync(recursive: true);
         } catch (_) {}
       });
-      final result =
-          await engine.hasEnoughDiskSpaceOrNull(tempDir.path, 1024);
+      final result = await engine.hasEnoughDiskSpaceOrNull(tempDir.path, 1024);
       expect(result, isTrue);
     });
 

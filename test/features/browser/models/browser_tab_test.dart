@@ -5,7 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('BrowserTab Model Tests', () {
-    test('Favicon setter detaches buffer and discards oversized payloads (B2)', () {
+    test('Favicon setter detaches buffer and discards oversized payloads (B2)',
+        () {
       final tab = BrowserTab(id: 'tab-1', url: 'https://example.com');
       final validBytes = Uint8List.fromList([1, 2, 3, 4, 5]);
       tab.faviconBytes = validBytes;

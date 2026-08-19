@@ -15,7 +15,9 @@ void main() {
       governor.dispose();
     });
 
-    test('initial state does not start domain cleanup timer when consumers == 0', () {
+    test(
+        'initial state does not start domain cleanup timer when consumers == 0',
+        () {
       expect(governor.activeConsumers, equals(0));
       expect(governor.domainCleanupTimerForTesting, isNull);
     });
@@ -33,7 +35,9 @@ void main() {
       expect(governor.domainCleanupTimerForTesting, same(timer));
     });
 
-    test('unregisterConsumer cancels domain cleanup timer when consumers reach 0', () {
+    test(
+        'unregisterConsumer cancels domain cleanup timer when consumers reach 0',
+        () {
       governor.registerConsumer();
       governor.registerConsumer();
       expect(governor.domainCleanupTimerForTesting, isNotNull);

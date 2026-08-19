@@ -59,9 +59,11 @@ class FilterLineParser {
     var openCount = 0;
     for (var i = 0; i < text.length; i++) {
       final code = text.codeUnitAt(i);
-      if (code == 40) { // '('
+      if (code == 40) {
+        // '('
         openCount++;
-      } else if (code == 41) { // ')'
+      } else if (code == 41) {
+        // ')'
         openCount--;
         if (openCount < 0) return false;
       }

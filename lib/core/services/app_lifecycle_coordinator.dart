@@ -121,12 +121,13 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
       getIt<AmbientAnimationController>().stopAll();
     }
 
-    // Task 4.3: Flush database saves on backgrounding/detaching
+    // Task 4.3: Flush database saves and checkpoint WAL on backgrounding/detaching
     try {
       DatabaseService.instance.flushPendingSaves();
+      DatabaseService.instance.checkpointWal(truncate: true);
     } catch (e, st) {
       LoggingService.logger('AppLifecycleCoordinator')
-          .warning('Operation failed', e, st);
+          .warning('Database flush/checkpoint on background failed', e, st);
     }
   }
 }

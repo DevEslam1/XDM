@@ -479,7 +479,8 @@ class DownloadOrchestrator {
           try {
             final cookies =
                 await CookieManager.instance().getCookies(url: WebUri(origin));
-            cookieString = cookies.map((c) => '${c.name}=${c.value}').join('; ');
+            cookieString =
+                cookies.map((c) => '${c.name}=${c.value}').join('; ');
             _cookieCache[origin] = (cookie: cookieString, timestamp: now);
             if (_cookieCache.length >= _cookieCacheMaxSize) {
               evictStaleCookies();
@@ -1793,7 +1794,8 @@ class DownloadOrchestrator {
       // the microtask scheduling (and thus notifyListeners). Previously the
       // entire function returned early on background, leaving zeros in the task
       // model that the UI would show for the first few frames after resuming.
-      final isBackground = !DownloadEngine.appInForeground || PowerMonitor.screenOff;
+      final isBackground =
+          !DownloadEngine.appInForeground || PowerMonitor.screenOff;
       // FIX-AUDIT-10: Microtask coalescing guard to prevent interleaved reads
       if (_pushScheduled[task.id] == true) return;
       _pushScheduled[task.id] = true;
@@ -1812,7 +1814,8 @@ class DownloadOrchestrator {
             if (files != null && files.isNotEmpty) {
               torrentDerivedSize = files
                   .where((f) => isTorrentFileSelected(f))
-                  .fold<int>(0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
+                  .fold<int>(
+                      0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
             }
             if (torrentDerivedSize == 0) {
               final tid = _host.providerTorrentIds[task.id];
@@ -1848,10 +1851,14 @@ class DownloadOrchestrator {
           // Use the live audioBytesSoFar first (updated on every audio tick),
           // then fall back to the persisted audioDownloadedBytes, then 0.
           final audioContribution = hasAudio
-              ? (base.audioSize > 0 ? base.audioSize : base.audioDownloadedBytes)
+              ? (base.audioSize > 0
+                  ? base.audioSize
+                  : base.audioDownloadedBytes)
               : 0;
           var calculatedTotal = effectiveVideoSize + audioContribution;
-          if (!base.isTorrent && base.fileSize > 0 && calculatedTotal > base.fileSize) {
+          if (!base.isTorrent &&
+              base.fileSize > 0 &&
+              calculatedTotal > base.fileSize) {
             calculatedTotal = base.fileSize;
           }
           final cachedMax = _sessionCachedTotalSize[task.id] ?? 0;
@@ -1865,8 +1872,8 @@ class DownloadOrchestrator {
           }
 
           // FIX-09: Clamp numerator totalDownloaded
-          final totalDownloaded = (audioBytesSoFar + videoBytesSoFar).clamp(
-              0, totalSize > 0 ? totalSize : (audioBytesSoFar + videoBytesSoFar));
+          final totalDownloaded = (audioBytesSoFar + videoBytesSoFar).clamp(0,
+              totalSize > 0 ? totalSize : (audioBytesSoFar + videoBytesSoFar));
           final instantSpeed = audioSpeedNow + videoSpeedNow;
           final speedQueue = _host.speedHistories[task.id];
           if (speedQueue != null) {
@@ -1941,8 +1948,8 @@ class DownloadOrchestrator {
                   (base.fileName != updated.fileName);
 
           if (hasNewlyResolvedMetadata) {
-            unawaited(_host.setTaskState(updated).catchError(
-                (e) => debugPrint('[DMX] setTaskState failed on metadata update: $e')));
+            unawaited(_host.setTaskState(updated).catchError((e) => debugPrint(
+                '[DMX] setTaskState failed on metadata update: $e')));
           }
 
           final now = DateTime.now().millisecondsSinceEpoch;
@@ -1968,8 +1975,8 @@ class DownloadOrchestrator {
                 eta: updated.etaFormatted,
                 payload: _host.notifications.opaqueHandleFor(task.id),
               );
-              unawaited(BackgroundService.sendHeartbeat()
-                  .catchError((e) => debugPrint('[DMX] sendHeartbeat failed: $e')));
+              unawaited(BackgroundService.sendHeartbeat().catchError(
+                  (e) => debugPrint('[DMX] sendHeartbeat failed: $e')));
             }
           } else {
             _host.providerTasks[index] = updated;
@@ -2523,7 +2530,8 @@ class DownloadOrchestrator {
                   final idx =
                       _host.providerTasks.indexWhere((t) => t.id == task.id);
                   if (idx != -1) {
-                    _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
+                    _host.providerTasks[idx] =
+                        _host.providerTasks[idx].copyWith(
                       videoStreamSize: progress.fileSize > 0
                           ? progress.fileSize
                           : _host.providerTasks[idx].videoStreamSize,
@@ -3106,10 +3114,12 @@ class DownloadOrchestrator {
                   rethrow;
                 }
                 // Full identity check: itag / mime / clen — not just top-level mime.
-                final identityChanged = DownloadProvider
-                    .youtubeStreamIdentityChanged(task.url, refreshedUrl);
+                final identityChanged =
+                    DownloadProvider.youtubeStreamIdentityChanged(
+                        task.url, refreshedUrl);
                 if (identityChanged) {
-                  debugPrint('[DMX] FIX-3: Stream identity changed during inline '
+                  debugPrint(
+                      '[DMX] FIX-3: Stream identity changed during inline '
                       'refresh (${task.id}). Resetting all progress.');
                   for (final path in [
                     task.tempFilePath,
@@ -3148,7 +3158,8 @@ class DownloadOrchestrator {
                     mergedAudioUrl: refreshedAudioUrl ?? task.mergedAudioUrl,
                   );
                 }
-                final idx = _host.providerTasks.indexWhere((x) => x.id == task.id);
+                final idx =
+                    _host.providerTasks.indexWhere((x) => x.id == task.id);
                 if (idx != -1) {
                   _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
                     url: task.url,
@@ -3157,8 +3168,8 @@ class DownloadOrchestrator {
                     audioProgress: task.audioProgress,
                     audioDownloadedBytes: task.audioDownloadedBytes,
                   );
-                  await _host.providerDatabaseService.saveTask(
-                      _host.providerTasks[idx]);
+                  await _host.providerDatabaseService
+                      .saveTask(_host.providerTasks[idx]);
                 }
                 await _host.setTaskState(task);
                 continue;
@@ -4351,9 +4362,9 @@ class DownloadOrchestrator {
         msg.contains('output file missing') ||
         msg.contains('temporary download file missing') ||
         (msg.contains('not found') &&
-         !msg.contains('stream') &&
-         !msg.contains('youtube') &&
-         !msg.contains('mirror'))) {
+            !msg.contains('stream') &&
+            !msg.contains('youtube') &&
+            !msg.contains('mirror'))) {
       return false;
     }
     // FIX-10: YouTube stream expiry and bot detection are transient

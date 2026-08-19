@@ -23,8 +23,8 @@ void main() {
               "SELECT name FROM sqlite_master WHERE type = 'view' AND name = 'v_download_task_summary'")
           .get();
       expect(rows, hasLength(1));
-      expect(rows.first.read<String>('name'),
-          equals('v_download_task_summary'));
+      expect(
+          rows.first.read<String>('name'), equals('v_download_task_summary'));
     });
 
     test('view computes torrent file aggregates from JSON', () async {
@@ -48,7 +48,7 @@ void main() {
           'selected': false,
         },
       ];
-await db.into(db.downloadTasks).insert(DownloadTasksCompanion.insert(
+      await db.into(db.downloadTasks).insert(DownloadTasksCompanion.insert(
             id: 'view-test-1',
             fileName: 'bundle',
             url: 'https://example.com/bundle',

@@ -79,7 +79,8 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                       : (isRtl ? 'لا توجد ملفات متاحة' : 'No files available'),
                   style: TextStyle(
                     fontSize: 12,
-                    color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                    color:
+                        isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                   ),
                 ),
               ],

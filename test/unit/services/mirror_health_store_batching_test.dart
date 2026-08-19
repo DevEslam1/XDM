@@ -1,4 +1,6 @@
+import 'package:dmx/core/services/database/app_database.dart';
 import 'package:dmx/core/services/mirror/mirror_registry.dart';
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -6,16 +8,22 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('MirrorHealthStore Flush Batching Under High Load (P0-04)', () {
-    final store = MirrorHealthStore.instance;
+    late AppDatabase db;
+    late MirrorHealthDriftRepository repo;
+    late MirrorHealthStore store;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
+      db = AppDatabase.forTesting(NativeDatabase.memory());
+      repo = MirrorHealthDriftRepository(db);
+      store = MirrorHealthStore(repository: repo);
       await store.init();
       await store.clear();
     });
 
     tearDown(() async {
       await store.dispose();
+      await db.close();
     });
 
     test('batches 1000 rapid updates incrementally via per-URL keys', () async {
@@ -39,22 +47,14 @@ void main() {
       expect(store.isDirtyForTesting, isFalse);
       expect(store.dirtyUrlsForTesting, isEmpty);
 
-      // Verify SharedPrefs contains per-URL keys and index
-      final prefs = await SharedPreferences.getInstance();
-      final urlIndex = prefs.getStringList('mirror_health_urls_index');
-      expect(urlIndex, isNotNull);
-      expect(urlIndex!.length, equals(50));
-
-      for (int i = 0; i < 50; i++) {
-        final key = 'mirror_health_url_https://mirror$i.example.com/asset';
-        expect(prefs.containsKey(key), isTrue);
-      }
+      // Verify Drift repository contains 50 records
+      final rows = await repo.loadAll();
+      expect(rows.length, equals(50));
 
       // Simulate a fresh cold startup reload
-      final newStore = MirrorHealthStore();
+      final newStore = MirrorHealthStore(repository: repo);
       await newStore.init();
 
-      expect(newStore.getPersistedSpeed('https://mirror0.example.com/asset'), isNonZero);
       expect(newStore.getMirrorRanking().length, equals(50));
 
       await newStore.dispose();

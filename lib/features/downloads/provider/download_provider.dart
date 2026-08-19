@@ -16,7 +16,6 @@ import '../../../core/services/app_lifecycle_coordinator.dart';
 import '../../../core/services/background_gate.dart';
 import '../../../core/services/background_service.dart';
 import '../../../core/services/database_service.dart';
-import '../../../core/services/diagnostic_service.dart';
 import '../../../core/services/download_engine.dart';
 import '../../../core/services/download_journal.dart';
 import '../../../core/services/download_metrics.dart';
@@ -645,6 +644,7 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, ({CancelToken video, CancelToken audio})>
       _orchestratorTokens = {};
   final List<Future<void>> _pendingDeleteCleanups = [];
+  final Map<String, Timer> _pendingFileDeletionTimers = {};
   final Map<String, bool> _resumeRejectionRestarts = {};
   final Map<String, Queue<double>> _speedHistories = {};
   final Map<String, Queue<double>> _uploadSpeedHistories = {};
@@ -2520,14 +2520,16 @@ class DownloadProvider extends ChangeNotifier
                 try {
                   orchTokens.video.cancel('paused:${reason.name}');
                 } catch (e, st) {
-                  _log.fine('Ignored cancel error for orch video token: $e', e, st);
+                  _log.fine(
+                      'Ignored cancel error for orch video token: $e', e, st);
                 }
               }
               if (!orchTokens.audio.isCancelled) {
                 try {
                   orchTokens.audio.cancel('paused:${reason.name}');
                 } catch (e, st) {
-                  _log.fine('Ignored cancel error for orch audio token: $e', e, st);
+                  _log.fine(
+                      'Ignored cancel error for orch audio token: $e', e, st);
                 }
               }
             }
@@ -4254,8 +4256,6 @@ class DownloadProvider extends ChangeNotifier
 
       // 2. For torrents, pause + remove from session IMMEDIATELY
       if (task.isTorrent) {
-        // FIX-P2-02: Deterministically dispose the torrent subscription on
-        // delete instead of relying on WeakReference GC cleanup.
         if (resolvedTorrentId != null) {
           try {
             TorrentSubscriptionRegistry.instance.dispose(resolvedTorrentId);
@@ -4266,13 +4266,8 @@ class DownloadProvider extends ChangeNotifier
         }
         if (resolvedTorrentId != null &&
             TorrentService.isTorrentAlive(resolvedTorrentId)) {
-          // FIX-B10: Guard with alive check
           try {
-            // FIX-C: forceStopTorrent verifies the engine actually halted
-            // before we wipe the DB row.
             await TorrentService.forceStopTorrent(resolvedTorrentId);
-
-            // WAIT for engine to confirm stop (up to 3 seconds)
             final stopDeadline = DateTime.now().add(const Duration(seconds: 3));
             while (DateTime.now().isBefore(stopDeadline)) {
               if (!TorrentService.isTorrentAlive(resolvedTorrentId)) break;
@@ -4315,30 +4310,7 @@ class DownloadProvider extends ChangeNotifier
         }
       }
 
-      // 3. Remove from UI IMMEDIATELY (optimistic update)
-      _tasks.removeWhere((t) => t.id == id);
-      filteredTasksDirty = true;
-      // FIX-DELETE-2: Cancel video/audio sub-tokens too before removing.
-      // Previously only the primary token was removed (not cancelled), so
-      // whenCancel hooks in TorrentDownloadOrchestrator never fired.
-      for (final suffix in ['::video', '::audio', '']) {
-        final k = suffix.isEmpty ? id : '$id$suffix';
-        try {
-          _cancelTokens[k]?.cancel('deleted');
-        } catch (e, st) {
-          LoggingService.logger('DownloadProvider')
-              .warning('Operation failed', e, st);
-        }
-        _cancelTokens.remove(k);
-      }
-      _cleanupTaskState(id);
-
-      notifyListeners();
-
-      // 4. Remove notification IMMEDIATELY
-      _notifications.cleanupTask(id);
-
-      // 5. Delete from DB (with retries)
+      // 3. Task 1.1 & 1.2: DB Delete FIRST. If DB delete fails, abort and show error.
       bool dbDeleteSucceeded = false;
       for (var attempt = 0; attempt < 3; attempt++) {
         try {
@@ -4354,42 +4326,41 @@ class DownloadProvider extends ChangeNotifier
       }
 
       if (!dbDeleteSucceeded) {
-        debugPrint(
-            '[DMX] M3: All DB delete attempts failed for $id. Re-adding task with delete error.');
-        final failedTask = task.copyWith(
-          status: DownloadStatus.failed,
-          errorMessage: 'Database deletion failed. Tap delete to retry.',
-          speed: 0,
-          clearEta: true,
-        );
-        try {
-          await _databaseService.saveTask(failedTask);
-        } catch (e) {
-          _log.warning('Failed to save failedTask ${failedTask.id}', e);
-          DiagnosticService.instance.record(
-            'db_save',
-            'Failed to save task ${failedTask.id}',
-            error: e,
-          );
-        }
-        if (!_tasks.any((t) => t.id == id)) {
-          _tasks.add(failedTask);
-          filteredTasksDirty = true;
-          notifyListeners();
-        }
+        debugPrint('[DMX] deleteTask failed: DB delete failed for $id');
+        throw Exception('Database deletion failed for task $id. Deletion aborted.');
       }
 
-      // 6. Heavy cleanup in BACKGROUND
-      // FIX-DELETE-3: Pass the pre-captured future reference and torrentId
-      // FIX #7: Track pending delete cleanups
-      final cleanupFuture = _backgroundDeleteCleanup(
-              taskSnapshot, deleteFiles, activeFuture, resolvedTorrentId)
-          .catchError((e) {
-        _log.warning('Background delete cleanup failed', e);
-      });
-      _pendingDeleteCleanups.add(cleanupFuture);
-      cleanupFuture.whenComplete(() {
-        _pendingDeleteCleanups.remove(cleanupFuture);
+      // 4. UI Remove (committed after successful DB deletion)
+      _tasks.removeWhere((t) => t.id == id);
+      filteredTasksDirty = true;
+      for (final suffix in ['::video', '::audio', '']) {
+        final k = suffix.isEmpty ? id : '$id$suffix';
+        try {
+          _cancelTokens[k]?.cancel('deleted');
+        } catch (e, st) {
+          LoggingService.logger('DownloadProvider')
+              .warning('Operation failed', e, st);
+        }
+        _cancelTokens.remove(k);
+      }
+      _cleanupTaskState(id);
+      notifyListeners();
+
+      _notifications.cleanupTask(id);
+
+      // 5. Task 1.2: 5-second "Undo" soft-delete window before permanent file cleanup
+      _pendingFileDeletionTimers[id]?.cancel();
+      _pendingFileDeletionTimers[id] = Timer(const Duration(seconds: 5), () {
+        _pendingFileDeletionTimers.remove(id);
+        final cleanupFuture = _backgroundDeleteCleanup(
+                taskSnapshot, deleteFiles, activeFuture, resolvedTorrentId)
+            .catchError((e) {
+          _log.warning('Background delete cleanup failed', e);
+        });
+        _pendingDeleteCleanups.add(cleanupFuture);
+        cleanupFuture.whenComplete(() {
+          _pendingDeleteCleanups.remove(cleanupFuture);
+        });
       });
 
       updateActualTorrentUploadLimit();
@@ -4406,6 +4377,10 @@ class DownloadProvider extends ChangeNotifier
 
   /// Restores a previously soft-deleted task back into state and database.
   Future<void> restoreTask(DownloadTask task) async {
+    // Task 1.2: Cancel pending permanent file deletion timer
+    _pendingFileDeletionTimers[task.id]?.cancel();
+    _pendingFileDeletionTimers.remove(task.id);
+
     final exists = _tasks.any((t) => t.id == task.id);
     if (!exists) {
       _tasks.add(task);
@@ -4793,9 +4768,10 @@ class DownloadProvider extends ChangeNotifier
           chunks: updated.chunks.isNotEmpty
               ? List<double>.filled(updated.chunks.length, 1.0)
               : const [1.0],
-          audioProgress: (updated.hasMergedAudio || updated.mergedAudioUrl != null)
-              ? 1.0
-              : updated.audioProgress,
+          audioProgress:
+              (updated.hasMergedAudio || updated.mergedAudioUrl != null)
+                  ? 1.0
+                  : updated.audioProgress,
         );
       } else if (updated.downloadedBytes > 0) {
         updated = updated.copyWith(
@@ -4803,9 +4779,10 @@ class DownloadProvider extends ChangeNotifier
           chunks: updated.chunks.isNotEmpty
               ? List<double>.filled(updated.chunks.length, 1.0)
               : const [1.0],
-          audioProgress: (updated.hasMergedAudio || updated.mergedAudioUrl != null)
-              ? 1.0
-              : updated.audioProgress,
+          audioProgress:
+              (updated.hasMergedAudio || updated.mergedAudioUrl != null)
+                  ? 1.0
+                  : updated.audioProgress,
         );
       }
     }
@@ -4922,9 +4899,12 @@ class DownloadProvider extends ChangeNotifier
           currentTask.copyWith(downloadedBytes: currentTask.fileSize);
     }
 
-    if (updated.status == DownloadStatus.failed) {
+    // Task 1.6: Clean up maps on terminal states (completed, failed)
+    if (updated.status == DownloadStatus.completed ||
+        updated.status == DownloadStatus.failed) {
       final id = updated.id;
       _speedHistories.remove(id);
+      _uploadSpeedHistories.remove(id);
       _lastProgressUpdateTimes.remove(id);
       _lastDbSaveTimes.remove(id);
       _pendingProgressUpdates.remove(id);
@@ -4932,32 +4912,24 @@ class DownloadProvider extends ChangeNotifier
       _ytThrottlingRefreshing.remove(id);
       _lastTorrentFileDiskSync.remove(id);
 
-      if (_cancelTokens.containsKey(id)) {
-        final token = _cancelTokens[id];
-        if (token != null && !token.isCancelled) {
-          try {
-            token.cancel('failed');
-          } catch (e, st) {
-            LoggingService.logger('DownloadProvider')
-                .warning('Operation failed', e, st);
+      if (updated.status == DownloadStatus.failed) {
+        if (_cancelTokens.containsKey(id)) {
+          final token = _cancelTokens[id];
+          if (token != null && !token.isCancelled) {
+            try {
+              token.cancel('failed');
+            } catch (e, st) {
+              LoggingService.logger('DownloadProvider')
+                  .warning('Operation failed', e, st);
+            }
           }
+          _cancelTokens.remove(id);
         }
-        _cancelTokens.remove(id);
       }
       final torrentId = _torrentIds[id];
       if (torrentId != null && !TorrentService.isTorrentAlive(torrentId)) {
         _torrentIds.remove(id);
       }
-    }
-
-    // FIX-A4: Immediate DB save when task status == DownloadStatus.failed
-    // FIX-F1: Immediate DB save when status transitions queued -> downloading
-    if (updated.status == DownloadStatus.failed ||
-        (prev.status == DownloadStatus.queued &&
-            updated.status == DownloadStatus.downloading)) {
-      unawaited(_databaseService.saveTask(_tasks[index]).catchError((e) {
-        debugPrint('[DMX] Immediate DB save failed on status transition: $e');
-      }));
     }
 
     // Only invalidate the filter/sort cache when a "structural" field changes
@@ -4972,27 +4944,14 @@ class DownloadProvider extends ChangeNotifier
         prev.fileSize != updated.fileSize ||
         prev.scheduledAt != updated.scheduledAt;
 
-    if (isStructuralChange) {
-      filteredTasksDirty = true;
-    }
-
-    if (prev.scheduledAt != updated.scheduledAt ||
-        prev.status != updated.status) {
-      _scheduleManager.reschedule();
-    }
-
-    updateActualTorrentUploadLimit();
-
-    _pushTick(updated.id, updated.progress, updated.speed.toDouble());
-
-    // Progress-only changes (speed, bytes, eta, chunks) skip the immediate
-    // DB save and notifyListeners. The timer-based batch save persists
-    // progress periodically, and _notifyPending coalesces UI notifications
-    // to the timer frequency (~5 s) so we don't rebuild widgets on every tick.
     if (!isStructuralChange) {
+      // Task 1.6: Cap _pendingProgressUpdates at 50 entries
+      if (_pendingProgressUpdates.length >= 50 &&
+          !_pendingProgressUpdates.contains(updated.id)) {
+        _pendingProgressUpdates.remove(_pendingProgressUpdates.first);
+      }
       _pendingProgressUpdates.add(updated.id);
       _notifyPending = true;
-      // FIX(D-1): ensure widget timer is running for progress flush
       if (_widgetTimer == null) _startWidgetTimer();
 
       // Complete any previous queued save so the chain stays consistent.
@@ -5001,14 +4960,31 @@ class DownloadProvider extends ChangeNotifier
         try {
           await previousSave;
         } catch (e, st) {
-          // FIX(D-2): log previous DB save failure at severe level
           _log.severe('[download_provider] previous DB save failed', e, st);
         }
       }
       return;
     }
 
-    await _saveTaskToDbInternal(updated);
+    // Task 1.1: DB First for structural state transitions with rollback
+    final previousSnapshot = prev;
+    try {
+      await _saveTaskToDbInternal(updated);
+      _tasks[index] = updated;
+      filteredTasksDirty = true;
+
+      if (prev.scheduledAt != updated.scheduledAt ||
+          prev.status != updated.status) {
+        _scheduleManager.reschedule();
+      }
+
+      updateActualTorrentUploadLimit();
+      _pushTick(updated.id, updated.progress, updated.speed.toDouble());
+    } catch (e, st) {
+      _tasks[index] = previousSnapshot;
+      _log.severe('Atomic DB write failed in _setTask for ${updated.id}, rolling back in-memory state.', e, st);
+      rethrow;
+    }
   }
 
   Future<void> _saveTaskToDbInternal(DownloadTask updated) async {
@@ -5566,23 +5542,8 @@ class DownloadProvider extends ChangeNotifier
       }
     }
 
-    // Delete the state file so the next resume starts a fresh identity
-    // check against the new URL instead of the stale etag/url.
-    if (!task.isTorrent && task.tempFilePath.isNotEmpty) {
-      for (final p in [
-        '${task.tempFilePath}.dmxstate',
-        '${task.tempFilePath}.dmxstate.tmp',
-      ]) {
-        try {
-          final f = File(p);
-          if (await f.exists()) await f.delete();
-        } catch (e, st) {
-          LoggingService.logger('DownloadProvider')
-              .warning('Operation failed', e, st);
-        }
-      }
-    }
-
+    // Task 1.4: Do NOT zero out downloadedBytes or delete dmxstate during
+    // updateTaskUrl until the new URL has been successfully verified. Keep old state as fallback.
     try {
       bool sameTorrent(String a, String b) {
         if (a == b) return true; // FIX-10: File path / URL exact comparison
@@ -6424,6 +6385,47 @@ class DownloadProvider extends ChangeNotifier
       })); // FIX-9: Clear TorrentResumeStore
     }
 
+    // FIX-C3: Force realBytesOnDisk to 0 when deleteTempFiles is true so task is reset clean
+    final videoBytes = deleteTempFiles
+        ? 0
+        : await _readDmxStateBytes(
+            task.tempFilePath,
+            threadCount: task.threadCount,
+          );
+    var audioBytes = 0;
+    final targetAudioUrl = newAudioUrl ?? task.mergedAudioUrl;
+    if (!deleteTempFiles &&
+        targetAudioUrl != null &&
+        targetAudioUrl.isNotEmpty) {
+      audioBytes = await _readDmxStateBytes(
+        '${task.tempFilePath}.audio',
+        threadCount: task.audioThreadCount > 0 ? task.audioThreadCount : 1,
+      );
+    }
+
+    final realBytesOnDisk = deleteTempFiles ? 0 : (videoBytes + audioBytes);
+
+    // Task 1.2: Update DB to reset state FIRST before deleting files or resetting on disk
+    await _setTask(
+      task.copyWith(
+        url: newUrl.trim(),
+        mergedAudioUrl: targetAudioUrl,
+        clearMergedAudioUrl: clearAudioUrl,
+        status: DownloadStatus.queued,
+        downloadedBytes: deleteTempFiles ? 0 : realBytesOnDisk,
+        chunks: List<double>.filled(
+            task.threadCount > 0 ? task.threadCount : 1, 0.0),
+        audioProgress: deleteTempFiles ? 0.0 : task.audioProgress,
+        speed: 0,
+        clearEta: true,
+        clearError: true,
+        clearStatusMessage: true,
+        clearCompletedAt: true,
+        pausedByUser: false,
+      ),
+    );
+    _orchestrator.clearSessionCachedTotalSize(id);
+
     // FIX-R-1: Delete audio sidecars when newAudioUrl differs from task.mergedAudioUrl
     if (newAudioUrl != null && newAudioUrl != task.mergedAudioUrl) {
       for (final p in [
@@ -6460,7 +6462,6 @@ class DownloadProvider extends ChangeNotifier
         if (await tempFile.exists()) {
           await tempFile.delete();
         }
-        // FIX-AUDIT-A5: Also delete audio sidecars
         for (final path in [
           task.tempFilePath,
           '${task.tempFilePath}.dmxstate',
@@ -6484,49 +6485,6 @@ class DownloadProvider extends ChangeNotifier
         debugPrint('Failed to delete temp files: $e');
       }
     }
-
-    // FIX-C3: Force realBytesOnDisk to 0 when deleteTempFiles is true so task is reset clean
-    final videoBytes = deleteTempFiles
-        ? 0
-        : await _readDmxStateBytes(
-            task.tempFilePath,
-            threadCount: task.threadCount, // FIX-B1: Pass task threadCount
-          );
-    var audioBytes = 0;
-    final targetAudioUrl = newAudioUrl ?? task.mergedAudioUrl;
-    if (!deleteTempFiles &&
-        targetAudioUrl != null &&
-        targetAudioUrl.isNotEmpty) {
-      audioBytes = await _readDmxStateBytes(
-        '${task.tempFilePath}.audio',
-        // FIX-4: Never hardcode 2. Small audio (<5 MB) uses 1 thread → no
-        // .dmxstate written → reading with threadCount:2 returns 0 and loses
-        // progress. Use the task's real audio thread count.
-        threadCount: task.audioThreadCount > 0 ? task.audioThreadCount : 1,
-      );
-    }
-
-    final realBytesOnDisk = deleteTempFiles ? 0 : (videoBytes + audioBytes);
-
-    await _setTask(
-      task.copyWith(
-        url: newUrl.trim(),
-        mergedAudioUrl: targetAudioUrl,
-        clearMergedAudioUrl: clearAudioUrl,
-        status: DownloadStatus.queued,
-        downloadedBytes: deleteTempFiles ? 0 : realBytesOnDisk,
-        chunks: List<double>.filled(
-            task.threadCount > 0 ? task.threadCount : 1, 0.0),
-        audioProgress: deleteTempFiles ? 0.0 : task.audioProgress,
-        speed: 0,
-        clearEta: true,
-        clearError: true,
-        clearStatusMessage: true,
-        clearCompletedAt: true,
-        pausedByUser: false,
-      ),
-    );
-    _orchestrator.clearSessionCachedTotalSize(id);
 
     pumpQueue();
     _startWidgetTimer();

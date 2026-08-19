@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import '../../constants/thresholds.dart';
 import '../bandwidth_governor.dart';
+import '../checksum_service.dart';
 import '../download_engine.dart' show DownloadEngine;
 import '../download_journal.dart';
 import '../engines/http_download_engine.dart';
@@ -129,7 +130,8 @@ class HttpTransferJob {
       _pendingDelays.values.toList();
 
   @visibleForTesting
-  List<Timer> get pendingDelayTimersForTesting => _pendingTimers.values.toList();
+  List<Timer> get pendingDelayTimersForTesting =>
+      _pendingTimers.values.toList();
 
   @visibleForTesting
   bool get stateSavePendingForTesting => _stateSavePending;
@@ -274,8 +276,7 @@ class HttpTransferJob {
       return;
     }
     if (e is InsufficientStorageException ||
-        (e is PositionalFileWriterException &&
-            _looksLikeDiskFull(e.message))) {
+        (e is PositionalFileWriterException && _looksLikeDiskFull(e.message))) {
       _send('error', {'errorType': 'diskFull', 'errorMessage': e.toString()});
       return;
     }
@@ -349,6 +350,7 @@ class HttpTransferJob {
             'Hard timeout exceeded: ${_formatDuration(hardTimeoutDuration)}',
       });
     }
+
     _hardTimeoutTimer = Timer(hardTimeoutDuration, onHardTimeout);
 
     _jobHealthTimer = Timer.periodic(const Duration(seconds: 60), (_) {
@@ -370,8 +372,7 @@ class HttpTransferJob {
         if (elapsed >= stalledThreshold.inMilliseconds) {
           _stalledEmitted = true;
           _emitProgress(_stopwatch.elapsedMilliseconds,
-              statusMessage: 'Stalled',
-              cycleStateOverride: CycleState.stalled);
+              statusMessage: 'Stalled', cycleStateOverride: CycleState.stalled);
         }
       }
     });
@@ -459,8 +460,7 @@ class HttpTransferJob {
       }
     } else {
       _emitProgress(0,
-          statusMessage: 'Starting…',
-          cycleStateOverride: CycleState.starting);
+          statusMessage: 'Starting…', cycleStateOverride: CycleState.starting);
     }
     return _state!;
   }
@@ -849,8 +849,8 @@ class HttpTransferJob {
       );
 
       // Check for URL expiration errors first (highest priority)
-      final urlExpiredErrors = results.where((r) =>
-          !r.success && r.error is UrlExpiredException);
+      final urlExpiredErrors =
+          results.where((r) => !r.success && r.error is UrlExpiredException);
       if (urlExpiredErrors.isNotEmpty) {
         throw urlExpiredErrors.first.error!;
       }
@@ -881,15 +881,14 @@ class HttpTransferJob {
         try {
           await writer.flushAll();
         } catch (flushErr, flushSt) {
-          _log.fine('Writer flush on pause failed: $flushErr', flushErr,
-              flushSt);
+          _log.fine(
+              'Writer flush on pause failed: $flushErr', flushErr, flushSt);
         }
         _stateSavedInCatch = true;
         await StateStore.save(cmd.tempFilePath, st, durable: true);
         _emitProgress(0,
             statusMessage: 'Paused', pauseReason: effectivePauseReason);
-      } else if (e is! RangeUnsupportedException &&
-          e is! UrlExpiredException) {
+      } else if (e is! RangeUnsupportedException && e is! UrlExpiredException) {
         final anyProven = st.chunks.any((c) => c.downloaded > 0);
         st.status = DmxStateStatus.failed;
         st.migrationNote =
@@ -898,8 +897,8 @@ class HttpTransferJob {
         try {
           await writer.flushAll();
         } catch (flushErr, flushSt) {
-          _log.fine('Writer flush on failure failed: $flushErr', flushErr,
-              flushSt);
+          _log.fine(
+              'Writer flush on failure failed: $flushErr', flushErr, flushSt);
         }
         _stateSavedInCatch = true;
         await StateStore.save(cmd.tempFilePath, st, durable: true);
@@ -937,8 +936,7 @@ class HttpTransferJob {
 
     while (!chunk.isComplete) {
       _throwIfCancelled();
-      if (DateTime.now().difference(chunkStartWallClock) >
-          _maxChunkWallClock) {
+      if (DateTime.now().difference(chunkStartWallClock) > _maxChunkWallClock) {
         throw DownloadIntegrityException(
             'Chunk $chunkIndex exceeded wall-clock budget');
       }
@@ -992,12 +990,9 @@ class HttpTransferJob {
         }
         if (response.statusCode == 416) {
           await response.data?.stream.listen((_) {}).cancel();
-          if (chunk.downloaded >= chunk.size) {
-            chunk.downloaded = chunk.size;
-            break;
-          }
-          // Range not satisfiable - might mean the file is complete
-          if (chunk.size >= 0 && chunk.downloaded >= chunk.size) {
+          handle416(chunk, _state?.totalSize ?? 0);
+          if (chunk.isComplete ||
+              (chunk.size >= 0 && chunk.downloaded >= chunk.size)) {
             break;
           }
           throw DioException(
@@ -1037,8 +1032,7 @@ class HttpTransferJob {
             requestOptions: response.requestOptions,
             type: DioExceptionType.badResponse,
             response: response,
-            message:
-                'Server returned ${response.statusCode} instead of 206.',
+            message: 'Server returned ${response.statusCode} instead of 206.',
           );
         }
 
@@ -1146,8 +1140,7 @@ class HttpTransferJob {
             if (_state != null) {
               _state!.cycleState = CycleState.updatingLinks.name;
               try {
-                await StateStore.save(cmd.tempFilePath, _state!,
-                    durable: true);
+                await StateStore.save(cmd.tempFilePath, _state!, durable: true);
               } catch (_) {}
             }
             await Future.delayed(const Duration(milliseconds: 10));
@@ -1240,8 +1233,8 @@ class HttpTransferJob {
         if (response.statusCode != 206 || response.data == null) {
           chunk.downloaded = 0;
           // FIX 9: Clear writer data for the reset chunk
-          await writer.write(chunkIndex, chunk.start,
-              Uint8List(len > 0 ? len : 0));
+          await writer.write(
+              chunkIndex, chunk.start, Uint8List(len > 0 ? len : 0));
           return;
         }
         final builder = BytesBuilder(copy: false);
@@ -1253,8 +1246,8 @@ class HttpTransferJob {
             !listEquals(netBytes, diskBytes)) {
           chunk.downloaded = 0;
           // FIX 9: Clear writer data for the mismatched chunk
-          await writer.write(chunkIndex, chunk.start,
-              Uint8List(len > 0 ? len : 0));
+          await writer.write(
+              chunkIndex, chunk.start, Uint8List(len > 0 ? len : 0));
           _log.fine('[DMX-Job] spot-check mismatch → chunk $chunkIndex reset '
               'and writer cleared');
         }
@@ -1366,10 +1359,8 @@ class HttpTransferJob {
               try {
                 await StateStore.remove(cmd.tempFilePath);
               } catch (e, st) {
-                _log.fine(
-                    'Failed to remove state store on spot check mismatch',
-                    e,
-                    st);
+                _log.fine('Failed to remove state store on spot check mismatch',
+                    e, st);
               }
               st.chunks = ChunkScheduler.singleStream(st.totalSize);
             }
@@ -1403,7 +1394,7 @@ class HttpTransferJob {
         throw DownloadIntegrityException(
             'Max total mirror attempts ($maxTotalAttempts) exceeded for single-stream job');
       }
-      IOSink? sink;
+      RandomAccessFile? raf;
       try {
         final resumeFrom = chunk.downloaded;
         final headers = <String, dynamic>{};
@@ -1425,6 +1416,7 @@ class HttpTransferJob {
 
         if (response.statusCode == 416) {
           await response.data?.stream.listen((_) {}).cancel();
+          handle416(chunk, st.totalSize);
           if (st.totalSize > 0 && chunk.downloaded >= st.totalSize) break;
           chunk.downloaded = 0;
           if (await tempFile.exists()) await tempFile.delete();
@@ -1478,8 +1470,7 @@ class HttpTransferJob {
           await response.data?.stream.listen((_) {}).cancel();
           // FIX 4: URL expiration detection
           if (response.statusCode == 401 || response.statusCode == 403) {
-            final host =
-                Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
+            final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
             final isYtOrSigned = _isExpiredUrlOrSite(cmd.url, host);
             if (isYtOrSigned) {
               _emitProgress(0,
@@ -1507,8 +1498,7 @@ class HttpTransferJob {
             requestOptions: response.requestOptions,
             type: DioExceptionType.badResponse,
             response: response,
-            message:
-                'Server returned status code ${response.statusCode}',
+            message: 'Server returned status code ${response.statusCode}',
           );
         }
 
@@ -1558,7 +1548,7 @@ class HttpTransferJob {
           }
         }
 
-        sink = tempFile.openWrite(
+        raf = await tempFile.open(
           mode: chunk.downloaded > 0 ? FileMode.append : FileMode.write,
         );
         final stream = response.data?.stream;
@@ -1578,13 +1568,13 @@ class HttpTransferJob {
               await _cancellableDelay(Duration(milliseconds: sleepMs));
               _throwIfCancelled();
             }
-            sink.add(piece);
+            await raf.writeFrom(piece);
             chunk.downloaded += piece.length;
             _bytesSinceSave += piece.length;
             await _throttledSaveAndReport(
               null,
               preSaveFlush: () async {
-                await sink?.flush();
+                await raf?.flush();
               },
             );
           }
@@ -1596,12 +1586,12 @@ class HttpTransferJob {
         }
 
         try {
-          await sink.flush();
-          await sink.close();
+          await raf.flush();
+          await raf.close();
         } catch (e, st) {
-          _log.fine('Failed to flush/close sink in single-stream', e, st);
+          _log.fine('Failed to flush/close raf in single-stream', e, st);
         }
-        sink = null;
+        raf = null;
         failover.reportSuccess();
         attempts = 0;
         if (st.totalSize <= 0) {
@@ -1616,12 +1606,13 @@ class HttpTransferJob {
           // FIX 1: Pause - save state synchronously
           _state!.status = DmxStateStatus.paused;
           try {
-            await sink?.flush();
-            await sink?.close();
+            await raf?.flush();
+            await raf?.close();
           } catch (flushErr, flushSt) {
-            _log.fine('Sink flush on pause failed: $flushErr', flushErr,
-                flushSt);
+            _log.fine(
+                'RAF flush on pause failed: $flushErr', flushErr, flushSt);
           }
+          raf = null;
           _stateSavedInCatch = true;
           await StateStore.save(cmd.tempFilePath, _state!, durable: true);
           _emitProgress(0,
@@ -1646,8 +1637,7 @@ class HttpTransferJob {
             if (_state != null) {
               _state!.cycleState = CycleState.updatingLinks.name;
               try {
-                await StateStore.save(cmd.tempFilePath, _state!,
-                    durable: true);
+                await StateStore.save(cmd.tempFilePath, _state!, durable: true);
               } catch (e, st) {
                 _log.fine(
                     'Failed to save state on expired URL in single-stream',
@@ -1662,10 +1652,7 @@ class HttpTransferJob {
           }
         }
         // Non-retryable client errors
-        if (status == 401 ||
-            status == 403 ||
-            status == 404 ||
-            status == 410) {
+        if (status == 401 || status == 403 || status == 404 || status == 410) {
           _state!.status = DmxStateStatus.failed;
           _emitProgress(0, statusMessage: _formatFailedMessage(e));
           rethrow;
@@ -1702,19 +1689,19 @@ class HttpTransferJob {
             Duration(seconds: (attempts * attempts * 2) + _rng.nextInt(3)));
       } finally {
         try {
-          await sink?.flush();
-          await sink?.close();
+          await raf?.flush();
+          await raf?.close();
         } catch (e, st) {
           _log.fine(
-              'Failed to flush/close sink in single-stream finally', e, st);
+              'Failed to flush/close raf in single-stream finally', e, st);
         }
+        raf = null;
         // FIX 15: Only save if not already saved in catch
         if (!_stateSavedInCatch) {
           try {
             await StateStore.save(cmd.tempFilePath, _state!, durable: true);
           } catch (e, st) {
-            _log.fine(
-                'Failed to save state in single-stream finally', e, st);
+            _log.fine('Failed to save state in single-stream finally', e, st);
           }
         }
       }
@@ -1754,6 +1741,18 @@ class HttpTransferJob {
         _emitProgress(0, statusMessage: _formatFailedMessage(err));
         throw err;
       }
+      // Fsync final write before rename
+      try {
+        final raf =
+            await File(cmd.tempFilePath).open(mode: FileMode.writeOnlyAppend);
+        try {
+          await raf.flush();
+        } finally {
+          await raf.close();
+        }
+      } catch (fsyncErr, fsyncSt) {
+        _log.fine('fsync before rename failed: $fsyncErr', fsyncErr, fsyncSt);
+      }
       final finalFile = File(cmd.localFilePath);
       await finalFile.parent.create(recursive: true);
       if (await finalFile.exists()) await finalFile.delete();
@@ -1761,13 +1760,13 @@ class HttpTransferJob {
         await File(cmd.tempFilePath).rename(cmd.localFilePath);
       } catch (e) {
         await File(cmd.tempFilePath).copy(cmd.localFilePath);
-        final copiedLen = await File(cmd.localFilePath).length();
-        final origLen = await File(cmd.tempFilePath).length();
-        if (copiedLen == origLen) {
+        final sourceSha = await ChecksumService.sha256File(cmd.tempFilePath);
+        final destSha = await ChecksumService.sha256File(cmd.localFilePath);
+        if (sourceSha == destSha) {
           await File(cmd.tempFilePath).delete();
         } else {
           throw const DownloadIntegrityException(
-              'File copy verification failed on rename fallback.');
+              'File copy SHA-256 verification failed on rename fallback.');
         }
       }
     } else {
@@ -1838,7 +1837,7 @@ class HttpTransferJob {
     final saveInterval = isBackground
         ? const Duration(seconds: 120).inMilliseconds
         : const Duration(seconds: 15).inMilliseconds;
-    const saveByteThreshold = 32 * 1024 * 1024;
+    const saveByteThreshold = 8 * 1024 * 1024;
     final dueSave = nowMs - _lastStateSaveMs >= saveInterval ||
         _bytesSinceSave >= saveByteThreshold;
     final reportInterval = isBackground ? 15000 : 750;
@@ -1978,8 +1977,7 @@ class HttpTransferJob {
     }
 
     // Speed calculation
-    _speedSamples
-        .add(SpeedSample(_stopwatch.elapsedMilliseconds, downloaded));
+    _speedSamples.add(SpeedSample(_stopwatch.elapsedMilliseconds, downloaded));
     while (_speedSamples.isNotEmpty &&
         _stopwatch.elapsedMilliseconds - _speedSamples.first.timestampMs >
             3000) {
@@ -2149,5 +2147,28 @@ class HttpTransferJob {
             'Expected start $expectedStart got $start.',
       );
     }
+  }
+
+  /// Standalone 416 helper returning updated chunk state without throwing.
+  @visibleForTesting
+  static ChunkState handle416(ChunkState chunk, int serverTotal) {
+    if (serverTotal > 0) {
+      if (chunk.start >= serverTotal) {
+        chunk.downloaded = 0;
+        return chunk;
+      }
+      if (chunk.end >= serverTotal) {
+        chunk.end = serverTotal - 1;
+      }
+      if (chunk.downloaded >= chunk.size && chunk.size > 0) {
+        chunk.downloaded = chunk.size;
+        return chunk;
+      }
+    }
+    if (chunk.size >= 0 && chunk.downloaded >= chunk.size) {
+      chunk.downloaded = chunk.size;
+      return chunk;
+    }
+    return chunk;
   }
 }

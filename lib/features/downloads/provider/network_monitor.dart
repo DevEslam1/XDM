@@ -176,11 +176,13 @@ class NetworkMonitor {
   }
 
   Future<void> _pauseForNetworkDisconnect() async {
-    final active = _tasks().where(
-      (task) =>
-          task.status == DownloadStatus.downloading ||
-          task.status == DownloadStatus.queued,
-    ).toList();
+    final active = _tasks()
+        .where(
+          (task) =>
+              task.status == DownloadStatus.downloading ||
+              task.status == DownloadStatus.queued,
+        )
+        .toList();
     await Future.wait(active.map((task) async {
       _tasksPausedDueToDisconnect.add(task.id);
       if (task.status == DownloadStatus.downloading) {
@@ -240,11 +242,13 @@ class NetworkMonitor {
   }
 
   Future<void> _pauseForWifiOnly() async {
-    final active = _tasks().where(
-      (task) =>
-          task.status == DownloadStatus.downloading ||
-          task.status == DownloadStatus.queued,
-    ).toList();
+    final active = _tasks()
+        .where(
+          (task) =>
+              task.status == DownloadStatus.downloading ||
+              task.status == DownloadStatus.queued,
+        )
+        .toList();
     await Future.wait(active.map((task) async {
       _tasksPausedDueToWifiOnly.add(task.id);
       if (task.status == DownloadStatus.downloading) {

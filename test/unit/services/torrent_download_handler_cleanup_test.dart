@@ -9,8 +9,11 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('TorrentDownloadHandler Resource Cleanup (P1-08)', () {
-    test('removeActiveTorrent releases cachedAccurateFiles, lastStateLabel, and subscriptions', () {
-      final handler = TorrentDownloadHandler(torrentService: _FakeTorrentService());
+    test(
+        'removeActiveTorrent releases cachedAccurateFiles, lastStateLabel, and subscriptions',
+        () {
+      final handler =
+          TorrentDownloadHandler(torrentService: _FakeTorrentService());
 
       // Seed state simulating an active transfer
       handler.cachedAccurateFiles = [

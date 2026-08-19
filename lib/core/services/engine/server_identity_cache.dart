@@ -23,21 +23,14 @@ class ServerIdentityCache implements DisposableService, MemoryPressureListener {
   void removeStale(Duration ttl) => _cache.removeStale(ttl);
 
   void invalidateForUrl(String url) {
-    String host = '';
     final uri = Uri.tryParse(url);
-    if (uri != null && uri.hasAuthority && uri.host.isNotEmpty) {
-      host = uri.host;
-    } else {
-      final fallbackUri = Uri.tryParse('http://$url');
-      if (fallbackUri != null && fallbackUri.host.isNotEmpty) {
-        host = fallbackUri.host;
-      } else {
-        host = url;
-      }
+    if (uri == null || !uri.hasAuthority || uri.host.isEmpty) {
+      clear();
+      return;
     }
+    final host = uri.host;
     for (final key in List<String>.from(_cache.keys)) {
-      if ((host.isNotEmpty && key.startsWith('$host|')) ||
-          key.startsWith('$url|')) {
+      if (key.startsWith('$host|') || key.startsWith('$url|')) {
         _cache.remove(key);
       }
     }

@@ -40,7 +40,8 @@ void main() {
   });
 
   group('FIX 1 & 11: StateStoreInstance Bounded Locks & fsync', () {
-    test('Bounding _pathLocks to max 64 entries under high path churn', () async {
+    test('Bounding _pathLocks to max 64 entries under high path churn',
+        () async {
       final store = StateStoreInstance();
       final state = TransferState(
         totalSize: 1000,
@@ -108,8 +109,11 @@ void main() {
     });
   });
 
-  group('FIX 4: DatabaseMaintenanceService WAL Checkpoint PASS on active downloads', () {
-    test('Runs maintenance without throw and checks WAL pass checkpoint', () async {
+  group(
+      'FIX 4: DatabaseMaintenanceService WAL Checkpoint PASS on active downloads',
+      () {
+    test('Runs maintenance without throw and checks WAL pass checkpoint',
+        () async {
       final db = AppDatabase(p.join(tempDir.path, 'maint_test.sqlite'));
       final service = DatabaseMaintenanceService(db);
 
@@ -139,7 +143,8 @@ void main() {
   });
 
   group('FIX 6: DownloadProgressHandler Pending Progress on Dispose', () {
-    test('Emits pending progress when disposed before throttle timer fires', () async {
+    test('Emits pending progress when disposed before throttle timer fires',
+        () async {
       DownloadProgress? emitted;
       final cancelToken = CancelToken();
       final handler = DownloadProgressHandler(
@@ -158,11 +163,13 @@ void main() {
       );
 
       // Emit first progress immediately
-      await handler.handleProgress({'downloadedBytes': 1000, 'fileSize': 100000});
+      await handler
+          .handleProgress({'downloadedBytes': 1000, 'fileSize': 100000});
       expect(emitted?.downloadedBytes, equals(1000));
 
       // Emit second progress, which gets throttled as pending
-      await handler.handleProgress({'downloadedBytes': 2000, 'fileSize': 100000});
+      await handler
+          .handleProgress({'downloadedBytes': 2000, 'fileSize': 100000});
       expect(emitted?.downloadedBytes, equals(1000)); // still old value
 
       // Disposing handler should emit pending progress
@@ -172,13 +179,15 @@ void main() {
   });
 
   group('FIX 8: BackendHealthService Configurable & Refresh', () {
-    test('Loads default backends and allows manifest refresh fallback', () async {
+    test('Loads default backends and allows manifest refresh fallback',
+        () async {
       final health = BackendHealthService.instance;
       expect(health.backends, isNotEmpty);
       expect(health.activeBaseUrl, isNotEmpty);
 
       // refreshBackends graceful handling of invalid URL
-      await health.refreshBackends('http://127.0.0.1:9999/non_existent_manifest.json');
+      await health
+          .refreshBackends('http://127.0.0.1:9999/non_existent_manifest.json');
       expect(health.backends, isNotEmpty);
     });
   });
@@ -198,7 +207,8 @@ void main() {
   });
 
   group('FIX 10: Configurable Stalled Detection', () {
-    test('SettingsProvider has downloadStalledTimeoutMinutes setting', () async {
+    test('SettingsProvider has downloadStalledTimeoutMinutes setting',
+        () async {
       final settings = SettingsProvider.instance;
       await settings.setDownloadStalledTimeoutMinutes(15);
       expect(settings.downloadStalledTimeoutMinutes, equals(15));
@@ -206,7 +216,9 @@ void main() {
   });
 
   group('FIX 14: AppLockService Monotonic Clock Reboot Edge Case', () {
-    test('Falls back to wall clock when monotonic clock resets (currentMono < startMs)', () async {
+    test(
+        'Falls back to wall clock when monotonic clock resets (currentMono < startMs)',
+        () async {
       AppLockService.resetMonotonicState();
       // Simulate lockout set with start monotonic 500000ms
       AppLockService.mockMonotonicTimeMs = 500000;

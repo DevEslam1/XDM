@@ -322,7 +322,8 @@ class ErrorTaxonomy {
         case DioExceptionType.badCertificate:
           return const ErrorClassification(
             family: ErrorFamily.auth,
-            message: 'SSL certificate verification failed (Untrusted or Expired)',
+            message:
+                'SSL certificate verification failed (Untrusted or Expired)',
             severe: true,
             recoveryAction: RecoveryAction.refreshUrl,
           );

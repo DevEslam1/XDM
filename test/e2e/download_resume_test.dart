@@ -46,8 +46,8 @@ void main() {
         final length = clampedEnd - start + 1;
 
         response.statusCode = HttpStatus.partialContent;
-        response.headers.set(
-            HttpHeaders.contentRangeHeader, 'bytes $start-$clampedEnd/$fileSize');
+        response.headers.set(HttpHeaders.contentRangeHeader,
+            'bytes $start-$clampedEnd/$fileSize');
         response.headers.contentLength = length;
         response.headers.contentType = ContentType.binary;
 
@@ -144,13 +144,16 @@ void main() {
     expect(downloadedSha256, equals(expectedSha256));
   }
 
-  group('FIX 16: E2E Download -> Pause -> Kill -> Resume -> Verify SHA-256', () {
-    test('Single-stream (1 thread) download pause, kill, resume, verify SHA-256',
+  group('FIX 16: E2E Download -> Pause -> Kill -> Resume -> Verify SHA-256',
+      () {
+    test(
+        'Single-stream (1 thread) download pause, kill, resume, verify SHA-256',
         () async {
       await runDownloadResumeTest(threadCount: 1);
     });
 
-    test('Multi-threaded (4 threads) download pause, kill, resume, verify SHA-256',
+    test(
+        'Multi-threaded (4 threads) download pause, kill, resume, verify SHA-256',
         () async {
       await runDownloadResumeTest(threadCount: 4);
     });

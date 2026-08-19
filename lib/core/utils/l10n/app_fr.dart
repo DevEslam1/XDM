@@ -66,12 +66,14 @@ const Map<String, String> frTranslations = {
   'browser_stop': 'Arrêter',
   'browser_retry': 'Réessayer',
   'browser_pip_tooltip': 'Image dans l\'image',
-  'browser_pip_unsupported': 'L\'image dans l\'image n\'est pas disponible sur cette page',
+  'browser_pip_unsupported':
+      'L\'image dans l\'image n\'est pas disponible sur cette page',
   'browser_save_screenshot': 'Enregistrer la capture',
   'browser_screenshot_saved': 'Capture enregistrée',
   'browser_screenshot_failed': 'Impossible de capturer l\'écran',
   'browser_nav_blocked_title': 'Navigation bloquée',
-  'browser_nav_blocked_reason': 'Cette page a été bloquée en tant que publicité potentielle ou page non sécurisée.\n\nRaison : {reason}',
+  'browser_nav_blocked_reason':
+      'Cette page a été bloquée en tant que publicité potentielle ou page non sécurisée.\n\nRaison : {reason}',
   'browser_nav_open_anyway': 'OUVRIR QUAND MÊME',
   'browser_close': 'Fermer le navigateur',
   'browser_close_btn': 'FERMER',
@@ -201,8 +203,10 @@ const Map<String, String> frTranslations = {
   'browser_status_queued': 'EN ATTENTE',
   'browser_stop_loading': 'Arrêter le chargement',
   'browser_stream_sniffer_status': 'STATUT DU DÉTECTEUR DE FLUX',
-  'browser_sniffer_on_tooltip': 'Détecteur de médias ACTIVÉ — touchez pour désactiver',
-  'browser_sniffer_off_tooltip': 'Détecteur de médias DÉSACTIVÉ — touchez pour activer',
+  'browser_sniffer_on_tooltip':
+      'Détecteur de médias ACTIVÉ — touchez pour désactiver',
+  'browser_sniffer_off_tooltip':
+      'Détecteur de médias DÉSACTIVÉ — touchez pour activer',
   'browser_offline_tooltip': 'Vous êtes hors ligne',
   'browser_surfing_history': 'Historique de navigation',
   'browser_tabs_restored': 'Onglets précédents restaurés',

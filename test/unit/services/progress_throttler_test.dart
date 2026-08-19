@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('ProgressThrottler', () {
-    test('emits first report immediately and throttles rapid subsequent reports',
+    test(
+        'emits first report immediately and throttles rapid subsequent reports',
         () async {
       final emitted = <Map<String, dynamic>>[];
       final throttler = ProgressThrottler(
@@ -31,7 +32,8 @@ void main() {
       throttler.dispose();
     });
 
-    test('isTerminal forces immediate emit regardless of throttle interval', () {
+    test('isTerminal forces immediate emit regardless of throttle interval',
+        () {
       final emitted = <Map<String, dynamic>>[];
       final throttler = ProgressThrottler(
         getForegroundInterval: () => const Duration(seconds: 10),

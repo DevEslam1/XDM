@@ -80,7 +80,8 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
     try {
       final result = await TopSitesCacheService.instance.getTopSites(
         loader: () async {
-          final history = await widget.controller.historyManager.getRecentHistory(limit: 30);
+          final history = await widget.controller.historyManager
+              .getRecentHistory(limit: 30);
           final hostCounts = <String, int>{};
           final hostTitles = <String, String>{};
           final hostUrls = <String, String>{};
@@ -165,7 +166,8 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
               color: isDark ? AppTheme.surface : AppTheme.lightSurface,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                color:
+                    isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
                 width: 0.8,
               ),
             ),
@@ -174,14 +176,18 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: (widget.controller.isSnifferEnabled ? accentColor : Colors.grey)
+                    color: (widget.controller.isSnifferEnabled
+                            ? accentColor
+                            : Colors.grey)
                         .withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     Icons.radar_rounded,
                     size: 18,
-                    color: widget.controller.isSnifferEnabled ? accentColor : Colors.grey,
+                    color: widget.controller.isSnifferEnabled
+                        ? accentColor
+                        : Colors.grey,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -190,20 +196,30 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isRtl ? 'كاشف الوسائط التلقائي' : 'Media Sniffer Engine',
+                        isRtl
+                            ? 'كاشف الوسائط التلقائي'
+                            : 'Media Sniffer Engine',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                          color: isDark
+                              ? AppTheme.textPrimary
+                              : AppTheme.lightTextPrimary,
                         ),
                       ),
                       Text(
                         widget.controller.isSnifferEnabled
-                            ? (isRtl ? 'جاهز لاقتناص الوسائط' : 'Ready to capture video/audio streams')
-                            : (isRtl ? 'الكاشف متوقف مؤقتاً' : 'Sniffer is paused'),
+                            ? (isRtl
+                                ? 'جاهز لاقتناص الوسائط'
+                                : 'Ready to capture video/audio streams')
+                            : (isRtl
+                                ? 'الكاشف متوقف مؤقتاً'
+                                : 'Sniffer is paused'),
                         style: TextStyle(
                           fontSize: 11,
-                          color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                          color: isDark
+                              ? AppTheme.textSecondary
+                              : AppTheme.lightTextSecondary,
                         ),
                       ),
                     ],
@@ -235,14 +251,16 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
               return Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
                       .withValues(alpha: 0.07),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
-                        .withValues(alpha: 0.25),
+                    color:
+                        (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+                            .withValues(alpha: 0.25),
                     width: 0.8,
                   ),
                 ),
@@ -252,7 +270,9 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                        color: isDark
+                            ? AppTheme.neonGreen
+                            : AppTheme.lightNeonGreen,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -260,7 +280,9 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
                     Text(
                       '${stats.active} ${isRtl ? "تنزيل نشط" : "Active downloads"}',
                       style: TextStyle(
-                        color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                        color: isDark
+                            ? AppTheme.textPrimary
+                            : AppTheme.lightTextPrimary,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -269,13 +291,16 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
                     Icon(
                       Icons.speed_rounded,
                       size: 14,
-                      color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                      color:
+                          isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                     ),
                     const SizedBox(width: 6),
                     Text(
                       stats.speed,
                       style: TextStyle(
-                        color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                        color: isDark
+                            ? AppTheme.neonGreen
+                            : AppTheme.lightNeonGreen,
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
                       ),
@@ -361,10 +386,14 @@ class _BrowserHomeDashboardState extends State<BrowserHomeDashboard>
               const SizedBox(width: 8),
               Text(
                 _topHistorySites.isNotEmpty
-                    ? (isRtl ? 'الأكثر زيارة والمقترحة' : 'Top & Suggested Sites')
+                    ? (isRtl
+                        ? 'الأكثر زيارة والمقترحة'
+                        : 'Top & Suggested Sites')
                     : (isRtl ? 'المواقع المقترحة' : 'Suggested Sites'),
                 style: TextStyle(
-                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                  color: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
                 ),

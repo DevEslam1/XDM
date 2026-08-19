@@ -44,30 +44,26 @@ class DatabaseMaintenanceService {
 
     final swCheckpoint = Stopwatch()..start();
     int logPages = 0;
+    int checkpointedPages = 0;
     try {
-      if (hasActiveDownloads) {
-        if (maintenanceRuns % 4 == 0) {
-          final walRows =
-              await _db.customSelect('PRAGMA wal_checkpoint(PASS)').get();
-          if (walRows.isNotEmpty) {
-            final row = walRows.first.data;
-            final log = row['log'] ?? 0;
-            if (log is num) {
-              logPages = log.toInt();
-            }
-          }
-        } else {
-          _log.fine(
-              '[DatabaseMaintenanceService] Active downloads in progress; skipping periodic wal_checkpoint');
-        }
+      if (hasActiveDownloads && maintenanceRuns % 4 != 0) {
+        _log.fine(
+            '[DatabaseMaintenanceService] Active downloads in progress; skipping periodic wal_checkpoint');
       } else {
-        final walRows =
-            await _db.customSelect('PRAGMA wal_checkpoint(RESTART)').get();
+        final walRows = await _db
+            .customSelect('PRAGMA wal_checkpoint(RESTART)')
+            .get()
+            .timeout(const Duration(seconds: 1));
         if (walRows.isNotEmpty) {
           final row = walRows.first.data;
           final log = row['log'] ?? 0;
-          if (log is num) {
-            logPages = log.toInt();
+          final checkpointed = row['checkpointed'] ?? 0;
+          if (log is num) logPages = log.toInt();
+          if (checkpointed is num) checkpointedPages = checkpointed.toInt();
+          if (checkpointedPages > 100) {
+            _log.info(
+              '[DatabaseMaintenanceService] wal_checkpoint(RESTART) reclaimed $checkpointedPages pages ($logPages log pages)',
+            );
           }
         }
       }

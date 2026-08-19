@@ -7,7 +7,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('HttpTransferJob Hardening (Sprint 1)', () {
-    test('cancellableDelay falls back to direct delay when queue capacity (16) is reached', () async {
+    test(
+        'cancellableDelay falls back to direct delay when queue capacity (16) is reached',
+        () async {
       final receivePort = ReceivePort();
       const cmd = DownloadCommand(
         taskId: 'test-delay-cap',
@@ -39,7 +41,9 @@ void main() {
       receivePort.close();
     });
 
-    test('registerWatchdogs sets single _jobHealthTimer and cancelWatchdogs clears it', () {
+    test(
+        'registerWatchdogs sets single _jobHealthTimer and cancelWatchdogs clears it',
+        () {
       final receivePort = ReceivePort();
       const cmd = DownloadCommand(
         taskId: 'test-watchdogs',
@@ -64,7 +68,8 @@ void main() {
       receivePort.close();
     });
 
-    test('throttledSaveAndReport skips work while a state save is pending', () async {
+    test('throttledSaveAndReport skips work while a state save is pending',
+        () async {
       final receivePort = ReceivePort();
       const cmd = DownloadCommand(
         taskId: 'test-throttle-skip',

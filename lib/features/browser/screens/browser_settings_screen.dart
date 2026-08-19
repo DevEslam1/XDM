@@ -138,9 +138,7 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                 subtitle: Text(
                   currentEngine,
                   style: TextStyle(
-                      color: accent,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12),
+                      color: accent, fontWeight: FontWeight.bold, fontSize: 12),
                 ),
                 trailing: PopupMenuButton<String>(
                   initialValue: currentEngine,
@@ -276,7 +274,8 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
               _buildSettingsSwitch(
                 context: context,
                 icon: Icons.history_toggle_off_rounded,
-                title: L10n.isRtl(context) ? 'حفظ السجل' : 'Save Browsing History',
+                title:
+                    L10n.isRtl(context) ? 'حفظ السجل' : 'Save Browsing History',
                 subtitle: L10n.isRtl(context)
                     ? 'تسجيل المواقع المزارة في السجل'
                     : 'Keep record of visited websites',
@@ -294,7 +293,9 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
               _buildSettingsSwitch(
                 context: context,
                 icon: Icons.lock_outline_rounded,
-                title: L10n.isRtl(context) ? 'الاتصال الآمن فقط (HTTPS)' : 'HTTPS-Only Mode',
+                title: L10n.isRtl(context)
+                    ? 'الاتصال الآمن فقط (HTTPS)'
+                    : 'HTTPS-Only Mode',
                 subtitle: L10n.isRtl(context)
                     ? 'ترقية جميع الاتصالات إلى HTTPS المشفر'
                     : 'Upgrade insecure HTTP requests to HTTPS',
@@ -312,7 +313,9 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
               _buildSettingsSwitch(
                 context: context,
                 icon: Icons.fingerprint_rounded,
-                title: L10n.isRtl(context) ? 'مقاومة التتبع الرقمي' : 'Anti-Fingerprinting',
+                title: L10n.isRtl(context)
+                    ? 'مقاومة التتبع الرقمي'
+                    : 'Anti-Fingerprinting',
                 subtitle: L10n.isRtl(context)
                     ? 'حماية هوية المتصفح من التعقب'
                     : 'Shield canvas, audio & navigator fingerprinting',
@@ -330,7 +333,9 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
               _buildSettingsSwitch(
                 context: context,
                 icon: Icons.password_rounded,
-                title: L10n.isRtl(context) ? 'الملء التلقائي للنماذج' : 'Form Autofill',
+                title: L10n.isRtl(context)
+                    ? 'الملء التلقائي للنماذج'
+                    : 'Form Autofill',
                 subtitle: L10n.isRtl(context)
                     ? 'حفظ وتعبئة الحقول والنماذج تلقائياً'
                     : 'Save & autofill login credentials and inputs',
@@ -348,7 +353,9 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
           ),
           const SizedBox(height: 24),
           SectionHeader(
-            title: L10n.isRtl(context) ? 'علامات التبويب والموارد' : 'Tabs & Resource Management',
+            title: L10n.isRtl(context)
+                ? 'علامات التبويب والموارد'
+                : 'Tabs & Resource Management',
             subtitle: L10n.isRtl(context)
                 ? 'الحد الأقصى للألسنة وإدارة الذاكرة'
                 : 'Maximum tabs limit and memory allocation',
@@ -362,7 +369,8 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
             isAmoled: isAmoled,
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -378,7 +386,9 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                             ),
                             const SizedBox(width: 12),
                             Text(
-                              L10n.isRtl(context) ? 'أقصى عدد للألسنة' : 'Max Open Tabs',
+                              L10n.isRtl(context)
+                                  ? 'أقصى عدد للألسنة'
+                                  : 'Max Open Tabs',
                               style: TextStyle(
                                 color: textClr,
                                 fontWeight: FontWeight.w600,
@@ -388,7 +398,8 @@ class _BrowserSettingsScreenState extends State<BrowserSettingsScreen>
                           ],
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: accent.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(8),
@@ -705,9 +716,8 @@ class SettingsCard extends StatelessWidget {
     final bg = isAmoled
         ? const Color(0xFF0A0A0A)
         : (isDark ? AppTheme.cardBg : AppTheme.lightCardBg);
-    final borderClr = isDark
-        ? AppTheme.border.withValues(alpha: 0.4)
-        : AppTheme.lightBorder;
+    final borderClr =
+        isDark ? AppTheme.border.withValues(alpha: 0.4) : AppTheme.lightBorder;
 
     return Container(
       decoration: BoxDecoration(

@@ -5,16 +5,33 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Bookmark Model Tests', () {
     test('initial returns first uppercase character of title or domain', () {
-      final b1 = Bookmark(id: '1', title: 'Google', url: 'https://google.com', createdAt: DateTime.now());
+      final b1 = Bookmark(
+          id: '1',
+          title: 'Google',
+          url: 'https://google.com',
+          createdAt: DateTime.now());
       expect(b1.initial, 'G');
 
-      final b2 = Bookmark(id: '2', title: '', url: 'https://youtube.com', createdAt: DateTime.now());
+      final b2 = Bookmark(
+          id: '2',
+          title: '',
+          url: 'https://youtube.com',
+          createdAt: DateTime.now());
       expect(b2.initial, 'Y');
     });
 
-    test('accentColor returns consistent color from AppTheme.bookmarkPalette', () {
-      final b1 = Bookmark(id: '1', title: 'Example', url: 'https://example.com', createdAt: DateTime.now());
-      final b2 = Bookmark(id: '2', title: 'Example', url: 'https://example.com', createdAt: DateTime.now());
+    test('accentColor returns consistent color from AppTheme.bookmarkPalette',
+        () {
+      final b1 = Bookmark(
+          id: '1',
+          title: 'Example',
+          url: 'https://example.com',
+          createdAt: DateTime.now());
+      final b2 = Bookmark(
+          id: '2',
+          title: 'Example',
+          url: 'https://example.com',
+          createdAt: DateTime.now());
       expect(b1.accentColor, b2.accentColor);
       expect(AppTheme.bookmarkPalette.contains(b1.accentColor), isTrue);
     });

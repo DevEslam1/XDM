@@ -66,12 +66,14 @@ const Map<String, String> deTranslations = {
   'browser_stop': 'Stopp',
   'browser_retry': 'Wiederholen',
   'browser_pip_tooltip': 'Bild-im-Bild',
-  'browser_pip_unsupported': 'Bild-im-Bild ist auf dieser Seite nicht verfügbar',
+  'browser_pip_unsupported':
+      'Bild-im-Bild ist auf dieser Seite nicht verfügbar',
   'browser_save_screenshot': 'Screenshot speichern',
   'browser_screenshot_saved': 'Screenshot gespeichert',
   'browser_screenshot_failed': 'Screenshot konnte nicht aufgenommen werden',
   'browser_nav_blocked_title': 'Navigation blockiert',
-  'browser_nav_blocked_reason': 'Diese Seite wurde als potenzielle Werbung oder unsichere Seite blockiert.\n\nGrund: {reason}',
+  'browser_nav_blocked_reason':
+      'Diese Seite wurde als potenzielle Werbung oder unsichere Seite blockiert.\n\nGrund: {reason}',
   'browser_nav_open_anyway': 'TROTZDEM ÖFFNEN',
   'browser_close': 'Browser schließen',
   'browser_close_btn': 'SCHLIESSEN',
@@ -154,7 +156,8 @@ const Map<String, String> deTranslations = {
   'browser_no_bookmarks': 'Noch keine Lesezeichen',
   'browser_no_bookmarks_desc': 'Tippen Sie auf +, um Favoriten zu speichern',
   'browser_no_bookmarks_search': 'Keine Lesezeichen passen zu Ihrer Suche',
-  'browser_no_bookmarks_search_desc': 'Versuchen Sie ein anderes Stichwort oder leeren Sie die Suche',
+  'browser_no_bookmarks_search_desc':
+      'Versuchen Sie ein anderes Stichwort oder leeren Sie die Suche',
   'browser_no_downloads_desc':
       'Heruntergeladene Dateien werden hier angezeigt.',
   'browser_no_downloads_yet': 'Noch keine Downloads',
@@ -198,8 +201,10 @@ const Map<String, String> deTranslations = {
   'browser_status_queued': 'IN WARTESCHLANGE',
   'browser_stop_loading': 'Laden stoppen',
   'browser_stream_sniffer_status': 'STREAM-SNIFFER-STATUS',
-  'browser_sniffer_on_tooltip': 'Medien-Sniffer ist AN — zum Ausschalten tippen',
-  'browser_sniffer_off_tooltip': 'Medien-Sniffer ist AUS — zum Einschalten tippen',
+  'browser_sniffer_on_tooltip':
+      'Medien-Sniffer ist AN — zum Ausschalten tippen',
+  'browser_sniffer_off_tooltip':
+      'Medien-Sniffer ist AUS — zum Einschalten tippen',
   'browser_offline_tooltip': 'Du bist offline',
   'browser_surfing_history': 'Surfverlauf',
   'browser_tabs_restored': 'Vorherige Tabs wiederhergestellt',

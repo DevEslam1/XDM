@@ -75,8 +75,8 @@ class TorrentProvider extends ChangeNotifier {
       if (!TorrentService.isInitialized) return;
       final active = TorrentService.activeTorrentIds;
       final registeredToTasks = _torrentIds.values.toSet();
-      _latestStats.removeWhere((id, _) =>
-          !active.contains(id) && !registeredToTasks.contains(id));
+      _latestStats.removeWhere(
+          (id, _) => !active.contains(id) && !registeredToTasks.contains(id));
     });
   }
 

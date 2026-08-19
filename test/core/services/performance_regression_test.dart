@@ -47,10 +47,8 @@ void main() {
         taskId: 'perf_task_$i',
         url: 'http://localhost:$port/perf_$i.bin',
         punyUrl: 'http://localhost:$port/perf_$i.bin',
-        tempFilePath:
-            '${Directory.systemTemp.path}/dmx_perf_$i.tmp',
-        localFilePath:
-            '${Directory.systemTemp.path}/dmx_perf_out_$i.bin',
+        tempFilePath: '${Directory.systemTemp.path}/dmx_perf_$i.tmp',
+        localFilePath: '${Directory.systemTemp.path}/dmx_perf_out_$i.bin',
         knownFileSize: payloadSize,
         supportsResume: false,
         threadCount: 1,

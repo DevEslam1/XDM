@@ -292,7 +292,6 @@ class ScriptInjector {
     })();
   ''';
 
-
   static const String kLongPressScript = '''
     (function() {
       if (window.__xdmLongPressInjected) return;
@@ -606,8 +605,9 @@ $customJs
     // next group still runs.
     const groupSize = 4;
     for (var start = 0; start < scripts.length; start += groupSize) {
-      final end =
-          (start + groupSize > scripts.length) ? scripts.length : start + groupSize;
+      final end = (start + groupSize > scripts.length)
+          ? scripts.length
+          : start + groupSize;
       final group = scripts.sublist(start, end);
       final safeGroup = group.map((s) => '''
 try {

@@ -293,9 +293,7 @@ class BrowserMenuButton extends StatelessWidget {
               ? L10n.of(context, 'browser_force_dark_enabled')
               : L10n.of(context, 'browser_force_dark_disabled'),
           color: nextState ? AppTheme.neonBlue : AppTheme.neonAmber,
-          icon: nextState
-              ? Icons.dark_mode_rounded
-              : Icons.light_mode_outlined,
+          icon: nextState ? Icons.dark_mode_rounded : Icons.light_mode_outlined,
           isDarkMode: isDark,
         );
         break;
@@ -305,8 +303,12 @@ class BrowserMenuButton extends StatelessWidget {
         ThemedSnackbar.show(
           context,
           message: nextState
-              ? (L10n.isRtl(context) ? 'تم تفعيل كاشف الوسائط' : 'Media sniffer enabled')
-              : (L10n.isRtl(context) ? 'تم تعطيل كاشف الوسائط' : 'Media sniffer disabled'),
+              ? (L10n.isRtl(context)
+                  ? 'تم تفعيل كاشف الوسائط'
+                  : 'Media sniffer enabled')
+              : (L10n.isRtl(context)
+                  ? 'تم تعطيل كاشف الوسائط'
+                  : 'Media sniffer disabled'),
           color: nextState ? AppTheme.neonGreen : AppTheme.neonAmber,
           icon: nextState ? Icons.radar_rounded : Icons.radar_outlined,
           isDarkMode: isDark,
@@ -316,7 +318,8 @@ class BrowserMenuButton extends StatelessWidget {
         controller.openInNewTab('about:blank', switchTo: true);
         break;
       case 'new_incognito':
-        controller.openInNewTab('about:blank', isIncognito: true, switchTo: true);
+        controller.openInNewTab('about:blank',
+            isIncognito: true, switchTo: true);
         break;
       case 'bookmarks':
         Navigator.push(
@@ -370,7 +373,9 @@ class BrowserMenuButton extends StatelessWidget {
           Clipboard.setData(ClipboardData(text: activeTab.url));
           ThemedSnackbar.show(
             context,
-            message: L10n.isRtl(context) ? 'تم نسخ الرابط' : 'Link copied to clipboard',
+            message: L10n.isRtl(context)
+                ? 'تم نسخ الرابط'
+                : 'Link copied to clipboard',
             color: AppTheme.neonGreen,
             icon: Icons.check_circle_outline,
             isDarkMode: isDark,
@@ -393,7 +398,8 @@ class BrowserMenuButton extends StatelessWidget {
         }
         break;
       case 'keyboard_shortcuts':
-        BrowserMiscDialogs.showKeyboardShortcutsDialog(context, settings: settings);
+        BrowserMiscDialogs.showKeyboardShortcutsDialog(context,
+            settings: settings);
         break;
       case 'settings':
         Navigator.push(

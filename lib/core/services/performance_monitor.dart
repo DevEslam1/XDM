@@ -137,7 +137,8 @@ class PerformanceMonitor {
         if (_consecutiveJankCount >= 5) {
           final now = DateTime.now();
           if (_lastAutoDegradeTime == null ||
-              now.difference(_lastAutoDegradeTime!) >= const Duration(seconds: 30)) {
+              now.difference(_lastAutoDegradeTime!) >=
+                  const Duration(seconds: 30)) {
             _lastAutoDegradeTime = now;
             onAutoDegradeTriggered?.call();
           }

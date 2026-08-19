@@ -75,7 +75,8 @@ class Bookmark {
     );
   }
 
-  factory Bookmark.fromJson(Map<String, dynamic> json) => Bookmark.fromMap(json);
+  factory Bookmark.fromJson(Map<String, dynamic> json) =>
+      Bookmark.fromMap(json);
 
   static DateTime parseTimestamp(dynamic value) {
     if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);

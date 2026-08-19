@@ -5,43 +5,8 @@ import '../../utils/bounded_lru_cache.dart';
 class CycleStateResolver {
   const CycleStateResolver._();
 
-  /// Increased from 256 to 512 to handle torrent-heavy workloads where
-  /// libtorrent emits dozens of distinct substate strings per session.
   static final BoundedLruCache<String, CycleState> _resolutionCache =
-      BoundedLruCache<String, CycleState>(maxCapacity: 512);
-
-  static const Map<String, CycleState> _libtorrentExact = {
-    'checking_files': CycleState.verifying,
-    'checking_resume_data': CycleState.verifying,
-    'queued_for_checking': CycleState.verifying,
-    'checking': CycleState.verifying,
-    'verifying': CycleState.verifying,
-    'downloading_metadata': CycleState.fetchingMetadata,
-    'fetching_metadata': CycleState.fetchingMetadata,
-    'metadata': CycleState.fetchingMetadata,
-    'allocating': CycleState.allocating,
-    'downloading': CycleState.downloading,
-    'seeding': CycleState.seeding,
-    'finished': CycleState.completed,
-    'completed': CycleState.completed,
-    'paused': CycleState.paused,
-    'stopped': CycleState.paused,
-    'stalled': CycleState.stalled,
-    'stalled_downloading': CycleState.stalled,
-    'stalled_uploading': CycleState.seeding,
-    'error': CycleState.failed,
-    'failed': CycleState.failed,
-    'resuming': CycleState.resuming,
-    'retrying': CycleState.retrying,
-    'updating_links': CycleState.updatingLinks,
-    'updatinglinks': CycleState.updatingLinks,
-    'merging': CycleState.merging,
-    'muxing': CycleState.merging,
-    'starting': CycleState.starting,
-    'queued': CycleState.starting,
-    'waiting_for_counterpart': CycleState.starting,
-    'waiting for counterpart stream…': CycleState.starting,
-  };
+      BoundedLruCache<String, CycleState>(maxCapacity: 256);
 
   static final RegExp _compiledPattern = RegExp(
     r'(?<metadata>downloading_metadata|fetching_metadata|\bmetadata\b)|'
@@ -70,18 +35,24 @@ class CycleStateResolver {
       return CycleState.downloading;
     }
     final sm = statusMessage.trim();
+    final cacheKey = '${sm.toLowerCase()}|$isTorrent';
+    final cached = _resolutionCache.get(cacheKey);
+    if (cached != null) return cached;
+
+    CycleState resolved;
     if (isTorrent) {
       final normalized = sm.toLowerCase().replaceAll(' ', '_');
-      final direct = _libtorrentExact[normalized];
-      if (direct != null) return direct;
-      final directOriginal = _libtorrentExact[sm.toLowerCase()];
-      if (directOriginal != null) return directOriginal;
-      return CycleState.fromLibtorrent(sm);
+      final direct = CycleState.libtorrentStateMap[normalized] ??
+          CycleState.libtorrentStateMap[sm.toLowerCase()];
+      if (direct != null) {
+        resolved = direct;
+      } else {
+        resolved = CycleState.fromLibtorrent(sm);
+      }
+    } else {
+      resolved = _resolveMessage(sm);
     }
-    final cached = _resolutionCache.get(sm);
-    if (cached != null) return cached;
-    final resolved = _resolveMessage(sm);
-    _resolutionCache.put(sm, resolved);
+    _resolutionCache.put(cacheKey, resolved);
     return resolved;
   }
 

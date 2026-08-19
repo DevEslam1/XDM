@@ -183,4 +183,3 @@ class TorrentSessionManager {
     _latestStats.clear();
   }
 }
-

@@ -33,8 +33,8 @@ class ProgressThrottler {
 
     final interval = getForegroundInterval();
     final now = DateTime.now();
-    final canEmitNow = _lastEmitTime == null ||
-        now.difference(_lastEmitTime!) >= interval;
+    final canEmitNow =
+        _lastEmitTime == null || now.difference(_lastEmitTime!) >= interval;
 
     if (canEmitNow) {
       _throttleTimer?.cancel();

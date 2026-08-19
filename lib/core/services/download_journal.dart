@@ -180,10 +180,11 @@ class StateStoreInstance {
       }
     }
 
-    if (state == null) {
-      final journalBytes =
-          await DownloadJournal.recover('$tempFilePath.journal');
-      if (journalBytes != null && journalBytes.isNotEmpty) {
+    // Replay journal into state if journal exists and is ahead of state
+    final journalBytes =
+        await DownloadJournal.recover('$tempFilePath.journal');
+    if (journalBytes != null && journalBytes.isNotEmpty) {
+      if (state == null) {
         state = _stateFromChunkBytes(
           tempFilePath: tempFilePath,
           url: url,
@@ -192,6 +193,19 @@ class StateStoreInstance {
           totalSize: knownFileSize,
         );
         migratedFrom = 'journal';
+      } else if (state.chunks.isNotEmpty &&
+          journalBytes.length == state.chunks.length) {
+        var replayedAny = false;
+        for (var i = 0; i < state.chunks.length; i++) {
+          if (journalBytes[i] > state.chunks[i].downloaded) {
+            state.chunks[i].downloaded = journalBytes[i];
+            replayedAny = true;
+          }
+        }
+        if (replayedAny) {
+          state.migrationNote =
+              '${state.migrationNote ?? ''} journal_replayed'.trim();
+        }
       }
     }
 
@@ -435,10 +449,14 @@ class StateStoreInstance {
 
           final bytesSinceLastWrite =
               (state.downloadedBytes - (lastWrittenByte ?? 0)).abs();
-          final statusChanged = lastStatus != state.status;
+          final statusChanged =
+              lastStatus != null && lastStatus != state.status;
 
-          // Rate-limit non-durable state saves in background (120s / 16MB) or foreground (30s / 5MB)
+          // Task 2.1: Maximum 1 disk write per 5 seconds per task for non-durable saves
           if (!durable && !statusChanged && lastSave != null) {
+            if (now.difference(lastSave!) < const Duration(seconds: 5)) {
+              return;
+            }
             if (isBg) {
               if (now.difference(lastSave!) < kStateSaveBgInterval &&
                   bytesSinceLastWrite < kStateSaveBgDelta) {
@@ -468,6 +486,20 @@ class StateStoreInstance {
             }
           }
 
+          // Ensure journal (if present) is flushed/fsync'd before writing state
+          final journalFile = File('$tempFilePath.journal');
+          if (await journalFile.exists()) {
+            try {
+              final jRaf =
+                  await journalFile.open(mode: FileMode.writeOnlyAppend);
+              try {
+                await jRaf.flush();
+              } finally {
+                await jRaf.close();
+              }
+            } catch (_) {}
+          }
+
           state.updatedAt = now;
           final payload = jsonEncode(state.toJson());
           final tmp = File(tmpPath);
@@ -476,7 +508,8 @@ class StateStoreInstance {
             await tmp.writeAsString(payload, flush: true);
             if (!kIsWeb) {
               try {
-                final raf = await tmp.open(mode: FileMode.read);
+                final raf =
+                    await tmp.open(mode: FileMode.writeOnlyAppend);
                 try {
                   await raf.flush();
                 } finally {
@@ -579,8 +612,8 @@ class StateStoreInstance {
             final tmp = File('$legacyPath.tmp');
             if (await tmp.exists()) await tmp.delete();
           } catch (e, st) {
-            LoggingService.logger('DownloadJournal')
-                .warning('Failed to delete legacy tmp state file on remove', e, st);
+            LoggingService.logger('DownloadJournal').warning(
+                'Failed to delete legacy tmp state file on remove', e, st);
           }
         }
       });
@@ -668,6 +701,7 @@ class DownloadJournal {
   IOSink? _sink;
   bool _isOpen = false;
   int _approxBytes = 0;
+  int _bytesSinceLastFsync = 0;
   // FIX-P5: Flush counter and tracking
   int _flushCounter = 0;
   int _lastFlushRecordCount = 0;
@@ -696,6 +730,25 @@ class DownloadJournal {
     });
   }
 
+  Future<void> _fsyncLocked() async {
+    if (_sink != null) {
+      await _sink!.flush();
+    }
+    if (!kIsWeb) {
+      try {
+        final raf = await File(path).open(mode: FileMode.writeOnlyAppend);
+        try {
+          await raf.flush();
+        } finally {
+          await raf.close();
+        }
+      } catch (e, st) {
+        LoggingService.logger('DownloadJournal')
+            .fine('fsync on journal file failed', e, st);
+      }
+    }
+  }
+
   Future<void> writeInit(int threadCount, int totalSize) async {
     await _lock.synchronized(() async {
       _ensureOpen();
@@ -722,15 +775,15 @@ class DownloadJournal {
   int _lastGlobalWriteBytes = 0;
 
   Future<void> recordChunkProgress(int index, int bytes) async {
-    final isBg = !DownloadEngine.appInForeground ||
-        DownloadEngine.isInBackground ||
-        PowerMonitor.screenOff;
+    // Task 2.1: Disable chunk journal writes entirely when screen is off
+    if (PowerMonitor.screenOff) return;
 
-    final threshold = PowerMonitor.screenOff
-        ? kJournalScreenOffWriteDelta // 16MB when screen off (C-BG-02)
-        : isBg
-            ? kJournalBackgroundWriteDelta // 4MB when backgrounded (BG-04 / C-BG-02)
-            : kJournalForegroundWriteDelta; // 512KB foreground (M-DL-08)
+    final isBg = !DownloadEngine.appInForeground ||
+        DownloadEngine.isInBackground;
+
+    final threshold = isBg
+        ? kJournalBackgroundWriteDelta // 4MB when backgrounded (BG-04 / C-BG-02)
+        : kJournalForegroundWriteDelta; // 512KB foreground (M-DL-08)
 
     await _lock.synchronized(() async {
       _lastRecordedChunkBytes[index] = bytes;
@@ -754,13 +807,22 @@ class DownloadJournal {
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
       _sink!.writeln(line);
-      _approxBytes += line.length + 1;
+      final lineBytes = line.length + 1;
+      _approxBytes += lineBytes;
+      _bytesSinceLastFsync += lineBytes;
       _flushCounter++;
 
-      final flushInterval = PowerMonitor.screenOff ? 1000 : (isBg ? 500 : 50);
-      if (_flushCounter - _lastFlushRecordCount >= flushInterval) {
-        await _sink!.flush();
+      // Task 1.3: Add fsync call to the journal on every 1MB written
+      if (_bytesSinceLastFsync >= 1024 * 1024) {
+        await _fsyncLocked();
+        _bytesSinceLastFsync = 0;
         _lastFlushRecordCount = _flushCounter;
+      } else {
+        final flushInterval = PowerMonitor.screenOff ? 1000 : (isBg ? 500 : 50);
+        if (_flushCounter - _lastFlushRecordCount >= flushInterval) {
+          await _sink!.flush();
+          _lastFlushRecordCount = _flushCounter;
+        }
       }
     });
   }

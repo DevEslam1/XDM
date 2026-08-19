@@ -22,7 +22,9 @@ void main() {
   });
 
   group('HiveMigrationService Interrupted Task Mapping (FIX-07)', () {
-    test('_taskToCompanion sets pauseReason = appRestarted and cycleState = paused for downloading resumable task', () {
+    test(
+        '_taskToCompanion sets pauseReason = appRestarted and cycleState = paused for downloading resumable task',
+        () {
       final task = DownloadTask(
         id: 'task-mig-1',
         fileName: 'file.zip',
@@ -44,7 +46,8 @@ void main() {
 
       final companion = migrationService.taskToCompanionForTesting(task);
 
-      expect(companion.pauseReason.value, equals(PauseReason.appRestarted.name));
+      expect(
+          companion.pauseReason.value, equals(PauseReason.appRestarted.name));
       expect(companion.cycleState.value, equals(CycleState.paused.name));
       expect(companion.status.value, equals(DownloadStatus.paused.name));
     });

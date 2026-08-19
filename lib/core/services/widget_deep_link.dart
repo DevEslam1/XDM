@@ -74,13 +74,17 @@ class WidgetDeepLinkHandler {
   static bool isValidDeepLink(String url) {
     final trimmed = url.trim();
     if (trimmed.isEmpty) return false;
-    if (isMagnetUrl(trimmed) || isTorrentFileUrl(trimmed) || trimmed.startsWith('magnet:')) {
+    if (isMagnetUrl(trimmed) ||
+        isTorrentFileUrl(trimmed) ||
+        trimmed.startsWith('magnet:')) {
       return true;
     }
     final uri = Uri.tryParse(trimmed);
     if (uri == null) return false;
     final scheme = uri.scheme.toLowerCase();
-    if (scheme == 'magnet' || scheme == 'file' || scheme == 'content') return true;
+    if (scheme == 'magnet' || scheme == 'file' || scheme == 'content') {
+      return true;
+    }
     if (scheme != 'dmx' && scheme != 'xdm') return false;
     final host = uri.host.toLowerCase();
     return validRoutes.contains(host);
@@ -89,7 +93,9 @@ class WidgetDeepLinkHandler {
   static void handleUrl(String url) {
     final trimmed = url.trim();
     if (!isValidDeepLink(trimmed)) return;
-    if (isMagnetUrl(trimmed) || isTorrentFileUrl(trimmed) || trimmed.startsWith('magnet:')) {
+    if (isMagnetUrl(trimmed) ||
+        isTorrentFileUrl(trimmed) ||
+        trimmed.startsWith('magnet:')) {
       _handleAddUrl(trimmed);
       return;
     }

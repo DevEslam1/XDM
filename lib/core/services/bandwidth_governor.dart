@@ -35,7 +35,7 @@ class BandwidthGovernor {
     this._globalBytesPerSecond = 0,
     double burstFactor = 1.5,
     double? throttleFactor,
-  ])  : _burstFactor = burstFactor.clamp(1.0, 1.5) {
+  ]) : _burstFactor = burstFactor.clamp(1.0, 1.5) {
     PowerMonitor.throttleFactorNotifier.addListener(onPowerStateChanged);
   }
 
@@ -156,6 +156,16 @@ class BandwidthGovernor {
     return acquireNonBlocking(bytes, taskId: taskId);
   }
 
+  /// Blocking variant of [acquire] that awaits the calculated delay (if any)
+  /// before returning the waited milliseconds.
+  Future<int> acquireBlocking(int bytes, {String? taskId}) async {
+    final waitMs = acquireNonBlocking(bytes, taskId: taskId);
+    if (waitMs > 0) {
+      await Future.delayed(Duration(milliseconds: waitMs));
+    }
+    return waitMs;
+  }
+
   /// Non-blocking variant of [acquire] for probe requests. Returns the required wait
   /// in milliseconds without suspending execution.
   int acquireNonBlocking(int bytes, {String? taskId}) {
@@ -176,8 +186,8 @@ class BandwidthGovernor {
     final taskLimit = (rawLimit * throttleFactor).round();
     if (taskLimit <= 0) return _maxThrottleWaitMs;
     final now = DateTime.now();
-    final last = _taskLastRefill[taskId] ??
-        now.subtract(const Duration(seconds: 1));
+    final last =
+        _taskLastRefill[taskId] ?? now.subtract(const Duration(seconds: 1));
     final elapsedMs = now.difference(last).inMilliseconds;
     final tokens = _taskTokens[taskId] ?? 0.0;
     var currentTokens = tokens;

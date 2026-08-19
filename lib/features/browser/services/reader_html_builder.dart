@@ -23,7 +23,8 @@ class ReaderHtmlBuilder {
     final font =
         fontFamily == 'serif' ? "'Georgia', serif" : "'Inter', sans-serif";
 
-    final contentHtml = sanitizedContent ?? HtmlSanitizer.sanitize(article.content);
+    final contentHtml =
+        sanitizedContent ?? HtmlSanitizer.sanitize(article.content);
 
     return '''
 <!DOCTYPE html>

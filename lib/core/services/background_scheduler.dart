@@ -94,7 +94,8 @@ class BackgroundScheduler {
     }
 
     final now = DateTime.now();
-    final isBackground = DownloadEngine.isInBackground || PowerMonitor.screenOff;
+    final isBackground =
+        DownloadEngine.isInBackground || PowerMonitor.screenOff;
 
     final entries = List<MapEntry<String, _ScheduledTask>>.from(_tasks.entries);
     for (final entry in entries) {

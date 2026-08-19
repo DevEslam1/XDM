@@ -31,6 +31,7 @@ class _FakeTaskRepo implements TaskRepository {
     final idx = tasks.indexWhere((t) => t.id == id);
     return idx != -1 ? tasks[idx] : null;
   }
+
   @override
   Future<void> save(DownloadTask task) async {
     final idx = tasks.indexWhere((t) => t.id == task.id);
@@ -40,12 +41,14 @@ class _FakeTaskRepo implements TaskRepository {
       tasks.add(task);
     }
   }
+
   @override
   Future<void> saveAll(List<DownloadTask> newTasks) async {
     for (final task in newTasks) {
       await save(task);
     }
   }
+
   @override
   Future<void> delete(String id) async => tasks.removeWhere((t) => t.id == id);
   @override

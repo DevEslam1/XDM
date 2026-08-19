@@ -487,7 +487,8 @@ class AdBlockFilterUpdater {
     // P4: Concurrency-limited parallel downloading of sources
     final chunks = <List<_FilterSource>>[];
     for (var i = 0; i < _sources.length; i += 3) {
-      chunks.add(_sources.sublist(i, (i + 3 > _sources.length) ? _sources.length : i + 3));
+      chunks.add(_sources.sublist(
+          i, (i + 3 > _sources.length) ? _sources.length : i + 3));
     }
 
     for (final chunk in chunks) {
@@ -547,7 +548,8 @@ class AdBlockFilterUpdater {
             return;
           }
 
-          final result = await _parseFilterLines(lines, source.type, changedPatterns);
+          final result =
+              await _parseFilterLines(lines, source.type, changedPatterns);
 
           // Save size of the successfully validated file for future comparisons
           await prefs.setInt(sizeKey, fileSize);

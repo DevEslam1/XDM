@@ -12,9 +12,8 @@ class DownloadQueueEngine {
     Future<void> Function(DownloadTask) onStart, {
     Set<String>? excludedTaskIds,
   }) {
-    final activeCount = tasks
-        .where((t) => t.status == DownloadStatus.downloading)
-        .length;
+    final activeCount =
+        tasks.where((t) => t.status == DownloadStatus.downloading).length;
     final availableSlots = maxConcurrent - activeCount;
     if (availableSlots <= 0) return;
 
@@ -38,4 +37,3 @@ class DownloadQueueEngine {
     }
   }
 }
-

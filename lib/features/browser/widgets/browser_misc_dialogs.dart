@@ -31,12 +31,14 @@ class BrowserMiscDialogs {
         builder: (context, setDialogState) {
           return AlertDialog(
             backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: Text(
               '${L10n.of(context, 'browser_page_zoom')} (${(localZoom * 100).round()}%)',
               style: TextStyle(
                 fontSize: 16,
-                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                color:
+                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
               ),
             ),
             content: Column(
@@ -130,13 +132,15 @@ class BrowserMiscDialogs {
                       ChoiceChip(
                         label: const Text('JavaScript'),
                         selected: activeTabIndex == 0,
-                        onSelected: (_) => setDialogState(() => activeTabIndex = 0),
+                        onSelected: (_) =>
+                            setDialogState(() => activeTabIndex = 0),
                       ),
                       const SizedBox(width: 8),
                       ChoiceChip(
                         label: const Text('CSS'),
                         selected: activeTabIndex == 1,
-                        onSelected: (_) => setDialogState(() => activeTabIndex = 1),
+                        onSelected: (_) =>
+                            setDialogState(() => activeTabIndex = 1),
                       ),
                     ],
                   ),
@@ -189,9 +193,11 @@ class BrowserMiscDialogs {
                   if (activeTabIndex == 0 && js.isNotEmpty) {
                     tab.controller?.evaluateJavascript(source: js);
                   } else if (activeTabIndex == 1 && css.isNotEmpty) {
-                    final escaped = css.replaceAll("'", r"\'").replaceAll('\n', ' ');
+                    final escaped =
+                        css.replaceAll("'", r"\'").replaceAll('\n', ' ');
                     tab.controller?.evaluateJavascript(
-                      source: "var s = document.createElement('style'); s.innerHTML = '$escaped'; document.head.appendChild(s);",
+                      source:
+                          "var s = document.createElement('style'); s.innerHTML = '$escaped'; document.head.appendChild(s);",
                     );
                   }
                   if (dialogCtx.mounted) {
@@ -226,7 +232,8 @@ class BrowserMiscDialogs {
         backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
         title: Row(
           children: [
-            const Icon(Icons.power_settings_new_rounded, size: 22, color: AppTheme.neonRed),
+            const Icon(Icons.power_settings_new_rounded,
+                size: 22, color: AppTheme.neonRed),
             const SizedBox(width: 8),
             Text(isRtl ? 'جلسة المتصفح' : 'Browser Session'),
           ],
@@ -236,7 +243,8 @@ class BrowserMiscDialogs {
               ? 'هل تريد إخفاء المتصفح والعودة للتطبيق مع الإبقاء على التبويبات المفتوحة، أم إنهاء جلسة المتصفح بالكامل؟'
               : 'Do you want to hide the browser and return to downloads while keeping your open tabs, or terminate the browser session completely?',
           style: TextStyle(
-            color: (isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary).withValues(alpha: 0.8),
+            color: (isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary)
+                .withValues(alpha: 0.8),
             fontSize: 14,
           ),
         ),
@@ -316,7 +324,9 @@ class BrowserMiscDialogs {
               ElevatedButton(
                 onPressed: () {
                   final inputUrl = urlController.text.trim();
-                  final uri = Uri.tryParse(inputUrl.contains('://') ? inputUrl : 'https://$inputUrl');
+                  final uri = Uri.tryParse(inputUrl.contains('://')
+                      ? inputUrl
+                      : 'https://$inputUrl');
                   if (uri == null || !uri.hasAuthority || uri.host.isEmpty) {
                     setDialogState(() {
                       errorText = L10n.of(context, 'add_download_invalid_url');
@@ -324,7 +334,9 @@ class BrowserMiscDialogs {
                     return;
                   }
                   onAdd(
-                    titleController.text.trim().isNotEmpty ? titleController.text.trim() : uri.host,
+                    titleController.text.trim().isNotEmpty
+                        ? titleController.text.trim()
+                        : uri.host,
                     uri.toString(),
                   );
                   Navigator.pop(dialogCtx);
@@ -382,12 +394,14 @@ class BrowserMiscDialogs {
                 child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: isDark ? AppTheme.cardBg : AppTheme.lightCardBg,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                          color:
+                              isDark ? AppTheme.border : AppTheme.lightBorder,
                         ),
                       ),
                       child: Text(

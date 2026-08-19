@@ -39,7 +39,8 @@ class SearchEngineSelectorWidget extends StatelessWidget {
           Icon(
             Icons.travel_explore_rounded,
             size: 15,
-            color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+            color:
+                isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
           ),
           const SizedBox(width: 8),
           Text(

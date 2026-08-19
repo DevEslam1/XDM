@@ -7,7 +7,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('HttpTransferJob CancellableDelay Queue Overflow Fallback (P0-05)', () {
-    test('coalesces to direct Future.delayed fallback instead of throwing exception', () async {
+    test(
+        'coalesces to direct Future.delayed fallback instead of throwing exception',
+        () async {
       final port = ReceivePort();
       const cmd = DownloadCommand(
         taskId: 'overflow-test',
@@ -31,7 +33,8 @@ void main() {
       expect(job.pendingDelaysForTesting.length, equals(16));
 
       // Attempt 17th delay - must not throw DelayQueueFullException, but complete safely via fallback
-      final fallbackFuture = job.cancellableDelay(const Duration(milliseconds: 20));
+      final fallbackFuture =
+          job.cancellableDelay(const Duration(milliseconds: 20));
       await expectLater(fallbackFuture, completes);
 
       // Pending tracked delays remain at 16 (fallback is non-cancellable direct Future.delayed)

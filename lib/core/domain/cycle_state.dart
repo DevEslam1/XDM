@@ -15,7 +15,7 @@ enum CycleState {
   failed,
   updatingLinks;
 
-  static const Map<String, CycleState> _libtorrentStateMap = {
+  static const Map<String, CycleState> libtorrentStateMap = {
     'downloading_metadata': CycleState.fetchingMetadata,
     'fetching_metadata': CycleState.fetchingMetadata,
     'metadata': CycleState.fetchingMetadata,
@@ -32,15 +32,20 @@ enum CycleState {
     'paused': CycleState.paused,
     'stopped': CycleState.paused,
     'stalled': CycleState.stalled,
+    'stalled_downloading': CycleState.stalled,
+    'stalled_uploading': CycleState.seeding,
     'error': CycleState.failed,
     'failed': CycleState.failed,
     'resuming': CycleState.resuming,
     'retrying': CycleState.retrying,
     'updating_links': CycleState.updatingLinks,
+    'updatinglinks': CycleState.updatingLinks,
     'merging': CycleState.merging,
     'muxing': CycleState.merging,
     'starting': CycleState.starting,
     'queued': CycleState.starting,
+    'waiting_for_counterpart': CycleState.starting,
+    'waiting for counterpart stream…': CycleState.starting,
   };
 
   /// Maps libtorrent state labels / strings to a canonical [CycleState].
@@ -52,7 +57,7 @@ enum CycleState {
     final s = stateLabel.trim().toLowerCase().replaceAll(' ', '_');
 
     // 1. Fast exact match lookup
-    final direct = _libtorrentStateMap[s];
+    final direct = libtorrentStateMap[s];
     if (direct != null) {
       if (direct == CycleState.seeding && !seedingEnabled) {
         return CycleState.completed;

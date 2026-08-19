@@ -39,8 +39,7 @@ void main() {
 
     test('TorrentFilesConverter caches recovered values for repeat reads', () {
       const converter = TorrentFilesConverter();
-      const corrupt =
-          '[{"name": "f1.mp4", "downloadedBytes": 500}, bad_token]';
+      const corrupt = '[{"name": "f1.mp4", "downloadedBytes": 500}, bad_token]';
 
       TorrentFilesConverter.clearRecoveryCache();
       final first = converter.fromSql(corrupt);

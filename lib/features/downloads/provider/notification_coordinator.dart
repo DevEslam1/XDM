@@ -136,17 +136,20 @@ class NotificationCoordinator {
     final existing = _taskToHandle[taskId];
     if (existing != null) return existing;
     final handle = const Uuid().v4();
-    _handlesLock.synchronized(() {
-      _opaqueHandles[handle] = taskId;
-      _taskToHandle[taskId] = handle;
-      while (_opaqueHandles.length > 50) {
-        final firstKey = _opaqueHandles.keys.first;
-        final mappedTask = _opaqueHandles.remove(firstKey);
-        if (mappedTask != null) _taskToHandle.remove(mappedTask);
-      }
-    }).then((_) => _persistHandles()).catchError((e) {
-      debugPrint('[NotificationCoordinator] Failed to persist handle: $e');
-    });
+    _handlesLock
+        .synchronized(() {
+          _opaqueHandles[handle] = taskId;
+          _taskToHandle[taskId] = handle;
+          while (_opaqueHandles.length > 50) {
+            final firstKey = _opaqueHandles.keys.first;
+            final mappedTask = _opaqueHandles.remove(firstKey);
+            if (mappedTask != null) _taskToHandle.remove(mappedTask);
+          }
+        })
+        .then((_) => _persistHandles())
+        .catchError((e) {
+          debugPrint('[NotificationCoordinator] Failed to persist handle: $e');
+        });
     return handle;
   }
 

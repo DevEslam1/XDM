@@ -55,6 +55,7 @@ class TaskCompanionConverter {
       ytCounterpartDownloadedBytes:
           drift.Value(task.ytCounterpartDownloadedBytes),
       cycleState: drift.Value(task.cycleState?.name),
+      previousCycleState: drift.Value(task.previousCycleState?.name),
     );
   }
 
@@ -101,6 +102,9 @@ class TaskCompanionConverter {
 
     final rawCycleState =
         row.cycleState != null ? CycleState.fromName(row.cycleState) : null;
+    final rawPreviousCycleState = row.previousCycleState != null
+        ? CycleState.fromName(row.previousCycleState)
+        : null;
     final rawPauseReason =
         row.pauseReason != null ? PauseReason.fromName(row.pauseReason) : null;
 
@@ -121,7 +125,8 @@ class TaskCompanionConverter {
     final pauseReason = isUpdatingLinks
         ? PauseReason.urlExpired
         : (isInterruptedActive ? PauseReason.appRestarted : rawPauseReason);
-    final previousCycleState = isInterruptedActive ? rawCycleState : null;
+    final previousCycleState =
+        isInterruptedActive ? rawCycleState : rawPreviousCycleState;
 
     final files = row.torrentFiles;
     int totalFiles = 0;
@@ -194,10 +199,8 @@ class TaskCompanionConverter {
       cycleState: cycleState,
       previousCycleState: previousCycleState,
       totalFiles: files != null && files.isNotEmpty ? totalFiles : null,
-      completedFiles:
-          files != null && files.isNotEmpty ? completedFiles : null,
-      totalFileBytes:
-          files != null && files.isNotEmpty ? totalFileBytes : null,
+      completedFiles: files != null && files.isNotEmpty ? completedFiles : null,
+      totalFileBytes: files != null && files.isNotEmpty ? totalFileBytes : null,
       downloadedFileBytes:
           files != null && files.isNotEmpty ? downloadedFileBytes : null,
     );
