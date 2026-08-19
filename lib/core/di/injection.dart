@@ -47,6 +47,7 @@ import '../services/network/cookie_cache.dart';
 import '../services/notification_service.dart';
 import '../services/permission_service.dart';
 import '../services/power_monitor.dart';
+import '../services/service_registry.dart';
 import '../services/share_url_handler.dart';
 import '../services/shared_prefs_batcher.dart';
 import '../services/single_instance_service.dart';
@@ -88,18 +89,22 @@ Future<void> configureDependencies() async {
   );
   getIt.registerLazySingleton<DownloadListProvider>(
     () => DownloadListProvider(getIt<TaskRepository>()),
+    dispose: (p) => p.dispose(),
   );
   getIt.registerLazySingleton<DownloadQueueProvider>(
     () => DownloadQueueProvider(
       listProvider: getIt<DownloadListProvider>(),
       settings: getIt<SettingsProvider>(),
     ),
+    dispose: (p) => p.dispose(),
   );
   getIt.registerLazySingleton<DownloadFilterProvider>(
     () => DownloadFilterProvider(getIt<DownloadListProvider>()),
+    dispose: (p) => p.dispose(),
   );
   getIt.registerLazySingleton<TorrentProvider>(
     () => TorrentProvider(),
+    dispose: (p) => p.dispose(),
   );
   getIt.registerLazySingleton<DownloadCoordinator>(
     () => DownloadCoordinator(
@@ -111,6 +116,7 @@ Future<void> configureDependencies() async {
       resumeUseCase: getIt<ResumeDownloadUseCase>(),
       deleteUseCase: getIt<DeleteDownloadUseCase>(),
     ),
+    dispose: (c) => c.dispose(),
   );
 
   getIt.registerLazySingleton<DownloadProvider>(
@@ -170,9 +176,13 @@ Future<void> configureDependencies() async {
       getIt<SettingsProvider>(),
     ),
   );
-  getIt.registerLazySingleton<ITorrentService>(() => TorrentServiceImpl());
+  getIt.registerLazySingleton<ITorrentService>(
+    () => TorrentServiceImpl(),
+    dispose: (s) => s.dispose(),
+  );
   getIt.registerLazySingleton<TorrentDownloadHandler>(
     () => TorrentDownloadHandler(),
+    dispose: (h) => h.dispose(),
   );
   getIt.registerLazySingleton<TorrentDownloadOrchestrator>(
     () => TorrentDownloadOrchestrator(
@@ -190,41 +200,58 @@ Future<void> configureDependencies() async {
       ytCoordinator: getIt<YtCounterpartCoordinator>(),
       dioPool: getIt<DioClientPool>(),
     ),
+    dispose: (e) => e.dispose(),
   );
-  getIt.registerLazySingleton<PowerMonitor>(() => PowerMonitor());
+  getIt.registerLazySingleton<PowerMonitor>(
+    () => PowerMonitor(),
+    dispose: (_) => PowerMonitor.dispose(),
+  );
   getIt.registerLazySingleton<PermissionService>(() => PermissionService());
   getIt.registerLazySingleton<ConnectionManager>(() => ConnectionManager(),
       dispose: (c) => c.dispose());
   getIt.registerLazySingleton<ServerIdentityCache>(
-      () => ServerIdentityCache.instance,
+      () => ServerIdentityCache(),
       dispose: (c) => c.dispose());
-  getIt.registerLazySingleton<BandwidthGovernor>(() => BandwidthGovernor(0),
+  getIt.registerLazySingleton<BandwidthGovernor>(
+      () => BandwidthGovernor(BandwidthGovernor.unlimited),
       dispose: (governor) => governor.dispose());
   getIt.registerLazySingleton<ChecksumService>(() => ChecksumService());
-  getIt.registerLazySingleton<NotificationService>(() => NotificationService());
+  getIt.registerLazySingleton<NotificationService>(
+    () => NotificationService(),
+    dispose: (n) => n.dispose(),
+  );
   getIt.registerLazySingleton<ClipboardService>(() => ClipboardService());
   getIt.registerLazySingleton<ShareUrlHandler>(() => ShareUrlHandler());
-  getIt.registerLazySingleton<BackgroundService>(() => BackgroundService());
+  getIt.registerLazySingleton<BackgroundService>(
+    () => BackgroundService(),
+    dispose: (b) => b.dispose(),
+  );
   getIt.registerLazySingleton<CrashReportingService>(
       () => CrashReportingService());
   getIt.registerLazySingleton<AppLockService>(() => AppLockService());
   getIt.registerLazySingleton<XdmBackendClient>(() => XdmBackendClient());
-  getIt.registerLazySingleton<UpdateService>(() => UpdateService());
+  getIt.registerLazySingleton<UpdateService>(
+    () => UpdateService(),
+    dispose: (u) => u.dispose(),
+  );
   getIt.registerLazySingleton<SingleInstanceService>(
       () => SingleInstanceService());
-  getIt.registerLazySingleton<TrackerManager>(() => TrackerManager());
+  getIt.registerLazySingleton<TrackerManager>(
+    () => TrackerManager(),
+    dispose: (t) => t.dispose(),
+  );
 
   getIt.registerLazySingleton<SiteIntelligenceService>(
-    () => SiteIntelligenceService()..init(),
+    () => SiteIntelligenceService(),
     dispose: (service) => service.dispose(),
   );
 
   getIt.registerLazySingleton<ServerProfileManager>(
-    () => ServerProfileManager.instance,
+    () => ServerProfileManager(),
     dispose: (s) => s.dispose(),
   );
   getIt.registerLazySingleton<MirrorBenchmarkService>(
-    () => MirrorBenchmarkService.instance,
+    () => MirrorBenchmarkService(),
     dispose: (s) => s.dispose(),
   );
 
@@ -234,7 +261,7 @@ Future<void> configureDependencies() async {
       dispose: (cache) => cache.dispose());
 
   getIt.registerLazySingleton<MirrorHealthStore>(
-    () => MirrorHealthStore.instance,
+    () => MirrorHealthStore(),
     dispose: (s) => s.dispose(),
   );
   getIt.registerLazySingleton<MirrorRegistry>(
@@ -243,29 +270,46 @@ Future<void> configureDependencies() async {
   );
 
   getIt.registerLazySingleton<AppLifecycleCoordinator>(
-    () => AppLifecycleCoordinator.instance,
+    () => AppLifecycleCoordinator(),
     dispose: (s) => AppLifecycleCoordinator.dispose(),
   );
 
   getIt.registerLazySingleton<TorrentSessionManager>(
     () => TorrentSessionManager(),
+    dispose: (m) => m.dispose(),
   );
 
   getIt.registerLazySingleton<AmbientAnimationController>(
-    () => (kDebugMode == false || PowerMonitor.isLowEndDevice)
+    () => (PowerMonitor.isLowEndDevice ||
+            PowerMonitor.batterySaverMode != BatterySaverMode.off)
         ? const NoOpAmbientAnimationController()
         : const CompositeAmbientAnimationController(),
   );
 
   getIt.registerLazySingleton<BackgroundTimerManager>(
-    () => BackgroundTimerManager.instance,
+    () => BackgroundTimerManager(),
+    dispose: (m) => m.dispose(),
   );
 
-  getIt
-      .registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);
+  getIt.registerLazySingleton<WidgetDataBridge>(
+    () => WidgetDataBridge(),
+    dispose: (w) => w.dispose(),
+  );
 
   getIt.registerLazySingleton<SharedPrefsBatcher>(
-    () => SharedPrefsBatcher.instance,
+    () => SharedPrefsBatcher(),
     dispose: (b) => b.dispose(),
   );
+}
+
+/// Shuts down and disposes all registered singleton dependencies on app detach.
+Future<void> shutdownDependencies() async {
+  await ServiceRegistry.shutdownAll();
+  await getIt.reset();
+}
+
+/// Helper for resetting GetIt dependency graph between tests.
+@visibleForTesting
+Future<void> resetDependenciesForTesting() async {
+  await getIt.reset();
 }

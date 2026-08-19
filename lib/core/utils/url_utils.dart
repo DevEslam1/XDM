@@ -484,3 +484,55 @@ int _punycodeDigit(int d) {
   if (d < 26) return d + 97; // a-z
   return d + 22; // 0-9
 }
+
+/// Production URL validator for input validation and security screening.
+class UrlValidator {
+  static const int maxUrlLength = 2048;
+  static const Set<String> _blockedSchemes = {
+    'javascript',
+    'data',
+    'vbscript',
+    'about',
+    'blob',
+  };
+
+  /// Returns true if the given [url] is non-empty, well-formed, within length limits,
+  /// contains no forbidden control characters, and uses an allowed protocol.
+  static bool isValid(String? url, {bool allowMagnet = true, bool allowFtp = true}) {
+    if (url == null) return false;
+    final trimmed = url.trim();
+    if (trimmed.isEmpty || trimmed.length > maxUrlLength) return false;
+
+    // Reject unescaped control characters
+    if (trimmed.contains(RegExp(r'[\x00-\x1f\x7f]'))) return false;
+
+    final lower = trimmed.toLowerCase();
+    if (allowMagnet && lower.startsWith('magnet:')) {
+      return isMagnetUrl(trimmed);
+    }
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasScheme) return false;
+
+    final scheme = uri.scheme.toLowerCase();
+    if (_blockedSchemes.contains(scheme)) return false;
+
+    if (scheme == 'http' || scheme == 'https') {
+      return uri.host.isNotEmpty;
+    }
+    if (allowFtp && (scheme == 'ftp' || scheme == 'ftps')) {
+      return uri.host.isNotEmpty;
+    }
+    if (scheme == 'dmx') return true;
+
+    return false;
+  }
+
+  /// Sanitizes input URL string by stripping control characters and trimming whitespace.
+  static String? sanitize(String? url) {
+    if (url == null) return null;
+    final cleaned = url.replaceAll(RegExp(r'[\x00-\x1f\x7f]'), '').trim();
+    return cleaned.isEmpty ? null : cleaned;
+  }
+}
+

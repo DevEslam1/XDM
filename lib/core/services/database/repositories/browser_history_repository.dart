@@ -104,8 +104,16 @@ class BrowserHistoryRepository {
         List<Map<String, dynamic>>.from(_pendingHistoryEntries.values);
     _pendingHistoryEntries.clear();
 
-    for (final entry in entries) {
-      await _writeBrowserHistoryDirect(entry);
+    await _db.transaction(() async {
+      for (final entry in entries) {
+        await _writeEntryInTx(entry);
+      }
+    });
+
+    _historyInsertCount += entries.length;
+    if (_historyInsertCount >= 100) {
+      _historyInsertCount = 0;
+      await _trimHistoryInternal();
     }
 
     if (_pendingHistoryEntries.isNotEmpty && _historyFlushTimer == null) {
@@ -116,7 +124,7 @@ class BrowserHistoryRepository {
     }
   }
 
-  Future<int> _writeBrowserHistoryDirect(Map<String, dynamic> entry) async {
+  Future<int> _writeEntryInTx(Map<String, dynamic> entry) async {
     final url = entry['url'] as String? ?? '';
     if (url.isEmpty || url == 'about:blank') return 0;
     final visitedAt = (entry['visitedAt'] as num?)?.toInt() ??
@@ -124,34 +132,38 @@ class BrowserHistoryRepository {
     final title = entry['title'] as String? ?? url;
     final faviconUrl = entry['faviconUrl'] as String?;
 
-    final id = await _db.transaction(() async {
-      final existing = await (_db.select(_db.browserHistory)
-            ..where((t) => t.url.equals(url))
-            ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
-            ..limit(1))
-          .getSingleOrNull();
+    final existing = await (_db.select(_db.browserHistory)
+          ..where((t) => t.url.equals(url))
+          ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
+          ..limit(1))
+        .getSingleOrNull();
 
-      if (existing != null) {
-        await (_db.update(_db.browserHistory)
-              ..where((t) => t.id.equals(existing.id)))
-            .write(BrowserHistoryCompanion(
-          title: drift.Value(title),
-          visitedAt: drift.Value(visitedAt),
-          visitCount: drift.Value(existing.visitCount + 1),
-          faviconUrl: drift.Value(faviconUrl ?? existing.faviconUrl),
-        ));
-        return existing.id;
-      } else {
-        return await _db.into(_db.browserHistory).insert(
-              BrowserHistoryCompanion.insert(
-                url: url,
-                title: title,
-                visitedAt: visitedAt,
-                visitCount: const drift.Value(1),
-                faviconUrl: drift.Value(faviconUrl),
-              ),
-            );
-      }
+    if (existing != null) {
+      await (_db.update(_db.browserHistory)
+            ..where((t) => t.id.equals(existing.id)))
+          .write(BrowserHistoryCompanion(
+        title: drift.Value(title),
+        visitedAt: drift.Value(visitedAt),
+        visitCount: drift.Value(existing.visitCount + 1),
+        faviconUrl: drift.Value(faviconUrl ?? existing.faviconUrl),
+      ));
+      return existing.id;
+    } else {
+      return await _db.into(_db.browserHistory).insert(
+            BrowserHistoryCompanion.insert(
+              url: url,
+              title: title,
+              visitedAt: visitedAt,
+              visitCount: const drift.Value(1),
+              faviconUrl: drift.Value(faviconUrl),
+            ),
+          );
+    }
+  }
+
+  Future<int> _writeBrowserHistoryDirect(Map<String, dynamic> entry) async {
+    final id = await _db.transaction(() async {
+      return await _writeEntryInTx(entry);
     });
 
     _historyInsertCount++;

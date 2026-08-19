@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
+import '../../core/services/download_engine.dart';
 import '../../core/services/performance_monitor.dart';
 import '../../core/services/power_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -53,7 +54,8 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
       !widget.isLoading &&
       !PowerMonitor.isLowEndDevice &&
       NeonGlowButton.enabled &&
-      !PerformanceMonitor.shouldReduceMotion;
+      !PerformanceMonitor.shouldReduceMotion &&
+      !DownloadEngine.hasActiveDownloads;
 
   @override
   void initState() {

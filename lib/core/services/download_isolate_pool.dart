@@ -123,21 +123,23 @@ class DownloadIsolatePool implements MemoryPressureListener {
   bool _foregroundListenerAttached = false;
 
   int get effectiveMaxSize {
-    if (PowerMonitor.screenOff || PowerMonitor.isLowEndDevice) {
+    if (DownloadEngine.isInBackground) return 1;
+    if (PowerMonitor.screenOff || PowerMonitor.isLowEndDevice) return 1;
+    if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ||
+        PowerMonitor.thermal == ThermalStatus.severe ||
+        PowerMonitor.thermal == ThermalStatus.critical) {
       return 1;
     }
-    if (DownloadEngine.isInBackground) {
-      final bgCap = min(2, _size);
-      return _maxPoolSize != null ? min(bgCap, _maxPoolSize!) : bgCap;
+    if (PowerMonitor.batteryLevel < 15) return 1;
+
+    if (PowerMonitor.batterySaverMode == BatterySaverMode.moderate) {
+      final modCap = min(2, _size);
+      return _maxPoolSize != null ? min(modCap, _maxPoolSize!) : modCap;
     }
+
     if (_powerAware) {
       if (PowerMonitor.isCharging) {
         return _maxPoolSize != null ? min(_size, _maxPoolSize!) : _size;
-      }
-      if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive ||
-          PowerMonitor.thermal == ThermalStatus.severe ||
-          PowerMonitor.thermal == ThermalStatus.critical) {
-        return 1;
       }
       if (PowerMonitor.batteryLevel < 20) {
         return 1;
@@ -203,9 +205,7 @@ class DownloadIsolatePool implements MemoryPressureListener {
         LoggingService.logger('DownloadIsolatePool')
             .warning('Operation failed', e, st);
       }
-      w.inbox.close();
-      w.errorPort.close();
-      w.isolate.kill(priority: Isolate.beforeNextEvent);
+      w.disposeResources(killPriority: Isolate.beforeNextEvent);
     }
   }
 
@@ -218,7 +218,10 @@ class DownloadIsolatePool implements MemoryPressureListener {
 
   void _startIdleCheckTimer() {
     _idleCheckTimer?.cancel();
-    _idleCheckTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    final interval = (DownloadEngine.isInBackground || PowerMonitor.screenOff)
+        ? const Duration(seconds: 60)
+        : const Duration(seconds: 15);
+    _idleCheckTimer = Timer.periodic(interval, (_) {
       _checkIdleWorkers();
     });
   }
@@ -256,9 +259,7 @@ class DownloadIsolatePool implements MemoryPressureListener {
         LoggingService.logger('DownloadIsolatePool')
             .warning('Operation failed', e, st);
       }
-      w.inbox.close();
-      w.errorPort.close();
-      w.isolate.kill(priority: Isolate.beforeNextEvent);
+      w.disposeResources(killPriority: Isolate.beforeNextEvent);
     }
   }
 
@@ -294,9 +295,7 @@ class DownloadIsolatePool implements MemoryPressureListener {
       if (!_shuttingDown) {
         _workers.add(worker);
       } else {
-        worker.inbox.close();
-        worker.errorPort.close();
-        worker.isolate.kill(priority: Isolate.immediate);
+        worker.disposeResources(killPriority: Isolate.immediate);
       }
     } catch (e, st) {
       LoggingService.logger('DownloadIsolatePool')
@@ -446,9 +445,7 @@ class DownloadIsolatePool implements MemoryPressureListener {
         );
       }
     }
-    worker.inbox.close();
-    worker.errorPort.close();
-    worker.isolate.kill(priority: Isolate.immediate);
+    worker.disposeResources(killPriority: Isolate.immediate);
     if (!_shuttingDown) {
       _workers.remove(worker);
       Future.microtask(() async {
@@ -499,9 +496,7 @@ class DownloadIsolatePool implements MemoryPressureListener {
           null,
         );
       }
-      worker.inbox.close();
-      worker.errorPort.close();
-      worker.isolate.kill(priority: Isolate.immediate);
+      worker.disposeResources(killPriority: Isolate.immediate);
       if (!_shuttingDown) {
         _workers.remove(worker);
         Future.microtask(() async {
@@ -555,9 +550,7 @@ class DownloadIsolatePool implements MemoryPressureListener {
     for (final w in _workers) {
       w.commandPort?.send({'t': 'shutdown'});
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      w.inbox.close();
-      w.errorPort.close();
-      w.isolate.kill(priority: Isolate.beforeNextEvent);
+      w.disposeResources(killPriority: Isolate.beforeNextEvent);
     }
     _workers.clear();
   }
@@ -587,9 +580,7 @@ class DownloadIsolatePool implements MemoryPressureListener {
           .lastIndexWhere((w) => w.activeJobs == 0 && w.pending.isEmpty);
       if (idleIndex != -1) {
         final w = _workers.removeAt(idleIndex);
-        w.inbox.close();
-        w.errorPort.close();
-        w.isolate.kill(priority: Isolate.beforeNextEvent);
+        w.disposeResources(killPriority: Isolate.beforeNextEvent);
       }
     }
   }
@@ -601,14 +592,39 @@ class _Worker {
     required this.inbox,
     required this.errorPort,
   });
-  final Isolate isolate;
-  final ReceivePort inbox;
-  final ReceivePort errorPort;
+  Isolate? isolate;
+  ReceivePort? inbox;
+  ReceivePort? errorPort;
   SendPort? commandPort;
   final List<PoolJob> pending = [];
   int activeJobs = 0;
   bool dead = false;
   DateTime lastActiveTime = DateTime.now();
+
+  void disposeResources({int killPriority = Isolate.immediate}) {
+    try {
+      inbox?.close();
+    } catch (e, st) {
+      LoggingService.logger('DownloadIsolatePool')
+          .warning('Failed to close worker inbox', e, st);
+    }
+    try {
+      errorPort?.close();
+    } catch (e, st) {
+      LoggingService.logger('DownloadIsolatePool')
+          .warning('Failed to close worker errorPort', e, st);
+    }
+    try {
+      isolate?.kill(priority: killPriority);
+    } catch (e, st) {
+      LoggingService.logger('DownloadIsolatePool')
+          .warning('Failed to kill worker isolate', e, st);
+    }
+    inbox = null;
+    errorPort = null;
+    isolate = null;
+    commandPort = null;
+  }
 }
 
 class ChunkResult {

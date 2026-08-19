@@ -7,10 +7,10 @@ import 'power_monitor.dart';
 /// Centralized manager for timers that should be throttled or paused
 /// when the app is in background or the screen is off.
 class BackgroundTimerManager {
-  BackgroundTimerManager._() {
+  BackgroundTimerManager() {
     _initListeners();
   }
-  static final instance = BackgroundTimerManager._();
+  static final instance = BackgroundTimerManager();
   static final _log = LoggingService.logger('BackgroundTimerManager');
 
   final Map<String, Timer> _timers = {};

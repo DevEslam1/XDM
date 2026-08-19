@@ -211,7 +211,7 @@ class DatabaseService {
         DownloadEngine.isInBackground ||
         PowerMonitor.screenOff;
     final interval = isBackground
-        ? const Duration(seconds: 120) // 120s in background
+        ? const Duration(seconds: 20) // 20s in background (hardened from 120s)
         : const Duration(seconds: 10); // 10s in foreground
 
     _scheduleFlush(interval);

@@ -173,6 +173,11 @@ class DownloadProgressHandler {
   }
 
   void dispose() {
+    if (_pendingProgress != null && !cancelToken.isCancelled) {
+      final pending = _pendingProgress!;
+      _pendingProgress = null;
+      emit(pending);
+    }
     _throttleTimer?.cancel();
     _throttleTimer = null;
     _pendingProgress = null;

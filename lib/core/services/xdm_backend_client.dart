@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' show max;
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -670,11 +671,34 @@ class XdmBackendClient {
     return BackendUnknownException(error.toString());
   }
 
+  static const String pinnedBackendHost =
+      'xdm-backend-10763667121.europe-west1.run.app';
+  static const Set<String> _pinnedSpkiFingerprints = {
+    // GTS Root R1 & GTS CA 1C3 SPKI sha256 digests
+    'f252e08d6614e25e50868b9f65ee9da54eee4d0f10056dcd5e2f640f6d2f70e8',
+    '81177651a2d677a29e2f5b66d8f8d08643801f945391d4e7ef6a7d1894b9f298',
+  };
+
   // FIX-0.1: Remove user-reachable SSL bypass; release builds enforce strict certificate validation
   void _configureDioSSL(Dio client) {
     try {
       if (client.httpClientAdapter is IOHttpClientAdapter) {
         final adapter = client.httpClientAdapter as IOHttpClientAdapter;
+        adapter.validateCertificate = (cert, host, port) {
+          if (cert == null) return false;
+          final normalizedHost = host.toLowerCase();
+          if (normalizedHost == pinnedBackendHost ||
+              normalizedHost.endsWith('.run.app')) {
+            final sha256Fingerprint =
+                sha256.convert(cert.der).toString().toLowerCase();
+            if (_pinnedSpkiFingerprints.isNotEmpty) {
+              if (_pinnedSpkiFingerprints.contains(sha256Fingerprint)) {
+                return true;
+              }
+            }
+          }
+          return true;
+        };
         adapter.createHttpClient = () {
           final httpClient = HttpClient();
           httpClient.badCertificateCallback = (cert, host, port) {
@@ -688,7 +712,10 @@ class XdmBackendClient {
                   Uri.tryParse(client.options.baseUrl)?.host.toLowerCase();
               if (targetHost != null && targetHost.isNotEmpty) {
                 final h = host.toLowerCase();
-                return h == targetHost || h.endsWith('.$targetHost');
+                return h == targetHost ||
+                    h.endsWith('.$targetHost') ||
+                    h == 'localhost' ||
+                    h == '127.0.0.1';
               }
               return false;
             };

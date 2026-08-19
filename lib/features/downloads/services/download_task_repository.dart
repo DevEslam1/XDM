@@ -1,67 +1,54 @@
 import 'dart:async';
 import '../../../core/services/database_service.dart';
+import '../data/drift_task_repository.dart';
+import '../data/task_repository.dart';
 import '../models/download_task.dart';
 
-/// Repository interface and implementation for persisting and retrieving
-/// [DownloadTask] records using the underlying Drift/SQLite database.
-abstract class IDownloadTaskRepository {
+/// Legacy facade implementing [TaskRepository] that delegates to [DriftTaskRepository].
+abstract class IDownloadTaskRepository implements TaskRepository {
   Future<List<DownloadTask>> loadAll();
-  Future<DownloadTask?> getById(String id);
-  Future<void> save(DownloadTask task);
   Future<void> saveDebounced(DownloadTask task);
-  Future<void> saveAll(List<DownloadTask> tasks);
-  Future<void> delete(String id);
   Future<void> deleteMany(List<String> ids);
-  Stream<DownloadTask> watchTask(String id);
   Stream<List<DownloadTask>> watchAll();
 }
 
 class DownloadTaskRepository implements IDownloadTaskRepository {
+  final DriftTaskRepository _delegate;
   final DatabaseService _db;
 
   DownloadTaskRepository({DatabaseService? databaseService})
-      : _db = databaseService ?? DatabaseService.instance;
+      : _db = databaseService ?? DatabaseService.instance,
+        _delegate = DriftTaskRepository(databaseService ?? DatabaseService.instance);
 
   @override
-  Future<List<DownloadTask>> loadAll() async {
-    return await _db.loadTasks();
-  }
+  Future<List<DownloadTask>> getAll() => _delegate.getAll();
 
   @override
-  Future<DownloadTask?> getById(String id) async {
-    return await _db.getTask(id);
-  }
+  Future<List<DownloadTask>> loadAll() => _delegate.getAll();
 
   @override
-  Future<void> save(DownloadTask task) async {
-    await _db.saveTask(task);
-  }
+  Future<DownloadTask?> getById(String id) => _delegate.getById(id);
 
   @override
-  Future<void> saveDebounced(DownloadTask task) async {
-    await _db.saveTaskDebounced(task);
-  }
+  Future<void> save(DownloadTask task) => _delegate.save(task);
 
   @override
-  Future<void> saveAll(List<DownloadTask> tasks) async {
-    await _db.saveTasks(tasks);
-  }
+  Future<void> saveDebounced(DownloadTask task) => _db.saveTaskDebounced(task);
 
   @override
-  Future<void> delete(String id) async {
-    await _db.deleteTask(id);
-  }
+  Future<void> saveAll(List<DownloadTask> tasks) => _delegate.saveAll(tasks);
 
   @override
-  Future<void> deleteMany(List<String> ids) async {
-    await _db.deleteTasks(ids);
-  }
+  Future<void> delete(String id) => _delegate.delete(id);
 
   @override
-  Stream<DownloadTask> watchTask(String id) async* {
-    final task = await getById(id);
-    if (task != null) yield task;
-  }
+  Future<void> deleteMany(List<String> ids) => _delegate.deleteAll(ids);
+
+  @override
+  Future<void> deleteAll(List<String> ids) => _delegate.deleteAll(ids);
+
+  @override
+  Stream<DownloadTask> watchTask(String id) => _delegate.watchTask(id);
 
   @override
   Stream<List<DownloadTask>> watchAll() async* {

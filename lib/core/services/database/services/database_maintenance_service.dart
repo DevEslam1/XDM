@@ -46,8 +46,20 @@ class DatabaseMaintenanceService {
     int logPages = 0;
     try {
       if (hasActiveDownloads) {
-        _log.fine(
-            '[DatabaseMaintenanceService] Active downloads in progress; skipping periodic wal_checkpoint');
+        if (maintenanceRuns % 4 == 0) {
+          final walRows =
+              await _db.customSelect('PRAGMA wal_checkpoint(PASS)').get();
+          if (walRows.isNotEmpty) {
+            final row = walRows.first.data;
+            final log = row['log'] ?? 0;
+            if (log is num) {
+              logPages = log.toInt();
+            }
+          }
+        } else {
+          _log.fine(
+              '[DatabaseMaintenanceService] Active downloads in progress; skipping periodic wal_checkpoint');
+        }
       } else {
         final walRows =
             await _db.customSelect('PRAGMA wal_checkpoint(RESTART)').get();
@@ -58,6 +70,10 @@ class DatabaseMaintenanceService {
             logPages = log.toInt();
           }
         }
+      }
+      if (logPages > 2500) {
+        _log.warning(
+            'WAL log size exceeded warning threshold: $logPages pages');
       }
       if (maintenanceRuns % 12 == 0) {
         await _db.customStatement('PRAGMA optimize');

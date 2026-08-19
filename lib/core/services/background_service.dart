@@ -11,6 +11,7 @@ import 'package:synchronized/synchronized.dart';
 import '../../features/downloads/models/download_task.dart';
 import '../../features/downloads/services/torrent_session_manager.dart';
 import '../di/injection.dart';
+import 'background_scheduler.dart';
 import 'database_service.dart';
 import 'diagnostic_service.dart';
 import 'download_engine.dart';
@@ -43,7 +44,7 @@ class BackgroundService {
   static Timer? _wakeLockSafetyTimer;
   static Timer? _heartbeatTimer;
   static Duration get _maxWakeLockHold =>
-      Platform.isIOS ? const Duration(seconds: 30) : const Duration(minutes: 30);
+      Platform.isIOS ? const Duration(seconds: 30) : const Duration(minutes: 10);
   static DateTime? _lastHeartbeatTime;
   static final Lock _activeLock = Lock();
   static final Set<String> _activeTaskIds = <String>{};
@@ -450,6 +451,57 @@ class BackgroundService {
   static Future<bool> onIosBackgroundForTesting([ServiceInstance? service]) =>
       _onIosBackground(service);
 
+  /// Android 15 (API 35) dataSync foreground service 6-hour runtime timeout watchdog
+  static DateTime? _dataSyncSessionStartTime;
+  static Timer? _dataSyncTimeoutTimer;
+  static const Duration _maxDataSyncDuration = Duration(hours: 5, minutes: 55);
+
+  /// Callback to pause active tasks when the 6-hour dataSync limit is hit.
+  static Future<void> Function()? onDataSyncTimeout;
+
+  @visibleForTesting
+  static DateTime? get dataSyncSessionStartTimeForTesting => _dataSyncSessionStartTime;
+
+  @visibleForTesting
+  static Future<void> triggerDataSyncTimeoutForTesting() => _handleDataSyncTimeout();
+
+  static Future<void> _handleDataSyncTimeout() async {
+    _log.warning(
+      'Android 15 dataSync 6-hour foreground service timeout reached. '
+      'Pausing tasks, flushing state, and scheduling background retry.',
+    );
+    _dataSyncTimeoutTimer?.cancel();
+    _dataSyncTimeoutTimer = null;
+    _dataSyncSessionStartTime = null;
+
+    try {
+      if (onDataSyncTimeout != null) {
+        await onDataSyncTimeout!();
+      }
+      DownloadEngine.markBackground();
+      DatabaseService.instance.flushPendingSaves();
+    } catch (e, st) {
+      _log.warning('Error pausing tasks during dataSync timeout', e, st);
+    }
+
+    try {
+      await releaseWakeLock();
+    } catch (e, st) {
+      _log.warning('Error releasing wakelock during dataSync timeout', e, st);
+    }
+
+    try {
+      BackgroundScheduler.instance.scheduleBackgroundSync();
+    } catch (e, st) {
+      _log.warning('Error scheduling background sync on dataSync timeout', e, st);
+    }
+
+    try {
+      final service = FlutterBackgroundService();
+      service.invoke('stopService');
+    } catch (_) {}
+  }
+
   static Future<void> start() async {
     if (!isSupported) {
       final platformName = kIsWeb ? 'web' : Platform.operatingSystem;
@@ -465,6 +517,14 @@ class BackgroundService {
       await IosBackgroundService.scheduleBackgroundDownload();
       return;
     }
+
+    _dataSyncSessionStartTime ??= DateTime.now();
+    _dataSyncTimeoutTimer?.cancel();
+    _dataSyncTimeoutTimer = Timer(_maxDataSyncDuration, () {
+      _handleDataSyncTimeout();
+    });
+
+    if (_testMode) return;
 
     final service = FlutterBackgroundService();
     final isRunning = await service.isRunning();
@@ -486,14 +546,37 @@ class BackgroundService {
       return;
     }
 
+    await releaseWakeLock();
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    _dataSyncTimeoutTimer?.cancel();
+    _dataSyncTimeoutTimer = null;
+    _dataSyncSessionStartTime = null;
+    BackgroundScheduler.instance.stopTimer();
+
     if (!kIsWeb && Platform.isIOS) {
       _log.info('Cancelling native iOS BGTaskScheduler background task');
-      await IosBackgroundService.cancelBackgroundDownload();
+      try {
+        await IosBackgroundService.cancelBackgroundDownload();
+      } catch (e, st) {
+        _log.warning('Error cancelling iOS background download', e, st);
+      }
       return;
     }
 
-    final service = FlutterBackgroundService();
-    service.invoke('stopService');
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        final service = FlutterBackgroundService();
+        service.invoke('stopService');
+      } catch (e, st) {
+        _log.warning('Error invoking stopService on Android', e, st);
+      }
+    }
+    _log.info('Background service fully stopped');
+  }
+
+  void dispose() {
+    stop();
   }
 
   static Future<void> updateNotification({
@@ -525,6 +608,10 @@ class BackgroundService {
   /// to prevent the native 30-minute timeout from expiring.
   static Future<void> acquireWakeLock() async {
     if (!isSupported || _wakeLockHeld) return;
+    if (_activeDownloadCount <= 0) {
+      final queryCount = _activeDownloadCountQuery?.call() ?? 0;
+      if (queryCount <= 0) return;
+    }
     // Battery gate: if battery is <20% and not charging, do not hold wake lock to avoid rapid battery drain
     try {
       if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
@@ -713,6 +800,22 @@ class BackgroundService {
     } catch (e, st) {
       _log.warning('Failed to restore interrupted tasks', e, st);
       return [];
+    }
+  }
+
+  /// Terminates all background processing when all downloads complete.
+  static void onAllDownloadsComplete() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    releaseWakeLock();
+    BackgroundScheduler.instance.stopTimer();
+
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        FlutterBackgroundService().invoke('stopService');
+      } catch (e, st) {
+        _log.warning('Failed to invoke stopService on all downloads complete', e, st);
+      }
     }
   }
 }

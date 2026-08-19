@@ -6,8 +6,8 @@ import 'package:synchronized/synchronized.dart';
 
 /// Debounces and batches high-frequency SharedPreferences mutations into periodic writes.
 class SharedPrefsBatcher {
-  SharedPrefsBatcher._();
-  static final SharedPrefsBatcher instance = SharedPrefsBatcher._();
+  SharedPrefsBatcher();
+  static final SharedPrefsBatcher instance = SharedPrefsBatcher();
 
   static final _log = Logger('SharedPrefsBatcher');
   final Lock _lock = Lock();

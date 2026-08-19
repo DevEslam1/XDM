@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:dio/dio.dart';
+import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/engine/engine_utils.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/power_monitor.dart';
@@ -13,7 +14,6 @@ import 'package:flutter/foundation.dart';
 class DioClientPool implements DisposableService, MemoryPressureListener {
   static final _log = LoggingService.logger('DioClientPool');
   static const int _maxActiveClients = 6;
-  static const int _maxActiveClientsAggressive = 3;
   static const int _maxIdleHosts = 10;
   final Map<Dio, DateTime> _clientCreationTimes = {};
   final Set<Dio> _activeClients = {};
@@ -35,18 +35,24 @@ class DioClientPool implements DisposableService, MemoryPressureListener {
   int get activeClientsCount => _activeClients.length;
   int get reservedClientsCount => _reservedClients.length;
 
-  /// Effective client cap: drops to 3 while the aggressive battery-saver mode
-  /// is active to minimize memory/CPU during constrained background downloads.
-  int get _effectiveMaxClients =>
-      PowerMonitor.batterySaverMode == BatterySaverMode.aggressive
-          ? _maxActiveClientsAggressive
-          : _maxActiveClients;
+  /// Effective client cap: drops to 2 while in background, screen off, or aggressive battery saver.
+  int get _effectiveMaxClients {
+    if (DownloadEngine.isInBackground || PowerMonitor.screenOff) return 2;
+    if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) return 2;
+    return _maxActiveClients;
+  }
 
   @override
   void onMemoryPressure() {
     final initialCount = _activeClients.length;
-    final toRelease = <Dio>[];
 
+    // Close ALL idle clients immediately
+    for (final client in List<Dio>.from(_idleClientsByHost.values)) {
+      _closeClient(client);
+    }
+    _idleClientsByHost.clear();
+
+    final toRelease = <Dio>[];
     for (final client in _activeClients) {
       final hasActiveDownloads =
           _activeDownloadsPerClient[client]?.isNotEmpty ?? false;

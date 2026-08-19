@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
 import '../../../../core/services/database_service.dart';
+import '../../../../core/services/logging_service.dart';
 import '../../../../core/services/retry_engine.dart';
 import '../../../../core/services/torrent_service.dart';
 import '../../../../core/utils/file_utils.dart';
@@ -74,7 +75,10 @@ mixin DownloadTorrentMixin {
           try {
             TorrentService.pauseTorrent(existingId);
             TorrentService.removeTorrent(existingId, deleteFiles: false);
-          } catch (_) {}
+          } catch (e, st) {
+            LoggingService.logger('DownloadTorrentMixin')
+                .warning('Failed to remove stale error torrent $existingId', e, st);
+          }
           providerTorrentIds.remove(task.id);
           // Fall through to the add-new-handle path below
         } else {

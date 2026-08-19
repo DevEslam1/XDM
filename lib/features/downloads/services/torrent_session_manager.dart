@@ -177,5 +177,10 @@ class TorrentSessionManager {
     }
     return reconciled;
   }
+
+  void dispose() {
+    _torrentIds.clear();
+    _latestStats.clear();
+  }
 }
 

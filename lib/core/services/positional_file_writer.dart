@@ -84,6 +84,7 @@ class PositionalFileWriter
   final Map<int, RandomAccessFile> _handles = {};
   final Map<int, Lock> _handleLocks = {};
   final Map<int, _ChunkBuffer> _buffers = {};
+  Completer<void>? _drainCompleter;
   bool _closed = false;
 
   static Future<PositionalFileWriter> open(
@@ -197,8 +198,14 @@ class PositionalFileWriter
     // Bounded write buffer: drain when pending bytes exceed maxPendingBytes
     while (_pendingBytes + data.length > maxPendingBytes && !_closed) {
       await flushBuffers();
-      if (_pendingBytes + data.length > maxPendingBytes) {
-        await Future.delayed(const Duration(milliseconds: 5));
+      if (_pendingBytes + data.length > maxPendingBytes && !_closed) {
+        _drainCompleter ??= Completer<void>();
+        try {
+          await _drainCompleter!.future
+              .timeout(const Duration(milliseconds: 100));
+        } catch (_) {
+          // Timeout fallback - loop will re-evaluate conditions
+        }
       }
     }
 
@@ -246,6 +253,12 @@ class PositionalFileWriter
     final pos = buffer.startPos;
     final bytes = buffer.takeBytes();
     _pendingBytes = math.max(0, _pendingBytes - bytes.length);
+    if (_pendingBytes < maxPendingBytes &&
+        _drainCompleter != null &&
+        !_drainCompleter!.isCompleted) {
+      _drainCompleter!.complete();
+      _drainCompleter = null;
+    }
     try {
       await raf.setPosition(pos);
       await raf.writeFrom(bytes);
@@ -427,6 +440,10 @@ class PositionalFileWriter
         _handleLocks.clear();
         _buffers.clear();
         _pendingBytes = 0;
+        if (_drainCompleter != null && !_drainCompleter!.isCompleted) {
+          _drainCompleter!.complete();
+          _drainCompleter = null;
+        }
       }
     });
   }

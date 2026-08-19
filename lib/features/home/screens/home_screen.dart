@@ -651,11 +651,17 @@ class _HomeScreenState extends State<HomeScreen>
     required bool isRtl,
     required DownloadProvider downloadProvider,
   }) {
-    return Selector<DownloadProvider, List<DownloadTask>>(
-      selector: (_, p) => p.filteredTasks,
-      builder: (context, allTasks, _) {
-        final activeCount = allTasks.where(_isActiveTask).length;
-        final historyCount = allTasks.where((t) => !_isActiveTask(t)).length;
+    return Selector<DownloadProvider, ({int active, int history})>(
+      selector: (_, p) {
+        final allTasks = p.filteredTasks;
+        return (
+          active: allTasks.where(_isActiveTask).length,
+          history: allTasks.where((t) => !_isActiveTask(t)).length,
+        );
+      },
+      builder: (context, counts, _) {
+        final activeCount = counts.active;
+        final historyCount = counts.history;
         return Padding(
           padding:
               EdgeInsets.symmetric(horizontal: screenPadding(context).left),

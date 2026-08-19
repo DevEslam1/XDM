@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Network Security Configuration for XDM Download Manager & In-App Browser.
+     Cleartext (HTTP) traffic is permitted because the application functions as a general-purpose
+     download manager and web browser, downloading user-specified files from arbitrary remote HTTP endpoints. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

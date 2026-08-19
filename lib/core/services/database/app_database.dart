@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'package:drift/drift.dart';
@@ -92,7 +93,8 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
 
   /// Bounded cache of regex-recovered values so repeatedly reading the same
   /// corrupted cell does not re-run the recovery pass on every query.
-  static final Map<String, List<double>> _recoveryCache = {};
+  static final LinkedHashMap<String, List<double>> _recoveryCache =
+      LinkedHashMap<String, List<double>>();
   static const int _recoveryCacheLimit = 64;
 
   /// Clears the bounded recovery cache. Testing hook.
@@ -133,7 +135,7 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
         final result = _recoverDoubleList(fromDb);
         if (result.isNotEmpty) {
           if (_recoveryCache.length >= _recoveryCacheLimit) {
-            _recoveryCache.clear();
+            _recoveryCache.remove(_recoveryCache.keys.first);
           }
           _recoveryCache[fromDb] = result;
           _dbLog.info(
@@ -158,7 +160,8 @@ class TorrentFilesConverter
 
   /// Bounded cache of regex-recovered values so repeatedly reading the same
   /// corrupted cell does not re-run the recovery pass on every query.
-  static final Map<String, List<Map<String, dynamic>>> _recoveryCache = {};
+  static final LinkedHashMap<String, List<Map<String, dynamic>>> _recoveryCache =
+      LinkedHashMap<String, List<Map<String, dynamic>>>();
   static const int _recoveryCacheLimit = 64;
 
   /// Clears the bounded recovery cache. Testing hook.
@@ -198,7 +201,7 @@ class TorrentFilesConverter
         final result = _recoverTorrentFiles(fromDb);
         if (result.isNotEmpty) {
           if (_recoveryCache.length >= _recoveryCacheLimit) {
-            _recoveryCache.clear();
+            _recoveryCache.remove(_recoveryCache.keys.first);
           }
           _recoveryCache[fromDb] = result;
           _dbLog.info(
@@ -215,7 +218,20 @@ class TorrentFilesConverter
 
   @override
   String toSql(List<Map<String, dynamic>> value) {
-    return jsonEncode(value);
+    try {
+      return jsonEncode(value);
+    } catch (e, st) {
+      _dbLog.warning('Sanitizing TorrentFiles before encoding: $e', e, st);
+      final safeList = value.map((map) {
+        return map.map((k, v) {
+          if (v is String || v is num || v is bool || v is List || v is Map) {
+            return MapEntry(k, v);
+          }
+          return MapEntry(k, v.toString());
+        });
+      }).toList();
+      return jsonEncode(safeList);
+    }
   }
 }
 

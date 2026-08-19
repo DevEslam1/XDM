@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:dio/dio.dart';
+import '../../features/settings/provider/settings_provider.dart';
 import '../utils/constants.dart';
 import 'logging_service.dart';
 
@@ -13,25 +16,82 @@ class BackendConfig {
     required this.name,
     required this.priority,
   });
+
+  factory BackendConfig.fromJson(Map<String, dynamic> json) {
+    return BackendConfig(
+      baseUrl: json['baseUrl'] as String? ?? json['url'] as String? ?? '',
+      name: json['name'] as String? ?? 'Backend',
+      priority: (json['priority'] as num?)?.toInt() ?? 1,
+    );
+  }
 }
 
 /// Manages backend failover, health tracking, and cooldown recovery.
 class BackendHealthService {
-  BackendHealthService._internal();
+  BackendHealthService._internal() {
+    _loadFromSettings();
+  }
   static final BackendHealthService instance = BackendHealthService._internal();
 
-  final List<BackendConfig> _backends = [
-    const BackendConfig(
+  static const List<BackendConfig> _defaultFallbackBackends = [
+    BackendConfig(
       baseUrl: kDefaultBackendBaseUrl,
       name: 'Primary Backend',
       priority: 1,
     ),
-    const BackendConfig(
+    BackendConfig(
       baseUrl: 'https://xdm-backend-fallback.europe-west1.run.app',
       name: 'Fallback Backend',
       priority: 2,
     ),
   ];
+
+  final List<BackendConfig> _backends = List.from(_defaultFallbackBackends);
+
+  void _loadFromSettings() {
+    try {
+      final customUrl = SettingsProvider.instance.backendUrl;
+      if (customUrl.isNotEmpty && customUrl.startsWith('http')) {
+        registerBackend(BackendConfig(
+          baseUrl: customUrl,
+          name: 'Custom Backend',
+          priority: 0,
+        ));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> refreshBackends([String? manifestUrl]) async {
+    final targetUrl = manifestUrl ?? '$activeBaseUrl/api/manifest.json';
+    try {
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
+      ));
+      final response = await dio.get(targetUrl);
+      if (response.statusCode == 200 && response.data != null) {
+        dynamic data = response.data;
+        if (data is String) {
+          data = jsonDecode(data);
+        }
+        if (data is Map && data['backends'] is List) {
+          final list = (data['backends'] as List)
+              .whereType<Map>()
+              .map((m) => BackendConfig.fromJson(Map<String, dynamic>.from(m)))
+              .where((b) => b.baseUrl.isNotEmpty)
+              .toList();
+          if (list.isNotEmpty) {
+            for (final b in list) {
+              registerBackend(b);
+            }
+            _log.info('Refreshed ${list.length} backends from manifest');
+          }
+        }
+      }
+    } catch (e, st) {
+      _log.warning('Failed to refresh backends from manifest: $e', e, st);
+    }
+  }
 
   final Map<String, DateTime> _unhealthyCooldowns = {};
   Duration cooldownDuration = const Duration(seconds: 30);

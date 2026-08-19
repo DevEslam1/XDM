@@ -341,4 +341,6 @@ class WidgetDataBridge {
 
   static bool isStorageCritical(int availableBytes) =>
       availableBytes >= 0 && availableBytes < 100 * 1024 * 1024;
+
+  void dispose() {}
 }

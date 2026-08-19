@@ -788,21 +788,27 @@ class DownloadTask {
         : (fileSize != null ? max(0, fileSize) : this.fileSize);
     final rawDownloadedBytes = max(0, downloadedBytes ?? this.downloadedBytes);
 
+    final effectiveStatus = status ?? this.status;
+    final isCompleted = effectiveStatus == DownloadStatus.completed;
+    final pinnedDownloadedBytes = isCompleted && effectiveFileSize > 0
+        ? effectiveFileSize
+        : ((effectiveFileSize > 0 &&
+                !hasMergedAudio &&
+                !isTorrent &&
+                (mergedAudioUrl == null || mergedAudioUrl.isEmpty))
+            ? rawDownloadedBytes.clamp(0, effectiveFileSize)
+            : rawDownloadedBytes);
+
     return DownloadTask(
       id: id,
       fileName: fileName ?? this.fileName,
       url: url ?? this.url,
       fileSize: effectiveFileSize,
-      downloadedBytes: (effectiveFileSize > 0 &&
-              !hasMergedAudio &&
-              !isTorrent &&
-              (mergedAudioUrl == null || mergedAudioUrl.isEmpty))
-          ? rawDownloadedBytes.clamp(0, effectiveFileSize)
-          : rawDownloadedBytes,
+      downloadedBytes: pinnedDownloadedBytes,
       speed: speed ?? this.speed,
       eta: clearEta ? null : (eta ?? this.eta),
       category: category ?? this.category,
-      status: status ?? this.status,
+      status: effectiveStatus,
       savePath: savePath ?? this.savePath,
       localFilePath: localFilePath ?? this.localFilePath,
       tempFilePath: tempFilePath ?? this.tempFilePath,
@@ -1184,12 +1190,32 @@ class DownloadTask {
     return null;
   }
 
-  // Identity equality based on [id] (plus playlist grouping keys) so cards
-  // animate correctly in lists.
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || (other is DownloadTask && other.id == id);
+      identical(this, other) ||
+      (other is DownloadTask &&
+          other.id == id &&
+          other.status == status &&
+          other.downloadedBytes == downloadedBytes &&
+          other.fileSize == fileSize &&
+          other.speed == speed &&
+          other.eta == eta &&
+          other.updatedAt == updatedAt &&
+          other.errorMessage == errorMessage &&
+          other.category == category &&
+          other.threadCount == threadCount &&
+          other.isMergeInProgress == isMergeInProgress);
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(
+        id,
+        status,
+        downloadedBytes,
+        fileSize,
+        speed,
+        eta,
+        updatedAt,
+        errorMessage,
+        isMergeInProgress,
+      );
 }

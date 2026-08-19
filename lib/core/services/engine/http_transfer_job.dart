@@ -111,6 +111,8 @@ class HttpTransferJob {
   bool _cancelRequested = false;
 
   static const int maxPendingDelays = 16;
+  static const Duration _maxChunkWallClock = Duration(minutes: 10);
+  static Duration stalledThreshold = const Duration(minutes: 5);
   int _nextTimerId = 0;
   final Map<int, Completer<void>> _pendingDelays = <int, Completer<void>>{};
   final Map<int, Timer> _pendingTimers = <int, Timer>{};
@@ -333,6 +335,11 @@ class HttpTransferJob {
   /// has a lower minimum for small files.
   @visibleForTesting
   void registerWatchdogs() {
+    try {
+      stalledThreshold = Duration(
+        minutes: SettingsProvider.instance.downloadStalledTimeoutMinutes,
+      );
+    } catch (_) {}
     final hardTimeoutDuration = _computeHardTimeout();
     void onHardTimeout() {
       requestCancel(PauseReason.userRequested);
@@ -360,7 +367,7 @@ class HttpTransferJob {
       // FIX 7: Stall detection - also check for network connectivity
       if (!_stalledEmitted && _lastProgressTimeMs != 0) {
         final elapsed = _stopwatch.elapsedMilliseconds - _lastProgressTimeMs;
-        if (elapsed >= 5 * 60 * 1000) {
+        if (elapsed >= stalledThreshold.inMilliseconds) {
           _stalledEmitted = true;
           _emitProgress(_stopwatch.elapsedMilliseconds,
               statusMessage: 'Stalled',
@@ -926,9 +933,15 @@ class HttpTransferJob {
         (failover.hasAlternatives ? failover.remainingAlternatives + 1 : 1) *
             maxAttempts;
     var activeUrl = failover.activeUrl;
+    final chunkStartWallClock = DateTime.now();
 
     while (!chunk.isComplete) {
       _throwIfCancelled();
+      if (DateTime.now().difference(chunkStartWallClock) >
+          _maxChunkWallClock) {
+        throw DownloadIntegrityException(
+            'Chunk $chunkIndex exceeded wall-clock budget');
+      }
       attempts++;
       totalMirrorAttempts++;
       if (totalMirrorAttempts > maxTotalAttempts) {
@@ -1374,6 +1387,8 @@ class HttpTransferJob {
     final failover = MirrorFailover([cmd.punyUrl, ...?cmd.mirrorUrls]);
     var attempts = 0;
     var totalMirrorAttempts = 0;
+    var rangeRejectCount = 0;
+    const maxRangeRejects = 2;
     const maxAttempts = 3;
     final maxTotalAttempts =
         (failover.hasAlternatives ? failover.remainingAlternatives + 1 : 1) *
@@ -1416,12 +1431,20 @@ class HttpTransferJob {
           continue;
         }
 
-        // FIX 5: HTTP 200 resume rejection - throw RangeUnsupportedException
-        // instead of DioException.badResponse to avoid triggering retry logic.
-        // The caller will handle the RangeUnsupportedException by falling
-        // back to single-stream (which we already are) or restarting.
+        // FIX 5: HTTP 200 resume rejection - handle server ignoring Range headers
         if (response.statusCode == 200 && resumeFrom > 0) {
           await response.data?.stream.listen((_) {}).cancel();
+          rangeRejectCount++;
+          if (rangeRejectCount > maxRangeRejects) {
+            st.status = DmxStateStatus.failed;
+            _emitProgress(0,
+                statusMessage: 'Failed: Server rejected resume requests.');
+            throw DioException(
+              requestOptions: response.requestOptions,
+              type: DioExceptionType.badResponse,
+              message: 'Server repeatedly ignored Range requests.',
+            );
+          }
           // Clear state files
           for (final p in [
             '${cmd.tempFilePath}.dmxstate',

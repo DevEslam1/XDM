@@ -30,14 +30,37 @@ class StateStoreInstance {
 
   final Lock _lock = Lock();
   final Map<String, int> _lastFingerprints = {};
-  final Map<String, String> _lastWrittenPayloads = {};
   final Map<String, int> _lastWrittenBytes = {};
   final Map<String, DateTime> _lastSaveTimes = {};
   final Map<String, DmxStateStatus> _lastWrittenStatus = {};
-  final Map<String, Lock> _pathLocks = {};
+  final LinkedHashMap<String, Lock> _pathLocks = LinkedHashMap<String, Lock>();
+  final Set<String> _heldPaths = <String>{};
+  static const int _maxPathLocks = 64;
   static const int _maxCachedPayloads = kStateCacheMaxPayloads;
 
-  // Fix 6: Enable SHA-256 state save strict deduplication by default
+  @visibleForTesting
+  int get pathLockCount => _pathLocks.length;
+
+  Lock _acquirePathLock(String targetPath) {
+    if (_pathLocks.containsKey(targetPath)) {
+      final lock = _pathLocks.remove(targetPath)!;
+      _pathLocks[targetPath] = lock;
+      return lock;
+    }
+    if (_pathLocks.length >= _maxPathLocks) {
+      for (final key in _pathLocks.keys.toList()) {
+        if (!_heldPaths.contains(key)) {
+          _pathLocks.remove(key);
+          if (_pathLocks.length < _maxPathLocks) break;
+        }
+      }
+    }
+    final lock = Lock();
+    _pathLocks[targetPath] = lock;
+    return lock;
+  }
+
+  // Enable SHA-256 state save strict deduplication by default
   bool stateSaveStrictDedup = true;
 
   String pathFor(String tempFilePath, {String? taskId}) {
@@ -324,8 +347,9 @@ class StateStoreInstance {
       final chunkStart = c.start;
       final chunkEnd = c.start + c.downloaded;
       if (chunkEnd > len) {
-        final newDownloaded =
-            (len - chunkStart).clamp(0, c.size >= 0 ? c.size : 0);
+        final available = len - chunkStart;
+        final cap = c.size >= 0 ? c.size : (available < 0 ? 0 : available);
+        final newDownloaded = available < 0 ? 0 : available.clamp(0, cap);
         if (c.downloaded != newDownloaded) {
           c.downloaded = newDownloaded;
           adjusted = true;
@@ -365,7 +389,6 @@ class StateStoreInstance {
   void removeCachedPayload(String targetPath) {
     _lock.synchronized(() {
       _lastFingerprints.remove(targetPath);
-      _lastWrittenPayloads.remove(targetPath);
       _lastWrittenBytes.remove(targetPath);
       _lastSaveTimes.remove(targetPath);
       _lastWrittenStatus.remove(targetPath);
@@ -382,154 +405,193 @@ class StateStoreInstance {
     String? taskId,
   }) async {
     final targetPath = pathFor(tempFilePath, taskId: taskId);
-    final pathLock = await _lock
-        .synchronized(() => _pathLocks.putIfAbsent(targetPath, () => Lock()));
+    final pathLock =
+        await _lock.synchronized(() => _acquirePathLock(targetPath));
 
-    return pathLock.synchronized(() async {
-      state.updatedAt = DateTime.now();
-      final isScreenOff = screenOff || PowerMonitor.screenOff;
-      final isBg = isScreenOff ||
-          !DownloadEngine.appInForeground ||
-          DownloadEngine.isInBackground;
-      final tmpPath = '$targetPath.tmp';
-      try {
-        final now = DateTime.now();
-        DateTime? lastSave;
-        int? lastWrittenByte;
-        DmxStateStatus? lastStatus;
-        int? lastFp;
+    _lock.synchronized(() {
+      _heldPaths.add(targetPath);
+    });
 
-        _lock.synchronized(() {
-          lastSave = _lastSaveTimes[targetPath];
-          lastWrittenByte = _lastWrittenBytes[targetPath];
-          lastStatus = _lastWrittenStatus[targetPath];
-          lastFp = _lastFingerprints[targetPath];
-        });
+    try {
+      return await pathLock.synchronized(() async {
+        final isScreenOff = screenOff || PowerMonitor.screenOff;
+        final isBg = isScreenOff ||
+            !DownloadEngine.appInForeground ||
+            DownloadEngine.isInBackground;
+        final tmpPath = '$targetPath.tmp';
+        try {
+          final now = DateTime.now();
+          DateTime? lastSave;
+          int? lastWrittenByte;
+          DmxStateStatus? lastStatus;
+          int? lastFp;
 
-        final bytesSinceLastWrite =
-            (state.downloadedBytes - (lastWrittenByte ?? 0)).abs();
-        final statusChanged = lastStatus != state.status;
+          _lock.synchronized(() {
+            lastSave = _lastSaveTimes[targetPath];
+            lastWrittenByte = _lastWrittenBytes[targetPath];
+            lastStatus = _lastWrittenStatus[targetPath];
+            lastFp = _lastFingerprints[targetPath];
+          });
 
-        // Rate-limit non-durable state saves in background (120s / 16MB) or foreground (30s / 5MB)
-        if (!durable && !statusChanged && lastSave != null) {
-          if (isBg) {
-            if (now.difference(lastSave!) < kStateSaveBgInterval &&
-                bytesSinceLastWrite < kStateSaveBgDelta) {
-              return;
+          final bytesSinceLastWrite =
+              (state.downloadedBytes - (lastWrittenByte ?? 0)).abs();
+          final statusChanged = lastStatus != state.status;
+
+          // Rate-limit non-durable state saves in background (120s / 16MB) or foreground (30s / 5MB)
+          if (!durable && !statusChanged && lastSave != null) {
+            if (isBg) {
+              if (now.difference(lastSave!) < kStateSaveBgInterval &&
+                  bytesSinceLastWrite < kStateSaveBgDelta) {
+                return;
+              }
+            } else {
+              if (now.difference(lastSave!) < kStateSaveFgInterval &&
+                  bytesSinceLastWrite < kStateSaveFgDelta) {
+                return;
+              }
+            }
+          }
+
+          // Screen-off threshold: always write when status changed or durable
+          if (isScreenOff &&
+              !durable &&
+              !statusChanged &&
+              bytesSinceLastWrite < kStateSaveFgDelta) {
+            return; // skip small deltas when screen off
+          }
+
+          // Lightweight structural deduplication: skips redundant writes in O(N) without jsonEncode or SHA-256
+          final fingerprint = computeFingerprint(state);
+          if (!durable && !statusChanged) {
+            if (lastFp == fingerprint) {
+              return; // Skip redundant state write without JSON serialization
+            }
+          }
+
+          state.updatedAt = now;
+          final payload = jsonEncode(state.toJson());
+          final tmp = File(tmpPath);
+          await tmp.parent.create(recursive: true);
+          if (durable) {
+            await tmp.writeAsString(payload, flush: true);
+            if (!kIsWeb) {
+              try {
+                final raf = await tmp.open(mode: FileMode.read);
+                try {
+                  await raf.flush();
+                } finally {
+                  await raf.close();
+                }
+              } catch (_) {}
             }
           } else {
-            if (now.difference(lastSave!) < kStateSaveFgInterval &&
-                bytesSinceLastWrite < kStateSaveFgDelta) {
-              return;
+            await tmp.writeAsString(payload, flush: false);
+          }
+          try {
+            await tmp.rename(targetPath);
+          } catch (e) {
+            // Fallback to direct write if rename fails (e.g. file lock on Windows)
+            await File(targetPath).writeAsString(payload, flush: true);
+            try {
+              if (await tmp.exists()) await tmp.delete();
+            } catch (_) {}
+          }
+
+          // Mutate dedup cache ONLY after successful write to disk:
+          _lock.synchronized(() {
+            _lastFingerprints.remove(targetPath);
+            _lastFingerprints[targetPath] = fingerprint; // LRU recency update
+            _lastSaveTimes[targetPath] = now;
+            _lastWrittenStatus[targetPath] = state.status;
+            _lastWrittenBytes[targetPath] = state.downloadedBytes;
+
+            if (_lastFingerprints.length > _maxCachedPayloads) {
+              final keysToRemove = _lastFingerprints.keys
+                  .take(_lastFingerprints.length - _maxCachedPayloads)
+                  .toList();
+              for (final key in keysToRemove) {
+                _lastFingerprints.remove(key);
+                _lastWrittenBytes.remove(key);
+                _lastSaveTimes.remove(key);
+                _lastWrittenStatus.remove(key);
+              }
             }
-          }
-        }
-
-        // Lightweight structural deduplication: skips redundant writes in O(N) without jsonEncode or SHA-256
-        final fingerprint = computeFingerprint(state);
-        if (!durable && !statusChanged) {
-          if (lastFp == fingerprint) {
-            return; // Skip redundant state write without JSON serialization
-          }
-        }
-
-        _lock.synchronized(() {
-          _lastFingerprints[targetPath] = fingerprint;
-          _lastSaveTimes[targetPath] = now;
-          _lastWrittenStatus[targetPath] = state.status;
-          if (_lastFingerprints.length > _maxCachedPayloads) {
-            final keysToRemove = _lastFingerprints.keys
-                .take(_lastFingerprints.length - _maxCachedPayloads)
-                .toList();
-            for (final key in keysToRemove) {
-              _lastFingerprints.remove(key);
-              _lastWrittenPayloads.remove(key);
-              _lastWrittenBytes.remove(key);
-              _lastSaveTimes.remove(key);
-              _lastWrittenStatus.remove(key);
-            }
-          }
-        });
-
-        // Screen-off threshold: always write when status changed or durable
-        if (isScreenOff &&
-            !durable &&
-            !statusChanged &&
-            bytesSinceLastWrite < kStateSaveFgDelta) {
-          return; // skip small deltas when screen off
-        }
-
-        _lock.synchronized(() {
-          _lastWrittenBytes[targetPath] = state.downloadedBytes;
-        });
-
-        final payload = jsonEncode(state.toJson());
-        final tmp = File(tmpPath);
-        await tmp.parent.create(recursive: true);
-        if (durable) {
-          await tmp.writeAsString(payload, flush: true);
-        } else {
-          await tmp.writeAsString(payload, flush: false);
-        }
-        try {
-          await tmp.rename(targetPath);
+          });
         } catch (e) {
-          // Fallback to direct write if rename fails (e.g. file lock on Windows)
-          await File(targetPath).writeAsString(payload, flush: true);
+          debugPrint('[DmxState] save failed for $tempFilePath: $e');
         }
-      } catch (e) {
-        debugPrint('[DmxState] save failed for $tempFilePath: $e');
-      }
-    });
+      });
+    } finally {
+      _lock.synchronized(() {
+        _heldPaths.remove(targetPath);
+      });
+    }
   }
 
   Future<void> remove(String tempFilePath, {String? taskId}) async {
     final targetPath = pathFor(tempFilePath, taskId: taskId);
+    final pathLock =
+        await _lock.synchronized(() => _acquirePathLock(targetPath));
+
     _lock.synchronized(() {
-      _pathLocks.remove(targetPath);
-      _lastWrittenPayloads.remove(targetPath);
-      _lastWrittenBytes.remove(targetPath);
-      _lastSaveTimes.remove(targetPath);
-      _lastWrittenStatus.remove(targetPath);
+      _heldPaths.add(targetPath);
     });
-    final tmpPath = '$targetPath.tmp';
+
     try {
-      final f = File(targetPath);
-      if (await f.exists()) await f.delete();
-    } catch (e, st) {
-      LoggingService.logger('DownloadJournal')
-          .warning('Failed to delete state file on remove', e, st);
-    }
-    try {
-      final tmp = File(tmpPath);
-      if (await tmp.exists()) await tmp.delete();
-    } catch (e, st) {
-      LoggingService.logger('DownloadJournal')
-          .warning('Failed to delete tmp state file on remove', e, st);
-    }
-    if (taskId != null && taskId.isNotEmpty) {
-      final legacyPath = _legacyPathFor(tempFilePath);
-      _lock.synchronized(() {
-        _pathLocks.remove(legacyPath);
-        _lastWrittenPayloads.remove(legacyPath);
-        _lastWrittenBytes.remove(legacyPath);
-        _lastSaveTimes.remove(legacyPath);
-        _lastWrittenStatus.remove(legacyPath);
+      await pathLock.synchronized(() async {
+        _lock.synchronized(() {
+          _lastFingerprints.remove(targetPath);
+          _lastWrittenBytes.remove(targetPath);
+          _lastSaveTimes.remove(targetPath);
+          _lastWrittenStatus.remove(targetPath);
+        });
+        final tmpPath = '$targetPath.tmp';
+        try {
+          final f = File(targetPath);
+          if (await f.exists()) await f.delete();
+        } catch (e, st) {
+          LoggingService.logger('DownloadJournal')
+              .warning('Failed to delete state file on remove', e, st);
+        }
+        try {
+          final tmp = File(tmpPath);
+          if (await tmp.exists()) await tmp.delete();
+        } catch (e, st) {
+          LoggingService.logger('DownloadJournal')
+              .warning('Failed to delete tmp state file on remove', e, st);
+        }
+        if (taskId != null && taskId.isNotEmpty) {
+          final legacyPath = _legacyPathFor(tempFilePath);
+          _lock.synchronized(() {
+            _lastFingerprints.remove(legacyPath);
+            _lastWrittenBytes.remove(legacyPath);
+            _lastSaveTimes.remove(legacyPath);
+            _lastWrittenStatus.remove(legacyPath);
+          });
+          try {
+            final f = File(legacyPath);
+            if (await f.exists()) await f.delete();
+          } catch (e, st) {
+            LoggingService.logger('DownloadJournal')
+                .warning('Failed to delete legacy state file on remove', e, st);
+          }
+          try {
+            final tmp = File('$legacyPath.tmp');
+            if (await tmp.exists()) await tmp.delete();
+          } catch (e, st) {
+            LoggingService.logger('DownloadJournal')
+                .warning('Failed to delete legacy tmp state file on remove', e, st);
+          }
+        }
       });
-      try {
-        final f = File(legacyPath);
-        if (await f.exists()) await f.delete();
-      } catch (e, st) {
-        LoggingService.logger('DownloadJournal')
-            .warning('Failed to delete legacy state file on remove', e, st);
-      }
-      try {
-        final tmp = File('$legacyPath.tmp');
-        if (await tmp.exists()) await tmp.delete();
-      } catch (e, st) {
-        LoggingService.logger('DownloadJournal')
-            .warning('Failed to delete legacy tmp state file on remove', e, st);
-      }
+    } finally {
+      _lock.synchronized(() {
+        _heldPaths.remove(targetPath);
+        _pathLocks.remove(targetPath);
+        if (taskId != null && taskId.isNotEmpty) {
+          _pathLocks.remove(_legacyPathFor(tempFilePath));
+        }
+      });
     }
   }
 }
@@ -654,9 +716,9 @@ class DownloadJournal {
   }
 
   /// Access-ordered LRU of the last recorded byte-count per chunk index,
-  /// capped at [maxBgRecordedEntries] (one entry per chunk across all jobs).
-  final LinkedHashMap<int, int> _lastBgRecordedBytes = LinkedHashMap();
-  static const int maxBgRecordedEntries = kJournalMaxBgRecordedEntries;
+  /// capped at [maxRecordedEntries] (one entry per chunk across all jobs).
+  final LinkedHashMap<int, int> _lastRecordedChunkBytes = LinkedHashMap();
+  static const int maxRecordedEntries = kJournalMaxBgRecordedEntries;
   int _lastGlobalWriteBytes = 0;
 
   Future<void> recordChunkProgress(int index, int bytes) async {
@@ -670,22 +732,20 @@ class DownloadJournal {
             ? kJournalBackgroundWriteDelta // 4MB when backgrounded (BG-04 / C-BG-02)
             : kJournalForegroundWriteDelta; // 512KB foreground (M-DL-08)
 
-    _lastBgRecordedBytes[index] = bytes;
-    while (_lastBgRecordedBytes.length > maxBgRecordedEntries) {
-      _lastBgRecordedBytes.remove(_lastBgRecordedBytes.keys.first);
-    }
-
-    final totalWritten =
-        _lastBgRecordedBytes.values.fold<int>(0, (sum, b) => sum + b);
-    final chunkCount =
-        _lastBgRecordedBytes.isNotEmpty ? _lastBgRecordedBytes.length : 1;
-    final totalBytesSinceLastWrite =
-        (totalWritten - _lastGlobalWriteBytes).abs();
-
-    if (totalBytesSinceLastWrite < threshold * chunkCount) return;
-    _lastGlobalWriteBytes = totalWritten;
-
     await _lock.synchronized(() async {
+      _lastRecordedChunkBytes[index] = bytes;
+      while (_lastRecordedChunkBytes.length > maxRecordedEntries) {
+        _lastRecordedChunkBytes.remove(_lastRecordedChunkBytes.keys.first);
+      }
+
+      final totalWritten =
+          _lastRecordedChunkBytes.values.fold<int>(0, (sum, b) => sum + b);
+      final totalBytesSinceLastWrite =
+          (totalWritten - _lastGlobalWriteBytes).abs();
+
+      if (totalBytesSinceLastWrite < threshold) return;
+      _lastGlobalWriteBytes = totalWritten;
+
       _ensureOpen();
       final line = _withCrc({
         't': 'chunk',
@@ -818,7 +878,7 @@ class DownloadJournal {
   /// fires `flush()`/`close()` on the sink without awaiting them; safe to call
   /// from a `finally` block or before deleting the journal file.
   void dispose() {
-    _lastBgRecordedBytes.clear();
+    _lastRecordedChunkBytes.clear();
     if (!_isOpen) return;
     _isOpen = false;
     final sink = _sink;
@@ -835,14 +895,14 @@ class DownloadJournal {
   /// Flushes and closes the underlying journal sink.
   Future<void> close() async {
     await _lock.synchronized(() async {
-      _lastBgRecordedBytes.clear();
+      _lastRecordedChunkBytes.clear();
       await _closeLocked();
     });
   }
 
   Future<void> delete() async {
     await _lock.synchronized(() async {
-      _lastBgRecordedBytes.clear();
+      _lastRecordedChunkBytes.clear();
       await _closeLocked();
     });
     try {

@@ -46,6 +46,11 @@ class DownloadEngine implements IDownloadEngine {
 
   /// Explicitly mark the engine as background. Prefer over `isInBackground = true`.
   static void markBackground() => appInForeground = false;
+  
+  static int _activeDownloadsCount = 0;
+  static bool get hasActiveDownloads => _activeDownloadsCount > 0;
+  static void setActiveDownloadsCount(int count) => _activeDownloadsCount = count;
+  
   static const int _isolatePoolSize = 4;
 
   final HttpDownloadOrchestrator _httpOrchestrator;

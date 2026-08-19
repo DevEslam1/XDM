@@ -167,6 +167,19 @@ class TorrentDownloadHandler {
     lastStateLabel = '';
   }
 
+  void dispose() {
+    _stallWatchdog?.cancel();
+    _stallWatchdog = null;
+    _alivenessWatchdog?.cancel();
+    _alivenessWatchdog = null;
+    for (final sub in _activeSubs.values) {
+      sub.cancel();
+    }
+    _activeSubs.clear();
+    _activeTorrentIds.clear();
+    cachedAccurateFiles = null;
+  }
+
   Future<void> haltTorrent(int id) async {
     TorrentSubscriptionRegistry.instance.unregister(id, this);
     final sub = _activeSubs.remove(id);
@@ -1287,24 +1300,25 @@ class TorrentDownloadHandler {
         }
       });
       sub = _torrentService.torrentUpdates.listen((torrents) async {
-        if (cancelToken.isCancelled) return;
-        final torrent = torrents[id];
-        if (torrent == null) {
-          if (!_torrentService.isTorrentAlive(id)) {
-            sub?.cancel();
-            _activeSubs.remove(id);
-            _activeTorrentIds.remove(id);
-            TorrentSubscriptionRegistry.instance.unregister(id, this);
-            if (!completer.isCompleted) {
-              completer.completeError(DioException(
-                requestOptions: RequestOptions(path: url),
-                type: DioExceptionType.unknown,
-                error: 'Torrent handle lost.',
-              ));
+        try {
+          if (cancelToken.isCancelled) return;
+          final torrent = torrents[id];
+          if (torrent == null) {
+            if (!_torrentService.isTorrentAlive(id)) {
+              sub?.cancel();
+              _activeSubs.remove(id);
+              _activeTorrentIds.remove(id);
+              TorrentSubscriptionRegistry.instance.unregister(id, this);
+              if (!completer.isCompleted) {
+                completer.completeError(DioException(
+                  requestOptions: RequestOptions(path: url),
+                  type: DioExceptionType.unknown,
+                  error: 'Torrent handle lost.',
+                ));
+              }
             }
+            return;
           }
-          return;
-        }
         final stateLabel = torrent.stateLabel.toLowerCase();
         final isStateChange = stateLabel != lastStateLabel;
         final isTerminal = stateLabel == 'seeding' ||
@@ -1631,7 +1645,19 @@ class TorrentDownloadHandler {
             completer.complete();
           }
         }
-      });
+      } catch (e, st) {
+        _log.severe('Unexpected error processing torrent update for $id', e, st);
+      }
+    }, onError: (Object e, StackTrace st) {
+      _log.severe('Torrent updates stream error for $id: $e', e, st);
+      if (!completer.isCompleted && !_torrentService.isTorrentAlive(id)) {
+        completer.completeError(DioException(
+          requestOptions: RequestOptions(path: url),
+          type: DioExceptionType.unknown,
+          error: 'Torrent stream terminated: $e',
+        ));
+      }
+    });
       _activeSubs[id] = sub;
       TorrentSubscriptionRegistry.instance.register(id, this, sub);
       await completer.future;

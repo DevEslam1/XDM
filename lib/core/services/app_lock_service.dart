@@ -148,13 +148,19 @@ class AppLockService {
 
     // 1. Monotonic in-memory check (immune to clock changes during process runtime)
     if (_monotonicLockoutStartMs != null && _totalLockoutDurationMs != null) {
-      final elapsedSinceStart = currentMono - _monotonicLockoutStartMs!;
-      final remainingMs = _totalLockoutDurationMs! - elapsedSinceStart;
-      if (remainingMs <= 0) {
-        await resetFailedAttempts();
-        return Duration.zero;
+      if (currentMono < _monotonicLockoutStartMs!) {
+        // Device reboot detected: elapsedRealtime reset to 0
+        _monotonicLockoutStartMs = null;
+        _totalLockoutDurationMs = null;
+      } else {
+        final elapsedSinceStart = currentMono - _monotonicLockoutStartMs!;
+        final remainingMs = _totalLockoutDurationMs! - elapsedSinceStart;
+        if (remainingMs <= 0) {
+          await resetFailedAttempts();
+          return Duration.zero;
+        }
+        return Duration(milliseconds: remainingMs);
       }
-      return Duration(milliseconds: remainingMs);
     }
 
     // 2. Storage check across process restarts

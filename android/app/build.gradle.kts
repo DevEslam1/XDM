@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "com.xdm.downloadmanager"
-    compileSdk = 37
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -27,7 +27,7 @@ android {
         applicationId = "com.xdm.downloadmanager"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 24
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -64,10 +64,15 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = if (hasValidKeystore && signingConfigs.findByName("release") != null) {
-                signingConfigs.getByName("release")
+            if (hasValidKeystore && signingConfigs.findByName("release") != null) {
+                signingConfig = signingConfigs.getByName("release")
             } else {
-                signingConfigs.getByName("debug")
+                val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
+                    it.contains("Release", ignoreCase = true) || it.contains("bundle", ignoreCase = true)
+                }
+                if (isReleaseBuildRequested) {
+                    throw GradleException("Release build requires a valid signing configuration in keystore.properties or key.properties!")
+                }
             }
         }
     }

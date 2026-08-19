@@ -80,4 +80,12 @@ class BoundedLruCache<K, V> {
     final now = DateTime.now();
     _map.removeWhere((key, entry) => now.difference(entry.createdAt) > ttl!);
   }
+
+  /// Reduces cache size aggressively when backgrounded or under memory pressure.
+  void shrinkForBackground() {
+    final targetSize = maxCapacity ~/ 4;
+    while (_map.length > targetSize && _map.isNotEmpty) {
+      _map.remove(_map.keys.first);
+    }
+  }
 }

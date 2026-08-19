@@ -1,4 +1,6 @@
 const Map<String, String> arTranslations = {
+  'waiting_wifi': 'بانتظار شبكة اللاسلكي',
+  'waiting_for_slot': 'بانتظار دور للتحميل ({active}/{max} نشط)',
   'active_connections': 'قنوات الاتصال',
   'active_on_completion': 'المشاركة بعد الاكتمال',
   'active_tab': 'النشطة',

@@ -157,6 +157,7 @@ class SettingsProvider extends ChangeNotifier
   static const _sendBrowserCookiesToBackendKey =
       'send_browser_cookies_to_backend';
   static const _useLocalYtFallbackKey = 'use_local_yt_fallback';
+  static const _downloadStalledTimeoutMinutesKey = 'downloadStalledTimeoutMinutes';
 
   late SharedPreferences _prefs;
   final _secureStorage = const FlutterSecureStorage();
@@ -268,6 +269,14 @@ class SettingsProvider extends ChangeNotifier
   String backendToken = '';
   bool sendBrowserCookiesToBackend = true;
   bool useLocalYtFallback = false;
+  int downloadStalledTimeoutMinutes = 5;
+
+  Future<void> setDownloadStalledTimeoutMinutes(int value) async {
+    downloadStalledTimeoutMinutes = value.clamp(1, 120);
+    await _prefs.setInt(
+        _downloadStalledTimeoutMinutesKey, downloadStalledTimeoutMinutes);
+    notifyListeners();
+  }
 
   @override
   bool globalTorrentSeeding = true;
@@ -713,6 +722,8 @@ class SettingsProvider extends ChangeNotifier
       powerBandwidthThrottling =
           _prefs.getBool(_powerBandwidthThrottlingKey) ?? true;
       resumeIntegrityCheck = _prefs.getBool(_resumeIntegrityCheckKey) ?? true;
+      downloadStalledTimeoutMinutes =
+          _prefs.getInt(_downloadStalledTimeoutMinutesKey) ?? 5;
 
       PowerMonitor.thermalThreadLimitingEnabled = thermalThreadLimiting;
       PowerMonitor.powerBandwidthThrottlingEnabled = powerBandwidthThrottling;

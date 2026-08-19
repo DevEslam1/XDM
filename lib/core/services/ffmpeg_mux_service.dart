@@ -117,6 +117,8 @@ class FFmpegMuxService {
           'copy',
           '-c:a',
           'copy',
+          '-max_muxing_queue_size',
+          '1024',
           '-map',
           '0:v:0',
           '-map',
@@ -146,6 +148,8 @@ class FFmpegMuxService {
           'aac',
           '-b:a',
           '192k',
+          '-max_muxing_queue_size',
+          '1024',
           '-af',
           'loudnorm=I=-16:TP=-1.5:LRA=11',
           '-map',
@@ -174,6 +178,8 @@ class FFmpegMuxService {
           'aac',
           '-b:a',
           '192k',
+          '-max_muxing_queue_size',
+          '1024',
           '-af',
           'loudnorm=I=-16:TP=-1.5:LRA=11',
           '-map',
@@ -186,6 +192,57 @@ class FFmpegMuxService {
           '-y',
           outputPath,
         ];
+    }
+  }
+
+  static Future<bool> _canStreamCopy({
+    required String videoPath,
+    required String audioPath,
+    required String outputPath,
+  }) async {
+    try {
+      final ext = p.extension(outputPath).toLowerCase();
+      final probeV = await FFprobeKit.executeWithArguments([
+        '-v',
+        'error',
+        '-show_entries',
+        'stream=codec_name',
+        '-of',
+        'default=noprint_wrappers=1',
+        videoPath,
+      ]);
+      final vLogs = (await probeV.getLogsAsString()).toLowerCase();
+
+      final probeA = await FFprobeKit.executeWithArguments([
+        '-v',
+        'error',
+        '-show_entries',
+        'stream=codec_name',
+        '-of',
+        'default=noprint_wrappers=1',
+        audioPath,
+      ]);
+      final aLogs = (await probeA.getLogsAsString()).toLowerCase();
+
+      if (ext == '.mp4' || ext == '.m4v') {
+        final hasCompatibleVideo = vLogs.contains('h264') ||
+            vLogs.contains('hevc') ||
+            vLogs.contains('av01') ||
+            vLogs.contains('vp9') ||
+            vLogs.contains('avc1');
+        final hasCompatibleAudio = aLogs.contains('aac') ||
+            aLogs.contains('mp3') ||
+            aLogs.contains('opus') ||
+            aLogs.contains('m4a');
+        return hasCompatibleVideo && hasCompatibleAudio;
+      }
+      if (ext == '.mkv' || ext == '.webm') {
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _log.info('Stream probe skipped or failed: $e');
+      return false;
     }
   }
 
@@ -306,11 +363,21 @@ class FFmpegMuxService {
     _log.info(
         'Starting merge for $videoSize bytes video + $audioSize bytes audio (required storage: $requiredSpace bytes)');
 
-    for (final strategy in [
-      MergeStrategy.streamCopy,
-      MergeStrategy.hwReencode,
-      MergeStrategy.swFallback,
-    ]) {
+    final canCopy = await _canStreamCopy(
+      videoPath: videoPath,
+      audioPath: audioPath,
+      outputPath: outputPath,
+    );
+
+    final strategies = canCopy
+        ? [MergeStrategy.streamCopy]
+        : [
+            MergeStrategy.streamCopy,
+            MergeStrategy.hwReencode,
+            MergeStrategy.swFallback,
+          ];
+
+    for (final strategy in strategies) {
       final args = _buildArgs(
         videoPath: videoPath,
         audioPath: audioPath,

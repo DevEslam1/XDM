@@ -10,14 +10,18 @@ abstract class MemoryPressureListener {
 }
 
 /// Central service coordinator that ensures clean teardown of all singletons
-/// when the app enters `AppLifecycleState.detached` or shuts down.
+/// when the app enters `AppLifecycleState.detached` or shuts down, and distributes
+/// memory pressure notifications via WeakReferences to prevent retention leaks.
 class ServiceRegistry {
   static final _log = Logger('ServiceRegistry');
   static final List<DisposableService> _services = [];
-  static final List<MemoryPressureListener> _memoryListeners = [];
+  static final List<WeakReference<MemoryPressureListener>> _memoryListeners = [];
 
   static int get activeServicesCount => _services.length;
-  static int get activeMemoryListenersCount => _memoryListeners.length;
+  static int get activeMemoryListenersCount {
+    _memoryListeners.removeWhere((ref) => ref.target == null);
+    return _memoryListeners.length;
+  }
 
   static void register(DisposableService service) {
     if (!_services.contains(service)) {
@@ -30,25 +34,30 @@ class ServiceRegistry {
   }
 
   static void registerMemoryPressureListener(MemoryPressureListener listener) {
-    if (!_memoryListeners.contains(listener)) {
-      _memoryListeners.add(listener);
+    _memoryListeners.removeWhere((ref) => ref.target == null);
+    final alreadyRegistered = _memoryListeners.any((ref) => ref.target == listener);
+    if (!alreadyRegistered) {
+      _memoryListeners.add(WeakReference(listener));
     }
   }
 
   static void unregisterMemoryPressureListener(
       MemoryPressureListener listener) {
-    _memoryListeners.remove(listener);
+    _memoryListeners.removeWhere((ref) => ref.target == null || ref.target == listener);
   }
 
   static void broadcastMemoryPressure() {
+    _memoryListeners.removeWhere((ref) => ref.target == null);
     _log.info(
         'Broadcasting memory pressure event to ${_memoryListeners.length} listeners');
-    for (final listener
-        in List<MemoryPressureListener>.from(_memoryListeners)) {
-      try {
-        listener.onMemoryPressure();
-      } catch (e, st) {
-        _log.warning('Error in memory pressure listener: $e', e, st);
+    for (final ref in List<WeakReference<MemoryPressureListener>>.from(_memoryListeners)) {
+      final listener = ref.target;
+      if (listener != null) {
+        try {
+          listener.onMemoryPressure();
+        } catch (e, st) {
+          _log.warning('Error in memory pressure listener: $e', e, st);
+        }
       }
     }
   }

@@ -6,22 +6,23 @@
 library;
 
 /// Maximum number of download threads per transfer.
-const int kMaxTransferThreads = 64;
+const int kMaxTransferThreads = 16;
 
 /// Minimum number of download threads per transfer.
 const int kMinTransferThreads = 1;
 
 /// A transfer smaller than this stays single-threaded.
-const int kMinSizeForMultithread = 512 * 1024; // 512KB
+const int kMinSizeForMultithread = 4 * 1024 * 1024; // 4MB
 
 /// Multi-threaded transfers below this size get single-thread handling.
 const int kMinSplitThreshold = 2 * 1024 * 1024; // 2MB
 
-/// Hard timeout for a single task before it is killed by the watchdog.
+/// Hard timeout for a single HTTP task before it is killed by the watchdog.
+/// Torrents are exempt from this timeout while active or seeding.
 const Duration kTaskHardTimeout = Duration(hours: 24);
 
 /// Global per-worker active task cap applied to engine IPC `limits`.
-const int kWorkerMaxActiveJobs = 1000;
+const int kWorkerMaxActiveJobs = 32;
 
 /// Minimum bytes that must pass before a state save is considered.
 const int kStateSaveMinBytes = 16 * 1024 * 1024; // 16MB
@@ -33,25 +34,25 @@ const int kJournalCompactionThreshold = 512 * 1024;
 const int kJournalForegroundWriteDelta = 512 * 1024;
 
 /// Background (non-screen-off) chunk-progress journal write threshold.
-const int kJournalBackgroundWriteDelta = 4 * 1024 * 1024;
+const int kJournalBackgroundWriteDelta = 1 * 1024 * 1024; // 1MB
 
 /// Screen-off chunk-progress journal write threshold.
-const int kJournalScreenOffWriteDelta = 16 * 1024 * 1024;
+const int kJournalScreenOffWriteDelta = 2 * 1024 * 1024; // 2MB
 
 /// Maximum number of chunk-progress entries tracked in the journal LRU.
 const int kJournalMaxBgRecordedEntries = 256;
 
 /// State-save debounce interval while in the background.
-const Duration kStateSaveBgInterval = Duration(seconds: 120);
+const Duration kStateSaveBgInterval = Duration(minutes: 2);
 
 /// State-save debounce interval while in the foreground.
 const Duration kStateSaveFgInterval = Duration(seconds: 30);
 
 /// Minimum background state-save delta.
-const int kStateSaveBgDelta = 16 * 1024 * 1024;
+const int kStateSaveBgDelta = 8 * 1024 * 1024; // 8MB
 
 /// Minimum foreground state-save delta.
-const int kStateSaveFgDelta = 5 * 1024 * 1024;
+const int kStateSaveFgDelta = 2 * 1024 * 1024; // 2MB
 
 /// Max cached state payloads kept for fast-fingerprint dedup.
 const int kStateCacheMaxPayloads = 16;

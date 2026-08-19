@@ -1,4 +1,6 @@
 const Map<String, String> enTranslations = {
+  'waiting_wifi': 'Waiting WiFi',
+  'waiting_for_slot': 'Waiting for slot ({active}/{max} active)',
   'active_connections': 'Active Connections',
   'active_on_completion': 'Seed after completion',
   'active_tab': 'Active',

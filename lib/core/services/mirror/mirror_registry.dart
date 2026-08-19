@@ -303,6 +303,8 @@ class MirrorHealthStore implements DisposableService {
       }
       SharedPrefsBatcher.instance
           .setStringList(_urlsIndexKey, _cache!.keys.toList());
+      SharedPrefsBatcher.instance.setString(_storeKey,
+          jsonEncode(_cache!.map((k, v) => MapEntry(k, v.toJson()))));
       if (durable) {
         await SharedPrefsBatcher.instance.flush();
       }

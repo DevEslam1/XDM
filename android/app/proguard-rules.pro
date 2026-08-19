@@ -25,6 +25,15 @@
 -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
 -dontwarn kotlinx.serialization.**
 
+# Flutter Background Service
+-keep class id.flutter.flutter_background_service.** { *; }
+-dontwarn id.flutter.flutter_background_service.**
+
+# Native JNI Methods
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+
 # Mozilla Rhino / NewPipeExtractor missing JVM runtime classes on Android
 -dontwarn org.mozilla.javascript.**
 -dontwarn java.beans.**

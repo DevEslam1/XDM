@@ -1033,6 +1033,7 @@ class DownloadProvider extends ChangeNotifier
 
   DateTime _lastNotifyTime = DateTime.fromMillisecondsSinceEpoch(0);
   static const _minNotifyInterval = Duration(milliseconds: 250);
+  Timer? _trailingNotifyTimer;
 
   @override
   void notifyListeners() {
@@ -1043,7 +1044,21 @@ class DownloadProvider extends ChangeNotifier
     }
     if (PowerMonitor.screenOff) return;
     final now = DateTime.now();
-    if (now.difference(_lastNotifyTime) < _minNotifyInterval) return;
+    final elapsed = now.difference(_lastNotifyTime);
+    if (elapsed < _minNotifyInterval) {
+      if (_trailingNotifyTimer == null && !_disposed) {
+        final remaining = _minNotifyInterval - elapsed;
+        _trailingNotifyTimer = Timer(remaining, () {
+          _trailingNotifyTimer = null;
+          if (_disposed || PowerMonitor.screenOff) return;
+          _lastNotifyTime = DateTime.now();
+          super.notifyListeners();
+        });
+      }
+      return;
+    }
+    _trailingNotifyTimer?.cancel();
+    _trailingNotifyTimer = null;
     _lastNotifyTime = now;
     super.notifyListeners();
   }
@@ -2504,12 +2519,16 @@ class DownloadProvider extends ChangeNotifier
               if (!orchTokens.video.isCancelled) {
                 try {
                   orchTokens.video.cancel('paused:${reason.name}');
-                } catch (_) {}
+                } catch (e, st) {
+                  _log.fine('Ignored cancel error for orch video token: $e', e, st);
+                }
               }
               if (!orchTokens.audio.isCancelled) {
                 try {
                   orchTokens.audio.cancel('paused:${reason.name}');
-                } catch (_) {}
+                } catch (e, st) {
+                  _log.fine('Ignored cancel error for orch audio token: $e', e, st);
+                }
               }
             }
 
@@ -3806,7 +3825,10 @@ class DownloadProvider extends ChangeNotifier
               final jsonStr = await stateFile.readAsString();
               final decoded = jsonDecode(jsonStr);
               if (decoded is Map<String, dynamic> &&
-                  decoded['downloadedBytes'] != null) {
+                  (decoded['downloadedBytes'] != null ||
+                      decoded['progress'] != null ||
+                      decoded['chunks'] != null ||
+                      decoded['totalSize'] != null)) {
                 isValid = true;
               }
             } catch (_) {
@@ -4382,6 +4404,21 @@ class DownloadProvider extends ChangeNotifier
     });
   }
 
+  /// Restores a previously soft-deleted task back into state and database.
+  Future<void> restoreTask(DownloadTask task) async {
+    final exists = _tasks.any((t) => t.id == task.id);
+    if (!exists) {
+      _tasks.add(task);
+      filteredTasksDirty = true;
+      notifyListeners();
+      try {
+        await _databaseService.saveTask(task);
+      } catch (e, st) {
+        _log.warning('Failed to save restored task ${task.id}', e, st);
+      }
+    }
+  }
+
   /// Runs file cleanup without blocking the UI thread.
   /// [capturedFuture] is the activeFuture captured BEFORE it was removed from
   /// _activeFutures, so this method can actually await download completion.
@@ -4608,30 +4645,24 @@ class DownloadProvider extends ChangeNotifier
   /// Persists any throttled in-memory progress for [id] that hasn't yet
   /// been flushed to the database. No-op if there's nothing pending.
   Future<void> _flushPendingProgress(String id) async {
-    if (_flushingIds.contains(id)) return;
-    _flushingIds.add(id);
+    _lastProgressUpdateTimes.remove(id);
+    _lastDbSaveTimes.remove(id);
+
+    if (!_pendingProgressUpdates.contains(id)) return;
+
+    final index = _tasks.indexWhere((t) => t.id == id);
+    if (index == -1) {
+      _pendingProgressUpdates.remove(id);
+      return;
+    }
+
+    final task = _tasks[index];
+
     try {
-      _lastProgressUpdateTimes.remove(id);
-      _lastDbSaveTimes.remove(id);
-
-      if (!_pendingProgressUpdates.contains(id)) return;
-
-      final index = _tasks.indexWhere((t) => t.id == id);
-      if (index == -1) {
-        _pendingProgressUpdates.remove(id);
-        return;
-      }
-
-      final task = _tasks[index];
-
-      try {
-        await _databaseService.saveTask(task);
-        _pendingProgressUpdates.remove(id);
-      } catch (e) {
-        debugPrint('[DMX] flushPendingProgress failed for $id: $e');
-      }
-    } finally {
-      _flushingIds.remove(id);
+      await _databaseService.saveTask(task);
+      _pendingProgressUpdates.remove(id);
+    } catch (e) {
+      debugPrint('[DMX] flushPendingProgress failed for $id: $e');
     }
   }
 
@@ -4735,10 +4766,50 @@ class DownloadProvider extends ChangeNotifier
       );
     }
 
+    if (incoming.status == DownloadStatus.completed) {
+      final safeSize = incoming.fileSize > 0
+          ? incoming.fileSize
+          : (incoming.downloadedBytes > 0
+              ? incoming.downloadedBytes
+              : (live.fileSize > 0 ? live.fileSize : live.downloadedBytes));
+      return incoming.copyWith(
+        fileSize: safeSize,
+        downloadedBytes: safeSize > 0 ? safeSize : incoming.downloadedBytes,
+        chunks: incoming.chunks.isNotEmpty
+            ? List<double>.filled(incoming.chunks.length, 1.0)
+            : const [1.0],
+      );
+    }
+
     return incoming;
   }
 
   Future<void> _setTask(DownloadTask updated) async {
+    // FIX-P0-03: Pin completion bytes so progress is always exactly 100%
+    if (updated.status == DownloadStatus.completed) {
+      if (updated.fileSize > 0) {
+        updated = updated.copyWith(
+          downloadedBytes: updated.fileSize,
+          chunks: updated.chunks.isNotEmpty
+              ? List<double>.filled(updated.chunks.length, 1.0)
+              : const [1.0],
+          audioProgress: (updated.hasMergedAudio || updated.mergedAudioUrl != null)
+              ? 1.0
+              : updated.audioProgress,
+        );
+      } else if (updated.downloadedBytes > 0) {
+        updated = updated.copyWith(
+          fileSize: updated.downloadedBytes,
+          chunks: updated.chunks.isNotEmpty
+              ? List<double>.filled(updated.chunks.length, 1.0)
+              : const [1.0],
+          audioProgress: (updated.hasMergedAudio || updated.mergedAudioUrl != null)
+              ? 1.0
+              : updated.audioProgress,
+        );
+      }
+    }
+
     // FIX-H-06: Clamp downloadedBytes to fileSize
     if (updated.fileSize > 0 && updated.downloadedBytes > updated.fileSize) {
       updated = updated.copyWith(downloadedBytes: updated.fileSize);
@@ -6507,6 +6578,8 @@ class DownloadProvider extends ChangeNotifier
 
     _torrentInitTimer?.cancel();
     _widgetTimer?.cancel();
+    _trailingNotifyTimer?.cancel();
+    _trailingNotifyTimer = null;
     // FIX-M7: Cancel speed history cleanup timer
     _speedHistoryCleanupTimer?.cancel();
     _speedHistoryCleanupTimer = null;
@@ -6697,6 +6770,7 @@ class DownloadProvider extends ChangeNotifier
       final oldUri = Uri.tryParse(oldUrl);
       final newUri = Uri.tryParse(newUrl);
       if (oldUri == null || newUri == null) return false;
+      if (oldUri.host.isEmpty || newUri.host.isEmpty) return false;
 
       final oldItag = oldUri.queryParameters['itag'];
       final newItag = newUri.queryParameters['itag'];

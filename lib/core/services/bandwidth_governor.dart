@@ -12,6 +12,9 @@ import 'power_monitor.dart';
 /// In the current DMX architecture it is typically used per HTTP download job,
 /// while the effective per-task limit is supplied by the engine.
 class BandwidthGovernor {
+  /// Special limit value indicating no bandwidth restriction (unlimited).
+  static const int unlimited = 0;
+
   int _globalBytesPerSecond;
   int _activeConsumers = 0;
 

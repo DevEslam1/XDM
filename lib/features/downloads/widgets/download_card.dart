@@ -80,7 +80,7 @@ class _DownloadCardState extends State<DownloadCard>
         context.select((DownloadProvider p) => p.isSelectionMode);
     final provider = context.read<DownloadProvider>();
 
-    final statusLabel = task.status.name;
+    final statusLabel = L10n.translateStatusName(context, task.status);
     final effectiveProgress =
         task.isTorrent ? task.torrentOverallPercent : task.progress;
     final semanticLabel = '${task.fileName}, status: $statusLabel, '
@@ -157,7 +157,9 @@ class _DownloadCardState extends State<DownloadCard>
                     message: '${task.fileName} deleted',
                     action: () async =>
                         provider.deleteTask(taskCopy.id, deleteFiles: false),
-                    undo: () async {},
+                    undo: () async {
+                      await provider.restoreTask(taskCopy);
+                    },
                   );
                   return true;
                 }
@@ -174,10 +176,20 @@ class _DownloadCardState extends State<DownloadCard>
                 // User cancelled → snap the card back.
                 if (deleteFiles == null) return false;
 
-                // User confirmed → delete immediately (no UndoService; the
-                // dialog itself acts as the confirmation gate).
-                unawaited(provider.deleteTask(task.id, deleteFiles: deleteFiles));
-                return true;
+                // User confirmed → delete immediately (dialog acts as gate)
+                try {
+                  await provider.deleteTask(task.id, deleteFiles: deleteFiles);
+                  return true;
+                } catch (e) {
+                  if (context.mounted) {
+                    ThemedSnackbar.show(
+                      context,
+                      message: 'Failed to delete: $e',
+                      color: AppTheme.neonRed,
+                    );
+                  }
+                  return false;
+                }
               }
             },
             child: cardWidget,
@@ -536,15 +548,23 @@ class _StatusChipState extends State<_StatusChip> {
     final overrideLabel = widget.overrideLabel;
     final provider = context.read<DownloadProvider>();
 
+    final hasCategoryFilter = context.select(
+        (DownloadProvider p) => p.categoryFilters.isNotEmpty);
+    final hasStatusFilter = context.select(
+        (DownloadProvider p) => p.statusFilter != 'All');
+    final filterColor = (hasCategoryFilter || hasStatusFilter)
+        ? getActiveFilterColor(provider, isDark)
+        : null;
+
     final isWifiWaiting = task.status == DownloadStatus.paused &&
         task.errorMessage != null &&
         task.errorMessage!.contains('WiFi');
     final color = isWifiWaiting
         ? (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber)
-        : getEffectiveCardAccent(task, provider, isDark);
+        : getEffectiveCardAccent(task, provider, isDark, filterColor: filterColor);
     final label = overrideLabel ??
         (isWifiWaiting
-            ? 'Waiting WiFi'
+            ? L10n.of(context, 'waiting_wifi')
             : L10n.translateStatusName(context, task.status));
 
     final isScheduled = task.status == DownloadStatus.paused &&
@@ -620,13 +640,13 @@ class _StatusChipState extends State<_StatusChip> {
                   children: [
                     const Icon(Icons.schedule_rounded,
                         size: 12, color: AppTheme.neonAmber),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 3),
                     Text(
-                      'Scheduled for ${formatLocalizedTime(context, task.scheduledAt!)}',
+                      formatLocalizedTime(context, task.scheduledAt!),
                       style: TextStyle(
-                        fontSize: responsiveFontSize(context, 10),
+                        fontSize: responsiveFontSize(context, 10.5),
                         color: AppTheme.neonAmber,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
@@ -654,10 +674,19 @@ class _QueuedSubtext extends StatelessWidget {
     // FIX-P3: select() the single setting instead of watching the whole provider.
     final maxCount = context.select((SettingsProvider s) => s.maxDownloads);
 
+    final text = L10n.of(
+      context,
+      'waiting_for_slot',
+      args: {
+        'active': activeCount,
+        'max': maxCount,
+      },
+    );
+
     return Padding(
       padding: const EdgeInsets.only(top: 3),
       child: Text(
-        'Waiting for slot ($activeCount/$maxCount active)',
+        text,
         style: TextStyle(
           fontSize: responsiveFontSize(context, 9.5),
           color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,

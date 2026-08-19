@@ -366,9 +366,12 @@ class _FadeIndexedStack extends StatefulWidget {
 class _FadeIndexedStackState extends State<_FadeIndexedStack>
     with SingleTickerProviderStateMixin {
   late AnimationController _c;
+  final Set<int> _activatedIndices = {};
+
   @override
   void initState() {
     super.initState();
+    _activatedIndices.add(widget.index);
     _c = AnimationController(vsync: this, duration: AppTheme.motionBase)
       ..forward();
   }
@@ -376,6 +379,7 @@ class _FadeIndexedStackState extends State<_FadeIndexedStack>
   @override
   void didUpdateWidget(_FadeIndexedStack old) {
     super.didUpdateWidget(old);
+    _activatedIndices.add(widget.index);
     if (old.index != widget.index) {
       _c.reset();
       _c.forward();
@@ -390,17 +394,17 @@ class _FadeIndexedStackState extends State<_FadeIndexedStack>
 
   @override
   Widget build(BuildContext context) {
-    // FIX-P0-04: Only render the active screen + adjacent screens.
-    // Wrap distant ones in Offstage and disable TickerMode to release rendering resources.
+    _activatedIndices.add(widget.index);
     return FadeTransition(
       opacity: _c,
       child: IndexedStack(
         index: widget.index,
         children: List.generate(widget.children.length, (i) {
           final isCurrent = i == widget.index;
+          final isActivated = _activatedIndices.contains(i);
           return TickerMode(
             enabled: isCurrent,
-            child: widget.children[i],
+            child: isActivated ? widget.children[i] : const SizedBox.shrink(),
           );
         }),
       ),

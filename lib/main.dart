@@ -29,6 +29,7 @@ import 'core/services/protocol_cache.dart';
 import 'core/services/remote_api_service.dart';
 import 'core/services/service_registry.dart';
 import 'core/services/single_instance_service.dart';
+import 'core/services/site_intelligence/site_intelligence_service.dart';
 import 'core/services/torrent_resume_store.dart';
 import 'core/services/torrent_service.dart';
 import 'core/services/widget_deep_link.dart';
@@ -224,7 +225,8 @@ Future<void> main(List<String> args) async {
         getIt.unregister<AmbientAnimationController>();
       }
       getIt.registerSingleton<AmbientAnimationController>(
-        (kDebugMode == false || PowerMonitor.isLowEndDevice)
+        (PowerMonitor.isLowEndDevice ||
+                PowerMonitor.batterySaverMode != BatterySaverMode.off)
             ? const NoOpAmbientAnimationController()
             : const CompositeAmbientAnimationController(),
       );
@@ -388,6 +390,12 @@ Future<void> _initNonCriticalServices(
     await YoutubeService.init();
   } catch (e, st) {
     _mainLog.warning('YouTube init failed', e, st);
+  }
+
+  try {
+    await inject<SiteIntelligenceService>().init();
+  } catch (e, st) {
+    _mainLog.warning('SiteIntelligenceService init failed', e, st);
   }
 
   try {
@@ -614,8 +622,8 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
 
     if (state == AppLifecycleState.detached) {
       // App is being terminated — release wake lock and shutdown singleton services
-      unawaited(ServiceRegistry.shutdownAll().catchError((e, st) {
-        _mainLog.warning('Failed to shutdown services on detach', e, st);
+      unawaited(shutdownDependencies().catchError((e, st) {
+        _mainLog.warning('Failed to shutdown dependencies on detach', e, st);
       }));
       unawaited(BackgroundService.releaseWakeLock().catchError((e, st) {
         _mainLog.warning('Failed to release wake lock on detach', e, st);

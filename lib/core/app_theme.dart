@@ -1,6 +1,8 @@
+import 'dart:collection';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'services/service_registry.dart';
 
 /// XDM design system — "Signal Deck" (refined)
 /// Display: Space Grotesk · Body: Inter
@@ -821,6 +823,25 @@ class CockpitNotchBorder extends ShapeBorder {
     this.side = const BorderSide(color: AppTheme.border, width: 0.8),
   });
 
+  static final LinkedHashMap<String, Path> _cache =
+      LinkedHashMap<String, Path>();
+  static const int _cacheCapacity = 32;
+  static bool _memoryListenerRegistered = false;
+
+  static void _ensureMemoryListener() {
+    if (!_memoryListenerRegistered) {
+      _memoryListenerRegistered = true;
+      ServiceRegistry.registerMemoryPressureListener(
+          _CockpitNotchBorderMemoryListener());
+    }
+  }
+
+  @visibleForTesting
+  static void clearCache() => _cache.clear();
+
+  @visibleForTesting
+  static int get cacheSize => _cache.length;
+
   @override
   EdgeInsetsGeometry get dimensions => EdgeInsets.all(side.width);
 
@@ -832,6 +853,14 @@ class CockpitNotchBorder extends ShapeBorder {
       );
 
   Path _path(Rect r) {
+    _ensureMemoryListener();
+    final key =
+        '${r.left}_${r.top}_${r.width}_${r.height}_${radius}_$notch';
+    final cached = _cache[key];
+    if (cached != null) {
+      return cached;
+    }
+
     final rad = math.min(radius, math.min(r.width, r.height) / 2);
     final n = math.min(notch, math.min(r.width, r.height) / 2);
     final path = Path();
@@ -859,6 +888,11 @@ class CockpitNotchBorder extends ShapeBorder {
       false,
     );
     path.close();
+
+    if (_cache.length >= _cacheCapacity) {
+      _cache.remove(_cache.keys.first);
+    }
+    _cache[key] = path;
     return path;
   }
 
@@ -881,5 +915,12 @@ class CockpitNotchBorder extends ShapeBorder {
         ..style = PaintingStyle.stroke
         ..strokeWidth = side.width,
     );
+  }
+}
+
+class _CockpitNotchBorderMemoryListener implements MemoryPressureListener {
+  @override
+  void onMemoryPressure() {
+    CockpitNotchBorder.clearCache();
   }
 }

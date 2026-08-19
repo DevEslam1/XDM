@@ -447,6 +447,8 @@ class UpdateService {
       );
     }
   }
+
+  void dispose() {}
 }
 
 Map<String, dynamic> _parseUpdateManifestJson(String rawData) {

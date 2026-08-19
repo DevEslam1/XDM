@@ -8,7 +8,11 @@ abstract class BackgroundGate {
   static bool get allowHeavyOps =>
       !PowerMonitor.screenOff &&
       DownloadEngine.appInForeground &&
-      PowerMonitor.batterySaverMode != BatterySaverMode.aggressive;
+      PowerMonitor.batterySaverMode == BatterySaverMode.off;
+
+  /// Returns true if any background work is allowed.
+  static bool get allowAnyWork =>
+      !PowerMonitor.screenOff || DownloadEngine.hasActiveDownloads;
 
   /// Returns true if lightweight operations are allowed.
   static bool get allowLightOps =>
@@ -17,13 +21,13 @@ abstract class BackgroundGate {
   /// Scales a duration based on current power context.
   /// Call this to get the effective interval for any periodic operation.
   static Duration scaleInterval(Duration base) {
-    if (PowerMonitor.screenOff) return base * 20;
-    if (DownloadEngine.isInBackground) return base * 5;
+    if (PowerMonitor.screenOff) return base * 30;
+    if (DownloadEngine.isInBackground) return base * 10;
     if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
-      return base * 8;
+      return base * 15;
     }
     if (PowerMonitor.batterySaverMode == BatterySaverMode.moderate) {
-      return base * 3;
+      return base * 5;
     }
     return base;
   }

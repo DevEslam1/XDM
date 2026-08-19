@@ -257,9 +257,14 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
         !BackgroundGate.allowHeavyOps ||
         !BackgroundGate.shouldAnimate ||
         hasActiveDownloads) {
+      if (_controller.isAnimating) {
+        _controller.stop();
+      }
       return RepaintBoundary(
         child: Container(color: bgColor, child: widget.child),
       );
+    } else if (!_controller.isAnimating && BackgroundGate.shouldAnimate) {
+      _controller.repeat();
     }
 
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
