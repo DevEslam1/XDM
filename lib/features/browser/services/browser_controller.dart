@@ -31,6 +31,7 @@ import 'history_manager.dart';
 import 'inactivity_watchdog.dart';
 import 'media_sniffer.dart';
 import 'navigation_controller.dart';
+import 'page_intent_classifier.dart';
 import 'reader_mode_service.dart';
 import 'script_injector.dart';
 import 'site_settings_store.dart';
@@ -224,7 +225,15 @@ class BrowserController extends ChangeNotifier {
           isActive: () => !_isDisposed,
         );
 
+    AdBlockerService.instance.addListener(_onAdBlockerChanged);
+
     _initAsyncState();
+  }
+
+  void _onAdBlockerChanged() {
+    if (!_isDisposed) {
+      notifyListeners();
+    }
   }
 
   List<BrowserTab> get tabs => tabController.tabs;
@@ -234,6 +243,8 @@ class BrowserController extends ChangeNotifier {
   Future<void> _initAsyncState() async {
     try {
       _incognitoBannerDismissed = await prefsRepo.getIncognitoBannerDismissed();
+      await PageIntentClassifier.instance.init();
+      await AdBlockerService.instance.init();
 
       if (tabs.isEmpty) {
         await restoreTabs();
@@ -1026,6 +1037,8 @@ class BrowserController extends ChangeNotifier {
     downloadCoordinator.dispose();
 
     inactivityWatchdog.dispose();
+
+    AdBlockerService.instance.removeListener(_onAdBlockerChanged);
 
     super.dispose();
   }

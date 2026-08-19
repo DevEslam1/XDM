@@ -208,7 +208,18 @@ class PageIntentClassifier {
     ),
   ];
 
+  bool _initialized = false;
+  Future<void>? _initFuture;
+
   Future<void> init() async {
+    if (_initialized) return;
+    if (_initFuture != null) return _initFuture!;
+    _initFuture = _doInit();
+    await _initFuture;
+    _initFuture = null;
+  }
+
+  Future<void> _doInit() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       _enabled = prefs.getBool(_prefKey) ?? true;
@@ -217,6 +228,7 @@ class PageIntentClassifier {
       if (adDomains != null) {
         _knownAdDomains.addAll(adDomains);
       }
+      _initialized = true;
     } catch (e) {
       _log.warning('Failed to init PageIntentClassifier: $e');
     }
@@ -224,6 +236,7 @@ class PageIntentClassifier {
 
   Future<void> setEnabled(bool value) async {
     _enabled = value;
+    _initialized = true;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_prefKey, value);

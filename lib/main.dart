@@ -37,7 +37,6 @@ import 'core/services/xdm_backend_client.dart';
 import 'core/services/youtube_service.dart';
 import 'core/utils/constants.dart';
 import 'core/utils/url_utils.dart';
-import 'features/browser/services/page_intent_classifier.dart';
 import 'features/downloads/provider/download_coordinator.dart';
 import 'features/downloads/provider/download_filter_provider.dart';
 import 'features/downloads/provider/download_list_provider.dart';
@@ -400,12 +399,6 @@ Future<void> _initNonCriticalServices(
     await inject<SiteIntelligenceService>().init();
   } catch (e, st) {
     _mainLog.warning('SiteIntelligenceService init failed', e, st);
-  }
-
-  try {
-    await PageIntentClassifier.instance.init();
-  } catch (e, st) {
-    _mainLog.warning('PageIntentClassifier init failed', e, st);
   }
 
   unawaited(

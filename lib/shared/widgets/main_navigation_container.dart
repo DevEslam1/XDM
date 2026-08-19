@@ -54,11 +54,18 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     isUtc: true,
   );
 
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const BrowserScreen(),
-    const SettingsScreen(),
-  ];
+  Widget _buildScreen(int index) {
+    switch (index) {
+      case 0:
+        return const HomeScreen();
+      case 1:
+        return const BrowserScreen();
+      case 2:
+        return const SettingsScreen();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
 
   @override
   void initState() {
@@ -286,7 +293,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                 textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
                 child: _FadeIndexedStack(
                   index: currentIndex,
-                  children: _screens,
+                  itemCount: 3,
+                  itemBuilder: (ctx, i) => _buildScreen(i),
                 ),
               ),
             );
@@ -361,11 +369,18 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   }
 }
 
-// Smooth fade when switching tabs
+// Smooth fade when switching tabs with lazy item construction
 class _FadeIndexedStack extends StatefulWidget {
   final int index;
-  final List<Widget> children;
-  const _FadeIndexedStack({required this.index, required this.children});
+  final int itemCount;
+  final Widget Function(BuildContext context, int index) itemBuilder;
+
+  const _FadeIndexedStack({
+    required this.index,
+    required this.itemCount,
+    required this.itemBuilder,
+  });
+
   @override
   State<_FadeIndexedStack> createState() => _FadeIndexedStackState();
 }
@@ -374,6 +389,7 @@ class _FadeIndexedStackState extends State<_FadeIndexedStack>
     with SingleTickerProviderStateMixin {
   late AnimationController _c;
   final Set<int> _activatedIndices = {};
+  final Map<int, Widget> _cachedWidgets = {};
 
   @override
   void initState() {
@@ -406,12 +422,17 @@ class _FadeIndexedStackState extends State<_FadeIndexedStack>
       opacity: _c,
       child: IndexedStack(
         index: widget.index,
-        children: List.generate(widget.children.length, (i) {
+        children: List.generate(widget.itemCount, (i) {
           final isCurrent = i == widget.index;
           final isActivated = _activatedIndices.contains(i);
+          if (isActivated) {
+            _cachedWidgets.putIfAbsent(i, () => widget.itemBuilder(context, i));
+          }
           return TickerMode(
             enabled: isCurrent,
-            child: isActivated ? widget.children[i] : const SizedBox.shrink(),
+            child: isActivated
+                ? (_cachedWidgets[i] ?? const SizedBox.shrink())
+                : const SizedBox.shrink(),
           );
         }),
       ),

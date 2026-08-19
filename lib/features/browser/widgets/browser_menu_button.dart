@@ -107,6 +107,16 @@ class BrowserMenuButton extends StatelessWidget {
         ),
         _buildItem(
           ctx,
+          value: 'ad_blocker',
+          icon: controller.adBlocker.isEnabled
+              ? Icons.shield_rounded
+              : Icons.shield_outlined,
+          title: controller.adBlocker.isEnabled
+              ? (L10n.isRtl(ctx) ? 'حاجب الإعلانات: مفعل' : 'Ad Blocker: On')
+              : (L10n.isRtl(ctx) ? 'حاجب الإعلانات: معطل' : 'Ad Blocker: Off'),
+        ),
+        _buildItem(
+          ctx,
           value: 'desktop_mode',
           icon: settings.desktopMode
               ? Icons.desktop_windows_rounded
@@ -249,12 +259,32 @@ class BrowserMenuButton extends StatelessWidget {
     BuildContext context,
     String action,
     BrowserTab? activeTab,
-  ) {
+  ) async {
     HapticHelper.triggerHaptic(settings);
 
     switch (action) {
       case 'reload':
         controller.reload();
+        break;
+      case 'ad_blocker':
+        final nextState = !controller.adBlocker.isEnabled;
+        await controller.adBlocker.service.setEnabled(nextState);
+        controller.reload();
+        if (context.mounted) {
+          ThemedSnackbar.show(
+            context,
+            message: nextState
+                ? (L10n.isRtl(context)
+                    ? 'تم تفعيل حاجب الإعلانات'
+                    : 'Ad Blocker enabled')
+                : (L10n.isRtl(context)
+                    ? 'تم تعطيل حاجب الإعلانات'
+                    : 'Ad Blocker disabled'),
+            color: nextState ? AppTheme.neonGreen : AppTheme.neonAmber,
+            icon: nextState ? Icons.shield_rounded : Icons.shield_outlined,
+            isDarkMode: isDark,
+          );
+        }
         break;
       case 'recently_closed':
         controller.restoreRecentlyClosedTab();

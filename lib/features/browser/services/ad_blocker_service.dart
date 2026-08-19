@@ -163,15 +163,17 @@ class AdBlockerService {
       final lastUpdateMs = prefs.getInt(_lastUpdateKey) ?? 0;
       final nowMs = DateTime.now().millisecondsSinceEpoch;
       const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+      final hostCount = AdBlockFilterUpdater.instance.downloadedDomainCount;
 
-      if (nowMs - lastUpdateMs > sevenDaysMs) {
+      if (nowMs - lastUpdateMs > sevenDaysMs || hostCount == 0) {
         _log.info(
-            'AdBlock filters older than 7 days, running background update...');
+            'AdBlock filters ${hostCount == 0 ? "empty (0 hosts)" : "older than 7 days"}, running background update...');
         unawaited(
           updateFilters(force: true).then((success) async {
             if (success) {
               await prefs.setInt(
                   _lastUpdateKey, DateTime.now().millisecondsSinceEpoch);
+              refresh();
             }
           }).catchError((e) {
             _log.warning(

@@ -331,6 +331,7 @@ class AdBlockFilterUpdater {
   }
 
   Future<bool> isStale() async {
+    if (_downloadedDomains.isEmpty) return true;
     final prefs = await SharedPreferences.getInstance();
     final lastUpdate = prefs.getInt(_lastUpdateKey) ?? 0;
     if (lastUpdate == 0) return true;
@@ -375,7 +376,7 @@ class AdBlockFilterUpdater {
 
         if (!force) {
           final stale = await isStale();
-          if (!stale) return false;
+          if (!stale && _downloadedDomains.isNotEmpty) return false;
         }
 
         try {
