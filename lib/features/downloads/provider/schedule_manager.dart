@@ -52,23 +52,27 @@ class ScheduleManager {
         _onScheduleFired = onScheduleFired;
 
   final List<DownloadTask> Function() _tasks;
+  // ignore: unused_field
   final DatabaseService _databaseService;
   final bool Function() _isDisposed;
+  // ignore: unused_field
   final int Function() _downloadingTasksCount;
+  // ignore: unused_field
   final void Function() _updateTorrentUploadLimit;
+  // ignore: unused_field
   final void Function() _notifyListeners;
+  // ignore: unused_field
   final void Function() _pumpQueue;
+  // ignore: unused_field
   final void Function(String taskName, DateTime scheduledAt)?
       _onScheduledTaskStarted;
   final Future<void> Function(String taskId)? _onScheduleFired;
 
   Timer? _schedulingTimer;
-  DateTime? _lastUpdateCheckTime;
   // FIX-S12: Guard ready state until provider completes initial load
-  bool _isReady = false;
+  bool _ready = false;
 
   void markReady() => setReady(true);
-  bool _ready = false;
 
   Timer? get schedulingTimer => _schedulingTimer;
 
@@ -80,7 +84,6 @@ class ScheduleManager {
       try {
         await Workmanager().initialize(
           callbackDispatcher,
-          isInDebugMode: false,
         );
         LoggingService.logger('ScheduleManager').info('Workmanager initialized for download scheduling');
       } catch (e, st) {
@@ -160,6 +163,7 @@ class ScheduleManager {
 
   void start() {
     _schedulingTimer?.cancel();
+    if (Platform.isAndroid || isAndroidForTesting) return;
     // Use dynamic tick scheduling for efficiency (SCHED-FIX-3)
     scheduleNextDynamicTick();
   }
@@ -182,6 +186,7 @@ class ScheduleManager {
     final nowUtc = DateTime.now().toUtc();
     final currentTasks = _tasks();
     final candidateTasks = List<DownloadTask>.from(currentTasks);
+    var anyPromoted = false;
 
     for (var i = 0; i < candidateTasks.length; i++) {
       if (_isDisposed()) return; // SCHED-FIX-4: bail out if disposed
@@ -194,11 +199,34 @@ class ScheduleManager {
               !task.wasScheduledAt!.isAtSameMomentAs(task.scheduledAt!))) {
         if (_onScheduleFired != null) {
           await _onScheduleFired!(task.id);
+        } else {
+          final idx = currentTasks.indexWhere((t) => t.id == task.id);
+          if (idx != -1) {
+            final promoted = task.copyWith(
+              status: DownloadStatus.queued,
+              clearScheduledAt: true,
+              wasScheduledAt: task.scheduledAt,
+              clearError: true,
+            );
+            currentTasks[idx] = promoted;
+            try {
+              await _databaseService.saveTask(promoted);
+              anyPromoted = true;
+            } catch (_) {
+              currentTasks[idx] = task;
+              _notifyListeners();
+            }
+          }
         }
         if (task.wasScheduledAt != null) {
           _onScheduledTaskStarted?.call(task.fileName, task.wasScheduledAt!);
         }
       }
+    }
+    if (anyPromoted) {
+      _pumpQueue();
+      _notifyListeners();
+      _updateTorrentUploadLimit();
     }
   }
 

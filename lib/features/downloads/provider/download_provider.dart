@@ -496,7 +496,7 @@ class DownloadProvider extends ChangeNotifier
       try {
         final streams = await YoutubeService.getFreshStreams(task.downloadPageUrl!);
         if (streams != null) {
-          final freshUrl = streams['url'] as String?, freshAudioUrl = streams['audioUrl'] as String?;
+          final freshUrl = streams['url'], freshAudioUrl = streams['audioUrl'];
           if (freshUrl != null && youtubeStreamIdentityChanged(task.url, freshUrl)) shouldResetProgress = true;
           if (freshUrl != null) newUrl = freshUrl;
           if (freshAudioUrl != null) newAudioUrl = freshAudioUrl;

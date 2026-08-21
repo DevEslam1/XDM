@@ -38,6 +38,7 @@ class NetworkMonitor {
   final Map<String, CancelToken> Function() _cancelTokens;
   final Map<String, Future<void>> Function() _activeFutures;
   final bool Function() _wifiOnly;
+  // ignore: unused_field
   final Future<void> Function(DownloadTask updated) _setTask;
   final void Function() _pumpQueue;
   final Future<void> Function(NetworkChanged event)? _onNetworkChanged;

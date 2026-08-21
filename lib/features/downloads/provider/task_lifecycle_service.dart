@@ -5,6 +5,7 @@ import 'task_state_service.dart';
 
 /// Service for coordinating task lifecycle transitions safely.
 class TaskLifecycleService {
+  // ignore: unused_field
   final TaskStateService _stateService;
   final Map<String, Future<void>> _inFlightOps = {};
 

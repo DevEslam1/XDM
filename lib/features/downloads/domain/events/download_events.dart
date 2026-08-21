@@ -1,4 +1,3 @@
-import 'package:meta/meta.dart';
 import '../commands/download_commands.dart';
 
 /// Classified typed error codes emitted by engines when a task fails.
@@ -17,7 +16,6 @@ enum DomainErrorCode {
 }
 
 /// Base sealed class for all events emitted by engines and domain executors.
-@immutable
 sealed class DownloadEvent {
   const DownloadEvent();
 }

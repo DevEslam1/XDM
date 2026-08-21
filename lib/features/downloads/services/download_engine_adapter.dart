@@ -8,8 +8,10 @@ import '../models/download_task.dart';
 /// Adapter implementing [TaskEnginePort] to bridge domain commands to
 /// concrete download engines (HTTP, Torrent, YouTube, Mux).
 class DownloadEngineAdapter implements TaskEnginePort {
+  // ignore: unused_field
   final IDownloadEngine _downloadEngine;
   final DownloadTask? Function(String id) _findTask;
+  // ignore: unused_field
   final Future<void> Function(DownloadTask task) _saveTask;
   final void Function() _pumpQueueCallback;
 

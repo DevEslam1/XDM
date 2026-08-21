@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'package:meta/meta.dart';
 import '../models/domain_download_state.dart';
 
 /// An immutable record of an executed state transition in the download subsystem.
-@immutable
 class TransitionAuditLogEntry {
   final String taskId;
   final DomainDownloadState from;
