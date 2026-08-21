@@ -942,6 +942,23 @@ class TorrentDownloadHandler {
       } catch (e, st) {
         _log.fine('Post-metadata file fetch failed: $e', e, st);
       }
+    } else if (id >= 0 &&
+        postMetadataFiles != null &&
+        postMetadataFiles.isNotEmpty) {
+      cachedAccurateFiles = postMetadataFiles;
+      try {
+        final nativeFiles = _torrentService.getFiles(id);
+        if (nativeFiles.length == postMetadataFiles.length) {
+          final priorities = postMetadataFiles.map((f) {
+            final selected = (f['selected'] as bool?) != false;
+            if (!selected) return 0;
+            return (f['priority'] as int?) ?? 4;
+          }).toList();
+          _torrentService.setFilePriorities(id, priorities);
+        }
+      } catch (e, st) {
+        _log.fine('Setting initial file priorities failed: $e', e, st);
+      }
     }
     final postMetadataSummary = normalizeTorrentFiles(postMetadataFiles);
     if (id != torrentId || hasLoadedResume) {
@@ -1228,17 +1245,33 @@ class TorrentDownloadHandler {
     List<Map<String, dynamic>> currentList,
     List<TorrentFileItem> nativeFiles,
   ) {
+    String normKey(String name) => name.toLowerCase().replaceAll('\\', '/');
+    final oldByName = <String, Map<String, dynamic>>{
+      for (final item in currentList)
+        if (item['name'] is String) normKey(item['name'] as String): item,
+    };
+
     if (currentList.length != nativeFiles.length) {
-      return nativeFiles.map((f) {
+      return nativeFiles.asMap().entries.map((entry) {
+        final i = entry.key;
+        final f = entry.value;
+        final old = oldByName[normKey(f.name)] ??
+            (i < currentList.length ? currentList[i] : null);
         final bool isEstimated = f.downloadedBytes < 0 ||
             (f.downloadedBytes == 0 && f.size > 0);
         final dl = f.safeDownloadedBytes < 0 ? 0 : f.safeDownloadedBytes;
+        final selected = old != null
+            ? ((old['selected'] as bool?) ?? f.selected)
+            : f.selected;
+        final priority = old != null
+            ? ((old['priority'] as int?) ?? f.priority)
+            : f.priority;
         return {
           'name': f.name,
           'length': f.size,
           'downloadedBytes': dl,
-          'selected': f.selected,
-          'priority': f.priority,
+          'selected': selected,
+          'priority': priority,
           'progress': f.size > 0 ? (dl / f.size).clamp(0.0, 1.0) : 0.0,
           'isComplete': f.size > 0 && dl >= f.size,
           'progressEstimated': isEstimated,
@@ -1250,33 +1283,30 @@ class TorrentDownloadHandler {
     final updated = List<Map<String, dynamic>>.from(currentList);
     for (int i = 0; i < nativeFiles.length; i++) {
       final f = nativeFiles[i];
-      // Match by name if possible, fallback to index
-      var oldIndex = i;
-      if (currentList[i]['name'] != f.name) {
-        final matchIdx = currentList.indexWhere((m) => m['name'] == f.name);
-        if (matchIdx >= 0) oldIndex = matchIdx;
-      }
-      final old = currentList[oldIndex];
+      final old = oldByName[normKey(f.name)] ?? currentList[i];
       final dl = f.safeDownloadedBytes < 0 ? 0 : f.safeDownloadedBytes;
       final isEst =
           f.downloadedBytes < 0 || (f.downloadedBytes == 0 && f.size > 0);
       final prog = f.size > 0 ? (dl / f.size).clamp(0.0, 1.0) : 0.0;
       final isDone = f.size > 0 && dl >= f.size;
+      final selected = (old['selected'] as bool?) ?? f.selected;
+      final priority = (old['priority'] as int?) ?? f.priority;
 
       if (old['downloadedBytes'] != dl ||
-          old['selected'] != f.selected ||
-          old['priority'] != f.priority ||
+          old['selected'] != selected ||
+          old['priority'] != priority ||
           old['progress'] != prog ||
           old['isComplete'] != isDone ||
-          old['name'] != f.name) {
+          old['name'] != f.name ||
+          old['length'] != f.size) {
         hasDiff = true;
         updated[i] = {
           ...old,
           'name': f.name,
           'length': f.size,
           'downloadedBytes': dl,
-          'selected': f.selected,
-          'priority': f.priority,
+          'selected': selected,
+          'priority': priority,
           'progress': prog,
           'isComplete': isDone,
           'progressEstimated': isEst,
@@ -1635,10 +1665,25 @@ class TorrentDownloadHandler {
       try {
         final nativeFiles = _torrentService.getFiles(id);
         if (nativeFiles.isNotEmpty) {
+          final currentEffectiveList =
+              resolvedFiles ?? cachedAccurateFiles ?? const [];
           final diffed = _diffUpdateFileList(
-            cachedAccurateFiles ?? const [],
+            currentEffectiveList,
             nativeFiles,
           );
+          if (currentEffectiveList.isNotEmpty &&
+              nativeFiles.length == currentEffectiveList.length) {
+            try {
+              final priorities = diffed.map((f) {
+                final selected = (f['selected'] as bool?) != false;
+                if (!selected) return 0;
+                return (f['priority'] as int?) ?? 4;
+              }).toList();
+              _torrentService.setFilePriorities(id, priorities);
+            } catch (e, st) {
+              _log.fine('Ensuring file priorities failed: $e', e, st);
+            }
+          }
           final snapshot = TorrentFileSnapshot(diffed);
           if (snapshot.hash != _lastSnapshotHash) {
             _lastSnapshotHash = snapshot.hash;

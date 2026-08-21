@@ -35,6 +35,17 @@ class MockTorrentService extends TorrentServiceStub {
   }) async =>
       42;
 
+  List<TorrentFileItem> mockFiles = [];
+  List<int>? lastSetPriorities;
+
+  @override
+  List<TorrentFileItem> getFiles(int torrentId) => mockFiles;
+
+  @override
+  void setFilePriorities(int id, List<int> priorities) {
+    lastSetPriorities = priorities;
+  }
+
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
     int torrentId,
@@ -240,6 +251,74 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       expect(emittedStates.contains(CycleState.paused), isFalse);
+    });
+
+    test(
+        'handleTorrentDownload preserves pre-selected files and applies priorities to engine',
+        () async {
+      mock.mockFiles = [
+        TorrentFileItem(index: 0, name: 'video1.mp4', size: 1000, priority: 4),
+        TorrentFileItem(index: 1, name: 'video2.mp4', size: 2000, priority: 4),
+        TorrentFileItem(index: 2, name: 'extra.txt', size: 500, priority: 4),
+      ];
+
+      final preselectedFiles = [
+        {
+          'name': 'video1.mp4',
+          'length': 1000,
+          'selected': true,
+          'priority': 4,
+          'downloadedBytes': 0,
+        },
+        {
+          'name': 'video2.mp4',
+          'length': 2000,
+          'selected': true,
+          'priority': 4,
+          'downloadedBytes': 0,
+        },
+        {
+          'name': 'extra.txt',
+          'length': 500,
+          'selected': false,
+          'priority': 0,
+          'downloadedBytes': 0,
+        },
+      ];
+
+      final emittedProgress = <DownloadProgress>[];
+      final cancel = CancelToken();
+
+      final downloadFuture = handler.handleTorrentDownload(
+        taskId: 'test-preselected-task',
+        torrentId: 42,
+        url: 'magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789',
+        currentLocalFilePath:
+            '${Directory.systemTemp.path}/dmx_handler/video1.mp4',
+        knownFileSize: 3000,
+        cancelToken: cancel,
+        getTorrentFiles: () => preselectedFiles,
+        clientBuilder: (u) => Dio(),
+        clientReleaser: (d) => d.close(force: true),
+        onProgress: (p) {
+          emittedProgress.add(p);
+        },
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      // Check that priorities were passed: [4, 4, 0]
+      expect(mock.lastSetPriorities, equals([4, 4, 0]));
+
+      controller.add({42: seedingInfo(42)});
+      await downloadFuture;
+
+      final lastProgress = emittedProgress.lastWhere((p) => p.torrentFiles != null);
+      final lastFiles = lastProgress.torrentFiles!;
+      expect(lastFiles[0]['selected'], isTrue);
+      expect(lastFiles[1]['selected'], isTrue);
+      expect(lastFiles[2]['selected'], isFalse);
+      expect(lastFiles[2]['priority'], equals(0));
     });
   });
 }

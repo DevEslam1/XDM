@@ -336,7 +336,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   void _updateSelectedTorrentSize() {
     if (_torrentFiles.isEmpty) return;
     final selectedTotal = _torrentFiles
-        .where((f) => f['selected'] == true)
+        .where((f) => isTorrentFileSelected(f))
         .fold<int>(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
     setState(() => _resolvedFileSize = selectedTotal);
   }
@@ -2480,11 +2480,13 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               borderClr: borderClr,
                               onToggle: (i, v) {
                                 _torrentFiles[i]['selected'] = v;
+                                _torrentFiles[i]['priority'] = v ? 4 : 0;
                                 _updateSelectedTorrentSize();
                               },
                               onSelectAll: (v) {
                                 for (final f in _torrentFiles) {
                                   f['selected'] = v;
+                                  f['priority'] = v ? 4 : 0;
                                 }
                                 _updateSelectedTorrentSize();
                               },
