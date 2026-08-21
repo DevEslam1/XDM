@@ -4510,6 +4510,12 @@ class DownloadOrchestrator {
       if (error.type == DioExceptionType.cancel) {
         return false;
       }
+      // Torrent handle truly gone — silently re-queuing would restart from
+      // scratch (magnet re-added, metadata cleared). Let the user retry manually.
+      final errMsg = (error.error ?? error.message ?? '').toString();
+      if (errMsg.contains('Torrent handle lost')) {
+        return false;
+      }
       final statusCode = error.response?.statusCode;
       if (statusCode != null) {
         if (statusCode == 400 ||

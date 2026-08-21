@@ -64,6 +64,7 @@ class TorrentService {
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
       const Stream.empty();
   static Map<int, TorrentUpdateInfo> get latestStats => const {};
+  static int? idForSource(String source) => null;
   static void configureSession([TorrentSessionSettings? settings]) {}
   static void reconfigureSession() {}
 
@@ -177,6 +178,8 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   bool get sequentialDownloadEnabled => false;
   @override
+  bool get seedingEnabled => true;
+  @override
   double get shareRatioLimit => 2.0;
   @override
   int get maxSeedingTimeMinutes => 0;
@@ -238,6 +241,8 @@ class TorrentServiceImpl implements ITorrentService {
       const Stream.empty();
   @override
   Map<int, TorrentUpdateInfo> get latestStats => const {};
+  @override
+  int? idForSource(String source) => null;
   @override
   Map<String, dynamic>? getTorrentSnapshot(int id) => null;
   @override

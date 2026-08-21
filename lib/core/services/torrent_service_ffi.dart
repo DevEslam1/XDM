@@ -134,7 +134,18 @@ class TorrentService {
 
   static double progressFor(int id) => _latestProgress[id] ?? 0.0;
 
+  static final Map<int, Uint8List> _latestResumeBlobs = {};
+
   static Uint8List? resumeBlobFor(int id) {
+    final cached = _latestResumeBlobs[id];
+    if (cached != null && cached.isNotEmpty) return cached;
+    return null;
+  }
+
+  static int? idForSource(String source) {
+    for (final entry in _torrentSources.entries) {
+      if (entry.value == source) return entry.key;
+    }
     return null;
   }
 
@@ -267,9 +278,18 @@ class TorrentService {
             final nativeIds = Set<int>.from(torrents.keys);
             _activeTorrentIds = _activeTorrentIds.union(nativeIds);
             final previousIds = Set<int>.from(_latestProgress.keys);
+            // FIX: Do NOT evict an ID just because it was absent from one
+            // status batch. The native stream omits quiet/idle torrents from
+            // some ticks, which caused isTorrentAlive() to return false and
+            // triggered a spurious restart loop (downloads stopped after 2-4 MB,
+            // magnet re-added, metadata cleared, repeat).
+            // Only evict IDs that have disappeared AND have no cached stats —
+            // meaning they were never properly tracked. Active IDs are kept until
+            // the aliveness watchdog (with its two-miss guard) declares them gone.
             _activeTorrentIds.retainWhere(
               (id) =>
-                  nativeIds.contains(id) || !_latestProgress.containsKey(id),
+                  nativeIds.contains(id) ||
+                  _latestStats.containsKey(id), // keep while we have any state
             );
             final removedIds = previousIds.difference(_activeTorrentIds);
             for (final removedId in removedIds) {
@@ -364,7 +384,7 @@ class TorrentService {
     }
   }
 
-  static Uint8List? fetchResumeBytes(int torrentId) => null;
+  static Uint8List? fetchResumeBytes(int torrentId) => resumeBlobFor(torrentId);
 
   static Future<void> saveResumeData(int torrentId) async {
     if (_state == TorrentSessionLifecycleState.uninitialized ||
@@ -374,9 +394,10 @@ class TorrentService {
     try {
       final data = await _native.saveResumeData(torrentId);
       if (data != null && data.isNotEmpty) {
+        final uint8Data = Uint8List.fromList(data);
+        _latestResumeBlobs[torrentId] = uint8Data;
         final source = _torrentSources[torrentId];
         if (source != null) {
-          final uint8Data = Uint8List.fromList(data);
           await TorrentResumeStore.saveAndWait(
             torrentId: torrentId,
             sourceUrl: source,
@@ -493,13 +514,12 @@ class TorrentService {
     int maxRetries = 2,
     Duration retryDelay = const Duration(seconds: 10),
   }) async {
-    int attempt = 0;
+    final id = addMagnet(magnetUri, savePath);
+    if (id < 0) return -1;
 
+    int attempt = 0;
     while (attempt <= maxRetries) {
       attempt++;
-      final id = addMagnet(magnetUri, savePath);
-      if (id < 0) return -1;
-
       final stopwatch = Stopwatch()..start();
       final completer = Completer<int>();
       Timer? messageTimer;
@@ -543,13 +563,24 @@ class TorrentService {
           continue;
         }
 
-        removeTorrent(id, deleteFiles: true);
+        // FIX(M6-b): Remove handle on timeout
+        try {
+          removeTorrent(id, deleteFiles: true);
+        } catch (_) {}
         onStatusUpdate
             ?.call('Metadata fetch failed. Try adding trackers manually.');
         throw TimeoutException(
           'Magnet metadata fetch timed out after $maxRetries retries',
           timeout,
         );
+      } catch (e) {
+        messageTimer.cancel();
+        sub.cancel();
+        stopwatch.stop();
+        try {
+          removeTorrent(id, deleteFiles: true);
+        } catch (_) {}
+        rethrow;
       }
     }
     return -1;
@@ -581,12 +612,15 @@ class TorrentService {
     int id,
     String source,
   ) async {
+    if (_latestResumeBlobs.containsKey(id)) return;
     try {
       final resumeBytes =
           await TorrentResumeStore.loadResumeDataForSource(source);
       if (resumeBytes != null && resumeBytes.isNotEmpty) {
+        if (_latestResumeBlobs.containsKey(id)) return;
         final loaded = _native.loadResumeData(id, resumeBytes);
         if (loaded) {
+          _latestResumeBlobs[id] = Uint8List.fromList(resumeBytes);
           _log.fine(
             'Fast-resume data loaded successfully for torrent $id ($source)',
           );
@@ -605,7 +639,9 @@ class TorrentService {
     if (!isInitialized) return;
     if (id >= 0) {
       try {
-        _native.removeTorrent(id, deleteFiles: deleteFiles);
+        if (isTorrentAlive(id)) {
+          _native.removeTorrent(id, deleteFiles: deleteFiles);
+        }
         if (deleteResumeData) {
           unawaited(TorrentResumeStore.delete(id));
           final source = _torrentSources.remove(id);
@@ -662,6 +698,26 @@ class TorrentService {
     }
   }
 
+  /// Returns true if the native torrent handle is currently paused or stopped,
+  /// checking both the live [_native.getTorrentStatus] (which reflects the real
+  /// libtorrent state immediately) and the cached [_latestStats] label.
+  static bool _isTorrentPausedOrStopped(int id) {
+    try {
+      final nativeStatus = _native.getTorrentStatus(id);
+      if (nativeStatus != null && nativeStatus.isPaused) return true;
+    } catch (_) {}
+    final stats = _latestStats[id];
+    if (stats != null) {
+      final label = stats.stateLabel.toLowerCase();
+      if (label.contains('paused') ||
+          label.contains('stopped') ||
+          label.contains('pausing')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static Future<void> pauseTorrent(int id) async {
     if (!isPluginAvailable || !isInitialized || !isTorrentAlive(id)) return;
     if (id >= 0) {
@@ -671,16 +727,37 @@ class TorrentService {
           for (var attempt = 1; attempt <= 3; attempt++) {
             try {
               await _native.pauseTorrent(id, graceful: attempt < 3);
+            } catch (e) {
+              _log.fine(
+                  'Pause attempt $attempt native call failed for $id: $e');
+            }
+
+            // Check immediately via native status before waiting on stream.
+            if (_isTorrentPausedOrStopped(id)) {
+              confirmed = true;
+              break;
+            }
+
+            try {
               await torrentUpdates.firstWhere((updateMap) {
                 final stats = updateMap[id];
                 if (stats == null) return false;
+                // Accept any stopped/paused/pausing label.
                 final label = stats.stateLabel.toLowerCase();
-                return label.contains('paused') || label.contains('stopped');
+                return label.contains('paused') ||
+                    label.contains('stopped') ||
+                    label.contains('pausing');
               }).timeout(const Duration(seconds: 5));
               confirmed = true;
               break;
             } on TimeoutException {
-              _log.warning('Pause attempt $attempt/3 timed out for torrent $id');
+              // One last chance: re-query native status after timeout.
+              if (_isTorrentPausedOrStopped(id)) {
+                confirmed = true;
+                break;
+              }
+              _log.warning(
+                  'Pause attempt $attempt/3 timed out for torrent $id');
             } catch (e) {
               _log.fine('Pause verification check attempt $attempt caught: $e');
             }
@@ -717,8 +794,11 @@ class TorrentService {
   }
 
   static bool loadResumeData(int id, List<int> data) {
-    if (!isInitialized || id < 0) return false;
-    return _native.loadResumeData(id, data);
+    final uint8 = Uint8List.fromList(data);
+    _latestResumeBlobs[id] = uint8;
+    if (!isInitialized || id < 0) return true;
+    final loaded = _native.loadResumeData(id, data);
+    return loaded;
   }
 
   static bool isTorrentAlive(int id) {
@@ -1087,7 +1167,14 @@ class TorrentService {
 
   static bool get seedingEnabled => true;
 
-  static void boostMagnetDiscovery(int torrentId) {}
+  static void boostMagnetDiscovery(int torrentId) {
+    if (!isInitialized || torrentId < 0) return;
+    try {
+      _native.announceNow(torrentId);
+    } catch (e, st) {
+      _log.warning('boostMagnetDiscovery failed for $torrentId: $e', e, st);
+    }
+  }
 
   static void autoEnableSequentialForVideo(int torrentId) {
     if (!isInitialized || torrentId < 0) return;
@@ -1173,6 +1260,8 @@ class TorrentServiceImpl implements ITorrentService {
   bool get sequentialDownloadEnabled =>
       TorrentService.sequentialDownloadEnabled;
   @override
+  bool get seedingEnabled => TorrentService.seedingEnabled;
+  @override
   double get shareRatioLimit => TorrentService.shareRatioLimit;
   @override
   int get maxSeedingTimeMinutes => TorrentService.maxSeedingTimeMinutes;
@@ -1249,6 +1338,8 @@ class TorrentServiceImpl implements ITorrentService {
       TorrentService.torrentUpdates;
   @override
   Map<int, TorrentUpdateInfo> get latestStats => TorrentService.latestStats;
+  @override
+  int? idForSource(String source) => TorrentService.idForSource(source);
   @override
   Map<String, dynamic>? getTorrentSnapshot(int id) => null;
   @override
@@ -1436,6 +1527,8 @@ class TorrentServiceStub implements ITorrentService {
   @override
   bool get sequentialDownloadEnabled => false;
   @override
+  bool get seedingEnabled => true;
+  @override
   double get shareRatioLimit => 2.0;
   @override
   int get maxSeedingTimeMinutes => 0;
@@ -1497,6 +1590,8 @@ class TorrentServiceStub implements ITorrentService {
       const Stream.empty();
   @override
   Map<int, TorrentUpdateInfo> get latestStats => const {};
+  @override
+  int? idForSource(String source) => null;
   @override
   Map<String, dynamic>? getTorrentSnapshot(int id) => null;
   @override

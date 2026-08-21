@@ -9,8 +9,12 @@ class LibtorrentNativeImpl implements ITorrentNative {
   LibtorrentNativeImpl();
 
   StreamSubscription<lt.LtAlert>? _alertSub;
+  StreamSubscription<Map<int, lt.TorrentInfo>>? _statusSub;
+
   final StreamController<NativeAlertEvent> _alertStreamCtrl =
       StreamController<NativeAlertEvent>.broadcast();
+  final StreamController<Map<int, NativeTorrentStatus>> _statusStreamCtrl =
+      StreamController<Map<int, NativeTorrentStatus>>.broadcast();
 
   @override
   bool get isInitialized => lt.LibtorrentFlutter.isInitialized;
@@ -25,16 +29,13 @@ class LibtorrentNativeImpl implements ITorrentNative {
     }
   }
 
+  // FIX(N1): statusStream backed by broadcast StreamController
   @override
   Stream<NativeAlertEvent> get alertStream => _alertStreamCtrl.stream;
 
   @override
-  Stream<Map<int, NativeTorrentStatus>> get statusStream {
-    if (!isInitialized) return const Stream.empty();
-    return lt.LibtorrentFlutter.instance.torrentUpdates.map((map) {
-      return map.map((key, value) => MapEntry(key, _mapStatus(value)));
-    });
-  }
+  Stream<Map<int, NativeTorrentStatus>> get statusStream =>
+      _statusStreamCtrl.stream;
 
   NativeTorrentStatus _mapStatus(lt.TorrentInfo info) {
     return NativeTorrentStatus(
@@ -65,27 +66,12 @@ class LibtorrentNativeImpl implements ITorrentNative {
     );
   }
 
-  @override
-  Future<void> init({
-    String listenInterface = '',
-    int downloadLimit = 0,
-    int uploadLimit = 0,
-    Duration pollInterval = const Duration(milliseconds: 600),
-    bool fetchTrackers = true,
-    String? defaultSavePath,
-  }) async {
-    if (lt.LibtorrentFlutter.isInitialized) return;
-    await lt.LibtorrentFlutter.init(
-      listenInterface: listenInterface,
-      downloadLimit: downloadLimit,
-      uploadLimit: uploadLimit,
-      pollInterval: pollInterval,
-      fetchTrackers: fetchTrackers,
-      defaultSavePath: defaultSavePath,
-    );
-
-    _alertSub?.cancel();
+  // FIX(N2): Idempotent subscription establishment
+  void _ensureAlertSubscription() {
+    if (!lt.LibtorrentFlutter.isInitialized) return;
+    if (_alertSub != null) return;
     _alertSub = lt.LibtorrentFlutter.instance.alertUpdates.listen((alert) {
+      if (_alertStreamCtrl.isClosed) return;
       final alertType = TorrentAlertType.fromNativeType(alert.type);
       _alertStreamCtrl.add(NativeAlertEvent(
         type: alertType,
@@ -101,10 +87,54 @@ class LibtorrentNativeImpl implements ITorrentNative {
     });
   }
 
+  void _ensureStatusSubscription() {
+    if (!lt.LibtorrentFlutter.isInitialized) return;
+    if (_statusSub != null) return;
+    _statusSub = lt.LibtorrentFlutter.instance.torrentUpdates.listen((map) {
+      if (_statusStreamCtrl.isClosed) return;
+      final mapped = map.map((key, value) => MapEntry(key, _mapStatus(value)));
+      _statusStreamCtrl.add(Map.unmodifiable(mapped));
+    });
+  }
+
+  @override
+  Future<void> init({
+    String listenInterface = '',
+    int downloadLimit = 0,
+    int uploadLimit = 0,
+    Duration pollInterval = const Duration(milliseconds: 600),
+    bool fetchTrackers = true,
+    String? defaultSavePath,
+  }) async {
+    if (!lt.LibtorrentFlutter.isInitialized) {
+      await lt.LibtorrentFlutter.init(
+        listenInterface: listenInterface,
+        downloadLimit: downloadLimit,
+        uploadLimit: uploadLimit,
+        pollInterval: pollInterval,
+        fetchTrackers: fetchTrackers,
+        defaultSavePath: defaultSavePath,
+      );
+    }
+
+    // FIX(N2): Always ensure subscriptions are active even on re-init / early-return
+    _ensureAlertSubscription();
+    _ensureStatusSubscription();
+  }
+
   @override
   Future<void> dispose() async {
+    // FIX(N1): Cancel subscriptions and close controllers
     await _alertSub?.cancel();
     _alertSub = null;
+    await _statusSub?.cancel();
+    _statusSub = null;
+    if (!_alertStreamCtrl.isClosed) {
+      await _alertStreamCtrl.close();
+    }
+    if (!_statusStreamCtrl.isClosed) {
+      await _statusStreamCtrl.close();
+    }
     if (lt.LibtorrentFlutter.isInitialized) {
       await lt.LibtorrentFlutter.instance.dispose();
     }
@@ -122,7 +152,12 @@ class LibtorrentNativeImpl implements ITorrentNative {
 
   @override
   void removeTorrent(int id, {bool deleteFiles = false}) {
-    lt.LibtorrentFlutter.instance.removeTorrent(id, deleteFiles: deleteFiles);
+    if (id < 0) return;
+    try {
+      lt.LibtorrentFlutter.instance.removeTorrent(id, deleteFiles: deleteFiles);
+    } catch (e) {
+      // Catch any native or FFI exceptions for dead/invalid handles
+    }
   }
 
   @override

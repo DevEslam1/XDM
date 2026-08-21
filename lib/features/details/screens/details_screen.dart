@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/services/torrent_service.dart';
 import '../../../core/services/tracker_manager.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/file_opener.dart';
@@ -167,14 +168,24 @@ class _DetailsScreenState extends State<DetailsScreen>
             },
           ),
         ),
-        body: Selector<DownloadProvider, DownloadTask?>(
+        body: Selector<DownloadProvider, (DownloadTask?, int)>(
           selector: (_, provider) {
             final idx = provider.tasks.indexWhere((t) => t.id == widget.taskId);
-            return idx != -1 ? provider.tasks[idx] : null;
+            final task = idx != -1 ? provider.tasks[idx] : null;
+            final ulSpeed = task != null
+                ? provider.getTorrentUploadSpeed(task.id).toInt()
+                : 0;
+            return (task, ulSpeed);
           },
-          builder: (context, task, child) {
+          builder: (context, data, child) {
+            final task = data.$1;
             final provider = context.read<DownloadProvider>();
             if (task == null) {
+              if (_pulse.isAnimating) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && _pulse.isAnimating) _pulse.stop();
+                });
+              }
               return Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -207,11 +218,14 @@ class _DetailsScreenState extends State<DetailsScreen>
               );
             }
 
-            if (task.status == DownloadStatus.downloading) {
-              if (!_pulse.isAnimating) _pulse.repeat(reverse: true);
-            } else {
-              if (_pulse.isAnimating) _pulse.stop();
-            }
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              if (task.status == DownloadStatus.downloading) {
+                if (!_pulse.isAnimating) _pulse.repeat(reverse: true);
+              } else if (_pulse.isAnimating) {
+                _pulse.stop();
+              }
+            });
 
             final isSeeding = task.status == DownloadStatus.completed &&
                 task.isTorrent &&
@@ -228,7 +242,8 @@ class _DetailsScreenState extends State<DetailsScreen>
               speedTextInsideCircle =
                   'DL: ${task.speedFormatted} | UL: ${formatBytes(ulSpeed)}/s';
             } else if (isSeeding) {
-              speedTextInsideCircle = 'UL: ${task.speedFormatted}';
+              final ulSpeed = provider.getTorrentUploadSpeed(task.id);
+              speedTextInsideCircle = 'UL: ${formatBytes(ulSpeed)}/s';
             } else {
               speedTextInsideCircle = task.status == DownloadStatus.downloading
                   ? task.speedFormatted
@@ -270,17 +285,18 @@ class _DetailsScreenState extends State<DetailsScreen>
                                         task: task,
                                         statusColor: statusColor,
                                         speedText: speedTextInsideCircle,
-                                        etaText: (task.status ==
-                                                    DownloadStatus
-                                                        .downloading ||
-                                                isSeeding)
-                                            ? L10n.translateStatus(
-                                                context,
-                                                task.status,
-                                                task.etaFormatted,
-                                              )
-                                            : L10n.of(context,
-                                                'details_inactive_eta'),
+                                        etaText: isSeeding
+                                            ? provider.getSeedingSummary(task.id)
+                                            : (task.status ==
+                                                        DownloadStatus
+                                                            .downloading)
+                                                ? L10n.translateStatus(
+                                                    context,
+                                                    task.status,
+                                                    task.etaFormatted,
+                                                  )
+                                                : L10n.of(context,
+                                                    'details_inactive_eta'),
                                         pulse: _pulse,
                                       ),
                                     ),
@@ -340,16 +356,17 @@ class _DetailsScreenState extends State<DetailsScreen>
                                   ),
                                   if (_graphExpanded)
                                     const SizedBox(height: 14),
-                                  _stagger(
-                                    0.5,
-                                    _TorrentFilesPanel(
-                                      task: task,
-                                      provider: provider,
-                                      settings: settings,
+                                  if (task.isTorrent) ...[
+                                    _stagger(
+                                      0.5,
+                                      _TorrentFilesPanel(
+                                        task: task,
+                                        provider: provider,
+                                        settings: settings,
+                                      ),
                                     ),
-                                  ),
-                                  if (task.isTorrent)
                                     const SizedBox(height: 14),
+                                  ],
                                   _stagger(
                                     0.6,
                                     _MetadataPanel(
@@ -373,16 +390,17 @@ class _DetailsScreenState extends State<DetailsScreen>
                                   task: task,
                                   statusColor: statusColor,
                                   speedText: speedTextInsideCircle,
-                                  etaText: (task.status ==
-                                              DownloadStatus.downloading ||
-                                          isSeeding)
-                                      ? L10n.translateStatus(
-                                          context,
-                                          task.status,
-                                          task.etaFormatted,
-                                        )
-                                      : L10n.of(
-                                          context, 'details_inactive_eta'),
+                                  etaText: isSeeding
+                                      ? provider.getSeedingSummary(task.id)
+                                      : (task.status ==
+                                              DownloadStatus.downloading)
+                                          ? L10n.translateStatus(
+                                              context,
+                                              task.status,
+                                              task.etaFormatted,
+                                            )
+                                          : L10n.of(
+                                              context, 'details_inactive_eta'),
                                   pulse: _pulse,
                                 ),
                               ),
@@ -432,15 +450,17 @@ class _DetailsScreenState extends State<DetailsScreen>
                               ),
                             ),
                             if (_graphExpanded) const SizedBox(height: 14),
-                            _stagger(
-                              0.5,
-                              _TorrentFilesPanel(
-                                task: task,
-                                provider: provider,
-                                settings: settings,
+                            if (task.isTorrent) ...[
+                              _stagger(
+                                0.5,
+                                _TorrentFilesPanel(
+                                  task: task,
+                                  provider: provider,
+                                  settings: settings,
+                                ),
                               ),
-                            ),
-                            if (task.isTorrent) const SizedBox(height: 14),
+                              const SizedBox(height: 14),
+                            ],
                             _stagger(
                               0.6,
                               _MetadataPanel(task: task, provider: provider),
@@ -567,19 +587,25 @@ class _TelemetryHero extends StatelessWidget {
                                   ? (() {
                                       final files = task.torrentFiles;
                                       if (files != null && files.isNotEmpty) {
-                                        final total = files.length;
-                                        final completed = files.where((f) {
-                                          final isComp = (f['isComplete'] as bool?) ?? false;
-                                          final len = (f['length'] as num?)?.toInt() ?? 0;
-                                          final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-                                          return isComp || (len > 0 && dl >= len);
-                                        }).length;
-                                        return completed > 0
-                                            ? '$completed/$total FILES'
-                                            : '$total FILES';
+                                        final selected = files
+                                            .where((f) =>
+                                                (f['selected'] as bool?) ??
+                                                true)
+                                            .toList();
+                                        if (selected.isEmpty) return '—';
+                                        final completed = selected
+                                            .where((f) =>
+                                                f['isComplete'] == true)
+                                            .length;
+                                        return selected.length == files.length
+                                            ? (completed > 0
+                                                ? '$completed/${files.length} FILES'
+                                                : '${files.length} FILES')
+                                            : '$completed/${selected.length} FILES';
                                       }
                                       final total = task.totalFiles ?? 0;
-                                      final completed = task.completedFiles ?? 0;
+                                      final completed =
+                                          task.completedFiles ?? 0;
                                       if (total > 0) {
                                         return completed > 0
                                             ? '$completed/$total FILES'
@@ -640,7 +666,8 @@ class _TelemetryHero extends StatelessWidget {
                             ),
                           ),
                           if (task.isTorrent &&
-                              task.status == DownloadStatus.paused) ...[
+                              task.status == DownloadStatus.paused &&
+                              task.resumeDataSaved) ...[
                             const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -939,20 +966,33 @@ class _ActionRail extends StatelessWidget with HapticHelper {
           );
 
           if (deleteFiles != null) {
-            unawaited(provider.deleteTask(task.id, deleteFiles: deleteFiles));
+            final ok =
+                await provider.deleteTask(task.id, deleteFiles: deleteFiles);
 
             if (context.mounted) {
-              ThemedSnackbar.show(
-                context,
-                message: isRtl
-                    ? 'تم حذف التنزيل بنجاح'
-                    : 'Download deleted successfully',
-                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                icon: Icons.delete,
-                isDarkMode: isDark,
-              );
+              if (ok) {
+                ThemedSnackbar.show(
+                  context,
+                  message: isRtl
+                      ? 'تم حذف التنزيل بنجاح'
+                      : 'Download deleted successfully',
+                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  icon: Icons.delete,
+                  isDarkMode: isDark,
+                );
 
-              Navigator.pop(context);
+                Navigator.pop(context);
+              } else {
+                ThemedSnackbar.show(
+                  context,
+                  message: isRtl
+                      ? 'فشل حذف التنزيل'
+                      : 'Failed to delete download',
+                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  icon: Icons.error_outline,
+                  isDarkMode: isDark,
+                );
+              }
             }
           }
         },
@@ -1224,15 +1264,6 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
 
     final isDualYoutube = task.hasMergedAudio || task.audioSize > 0;
 
-    final videoDl = task.downloadedBytes;
-    final videoSize = task.videoStreamSize > 0
-        ? task.videoStreamSize
-        : (task.fileSize > task.audioSize && task.audioSize > 0
-            ? task.fileSize - task.audioSize
-            : (task.audioSize <= 0 ? task.fileSize : 0));
-    final videoProgress =
-        videoSize > 0 ? (videoDl / videoSize).clamp(0.0, 1.0) : 0.0;
-
     final audioDl = task.audioDownloadedBytes > 0
         ? task.audioDownloadedBytes
         : (task.ytCounterpartDownloadedBytes ?? 0);
@@ -1240,6 +1271,21 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
     final audioProgress = audioSize > 0
         ? (audioDl / audioSize).clamp(0.0, 1.0)
         : task.audioProgressPercent;
+
+    final videoSize = task.videoStreamSize > 0
+        ? task.videoStreamSize
+        : (task.fileSize > task.audioSize && task.audioSize > 0
+            ? task.fileSize - task.audioSize
+            : (task.audioSize <= 0 ? task.fileSize : 0));
+    final rawVideoDl = (task.fileSize > 0 &&
+            task.downloadedBytes >= task.fileSize &&
+            audioDl > 0 &&
+            task.downloadedBytes > audioDl)
+        ? math.max(0, task.downloadedBytes - audioDl)
+        : task.downloadedBytes;
+    final videoDl = videoSize > 0 ? rawVideoDl.clamp(0, videoSize) : rawVideoDl;
+    final videoProgress =
+        videoSize > 0 ? (videoDl / videoSize).clamp(0.0, 1.0) : 0.0;
 
     final activeChunks = task.sanitizedChunks;
     final completedChannels = activeChunks.where((c) => c >= 1.0).length;
@@ -1669,27 +1715,29 @@ class _SpeedGraphPanelState extends State<_SpeedGraphPanel> {
       final speedHistory = widget.provider.getSpeedHistory(widget.task.id);
       final uploadHistory =
           widget.provider.getUploadSpeedHistory(widget.task.id);
+      final len = math.max(speedHistory.length, uploadHistory.length);
 
-      final List<FlSpot> dlSpots = List.generate(speedHistory.length, (i) {
-        return FlSpot(i.toDouble(), speedHistory[i]);
-      });
-      if (dlSpots.length == 1) {
-        dlSpots.add(FlSpot(1.0, dlSpots[0].y));
-      }
+      List<FlSpot> align(List<double> h) => [
+            for (var i = 0; i < h.length; i++)
+              FlSpot((len - h.length + i).toDouble(), h[i]),
+          ];
 
-      final List<FlSpot> ulSpots = List.generate(uploadHistory.length, (i) {
-        return FlSpot(i.toDouble(), uploadHistory[i]);
-      });
-      if (ulSpots.length == 1) {
-        ulSpots.add(FlSpot(1.0, ulSpots[0].y));
+      var dlSpots = align(speedHistory);
+      var ulSpots = align(uploadHistory);
+      if (len == 1) {
+        dlSpots = [
+          FlSpot(0, speedHistory.isNotEmpty ? speedHistory[0] : 0),
+          FlSpot(1, speedHistory.isNotEmpty ? speedHistory[0] : 0)
+        ];
+        ulSpots = [
+          FlSpot(0, uploadHistory.isNotEmpty ? uploadHistory[0] : 0),
+          FlSpot(1, uploadHistory.isNotEmpty ? uploadHistory[0] : 0)
+        ];
       }
 
       _cachedDownloadSpots = dlSpots;
       _cachedUploadSpots = ulSpots;
-      _cachedMaxLen = math.max(
-        dlSpots.length,
-        ulSpots.isNotEmpty ? ulSpots.length : 1,
-      );
+      _cachedMaxLen = math.max(len, 1);
     }
   }
 
@@ -2288,12 +2336,12 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
         task.seedingEnabled;
 
     final dlSpeed = task.speed;
-    final ulSpeed = isSeeding
-        ? task.speed
-        : (task.isTorrent ? provider.getTorrentUploadSpeed(task.id) : 0.0);
+    final ulSpeed = task.isTorrent ? provider.getTorrentUploadSpeed(task.id) : 0.0;
 
-    final torrentId =
-        provider.providerTorrentIds[task.id] ?? (int.tryParse(task.id) ?? 0);
+    final torrentId = provider.providerTorrentIds[task.id] ??
+        int.tryParse(task.id) ??
+        TorrentService.idForSource(task.url) ??
+        0;
     final stats = provider.providerLatestTorrentStats[torrentId];
 
     return DmxCardShell(
@@ -2349,7 +2397,7 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
               ),
               const SizedBox(height: 14),
             ],
-            if (isActive && task.fileSize > 0) ...[
+            if (isActive && (task.resolvedFileSize > 0 || task.downloadedBytes > 0)) ...[
               Stack(
                 children: [
                   Container(
@@ -2744,15 +2792,19 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
             for (var i = 0; i < updatedFiles.length; i++) {
               final current = updatedFiles[i];
               final length = (current['length'] as num?)?.toInt() ?? 0;
+              final wasSelected = isTorrentFileSelected(current);
               final currentDl = (current['downloadedBytes'] as num?)?.toInt() ?? 0;
-              final isComplete = length > 0 && currentDl >= length;
+              final isComplete = wasSelected &&
+                  length > 0 &&
+                  currentDl >= length &&
+                  current['isComplete'] == true;
               updatedFiles[i] = {
                 ...current,
                 'selected': true,
                 'priority': 4,
                 if (!isComplete) ...{
-                  'downloadedBytes': currentDl > 0 ? currentDl : 0,
-                  'progress': (length > 0 && currentDl > 0)
+                  'downloadedBytes': (wasSelected && currentDl > 0) ? currentDl : 0,
+                  'progress': (wasSelected && length > 0 && currentDl > 0)
                       ? (currentDl / length).clamp(0.0, 1.0)
                       : 0.0,
                   'isComplete': false,
@@ -2801,9 +2853,14 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
             final updatedFiles = List<Map<String, dynamic>>.from(files);
             final current = files[index];
             final length = (current['length'] as num?)?.toInt() ?? 0;
+            final wasSelected = isTorrentFileSelected(current);
             final currentDl =
                 (current['downloadedBytes'] as num?)?.toInt() ?? 0;
-            final isComplete = val && length > 0 && currentDl >= length;
+            final isComplete = val &&
+                wasSelected &&
+                length > 0 &&
+                currentDl >= length &&
+                current['isComplete'] == true;
             updatedFiles[index] = {
               ...current,
               'selected': val,
@@ -2814,8 +2871,8 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
                 'isComplete': false,
                 'progressEstimated': false,
               } else if (!isComplete) ...{
-                'downloadedBytes': currentDl > 0 ? currentDl : 0,
-                'progress': (length > 0 && currentDl > 0)
+                'downloadedBytes': (wasSelected && currentDl > 0) ? currentDl : 0,
+                'progress': (wasSelected && length > 0 && currentDl > 0)
                     ? (currentDl / length).clamp(0.0, 1.0)
                     : 0.0,
                 'isComplete': false,

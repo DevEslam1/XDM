@@ -23,12 +23,12 @@ typedef int64_t lt_stream_id;
 /* torrent states */
 #define LT_STATE_ERROR             -2
 #define LT_STATE_UNKNOWN           -1
-#define LT_STATE_CHECKING_FILES     0
-#define LT_STATE_DOWNLOADING_META   1
-#define LT_STATE_DOWNLOADING        2
-#define LT_STATE_FINISHED           3
-#define LT_STATE_SEEDING            4
-#define LT_STATE_ALLOCATING         5
+#define LT_STATE_ALLOCATING         0
+#define LT_STATE_CHECKING_FILES     1
+#define LT_STATE_DOWNLOADING_META   2
+#define LT_STATE_DOWNLOADING        3
+#define LT_STATE_FINISHED           4
+#define LT_STATE_SEEDING            5
 #define LT_STATE_CHECKING_RESUME    6
 
 /* stream states */

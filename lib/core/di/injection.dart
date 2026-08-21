@@ -15,6 +15,7 @@ import '../../features/downloads/services/torrent_session_manager.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../../shared/animation/ambient_animation_coordinator.dart';
 import '../../shared/animation/composite_ambient_animation_controller.dart';
+import '../interfaces/i_connectivity.dart';
 import '../interfaces/i_download_engine.dart';
 import '../interfaces/i_torrent_service.dart';
 import '../services/app_lifecycle_coordinator.dart';
@@ -164,6 +165,9 @@ Future<void> configureDependencies() async {
         notificationService: getIt<NotificationService>(),
       ),
       dispose: (p) => p.dispose(),
+    );
+    getIt.registerLazySingleton<IConnectivity>(
+      () => getIt<DownloadProvider>().networkMonitor,
     );
 
     getIt.registerLazySingleton<PowerMonitor>(

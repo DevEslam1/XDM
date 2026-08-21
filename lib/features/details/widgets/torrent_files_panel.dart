@@ -101,10 +101,12 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
     double calcFileProgress(Map<String, dynamic> f) {
+      if (!isTorrentFileSelected(f)) return 0.0;
       if ((f['isComplete'] as bool?) == true) return 1.0;
+      final isEstimated = (f['progressEstimated'] as bool?) == true;
       final length = (f['length'] as num?)?.toInt() ?? 0;
       final downloadedBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-      if (length > 0 && downloadedBytes >= length) return 1.0;
+      if (!isEstimated && length > 0 && downloadedBytes >= length) return 1.0;
       if (f['progress'] != null) {
         return ((f['progress'] as num).toDouble()).clamp(0.0, 1.0);
       } else if (length > 0 && downloadedBytes > 0) {
@@ -114,10 +116,13 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
     }
 
     final files = widget.torrentFiles;
-    final completedCount = files.where((f) {
-      final isComp = (f['isComplete'] as bool?) ?? false;
-      final prog = calcFileProgress(f);
-      return isComp || prog >= 1.0;
+    final selectedFiles = files.where(isTorrentFileSelected).toList();
+    final completedCount = selectedFiles.where((f) {
+      final isEstimated = (f['progressEstimated'] as bool?) == true;
+      final isComp = (f['isComplete'] as bool?) == true;
+      final len = (f['length'] as num?)?.toInt() ?? 0;
+      final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+      return isComp || (!isEstimated && len > 0 && dl >= len);
     }).length;
 
     return DmxCardShell(
@@ -151,7 +156,9 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      '$completedCount/${files.length} ${isRtl ? "مكتمل" : "done"}',
+                      selectedFiles.length == files.length
+                          ? '$completedCount/${files.length} ${isRtl ? "مكتمل" : "done"}'
+                          : '$completedCount/${selectedFiles.length} ${isRtl ? "مكتمل" : "done"}',
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
@@ -224,16 +231,22 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                   // Progress calculation: prefer explicit progress field, fallback to downloaded/length
                   final progress = calcFileProgress(f);
 
-                  final isComplete =
-                      (f['isComplete'] as bool?) == true || progress >= 1.0;
-                  final displayDownloadedBytes =
-                      isComplete && length > 0 ? length : downloadedBytes;
+                  final isComplete = selected &&
+                      ((f['isComplete'] as bool?) == true ||
+                          (!isEstimated &&
+                              length > 0 &&
+                              downloadedBytes >= length));
+                  final displayDownloadedBytes = !selected
+                      ? 0
+                      : (isComplete && length > 0 ? length : downloadedBytes);
                   final progressPercent = (isComplete ? 1.0 : progress) * 100.0;
-                  final progressText = isComplete
-                      ? '100.0%'
-                      : (isEstimated
-                          ? '≈${progressPercent.toStringAsFixed(0)}%'
-                          : '${progressPercent.toStringAsFixed(1)}%');
+                  final progressText = !selected
+                      ? (isRtl ? 'تم التخطي' : 'Skipped')
+                      : (isComplete
+                          ? '100.0%'
+                          : (isEstimated
+                              ? '≈${progressPercent.toStringAsFixed(0)}%'
+                              : '${progressPercent.toStringAsFixed(1)}%'));
 
                   return RepaintBoundary(
                     key: ValueKey('$name:$downloadedBytes:$selected'),
@@ -265,7 +278,9 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                       Icon(
                         isComplete
                             ? Icons.check_circle_outline_rounded
-                            : Icons.insert_drive_file_outlined,
+                            : (selected
+                                ? Icons.insert_drive_file_outlined
+                                : Icons.block_rounded),
                         size: 16,
                         color: isComplete
                             ? greenClr

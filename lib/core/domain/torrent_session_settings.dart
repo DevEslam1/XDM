@@ -24,7 +24,76 @@ class TorrentSessionSettings {
     this.sequentialDownload = false,
     this.shareRatioLimit = 0.0,
     this.maxSeedingTimeMinutes = 0,
-  });
+  })  : assert(torrentConnectionsLimit > 0,
+            'Connections limit must be greater than zero'),
+        assert(downloadRateLimitKbps >= 0,
+            'Download rate limit cannot be negative'),
+        assert(
+            uploadRateLimitKbps >= 0, 'Upload rate limit cannot be negative'),
+        assert(
+            shareRatioLimit >= 0.0, 'Share ratio limit cannot be negative'),
+        assert(maxSeedingTimeMinutes >= 0,
+            'Max seeding time cannot be negative');
+
+  // FIX(M4): validated factory that throws ArgumentError on negative limits or connectionsLimit <= 0
+  factory TorrentSessionSettings.validated({
+    bool enableDht = true,
+    bool enableUpnp = true,
+    bool forceEncrypt = false,
+    int torrentConnectionsLimit = 200,
+    int downloadRateLimitKbps = 0,
+    int uploadRateLimitKbps = 0,
+    bool sequentialDownload = false,
+    double shareRatioLimit = 0.0,
+    int maxSeedingTimeMinutes = 0,
+  }) {
+    if (torrentConnectionsLimit <= 0) {
+      throw ArgumentError.value(
+        torrentConnectionsLimit,
+        'torrentConnectionsLimit',
+        'Connections limit must be greater than zero',
+      );
+    }
+    if (downloadRateLimitKbps < 0) {
+      throw ArgumentError.value(
+        downloadRateLimitKbps,
+        'downloadRateLimitKbps',
+        'Download rate limit cannot be negative',
+      );
+    }
+    if (uploadRateLimitKbps < 0) {
+      throw ArgumentError.value(
+        uploadRateLimitKbps,
+        'uploadRateLimitKbps',
+        'Upload rate limit cannot be negative',
+      );
+    }
+    if (shareRatioLimit < 0.0) {
+      throw ArgumentError.value(
+        shareRatioLimit,
+        'shareRatioLimit',
+        'Share ratio limit cannot be negative',
+      );
+    }
+    if (maxSeedingTimeMinutes < 0) {
+      throw ArgumentError.value(
+        maxSeedingTimeMinutes,
+        'maxSeedingTimeMinutes',
+        'Max seeding time cannot be negative',
+      );
+    }
+    return TorrentSessionSettings(
+      enableDht: enableDht,
+      enableUpnp: enableUpnp,
+      forceEncrypt: forceEncrypt,
+      torrentConnectionsLimit: torrentConnectionsLimit,
+      downloadRateLimitKbps: downloadRateLimitKbps,
+      uploadRateLimitKbps: uploadRateLimitKbps,
+      sequentialDownload: sequentialDownload,
+      shareRatioLimit: shareRatioLimit,
+      maxSeedingTimeMinutes: maxSeedingTimeMinutes,
+    );
+  }
 
   TorrentSessionSettings copyWith({
     bool? enableDht,
@@ -37,7 +106,7 @@ class TorrentSessionSettings {
     double? shareRatioLimit,
     int? maxSeedingTimeMinutes,
   }) {
-    return TorrentSessionSettings(
+    return TorrentSessionSettings.validated(
       enableDht: enableDht ?? this.enableDht,
       enableUpnp: enableUpnp ?? this.enableUpnp,
       forceEncrypt: forceEncrypt ?? this.forceEncrypt,

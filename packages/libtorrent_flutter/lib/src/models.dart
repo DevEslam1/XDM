@@ -37,12 +37,12 @@ StreamState streamStateFromInt(int v) {
 TorrentState stateFromInt(int v) {
   switch (v) {
     case -2: return TorrentState.error;
-    case  0: return TorrentState.checkingFiles;
-    case  1: return TorrentState.downloadingMetadata;
-    case  2: return TorrentState.downloading;
-    case  3: return TorrentState.finished;
-    case  4: return TorrentState.seeding;
-    case  5: return TorrentState.allocating;
+    case  0: return TorrentState.allocating;
+    case  1: return TorrentState.checkingFiles;
+    case  2: return TorrentState.downloadingMetadata;
+    case  3: return TorrentState.downloading;
+    case  4: return TorrentState.finished;
+    case  5: return TorrentState.seeding;
     case  6: return TorrentState.checkingResume;
     default: return TorrentState.unknown;
   }

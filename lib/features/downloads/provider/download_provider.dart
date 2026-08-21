@@ -12,6 +12,7 @@ import '../../../core/services/diagnostic_service.dart';
 import '../../../core/services/download_engine.dart' hide DownloadCommand;
 import '../../../core/services/download_journal.dart';
 import '../../../core/services/download_metrics.dart';
+import '../../../core/services/logging_service.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/power_monitor.dart';
@@ -158,7 +159,10 @@ class DownloadProvider extends ChangeNotifier
   @override Map<String, int> get ytLowSpeedCounts => _ytLowSpeedCounts;
   @override Map<String, bool> get ytThrottlingRefreshing => _ytThrottlingRefreshing;
   @override Map<String, int> get providerTorrentIds => _torrentIds;
-  @override Map<int, TorrentUpdateInfo> get providerLatestTorrentStats => _latestTorrentStats;
+  @override Map<int, TorrentUpdateInfo> get providerLatestTorrentStats =>
+      TorrentService.latestStats.isNotEmpty
+          ? TorrentService.latestStats
+          : _latestTorrentStats;
   @override Map<String, bool> get resumeRejectionRestarts => _resumeRejectionRestarts;
   @override Map<String, DownloadMetrics> get downloadMetrics => _downloadMetrics;
 
@@ -303,11 +307,7 @@ class DownloadProvider extends ChangeNotifier
     final oldUri = Uri.tryParse(oldUrl);
     final newUri = Uri.tryParse(newUrl);
     if (oldUri == null || newUri == null || oldUri.host.isEmpty || newUri.host.isEmpty) return false;
-    final isOldYt = oldUri.host.contains('googlevideo.com') || oldUri.host.contains('youtube.com');
-    final isNewYt = newUri.host.contains('googlevideo.com') || newUri.host.contains('youtube.com');
-    if (!isOldYt || !isNewYt) {
-      if (oldUri.host != newUri.host) return true;
-    }
+    if (oldUri.host != newUri.host) return true;
     final oldId = oldUri.queryParameters['id'] ?? oldUri.queryParameters['docid'];
     final newId = newUri.queryParameters['id'] ?? newUri.queryParameters['docid'];
     final oldItag = oldUri.queryParameters['itag'];
@@ -593,8 +593,8 @@ class DownloadProvider extends ChangeNotifier
 
   final Set<String> _deletingTaskIds = {};
 
-  Future<void> deleteTask(String id, {bool deleteFiles = false}) async {
-    if (_deletingTaskIds.contains(id)) return;
+  Future<bool> deleteTask(String id, {bool deleteFiles = false}) async {
+    if (_deletingTaskIds.contains(id)) return false;
     _deletingTaskIds.add(id);
     try {
       final task = _findTask(id);
@@ -614,7 +614,13 @@ class DownloadProvider extends ChangeNotifier
         _ytThrottlingRefreshing.remove(id);
         filteredTasksDirty = true;
         notifyListeners();
+        return true;
       }
+      return false;
+    } catch (e, st) {
+      LoggingService.logger('DownloadProvider')
+          .warning('Failed to delete task $id', e, st);
+      return false;
     } finally {
       _deletingTaskIds.remove(id);
     }

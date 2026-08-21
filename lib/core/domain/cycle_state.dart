@@ -134,3 +134,14 @@ enum CycleState {
     };
   }
 }
+
+/// Domain exception thrown when downloading, reading, or validating a torrent source fails.
+class TorrentSourceException implements Exception {
+  final String message;
+  final String? url;
+  const TorrentSourceException(this.message, {this.url});
+
+  @override
+  String toString() =>
+      'TorrentSourceException: $message${url != null ? ' (url: $url)' : ''}';
+}

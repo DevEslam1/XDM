@@ -16,34 +16,37 @@ enum TorrentAlertType {
   statusTick,
   other;
 
-  static TorrentAlertType fromNativeType(int type) {
-    switch (type) {
-      case 38: // metadata_received_alert
-        return TorrentAlertType.metadataReceived;
-      case 34: // torrent_paused_alert
-        return TorrentAlertType.torrentPaused;
-      case 35: // torrent_resumed_alert
-        return TorrentAlertType.torrentResumed;
-      case 26: // piece_finished_alert
-        return TorrentAlertType.pieceFinished;
-      case 30: // save_resume_data_alert
-        return TorrentAlertType.saveResumeDataCompleted;
-      case 31: // save_resume_data_failed_alert
-        return TorrentAlertType.saveResumeDataFailed;
-      case 16: // tracker_reply_alert
-        return TorrentAlertType.trackerReply;
-      case 17: // tracker_error_alert
-        return TorrentAlertType.trackerError;
-      case 19: // fastresume_rejected_alert
-        return TorrentAlertType.fastresumeRejected;
-      case 64: // torrent_error_alert
-        return TorrentAlertType.torrentError;
-      case 45: // tracker_announce_alert / stopped announce
-        return TorrentAlertType.stoppedAnnounce;
-      default:
-        return TorrentAlertType.other;
-    }
-  }
+  /// Pinned libtorrent alert codes
+  static const int alertTrackerReply = 16;
+  static const int alertTrackerError = 17;
+  static const int alertFastresumeRejected = 19;
+  static const int alertPieceFinished = 26;
+  static const int alertSaveResumeDataCompleted = 30;
+  static const int alertSaveResumeDataFailed = 31;
+  static const int alertTorrentPaused = 34;
+  static const int alertTorrentResumed = 35;
+  static const int alertMetadataReceived = 38;
+  static const int alertStoppedAnnounce = 45;
+  static const int alertTorrentError = 64;
+
+  /// Mappings pinned to libtorrent v1.2.x / v2.0.x alert codes.
+  static const Map<int, TorrentAlertType> _nativeTypeMap = {
+    alertMetadataReceived: TorrentAlertType.metadataReceived, // metadata_received_alert
+    alertTorrentPaused: TorrentAlertType.torrentPaused, // torrent_paused_alert
+    alertTorrentResumed: TorrentAlertType.torrentResumed, // torrent_resumed_alert
+    alertPieceFinished: TorrentAlertType.pieceFinished, // piece_finished_alert
+    alertSaveResumeDataCompleted: TorrentAlertType.saveResumeDataCompleted, // save_resume_data_alert
+    alertSaveResumeDataFailed: TorrentAlertType.saveResumeDataFailed, // save_resume_data_failed_alert
+    alertTrackerReply: TorrentAlertType.trackerReply, // tracker_reply_alert
+    alertTrackerError: TorrentAlertType.trackerError, // tracker_error_alert
+    alertFastresumeRejected: TorrentAlertType.fastresumeRejected, // fastresume_rejected_alert
+    alertTorrentError: TorrentAlertType.torrentError, // torrent_error_alert
+    alertStoppedAnnounce: TorrentAlertType.stoppedAnnounce, // tracker_announce_alert / stopped announce
+  };
+
+  // FIX(M5): Replace magic switch ints with pinned const Map lookup.
+  static TorrentAlertType fromNativeType(int type) =>
+      _nativeTypeMap[type] ?? TorrentAlertType.other;
 }
 
 /// Native engine alert event with typed details.
@@ -133,6 +136,7 @@ class NativeTorrentStatus {
     String? name,
     String? savePath,
     String? errorMsg,
+    bool clearErrorMsg = false,
     int? state,
     String? stateLabel,
     double? progress,
@@ -158,7 +162,7 @@ class NativeTorrentStatus {
         id: id,
         name: name ?? this.name,
         savePath: savePath ?? this.savePath,
-        errorMsg: errorMsg ?? this.errorMsg,
+        errorMsg: clearErrorMsg ? "" : (errorMsg ?? this.errorMsg),
         state: state ?? this.state,
         stateLabel: stateLabel ?? this.stateLabel,
         progress: progress ?? this.progress,
@@ -241,7 +245,7 @@ class NativeBtConfig {
     this.cacheSize = 64 * 1024 * 1024,
     this.readerReadAhead = 95,
     this.preloadCache = 50,
-    this.connectionsLimit = 25,
+    this.connectionsLimit = 200,
     this.torrentDisconnectTimeout = 30,
     this.forceEncrypt = false,
     this.disableTcp = false,

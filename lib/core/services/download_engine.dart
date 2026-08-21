@@ -15,7 +15,9 @@ import 'package:path/path.dart' as p;
 
 import '../../features/downloads/domain/orchestrators/http_download_orchestrator.dart';
 import '../../features/downloads/domain/orchestrators/torrent_download_orchestrator.dart';
+import '../di/injection.dart';
 import '../interfaces/i_download_engine.dart';
+import '../interfaces/i_torrent_service.dart';
 import 'dio_client_pool.dart';
 import 'engine/engine_exceptions.dart';
 import 'engine/engine_models.dart';
@@ -68,6 +70,7 @@ class DownloadEngine implements IDownloadEngine {
   late final MetadataProbeService _metadataService;
   late final YtCounterpartCoordinator _ytCoordinator;
   late final DioClientPool _dioPool;
+  late final ITorrentService _torrentService;
 
   TorrentDownloadOrchestrator get torrentOrchestrator => _torrentOrchestrator;
   TorrentDownloadHandler get torrentHandler => _torrentHandler;
@@ -83,6 +86,7 @@ class DownloadEngine implements IDownloadEngine {
     YtCounterpartCoordinator? ytCoordinator,
     DioClientPool? dioPool,
     Dio? dio,
+    ITorrentService? torrentService,
     bool enableCleanupTimer = true,
   }) {
     // FIX C-4: Create a single shared DioClientPool instead of up to 3 separate
@@ -94,9 +98,15 @@ class DownloadEngine implements IDownloadEngine {
         YtCounterpartCoordinator(enablePeriodicTimer: enableCleanupTimer);
     final sharedMetadata =
         metadataService ?? MetadataProbeService(sharedPool);
-    final sharedTorrentHandler = torrentHandler ?? TorrentDownloadHandler();
+    final resolvedTorrentService = torrentService ??
+        (getIt.isRegistered<ITorrentService>()
+            ? getIt<ITorrentService>()
+            : TorrentServiceImpl());
+    final sharedTorrentHandler = torrentHandler ??
+        TorrentDownloadHandler(torrentService: resolvedTorrentService);
 
     _dioPool = sharedPool;
+    _torrentService = resolvedTorrentService;
     _ytCoordinator = sharedYtCoordinator;
     _metadataService = sharedMetadata;
     _torrentHandler = sharedTorrentHandler;
@@ -107,7 +117,7 @@ class DownloadEngine implements IDownloadEngine {
           SettingsProvider.instance,
         );
     _torrentOrchestrator = torrentOrchestrator ??
-        TorrentDownloadOrchestrator(sharedPool, sharedTorrentHandler);
+        TorrentDownloadOrchestrator(sharedPool, sharedTorrentHandler, resolvedTorrentService);
     _latestInstance = this;
   }
 
@@ -118,20 +128,31 @@ class DownloadEngine implements IDownloadEngine {
   String buildTempFilePath(String dir, String fileName) =>
       p.join(dir, '$fileName.dmxpart');
 
-  static DateTime? _lastDiskCheck;
-  static bool? _lastDiskResult;
+  static final Map<String, _DiskSpaceCacheEntry> _diskCheckCache = {};
 
   @override
   Future<bool> hasEnoughDiskSpace(String saveDir, int requiredBytes) async {
-    if (_lastDiskCheck != null &&
-        _lastDiskResult != null &&
-        DateTime.now().difference(_lastDiskCheck!) < const Duration(seconds: 30)) {
-      return _lastDiskResult!;
+    final normDir = p.normalize(saveDir).toLowerCase();
+    final cached = _diskCheckCache[normDir];
+    final now = DateTime.now();
+
+    if (cached != null &&
+        now.difference(cached.timestamp) < const Duration(seconds: 30)) {
+      if (cached.hasSpace && requiredBytes <= cached.checkedBytes) {
+        return true;
+      }
+      if (!cached.hasSpace && requiredBytes >= cached.checkedBytes) {
+        return false;
+      }
     }
+
     final result = await hasEnoughDiskSpaceOrNull(saveDir, requiredBytes);
     final finalResult = result ?? false;
-    _lastDiskCheck = DateTime.now();
-    _lastDiskResult = finalResult;
+    _diskCheckCache[normDir] = _DiskSpaceCacheEntry(
+      hasSpace: finalResult,
+      checkedBytes: requiredBytes,
+      timestamp: now,
+    );
     return finalResult;
   }
 
@@ -344,14 +365,20 @@ class DownloadEngine implements IDownloadEngine {
     final existing = _pool;
     if (existing != null) return Future.value(existing);
     return _poolInit ??= () async {
-      final pool = DownloadIsolatePool(
-        size: _isolatePoolSize,
-        powerAware: true,
-      );
-      ServiceRegistry.registerMemoryPressureListener(pool);
-      await pool.init();
-      _pool = pool;
-      return pool;
+      try {
+        final pool = DownloadIsolatePool(
+          size: _isolatePoolSize,
+          powerAware: true,
+        );
+        ServiceRegistry.registerMemoryPressureListener(pool);
+        await pool.init();
+        _pool = pool;
+        return pool;
+      } catch (e) {
+        // FIX(N5): Reset _poolInit on failure so a transient error doesn't poison future attempts
+        _poolInit = null;
+        rethrow;
+      }
     }();
   }
 
@@ -496,7 +523,8 @@ class DownloadEngine implements IDownloadEngine {
 
   @override
   void updateSpeedLimit(int bytesPerSecond, int activeCount) {
-    TorrentService.setDownloadLimit(bytesPerSecond);
+    // FIX(C4): Use injected _torrentService for speed limits
+    _torrentService.setDownloadLimit(bytesPerSecond);
     _pool?.updateSpeedLimit(bytesPerSecond, activeCount);
   }
 
@@ -558,4 +586,17 @@ class DownloadEngine implements IDownloadEngine {
       if (e is InvalidPathException) rethrow;
     }
   }
+}
+
+// FIX(N4): Disk space cache entry tracking path-specific checks and tested capacities
+class _DiskSpaceCacheEntry {
+  final bool hasSpace;
+  final int checkedBytes;
+  final DateTime timestamp;
+
+  _DiskSpaceCacheEntry({
+    required this.hasSpace,
+    required this.checkedBytes,
+    required this.timestamp,
+  });
 }

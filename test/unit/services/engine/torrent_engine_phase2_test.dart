@@ -223,8 +223,8 @@ void main() {
     mock.alive = false;
     controller.add({}); // empty map
 
-    expect(
-      () => future.timeout(const Duration(seconds: 5)),
+    await expectLater(
+      future.timeout(const Duration(seconds: 5)),
       throwsA(isA<DioException>()),
     );
   });

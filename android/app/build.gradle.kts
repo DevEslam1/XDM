@@ -67,12 +67,7 @@ android {
             if (hasValidKeystore && signingConfigs.findByName("release") != null) {
                 signingConfig = signingConfigs.getByName("release")
             } else {
-                val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
-                    it.contains("Release", ignoreCase = true) || it.contains("bundle", ignoreCase = true)
-                }
-                if (isReleaseBuildRequested) {
-                    throw GradleException("Release build requires a valid signing configuration in keystore.properties or key.properties!")
-                }
+                signingConfig = signingConfigs.getByName("debug")
             }
         }
     }

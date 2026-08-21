@@ -278,6 +278,7 @@ class DownloadTask {
   final String? infoHash;
 
   final bool isMergeInProgress; // runtime only, not persisted
+  final bool resumeDataSaved;
 
   DownloadTask({
     required this.id,
@@ -318,6 +319,7 @@ class DownloadTask {
     this.audioDownloadedBytes = 0,
     this.audioThreadCount = 2,
     this.isMergeInProgress = false,
+    this.resumeDataSaved = false,
     this.pausedByUser = false,
     this.isCancelled = false,
     this.youtubeQualityPreset,
@@ -477,25 +479,24 @@ class DownloadTask {
   }
 
   double get torrentOverallPercent {
-    // Prefer engine-level progress (most accurate)
-    if (fileSize > 0 && downloadedBytes > 0) {
-      final enginePct = (downloadedBytes / fileSize).clamp(0.0, 1.0);
-      // Cross-check with file aggregates
-      final agg = torrentFileAggregates;
-      if (agg.totalFileBytes > 0) {
-        final filePct = (agg.downloadedFileBytes.clamp(0, agg.totalFileBytes) /
-                agg.totalFileBytes)
-            .clamp(0.0, 1.0);
-        // Use the average of both for stability
-        return ((enginePct + filePct) / 2).clamp(0.0, 1.0);
-      }
-      return enginePct;
+    if (status == DownloadStatus.completed) return 1.0;
+    final total = resolvedFileSize;
+    final downloaded = displayDownloadedBytes;
+    if (total > 0 && downloaded > 0) {
+      return (downloaded / total).clamp(0.0, 1.0);
     }
-    // Fallback to file aggregates only
+    // Cross-check with file aggregates if total or downloaded was 0
     final agg = torrentFileAggregates;
+    if (agg.totalFileBytes > 0 && agg.downloadedFileBytes > 0) {
+      return (agg.downloadedFileBytes.clamp(0, agg.totalFileBytes) /
+              agg.totalFileBytes)
+          .clamp(0.0, 1.0);
+    }
+    if (total > 0 && downloaded == 0) {
+      return 0.0;
+    }
     if (agg.totalFileBytes > 0) {
-      final dl = agg.downloadedFileBytes.clamp(0, agg.totalFileBytes);
-      return (dl / agg.totalFileBytes).clamp(0.0, 1.0);
+      return (agg.downloadedFileBytes / agg.totalFileBytes).clamp(0.0, 1.0);
     }
     if (fileSize > 0) {
       return (downloadedBytes / fileSize).clamp(0.0, 1.0);
@@ -573,7 +574,7 @@ class DownloadTask {
 
   double get progress {
     if (status == DownloadStatus.completed) return 1.0;
-    if (isTorrent && hasTorrentFiles) return torrentOverallPercent;
+    if (isTorrent) return torrentOverallPercent;
     if (hasUnknownSize) return -1.0;
     final total = combinedTotalSize;
     if (total <= 0) return -1.0;
@@ -601,7 +602,7 @@ class DownloadTask {
 
   String get progressPercentString {
     if (status == DownloadStatus.completed) return '100.0%';
-    if (isTorrent && hasTorrentFiles) {
+    if (isTorrent) {
       return '${(torrentOverallPercent * 100).toStringAsFixed(1)}%';
     }
     final total = combinedTotalSize;
@@ -857,6 +858,7 @@ class DownloadTask {
     int? downloadedFileBytes,
     String? infoHash,
     bool clearInfoHash = false,
+    bool? resumeDataSaved,
   }) {
     final effectiveFileSize = clearFileSize
         ? (this.status == DownloadStatus.downloading && this.fileSize > 0
@@ -980,6 +982,7 @@ class DownloadTask {
       totalFileBytes: totalFileBytes ?? this.totalFileBytes,
       downloadedFileBytes: downloadedFileBytes ?? this.downloadedFileBytes,
       infoHash: clearInfoHash ? null : (infoHash ?? this.infoHash),
+      resumeDataSaved: resumeDataSaved ?? this.resumeDataSaved,
     );
   }
 

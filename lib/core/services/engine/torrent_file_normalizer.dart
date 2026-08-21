@@ -13,20 +13,27 @@ class TorrentFileNormalizer {
   /// and properly typed. Mutates and returns the normalized map.
   static Map<String, dynamic> normalizeTorrentFile(Map<String, dynamic> f) {
     final len = (f['length'] as num?)?.toInt() ?? 0;
+    final selected = isTorrentFileSelected(f);
     var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-    // Clamp downloaded bytes to [0, length]
-    dl = len > 0 ? dl.clamp(0, len) : 0;
-    final progress =
-        len > 0 ? (dl / len).clamp(0.0, 1.0) : (len == 0 ? 1.0 : 0.0);
+    if (!selected) {
+      dl = 0;
+    } else {
+      dl = len > 0 ? dl.clamp(0, len) : 0;
+    }
+    final progress = selected
+        ? (len > 0 ? (dl / len).clamp(0.0, 1.0) : (len == 0 ? 1.0 : 0.0))
+        : 0.0;
+    final isEstimated = (f['progressEstimated'] as bool?) ?? false;
+    final isExplicitlyComplete = (f['isComplete'] as bool?) == true;
     f['name'] = f['name'] as String? ?? 'file';
     f['length'] = len;
     f['downloadedBytes'] = dl;
-    f['selected'] = f['selected'] as bool? ?? true;
-    f['priority'] = (f['priority'] as num?)?.toInt() ?? 4;
+    f['selected'] = selected;
+    f['priority'] = (f['priority'] as num?)?.toInt() ?? (selected ? 4 : 0);
     f['speed'] = (f['speed'] as num?)?.toDouble() ?? 0.0;
     f['progress'] = progress;
-    f['isComplete'] = len == 0 || (len > 0 && dl >= len);
-    f['progressEstimated'] = (f['progressEstimated'] as bool?) ?? false;
+    f['isComplete'] = selected && (isExplicitlyComplete || (!isEstimated && (len == 0 || (len > 0 && dl >= len))));
+    f['progressEstimated'] = isEstimated;
     return f;
   }
 
@@ -81,7 +88,7 @@ class TorrentFileNormalizer {
         total++;
         bytes += len;
         downloaded += dl;
-        if (len == 0 || dl >= len) {
+        if (map['isComplete'] == true) {
           done++;
         }
       }

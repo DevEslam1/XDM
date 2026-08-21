@@ -179,7 +179,10 @@ mixin DownloadTorrentMixin {
   // Torrent stat queries
   // ---------------------------------------------------------------------------
   int getTorrentSeeds(String taskId) {
-    final torrentId = providerTorrentIds[taskId];
+    final task = findTaskById(taskId);
+    final torrentId = providerTorrentIds[taskId] ??
+        int.tryParse(taskId) ??
+        (task != null ? TorrentService.idForSource(task.url) : null);
     if (torrentId != null) {
       final stat = providerLatestTorrentStats[torrentId];
       if (stat != null) {
@@ -190,7 +193,10 @@ mixin DownloadTorrentMixin {
   }
 
   int getTorrentPeers(String taskId) {
-    final torrentId = providerTorrentIds[taskId];
+    final task = findTaskById(taskId);
+    final torrentId = providerTorrentIds[taskId] ??
+        int.tryParse(taskId) ??
+        (task != null ? TorrentService.idForSource(task.url) : null);
     if (torrentId != null) {
       final stat = providerLatestTorrentStats[torrentId];
       if (stat != null) {
@@ -202,10 +208,15 @@ mixin DownloadTorrentMixin {
 
   double getTorrentUploadSpeed(String taskId) {
     final task = findTaskById(taskId);
-    if (task == null || !task.seedingEnabled) {
+    if (task == null) {
       return 0.0;
     }
-    final torrentId = providerTorrentIds[taskId];
+    if (task.status == DownloadStatus.completed && !task.seedingEnabled) {
+      return 0.0;
+    }
+    final torrentId = providerTorrentIds[taskId] ??
+        int.tryParse(taskId) ??
+        TorrentService.idForSource(task.url);
     if (torrentId != null) {
       final stat = providerLatestTorrentStats[torrentId];
       if (stat != null) {
@@ -213,6 +224,27 @@ mixin DownloadTorrentMixin {
       }
     }
     return 0.0;
+  }
+
+  String getSeedingSummary(String taskId) {
+    final task = findTaskById(taskId);
+    if (task == null) return '';
+    final torrentId = providerTorrentIds[taskId] ??
+        int.tryParse(taskId) ??
+        TorrentService.idForSource(task.url);
+    final stat = torrentId != null ? providerLatestTorrentStats[torrentId] : null;
+    final totalUploaded = stat?.totalPayloadUpload ?? task.uploadedBytes;
+    final totalDownloaded = stat?.totalPayloadDownload ?? task.downloadedBytes;
+    final ratio = totalDownloaded > 0 ? (totalUploaded / totalDownloaded) : 0.0;
+    final seedingDuration = task.completedAt != null
+        ? DateTime.now().difference(task.completedAt!)
+        : Duration.zero;
+    final minutes = seedingDuration.inMinutes;
+    final hours = seedingDuration.inHours;
+    final timeStr = hours > 0
+        ? '${hours}h ${seedingDuration.inMinutes.remainder(60)}m'
+        : '${minutes}m';
+    return 'Ratio ${ratio.toStringAsFixed(2)} • $timeStr seeded';
   }
 
   // ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../interfaces/i_torrent_service.dart';
 
 /// Manages stall and aliveness periodic watchdogs for active torrent downloads.
+/// Centralized single watchdog system for the torrent download cycle.
 class TorrentWatchdogManager {
   final ITorrentService _torrentService;
   final int _torrentId;
@@ -18,17 +19,25 @@ class TorrentWatchdogManager {
   );
 
   bool get isActive => _active;
+  Timer? get stallTimer => _stallTimer;
+  Timer? get alivenessTimer => _alivenessTimer;
 
+  // FIX(N7): rename onStalled to onStallCheck with backwards compatible fallback
   void start({
-    required VoidCallback onStalled,
+    VoidCallback? onStallCheck,
+    VoidCallback? onStalled,
     required VoidCallback onAlivenessLost,
     bool Function()? isPausedByUser,
   }) {
     stop();
+    final stallCallback = onStallCheck ?? onStalled;
+    if (stallCallback == null) {
+      throw ArgumentError('Either onStallCheck or onStalled must be provided');
+    }
     _active = true;
     _stallTimer = Timer.periodic(_watchdogInterval, (_) {
       if (_active && !(isPausedByUser?.call() ?? false)) {
-        onStalled();
+        stallCallback();
       }
     });
     _alivenessTimer = Timer.periodic(const Duration(seconds: 10), (_) {
@@ -50,4 +59,3 @@ class TorrentWatchdogManager {
 
   void dispose() => stop();
 }
-

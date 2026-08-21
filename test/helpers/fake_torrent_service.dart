@@ -61,6 +61,9 @@ class FakeITorrentService implements ITorrentService {
       Map.unmodifiable(_latestStats);
 
   @override
+  int? idForSource(String source) => null;
+
+  @override
   Stream<TorrentAlertEvent> get alertUpdates => _alertUpdatesCtrl.stream;
 
   @override
@@ -88,6 +91,8 @@ class FakeITorrentService implements ITorrentService {
   bool get pieceDeadlineSupported => true;
   @override
   bool get sequentialDownloadEnabled => false;
+  @override
+  bool get seedingEnabled => true;
   @override
   double get shareRatioLimit => simulatedShareRatioLimit;
   @override

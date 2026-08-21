@@ -37,7 +37,10 @@ class TorrentStatsDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final totalDownloaded = stats?.totalPayloadDownload ?? task.downloadedBytes;
-    final totalUploaded = stats?.totalPayloadUpload ?? 0;
+    final totalUploaded = (stats?.totalPayloadUpload != null &&
+            stats!.totalPayloadUpload > 0)
+        ? stats!.totalPayloadUpload
+        : task.uploadedBytes;
     final ratio = totalDownloaded > 0 ? totalUploaded / totalDownloaded : 0.0;
     final seedingDuration = task.completedAt != null
         ? DateTime.now().difference(task.completedAt!)

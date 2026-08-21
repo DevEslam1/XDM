@@ -2064,46 +2064,34 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final provider = context.read<DownloadProvider>();
-    final taskSnapshot = provider.findTaskById(widget.task.id) ?? widget.task;
-    final statusColor = getEffectiveCardAccent(taskSnapshot, provider, isDark);
+    final currentTask = provider.findTaskById(widget.task.id) ?? widget.task;
+    final statusColor = getEffectiveCardAccent(currentTask, provider, isDark);
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-    final isMagnet = taskSnapshot.url.startsWith('magnet:');
-    final seeding = _isSeeding(taskSnapshot);
+    final isMagnet = currentTask.url.startsWith('magnet:');
+    final seeding = _isSeeding(currentTask);
 
-    return Selector<DownloadProvider,
-        ({int seeds, int peers, double uploadSpeed})>(
-      // FIX-STATS-6: Rebuild on ANY change in seeds/peers (old threshold of >2
-      // silently swallowed the 0→1 transition, keeping stats frozen at zero).
-      // Upload speed threshold also lowered from 10 KB/s to 1 KB/s.
-      shouldRebuild: (prev, next) {
-        return prev.seeds != next.seeds ||
-            prev.peers != next.peers ||
-            (prev.uploadSpeed - next.uploadSpeed).abs() > 1024;
-      },
-      selector: (context, provider) => (
-        seeds: provider.getTorrentSeeds(widget.task.id),
-        peers: provider.getTorrentPeers(widget.task.id),
-        uploadSpeed: provider.getTorrentUploadSpeed(widget.task.id),
-      ),
-      builder: (context, stats, _) {
-        final currentTask =
-            provider.findTaskById(widget.task.id) ?? widget.task;
-        final fileCount = currentTask.torrentFiles?.length ?? 0;
-        final selectedCount = currentTask.torrentFiles
-                ?.where((f) => isTorrentFileSelected(f))
-                .length ??
-            0;
+    final stats = (
+      seeds: provider.getTorrentSeeds(currentTask.id),
+      peers: provider.getTorrentPeers(currentTask.id),
+      uploadSpeed: provider.getTorrentUploadSpeed(currentTask.id),
+    );
 
-        final isSmallScreen = MediaQuery.sizeOf(context).width < 360;
-        final horizPadding =
-            isSmallScreen ? 10.0 : (widget.compact ? 12.0 : 14.0);
-        final vertPadding =
-            isSmallScreen ? 10.0 : (widget.compact ? 10.0 : 14.0);
-        final itemGap = isSmallScreen ? 8.0 : 12.0;
+    final fileCount = currentTask.torrentFiles?.length ?? 0;
+    final selectedCount = currentTask.torrentFiles
+            ?.where((f) => isTorrentFileSelected(f))
+            .length ??
+        0;
 
-        return _CardShell(
+    final isSmallScreen = MediaQuery.sizeOf(context).width < 360;
+    final horizPadding =
+        isSmallScreen ? 10.0 : (widget.compact ? 12.0 : 14.0);
+    final vertPadding =
+        isSmallScreen ? 10.0 : (widget.compact ? 10.0 : 14.0);
+    final itemGap = isSmallScreen ? 8.0 : 12.0;
+
+    return _CardShell(
           accent: statusColor,
           isDark: isDark,
           onTap: () {
@@ -2193,6 +2181,9 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                                     task: currentTask,
                                     isDark: isDark,
                                     overrideLabel: (currentTask.isTorrent &&
+                                            (currentTask.torrentFiles == null ||
+                                                currentTask
+                                                    .torrentFiles!.isEmpty) &&
                                             currentTask.resolvedFileSize == 0 &&
                                             currentTask.downloadedBytes == 0 &&
                                             currentTask.status ==
@@ -2463,8 +2454,6 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
             ),
           ),
         );
-      },
-    );
   }
 }
 
@@ -2562,15 +2551,17 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
             final rawBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
             // During a recheck the engine may report 0 temporarily;
             // keep the last known value so the bar doesn't flicker to 0.
-            final downloaded = isChecking
-                ? (length > 0
-                    ? rawBytes.clamp(0, length)
-                    : (rawBytes < 0 ? 0 : rawBytes))
-                : (length > 0 ? rawBytes.clamp(0, length) : 0);
+            final downloaded = !selected
+                ? 0
+                : (isChecking
+                    ? (length > 0
+                        ? rawBytes.clamp(0, length)
+                        : (rawBytes < 0 ? 0 : rawBytes))
+                    : (length > 0 ? rawBytes.clamp(0, length) : 0));
             final resolvedBytes =
                 (liveTask.status == DownloadStatus.completed && selected)
                     ? length
-                    : downloaded;
+                    : (selected ? downloaded : 0);
 
             return {...f, 'downloadedBytes': resolvedBytes};
           }).toList();
@@ -2729,10 +2720,14 @@ class _TorrentFileRow extends StatelessWidget {
     // -1 means "engine has no progress data" — fall back to 0 but keep
     // the estimated flag so the UI can show a hint instead of a hard 0.
     final hasEngineData = rawBytes >= 0;
-    final downloaded = hasEngineData
-        ? (safeLength > 0 ? rawBytes.clamp(0, safeLength) : 0)
-        : 0;
-    final p = safeLength > 0 ? (downloaded / safeLength).clamp(0.0, 1.0) : 0.0;
+    final downloaded = !selected
+        ? 0
+        : (hasEngineData
+            ? (safeLength > 0 ? rawBytes.clamp(0, safeLength) : 0)
+            : 0);
+    final p = (selected && safeLength > 0)
+        ? (downloaded / safeLength).clamp(0.0, 1.0)
+        : 0.0;
     final done = selected && p >= 1.0;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
@@ -2744,13 +2739,15 @@ class _TorrentFileRow extends StatelessWidget {
     final hadNoData = (file['_hadNoData'] as bool?) ?? false;
     final showIndeterminate =
         (downloaded == 0 || hadNoData) && isEstimated && selected && !done;
-    final progressText = showIndeterminate
-        ? '…'
-        : (!hasEngineData && !isEstimated
+    final progressText = !selected
+        ? '-'
+        : (showIndeterminate
             ? '…'
-            : (isEstimated
-                ? '≈${(p * 100).toStringAsFixed(0)}%'
-                : '${(p * 100).toStringAsFixed(0)}%'));
+            : (!hasEngineData && !isEstimated
+                ? '…'
+                : (isEstimated
+                    ? '≈${(p * 100).toStringAsFixed(0)}%'
+                    : '${(p * 100).toStringAsFixed(0)}%')));
 
     // FIX(M-4): Render unselected torrent files with reduced opacity
     return Opacity(
@@ -2875,12 +2872,11 @@ class _TorrentFileRow extends StatelessWidget {
             const SizedBox(width: 8),
             SizedBox(
               child: Text(
-                // FIX-8: When the engine hasn't reported any bytes yet
-                // (rawBytes was −1 → clamped to 0) show "…" so the user
-                // doesn't see a false "0 B / 1.2 GB" after a restart.
-                rawBytes <= 0 && !done
-                    ? '… / ${formatBytes(length.toDouble())}'
-                    : '${formatBytes(downloaded.toDouble())} / ${formatBytes(length.toDouble())}',
+                !selected
+                    ? formatBytes(length.toDouble())
+                    : (rawBytes <= 0 && !done
+                        ? '… / ${formatBytes(length.toDouble())}'
+                        : '${formatBytes(downloaded.toDouble())} / ${formatBytes(length.toDouble())}'),
                 textAlign: TextAlign.end,
                 style: AppTheme.dataStyle(
                   isDark: isDark,

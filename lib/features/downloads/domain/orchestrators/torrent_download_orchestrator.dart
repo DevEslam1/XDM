@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:dmx/core/di/injection.dart';
 import 'package:dmx/core/domain/engine_types.dart';
+import 'package:dmx/core/interfaces/i_torrent_service.dart';
 import 'package:dmx/core/services/diagnostic_service.dart';
 import 'package:dmx/core/services/dio_client_pool.dart';
-import 'package:dmx/core/services/engine/engine_models.dart';
 import 'package:dmx/core/services/engine/torrent_download_handler.dart';
 import 'package:dmx/core/services/torrent_service.dart';
 
@@ -12,9 +13,24 @@ import 'package:dmx/core/services/torrent_service.dart';
 class TorrentDownloadOrchestrator {
   final DioClientPool _dioPool;
   final TorrentDownloadHandler _handler;
+  final ITorrentService _torrentService;
 
-  TorrentDownloadOrchestrator(this._dioPool, [TorrentDownloadHandler? handler])
-      : _handler = handler ?? TorrentDownloadHandler();
+  TorrentDownloadOrchestrator(
+    this._dioPool, [
+    TorrentDownloadHandler? handler,
+    ITorrentService? torrentService,
+  ])  : _torrentService = torrentService ??
+            (getIt.isRegistered<ITorrentService>()
+                ? getIt<ITorrentService>()
+                : TorrentServiceImpl()),
+        _handler = handler ??
+            (getIt.isRegistered<TorrentDownloadHandler>()
+                ? getIt<TorrentDownloadHandler>()
+                : TorrentDownloadHandler(
+                    torrentService: torrentService ??
+                        (getIt.isRegistered<ITorrentService>()
+                            ? getIt<ITorrentService>()
+                            : TorrentServiceImpl())));
 
   Future<void> download({
     required String url,
@@ -28,7 +44,8 @@ class TorrentDownloadOrchestrator {
     int? metadataTimeoutSeconds,
     String? effectiveTaskId,
   }) async {
-    final resolvedTaskId = effectiveTaskId ?? 'torrent_${torrentId ?? url.hashCode}';
+    final resolvedTaskId =
+        effectiveTaskId ?? 'torrent_${torrentId ?? url.hashCode}';
     int? activeTorrentId = torrentId;
     DownloadProgress? lastEmittedProgress;
 
@@ -42,22 +59,25 @@ class TorrentDownloadOrchestrator {
 
     StreamSubscription? alertSub;
     try {
-      alertSub = TorrentService.alertUpdates.listen((TorrentAlertEvent alert) {
+      alertSub = _torrentService.alertUpdates.listen((TorrentAlertEvent alert) {
         if (activeTorrentId != null && alert.torrentId == activeTorrentId) {
           if (alert.type == 19 || alert.category == 'fastresumeRejected') {
             // Transition task to CycleState.verifying and emit status message. Do NOT mark as failed.
             wrappedOnProgress(DownloadProgress(
               downloadedBytes: lastEmittedProgress?.downloadedBytes ?? 0,
-              fileSize: lastEmittedProgress?.fileSize ?? (knownFileSize > 0 ? knownFileSize : 0),
+              fileSize: lastEmittedProgress?.fileSize ??
+                  (knownFileSize > 0 ? knownFileSize : 0),
               speed: 0,
               eta: null,
               fileName: lastEmittedProgress?.fileName,
               torrentFiles: lastEmittedProgress?.torrentFiles,
-              statusMessage: 'Re-verifying file integrity (resume data rejected by engine)',
+              statusMessage:
+                  'Re-verifying file integrity (resume data rejected by engine)',
               cycleState: CycleState.verifying,
               torrentId: activeTorrentId,
             ));
-          } else if (alert.type == 31 || alert.category == 'saveResumeDataFailed') {
+          } else if (alert.type == 31 ||
+              alert.category == 'saveResumeDataFailed') {
             DiagnosticService.instance.recordTelemetryAlert(
               'resume_data_missing',
               taskId: resolvedTaskId,
@@ -66,7 +86,7 @@ class TorrentDownloadOrchestrator {
             Future.delayed(const Duration(seconds: 2), () {
               try {
                 if (activeTorrentId != null && activeTorrentId! >= 0) {
-                  TorrentService.saveResumeData(activeTorrentId!);
+                  _torrentService.saveResumeData(activeTorrentId!);
                 }
               } catch (_) {}
             });
@@ -92,4 +112,3 @@ class TorrentDownloadOrchestrator {
     }
   }
 }
-

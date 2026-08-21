@@ -201,6 +201,7 @@ class TorrentSeedingManager {
     if (globalLimit <= 0 || activeSeedingCount <= 1) {
       return globalLimit;
     }
-    return (globalLimit ~/ activeSeedingCount).clamp(1024, globalLimit);
+    final perTask = globalLimit ~/ activeSeedingCount;
+    return perTask.clamp(0, globalLimit);
   }
 }

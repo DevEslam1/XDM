@@ -6,6 +6,7 @@ import '../diagnostic_service.dart';
 class FakeTorrentNative implements ITorrentNative {
   bool _initialized = true;
   String _libraryVersion = 'libtorrent/2.0.9-fake';
+  int _nextId = 1;
 
   final StreamController<NativeAlertEvent> _alertCtrl =
       StreamController<NativeAlertEvent>.broadcast();
@@ -24,6 +25,20 @@ class FakeTorrentNative implements ITorrentNative {
 
   bool simulateGracefulPauseTimeout = false;
   Duration gracefulPauseDelay = Duration.zero;
+  bool simulateResumeLoadFailure = false;
+
+  // FIX(N3): Injectable telemetry recorder to isolate DiagnosticService in tests
+  void Function(String event, {String? taskId, String? details})? onTelemetryAlert;
+
+  void _recordTelemetry(String event, {String? taskId, String? details}) {
+    if (onTelemetryAlert != null) {
+      onTelemetryAlert!(event, taskId: taskId, details: details);
+    } else {
+      try {
+        DiagnosticService.instance.recordTelemetryAlert(event, taskId: taskId, details: details);
+      } catch (_) {}
+    }
+  }
 
   @override
   bool get isInitialized => _initialized;
@@ -41,13 +56,17 @@ class FakeTorrentNative implements ITorrentNative {
 
   /// Emit an alert into the alert stream.
   void emitAlert(NativeAlertEvent alert) {
-    _alertCtrl.add(alert);
+    if (!_alertCtrl.isClosed) {
+      _alertCtrl.add(alert);
+    }
   }
 
   /// Emit a batch or map of statuses.
   void emitStatuses(Map<int, NativeTorrentStatus> statuses) {
     _statuses.addAll(statuses);
-    _statusCtrl.add(Map.unmodifiable(_statuses));
+    if (!_statusCtrl.isClosed) {
+      _statusCtrl.add(Map.unmodifiable(_statuses));
+    }
   }
 
   /// Seed initial files and status for a test torrent.
@@ -94,7 +113,9 @@ class FakeTorrentNative implements ITorrentNative {
     );
 
     _statuses[id] = status;
-    _statusCtrl.add(Map.unmodifiable(_statuses));
+    if (!_statusCtrl.isClosed) {
+      _statusCtrl.add(Map.unmodifiable(_statuses));
+    }
   }
 
   /// Simulate progress advancing for a torrent.
@@ -142,7 +163,9 @@ class FakeTorrentNative implements ITorrentNative {
     );
 
     _statuses[id] = updated;
-    _statusCtrl.add(Map.unmodifiable(_statuses));
+    if (!_statusCtrl.isClosed) {
+      _statusCtrl.add(Map.unmodifiable(_statuses));
+    }
   }
 
   @override
@@ -159,14 +182,29 @@ class FakeTorrentNative implements ITorrentNative {
 
   @override
   Future<void> dispose() async {
+    // FIX(N3): Close controllers and clear all internal state
     _initialized = false;
     _statuses.clear();
     _files.clear();
+    _filePriorities.clear();
+    _fileProgress.clear();
+    _trackers.clear();
+    _webSeeds.clear();
+    _sequential.clear();
+    _superSeeding.clear();
+    _savedResumeData.clear();
+    if (!_alertCtrl.isClosed) {
+      await _alertCtrl.close();
+    }
+    if (!_statusCtrl.isClosed) {
+      await _statusCtrl.close();
+    }
   }
 
   @override
   int addMagnet(String magnetUri, String savePath, {bool streamOnly = false}) {
-    final id = _statuses.length + 1;
+    // FIX(N3): Monotonic ID assignment
+    final id = _nextId++;
     final status = NativeTorrentStatus(
       id: id,
       name: 'Magnet_$id',
@@ -189,13 +227,16 @@ class FakeTorrentNative implements ITorrentNative {
       queuePosition: 0,
     );
     _statuses[id] = status;
-    _statusCtrl.add(Map.unmodifiable(_statuses));
+    if (!_statusCtrl.isClosed) {
+      _statusCtrl.add(Map.unmodifiable(_statuses));
+    }
     return id;
   }
 
   @override
   int addTorrentFile(String filePath, String savePath, {bool streamOnly = false}) {
-    final id = _statuses.length + 1;
+    // FIX(N3): Monotonic ID assignment
+    final id = _nextId++;
     final status = NativeTorrentStatus(
       id: id,
       name: filePath.split('/').last,
@@ -218,17 +259,27 @@ class FakeTorrentNative implements ITorrentNative {
       queuePosition: 0,
     );
     _statuses[id] = status;
-    _statusCtrl.add(Map.unmodifiable(_statuses));
+    if (!_statusCtrl.isClosed) {
+      _statusCtrl.add(Map.unmodifiable(_statuses));
+    }
     return id;
   }
 
   @override
   void removeTorrent(int id, {bool deleteFiles = false}) {
+    // FIX(N3): Clear all associated trackers, webSeeds, resumeData, priorities, and state
     _statuses.remove(id);
     _files.remove(id);
     _filePriorities.remove(id);
     _fileProgress.remove(id);
-    _statusCtrl.add(Map.unmodifiable(_statuses));
+    _trackers.remove(id);
+    _webSeeds.remove(id);
+    _savedResumeData.remove(id);
+    _sequential.remove(id);
+    _superSeeding.remove(id);
+    if (!_statusCtrl.isClosed) {
+      _statusCtrl.add(Map.unmodifiable(_statuses));
+    }
   }
 
   @override
@@ -241,12 +292,10 @@ class FakeTorrentNative implements ITorrentNative {
         final resumeData =
             await saveResumeData(id, timeout: const Duration(seconds: 5));
         if (resumeData == null) {
-          DiagnosticService.instance
-              .recordTelemetryAlert('resume_data_missing', taskId: '$id');
+          _recordTelemetry('resume_data_missing', taskId: '$id');
         }
       } catch (_) {
-        DiagnosticService.instance
-            .recordTelemetryAlert('resume_data_missing', taskId: '$id');
+        _recordTelemetry('resume_data_missing', taskId: '$id');
       }
       if (gracefulPauseDelay > Duration.zero) {
         await Future.delayed(gracefulPauseDelay);
@@ -269,8 +318,7 @@ class FakeTorrentNative implements ITorrentNative {
         timestamp: DateTime.now(),
       ));
     } else if (graceful && simulateGracefulPauseTimeout) {
-      DiagnosticService.instance
-          .recordTelemetryAlert('resume_data_missing', taskId: '$id');
+      _recordTelemetry('resume_data_missing', taskId: '$id');
     }
 
     if (!simulateGracefulPauseTimeout) {
@@ -280,7 +328,9 @@ class FakeTorrentNative implements ITorrentNative {
         downloadRate: 0,
         uploadRate: 0,
       );
-      _statusCtrl.add(Map.unmodifiable(_statuses));
+      if (!_statusCtrl.isClosed) {
+        _statusCtrl.add(Map.unmodifiable(_statuses));
+      }
     }
   }
 
@@ -295,7 +345,9 @@ class FakeTorrentNative implements ITorrentNative {
       downloadRate: 500 * 1024,
       uploadRate: 0,
     );
-    _statusCtrl.add(Map.unmodifiable(_statuses));
+    if (!_statusCtrl.isClosed) {
+      _statusCtrl.add(Map.unmodifiable(_statuses));
+    }
 
     emitAlert(NativeAlertEvent(
       type: TorrentAlertType.torrentResumed,
@@ -319,7 +371,9 @@ class FakeTorrentNative implements ITorrentNative {
       piecesDone: 0,
       pieces: List.filled(status.numPieces, false),
     );
-    _statusCtrl.add(Map.unmodifiable(_statuses));
+    if (!_statusCtrl.isClosed) {
+      _statusCtrl.add(Map.unmodifiable(_statuses));
+    }
   }
 
   @override
@@ -363,7 +417,9 @@ class FakeTorrentNative implements ITorrentNative {
         progress: progress,
         filePriorities: priorities,
       );
-      _statusCtrl.add(Map.unmodifiable(_statuses));
+      if (!_statusCtrl.isClosed) {
+        _statusCtrl.add(Map.unmodifiable(_statuses));
+      }
     }
   }
 
@@ -398,8 +454,10 @@ class FakeTorrentNative implements ITorrentNative {
     return data;
   }
 
+  // FIX(N3): simulateResumeLoadFailure knob
   @override
   bool loadResumeData(int id, List<int> data) {
+    if (simulateResumeLoadFailure) return false;
     _savedResumeData[id] = List.from(data);
     return true;
   }

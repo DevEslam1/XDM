@@ -6,6 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/logging_service.dart';
 
+import '../../../core/interfaces/i_connectivity.dart';
 import '../../../core/services/torrent_service.dart';
 import '../domain/commands/download_commands.dart';
 import '../models/download_task.dart';
@@ -13,7 +14,7 @@ import '../models/download_task.dart';
 /// Watches device connectivity and pauses/resumes downloads accordingly.
 ///
 /// Under ARCH-1: pure command emitter emitting [NetworkChanged] when connectivity alters.
-class NetworkMonitor {
+class NetworkMonitor implements IConnectivity {
   NetworkMonitor({
     required List<DownloadTask> Function() tasks,
     required Map<String, int> Function() torrentIds,
@@ -75,6 +76,7 @@ class NetworkMonitor {
   bool get hasAnyNetworkConnection => !hasNoNetwork;
 
   /// Alias for hasAnyNetworkConnection.
+  @override
   bool get hasConnection => hasAnyNetworkConnection;
 
   void markWifiWaiting(String taskId) {
