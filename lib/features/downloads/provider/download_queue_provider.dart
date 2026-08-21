@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:synchronized/synchronized.dart';
 
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_state_machine.dart';
@@ -14,7 +13,6 @@ class DownloadQueueProvider extends ChangeNotifier {
   final int? _maxConcurrentOverride;
 
   final List<String> _queuedIds = [];
-  final Lock _lock = Lock();
   Timer? _debounceTimer;
 
   DownloadQueueProvider({
@@ -38,31 +36,32 @@ class DownloadQueueProvider extends ChangeNotifier {
 
   void pumpQueue() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 50), () {
-      unawaited(_lock.synchronized(() async {
-        final list = _listProvider;
-        if (list == null) return;
-        final activeCount = list.tasks
-            .where((t) => t.status == DownloadStatus.downloading)
-            .length;
-        final maxConcurrent = maxConcurrentDownloads;
+    _debounceTimer = Timer(const Duration(milliseconds: 50), () async {
+      final list = _listProvider;
+      if (list == null) return;
+      final activeCount = list.tasks
+          .where((t) => t.status == DownloadStatus.downloading)
+          .length;
+      final maxConcurrent = maxConcurrentDownloads;
 
-        if (activeCount >= maxConcurrent) return;
+      if (activeCount >= maxConcurrent) return;
 
-        final queued =
-            list.tasks.where((t) => t.status == DownloadStatus.queued).toList();
+      final queued =
+          list.tasks.where((t) => t.status == DownloadStatus.queued).toList();
 
-        var currentActive = activeCount;
-        for (final task in queued) {
-          if (currentActive >= maxConcurrent) break;
-          if (DownloadStateMachine.canTransitionStatus(
-              task.status, DownloadStatus.downloading)) {
-            await list.updateTask(
-                task.copyWith(status: DownloadStatus.downloading));
-            currentActive++;
-          }
+      var currentActive = activeCount;
+      for (final task in queued) {
+        if (currentActive >= maxConcurrent) break;
+        if (DownloadStateMachine.canTransitionStatus(
+            task.status, DownloadStatus.downloading)) {
+          final sm = DownloadStateMachine(
+            taskId: task.id,
+            initialState: DownloadStateMachine.fromStatus(task.status),
+          );
+          sm.transition(DomainDownloadState.downloading);
+          currentActive++;
         }
-      }));
+      }
     });
   }
 
@@ -74,11 +73,11 @@ class DownloadQueueProvider extends ChangeNotifier {
     if (task != null &&
         DownloadStateMachine.canTransitionStatus(
             task.status, DownloadStatus.paused)) {
-      await list.updateTask(
-        task.copyWith(
-            status: DownloadStatus.paused,
-            pausedByUser: reason == PauseReason.userRequested),
+      final sm = DownloadStateMachine(
+        taskId: task.id,
+        initialState: DownloadStateMachine.fromStatus(task.status),
       );
+      sm.transition(DomainDownloadState.paused, reason: reason.name);
       pumpQueue();
     }
   }
@@ -90,9 +89,11 @@ class DownloadQueueProvider extends ChangeNotifier {
     if (task != null &&
         DownloadStateMachine.canTransitionStatus(
             task.status, DownloadStatus.queued)) {
-      await list.updateTask(
-        task.copyWith(status: DownloadStatus.queued, pausedByUser: false),
+      final sm = DownloadStateMachine(
+        taskId: task.id,
+        initialState: DownloadStateMachine.fromStatus(task.status),
       );
+      sm.transition(DomainDownloadState.queued);
       pumpQueue();
     }
   }

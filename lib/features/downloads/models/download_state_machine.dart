@@ -1,20 +1,16 @@
 import 'dart:async';
 import 'package:logging/logging.dart';
+import '../domain/models/domain_download_state.dart';
+import '../domain/state_machine/invalid_transition_error.dart';
+import '../domain/state_machine/transition_audit_log.dart';
 import 'download_task.dart';
 
+export '../domain/models/domain_download_state.dart';
+export '../domain/state_machine/invalid_transition_error.dart';
+export '../domain/state_machine/transition_audit_log.dart';
+
 /// Explicit download state representations covering all lifecycle stages.
-enum DownloadState {
-  idle,
-  queued,
-  starting,
-  downloading,
-  paused,
-  merging,
-  completing,
-  completed,
-  failed,
-  retrying,
-}
+typedef DownloadState = DomainDownloadState;
 
 /// Transition event containing previous state, target state, and optional reason.
 class DownloadStateTransition {
@@ -38,11 +34,15 @@ class DownloadStateTransition {
 }
 
 /// State machine governing download lifecycle state transitions and validation.
+/// Under ARCH-1: Table-driven transition map — the ONLY component permitted to produce
+/// new DownloadTask state. Invalid transition throws [InvalidTransitionError] — never
+/// silently no-ops, never silently succeeds. Every transition appends to [TransitionAuditLog].
 class DownloadStateMachine {
   static final _log = Logger('DownloadStateMachine');
 
   final String taskId;
   DownloadState _currentState;
+  final TransitionAuditLog _auditLog;
 
   final StreamController<DownloadStateTransition> _transitionController =
       StreamController<DownloadStateTransition>.broadcast();
@@ -50,7 +50,9 @@ class DownloadStateMachine {
   DownloadStateMachine({
     required this.taskId,
     DownloadState initialState = DownloadState.idle,
-  }) : _currentState = initialState;
+    TransitionAuditLog? auditLog,
+  })  : _currentState = initialState,
+        _auditLog = auditLog ?? TransitionAuditLog();
 
   DownloadState get currentState => _currentState;
   Stream<DownloadStateTransition> get transitions =>
@@ -140,8 +142,14 @@ class DownloadStateMachine {
   }
 
   /// Attempts to transition the state machine to [targetState].
-  /// Returns `true` if transition was valid and executed, `false` otherwise.
-  bool transition(DownloadState targetState, {String? reason}) {
+  /// Throws [InvalidTransitionError] if transition is illegal.
+  bool transition(
+    DownloadState targetState, {
+    String? reason,
+    Object? command,
+    String? caller,
+    String? engine,
+  }) {
     if (_currentState == targetState) return true;
 
     if (!canTransition(_currentState, targetState)) {
@@ -149,7 +157,12 @@ class DownloadStateMachine {
         'Illegal state transition rejected for task $taskId: '
         '$_currentState -> $targetState (reason: $reason)',
       );
-      return false;
+      throw InvalidTransitionError(
+        taskId: taskId,
+        fromState: _currentState,
+        command: command ?? targetState,
+        reason: reason,
+      );
     }
 
     final previous = _currentState;
@@ -160,6 +173,15 @@ class DownloadStateMachine {
       from: previous,
       to: targetState,
       reason: reason,
+    );
+
+    _auditLog.recordTransition(
+      taskId: taskId,
+      from: previous,
+      to: targetState,
+      command: command ?? targetState,
+      caller: caller,
+      engine: engine,
     );
 
     if (!_transitionController.isClosed) {

@@ -9,7 +9,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:open_filex/open_filex.dart' as open_filex;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:synchronized/synchronized.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/services/background_service.dart';
@@ -84,7 +83,6 @@ class NotificationCoordinator {
   // ignore: prefer_collection_literals
   final Map<String, String> _opaqueHandles = LinkedHashMap<String, String>();
   final Map<String, String> _taskToHandle = {};
-  final Lock _handlesLock = Lock();
   // Notification actions may wake a killed Android process before the async
   // handle map has finished loading. Keep the action path behind this future
   // so a valid pause/cancel action is not dropped during cold start.
@@ -98,21 +96,19 @@ class NotificationCoordinator {
       final raw = prefs.getString(_handleMapKey);
       if (raw != null) {
         final map = jsonDecode(raw) as Map<String, dynamic>;
-        await _handlesLock.synchronized(() {
-          _opaqueHandles.clear();
-          _taskToHandle.clear();
-          map.forEach((handle, taskId) {
-            if (taskId is String) {
-              _opaqueHandles[handle] = taskId;
-              _taskToHandle[taskId] = handle;
-            }
-          });
-          while (_opaqueHandles.length > 50) {
-            final firstKey = _opaqueHandles.keys.first;
-            final mappedTask = _opaqueHandles.remove(firstKey);
-            if (mappedTask != null) _taskToHandle.remove(mappedTask);
+        _opaqueHandles.clear();
+        _taskToHandle.clear();
+        map.forEach((handle, taskId) {
+          if (taskId is String) {
+            _opaqueHandles[handle] = taskId;
+            _taskToHandle[taskId] = handle;
           }
         });
+        while (_opaqueHandles.length > 50) {
+          final firstKey = _opaqueHandles.keys.first;
+          final mappedTask = _opaqueHandles.remove(firstKey);
+          if (mappedTask != null) _taskToHandle.remove(mappedTask);
+        }
       }
     } catch (e) {
       debugPrint('[NotificationCoordinator] Failed to load handle map: $e');
@@ -121,9 +117,7 @@ class NotificationCoordinator {
 
   Future<void> _persistHandles() async {
     try {
-      final String payload = await _handlesLock.synchronized(() {
-        return jsonEncode(_opaqueHandles);
-      });
+      final String payload = jsonEncode(_opaqueHandles);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_handleMapKey, payload);
     } catch (e) {
@@ -136,35 +130,28 @@ class NotificationCoordinator {
     final existing = _taskToHandle[taskId];
     if (existing != null) return existing;
     final handle = const Uuid().v4();
-    _handlesLock
-        .synchronized(() {
-          _opaqueHandles[handle] = taskId;
-          _taskToHandle[taskId] = handle;
-          while (_opaqueHandles.length > 50) {
-            final firstKey = _opaqueHandles.keys.first;
-            final mappedTask = _opaqueHandles.remove(firstKey);
-            if (mappedTask != null) _taskToHandle.remove(mappedTask);
-          }
-        })
-        .then((_) => _persistHandles())
-        .catchError((e) {
-          debugPrint('[NotificationCoordinator] Failed to persist handle: $e');
-        });
+    _opaqueHandles[handle] = taskId;
+    _taskToHandle[taskId] = handle;
+    while (_opaqueHandles.length > 50) {
+      final firstKey = _opaqueHandles.keys.first;
+      final mappedTask = _opaqueHandles.remove(firstKey);
+      if (mappedTask != null) _taskToHandle.remove(mappedTask);
+    }
+    unawaited(_persistHandles().catchError((e) {
+      debugPrint('[NotificationCoordinator] Failed to persist handle: $e');
+    }));
     return handle;
   }
 
   Future<String?> _resolveOpaqueHandle(String? handle) async {
     if (handle == null) return null;
-    final resolved = await _handlesLock.synchronized(() {
-      final res = _opaqueHandles[handle];
-      if (res != null) {
-        // Move to end on access (LRU)
-        _opaqueHandles.remove(handle);
-        _opaqueHandles[handle] = res;
-      }
+    final res = _opaqueHandles[handle];
+    if (res != null) {
+      // Move to end on access (LRU)
+      _opaqueHandles.remove(handle);
+      _opaqueHandles[handle] = res;
       return res;
-    });
-    if (resolved != null) return resolved;
+    }
     if (_findTask(handle) != null) return handle;
     return null;
   }
@@ -197,29 +184,22 @@ class NotificationCoordinator {
         }),
       );
     }
-    unawaited(_handlesLock
-        .synchronized(() {
-          final handle = _taskToHandle.remove(taskId);
-          if (handle != null) {
-            _opaqueHandles.remove(handle);
-          }
-        })
-        .then((_) => _persistHandles())
-        .catchError(
-            (e) => debugPrint('[Notifications] persistHandles failed: $e')));
+    final handle = _taskToHandle.remove(taskId);
+    if (handle != null) {
+      _opaqueHandles.remove(handle);
+    }
+    unawaited(_persistHandles().catchError(
+        (e) => debugPrint('[Notifications] persistHandles failed: $e')));
   }
 
   /// Drops the ID mapping for [taskId] and returns the removed ID (used by
   /// delete flows that cancel the notification after file cleanup).
   int? removeId(String taskId) {
-    unawaited(_handlesLock
-        .synchronized(() {
-          final handle = _taskToHandle.remove(taskId);
-          if (handle != null) {
-            _opaqueHandles.remove(handle);
-          }
-        })
-        .then((_) => _persistHandles())
+    final handle = _taskToHandle.remove(taskId);
+    if (handle != null) {
+      _opaqueHandles.remove(handle);
+    }
+    unawaited(_persistHandles()
         .catchError((e) => debugPrint('[DMX] persistHandles failed: $e')));
     final notifId = _notificationIds.remove(taskId);
     if (notifId != null) {
@@ -510,16 +490,12 @@ class NotificationCoordinator {
       unawaited(
           _notificationService.cancelNotification(notifId).catchError((_) {}));
     }
-    unawaited(_handlesLock
-        .synchronized(() {
-          final handle = _taskToHandle.remove(taskId);
-          if (handle != null) {
-            _opaqueHandles.remove(handle);
-          }
-        })
-        .then((_) => _persistHandles())
-        .catchError(
-            (e) => debugPrint('[Notifications] persistHandles failed: $e')));
+    final handle = _taskToHandle.remove(taskId);
+    if (handle != null) {
+      _opaqueHandles.remove(handle);
+    }
+    unawaited(_persistHandles().catchError(
+        (e) => debugPrint('[Notifications] persistHandles failed: $e')));
   }
 
   void dispose() {
@@ -528,10 +504,8 @@ class NotificationCoordinator {
     _notificationIds.clear();
     _lastProgressPostTimes.clear();
     _lastNotifActionTime.clear();
-    _handlesLock.synchronized(() {
-      _opaqueHandles.clear();
-      _taskToHandle.clear();
-    });
+    _opaqueHandles.clear();
+    _taskToHandle.clear();
     _notificationService.stopPollingPendingActions();
   }
 }

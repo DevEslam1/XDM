@@ -2,12 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dmx/core/services/logging_service.dart';
-import 'package:flutter/foundation.dart';
 import 'package:workmanager/workmanager.dart';
 
-import '../../../core/services/background_service.dart';
 import '../../../core/services/database_service.dart';
-import '../../../core/services/update_service.dart';
+import '../domain/commands/download_commands.dart';
 import '../models/download_task.dart';
 
 @pragma('vm:entry-point')
@@ -30,11 +28,7 @@ void callbackDispatcher() {
 
 /// Owns the periodic scheduling timer and schedule evaluation.
 ///
-/// Extracted from [DownloadProvider] (Refactor A). Every 15 seconds (or on a
-/// dynamically targeted schedule) it promotes due scheduled tasks to the
-/// queue, triggers the periodic app update check, and keeps the background
-/// service heartbeat alive while downloads are running. All task/queue
-/// mutations go through the constructor callbacks into the provider.
+/// Under ARCH-1: pure command emitter emitting [ScheduleFired] when a schedule triggers.
 class ScheduleManager {
   ScheduleManager({
     required List<DownloadTask> Function() tasks,
@@ -46,6 +40,7 @@ class ScheduleManager {
     required void Function() pumpQueue,
     void Function(String taskName, DateTime scheduledAt)?
         onScheduledTaskStarted,
+    Future<void> Function(String taskId)? onScheduleFired,
   })  : _tasks = tasks,
         _databaseService = databaseService,
         _isDisposed = isDisposed,
@@ -53,7 +48,8 @@ class ScheduleManager {
         _updateTorrentUploadLimit = updateTorrentUploadLimit,
         _notifyListeners = notifyListeners,
         _pumpQueue = pumpQueue,
-        _onScheduledTaskStarted = onScheduledTaskStarted;
+        _onScheduledTaskStarted = onScheduledTaskStarted,
+        _onScheduleFired = onScheduleFired;
 
   final List<DownloadTask> Function() _tasks;
   final DatabaseService _databaseService;
@@ -64,10 +60,14 @@ class ScheduleManager {
   final void Function() _pumpQueue;
   final void Function(String taskName, DateTime scheduledAt)?
       _onScheduledTaskStarted;
+  final Future<void> Function(String taskId)? _onScheduleFired;
 
   Timer? _schedulingTimer;
   DateTime? _lastUpdateCheckTime;
   // FIX-S12: Guard ready state until provider completes initial load
+  bool _isReady = false;
+
+  void markReady() => setReady(true);
   bool _ready = false;
 
   Timer? get schedulingTimer => _schedulingTimer;
@@ -78,126 +78,110 @@ class ScheduleManager {
   static Future<void> initialize() async {
     if (Platform.isAndroid || isAndroidForTesting) {
       try {
-        Workmanager().initialize(callbackDispatcher);
-        Workmanager().registerPeriodicTask(
-          'dmx_schedule',
-          'dmx_schedule_check',
-          frequency: const Duration(minutes: 15),
-          existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
+        await Workmanager().initialize(
+          callbackDispatcher,
+          isInDebugMode: false,
         );
-      } catch (e) {
-        debugPrint('[ScheduleManager] Workmanager initialization error: $e');
+        LoggingService.logger('ScheduleManager').info('Workmanager initialized for download scheduling');
+      } catch (e, st) {
+        LoggingService.logger('ScheduleManager').warning('Failed to initialize Workmanager for scheduling', e, st);
       }
     }
   }
 
-  // FIX-S12: Mark schedule manager ready after initial load completes
-  void markReady() {
-    _ready = true;
-    reschedule();
-  }
-
-  // SCHED-FIX-3: Retarget the scheduling timer when schedule state changes
-  void reschedule() {
-    _scheduleNextCheck();
-  }
-
-  void start() {
+  /// Schedules an OS-level background wakeup alarm for [scheduledAt] (BG-09).
+  static Future<void> scheduleAlarm(String taskId, DateTime scheduledAt) async {
     if (Platform.isAndroid || isAndroidForTesting) {
-      // On Android, periodic checks are handled by platform Workmanager
-      return;
+      try {
+        final delay = scheduledAt.difference(DateTime.now());
+        if (delay.isNegative) return;
+
+        await Workmanager().registerOneOffTask(
+          'download_sched_$taskId',
+          'downloadScheduledTask',
+          initialDelay: delay,
+          existingWorkPolicy: ExistingWorkPolicy.replace,
+          constraints: Constraints(
+            networkType: NetworkType.connected,
+          ),
+        );
+      } catch (e, st) {
+        LoggingService.logger('ScheduleManager').warning('Failed to schedule Workmanager task for $taskId', e, st);
+      }
     }
-    _schedulingTimer?.cancel();
-    _scheduleNextCheck();
   }
 
-  // SCHED-FIX-3: Dynamic timer targeting the nearest upcoming scheduled task
-  void _scheduleNextCheck() {
+  /// Cancels any scheduled OS-level alarm for [taskId] (BG-09).
+  static Future<void> cancelAlarm(String taskId) async {
+    if (Platform.isAndroid || isAndroidForTesting) {
+      try {
+        await Workmanager().cancelByUniqueName('download_sched_$taskId');
+      } catch (e, st) {
+        LoggingService.logger('ScheduleManager').warning('Failed to cancel Workmanager task for $taskId', e, st);
+      }
+    }
+  }
+
+  /// Schedules dynamic timer tick targeting the nearest upcoming task (SCHED-FIX-3).
+  void scheduleNextDynamicTick() {
     _schedulingTimer?.cancel();
     if (_isDisposed()) return;
-    if (Platform.isAndroid || isAndroidForTesting) {
-      _schedulingTimer = null;
-      return;
-    }
 
-    final now = DateTime.now().toUtc();
+    final nowUtc = DateTime.now().toUtc();
     DateTime? nearest;
+
     for (final task in _tasks()) {
       if (task.status == DownloadStatus.paused &&
           !task.pausedByUser &&
-          task.scheduledAt != null &&
-          task.scheduledAt!.toUtc().isAfter(now)) {
-        if (nearest == null || task.scheduledAt!.toUtc().isBefore(nearest)) {
-          nearest = task.scheduledAt!.toUtc();
+          task.scheduledAt != null) {
+        final schedUtc = task.scheduledAt!.toUtc();
+        if (schedUtc.isAfter(nowUtc)) {
+          if (nearest == null || schedUtc.isBefore(nearest)) {
+            nearest = schedUtc;
+          }
         }
       }
     }
 
-    Duration delay;
+    Duration delay = const Duration(seconds: 15);
     if (nearest != null) {
-      delay = nearest.difference(now) + const Duration(seconds: 1);
-      if (delay.isNegative) delay = const Duration(seconds: 1);
-    } else {
-      delay = const Duration(seconds: 15);
+      final toNearest = nearest.difference(nowUtc);
+      if (toNearest < delay && !toNearest.isNegative) {
+        delay = toNearest + const Duration(milliseconds: 100);
+      }
     }
 
     _schedulingTimer = Timer(delay, () {
       if (_isDisposed()) return;
-      unawaited(
-        _onTimerTick().then((_) {
-          if (!_isDisposed()) _scheduleNextCheck();
-        }).catchError((e) {
-          debugPrint('[ScheduleManager] timer tick error: $e');
-          if (!_isDisposed()) _scheduleNextCheck();
-        }),
-      );
+      checkScheduledDownloads();
+      scheduleNextDynamicTick();
     });
   }
 
-  Future<void> _onTimerTick() async {
-    await checkScheduledDownloads();
-    await _checkPeriodicAppUpdate().catchError((e) {
-      LoggingService.logger('ScheduleManager').warning(
-        '[ScheduleManager] periodic app update check failed',
-        e,
-      );
-    });
-    if (_downloadingTasksCount() > 0) {
-      await BackgroundService.sendHeartbeat().catchError((e) {
-        LoggingService.logger('ScheduleManager').warning(
-          '[ScheduleManager] background heartbeat failed',
-          e,
-        );
-      });
+  void start() {
+    _schedulingTimer?.cancel();
+    // Use dynamic tick scheduling for efficiency (SCHED-FIX-3)
+    scheduleNextDynamicTick();
+  }
+
+  /// Sets the ready flag allowing scheduled download checks to proceed.
+  void setReady(bool value) {
+    _ready = value;
+    if (_ready) {
+      checkScheduledDownloads();
     }
   }
 
-  Future<void> _checkPeriodicAppUpdate() async {
-    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
-    final now = DateTime.now();
-    if (_lastUpdateCheckTime != null &&
-        now.difference(_lastUpdateCheckTime!).inHours < 12) {
-      return;
-    }
-    _lastUpdateCheckTime = now;
-    try {
-      await UpdateService().checkForUpdate();
-    } catch (e) {
-      debugPrint('[ScheduleManager] Background update check error: $e');
-    }
-  }
-
+  /// Evaluates pending scheduled tasks, background service heartbeat, and app
+  /// update check.
   Future<void> checkScheduledDownloads() async {
     // SCHED-FIX-7: skip promotion until provider is fully loaded
     if (!_ready) return;
 
     // Compare in UTC so device timezone changes do not affect trigger timing.
     final nowUtc = DateTime.now().toUtc();
-    var hasChanges = false;
     final currentTasks = _tasks();
     final candidateTasks = List<DownloadTask>.from(currentTasks);
-    final promotedTasks = <DownloadTask>[];
-    final originalTasks = <DownloadTask>[];
 
     for (var i = 0; i < candidateTasks.length; i++) {
       if (_isDisposed()) return; // SCHED-FIX-4: bail out if disposed
@@ -208,72 +192,11 @@ class ScheduleManager {
           task.scheduledAt!.toUtc().isBefore(nowUtc) &&
           (task.wasScheduledAt == null ||
               !task.wasScheduledAt!.isAtSameMomentAs(task.scheduledAt!))) {
-        final updated = task.copyWith(
-          status: DownloadStatus.queued,
-          clearError: true,
-          clearCompletedAt: true,
-          clearScheduledAt: true,
-          wasScheduledAt: task.scheduledAt, // SCHED-FIX-1: preserve origin
-          pausedByUser: false,
-        );
-        originalTasks.add(task);
-        promotedTasks.add(updated);
-      }
-    }
-
-    if (promotedTasks.isEmpty) return;
-
-    // FIX-S13: Persist each promotion atomically, isolating failures per task with rollback
-    // Tasks whose save succeeded stay queued; failed tasks are reverted in-memory.
-    final results = await Future.wait(
-      promotedTasks.map((task) async {
-        try {
-          await _databaseService.saveTask(task);
-          return true;
-        } catch (e) {
-          debugPrint('[ScheduleManager] Save failed for ${task.id}: $e');
-          return false;
+        if (_onScheduleFired != null) {
+          await _onScheduleFired!(task.id);
         }
-      }),
-    );
-
-    var anySaveFailed = false;
-    for (var s = 0; s < results.length; s++) {
-      final success = results[s];
-      final target = success ? promotedTasks[s] : originalTasks[s];
-      final idx = currentTasks.indexWhere((t) => t.id == target.id);
-      if (idx != -1) {
-        currentTasks[idx] = target;
-      }
-      if (success) {
-        hasChanges = true;
-      } else {
-        anySaveFailed = true;
-      }
-    }
-
-    if (anySaveFailed) {
-      // SCHED-FIX-6: After reverting the in-memory state, notify listeners so
-      // the UI reflects the reverted paused/scheduled task instead of the
-      // not-yet-persisted queued promotion.
-      _notifyListeners();
-      if (!hasChanges) {
-        return; // Don't pump queue with no successful promotions
-      }
-    }
-
-    if (hasChanges) {
-      _updateTorrentUploadLimit();
-      _notifyListeners();
-      _pumpQueue();
-
-      // SCHED-FIX-5: Notification when scheduled download starts
-      for (var s = 0; s < results.length; s++) {
-        if (results[s]) {
-          final t = promotedTasks[s];
-          if (t.wasScheduledAt != null) {
-            _onScheduledTaskStarted?.call(t.fileName, t.wasScheduledAt!);
-          }
+        if (task.wasScheduledAt != null) {
+          _onScheduledTaskStarted?.call(task.fileName, task.wasScheduledAt!);
         }
       }
     }

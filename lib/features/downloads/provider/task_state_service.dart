@@ -1,15 +1,14 @@
 // FIX-P1-01: Extracted task state management from DownloadProvider
 import 'dart:collection';
-import 'package:synchronized/synchronized.dart';
 import '../models/download_task.dart';
 
 /// Thread-safe service for managing DownloadTask collection in memory.
 class TaskStateService {
   final List<DownloadTask> _tasks = [];
-  final Map<String, Lock> _locks = {};
+  final Map<String, Object> _locks = {};
   final Map<String, int> _indexMap = {};
 
-  Lock lockFor(String id) => _locks.putIfAbsent(id, () => Lock());
+  Object lockFor(String id) => _locks.putIfAbsent(id, () => Object());
 
   UnmodifiableListView<DownloadTask> get allTasks =>
       UnmodifiableListView(_tasks);

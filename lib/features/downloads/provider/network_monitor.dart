@@ -7,14 +7,13 @@ import 'package:dio/dio.dart';
 import 'package:dmx/core/services/logging_service.dart';
 
 import '../../../core/services/torrent_service.dart';
+import '../domain/commands/download_commands.dart';
+import '../models/download_state_machine.dart';
 import '../models/download_task.dart';
 
 /// Watches device connectivity and pauses/resumes downloads accordingly.
 ///
-/// Extracted from [DownloadProvider] (Refactor A). The monitor owns all
-/// connectivity state (current results, wifi-only bookkeeping, the set of
-/// tasks it auto-paused) and calls back into the provider through the
-/// constructor callbacks for task mutations and queue pumping.
+/// Under ARCH-1: pure command emitter emitting [NetworkChanged] when connectivity alters.
 class NetworkMonitor {
   NetworkMonitor({
     required List<DownloadTask> Function() tasks,
@@ -24,13 +23,15 @@ class NetworkMonitor {
     required bool Function() wifiOnly,
     required Future<void> Function(DownloadTask updated) setTask,
     required void Function() pumpQueue,
+    Future<void> Function(NetworkChanged event)? onNetworkChanged,
   })  : _tasks = tasks,
         _torrentIds = torrentIds,
         _cancelTokens = cancelTokens,
         _activeFutures = activeFutures ?? (() => <String, Future<void>>{}),
         _wifiOnly = wifiOnly,
         _setTask = setTask,
-        _pumpQueue = pumpQueue;
+        _pumpQueue = pumpQueue,
+        _onNetworkChanged = onNetworkChanged;
 
   final List<DownloadTask> Function() _tasks;
   final Map<String, int> Function() _torrentIds;
@@ -39,6 +40,7 @@ class NetworkMonitor {
   final bool Function() _wifiOnly;
   final Future<void> Function(DownloadTask updated) _setTask;
   final void Function() _pumpQueue;
+  final Future<void> Function(NetworkChanged event)? _onNetworkChanged;
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   List<ConnectivityResult> _currentConnectivity = [];
@@ -139,11 +141,21 @@ class NetworkMonitor {
     }
     _checkingNetwork = true;
     try {
-      final hasNoNetwork =
+      final hasNoNet =
           _currentConnectivity.contains(ConnectivityResult.none) ||
               _currentConnectivity.isEmpty;
 
-      if (hasNoNetwork) {
+      if (_onNetworkChanged != null) {
+        await _onNetworkChanged!(
+          NetworkChanged(
+            isConnected: !hasNoNet,
+            isWifi: hasWifiOrEthernet,
+            state: _currentConnectivity,
+          ),
+        );
+      }
+
+      if (hasNoNet) {
         await _pauseForNetworkDisconnect();
         return;
       } else {
@@ -167,8 +179,6 @@ class NetworkMonitor {
       _checkingNetwork = false;
       if (_networkRecheckPending) {
         _networkRecheckPending = false;
-        // FIX(C-H4): Break potential synchronous recursion from rapid
-        // platform connectivity events by deferring to a microtask.
         unawaited(Future.microtask(
             () => checkNetworkConnectivity(skipPump: skipPump)));
       }
@@ -190,8 +200,7 @@ class NetworkMonitor {
         if (torrentId != null) {
           TorrentService.pauseTorrent(torrentId);
         }
-        // Cancel token and await active future so old engine completes before returning
-        _cancelTokens()[task.id]?.cancel('network_disconnect_pause');
+        _cancelTokens()[task.id]?.cancel('network_lost');
         final fut = _activeFutures()[task.id];
         if (fut != null) {
           try {
@@ -203,14 +212,14 @@ class NetworkMonitor {
         }
         _cancelTokens().remove(task.id);
       }
-      await _setTask(
-        task.copyWith(
-          status: DownloadStatus.paused,
-          speed: 0,
-          clearEta: true,
-          pauseReason: PauseReason.networkLost,
-          errorMessage: DownloadStatusMessages.waitingNetwork,
-        ),
+      final sm = DownloadStateMachine(
+        taskId: task.id,
+        initialState: DownloadStateMachine.fromStatus(task.status),
+      );
+      sm.transition(
+        DomainDownloadState.paused,
+        reason: 'networkLost',
+        caller: 'NetworkMonitor',
       );
     }));
   }
@@ -228,13 +237,13 @@ class NetworkMonitor {
         _tasksPausedDueToDisconnect.remove(task.id);
         continue;
       }
-      await _setTask(
-        task.copyWith(
-          status: DownloadStatus.queued,
-          clearError: true,
-          clearEta: true,
-          clearPauseReason: true,
-        ),
+      final sm = DownloadStateMachine(
+        taskId: task.id,
+        initialState: DownloadStateMachine.fromStatus(task.status),
+      );
+      sm.transition(
+        DomainDownloadState.queued,
+        caller: 'NetworkMonitor',
       );
     }
     _tasksPausedDueToDisconnect.clear();
@@ -256,18 +265,17 @@ class NetworkMonitor {
         if (torrentId != null) {
           TorrentService.pauseTorrent(torrentId);
         }
-        // No cancellation gate needed - cancel token removal handles resumes.
         _cancelTokens()[task.id]?.cancel('wifi_only_pause');
         _cancelTokens().remove(task.id);
       }
-      await _setTask(
-        task.copyWith(
-          status: DownloadStatus.paused,
-          speed: 0,
-          clearEta: true,
-          pauseReason: PauseReason.networkLost,
-          errorMessage: DownloadStatusMessages.waitingWifi,
-        ),
+      final sm = DownloadStateMachine(
+        taskId: task.id,
+        initialState: DownloadStateMachine.fromStatus(task.status),
+      );
+      sm.transition(
+        DomainDownloadState.paused,
+        reason: 'networkLost',
+        caller: 'NetworkMonitor',
       );
     }));
   }
@@ -284,13 +292,13 @@ class NetworkMonitor {
         _tasksPausedDueToWifiOnly.remove(task.id);
         continue;
       }
-      await _setTask(
-        task.copyWith(
-          status: DownloadStatus.queued,
-          clearError: true,
-          clearEta: true,
-          clearPauseReason: true,
-        ),
+      final sm = DownloadStateMachine(
+        taskId: task.id,
+        initialState: DownloadStateMachine.fromStatus(task.status),
+      );
+      sm.transition(
+        DomainDownloadState.queued,
+        caller: 'NetworkMonitor',
       );
     }
     _tasksPausedDueToWifiOnly.clear();
@@ -299,9 +307,7 @@ class NetworkMonitor {
 
   void dispose() {
     _debounceTimer?.cancel();
-    _debounceTimer = null;
     _connectivitySubscription?.cancel();
-    _tasksPausedDueToDisconnect.clear();
-    _tasksPausedDueToWifiOnly.clear();
+    _connectivitySubscription = null;
   }
 }

@@ -29,9 +29,7 @@ class TaskLifecycleService {
     _inFlightOps[id] = completer.future;
 
     try {
-      await _stateService.lockFor(id).synchronized(() async {
-        await body();
-      });
+      await body();
       completer.complete();
     } catch (e, st) {
       debugPrint('[TaskLifecycleService] $opName failed for $id: $e\n$st');

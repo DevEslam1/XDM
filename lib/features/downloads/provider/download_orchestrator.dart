@@ -36,6 +36,7 @@ import '../../../core/utils/semaphore.dart';
 import '../../../core/utils/url_utils.dart';
 import '../../../shared/accessibility/xdm_announcer.dart';
 import '../../settings/provider/settings_provider.dart';
+import '../models/download_state_machine.dart';
 import '../models/download_task.dart';
 import 'download_provider.dart';
 import 'network_monitor.dart';
@@ -278,7 +279,7 @@ class DownloadOrchestrator {
   Future<DownloadTask> validateResumeState(DownloadTask task) async {
     final live = _host.findTaskById(task.id);
     if (live != null) {
-      task = task.copyWith(status: live.status);
+      task = live;
     }
     // Torrents use libtorrent resume, not .dmxstate
     if (task.isTorrent) {
@@ -809,8 +810,10 @@ class DownloadOrchestrator {
       if (!hasAudio) return false;
 
       // FIX-O-02: Set merging status before merge starts
-      await _host
-          .setTaskState(current.copyWith(status: DownloadStatus.merging));
+      DownloadStateMachine(
+        taskId: current.id,
+        initialState: DownloadStateMachine.fromStatus(current.status),
+      ).transition(DomainDownloadState.merging);
 
       await _host.setTaskState(
         current.copyWith(
@@ -3061,8 +3064,10 @@ class DownloadOrchestrator {
             }
             // FIX-AUDIT-4: Check merge result. If merge failed, do NOT proceed to finalize.
             // FIX-YT-1: Set merging status before merge in normal download path
-            await _host.setTaskState(
-                preMergeCheck.copyWith(status: DownloadStatus.merging));
+            DownloadStateMachine(
+              taskId: preMergeCheck.id,
+              initialState: DownloadStateMachine.fromStatus(preMergeCheck.status),
+            ).transition(DomainDownloadState.merging);
             final mergeOk = await _mergeAudioVideo(task.id, effectiveAudioPath,
                 notificationId: notificationId);
 
@@ -3530,14 +3535,19 @@ class DownloadOrchestrator {
             debugPrint(
                 '[DMX] FIX(04): Both video and audio streams complete. Skipping download, executing merge.');
             final notificationId = _host.notifications.idFor(task.id);
-            await _host.setTaskState(
-                task.copyWith(status: DownloadStatus.downloading));
+            DownloadStateMachine(
+              taskId: task.id,
+              initialState: DownloadStateMachine.fromStatus(task.status),
+            ).transition(DomainDownloadState.downloading);
             final merged = await _mergeAudioVideo(task.id, audioFile.path);
             if (merged) {
               await _finalizeDownload(task.id, notificationId);
             } else {
+              DownloadStateMachine(
+                taskId: task.id,
+                initialState: DomainDownloadState.downloading,
+              ).transition(DomainDownloadState.failed, reason: 'Merge failed.');
               await _host.setTaskState(task.copyWith(
-                status: DownloadStatus.failed,
                 errorMessage: 'Merge failed. Tap retry to re-attempt merge.',
               ));
             }

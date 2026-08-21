@@ -16,6 +16,7 @@ import 'package:pointycastle/asymmetric/api.dart' show RSAPublicKey;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class UpdateInfo {
+  String get downloadUrl => apkUrl;
   final String latestVersion;
   final int versionCode;
   final String apkUrl;
