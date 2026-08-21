@@ -262,18 +262,19 @@ class DownloadProgress {
     if (ytStreamKind == YtStreamKind.combined) {
       return progressRatio;
     }
-    if (ytCounterpartSize == null || ytCounterpartSize! <= 0) {
+    // For split streams (video + audio separate downloads)
+    final cpSize = ytCounterpartSize;
+    if (cpSize == null || cpSize <= 0) {
+      // Counterpart size unknown — show self progress only
       if (fileSize > 0) {
         final ratio = progressRatio;
         return ratio < 1.0 ? ratio : null;
       }
       return null;
     }
-    final cpSize = ytCounterpartSize!;
     final selfSize = fileSize > 0 ? fileSize : 0;
     final totalSize = selfSize + cpSize;
     if (totalSize <= 0) return null;
-
     final selfDownloaded = ytDownloadedBytes ?? downloadedBytes;
     final cpDownloaded = ytCounterpartDownloadedBytes ?? 0;
     final totalDownloaded = (selfDownloaded > 0 ? selfDownloaded : 0) +

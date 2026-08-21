@@ -15,6 +15,7 @@ class TorrentProvider extends ChangeNotifier {
   final Map<int, TorrentUpdateInfo> _latestStats = {};
   StreamSubscription<Map<int, TorrentUpdateInfo>>? _updatesSub;
   Timer? _staleDetector;
+  Timer? _coalesceTimer;
 
   TorrentProvider({ITorrentService? torrentService})
       : _torrentService = torrentService ??
@@ -72,7 +73,10 @@ class TorrentProvider extends ChangeNotifier {
       for (final entry in torrents.entries) {
         _latestStats[entry.key] = entry.value;
       }
-      notifyListeners();
+      _coalesceTimer?.cancel();
+      _coalesceTimer = Timer(const Duration(seconds: 1), () {
+        notifyListeners();
+      });
     }, onError: (Object e) {
       LoggingService.logger('TorrentProvider')
           .warning('torrentUpdates error', e as Exception);
@@ -99,6 +103,8 @@ class TorrentProvider extends ChangeNotifier {
   void dispose() {
     _updatesSub?.cancel();
     _updatesSub = null;
+    _coalesceTimer?.cancel();
+    _coalesceTimer = null;
     _staleDetector?.cancel();
     _staleDetector = null;
     super.dispose();

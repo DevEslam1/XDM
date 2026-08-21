@@ -2357,12 +2357,34 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
                     decoration: AppTheme.progressTrack(isDark: isDark),
                   ),
                   FractionallySizedBox(
-                    widthFactor: task.progress.clamp(0.0, 1.0),
+                    widthFactor: task.torrentOverallPercent.clamp(0.0, 1.0),
                     child: Container(
                       height: 6,
                       decoration: AppTheme.progressFill(blueClr),
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${(task.torrentOverallPercent * 100).toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: blueClr,
+                    ),
+                  ),
+                  if (task.totalPieces != null && task.totalPieces! > 0)
+                    Text(
+                      '${task.completedPieces ?? 0}/${task.totalPieces} pieces',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: mutedClr,
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 14),
@@ -2720,10 +2742,22 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
             triggerHaptic(settings);
             final updatedFiles = List<Map<String, dynamic>>.from(files);
             for (var i = 0; i < updatedFiles.length; i++) {
+              final current = updatedFiles[i];
+              final length = (current['length'] as num?)?.toInt() ?? 0;
+              final currentDl = (current['downloadedBytes'] as num?)?.toInt() ?? 0;
+              final isComplete = length > 0 && currentDl >= length;
               updatedFiles[i] = {
-                ...updatedFiles[i],
+                ...current,
                 'selected': true,
                 'priority': 4,
+                if (!isComplete) ...{
+                  'downloadedBytes': currentDl > 0 ? currentDl : 0,
+                  'progress': (length > 0 && currentDl > 0)
+                      ? (currentDl / length).clamp(0.0, 1.0)
+                      : 0.0,
+                  'isComplete': false,
+                  'progressEstimated': false,
+                },
               };
             }
             unawaited(
@@ -2745,6 +2779,10 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
                 ...updatedFiles[i],
                 'selected': false,
                 'priority': 0,
+                'downloadedBytes': 0,
+                'progress': 0.0,
+                'isComplete': false,
+                'progressEstimated': false,
               };
             }
             unawaited(
@@ -2761,10 +2799,28 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
           onFileToggle: (index, val) {
             triggerHaptic(settings);
             final updatedFiles = List<Map<String, dynamic>>.from(files);
+            final current = files[index];
+            final length = (current['length'] as num?)?.toInt() ?? 0;
+            final currentDl =
+                (current['downloadedBytes'] as num?)?.toInt() ?? 0;
+            final isComplete = val && length > 0 && currentDl >= length;
             updatedFiles[index] = {
-              ...files[index],
+              ...current,
               'selected': val,
               'priority': val ? 4 : 0,
+              if (!val) ...{
+                'downloadedBytes': 0,
+                'progress': 0.0,
+                'isComplete': false,
+                'progressEstimated': false,
+              } else if (!isComplete) ...{
+                'downloadedBytes': currentDl > 0 ? currentDl : 0,
+                'progress': (length > 0 && currentDl > 0)
+                    ? (currentDl / length).clamp(0.0, 1.0)
+                    : 0.0,
+                'isComplete': false,
+                'progressEstimated': false,
+              },
             };
             provider.updateTorrentTaskFiles(currentTask.id, updatedFiles);
           },

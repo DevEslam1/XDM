@@ -2806,6 +2806,13 @@ class DownloadOrchestrator {
                             (copy['length'] as num?)?.toInt() ??
                                 (copy['size'] as num?)?.toInt() ??
                                 0;
+                        copy['progress'] = 1.0;
+                        copy['isComplete'] = true;
+                        copy['progressEstimated'] = false;
+                      } else {
+                        copy['downloadedBytes'] = 0;
+                        copy['progress'] = 0.0;
+                        copy['isComplete'] = false;
                         copy['progressEstimated'] = false;
                       }
                       return copy;

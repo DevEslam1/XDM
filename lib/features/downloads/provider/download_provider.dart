@@ -81,6 +81,7 @@ class DownloadProvider extends ChangeNotifier
       onTaskUpdated: (updated) {
         final idx = _tasks.indexWhere((t) => t.id == updated.id);
         if (idx != -1) { _tasks[idx] = updated; } else { _tasks.add(updated); }
+        _taskIndex[updated.id] = updated;
         filteredTasksDirty = true; notifyListeners();
       },
     );
@@ -108,6 +109,7 @@ class DownloadProvider extends ChangeNotifier
   StreamSubscription<DownloadEvent>? _eventSubscription;
 
   final List<DownloadTask> _tasks = [];
+  final Map<String, DownloadTask> _taskIndex = {};
   bool _disposed = false;
   String? lastError;
   Timer? _widgetUpdateTimer;
@@ -241,7 +243,11 @@ class DownloadProvider extends ChangeNotifier
 
     // Step 4: UI update (DB write complete, now expose to in-memory state & notify UI)
     _tasks.clear();
+    _taskIndex.clear();
     _tasks.addAll(reconciledTasks);
+    for (final task in reconciledTasks) {
+      _taskIndex[task.id] = task;
+    }
     filteredTasksDirty = true;
     notifyListeners();
 
@@ -271,13 +277,10 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
-  DownloadTask? _findTask(String id) {
-    final idx = _tasks.indexWhere((t) => t.id == id);
-    return idx != -1 ? _tasks[idx] : null;
-  }
+  DownloadTask? _findTask(String id) => _taskIndex[id];
 
-  @override DownloadTask? findTaskById(String id) => _findTask(id);
-  DownloadTask? taskById(String id) => _findTask(id);
+  @override DownloadTask? findTaskById(String id) => _taskIndex[id];
+  DownloadTask? taskById(String id) => _taskIndex[id];
   bool isTaskOperationPending(String taskId) => false;
   bool get isLoadingTasks => false;
   bool get isReconciling => false;
@@ -357,6 +360,7 @@ class DownloadProvider extends ChangeNotifier
     await _databaseService.saveTask(task);
     final idx = _tasks.indexWhere((t) => t.id == task.id);
     if (idx != -1) { _tasks[idx] = task; } else { _tasks.add(task); }
+    _taskIndex[task.id] = task;
     filteredTasksDirty = true;
     if (!DownloadEngine.isInBackground || !PowerMonitor.screenOff) notifyListeners();
   }
@@ -379,6 +383,7 @@ class DownloadProvider extends ChangeNotifier
     final isProgressOnly = existing != null && existing.status == task.status && existing.status == DownloadStatus.downloading && existing.downloadedBytes != task.downloadedBytes;
     final idx = _tasks.indexWhere((t) => t.id == task.id);
     if (idx != -1) { _tasks[idx] = task; } else { _tasks.add(task); }
+    _taskIndex[task.id] = task;
     filteredTasksDirty = true;
     if (isProgressOnly) {
       _pendingProgressUpdates.add(task.id);
@@ -415,6 +420,7 @@ class DownloadProvider extends ChangeNotifier
     final updated = _findTask(id);
     if (updated != null) {
       _tasks[_tasks.indexOf(updated)] = updated;
+      _taskIndex[updated.id] = updated;
       filteredTasksDirty = true;
       notifyListeners();
     }
@@ -539,7 +545,21 @@ class DownloadProvider extends ChangeNotifier
 
   @override
   Future<void> pauseTask(String id, {PauseReason reason = PauseReason.userRequested}) async {
-    _cancelTokens.remove(id)?.cancel('user_paused');
+    final token = _cancelTokens.remove(id);
+    if (token != null && !token.isCancelled) {
+      token.cancel('paused:${reason.name}');
+    }
+    final orchTokens = _orchestratorTokens.remove(id);
+    if (orchTokens != null) {
+      if (!orchTokens.video.isCancelled) orchTokens.video.cancel('paused:${reason.name}');
+      if (!orchTokens.audio.isCancelled) orchTokens.audio.cancel('paused:${reason.name}');
+    }
+    final future = _activeFutures.remove(id);
+    if (future != null) {
+      try {
+        await future.timeout(const Duration(seconds: 5), onTimeout: () {});
+      } catch (_) {}
+    }
     await _applyStateChange(
       id, DomainDownloadState.paused,
       PauseTask(id, reason: reason.name, userInitiated: reason == PauseReason.userRequested),
@@ -587,8 +607,11 @@ class DownloadProvider extends ChangeNotifier
         }
         await _databaseService.deleteTask(id);
         _tasks.removeWhere((t) => t.id == id);
+        _taskIndex.remove(id);
         _speedHistories.remove(id);
         _lastProgressUpdateTimes.remove(id);
+        _ytLowSpeedCounts.remove(id);
+        _ytThrottlingRefreshing.remove(id);
         filteredTasksDirty = true;
         notifyListeners();
       }
@@ -602,8 +625,14 @@ class DownloadProvider extends ChangeNotifier
     if (task == null) return;
     var newUrl = task.url, newAudioUrl = task.mergedAudioUrl, downloadedBytes = task.downloadedBytes;
     final msg = task.errorMessage?.toLowerCase() ?? '';
-    final isUnrecoverable = msg.contains('checksum') || msg.contains('corrupt') || msg.contains('unrecoverable');
-    var shouldResetProgress = isUnrecoverable;
+    final isCorruptionRetry = msg.contains('file changed') ||
+        msg.contains('checksum') ||
+        msg.contains('corrupt') ||
+        msg.contains('integrity') ||
+        msg.contains('unrecoverable') ||
+        task.failureCategory == FailureCategory.integrityError ||
+        task.failureCategory == FailureCategory.fileChanged;
+    var shouldResetProgress = isCorruptionRetry;
     if (task.downloadPageUrl != null && task.youtubeQualityPreset != null) {
       try {
         final streams = await YoutubeService.getFreshStreams(task.downloadPageUrl!);
@@ -619,6 +648,10 @@ class DownloadProvider extends ChangeNotifier
       downloadedBytes = 0;
       await _deleteFileSafely(task.tempFilePath);
       await _deleteFileSafely('${task.tempFilePath}.dmxstate');
+      await _deleteFileSafely('${task.tempFilePath}.journal');
+      await _deleteFileSafely('${task.tempFilePath}.audio');
+      await _deleteFileSafely('${task.tempFilePath}.audio.dmxstate');
+      await _deleteFileSafely('${task.tempFilePath}.audio.journal');
     } else {
       final stateFile = File('${task.tempFilePath}.dmxstate');
       if (await stateFile.exists()) {
@@ -632,9 +665,20 @@ class DownloadProvider extends ChangeNotifier
     final updated = _findTask(id);
     if (updated != null) {
       await _setTask(updated.copyWith(
-        url: newUrl, mergedAudioUrl: newAudioUrl, downloadedBytes: downloadedBytes,
+        url: newUrl,
+        mergedAudioUrl: newAudioUrl,
+        downloadedBytes: downloadedBytes,
         videoStreamSize: shouldResetProgress ? 0 : updated.videoStreamSize,
         audioDownloadedBytes: shouldResetProgress ? 0 : updated.audioDownloadedBytes,
+        chunks: shouldResetProgress ? List.filled(updated.threadCount, 0.0) : updated.chunks,
+        failureCategory: null,
+        clearFailureCategory: true,
+        errorMessage: null,
+        clearError: true,
+        recoveryHint: null,
+        clearRecoveryHint: true,
+        speed: 0,
+        clearEta: true,
       ));
     }
   }
@@ -694,7 +738,6 @@ class DownloadProvider extends ChangeNotifier
       _speedNotifiers[id]!.value = s;
     }
   }
-  @override List<Map<String, dynamic>> markTorrentFilesCompleted(List<Map<String, dynamic>> files) => files.map((m) => {...m, 'downloadedBytes': m['length'] ?? 0, 'progress': 1.0}).toList();
   @override Future<void> cleanupPartFiles(DownloadTask t, {bool preserveParts = false}) async { if (!preserveParts) await _deleteFileSafely(t.tempFilePath); }
   @override
   Future<void> startOverTask(
@@ -742,6 +785,9 @@ class DownloadProvider extends ChangeNotifier
     _networkMonitor.dispose(); _scheduleManager.dispose(); _notifications.dispose();
     _orchestrator.dispose(); _executor.dispose();
     _settingsProvider.removeListener(_onSettingsChanged);
+    _taskIndex.clear();
+    _ytLowSpeedCounts.clear();
+    _ytThrottlingRefreshing.clear();
     for (final n in _progressNotifiers.values) {
       n.dispose();
     }

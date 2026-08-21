@@ -448,7 +448,11 @@ class DownloadProgressHandler {
     final doneParts = chunkList != null
         ? (isDone
             ? chunkList.length
-            : chunkList.where((c) => c.isComplete).length)
+            : chunkList
+                .where((c) =>
+                    c.isComplete ||
+                    (c.isIndeterminate && c.downloaded > 0 && c.size >= 0))
+                .length)
         : (pCompletedChunks ??
             (isDone ? totalParts : lastCompletedChunks ?? 0));
 

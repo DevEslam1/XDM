@@ -486,6 +486,13 @@ class TorrentDownloadHandler {
     if (files.isEmpty) return;
     for (var i = 0; i < files.length; i++) {
       final f = files[i];
+      if (!isTorrentFileSelected(f)) {
+        f['downloadedBytes'] = 0;
+        f['progress'] = 0.0;
+        f['isComplete'] = false;
+        f['progressEstimated'] = false;
+        continue;
+      }
       final len = (f['length'] as num?)?.toInt() ?? 0;
       if (len <= 0) {
         f['downloadedBytes'] = 0;
@@ -524,6 +531,7 @@ class TorrentDownloadHandler {
         f['progressEstimated'] = true;
       }
     }
+    if (totalDownloadedBytes == 0) return;
     if (TorrentService.sequentialDownloadEnabled) {
       distributeEstimatedBytesSequential(files, totalDownloadedBytes);
     } else {
@@ -571,6 +579,13 @@ class TorrentDownloadHandler {
     double totalWeightedNeedingSize = 0;
     final needing = <Map<String, dynamic>>[];
     for (final f in files) {
+      if (!isTorrentFileSelected(f)) {
+        f['downloadedBytes'] = 0;
+        f['progress'] = 0.0;
+        f['isComplete'] = false;
+        f['progressEstimated'] = false;
+        continue;
+      }
       final estimated = (f['progressEstimated'] as bool?) ?? true;
       final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
       final len = (f['length'] as num?)?.toInt() ?? 0;

@@ -155,17 +155,22 @@ class UserScriptManager extends ChangeNotifier implements ScriptRepository {
       throw Exception('Dynamic imports are prohibited in UserScripts.');
     }
 
+    final hasWindowComputed = (stripped.contains('window[') || RegExp(r'window\s*\[').hasMatch(stripped)) &&
+        (stripped.contains('eval') || stripped.contains('Function'));
     final hasObfuscatedEval =
-        RegExp(r'window\s*\[\s*["\x27]ev').hasMatch(stripped);
+        hasWindowComputed || RegExp(r'window\s*\[\s*["\x27]ev').hasMatch(stripped);
     final hasObfuscatedFunction =
         RegExp(r'window\s*\[\s*["\x27]Function').hasMatch(stripped);
-    final hasGlobalThis = RegExp(r'globalThis\s*\[').hasMatch(stripped);
+    final hasGlobalThis = stripped.contains('globalThis[') ||
+        RegExp(r'globalThis\s*\[').hasMatch(stripped);
     final hasConstructorCall = RegExp(r'constructor\s*\(').hasMatch(stripped);
     final hasCharCode = stripped.contains('String.fromCharCode');
     final hasAtob = stripped.contains('atob(');
     final hasBtoa = stripped.contains('btoa(');
-    final hasReflect =
-        stripped.contains('Reflect.') || stripped.contains('Reflect[');
+    final hasReflect = stripped.contains('Reflect.get') ||
+        stripped.contains('Reflect.set') ||
+        stripped.contains('Reflect.') ||
+        stripped.contains('Reflect[');
     final hasProxy =
         stripped.contains('Proxy(') || stripped.contains('new Proxy');
     final hasProtoGetSet = stripped.contains('getPrototypeOf') ||

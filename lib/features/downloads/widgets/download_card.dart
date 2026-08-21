@@ -495,7 +495,7 @@ class _StatusChipState extends State<_StatusChip> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _syncPulse();
+    _syncPausableLoop();
   }
 
   @override
@@ -503,17 +503,21 @@ class _StatusChipState extends State<_StatusChip> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.task.status != widget.task.status ||
         oldWidget.task.seedingEnabled != widget.task.seedingEnabled) {
-      _syncPulse();
+      _syncPausableLoop();
     }
   }
+
+  void _syncPausableLoop() => _syncPulse();
 
   void _syncPulse() {
     // FIX-P1-03: Debounce pulse driver reference updates during rapid scrolling/updates
     _syncDebounce?.cancel();
     _syncDebounce = Timer(const Duration(milliseconds: 100), () {
       if (!mounted) return;
+      final provider = context.read<DownloadProvider>();
+      final isTabVisible = provider.activeTabIndex == 0 || provider.activeTabIndex == 1;
       final needsPulse =
-          _shouldPulse(widget.task) && modernAnimationsAllowed(context);
+          _shouldPulse(widget.task) && isTabVisible && modernAnimationsAllowed(context);
       if (needsPulse && !_hasActiveRef) {
         _StatusChipPulseDriver().addRef();
         _hasActiveRef = true;
@@ -806,26 +810,32 @@ class _TelemetryStrip extends StatelessWidget {
       ),
     );
 
+    final effectiveSeedingSpeed = seedingUploadSpeed > 0
+        ? seedingUploadSpeed
+        : (seeding ? context.read<DownloadProvider>().getTorrentUploadSpeed(task.id) : 0.0);
+
     // Completed downloads: clean single metadata line
     if (isCompleted) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Row(
-          children: [
-            Icon(Icons.sd_storage_outlined, size: 14, color: mutedClr),
-            const SizedBox(width: 4),
-            Text(
-              task.sizeFormatted,
-              style: AppTheme.dataStyle(
-                isDark: isDark,
-                size: 12,
-                weight: FontWeight.w600,
-                color: secClr,
+      return RepaintBoundary(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            children: [
+              Icon(Icons.sd_storage_outlined, size: 14, color: mutedClr),
+              const SizedBox(width: 4),
+              Text(
+                task.sizeFormatted,
+                style: AppTheme.dataStyle(
+                  isDark: isDark,
+                  size: 12,
+                  weight: FontWeight.w600,
+                  color: secClr,
+                ),
               ),
-            ),
-            const Spacer(),
-            protoBadge,
-          ],
+              const Spacer(),
+              protoBadge,
+            ],
+          ),
         ),
       );
     }
@@ -834,88 +844,90 @@ class _TelemetryStrip extends StatelessWidget {
     if (isDownloading) {
       // FIX-UI-05: Show correct speed for seeding torrents
       final speedText = seeding
-          ? '${formatBytes(seedingUploadSpeed)}/s'
+          ? '${formatBytes(effectiveSeedingSpeed)}/s'
           : task.speedFormatted;
       final etaText = seeding ? 'SEEDING' : task.etaFormatted;
 
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Icon(Icons.speed_rounded, size: 14, color: accent),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    speedText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.dataStyle(
-                      isDark: isDark,
-                      size: 12,
-                      weight: FontWeight.bold,
-                      color: accent,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Icon(Icons.schedule_rounded, size: 14, color: mutedClr),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    etaText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.dataStyle(
-                      isDark: isDark,
-                      size: 12,
-                      color: secClr,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                Builder(
-                  builder: (context) {
-                    final provider = context.read<DownloadProvider>();
-                    final history = provider.getSpeedHistory(task.id);
-                    if (history.length >= 2) {
-                      final screenW = MediaQuery.sizeOf(context).width;
-                      final sparkWidth =
-                          screenW < 340 ? 45.0 : (screenW < 400 ? 60.0 : 80.0);
-                      return _CardSparklineGraph(
-                        history: history,
+      return RepaintBoundary(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.speed_rounded, size: 14, color: accent),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      speedText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.dataStyle(
+                        isDark: isDark,
+                        size: 12,
+                        weight: FontWeight.bold,
                         color: accent,
-                        width: sparkWidth,
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(Icons.sd_storage_outlined, size: 14, color: mutedClr),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.dataStyle(
-                      isDark: isDark,
-                      size: 11,
-                      color: secClr,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                protoBadge,
-              ],
-            ),
-          ],
+                  const SizedBox(width: 10),
+                  Icon(Icons.schedule_rounded, size: 14, color: mutedClr),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      etaText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.dataStyle(
+                        isDark: isDark,
+                        size: 12,
+                        color: secClr,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Builder(
+                    builder: (context) {
+                      final provider = context.read<DownloadProvider>();
+                      final history = provider.getSpeedHistory(task.id);
+                      if (history.length >= 2) {
+                        final screenW = MediaQuery.sizeOf(context).width;
+                        final sparkWidth =
+                            screenW < 340 ? 45.0 : (screenW < 400 ? 60.0 : 80.0);
+                        return _CardSparklineGraph(
+                          history: history,
+                          color: accent,
+                          width: sparkWidth,
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.sd_storage_outlined, size: 14, color: mutedClr),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.dataStyle(
+                        isDark: isDark,
+                        size: 11,
+                        color: secClr,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  protoBadge,
+                ],
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -926,45 +938,47 @@ class _TelemetryStrip extends StatelessWidget {
       DownloadStatus.paused => 'Paused',
       DownloadStatus.downloading => task.speedFormatted,
       DownloadStatus.completed =>
-        seeding ? '${formatBytes(seedingUploadSpeed)}/s' : 'Done',
+        seeding ? '${formatBytes(effectiveSeedingSpeed)}/s' : 'Done',
       DownloadStatus.failed => '—',
       DownloadStatus.merging => 'Merging…',
     };
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Row(
-        children: [
-          Icon(Icons.sd_storage_outlined, size: 14, color: mutedClr),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              task.downloadedBytes > 0
-                  ? '${task.downloadedSizeFormatted} / ${task.sizeFormatted}'
-                  : task.sizeFormatted,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTheme.dataStyle(
-                isDark: isDark,
-                size: 12,
-                weight: FontWeight.w600,
-                color: secClr,
+    return RepaintBoundary(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          children: [
+            Icon(Icons.sd_storage_outlined, size: 14, color: mutedClr),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                task.downloadedBytes > 0
+                    ? '${task.downloadedSizeFormatted} / ${task.sizeFormatted}'
+                    : task.sizeFormatted,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.dataStyle(
+                  isDark: isDark,
+                  size: 12,
+                  weight: FontWeight.w600,
+                  color: secClr,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            speedText,
-            style: AppTheme.dataStyle(
-              isDark: isDark,
-              size: 11,
-              weight: FontWeight.w600,
-              color: mutedClr,
+            const SizedBox(width: 8),
+            Text(
+              speedText,
+              style: AppTheme.dataStyle(
+                isDark: isDark,
+                size: 11,
+                weight: FontWeight.w600,
+                color: mutedClr,
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          protoBadge,
-        ],
+            const SizedBox(width: 8),
+            protoBadge,
+          ],
+        ),
       ),
     );
   }
@@ -987,6 +1001,21 @@ class _ChunkedProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (task.progress < 0 || task.hasUnknownSize) {
+      final trackColor = (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+          .withValues(alpha: isDark ? 0.15 : 0.12);
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: SizedBox(
+          height: 8,
+          child: LinearProgressIndicator(
+            backgroundColor: trackColor,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+            minHeight: 8,
+          ),
+        ),
+      );
+    }
     final chunks = task.sanitizedChunks;
     final Widget bar;
     if (task.isTorrent || chunks.length <= 1 || task.hasMergedAudio) {
@@ -1123,96 +1152,97 @@ class _ProgressRow extends StatelessWidget {
     final showIndeterminate =
         (task.hasUnknownSize || task.progress == -1.0) && isDownloading;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: RepaintBoundary(
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 6.0,
-                  child: showIndeterminate
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            minHeight: 6.0,
-                            color: color,
-                            backgroundColor: color.withValues(alpha: 0.15),
-                          ),
-                        )
-                      : _ChunkedProgressBar(
-                          task: task, isDark: isDark, color: color),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            // Total percentage or byte count readout
-            SizedBox(
-              width: showIndeterminate ? 80 : 48,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerRight,
-                child: Text(
-                  showIndeterminate
-                      ? formatBytes(task.downloadedBytes)
-                      : task.progressPercentString,
-                  textAlign: TextAlign.end,
-                  style: AppTheme.dataStyle(
-                    isDark: isDark,
-                    size: showIndeterminate ? 11 : 13,
-                    weight: FontWeight.w800,
-                    color: color,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        // FIX(05): Audio progress indicator for YouTube downloads with separate audio track
-        if (task.hasMergedAudio) ...[
-          const SizedBox(height: 4),
+    return RepaintBoundary(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(Icons.audiotrack,
-                  size: 12, color: color.withValues(alpha: 0.8)),
-              const SizedBox(width: 4),
               Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
-                  child: LinearProgressIndicator(
-                    value: task.audioProgressPercent,
-                    minHeight: 3,
-                    color: color,
-                    backgroundColor: color.withValues(alpha: 0.15),
+                child: RepaintBoundary(
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 6.0,
+                    child: showIndeterminate
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              minHeight: 6.0,
+                              color: color,
+                              backgroundColor: color.withValues(alpha: 0.15),
+                            ),
+                          )
+                        : _ChunkedProgressBar(
+                            task: task, isDark: isDark, color: color),
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
-              Text(
-                task.audioProgressString,
-                style: AppTheme.dataStyle(
-                  isDark: isDark,
-                  size: 10,
-                  weight: FontWeight.w700,
-                  color: color,
+              const SizedBox(width: 10),
+              // Total percentage or byte count readout
+              SizedBox(
+                width: showIndeterminate ? 80 : 48,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    showIndeterminate
+                        ? formatBytes(task.downloadedBytes)
+                        : task.progressPercentString,
+                    textAlign: TextAlign.end,
+                    style: AppTheme.dataStyle(
+                      isDark: isDark,
+                      size: showIndeterminate ? 11 : 13,
+                      weight: FontWeight.w800,
+                      color: color,
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
+          // FIX(05): Audio progress indicator for YouTube downloads with separate audio track
+          if (task.hasMergedAudio) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.audiotrack,
+                    size: 12, color: color.withValues(alpha: 0.8)),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(
+                      value: task.audioProgress.clamp(0.0, 1.0),
+                      minHeight: 3.0,
+                      color: color.withValues(alpha: 0.7),
+                      backgroundColor: color.withValues(alpha: 0.15),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  task.audioProgressPercentString,
+                  style: AppTheme.microLabel(
+                    isDark: isDark,
+                    size: 9,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          // FIX(09 & FIX-17): Display partial size indicator when video size unknown
+          if (task.isTotalSizePartial) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Video size unknown',
+              style: AppTheme.microLabel(isDark: isDark, color: color, size: 9),
+            ),
+          ],
         ],
-        // FIX(09 & FIX-17): Display partial size indicator when video size unknown
-        if (task.isTotalSizePartial) ...[
-          const SizedBox(height: 2),
-          Text(
-            'Video size unknown',
-            style: AppTheme.microLabel(isDark: isDark, color: color, size: 9),
-          ),
-        ],
-      ],
+      ),
     );
   }
 }
@@ -1457,32 +1487,34 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
       actionBtn = const SizedBox.shrink();
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          switchInCurve: Curves.easeOutBack,
-          switchOutCurve: Curves.easeIn,
-          transitionBuilder: (Widget child, Animation<double> animation) {
-            return ScaleTransition(
-              scale: animation,
-              child: FadeTransition(
-                opacity: animation,
-                child: child,
-              ),
-            );
-          },
-          child: actionBtn,
-        ),
-        const SizedBox(width: 6),
-        _ControlButton(
-          icon: Icons.more_vert_rounded,
-          color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
-          tooltip: L10n.of(context, 'options_btn'),
-          onPressed: () => _showAdvancedControls(context, task, settings),
-        ),
-      ],
+    return RepaintBoundary(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            switchInCurve: Curves.easeOutBack,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (Widget child, Animation<double> animation) {
+              return ScaleTransition(
+                scale: animation,
+                child: FadeTransition(
+                  opacity: animation,
+                  child: child,
+                ),
+              );
+            },
+            child: actionBtn,
+          ),
+          const SizedBox(width: 6),
+          _ControlButton(
+            icon: Icons.more_vert_rounded,
+            color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+            tooltip: L10n.of(context, 'options_btn'),
+            onPressed: () => _showAdvancedControls(context, task, settings),
+          ),
+        ],
+      ),
     );
   }
 }

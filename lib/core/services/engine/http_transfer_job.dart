@@ -230,6 +230,7 @@ class HttpTransferJob {
   List<Map<String, dynamic>>? _cachedChunkDetails;
   final Stopwatch _stopwatch = Stopwatch();
   final Queue<SpeedSample> _speedSamples = Queue();
+  double _lastSpeed = 0.0;
   int _watchdogCheckpointBytes = 0;
   int _lastProgressBytes = 0;
   int _lastProgressTimeMs = 0;
@@ -2100,7 +2101,8 @@ class HttpTransferJob {
     final saveInterval = isBackground
         ? const Duration(seconds: 15).inMilliseconds
         : const Duration(seconds: 5).inMilliseconds;
-    const saveByteThreshold = 2 * 1024 * 1024;
+    final speed = _lastSpeed;
+    final saveByteThreshold = max(2 * 1024 * 1024, (speed * 1.5).toInt());
     final dueSave = nowMs - _lastStateSaveMs >= saveInterval ||
         _bytesSinceSave >= saveByteThreshold;
     final reportInterval = isBackground ? 15000 : 750;
@@ -2255,6 +2257,7 @@ class HttpTransferJob {
           (_stopwatch.elapsedMilliseconds - first.timestampMs) / 1000;
       if (elapsed > 0) speed = (downloaded - first.bytes) / elapsed;
     }
+    _lastSpeed = speed;
 
     // FIX 11: Writer buffer adaptation - also works in single-stream via
     // checking if writer is available (it's null in single-stream, so

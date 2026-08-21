@@ -227,9 +227,13 @@ mixin DownloadTorrentMixin {
       final copy = Map<String, dynamic>.from(f);
       if (isTorrentFileSelected(copy)) {
         copy['downloadedBytes'] = (copy['length'] as num?)?.toInt() ?? 0;
+        copy['progress'] = 1.0;
+        copy['isComplete'] = true;
         copy['progressEstimated'] = false;
       } else {
         copy['downloadedBytes'] = 0;
+        copy['progress'] = 0.0;
+        copy['isComplete'] = false;
         copy['progressEstimated'] = false;
       }
 
@@ -468,7 +472,14 @@ mixin DownloadTorrentMixin {
     final stampedFiles =
         files.map((f) => {...f, 'lastFileSyncMs': timestamp}).toList();
 
+    var newStatus = task.status;
+    if (task.status == DownloadStatus.completed &&
+        selectedDownloaded < selectedSize) {
+      newStatus = DownloadStatus.paused;
+    }
+
     final updated = task.copyWith(
+      status: newStatus,
       torrentFiles: stampedFiles,
       fileSize: selectedSize > 0 ? selectedSize : task.fileSize,
       downloadedBytes: selectedDownloaded,

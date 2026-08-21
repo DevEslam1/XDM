@@ -107,6 +107,7 @@ class BackgroundTimerManager {
         // If UI or widget timer and app is backgrounded or screen off, do not schedule active timer
         if ((cat == TimerCategory.ui || cat == TimerCategory.widget) &&
             (DownloadEngine.isInBackground || PowerMonitor.screenOff)) {
+          _timers.remove(id);
           continue;
         }
         final effective = _adaptInterval(base, category: cat);

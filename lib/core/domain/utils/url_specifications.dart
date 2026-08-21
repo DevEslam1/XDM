@@ -1,7 +1,7 @@
 import 'dart:core';
 
 /// Pure domain value object representing download metadata.
-class DownloadMetadata {
+class UrlResourceMetadata {
   final String url;
   final String fileName;
   final String? extension;
@@ -14,7 +14,7 @@ class DownloadMetadata {
   final String? thumbnailUrl;
   final List<TorrentFileSelection> torrentFiles;
 
-  const DownloadMetadata({
+  const UrlResourceMetadata({
     required this.url,
     required this.fileName,
     this.extension,
@@ -28,7 +28,7 @@ class DownloadMetadata {
     this.torrentFiles = const [],
   });
 
-  DownloadMetadata copyWith({
+  UrlResourceMetadata copyWith({
     String? url,
     String? fileName,
     String? extension,
@@ -41,7 +41,7 @@ class DownloadMetadata {
     String? thumbnailUrl,
     List<TorrentFileSelection>? torrentFiles,
   }) {
-    return DownloadMetadata(
+    return UrlResourceMetadata(
       url: url ?? this.url,
       fileName: fileName ?? this.fileName,
       extension: extension ?? this.extension,

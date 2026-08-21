@@ -118,10 +118,21 @@ class DownloadEngine implements IDownloadEngine {
   String buildTempFilePath(String dir, String fileName) =>
       p.join(dir, '$fileName.dmxpart');
 
+  static DateTime? _lastDiskCheck;
+  static bool? _lastDiskResult;
+
   @override
   Future<bool> hasEnoughDiskSpace(String saveDir, int requiredBytes) async {
+    if (_lastDiskCheck != null &&
+        _lastDiskResult != null &&
+        DateTime.now().difference(_lastDiskCheck!) < const Duration(seconds: 30)) {
+      return _lastDiskResult!;
+    }
     final result = await hasEnoughDiskSpaceOrNull(saveDir, requiredBytes);
-    return result ?? false;
+    final finalResult = result ?? false;
+    _lastDiskCheck = DateTime.now();
+    _lastDiskResult = finalResult;
+    return finalResult;
   }
 
   /// Like [hasEnoughDiskSpace] but returns `null` when the free-space check

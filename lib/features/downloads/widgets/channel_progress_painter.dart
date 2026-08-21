@@ -29,12 +29,69 @@ class ChannelProgressPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.width == 0) return;
     if (size.width <= 0 || size.height <= 0) return;
     final rawVal = progress.value;
     final value =
         (rawVal.isNaN || rawVal.isInfinite) ? 0.0 : rawVal.clamp(0.0, 1.0);
     final radius = size.height / 2;
+
+    // Fill color — use caller-supplied color when available so the bar matches the
+    // card's status accent (e.g. red for paused, violet for downloading).
+    final accent =
+        color ?? (isTorrent ? AppTheme.neonViolet : AppTheme.neonBlue);
+
+    if (chunkDetails.isNotEmpty) {
+      final totalSpacing = (chunkDetails.length - 1) * 2.0;
+      final segmentWidth = (size.width - totalSpacing) / chunkDetails.length;
+      final trackPaint = Paint()
+        ..color = (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+            .withValues(alpha: isDark ? 0.15 : 0.12)
+        ..style = PaintingStyle.fill;
+
+      for (int i = 0; i < chunkDetails.length; i++) {
+        final chunk = chunkDetails[i];
+        final startX = i * (segmentWidth + 2.0);
+        final segmentRRect = RRect.fromRectAndRadius(
+          Rect.fromLTWH(startX, 0, segmentWidth, size.height),
+          Radius.circular(radius),
+        );
+        canvas.drawRRect(segmentRRect, trackPaint);
+
+        if (chunk.isIndeterminate) {
+          final stripePaint = Paint()
+            ..color = accent.withValues(alpha: 0.3)
+            ..style = PaintingStyle.fill;
+          canvas.save();
+          canvas.clipRRect(segmentRRect);
+          const stripeWidth = 4.0;
+          const stripeGap = 4.0;
+          for (double x = startX;
+              x < startX + segmentWidth;
+              x += stripeWidth + stripeGap) {
+            canvas.drawRect(
+              Rect.fromLTWH(x, 0, stripeWidth, size.height),
+              stripePaint,
+            );
+          }
+          canvas.restore();
+        } else {
+          final fillPaint = Paint()
+            ..color = accent
+            ..style = PaintingStyle.fill;
+          final fillWidth = segmentWidth * chunk.ratio.clamp(0.0, 1.0);
+          if (fillWidth > 0) {
+            canvas.drawRRect(
+              RRect.fromRectAndRadius(
+                Rect.fromLTWH(startX, 0, fillWidth, size.height),
+                Radius.circular(radius),
+              ),
+              fillPaint,
+            );
+          }
+        }
+      }
+      return;
+    }
 
     // Track
     final trackPaint = Paint()
@@ -46,10 +103,6 @@ class ChannelProgressPainter extends CustomPainter {
       trackPaint,
     );
 
-    // Fill — use caller-supplied color when available so the bar matches the
-    // card's status accent (e.g. red for paused, violet for downloading).
-    final accent =
-        color ?? (isTorrent ? AppTheme.neonViolet : AppTheme.neonBlue);
     if (value > 0.0) {
       final fillPaint = Paint()
         ..shader = LinearGradient(colors: [

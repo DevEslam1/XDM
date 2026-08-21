@@ -98,8 +98,11 @@ class HttpDownloadOrchestrator {
         alreadyOnDisk = state.state.downloadedBytes;
 
         // Resume identity validation against fresh probe
+        final isYouTubeUrl = url.contains('.googlevideo.com') ||
+            url.contains('youtube.com') ||
+            ytStreamKind != null;
         final storedIdentity = state.state.resumeIdentity;
-        if (alreadyOnDisk > 0 && storedIdentity != null) {
+        if (alreadyOnDisk > 0 && storedIdentity != null && !isYouTubeUrl) {
           final candidateMirrors = [url, ...?mirrorUrls];
           bool identityMatched = false;
           String? matchingUrl;

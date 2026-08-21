@@ -477,6 +477,21 @@ class DownloadTask {
   }
 
   double get torrentOverallPercent {
+    // Prefer engine-level progress (most accurate)
+    if (fileSize > 0 && downloadedBytes > 0) {
+      final enginePct = (downloadedBytes / fileSize).clamp(0.0, 1.0);
+      // Cross-check with file aggregates
+      final agg = torrentFileAggregates;
+      if (agg.totalFileBytes > 0) {
+        final filePct = (agg.downloadedFileBytes.clamp(0, agg.totalFileBytes) /
+                agg.totalFileBytes)
+            .clamp(0.0, 1.0);
+        // Use the average of both for stability
+        return ((enginePct + filePct) / 2).clamp(0.0, 1.0);
+      }
+      return enginePct;
+    }
+    // Fallback to file aggregates only
     final agg = torrentFileAggregates;
     if (agg.totalFileBytes > 0) {
       final dl = agg.downloadedFileBytes.clamp(0, agg.totalFileBytes);
@@ -488,21 +503,18 @@ class DownloadTask {
     return 0.0;
   }
 
-  // FIX-M3: combinedTotalSize fallback when videoStreamSize == 0 and fileSize == 0
   int get combinedTotalSize {
     if (hasMergedAudio && audioSize > 0) {
-      if (videoStreamSize > 0) return videoStreamSize + audioSize;
-      if (fileSize > audioSize) return fileSize;
-      if (fileSize > 0 && fileSize <= audioSize) {
-        // fileSize only covers audio so far; total still unknown
-        return downloadedBytes + audioSize;
-      }
+      // fileSize is ALWAYS the video stream size (set in addDownload from stream size)
+      // videoStreamSize is an alternative field that may be set during progress updates
+      final videoSize = videoStreamSize > 0 ? videoStreamSize : fileSize;
+      if (videoSize > 0) return videoSize + audioSize;
+      // If video size unknown but we have downloaded bytes, use that
       if (downloadedBytes > 0) return downloadedBytes + audioSize;
-      return 0;
+      return audioSize; // Only audio known
     }
-    // FIX: when audioSize == 0 but hasMergedAudio, use fileSize as fallback
     if (hasMergedAudio && audioSize == 0 && fileSize > 0) {
-      return fileSize;
+      return fileSize; // Audio URL present but size unknown
     }
     return resolvedFileSize;
   }
@@ -512,25 +524,12 @@ class DownloadTask {
     final total = combinedTotalSize;
     var raw = downloadedBytes < 0 ? 0 : downloadedBytes;
     if (hasMergedAudio) {
-      final videoOnly = videoStreamSize > 0
-          ? videoStreamSize
-          : (fileSize > audioSize ? fileSize - audioSize : 0);
-      // FIX-1: Always fold audio bytes in, even when videoOnly is still 0
-      // (audio size may be known before video size resolves).
       final audioBytes = audioDownloadedBytes > 0
           ? audioDownloadedBytes
           : (audioSize > 0 ? (audioProgress * audioSize).round() : 0);
-      if (videoOnly > 0) {
-        if (raw < videoOnly) {
-          raw += audioBytes;
-        } else {
-          raw = videoOnly + audioBytes;
-        }
-      } else {
-        // videoOnly unknown — add audio bytes on top of whatever
-        // video bytes we already have so progress still moves.
-        raw += audioBytes;
-      }
+      // downloadedBytes always tracks VIDEO stream only for YouTube tasks
+      // So we always add audio separately
+      raw += audioBytes > 0 ? audioBytes : 0;
     }
     if (total > 0) return raw.clamp(0, total);
     return raw;
@@ -588,16 +587,15 @@ class DownloadTask {
     if (!hasMergedAudio && audioSize <= 0 && youtubeQualityPreset == null) {
       return null;
     }
+    // Use same logic as combinedTotalSize/combinedDownloadedBytes
     final selfSize = fileSize > 0 ? fileSize : 0;
     final cpSize = audioSize > 0 ? audioSize : 0;
     final totalSize = selfSize + cpSize;
     if (totalSize <= 0) return null;
-
     final selfDownloaded = downloadedBytes;
     final cpDownloaded = audioDownloadedBytes;
     final totalDownloaded = (selfDownloaded > 0 ? selfDownloaded : 0) +
         (cpDownloaded > 0 ? cpDownloaded : 0);
-
     return (totalDownloaded / totalSize).clamp(0.0, 1.0);
   }
 

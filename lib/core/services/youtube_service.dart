@@ -1050,6 +1050,8 @@ class YoutubeService {
               return {
                 'url': matched['src'] as String?,
                 'audioUrl': matched['audioSrc'] as String?,
+                'videoSize': matched['videoSize'] ?? matched['size'],
+                'audioSize': matched['audioSize'],
               };
             }
             debugPrint(
@@ -1078,6 +1080,8 @@ class YoutubeService {
             return {
               'url': bestMatch['src'] as String?,
               'audioUrl': bestMatch['audioSrc'] as String?,
+              'videoSize': bestMatch['videoSize'] ?? bestMatch['size'],
+              'audioSize': bestMatch['audioSize'],
             };
           }
 
@@ -1106,6 +1110,8 @@ class YoutubeService {
               return {
                 'url': sameType.first['src'] as String?,
                 'audioUrl': sameType.first['audioSrc'] as String?,
+                'videoSize': sameType.first['videoSize'] ?? sameType.first['size'],
+                'audioSize': sameType.first['audioSize'],
               };
             }
 
@@ -1124,6 +1130,8 @@ class YoutubeService {
               return {
                 'url': first['src'] as String?,
                 'audioUrl': first['audioSrc'] as String?,
+                'videoSize': first['videoSize'] ?? first['size'],
+                'audioSize': first['audioSize'],
               };
             }
           }

@@ -671,8 +671,8 @@ class _Worker {
   }
 }
 
-class ChunkResult {
-  const ChunkResult({
+class PoolChunkResult {
+  const PoolChunkResult({
     required this.chunk,
     required this.success,
     this.error,
