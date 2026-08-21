@@ -142,8 +142,7 @@
 		HTTP and HTTPS endpoints across the internet, including legacy servers.
 		NSAllowsArbitraryLoads is an intentional requirement for the core download functionality.
 		NSAllowsLocalNetworking is enabled for local network transfers and debugging.
-		All sensitive backend API communications are strictly pinned and TLS 1.2+
-		enforced via NSExceptionDomains.
+		Critical backend API domains enforce TLS 1.2+ and forward secrecy via NSExceptionDomains.
 	-->
 	<key>NSAppTransportSecurity</key>
 	<dict>

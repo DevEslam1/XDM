@@ -8,7 +8,9 @@ import 'package:flutter/material.dart';
 
 import '../../../core/interfaces/i_download_engine.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/services/diagnostic_service.dart';
 import '../../../core/services/download_engine.dart' hide DownloadCommand;
+import '../../../core/services/download_journal.dart';
 import '../../../core/services/download_metrics.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/permission_service.dart';
@@ -22,7 +24,6 @@ import '../domain/commands/download_commands.dart';
 import '../domain/events/download_events.dart';
 import '../domain/executor/task_executor.dart';
 import '../models/download_add_spec.dart';
-import '../models/download_state_machine.dart';
 import '../models/download_task.dart';
 import '../services/download_engine_adapter.dart';
 import 'download_orchestrator.dart';
@@ -32,7 +33,6 @@ import 'mixins/download_queue_mixin.dart';
 import 'mixins/download_torrent_mixin.dart';
 import 'network_monitor.dart';
 import 'notification_coordinator.dart';
-import 'progress_emitter.dart';
 import 'schedule_manager.dart';
 
 export '../models/download_add_spec.dart';
@@ -103,7 +103,8 @@ class DownloadProvider extends ChangeNotifier
   late final DriftTaskSnapshotStore _snapshotStore;
   late final TaskExecutor _executor;
   final TransitionAuditLog _auditLog = TransitionAuditLog();
-  final ProgressEmitter _progressEmitter = ProgressEmitter();
+  final Map<String, ValueNotifier<double>> _progressNotifiers = {};
+  final Map<String, ValueNotifier<double>> _speedNotifiers = {};
   StreamSubscription<DownloadEvent>? _eventSubscription;
 
   final List<DownloadTask> _tasks = [];
@@ -165,23 +166,90 @@ class DownloadProvider extends ChangeNotifier
   void _onSettingsChanged() => notifyListeners();
   void _onDomainEvent(DownloadEvent event) { filteredTasksDirty = true; notifyListeners(); }
 
-  Future<void> load({bool pauseOrphanDownloads = true}) async {
+  Future<void> load({bool pauseOrphanDownloads = true, bool autoResume = true}) async {
     final loaded = await _databaseService.loadTasks();
-    _tasks.clear();
-    _tasks.addAll(loaded);
-    filteredTasksDirty = true;
-    notifyListeners();
-    if (pauseOrphanDownloads) {
-      for (var i = 0; i < _tasks.length; i++) {
-        final t = _tasks[i];
-        if (t.status == DownloadStatus.downloading) {
-          await _applyStateChange(t.id, DomainDownloadState.paused, PauseTask(t.id, reason: 'orphan_recovery'), reason: 'orphan_recovery', pausedByUser: false);
+    final List<DownloadTask> reconciledTasks = [];
+
+    // Phase 5 Startup Pipeline:
+    // Step 1: Journal replay -> Step 2: Disk reconciliation
+    for (final task in loaded) {
+      var reconciled = task;
+      final localPath = task.savePath.isNotEmpty ? task.savePath : task.localFilePath;
+      final shouldReconcile = !task.isTorrent &&
+          task.status != DownloadStatus.completed &&
+          !task.isCancelled;
+
+      if (shouldReconcile) {
+        final tempPath = task.tempFilePath.isNotEmpty
+            ? task.tempFilePath
+            : (localPath.isNotEmpty ? '$localPath.dmxpart' : '');
+        final localFile = localPath.isNotEmpty ? File(localPath) : null;
+
+        // Check if final destination file exists and matches full size
+        if (task.fileSize > 0 &&
+            localFile != null &&
+            await localFile.exists() &&
+            (await localFile.length()) >= task.fileSize) {
+          reconciled = reconciled.copyWith(
+            status: DownloadStatus.completed,
+            downloadedBytes: task.fileSize,
+            errorMessage: null,
+          );
+        } else if (tempPath.isNotEmpty) {
+          try {
+            final stateResult = await StateStore.loadOrCreate(
+              tempPath,
+              url: task.url,
+              threadCount: task.threadCount,
+              knownFileSize: task.fileSize,
+              taskId: task.id,
+            );
+            final state = stateResult.state;
+            if (state.downloadedBytes > 0) {
+              reconciled = reconciled.copyWith(
+                downloadedBytes: state.downloadedBytes,
+              );
+              DiagnosticService.instance.recordTelemetryAlert(
+                'journal_reconciled',
+                taskId: task.id,
+                details: 'bytes=${state.downloadedBytes}',
+              );
+            }
+          } catch (e) {
+            debugPrint(
+                '[DownloadProvider] Startup reconciliation error for ${task.id}: $e');
+          }
         }
       }
+
+      if (pauseOrphanDownloads &&
+          reconciled.status == DownloadStatus.downloading) {
+        reconciled = reconciled.copyWith(
+          status: DownloadStatus.paused,
+          pauseReason: PauseReason.appRestarted,
+          pausedByUser: false,
+        );
+      }
+
+      // Step 3: DB update (Order matters; DB is updated last after journal & disk reconciliation)
+      if (reconciled != task) {
+        await _databaseService.saveTask(reconciled);
+      }
+
+      reconciledTasks.add(reconciled);
     }
+
+    // Step 4: UI update (DB write complete, now expose to in-memory state & notify UI)
+    _tasks.clear();
+    _tasks.addAll(reconciledTasks);
+    filteredTasksDirty = true;
+    notifyListeners();
+
     _scheduleManager.setReady(true);
     await _networkMonitor.ensureInitialConnectivity();
-    _autoResumeIncomplete();
+    if (autoResume) {
+      _autoResumeIncomplete();
+    }
   }
 
   void _autoResumeIncomplete() {
@@ -217,23 +285,38 @@ class DownloadProvider extends ChangeNotifier
   DownloadMetrics? getMetrics(String taskId) => _downloadMetrics[taskId];
   List<double> getSpeedHistory(String taskId) => _speedHistories[taskId]?.toList() ?? const [];
   List<double> getUploadSpeedHistory(String taskId) => const [];
-  ValueNotifier<double> progressNotifier(String taskId) => _progressEmitter.progressNotifier(taskId);
-  ValueNotifier<double> speedNotifier(String taskId) => _progressEmitter.speedNotifier(taskId);
-  void disposeTaskNotifier(String taskId) => _progressEmitter.disposeTaskNotifier(taskId);
+  ValueNotifier<double> progressNotifier(String taskId) =>
+      _progressNotifiers.putIfAbsent(taskId, () => ValueNotifier<double>(0.0));
+  ValueNotifier<double> speedNotifier(String taskId) =>
+      _speedNotifiers.putIfAbsent(taskId, () => ValueNotifier<double>(0.0));
+  void disposeTaskNotifier(String taskId) {
+    _progressNotifiers.remove(taskId)?.dispose();
+    _speedNotifiers.remove(taskId)?.dispose();
+  }
   void updateTorrentUploadLimit() => updateActualTorrentUploadLimit();
 
   static bool youtubeStreamIdentityChanged(String? oldUrl, String? newUrl) {
     if (oldUrl == null || newUrl == null || oldUrl == newUrl) return false;
     final oldUri = Uri.tryParse(oldUrl);
     final newUri = Uri.tryParse(newUrl);
-    if (oldUri == null || newUri == null) return false;
-    if (oldUri.host != newUri.host) return true;
+    if (oldUri == null || newUri == null || oldUri.host.isEmpty || newUri.host.isEmpty) return false;
+    final isOldYt = oldUri.host.contains('googlevideo.com') || oldUri.host.contains('youtube.com');
+    final isNewYt = newUri.host.contains('googlevideo.com') || newUri.host.contains('youtube.com');
+    if (!isOldYt || !isNewYt) {
+      if (oldUri.host != newUri.host) return true;
+    }
     final oldId = oldUri.queryParameters['id'] ?? oldUri.queryParameters['docid'];
     final newId = newUri.queryParameters['id'] ?? newUri.queryParameters['docid'];
     final oldItag = oldUri.queryParameters['itag'];
     final newItag = newUri.queryParameters['itag'];
+    final oldMime = oldUri.queryParameters['mime'];
+    final newMime = newUri.queryParameters['mime'];
+    final oldClen = oldUri.queryParameters['clen'];
+    final newClen = newUri.queryParameters['clen'];
     return (oldId != null && newId != null && oldId != newId) ||
-        (oldItag != null && newItag != null && oldItag != newItag);
+        (oldItag != null && newItag != null && oldItag != newItag) ||
+        (oldMime != null && newMime != null && oldMime != newMime) ||
+        (oldClen != null && newClen != null && oldClen != newClen);
   }
 
   static int torrentBytesFromFiles(List<Map<String, dynamic>>? files) =>
@@ -281,6 +364,18 @@ class DownloadProvider extends ChangeNotifier
   @override
   Future<void> setTaskState(DownloadTask task) async {
     final existing = _findTask(task.id);
+    if (existing != null) {
+      if (existing.pausedByUser && task.status == DownloadStatus.downloading) {
+        task = task.copyWith(
+          status: DownloadStatus.paused,
+          pausedByUser: true,
+        );
+      } else if (existing.status == DownloadStatus.failed && task.status == DownloadStatus.downloading) {
+        return;
+      } else if (existing.status == DownloadStatus.completed && task.status != DownloadStatus.completed) {
+        return;
+      }
+    }
     final isProgressOnly = existing != null && existing.status == task.status && existing.status == DownloadStatus.downloading && existing.downloadedBytes != task.downloadedBytes;
     final idx = _tasks.indexWhere((t) => t.id == task.id);
     if (idx != -1) { _tasks[idx] = task; } else { _tasks.add(task); }
@@ -562,7 +657,14 @@ class DownloadProvider extends ChangeNotifier
   @override void providerStartWidgetTimer() {}
   @override void providerStopWidgetTimer() {}
   @override void providerNotifyListeners() => notifyListeners();
-  @override void pushProgressTick(String id, double p, double s) => _progressEmitter.pushTick(id, p, s);
+  @override void pushProgressTick(String id, double p, double s) {
+    if (_progressNotifiers.containsKey(id)) {
+      _progressNotifiers[id]!.value = p;
+    }
+    if (_speedNotifiers.containsKey(id)) {
+      _speedNotifiers[id]!.value = s;
+    }
+  }
   @override List<Map<String, dynamic>> markTorrentFilesCompleted(List<Map<String, dynamic>> files) => files.map((m) => {...m, 'downloadedBytes': m['length'] ?? 0, 'progress': 1.0}).toList();
   @override Future<void> cleanupPartFiles(DownloadTask t, {bool preserveParts = false}) async { if (!preserveParts) await _deleteFileSafely(t.tempFilePath); }
   @override Future<void> startOverTask(String id, String url, {String? newAudioUrl, bool clearAudioUrl = false, bool fromError = false, int? newFileSize, int? newAudioSize, bool deleteTempFiles = false}) async {
@@ -580,6 +682,14 @@ class DownloadProvider extends ChangeNotifier
     _networkMonitor.dispose(); _scheduleManager.dispose(); _notifications.dispose();
     _orchestrator.dispose(); _executor.dispose();
     _settingsProvider.removeListener(_onSettingsChanged);
+    for (final n in _progressNotifiers.values) {
+      n.dispose();
+    }
+    _progressNotifiers.clear();
+    for (final n in _speedNotifiers.values) {
+      n.dispose();
+    }
+    _speedNotifiers.clear();
     super.dispose();
   }
 }

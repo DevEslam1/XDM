@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:dmx/core/services/engine/torrent_download_handler.dart';
 import 'package:dmx/core/services/torrent_resume_store.dart';
 import 'package:dmx/core/utils/url_utils.dart';
-import 'package:dmx/features/downloads/models/download_state_machine.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';

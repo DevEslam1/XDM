@@ -3,23 +3,12 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import '../domain/models/error_family.dart';
 import 'download_engine.dart';
 import 'positional_file_writer.dart';
 import 'xdm_backend_exceptions.dart';
 
-/// High-level family of an error, used to decide user messaging, retry policy
-/// and severity.
-enum ErrorFamily {
-  network,
-  server,
-  auth,
-  disk,
-  integrity,
-  cancelled,
-  timeout,
-  parse,
-  unknown,
-}
+export '../domain/models/error_family.dart';
 
 /// The concrete recovery path the app should take for a classified error.
 /// Every user-facing failure must map to exactly one recovery action.

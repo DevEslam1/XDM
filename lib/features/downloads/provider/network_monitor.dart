@@ -8,7 +8,6 @@ import 'package:dmx/core/services/logging_service.dart';
 
 import '../../../core/services/torrent_service.dart';
 import '../domain/commands/download_commands.dart';
-import '../models/download_state_machine.dart';
 import '../models/download_task.dart';
 
 /// Watches device connectivity and pauses/resumes downloads accordingly.
@@ -234,7 +233,7 @@ class NetworkMonitor {
           task.status == DownloadStatus.paused,
     );
     for (final task in waiting.toList()) {
-      if (task.pausedByUser) {
+      if (task.pausedByUser || task.pauseReason == PauseReason.user) {
         _tasksPausedDueToDisconnect.remove(task.id);
         continue;
       }
@@ -289,7 +288,7 @@ class NetworkMonitor {
           task.status == DownloadStatus.paused,
     );
     for (final task in waiting.toList()) {
-      if (task.pausedByUser) {
+      if (task.pausedByUser || task.pauseReason == PauseReason.user) {
         _tasksPausedDueToWifiOnly.remove(task.id);
         continue;
       }

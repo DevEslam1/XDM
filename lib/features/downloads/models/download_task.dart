@@ -1,14 +1,15 @@
 import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import '../../../core/domain/cycle_state.dart';
+import '../../../core/domain/pause_reason.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
-import 'cycle_state.dart';
-import 'download_state_machine.dart';
-import 'pause_reason.dart';
+import '../domain/state_machine/domain_state_machine.dart';
 
-export 'cycle_state.dart';
-export 'pause_reason.dart';
+export '../../../core/domain/cycle_state.dart';
+export '../../../core/domain/pause_reason.dart';
+export '../domain/state_machine/domain_state_machine.dart';
 
 /// Public status message constants used throughout the download pipeline.
 /// Extracted here for i18n readiness — replace with localized strings when

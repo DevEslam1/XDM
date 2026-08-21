@@ -36,7 +36,6 @@ import '../../../core/utils/semaphore.dart';
 import '../../../core/utils/url_utils.dart';
 import '../../../shared/accessibility/xdm_announcer.dart';
 import '../../settings/provider/settings_provider.dart';
-import '../models/download_state_machine.dart';
 import '../models/download_task.dart';
 import 'download_provider.dart';
 import 'network_monitor.dart';

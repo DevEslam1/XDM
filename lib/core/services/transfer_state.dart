@@ -9,14 +9,20 @@ import 'package:flutter/foundation.dart';
 enum DmxStateStatus { active, paused, complete, failed }
 
 class ChunkState {
-  ChunkState({required this.start, required this.end, this.downloaded = 0});
+  ChunkState({
+    required this.start,
+    required this.end,
+    this.downloaded = 0,
+    this.hash,
+  });
 
-  factory ChunkState.indeterminate({int downloaded = 0}) =>
-      ChunkState(start: 0, end: -1, downloaded: downloaded);
+  factory ChunkState.indeterminate({int downloaded = 0, String? hash}) =>
+      ChunkState(start: 0, end: -1, downloaded: downloaded, hash: hash);
 
   final int start;
   int end;
   int downloaded;
+  String? hash;
 
   int get size => end < 0 ? -1 : end - start + 1;
   bool get isIndeterminate => end < 0;
@@ -29,8 +35,12 @@ class ChunkState {
     return (downloaded / s).clamp(0.0, 1.0);
   }
 
-  Map<String, dynamic> toJson() =>
-      {'start': start, 'end': end, 'downloaded': downloaded};
+  Map<String, dynamic> toJson() => {
+        'start': start,
+        'end': end,
+        'downloaded': downloaded,
+        if (hash != null) 'hash': hash,
+      };
 
   static ChunkState fromJson(Map<String, dynamic> j) {
     var d = (j['downloaded'] as num?)?.toInt() ?? 0;
@@ -39,6 +49,7 @@ class ChunkState {
       start: (j['start'] as num?)?.toInt() ?? 0,
       end: (j['end'] as num?)?.toInt() ?? -1,
       downloaded: d,
+      hash: j['hash'] as String?,
     );
   }
 }
@@ -80,8 +91,10 @@ class TransferState {
   }
 
   bool get isComplete => totalSize > 0 && downloadedBytes >= totalSize;
-  List<double> get chunkRatios => chunks.map((c) => c.ratio).toList();
-  List<int> get progressCompat => chunks.map((c) => c.downloaded).toList();
+  List<double> get chunkRatios =>
+      List<ChunkState>.from(chunks).map((c) => c.ratio).toList();
+  List<int> get progressCompat =>
+      List<ChunkState>.from(chunks).map((c) => c.downloaded).toList();
 
   Map<String, dynamic> toJson() => {
         'version': currentVersion,
@@ -94,7 +107,7 @@ class TransferState {
         'url': url,
         'status': status.name,
         'updatedAt': updatedAt.millisecondsSinceEpoch,
-        'chunks': chunks.map((c) => c.toJson()).toList(),
+        'chunks': List<ChunkState>.from(chunks).map((c) => c.toJson()).toList(),
         if (cycleState != null) 'cycleState': cycleState,
         if (migrationNote != null) 'migrationNote': migrationNote,
       };
@@ -104,7 +117,10 @@ class TransferState {
         threadCount: threadCount,
         chunks: chunks
             .map((c) => ChunkState(
-                start: c.start, end: c.end, downloaded: c.downloaded))
+                start: c.start,
+                end: c.end,
+                downloaded: c.downloaded,
+                hash: c.hash))
             .toList(),
         url: url,
         etag: etag,

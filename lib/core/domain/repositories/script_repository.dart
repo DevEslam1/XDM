@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import '../../services/user_script_manager.dart';
+import '../models/user_script.dart';
 
 /// Clean Architecture interface for user script operations.
 abstract class ScriptRepository implements Listenable {

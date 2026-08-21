@@ -42,6 +42,7 @@ class TorrentService {
   static StreamController<Map<int, TorrentUpdateInfo>>? _updateController;
   static final StreamController<TorrentAlertEvent> _alertController =
       StreamController<TorrentAlertEvent>.broadcast();
+  static Timer? _periodicResumeTimer;
 
   static ITorrentNative _native = LibtorrentNativeImpl();
 
@@ -52,6 +53,21 @@ class TorrentService {
     isPluginAvailable = true;
     _startTrackingAlerts();
     _startTrackingUpdates();
+    _startPeriodicResumeSave();
+  }
+
+  static void _startPeriodicResumeSave() {
+    _periodicResumeTimer?.cancel();
+    _periodicResumeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (isInitialized && _activeTorrentIds.isNotEmpty) {
+        saveAllResumeData();
+      }
+    });
+  }
+
+  static void _stopPeriodicResumeSave() {
+    _periodicResumeTimer?.cancel();
+    _periodicResumeTimer = null;
   }
 
   static bool get fileProgressSupported => true;
@@ -155,6 +171,7 @@ class TorrentService {
         _configureSessionFromSettings();
         _startTrackingUpdates();
         _startTrackingAlerts();
+        _startPeriodicResumeSave();
         _state = TorrentSessionLifecycleState.ready;
         isAvailable.value = true;
       } on TimeoutException {
@@ -428,6 +445,7 @@ class TorrentService {
     }
 
     _state = TorrentSessionLifecycleState.disposing;
+    _stopPeriodicResumeSave();
     await _updatesSub?.cancel();
     _updatesSub = null;
     await _alertsSub?.cancel();

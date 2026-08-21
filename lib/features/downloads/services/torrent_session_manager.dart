@@ -89,6 +89,7 @@ class TorrentSessionManager {
 
   /// Starts or resumes seeding for a completed torrent task.
   Future<void> startSeeding(DownloadTask task) async {
+    if (task.pausedByUser || task.pauseReason == PauseReason.user) return;
     final tid = _torrentIds[task.id];
     if (tid != null && _torrentService.isTorrentAlive(tid)) {
       _torrentService.resumeTorrent(tid);

@@ -52,4 +52,7 @@ class DriftTaskRepository implements TaskRepository, ITaskDataSource {
   Stream<List<DownloadTask>> watchAll() async* {
     yield await getAll();
   }
+
+  @override
+  void dispose() {}
 }

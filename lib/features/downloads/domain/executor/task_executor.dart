@@ -1,11 +1,9 @@
 import 'dart:async';
 import '../commands/download_commands.dart';
 import '../events/download_events.dart';
-import '../models/domain_download_state.dart';
 import '../ports/task_engine_port.dart';
 import '../ports/task_snapshot_store.dart';
 import '../state_machine/domain_state_machine.dart';
-import '../state_machine/transition_audit_log.dart';
 import 'task_mailbox.dart';
 
 /// Single-flight, actor-pattern centralized executor for download commands.
@@ -123,7 +121,7 @@ class TaskExecutor {
           // Already running
           return;
         }
-        await sm.transition(
+        sm.transition(
           DomainDownloadState.starting,
           command: startCmd,
           caller: 'TaskExecutor',
@@ -136,7 +134,7 @@ class TaskExecutor {
             ignoreQueueLimit: startCmd.ignoreQueueLimit,
           );
         } catch (e) {
-          await sm.transition(
+          sm.transition(
             DomainDownloadState.failed,
             command: startCmd,
             reason: e.toString(),
@@ -161,7 +159,7 @@ class TaskExecutor {
           reason: pauseCmd.reason,
           userInitiated: pauseCmd.userInitiated,
         );
-        await sm.transition(
+        sm.transition(
           DomainDownloadState.paused,
           command: pauseCmd,
           reason: pauseCmd.reason,
@@ -181,7 +179,7 @@ class TaskExecutor {
             sm.currentState == DomainDownloadState.starting) {
           return;
         }
-        await sm.transition(
+        sm.transition(
           DomainDownloadState.queued,
           command: resumeCmd,
           caller: 'TaskExecutor',
@@ -195,7 +193,7 @@ class TaskExecutor {
           taskId,
           deleteFiles: cancelCmd.deleteFiles,
         );
-        await sm.transition(
+        sm.transition(
           DomainDownloadState.failed,
           command: cancelCmd,
           reason: 'Transfer cancelled.',
@@ -218,7 +216,7 @@ class TaskExecutor {
         if (snapshotStore != null) {
           await snapshotStore!.deleteTaskSnapshot(taskId);
         }
-        await sm.transition(
+        sm.transition(
           DomainDownloadState.idle,
           command: deleteCmd,
           caller: 'TaskExecutor',
@@ -237,7 +235,7 @@ class TaskExecutor {
         });
 
       case final RetryTask retryCmd:
-        await sm.transition(
+        sm.transition(
           DomainDownloadState.queued,
           command: retryCmd,
           caller: 'TaskExecutor',
@@ -247,7 +245,7 @@ class TaskExecutor {
         await enginePort.retryEngineTask(taskId);
 
       case final ScheduleFired schedCmd:
-        await sm.transition(
+        sm.transition(
           DomainDownloadState.queued,
           command: schedCmd,
           caller: 'TaskExecutor',

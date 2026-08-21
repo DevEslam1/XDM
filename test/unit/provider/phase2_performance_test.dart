@@ -1,6 +1,5 @@
 import 'package:dmx/core/services/tick_manager.dart';
 import 'package:dmx/features/downloads/data/task_repository.dart';
-import 'package:dmx/features/downloads/models/download_state_machine.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_list_provider.dart';
 import 'package:dmx/features/downloads/provider/download_stats_notifier.dart';

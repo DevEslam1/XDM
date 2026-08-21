@@ -1,6 +1,7 @@
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'package:synchronized/synchronized.dart';
@@ -212,31 +213,49 @@ class StateStoreInstance {
       }
     }
 
-    // Replay journal into state if journal exists and is ahead of state
-    final journalBytes =
-        await DownloadJournal.recover('$tempFilePath.journal');
-    if (journalBytes != null && journalBytes.isNotEmpty) {
+    // Unified WAL Recovery:
+    // 1. Snapshot (.dmxstate) is loaded if valid.
+    // 2. Journal (.journal) is parsed with detail timestamps & chunk progress.
+    // 3. If snapshot is newer than journal head, use snapshot.
+    // 4. If journal has newer events or snapshot is missing, replay journal.
+    // 5. If both are corrupt/missing, perform clean restart (0 progress).
+    final journalDetails =
+        await DownloadJournal.recoverWithDetails('$tempFilePath.journal');
+
+    if (journalDetails != null && journalDetails.chunkBytes.isNotEmpty) {
       if (state == null) {
         state = _stateFromChunkBytes(
           tempFilePath: tempFilePath,
           url: url,
-          threadCount: journalBytes.length,
-          chunkBytes: journalBytes,
-          totalSize: knownFileSize,
+          threadCount: journalDetails.threadCount ?? journalDetails.chunkBytes.length,
+          chunkBytes: journalDetails.chunkBytes,
+          totalSize: journalDetails.totalSize ?? knownFileSize,
         );
-        migratedFrom = 'journal';
-      } else if (state.chunks.isNotEmpty &&
-          journalBytes.length == state.chunks.length) {
-        var replayedAny = false;
         for (var i = 0; i < state.chunks.length; i++) {
-          if (journalBytes[i] > state.chunks[i].downloaded) {
-            state.chunks[i].downloaded = journalBytes[i];
-            replayedAny = true;
+          if (journalDetails.chunkHashes.containsKey(i)) {
+            state.chunks[i].hash = journalDetails.chunkHashes[i];
           }
         }
-        if (replayedAny) {
-          state.migrationNote =
-              '${state.migrationNote ?? ''} journal_replayed'.trim();
+        migratedFrom = 'journal';
+      } else {
+        final snapshotTs = state.updatedAt.millisecondsSinceEpoch;
+        if (journalDetails.maxTimestamp > snapshotTs) {
+          var replayedAny = false;
+          for (var i = 0;
+              i < min(state.chunks.length, journalDetails.chunkBytes.length);
+              i++) {
+            if (journalDetails.chunkBytes[i] > state.chunks[i].downloaded) {
+              state.chunks[i].downloaded = journalDetails.chunkBytes[i];
+              replayedAny = true;
+            }
+            if (journalDetails.chunkHashes.containsKey(i)) {
+              state.chunks[i].hash = journalDetails.chunkHashes[i];
+            }
+          }
+          if (replayedAny) {
+            state.migrationNote =
+                '${state.migrationNote ?? ''} journal_replayed'.trim();
+          }
         }
       }
     }
@@ -290,6 +309,15 @@ class StateStoreInstance {
     }
 
     final adjusted = await _reconcileWithDisk(tempFilePath, state);
+
+    // J2 Invariant: If a journal file exists, clear it after state reconciliation
+    // and persist a durable compacted snapshot to disk.
+    final journalFile = File('$tempFilePath.journal');
+    if (await journalFile.exists()) {
+      await save(tempFilePath, state, durable: true, taskId: taskId);
+      await DownloadJournal.clearJournalFor(tempFilePath);
+    }
+
     return StateLoadResult(
       state: state,
       created: created,
@@ -483,9 +511,13 @@ class StateStoreInstance {
               (state.downloadedBytes - (lastWrittenByte ?? 0)).abs();
           final statusChanged =
               lastStatus != null && lastStatus != state.status;
+          final isTerminalOrPaused = state.status == DmxStateStatus.paused ||
+              state.status == DmxStateStatus.complete ||
+              state.status == DmxStateStatus.failed;
+          final isDurable = durable || statusChanged || isTerminalOrPaused;
 
           // Task 2.1: Maximum 1 disk write per 5 seconds per task for non-durable saves
-          if (!durable && !statusChanged && lastSave != null) {
+          if (!isDurable && lastSave != null) {
             if (now.difference(lastSave!) < const Duration(seconds: 5)) {
               return;
             }
@@ -504,15 +536,14 @@ class StateStoreInstance {
 
           // Screen-off threshold: always write when status changed or durable
           if (isScreenOff &&
-              !durable &&
-              !statusChanged &&
+              !isDurable &&
               bytesSinceLastWrite < 5 * 1024 * 1024) {
             return; // skip small deltas when screen off (< 5MB)
           }
 
           // Lightweight structural deduplication: skips redundant writes in O(N) without jsonEncode or SHA-256
           final fingerprint = computeFingerprint(state);
-          if (!durable && !statusChanged) {
+          if (!isDurable) {
             if (lastFp == fingerprint) {
               return; // Skip redundant state write without JSON serialization
             }
@@ -536,7 +567,7 @@ class StateStoreInstance {
           final payload = jsonEncode(state.toJson());
           final tmp = File(tmpPath);
           await tmp.parent.create(recursive: true);
-          if (durable) {
+          if (isDurable) {
             await tmp.writeAsString(payload, flush: true);
             if (!kIsWeb) {
               try {
@@ -611,7 +642,15 @@ class StateStoreInstance {
     }
   }
 
-  Future<void> remove(String tempFilePath, {String? taskId}) async {
+  /// Atomically resets transfer state by clearing progress in [state],
+  /// deleting the snapshot (.dmxstate) and journal (.journal) files together (J1),
+  /// and optionally removing the temp data file.
+  Future<void> resetTransferState(
+    String tempFilePath, {
+    String? taskId,
+    TransferState? state,
+    bool deleteTempFile = false,
+  }) async {
     final targetPath = pathFor(tempFilePath, taskId: taskId);
     final pathLock =
         await _lock.synchronized(() => _acquirePathLock(targetPath));
@@ -622,29 +661,30 @@ class StateStoreInstance {
 
     try {
       await pathLock.synchronized(() async {
+        // 1. Clear memory dedup caches
         _lock.synchronized(() {
           _lastFingerprints.remove(targetPath);
           _lastWrittenBytes.remove(targetPath);
           _lastSaveTimes.remove(targetPath);
           _lastWrittenStatus.remove(targetPath);
         });
-        final tmpPath = '$targetPath.tmp';
-        try {
-          final f = File(targetPath);
-          if (await f.exists()) await f.delete();
-        } catch (e, st) {
-          LoggingService.logger('DownloadJournal')
-              .warning('Failed to delete state file on remove', e, st);
+
+        // 2. Delete state file and its tmp/bak variants
+        for (final p in [
+          targetPath,
+          '$targetPath.tmp',
+          '$targetPath.tmp2',
+          '$targetPath.bak',
+        ]) {
+          try {
+            final f = File(p);
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
         }
-        try {
-          final tmp = File(tmpPath);
-          if (await tmp.exists()) await tmp.delete();
-        } catch (e, st) {
-          LoggingService.logger('DownloadJournal')
-              .warning('Failed to delete tmp state file on remove', e, st);
-        }
-        // J1: Centrally delete .journal when state is removed
+
+        // 3. Delete journal atomically with snapshot (J1)
         await DownloadJournal.deleteJournalFor(tempFilePath);
+
         if (taskId != null && taskId.isNotEmpty) {
           final legacyPath = _legacyPathFor(tempFilePath);
           _lock.synchronized(() {
@@ -653,20 +693,33 @@ class StateStoreInstance {
             _lastSaveTimes.remove(legacyPath);
             _lastWrittenStatus.remove(legacyPath);
           });
+          for (final p in [
+            legacyPath,
+            '$legacyPath.tmp',
+            '$legacyPath.tmp2',
+            '$legacyPath.bak',
+          ]) {
+            try {
+              final f = File(p);
+              if (await f.exists()) await f.delete();
+            } catch (_) {}
+          }
+        }
+
+        // 4. Zero out in-memory state if supplied
+        if (state != null) {
+          for (final c in state.chunks) {
+            c.downloaded = 0;
+            c.hash = null;
+          }
+        }
+
+        // 5. Delete temp payload file if requested
+        if (deleteTempFile) {
           try {
-            final f = File(legacyPath);
+            final f = File(tempFilePath);
             if (await f.exists()) await f.delete();
-          } catch (e, st) {
-            LoggingService.logger('DownloadJournal')
-                .warning('Failed to delete legacy state file on remove', e, st);
-          }
-          try {
-            final tmp = File('$legacyPath.tmp');
-            if (await tmp.exists()) await tmp.delete();
-          } catch (e, st) {
-            LoggingService.logger('DownloadJournal').warning(
-                'Failed to delete legacy tmp state file on remove', e, st);
-          }
+          } catch (_) {}
         }
       });
     } finally {
@@ -678,6 +731,10 @@ class StateStoreInstance {
         }
       });
     }
+  }
+
+  Future<void> remove(String tempFilePath, {String? taskId}) async {
+    return resetTransferState(tempFilePath, taskId: taskId);
   }
 }
 
@@ -735,6 +792,19 @@ abstract class StateStore {
         taskId: taskId,
       );
 
+  static Future<void> resetTransferState(
+    String tempFilePath, {
+    String? taskId,
+    TransferState? state,
+    bool deleteTempFile = false,
+  }) =>
+      instance.resetTransferState(
+        tempFilePath,
+        taskId: taskId,
+        state: state,
+        deleteTempFile: deleteTempFile,
+      );
+
   static Future<void> remove(String tempFilePath, {String? taskId}) =>
       instance.remove(tempFilePath, taskId: taskId);
 
@@ -746,6 +816,22 @@ abstract class StateStore {
 
   static void removeTaskState(String targetPath) =>
       instance.removeTaskState(targetPath);
+}
+
+class JournalRecoveryData {
+  final List<int> chunkBytes;
+  final Map<int, String> chunkHashes;
+  final int? totalSize;
+  final int? threadCount;
+  final int maxTimestamp;
+
+  const JournalRecoveryData({
+    required this.chunkBytes,
+    required this.chunkHashes,
+    this.totalSize,
+    this.threadCount,
+    this.maxTimestamp = 0,
+  });
 }
 
 class DownloadJournal {
@@ -769,10 +855,8 @@ class DownloadJournal {
   bool _isOpen = false;
   int _approxBytes = 0;
   int _bytesSinceLastFsync = 0;
-  // FIX-P5: Flush counter and tracking
   int _flushCounter = 0;
   int _lastFlushRecordCount = 0;
-  // Compaction threshold bytes
   final int compactionThresholdBytes;
   final Lock _lock = Lock();
 
@@ -853,16 +937,16 @@ class DownloadJournal {
   static const int maxRecordedEntries = kJournalMaxBgRecordedEntries;
   int _lastGlobalWriteBytes = 0;
 
-  Future<void> recordChunkProgress(int index, int bytes) async {
-    // Task 2.1: Disable chunk journal writes entirely when screen is off
+  Future<void> recordChunkProgress(int index, int bytes, {String? hash}) async {
+    // Disable chunk journal writes entirely when screen is off
     if (PowerMonitor.screenOff) return;
 
     final isBg = !DownloadEngine.appInForeground ||
         DownloadEngine.isInBackground;
 
     final threshold = isBg
-        ? kJournalBackgroundWriteDelta // 4MB when backgrounded (BG-04 / C-BG-02)
-        : kJournalForegroundWriteDelta; // 512KB foreground (M-DL-08)
+        ? kJournalBackgroundWriteDelta
+        : kJournalForegroundWriteDelta;
 
     await _lock.synchronized(() async {
       _lastRecordedChunkBytes[index] = bytes;
@@ -871,11 +955,11 @@ class DownloadJournal {
       }
 
       final totalWritten =
-          _lastRecordedChunkBytes.values.fold<int>(0, (sum, b) => sum + b);
+          _lastRecordedChunkBytes.values.toList().fold<int>(0, (sum, b) => sum + b);
       final totalBytesSinceLastWrite =
           (totalWritten - _lastGlobalWriteBytes).abs();
 
-      if (totalBytesSinceLastWrite < threshold) return;
+      if (hash == null && totalBytesSinceLastWrite < threshold) return;
       _lastGlobalWriteBytes = totalWritten;
 
       _ensureOpen();
@@ -883,6 +967,7 @@ class DownloadJournal {
         't': 'chunk',
         'i': index,
         'b': bytes,
+        if (hash != null) 'h': hash,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
       _sink!.writeln(line);
@@ -891,7 +976,6 @@ class DownloadJournal {
       _bytesSinceLastFsync += lineBytes;
       _flushCounter++;
 
-      // Task 1.3: Add fsync call to the journal on every 1MB written
       if (_bytesSinceLastFsync >= 1024 * 1024) {
         await _fsyncLocked();
         _bytesSinceLastFsync = 0;
@@ -906,7 +990,12 @@ class DownloadJournal {
     });
   }
 
-  Future<void> writeCheckpoint(List<int> chunkProgress, int totalSize) async {
+  Future<void> writeCheckpoint(
+    List<int> chunkProgress,
+    int totalSize, {
+    Map<int, String>? hashes,
+    bool truncateDeltas = true,
+  }) async {
     await _lock.synchronized(() async {
       _ensureOpen();
       final line = _withCrc({
@@ -914,14 +1003,17 @@ class DownloadJournal {
         'v': 2,
         'chunks': chunkProgress,
         'total': totalSize,
+        if (hashes != null && hashes.isNotEmpty)
+          'hashes': {for (final e in hashes.entries) e.key.toString(): e.value},
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
       _sink!.writeln(line);
       await _fsyncLocked();
       _approxBytes += line.length + 1;
-      if (compactionThresholdBytes > 0 &&
-          _approxBytes >= compactionThresholdBytes) {
-        await _compactLocked(chunkProgress, totalSize);
+      if (truncateDeltas ||
+          (compactionThresholdBytes > 0 &&
+              _approxBytes >= compactionThresholdBytes)) {
+        await _compactLocked(chunkProgress, totalSize, hashes: hashes);
       }
     });
   }
@@ -937,11 +1029,14 @@ class DownloadJournal {
     return jsonEncode(payload);
   }
 
-  static Future<List<int>?> recover(String journalPath) async {
+  static Future<JournalRecoveryData?> recoverWithDetails(String journalPath) async {
     final file = File(journalPath);
     if (!await file.exists()) return null;
     List<int>? lastCheckpoint;
+    final chunkHashes = <int, String>{};
     int? threadCount;
+    int? totalSize;
+    int maxTs = 0;
     var skippedCorrupt = 0;
     try {
       final lines = file
@@ -960,9 +1055,6 @@ class DownloadJournal {
           skippedCorrupt++;
           continue;
         }
-        // ERR-RESILIENCE-2.3: Verify the per-line CRC when present. Lines with
-        // a missing/legacy checksum are trusted as before (backward compat);
-        // lines with a bad checksum are skipped as corrupt.
         final storedCrc = event['c'] as int?;
         if (storedCrc != null) {
           final payload = Map<String, dynamic>.from(event)..remove('c');
@@ -972,9 +1064,12 @@ class DownloadJournal {
             continue;
           }
         }
+        final ts = (event['ts'] as num?)?.toInt() ?? 0;
+        if (ts > maxTs) maxTs = ts;
         switch (event['t']) {
           case 'init':
             threadCount = event['threads'] as int?;
+            totalSize = (event['total'] as num?)?.toInt();
             lastCheckpoint = List.filled(threadCount ?? 0, 0);
             break;
           case 'checkpoint':
@@ -982,21 +1077,36 @@ class DownloadJournal {
             if (chunks != null) {
               lastCheckpoint = chunks.map((e) => (e as num).toInt()).toList();
             }
+            final t = (event['total'] as num?)?.toInt();
+            if (t != null && t > 0) totalSize = t;
+            final hashes = event['hashes'] as Map<dynamic, dynamic>?;
+            if (hashes != null) {
+              hashes.forEach((k, v) {
+                final idx = int.tryParse(k.toString());
+                if (idx != null && v is String) {
+                  chunkHashes[idx] = v;
+                }
+              });
+            }
             break;
-          case 'chunk': // FIX-P0-1
-            final i = event['i'] as int?; // FIX-P0-1
-            final b = event['b'] as int?; // FIX-P0-1
-            if (i != null && b != null && i >= 0) { // FIX-P0-1
-              if (lastCheckpoint == null) { // FIX-P0-1
-                lastCheckpoint = List.filled(i + 1, 0); // FIX-P0-1
-              } else if (i >= lastCheckpoint.length) { // FIX-P0-1
-                while (lastCheckpoint.length <= i) { // FIX-P0-1
-                  lastCheckpoint.add(0); // FIX-P0-1
-                } // FIX-P0-1
-              } // FIX-P0-1
-              lastCheckpoint[i] = b; // FIX-P0-1
-            } // FIX-P0-1
-            break; // FIX-P0-1
+          case 'chunk':
+            final i = event['i'] as int?;
+            final b = event['b'] as int?;
+            final h = event['h'] as String?;
+            if (i != null && b != null && i >= 0) {
+              if (lastCheckpoint == null) {
+                lastCheckpoint = List.filled(i + 1, 0);
+              } else if (i >= lastCheckpoint.length) {
+                while (lastCheckpoint.length <= i) {
+                  lastCheckpoint.add(0);
+                }
+              }
+              lastCheckpoint[i] = b;
+              if (h != null) {
+                chunkHashes[i] = h;
+              }
+            }
+            break;
         }
       }
     } catch (e) {
@@ -1014,15 +1124,27 @@ class DownloadJournal {
       );
       return null;
     }
-    return lastCheckpoint;
+    if (lastCheckpoint == null) return null;
+    return JournalRecoveryData(
+      chunkBytes: lastCheckpoint,
+      chunkHashes: chunkHashes,
+      totalSize: totalSize,
+      threadCount: threadCount ?? lastCheckpoint.length,
+      maxTimestamp: maxTs,
+    );
   }
 
-  /// Replays the journal file and recovers downloaded chunk progress. // FIX-P0-1
-  static Future<List<int>?> replay(String tempFilePath) async { // FIX-P0-1
-    final journalPath = tempFilePath.endsWith('.journal') // FIX-P0-1
-        ? tempFilePath // FIX-P0-1
-        : '$tempFilePath.journal'; // FIX-P0-1
-    return recover(journalPath); // FIX-P0-1
+  static Future<List<int>?> recover(String journalPath) async {
+    final details = await recoverWithDetails(journalPath);
+    return details?.chunkBytes;
+  }
+
+  /// Replays the journal file and recovers downloaded chunk progress.
+  static Future<List<int>?> replay(String tempFilePath) async {
+    final journalPath = tempFilePath.endsWith('.journal')
+        ? tempFilePath
+        : '$tempFilePath.journal';
+    return recover(journalPath);
   } // FIX-P0-1
 
   /// Best-effort synchronous close of the journal sink. Clears LRU state and
@@ -1044,10 +1166,11 @@ class DownloadJournal {
     }
   }
 
-  /// Flushes and closes the underlying journal sink.
+  /// Flushes, fsyncs, and closes the underlying journal sink.
   Future<void> close() async {
     await _lock.synchronized(() async {
       _lastRecordedChunkBytes.clear();
+      await _fsyncLocked();
       await _closeLocked();
     });
   }
@@ -1135,7 +1258,11 @@ class DownloadJournal {
     _sink = null;
   }
 
-  Future<void> _compactLocked(List<int> chunkProgress, int totalSize) async {
+  Future<void> _compactLocked(
+    List<int> chunkProgress,
+    int totalSize, {
+    Map<int, String>? hashes,
+  }) async {
     _isOpen = false;
     try {
       await _sink?.flush();
@@ -1155,6 +1282,8 @@ class DownloadJournal {
         'v': 2,
         'chunks': chunkProgress,
         'total': totalSize,
+        if (hashes != null && hashes.isNotEmpty)
+          'hashes': {for (final e in hashes.entries) e.key.toString(): e.value},
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
       await tmp.writeAsString('$initLine\n$checkpointLine\n', flush: true);

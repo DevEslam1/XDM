@@ -1,10 +1,16 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:dmx/core/domain/transfer_result.dart';
+import 'package:dmx/core/services/engines/speed_predictor.dart';
+import 'package:dmx/core/services/error_taxonomy.dart';
+import 'package:dmx/core/services/protocol_fallback_memory.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
@@ -262,69 +268,38 @@ class HttpTransferJob {
     out.send(TransferableTypedData.fromList([bytes]));
   }
 
-  /// FIX: Comprehensive error classification with proper handling for all
-  /// error types including HTML responses, URL expiration, and resume rejections.
+  /// Emits typed TransferResult containing classified taxonomy code and retryable flag.
   void sendUnhandledError(Object e) {
-    if (e is DioException && e.type == DioExceptionType.cancel) {
-      _send('error', {
-        'errorType': 'cancel',
-        'errorMessage': e.message ?? 'cancelled',
-      });
-      return;
-    }
-    if (e is DownloadIntegrityException) {
-      _send('error', {'errorType': 'integrity', 'errorMessage': e.message});
-      return;
-    }
-    if (e is InsufficientStorageException ||
-        (e is PositionalFileWriterException && _looksLikeDiskFull(e.message))) {
-      _send('error', {'errorType': 'diskFull', 'errorMessage': e.toString()});
-      return;
-    }
-    if (e is FileChangedOnServerException) {
-      _send('error', {
-        'errorType': 'fileChanged',
-        'errorMessage': 'File changed on server. Restart required.',
-      });
-      return;
-    }
-    if (e is UrlExpiredException) {
-      _send('error', {
-        'errorType': 'urlExpired',
-        'errorMessage': e.message,
-        'refreshAllMirrors': e.refreshAllMirrors,
-      });
-      return;
-    }
-    if (e is RangeUnsupportedException) {
-      _send('error', {
-        'errorType': 'rangeUnsupported',
-        'errorMessage': 'Server does not support range requests.',
-      });
-      return;
-    }
-    if (e is DioException) {
-      _send('error', {
-        'errorType': switch (e.type) {
-          DioExceptionType.cancel => 'cancel',
-          DioExceptionType.badResponse => 'badResponse',
-          DioExceptionType.connectionTimeout => 'connectionTimeout',
-          DioExceptionType.receiveTimeout => 'receiveTimeout',
-          DioExceptionType.sendTimeout => 'sendTimeout',
-          DioExceptionType.connectionError => 'connectionError',
-          _ => 'uncaught',
-        },
-        'errorMessage': e.message ?? e.toString(),
-        'errorStatus': e.response?.statusCode,
-      });
-      return;
-    }
-    _send('error', {'errorType': 'uncaught', 'errorMessage': e.toString()});
-  }
+    final classification = ErrorTaxonomy.classify(e);
+    final errorType = switch (classification.family) {
+      ErrorFamily.cancelled => 'cancel',
+      ErrorFamily.integrity => 'integrity',
+      ErrorFamily.disk => 'diskFull',
+      ErrorFamily.auth => (e is UrlExpiredException) ? 'urlExpired' : 'auth',
+      ErrorFamily.timeout => 'timeout',
+      _ => (e is RangeUnsupportedException)
+          ? 'rangeUnsupported'
+          : (e is FileChangedOnServerException)
+              ? 'fileChanged'
+              : classification.family.name,
+    };
 
-  static bool _looksLikeDiskFull(String msg) {
-    final m = msg.toLowerCase();
-    return m.contains('enospc') || m.contains('no space left');
+    final result = TransferResult.failure(
+      taxonomyCode: classification.family.name,
+      retryable: classification.retryable,
+      message: classification.message,
+      httpStatus: classification.httpStatus,
+      recoveryAction: classification.recoveryAction,
+      error: e,
+    );
+    final map = result.toMap();
+    map['errorType'] = errorType;
+    map['errorMessage'] = classification.message;
+    map['errorStatus'] = classification.httpStatus;
+    if (e is UrlExpiredException) {
+      map['refreshAllMirrors'] = e.refreshAllMirrors;
+    }
+    _send('error', map);
   }
 
   Timer? _hardTimeoutTimer;
@@ -398,6 +373,7 @@ class HttpTransferJob {
       url: cmd.url,
       threadCount: cmd.threadCount,
       knownFileSize: cmd.knownFileSize,
+      taskId: cmd.taskId,
     );
     _state = load.state;
     _watchdogCheckpointBytes = _state!.downloadedBytes;
@@ -418,8 +394,6 @@ class HttpTransferJob {
         int overlap = 0;
         for (final oc in oldChunks) {
           final oStart = oc.start;
-          // FIX: For complete chunks, the downloaded range is [start, start+downloaded)
-          // not [start, end+1). For incomplete chunks, it's [start, start+downloaded).
           final oEnd = oc.isComplete
               ? (oc.end >= 0 ? oc.end + 1 : oc.start + oc.downloaded)
               : oc.start + oc.downloaded;
@@ -442,50 +416,7 @@ class HttpTransferJob {
       _state!.totalSize = cmd.knownFileSize;
     }
     _state!.status = DmxStateStatus.active;
-    await StateStore.save(cmd.tempFilePath, _state!);
-
-    final tempFile = File(cmd.tempFilePath);
-    final tempFileExists = await tempFile.exists();
-    final diskFileLength = tempFileExists ? await tempFile.length() : 0;
-
-    // NOTE: PositionalFileWriter pre-extends the temp file to full totalSize via
-    // truncate(totalSize). Therefore, the primary defense against stale journal
-    // replay after server-side payload/ETag changes is J1 (explicit journal deletion
-    // in _verifyServerIdentity) and J2 (post-replay journal clear). J3 and J4 serve
-    // as defense-in-depth against missing, unallocated, or externally truncated temp files.
-    // J3: If temp file is missing entirely or 0 bytes on disk, skip journal replay and zero all chunk progress
-    if (!tempFileExists || diskFileLength == 0) {
-      if (_state!.chunks.isNotEmpty) {
-        for (final c in _state!.chunks) {
-          c.downloaded = 0;
-        }
-      }
-      await DownloadJournal.deleteJournalFor(cmd.tempFilePath);
-      _log.info('[Journal-J3] Temp file missing/empty ($diskFileLength bytes); zeroed progress and wiped journal');
-    } else if (await File('${cmd.tempFilePath}.journal').exists()) {
-      final journalBytes = await DownloadJournal.replay(cmd.tempFilePath);
-      if (journalBytes != null && journalBytes.isNotEmpty && _state!.chunks.isNotEmpty) {
-        for (var i = 0; i < min(_state!.chunks.length, journalBytes.length); i++) {
-          final chunk = _state!.chunks[i];
-          final onDiskChunkBytes = max(0, diskFileLength - chunk.start);
-          final maxPossibleBytes = chunk.size >= 0
-              ? min(chunk.size, onDiskChunkBytes)
-              : onDiskChunkBytes;
-          if (journalBytes[i] > chunk.downloaded) {
-            final clamped = journalBytes[i].clamp(0, maxPossibleBytes);
-            chunk.downloaded = clamped;
-          } else if (chunk.downloaded > maxPossibleBytes) {
-            chunk.downloaded = maxPossibleBytes;
-          }
-        }
-        _emitProgress(0,
-            statusMessage: 'Verifying resume data…',
-            cycleStateOverride: CycleState.verifying);
-      }
-      // J2: After journal replay into state + durable state save, clear the journal
-      await StateStore.save(cmd.tempFilePath, _state!, durable: true);
-      await DownloadJournal.clearJournalFor(cmd.tempFilePath);
-    }
+    await StateStore.save(cmd.tempFilePath, _state!, taskId: cmd.taskId);
 
     if (_state!.downloadedBytes > 0) {
       _stalledEmitted = false;
@@ -552,7 +483,7 @@ class HttpTransferJob {
       await loadAndReconcileState(dio);
       await executeDownload(dio);
       await _finalize(dio);
-      _send('done');
+      _send('done', const TransferResult.success().toMap());
     } finally {
       cancelWatchdogs();
       _abortAllDelays();
@@ -561,7 +492,7 @@ class HttpTransferJob {
         try {
           // Force flush any pending state save microtask first
           _stateSavePending = false;
-          await StateStore.save(cmd.tempFilePath, _state!);
+          await StateStore.save(cmd.tempFilePath, _state!, taskId: cmd.taskId);
         } catch (e, st) {
           _log.fine('Failed to save state during job finalize', e, st);
         }
@@ -601,6 +532,18 @@ class HttpTransferJob {
 
   static int probeSkipCount = 0;
   static int probeRunCount = 0;
+  int? _probeTtfbMs;
+  bool? _probeSupportsRange;
+  double? _probeInitialGoodputBps;
+
+  @visibleForTesting
+  int? get probeTtfbMsForTesting => _probeTtfbMs;
+
+  @visibleForTesting
+  bool? get probeSupportsRangeForTesting => _probeSupportsRange;
+
+  @visibleForTesting
+  double? get probeInitialGoodputBpsForTesting => _probeInitialGoodputBps;
 
   static void invalidateIdentityCacheForUrl(String url) {
     ServerIdentityCache.instance.invalidateForUrl(url);
@@ -610,10 +553,8 @@ class HttpTransferJob {
     ServerIdentityCache.instance.clear();
   }
 
-  /// Verifies server identity (etag/last-modified) to detect file changes.
-  /// Throws FileChangedOnServerException if the file has changed.
-  /// FIX 4: URL expiration detection now uses precise patterns instead of
-  /// broad substring matching.
+  /// Verifies server identity (etag/last-modified) to detect file changes
+  /// and enriches knowledge with Range support, TTFB, and initial goodput estimate.
   Future<void> _verifyServerIdentity(Dio dio) async {
     final cacheKey =
         '${Uri.tryParse(cmd.punyUrl)?.host}|${_state!.etag}|${_state!.lastModified}|${_state!.totalSize}';
@@ -624,6 +565,7 @@ class HttpTransferJob {
       return;
     }
     probeRunCount++;
+    final probeSw = Stopwatch()..start();
     try {
       final response = await dio.get<ResponseBody>(
         cmd.punyUrl,
@@ -635,8 +577,13 @@ class HttpTransferJob {
           validateStatus: (_) => true,
         ),
       );
+      _probeTtfbMs = probeSw.elapsedMilliseconds;
       if (response.statusCode == 206 || response.statusCode == 200) {
+        final rangeHeader = response.headers.value('accept-ranges');
         final contentRange = response.headers.value('content-range');
+        _probeSupportsRange = response.statusCode == 206 ||
+            (rangeHeader != null && rangeHeader.toLowerCase().contains('bytes'));
+
         int? serverTotal;
         if (contentRange != null) {
           serverTotal = int.tryParse(
@@ -646,26 +593,32 @@ class HttpTransferJob {
             response.headers.value(Headers.contentLengthHeader) ?? '');
         final newEtag = response.headers.value('etag');
         final newLm = response.headers.value('last-modified');
-        await response.data?.stream.listen((_) {}).cancel();
+
+        int probeBytes = 0;
+        final stream = response.data?.stream;
+        if (stream != null) {
+          await for (final chunk in stream) {
+            probeBytes += chunk.length;
+          }
+        }
+        final probeDurationSec = probeSw.elapsedMicroseconds / 1000000.0;
+        if (probeDurationSec > 0 && probeBytes > 0) {
+          _probeInitialGoodputBps = probeBytes / probeDurationSec;
+        }
 
         if (serverTotal != null && serverTotal > 0 && _state!.totalSize > 0) {
           final tolerance =
               (_state!.totalSize * 0.001).clamp(2048.0, 10 * 1024 * 1024);
           if ((serverTotal - _state!.totalSize).abs() > tolerance) {
-            for (var i = 0; i < _state!.chunks.length; i++) {
-              _state!.chunks[i] = ChunkState(
-                  start: _state!.chunks[i].start, end: _state!.chunks[i].end);
-            }
-            try {
-              final f = File(cmd.tempFilePath);
-              if (await f.exists()) await f.delete();
-            } catch (e, st) {
-              _log.fine(
-                  'Failed to delete temp file on server size change', e, st);
-            }
-            await DownloadJournal.deleteJournalFor(cmd.tempFilePath);
-            _log.info('[Journal-J1] Server size changed ($serverTotal vs ${_state!.totalSize}); wiped journal');
-            await StateStore.save(cmd.tempFilePath, _state!, durable: true);
+            await StateStore.resetTransferState(
+              cmd.tempFilePath,
+              taskId: cmd.taskId,
+              state: _state,
+              deleteTempFile: true,
+            );
+            _log.info('[Journal-J1] Server size changed ($serverTotal vs ${_state!.totalSize}); wiped state and journal');
+            _state!.totalSize = serverTotal;
+            await StateStore.save(cmd.tempFilePath, _state!, durable: true, taskId: cmd.taskId);
             throw FileChangedOnServerException();
           }
         }
@@ -676,22 +629,18 @@ class HttpTransferJob {
             newIdentity != null &&
             oldIdentity != newIdentity) {
           debugPrint('[DMX-Job] resource identity changed — restarting');
-          for (final c in _state!.chunks) {
-            c.downloaded = 0;
-          }
-          try {
-            final f = File(cmd.tempFilePath);
-            if (await f.exists()) await f.delete();
-          } catch (e, st) {
-            _log.fine('Failed to delete temp file on identity change', e, st);
-          }
-          await DownloadJournal.deleteJournalFor(cmd.tempFilePath);
-          _log.info('[Journal-J1] Server identity changed ($oldIdentity -> $newIdentity); wiped journal');
+          await StateStore.resetTransferState(
+            cmd.tempFilePath,
+            taskId: cmd.taskId,
+            state: _state,
+            deleteTempFile: true,
+          );
+          _log.info('[Journal-J1] Server identity changed ($oldIdentity -> $newIdentity); wiped state and journal');
           _state!.etag = newEtag;
           _state!.lastModified = newLm;
           _state!.migrationNote =
               '${_state!.migrationNote ?? ''} identity_restart'.trim();
-          await StateStore.save(cmd.tempFilePath, _state!, durable: true);
+          await StateStore.save(cmd.tempFilePath, _state!, durable: true, taskId: cmd.taskId);
           _emitProgress(0,
               statusMessage: 'Source changed on server — restarting');
         } else {
@@ -706,7 +655,6 @@ class HttpTransferJob {
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
-      // FIX 4: Use precise URL expiration detection
       final isYtOrSigned = _isExpiredUrlOrSite(cmd.url, host);
       if (isYtOrSigned && (status == 401 || status == 403)) {
         identityCache.remove(cacheKey);
@@ -716,7 +664,7 @@ class HttpTransferJob {
         if (_state != null) {
           _state!.cycleState = CycleState.updatingLinks.name;
           try {
-            await StateStore.save(cmd.tempFilePath, _state!, durable: true);
+            await StateStore.save(cmd.tempFilePath, _state!, durable: true, taskId: cmd.taskId);
           } catch (e, st) {
             _log.fine('Failed to save state on expired URL', e, st);
           }
@@ -734,42 +682,77 @@ class HttpTransferJob {
 
   void _resetToSingleStream() {
     final st = _state!;
-    for (final c in st.chunks) {
-      c.downloaded = 0;
-    }
+    _log.info('resume_range_ignored: resetting to single-stream for ${cmd.taskId}');
+    _send('telemetry', {
+      'event': 'resume_range_ignored',
+      'taskId': cmd.taskId,
+      'url': cmd.url,
+    });
+    StateStore.resetTransferState(
+      cmd.tempFilePath,
+      taskId: cmd.taskId,
+      state: st,
+      deleteTempFile: true,
+    );
     st.chunks = ChunkScheduler.singleStream(st.totalSize);
     st.threadCount = 1;
     _cachedChunkDetails = null;
     _lastChunkDetailsHash = 0;
     _lastChunkDetailsEmitMs = 0;
     _lastEmittedCompletedChunks = -1;
+  }
+
+  /// Computes the SHA-256 digest of a range [start, start + size - 1] in [filePath].
+  Future<String> _computeChunkDiskSha256(
+    String filePath,
+    int start,
+    int size,
+  ) async {
+    final file = File(filePath);
+    final raf = await file.open(mode: FileMode.read);
     try {
-      final f = File(cmd.tempFilePath);
-      if (f.existsSync()) f.deleteSync();
-    } catch (e, st) {
-      _log.fine('Failed to delete temp file on resetToSingleStream', e, st);
-    }
-    try {
-      StateStore.remove(cmd.tempFilePath);
-    } catch (e, st) {
-      _log.fine('Failed to remove state store on resetToSingleStream', e, st);
-    }
-    try {
-      final journal = File('${cmd.tempFilePath}.journal');
-      if (journal.existsSync()) journal.deleteSync();
-    } catch (e, st) {
-      _log.fine('Failed to delete journal on resetToSingleStream', e, st);
+      await raf.setPosition(start);
+      Digest? digest;
+      final innerSink =
+          ChunkedConversionSink<Digest>.withCallback((results) {
+        digest = results.single;
+      });
+      final sink = sha256.startChunkedConversion(innerSink);
+      var remaining = size;
+      const bufferSize = 64 * 1024;
+      while (remaining > 0) {
+        final toRead = min(remaining, bufferSize);
+        final bytes = await raf.read(toRead);
+        if (bytes.isEmpty) break;
+        sink.add(bytes);
+        remaining -= bytes.length;
+      }
+      sink.close();
+      if (digest == null) {
+        throw StateError('Failed to compute chunk digest');
+      }
+      return digest.toString();
+    } finally {
+      await raf.close();
     }
   }
 
-  /// Multi-threaded download with chunk-level retry and mirror failover.
-  /// FIX 16: Mirror failover now resets totalMirrorAttempts for the new mirror.
-  /// FIX 1: Pause properly saves state before throwing.
+  /// Multi-threaded download with adaptive chunk scheduling, per-connection goodput
+  /// monitoring, hot-chunk splitting, dead connection retirement, and integrity verification.
   Future<void> _runMultiThreaded(Dio dio) async {
     final st = _state!;
+    final host = Uri.tryParse(cmd.punyUrl)?.host ?? '';
+    final learnedCap = ProtocolFallbackMemory.getHostConcurrencyCap(host);
+    final targetConcurrency = learnedCap != null
+        ? min(learnedCap, cmd.threadCount)
+        : (cmd.threadCount > 4 ? 4 : max(2, min(cmd.threadCount, 4)));
+
     if (st.chunks.isEmpty) {
       st.chunks = ChunkScheduler.plan(
-          totalSize: st.totalSize, threadCount: cmd.threadCount);
+        totalSize: st.totalSize,
+        threadCount: targetConcurrency,
+      );
+      st.threadCount = targetConcurrency;
     }
 
     PositionalFileWriter writer;
@@ -795,122 +778,30 @@ class HttpTransferJob {
       governor.setTaskLimit(cmd.taskId, cmd.speedLimitKbps * 125);
     }
 
-    // FIX 9: Spot-check resume verification with writer data clearing
     if (hasPriorBytes && SettingsProvider.instance.resumeIntegrityCheck) {
       await spotCheckResumedBytes(dio, st, writer);
     }
 
     final failover = MirrorFailover([cmd.punyUrl, ...?cmd.mirrorUrls]);
-    final work = <(int, ChunkState)>[
-      for (var i = 0; i < st.chunks.length; i++)
-        if (!st.chunks[i].isComplete) (i, st.chunks[i]),
-    ];
-    final failFast = Completer<void>();
 
     try {
-      final results = await Future.wait<ChunkResult>(
-        work.map((entry) async {
-          final (chunkIndex, chunk) = entry;
-          var attempts = 0;
-          const maxAttempts = 3;
-          Object? lastError;
-          StackTrace? lastSt;
-          while (attempts < maxAttempts) {
-            if (failFast.isCompleted) {
-              return ChunkResult(
-                chunk: chunk,
-                success: false,
-                error: RangeUnsupportedException(),
-                attempts: attempts,
-              );
-            }
-            attempts++;
-            try {
-              await _runChunk(
-                dio: dio,
-                chunk: chunk,
-                chunkIndex: chunkIndex,
-                writer: writer,
-                governor: governor,
-                failover: failover,
-              );
-              return ChunkResult(
-                chunk: chunk,
-                success: true,
-                attempts: attempts,
-              );
-            } catch (e, st) {
-              lastError = e;
-              lastSt = st;
-              if (e is DioException && e.type == DioExceptionType.cancel) {
-                return ChunkResult(
-                  chunk: chunk,
-                  success: false,
-                  error: e,
-                  stackTrace: st,
-                  attempts: attempts,
-                );
-              }
-              if (e is RangeUnsupportedException) {
-                if (!failFast.isCompleted) failFast.complete();
-                return ChunkResult(
-                  chunk: chunk,
-                  success: false,
-                  error: e,
-                  stackTrace: st,
-                  attempts: attempts,
-                );
-              }
-              if (e is PositionalFileWriterException) {
-                return ChunkResult(
-                  chunk: chunk,
-                  success: false,
-                  error: e,
-                  stackTrace: st,
-                  attempts: attempts,
-                );
-              }
-              if (e is UrlExpiredException) {
-                return ChunkResult(
-                  chunk: chunk,
-                  success: false,
-                  error: e,
-                  stackTrace: st,
-                  attempts: attempts,
-                );
-              }
-              if (attempts < maxAttempts && !failFast.isCompleted) {
-                await _cancellableDelay(
-                  Duration(milliseconds: 200 * (1 << attempts)),
-                );
-              }
-            }
-          }
-          return ChunkResult(
-            chunk: chunk,
-            success: false,
-            error: lastError,
-            stackTrace: lastSt,
-            attempts: attempts,
-          );
-        }),
-        eagerError: false,
+      await _executeAdaptiveScheduling(
+        dio: dio,
+        st: st,
+        writer: writer,
+        governor: governor,
+        failover: failover,
+        maxConcurrency: targetConcurrency,
       );
 
-      // Check for URL expiration errors first (highest priority)
-      final urlExpiredErrors =
-          results.where((r) => !r.success && r.error is UrlExpiredException);
-      if (urlExpiredErrors.isNotEmpty) {
-        throw urlExpiredErrors.first.error!;
-      }
-
-      final failed = results.where((r) => !r.success).toList();
-      if (failed.isNotEmpty) {
-        final firstError = failed.first.error ??
-            const DownloadIntegrityException(
-                'Chunk download failed permanently');
-        throw firstError;
-      }
+      // Mandatory multi-chunk integrity pipeline stage
+      await _runIntegrityPipeline(
+        dio: dio,
+        st: st,
+        writer: writer,
+        governor: governor,
+        failover: failover,
+      );
 
       await writer.flushAll();
       final sum = st.downloadedBytes;
@@ -925,7 +816,6 @@ class HttpTransferJob {
       }
     } catch (e) {
       if (e is DioException && e.type == DioExceptionType.cancel) {
-        // FIX 1: Pause - save state synchronously before throwing
         st.status = DmxStateStatus.paused;
         try {
           await writer.flushAll();
@@ -934,7 +824,7 @@ class HttpTransferJob {
               'Writer flush on pause failed: $flushErr', flushErr, flushSt);
         }
         _stateSavedInCatch = true;
-        await StateStore.save(cmd.tempFilePath, st, durable: true);
+        await StateStore.save(cmd.tempFilePath, st, durable: true, taskId: cmd.taskId);
         _emitProgress(0,
             statusMessage: 'Paused', pauseReason: effectivePauseReason);
       } else if (e is! RangeUnsupportedException && e is! UrlExpiredException) {
@@ -950,7 +840,7 @@ class HttpTransferJob {
               'Writer flush on failure failed: $flushErr', flushErr, flushSt);
         }
         _stateSavedInCatch = true;
-        await StateStore.save(cmd.tempFilePath, st, durable: true);
+        await StateStore.save(cmd.tempFilePath, st, durable: true, taskId: cmd.taskId);
         _emitProgress(0, statusMessage: _formatFailedMessage(e));
       }
       rethrow;
@@ -962,10 +852,251 @@ class HttpTransferJob {
     }
   }
 
+  /// Adaptive scheduler worker pool. Handles goodput prediction, hottest chunk splitting,
+  /// and dead connection retirement with range redistribution.
+  Future<void> _executeAdaptiveScheduling({
+    required Dio dio,
+    required TransferState st,
+    required PositionalFileWriter writer,
+    required BandwidthGovernor governor,
+    required MirrorFailover failover,
+    required int maxConcurrency,
+  }) async {
+    final activeSpeedPredictors = <int, SpeedPredictor>{};
+    final activeChunkIndices = <int, int>{};
+    final pendingQueue = <int>[];
+
+    for (var i = 0; i < st.chunks.length; i++) {
+      if (!st.chunks[i].isComplete) {
+        pendingQueue.add(i);
+      }
+    }
+
+    if (pendingQueue.isEmpty) return;
+
+    final completer = Completer<void>();
+    var runningWorkers = 0;
+    var nextWorkerId = 0;
+    final failFast = Completer<void>();
+    Object? permanentError;
+
+    Future<void> spawnWorker(int workerId) async {
+      runningWorkers++;
+      activeSpeedPredictors[workerId] = SpeedPredictor();
+      if (_probeInitialGoodputBps != null && _probeInitialGoodputBps! > 0) {
+        activeSpeedPredictors[workerId]!.addSample(_probeInitialGoodputBps!);
+      }
+
+      try {
+        while (!_cancelRequested &&
+            !_cancelToken.isCancelled &&
+            !failFast.isCompleted) {
+          int? chunkIndex;
+          if (pendingQueue.isNotEmpty) {
+            chunkIndex = pendingQueue.removeAt(0);
+          } else {
+            // Check if we can split the hottest active chunk (>= 2MB remaining)
+            int bestHottest = -1;
+            int maxRemaining = 0;
+            for (final entry in activeChunkIndices.entries) {
+              final ci = entry.value;
+              if (ci >= 0 && ci < st.chunks.length) {
+                final c = st.chunks[ci];
+                if (ChunkScheduler.canSplitChunk(c)) {
+                  final rem = (c.end - c.start + 1) - c.downloaded;
+                  if (rem > maxRemaining) {
+                    maxRemaining = rem;
+                    bestHottest = ci;
+                  }
+                }
+              }
+            }
+
+            if (bestHottest != -1) {
+              final parent = st.chunks[bestHottest];
+              final split = ChunkScheduler.trySplitChunk(parent);
+              if (split != null) {
+                final (first, second) = split;
+                parent.end = first.end;
+                st.chunks.add(second);
+                st.threadCount = st.chunks.length;
+                chunkIndex = st.chunks.length - 1;
+                debugPrint(
+                  '[AdaptiveScheduler] Split hottest chunk $bestHottest -> '
+                  'new chunk $chunkIndex (range ${second.start}-${second.end})',
+                );
+              }
+            }
+          }
+
+          if (chunkIndex == null || chunkIndex >= st.chunks.length) {
+            break;
+          }
+
+          final chunk = st.chunks[chunkIndex];
+          if (chunk.isComplete) continue;
+
+          activeChunkIndices[workerId] = chunkIndex;
+          var attempts = 0;
+          const maxAttempts = 3;
+          var chunkSuccess = false;
+
+          while (attempts < maxAttempts &&
+              !chunk.isComplete &&
+              !failFast.isCompleted) {
+            _throwIfCancelled();
+            attempts++;
+            try {
+              await _runChunk(
+                dio: dio,
+                chunk: chunk,
+                chunkIndex: chunkIndex,
+                writer: writer,
+                governor: governor,
+                failover: failover,
+                speedPredictor: activeSpeedPredictors[workerId],
+              );
+              chunkSuccess = true;
+              break;
+            } catch (e) {
+              if (e is DioException && e.type == DioExceptionType.cancel) {
+                rethrow;
+              }
+              if (e is RangeUnsupportedException) {
+                if (!failFast.isCompleted) failFast.complete();
+                rethrow;
+              }
+              if (e is UrlExpiredException ||
+                  e is PositionalFileWriterException) {
+                rethrow;
+              }
+
+              // Check if server rate limited us (429/503) -> record concurrency cap
+              if (e is DioException &&
+                  (e.response?.statusCode == 429 ||
+                      e.response?.statusCode == 503)) {
+                final host = Uri.tryParse(cmd.punyUrl)?.host ?? '';
+                ProtocolFallbackMemory.recordHostConcurrencyCap(
+                    host, max(1, runningWorkers - 1));
+              }
+
+              if (attempts >= maxAttempts) {
+                final nextMirror = failover.advance();
+                if (nextMirror != null) {
+                  attempts = 0;
+                  debugPrint(
+                      '[AdaptiveScheduler] Chunk $chunkIndex failing over to mirror: $nextMirror');
+                  continue;
+                }
+                debugPrint(
+                    '[AdaptiveScheduler] Worker $workerId retiring on chunk $chunkIndex after $attempts attempts. Range redistributed.');
+                if (!chunk.isComplete) {
+                  pendingQueue.add(chunkIndex);
+                }
+                break;
+              } else {
+                await _cancellableDelay(
+                    Duration(milliseconds: 200 * (1 << attempts)));
+              }
+            }
+          }
+
+          activeChunkIndices.remove(workerId);
+          if (!chunkSuccess && pendingQueue.contains(chunkIndex)) {
+            break;
+          }
+        }
+      } catch (e) {
+        permanentError ??= e;
+        if (!failFast.isCompleted) failFast.complete();
+      } finally {
+        activeChunkIndices.remove(workerId);
+        activeSpeedPredictors.remove(workerId);
+        runningWorkers--;
+        if (runningWorkers == 0 && !completer.isCompleted) {
+          completer.complete();
+        }
+      }
+    }
+
+    final initialWorkers = min(maxConcurrency, max(1, pendingQueue.length));
+    for (var i = 0; i < initialWorkers; i++) {
+      unawaited(spawnWorker(nextWorkerId++));
+    }
+
+    await completer.future;
+
+    if (failFast.isCompleted && permanentError != null) {
+      throw permanentError!;
+    }
+  }
+
+  /// Mandatory multi-chunk integrity pipeline stage. Verifies on-disk chunk hashes
+  /// against incremental hashes computed during writing.
+  Future<void> _runIntegrityPipeline({
+    required Dio dio,
+    required TransferState st,
+    required PositionalFileWriter writer,
+    required BandwidthGovernor governor,
+    required MirrorFailover failover,
+  }) async {
+    if (st.chunks.length <= 1) return;
+
+    await writer.flushAll();
+    _emitProgress(_stopwatch.elapsedMilliseconds,
+        statusMessage: 'Verifying chunk integrity…',
+        cycleStateOverride: CycleState.verifying);
+
+    const maxIntegrityPasses = 3;
+    var pass = 0;
+
+    while (pass < maxIntegrityPasses) {
+      pass++;
+      final corruptedChunks = <int>[];
+      for (var i = 0; i < st.chunks.length; i++) {
+        final chunk = st.chunks[i];
+        if (chunk.hash != null && chunk.size > 0) {
+          final diskHash = await _computeChunkDiskSha256(
+            cmd.tempFilePath,
+            chunk.start,
+            chunk.size,
+          );
+          if (diskHash.toLowerCase() != chunk.hash!.toLowerCase()) {
+            _log.warning(
+              '[IntegrityPipeline] Corrupted chunk detected at index $i (range ${chunk.start}-${chunk.end}). '
+              'Expected hash: ${chunk.hash}, actual: $diskHash. Triggering re-download of ONLY this chunk.',
+            );
+            corruptedChunks.add(i);
+          }
+        }
+      }
+
+      if (corruptedChunks.isEmpty) {
+        _log.info('[IntegrityPipeline] All ${st.chunks.length} chunks verified OK.');
+        return;
+      }
+
+      // Re-download ONLY corrupted chunks
+      for (final i in corruptedChunks) {
+        st.chunks[i].downloaded = 0;
+        st.chunks[i].hash = null;
+      }
+      await StateStore.save(cmd.tempFilePath, st, durable: true, taskId: cmd.taskId);
+
+      await _executeAdaptiveScheduling(
+        dio: dio,
+        st: st,
+        writer: writer,
+        governor: governor,
+        failover: failover,
+        maxConcurrency: min(corruptedChunks.length, 4),
+      );
+      await writer.flushAll();
+    }
+  }
+
   /// Downloads a single chunk with retry and mirror failover.
-  /// FIX 16: totalMirrorAttempts is reset when switching to a new mirror.
-  /// FIX 6: HTML response detection uses precise regex instead of substring.
-  /// FIX 14: Chunk completion guards against server sending extra data.
+  /// Computes SHA-256 incrementally as bytes stream in.
   Future<void> _runChunk({
     required Dio dio,
     required ChunkState chunk,
@@ -973,6 +1104,7 @@ class HttpTransferJob {
     required PositionalFileWriter writer,
     required BandwidthGovernor governor,
     required MirrorFailover failover,
+    SpeedPredictor? speedPredictor,
   }) async {
     var attempts = 0;
     var totalMirrorAttempts = 0;
@@ -999,7 +1131,6 @@ class HttpTransferJob {
         var resumeFrom = chunk.downloaded;
         final tempFile = File(cmd.tempFilePath);
         final currentDiskLen = tempFile.existsSync() ? tempFile.lengthSync() : 0;
-        // J4: Pre-flight assert before any Range request to prevent sparse holes
         if (resumeFrom > 0 && chunk.start + resumeFrom > currentDiskLen) {
           _log.warning(
             '[DMX-Job-J4] Pre-flight violation on chunk $chunkIndex: '
@@ -1030,23 +1161,20 @@ class HttpTransferJob {
           ),
         );
 
-        // Handle various status codes
         if (response.statusCode == 200) {
           await response.data?.stream.listen((_) {}).cancel();
           if (resumeFrom > 0) {
-            // Server doesn't support resume - restart this chunk
             chunk.downloaded = 0;
             try {
-              await StateStore.remove(cmd.tempFilePath);
+              await StateStore.resetTransferState(cmd.tempFilePath, taskId: cmd.taskId);
             } catch (e, st) {
               _log.fine(
-                  'Failed to remove state store on HTTP 200 resume reject',
+                  'Failed to reset state store on HTTP 200 resume reject',
                   e,
                   st);
             }
             throw RangeUnsupportedException();
           }
-          // First byte of first chunk - server ignored range, treat as single stream
           throw RangeUnsupportedException();
         }
         if (response.statusCode == 416) {
@@ -1065,7 +1193,6 @@ class HttpTransferJob {
         }
         if (response.statusCode != 206) {
           await response.data?.stream.listen((_) {}).cancel();
-          // FIX 4: Check for URL expiration on auth errors
           if (response.statusCode == 401 || response.statusCode == 403) {
             final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
             final isYtOrSigned = _isExpiredUrlOrSite(cmd.url, host);
@@ -1077,7 +1204,7 @@ class HttpTransferJob {
                 _state!.cycleState = CycleState.updatingLinks.name;
                 try {
                   await StateStore.save(cmd.tempFilePath, _state!,
-                      durable: true);
+                      durable: true, taskId: cmd.taskId);
                 } catch (e, st) {
                   _log.fine(
                       'Failed to save state on URL expiration in chunk', e, st);
@@ -1097,7 +1224,6 @@ class HttpTransferJob {
           );
         }
 
-        // FIX 6: HTML response detection - use precise regex
         final contentType =
             response.headers.value('content-type')?.toLowerCase() ?? '';
         if (_htmlContentTypeRegex.hasMatch(contentType)) {
@@ -1110,7 +1236,6 @@ class HttpTransferJob {
           );
         }
 
-        // Validate content-range
         try {
           validateContentRange(
             response.headers.value('content-range'),
@@ -1136,6 +1261,13 @@ class HttpTransferJob {
           );
         }
 
+        Digest? chunkDigest;
+        final innerDigestSink =
+            ChunkedConversionSink<Digest>.withCallback((results) {
+          chunkDigest = results.single;
+        });
+        final digestSink = sha256.startChunkedConversion(innerDigestSink);
+
         var sessionBytes = 0;
         await for (final piece in stream) {
           _throwIfCancelled();
@@ -1150,48 +1282,71 @@ class HttpTransferJob {
               ? chunk.size - (resumeFrom + sessionBytes)
               : piece.length;
           if (remainingInChunk <= 0) {
-            // FIX 14: Guard against server sending more data than expected
             break;
           }
           final toWrite = remainingInChunk < piece.length
               ? Uint8List.sublistView(piece, 0, remainingInChunk)
               : piece;
           await writer.write(chunkIndex, pos, toWrite);
+          digestSink.add(toWrite);
           sessionBytes += toWrite.length;
           chunk.downloaded = resumeFrom + sessionBytes;
           _bytesSinceSave += toWrite.length;
+
+          if (speedPredictor != null) {
+            final elapsedSec = _stopwatch.elapsedMilliseconds / 1000.0;
+            if (elapsedSec > 0) {
+              speedPredictor.addSample(sessionBytes / elapsedSec);
+            }
+          }
+
           await _throttledSaveAndReport(writer);
 
           if (chunk.size >= 0 && (resumeFrom + sessionBytes) >= chunk.size) {
             break;
           }
         }
+        digestSink.close();
+        if (chunkDigest != null && chunk.isComplete) {
+          chunk.hash = chunkDigest.toString();
+        }
+
         failover.reportSuccess();
         _emitProgress(_stopwatch.elapsedMilliseconds,
             statusMessage: 'Downloading…',
             cycleStateOverride: CycleState.downloading);
         attempts = 0;
-        if (chunk.isComplete) { // FIX-P0-1
-          try { // FIX-P0-1
-            await writer.flushAll(); // FIX-P0-1
-            await StateStore.save(cmd.tempFilePath, _state!, durable: true); // FIX-P0-1
-          } catch (e) { // FIX-P0-1
-            debugPrint('[DMX] H-2: chunk-boundary save failed: $e'); // FIX-P0-1
-            try { // FIX-P0-1
+        if (chunk.isComplete) {
+          try {
+            await writer.flushAll();
+            await StateStore.save(cmd.tempFilePath, _state!, durable: true, taskId: cmd.taskId);
+            final journal = DownloadJournal('${cmd.tempFilePath}.journal');
+            await journal.open();
+            try {
+              await journal.recordChunkProgress(
+                chunkIndex,
+                chunk.downloaded,
+                hash: chunk.hash,
+              );
+            } finally {
+              await journal.close();
+            }
+          } catch (e) {
+            debugPrint('[DMX] H-2: chunk-boundary save failed: $e');
+            try {
               await Future<void>.delayed(const Duration(milliseconds: 150));
-              await StateStore.save(cmd.tempFilePath, _state!, durable: true); // FIX-P0-1
-            } catch (e, st) { // FIX-P0-1
-              _log.fine('Failed backup state save at chunk boundary', e, st); // FIX-P0-1
-            } // FIX-P0-1
-          } // FIX-P0-1
-        } // FIX-P0-1
+              await StateStore.save(cmd.tempFilePath, _state!, durable: true, taskId: cmd.taskId);
+            } catch (e, st) {
+              _log.fine('Failed backup state save at chunk boundary', e, st);
+            }
+          }
+        }
       } on DioException catch (e) {
         if (e.type == DioExceptionType.cancel) rethrow;
         if (e.message == 'HTML_INSTEAD_OF_MEDIA') rethrow;
         if (e.message?.startsWith('Server rejected resume') == true) rethrow;
 
         final status = e.response?.statusCode;
-        // FIX 4: URL expiration detection - precise patterns only
         if (status == 401 || status == 403) {
           final host = Uri.tryParse(cmd.punyUrl)?.host.toLowerCase() ?? '';
           final isLikelyExpired = _isExpiredUrlOrSite(cmd.url, host);
@@ -1202,7 +1357,7 @@ class HttpTransferJob {
             if (_state != null) {
               _state!.cycleState = CycleState.updatingLinks.name;
               try {
-                await StateStore.save(cmd.tempFilePath, _state!, durable: true);
+                await StateStore.save(cmd.tempFilePath, _state!, durable: true, taskId: cmd.taskId);
               } catch (_) {}
             }
             await Future.delayed(const Duration(milliseconds: 10));
@@ -1211,7 +1366,6 @@ class HttpTransferJob {
             );
           }
         }
-        // Non-retryable client errors
         if (status != null &&
             status >= 400 &&
             status < 500 &&
@@ -1223,7 +1377,6 @@ class HttpTransferJob {
           final next = failover.advance();
           if (next != null) {
             activeUrl = next;
-            // FIX 16: Reset both attempt counters for new mirror
             attempts = 0;
             totalMirrorAttempts = 0;
             debugPrint('[DMX-Job] failing over to mirror: $next');
@@ -1481,6 +1634,12 @@ class HttpTransferJob {
         // FIX 5: HTTP 200 resume rejection - handle server ignoring Range headers
         if (response.statusCode == 200 && resumeFrom > 0) {
           await response.data?.stream.listen((_) {}).cancel();
+          _log.info('resume_range_ignored (single-stream): resetting for ${cmd.taskId}');
+          _send('telemetry', {
+            'event': 'resume_range_ignored',
+            'taskId': cmd.taskId,
+            'url': cmd.url,
+          });
           rangeRejectCount++;
           if (rangeRejectCount > maxRangeRejects) {
             st.status = DmxStateStatus.failed;
@@ -1896,8 +2055,10 @@ class HttpTransferJob {
         try {
           await _stateSaveLock.synchronized(() async {
             if (preSaveFlush != null) await preSaveFlush();
-            if (writer != null) await writer.flushBuffers();
-            await StateStore.save(cmd.tempFilePath, st, durable: true);
+            if (writer != null) await writer.flushAll();
+            await DownloadJournal.flushAllActive();
+            await StateStore.save(cmd.tempFilePath, st,
+                durable: true, taskId: cmd.taskId);
           });
         } catch (e) {
           debugPrint('[DMX-Job] forced state save on cancel failed: $e');

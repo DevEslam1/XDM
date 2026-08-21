@@ -4,6 +4,8 @@ import 'package:get_it/get_it.dart';
 
 import '../../features/downloads/data/drift_task_repository.dart';
 import '../../features/downloads/data/task_repository.dart';
+import '../../features/downloads/domain/orchestrators/http_download_orchestrator.dart';
+import '../../features/downloads/domain/orchestrators/torrent_download_orchestrator.dart';
 import '../../features/downloads/provider/download_filter_provider.dart';
 import '../../features/downloads/provider/download_list_provider.dart';
 import '../../features/downloads/provider/download_queue_engine.dart';
@@ -35,7 +37,6 @@ import '../services/download_journal.dart';
 import '../services/engine/server_identity_cache.dart';
 import '../services/engine/torrent_download_handler.dart';
 import '../services/engines/connection_warmer.dart';
-import '../services/http_download_orchestrator.dart';
 import '../services/logging_service.dart';
 import '../services/metadata_probe_service.dart';
 import '../services/mirror/mirror_registry.dart';
@@ -48,7 +49,6 @@ import '../services/share_url_handler.dart';
 import '../services/shared_prefs_batcher.dart';
 import '../services/single_instance_service.dart';
 import '../services/site_intelligence/site_intelligence_service.dart';
-import '../services/torrent_download_orchestrator.dart';
 import '../services/torrent_service.dart';
 import '../services/tracker_manager.dart';
 import '../services/update_service.dart';
@@ -151,7 +151,7 @@ Future<void> configureDependencies() async {
       dispose: (p) => p.dispose(),
     );
     getIt.registerLazySingleton<TorrentProvider>(
-      () => TorrentProvider(),
+      () => TorrentProvider(torrentService: getIt<ITorrentService>()),
       dispose: (p) => p.dispose(),
     );
 

@@ -115,6 +115,12 @@ class DiagnosticService implements DiagnosticRepository {
   int _mirrorHealthHits = 0;
   int _mirrorHealthMisses = 0;
 
+  // Phase 8 Telemetry alerts
+  int _resumeRangeIgnoredCount = 0;
+  int _journalReconciledCount = 0;
+  int _resumeDataMissingCount = 0;
+  int _watchdogSkipPausedCount = 0;
+
   Map<String, dynamic>? _cachedSnapshot;
   bool _snapshotDirty = true;
 
@@ -130,6 +136,15 @@ class DiagnosticService implements DiagnosticRepository {
   int get mirrorHealthHits => _mirrorHealthHits;
   @override
   int get mirrorHealthMisses => _mirrorHealthMisses;
+
+  @override
+  int get resumeRangeIgnoredCount => _resumeRangeIgnoredCount;
+  @override
+  int get journalReconciledCount => _journalReconciledCount;
+  @override
+  int get resumeDataMissingCount => _resumeDataMissingCount;
+  @override
+  int get watchdogSkipPausedCount => _watchdogSkipPausedCount;
 
   @override
   double get mirrorHealthCacheHitRate {
@@ -190,6 +205,28 @@ class DiagnosticService implements DiagnosticRepository {
   }
 
   @override
+  void recordTelemetryAlert(String alertName, {String? taskId, String? details}) {
+    switch (alertName) {
+      case 'resume_range_ignored':
+        _resumeRangeIgnoredCount++;
+        break;
+      case 'journal_reconciled':
+        _journalReconciledCount++;
+        break;
+      case 'resume_data_missing':
+        _resumeDataMissingCount++;
+        break;
+      case 'watchdog_skip_paused':
+        _watchdogSkipPausedCount++;
+        break;
+      default:
+        break;
+    }
+    record('telemetry_alert', alertName, details: 'taskId=$taskId ${details ?? ''}'.trim());
+    _snapshotDirty = true;
+  }
+
+  @override
   void resetTelemetryMetrics() {
     _isolateBytesTransferred = 0;
     _isolateMessageCount = 0;
@@ -198,6 +235,10 @@ class DiagnosticService implements DiagnosticRepository {
     _maxDbWriteQueueDepth = 0;
     _mirrorHealthHits = 0;
     _mirrorHealthMisses = 0;
+    _resumeRangeIgnoredCount = 0;
+    _journalReconciledCount = 0;
+    _resumeDataMissingCount = 0;
+    _watchdogSkipPausedCount = 0;
     _snapshotDirty = true;
   }
 
@@ -215,6 +256,10 @@ class DiagnosticService implements DiagnosticRepository {
       'mirrorHealthHits': _mirrorHealthHits,
       'mirrorHealthMisses': _mirrorHealthMisses,
       'mirrorHealthCacheHitRate': mirrorHealthCacheHitRate,
+      'resumeRangeIgnored': _resumeRangeIgnoredCount,
+      'journalReconciled': _journalReconciledCount,
+      'resumeDataMissing': _resumeDataMissingCount,
+      'watchdogSkipPaused': _watchdogSkipPausedCount,
     };
     _snapshotDirty = false;
     return _cachedSnapshot!;

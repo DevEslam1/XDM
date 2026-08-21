@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../settings/provider/settings_provider.dart';
-import '../models/download_state_machine.dart';
 import '../models/download_task.dart';
 import 'download_list_provider.dart';
 

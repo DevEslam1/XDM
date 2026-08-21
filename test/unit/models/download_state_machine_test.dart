@@ -1,4 +1,3 @@
-import 'package:dmx/features/downloads/models/download_state_machine.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -60,7 +59,10 @@ void main() {
       );
 
       // Cannot jump from idle directly to completed
-      expect(sm.transition(DownloadState.completed), isFalse);
+      expect(
+        () => sm.transition(DownloadState.completed),
+        throwsA(isA<InvalidTransitionError>()),
+      );
       expect(sm.currentState, DownloadState.idle);
 
       // Cannot jump from completed to merging
@@ -68,7 +70,10 @@ void main() {
         taskId: 'task-3',
         initialState: DownloadState.completed,
       );
-      expect(smCompleted.transition(DownloadState.merging), isFalse);
+      expect(
+        () => smCompleted.transition(DownloadState.merging),
+        throwsA(isA<InvalidTransitionError>()),
+      );
       expect(smCompleted.currentState, DownloadState.completed);
 
       sm.dispose();

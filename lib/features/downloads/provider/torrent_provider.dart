@@ -1,17 +1,26 @@
 import 'dart:async';
 
+import 'package:dmx/core/interfaces/i_torrent_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/core/services/torrent_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:get_it/get_it.dart';
 
 /// Single-responsibility provider for torrent session management and stats tracking.
 class TorrentProvider extends ChangeNotifier {
+  final ITorrentService _torrentService;
   final Map<String, int> _torrentIds = {};
   final Map<int, TorrentUpdateInfo> _latestStats = {};
   StreamSubscription<Map<int, TorrentUpdateInfo>>? _updatesSub;
   Timer? _staleDetector;
+
+  TorrentProvider({ITorrentService? torrentService})
+      : _torrentService = torrentService ??
+            (GetIt.I.isRegistered<ITorrentService>()
+                ? GetIt.I<ITorrentService>()
+                : TorrentServiceImpl());
 
   Map<String, int> get torrentIds => Map.unmodifiable(_torrentIds);
   Map<int, TorrentUpdateInfo> get latestStats => Map.unmodifiable(_latestStats);
@@ -59,7 +68,7 @@ class TorrentProvider extends ChangeNotifier {
 
   void startListening() {
     if (_updatesSub != null) return;
-    _updatesSub = TorrentService.torrentUpdates.listen((torrents) {
+    _updatesSub = _torrentService.torrentUpdates.listen((torrents) {
       for (final entry in torrents.entries) {
         _latestStats[entry.key] = entry.value;
       }
@@ -78,8 +87,8 @@ class TorrentProvider extends ChangeNotifier {
         DownloadEngine.isInBackground;
     final interval = isBg ? const Duration(seconds: 60) : const Duration(seconds: 30);
     _staleDetector = Timer.periodic(interval, (_) {
-      if (!TorrentService.isInitialized) return;
-      final active = TorrentService.activeTorrentIds;
+      if (!_torrentService.isInitialized) return;
+      final active = _torrentService.activeTorrentIds;
       final registeredToTasks = _torrentIds.values.toSet();
       _latestStats.removeWhere(
           (id, _) => !active.contains(id) && !registeredToTasks.contains(id));

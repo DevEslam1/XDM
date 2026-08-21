@@ -261,16 +261,30 @@ class DownloadProgressHandler {
           .toList();
     }
 
-    lastDownloadedBytes =
-        (p['downloadedBytes'] as num?)?.toInt() ?? lastDownloadedBytes;
-    // FIX v2.0.0-BugFileSize: Don't overwrite a known file size with 0.
-    // v2.0.0 emits fileSize: 0 during pre-metadata/checking phases, which
-    // caused the UI to show "0 B" total size even when knownFileSize was
-    // previously set. Only update if the new value is positive or we have
-    // no previous value.
-    final newFileSize = (p['fileSize'] as num?)?.toInt();
-    if (newFileSize != null && (newFileSize > 0 || lastFileSize == 0)) {
-      lastFileSize = newFileSize;
+    if (isTorrent) {
+      final totalWanted = (p['totalWanted'] as num?)?.toInt();
+      final totalWantedDone = (p['totalWantedDone'] as num?)?.toInt();
+      if (totalWanted != null && totalWanted > 0) {
+        lastFileSize = totalWanted;
+      } else {
+        final newFileSize = (p['fileSize'] as num?)?.toInt();
+        if (newFileSize != null && (newFileSize > 0 || lastFileSize == 0)) {
+          lastFileSize = newFileSize;
+        }
+      }
+      if (totalWantedDone != null && totalWantedDone >= 0) {
+        lastDownloadedBytes = totalWantedDone;
+      } else {
+        lastDownloadedBytes =
+            (p['downloadedBytes'] as num?)?.toInt() ?? lastDownloadedBytes;
+      }
+    } else {
+      lastDownloadedBytes =
+          (p['downloadedBytes'] as num?)?.toInt() ?? lastDownloadedBytes;
+      final newFileSize = (p['fileSize'] as num?)?.toInt();
+      if (newFileSize != null && (newFileSize > 0 || lastFileSize == 0)) {
+        lastFileSize = newFileSize;
+      }
     }
 
     final pTorrentFiles = p['torrentFiles'];

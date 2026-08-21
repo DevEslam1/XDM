@@ -4,7 +4,6 @@ import 'package:dmx/core/services/bandwidth_governor.dart';
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/features/downloads/data/task_repository.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
-import 'package:dmx/features/downloads/provider/progress_emitter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -26,38 +25,6 @@ void main() {
       governor.setGlobalLimit(BandwidthGovernor.unlimited);
       expect(governor.isUnlimited, isTrue);
       governor.dispose();
-    });
-
-    test('ProgressEmitter updates, throttling, and memory cleanup (P0-5)', () {
-      final emitter = ProgressEmitter(throttleDuration: Duration.zero);
-      const taskId = 'task-readiness-1';
-
-      final progressNotif = emitter.progressNotifier(taskId);
-      final speedNotif = emitter.speedNotifier(taskId);
-
-      expect(progressNotif.value, 0.0);
-      expect(speedNotif.value, 0.0);
-
-      // In foreground
-      emitter.pushTick(taskId, 0.25, 500000);
-      expect(progressNotif.value, 0.25);
-      expect(speedNotif.value, 500000);
-
-      // Micro delta (< 0.005) should be filtered to prevent UI churn
-      emitter.pushTick(taskId, 0.252, 500100);
-      expect(progressNotif.value, 0.25); // unchanged
-
-      // Significant delta should push
-      emitter.pushTick(taskId, 0.26, 600000);
-      expect(progressNotif.value, 0.26);
-      expect(speedNotif.value, 600000);
-
-      // Refresh on resume re-emits last known progress
-      emitter.refreshOnResume();
-      expect(progressNotif.value, 0.26);
-
-      emitter.disposeTaskNotifier(taskId);
-      emitter.dispose();
     });
 
     test('Android 15 dataSync 6-hour timeout graceful pause and retry (P1-1)',

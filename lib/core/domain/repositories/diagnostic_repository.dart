@@ -1,4 +1,4 @@
-import '../../services/error_taxonomy.dart' show ErrorFamily;
+import '../models/error_family.dart';
 
 /// One recorded diagnostic entry (pure domain value).
 class DiagnosticEntry {
@@ -46,10 +46,17 @@ abstract class DiagnosticRepository {
   double get mirrorHealthCacheHitRate;
   double get p95ProgressLatencyMs;
 
+  // Phase 8 Telemetry alerts
+  int get resumeRangeIgnoredCount;
+  int get journalReconciledCount;
+  int get resumeDataMissingCount;
+  int get watchdogSkipPausedCount;
+
   void recordIsolatePayloadSize(int bytes);
   void recordProgressLatency(Duration latency);
   void recordDbWriteQueueDepth(int depth);
   void recordMirrorHealthAccess({required bool isHit});
+  void recordTelemetryAlert(String alertName, {String? taskId, String? details});
   void resetTelemetryMetrics();
   Map<String, dynamic> telemetryMetricsSnapshot();
 }

@@ -22,14 +22,19 @@ class TorrentWatchdogManager {
   void start({
     required VoidCallback onStalled,
     required VoidCallback onAlivenessLost,
+    bool Function()? isPausedByUser,
   }) {
     stop();
     _active = true;
     _stallTimer = Timer.periodic(_watchdogInterval, (_) {
-      if (_active) onStalled();
+      if (_active && !(isPausedByUser?.call() ?? false)) {
+        onStalled();
+      }
     });
     _alivenessTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (_active && !_torrentService.isTorrentAlive(_torrentId)) {
+      if (_active &&
+          !(isPausedByUser?.call() ?? false) &&
+          !_torrentService.isTorrentAlive(_torrentId)) {
         onAlivenessLost();
       }
     });
@@ -45,3 +50,4 @@ class TorrentWatchdogManager {
 
   void dispose() => stop();
 }
+

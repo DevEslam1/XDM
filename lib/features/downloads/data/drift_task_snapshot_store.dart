@@ -1,7 +1,7 @@
 import 'dart:async';
 import '../../../core/services/database_service.dart';
+import '../domain/commands/download_commands.dart';
 import '../domain/ports/task_snapshot_store.dart';
-import '../models/download_state_machine.dart';
 import '../models/download_task.dart';
 
 /// Adapter persisting state transitions into the Drift database.
@@ -33,7 +33,7 @@ class DriftTaskSnapshotStore implements TaskSnapshotStore {
     if (task == null) return;
 
     final legacyStatus = DownloadStateMachine.toStatus(to);
-    final isCanc = isCancelled ?? (to == DomainDownloadState.failed && command.toString().contains('CancelTask'));
+    final isCanc = isCancelled ?? (to == DomainDownloadState.failed && command is CancelTask);
     final isPausedUser = pausedByUser ?? (to == DomainDownloadState.paused);
 
     final updated = DownloadTask(

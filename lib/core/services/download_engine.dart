@@ -13,18 +13,18 @@ import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../features/downloads/domain/orchestrators/http_download_orchestrator.dart';
+import '../../features/downloads/domain/orchestrators/torrent_download_orchestrator.dart';
 import '../interfaces/i_download_engine.dart';
 import 'dio_client_pool.dart';
 import 'engine/engine_exceptions.dart';
 import 'engine/engine_models.dart';
 import 'engine/http_transfer_job.dart';
 import 'engine/torrent_download_handler.dart';
-import 'http_download_orchestrator.dart';
 import 'metadata_probe_service.dart';
 import 'permission_service.dart';
 import 'service_registry.dart';
 import 'tick_manager.dart';
-import 'torrent_download_orchestrator.dart';
 import 'yt_counterpart_coordinator.dart';
 
 export 'engine/engine_exceptions.dart';

@@ -5,7 +5,6 @@ import 'package:dmx/core/services/database/repositories/task_companion_converter
 import 'package:dmx/core/services/engine/engine_utils.dart';
 import 'package:dmx/core/services/ffmpeg_mux_service.dart';
 import 'package:dmx/core/services/torrent_seeding_manager.dart';
-import 'package:dmx/features/downloads/models/download_state_machine.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:flutter_test/flutter_test.dart';
 

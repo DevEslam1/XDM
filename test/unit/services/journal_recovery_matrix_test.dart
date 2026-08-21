@@ -1,6 +1,6 @@
 import 'dart:io';
+import 'package:dmx/core/domain/cycle_state.dart';
 import 'package:dmx/core/services/download_journal.dart';
-import 'package:dmx/features/downloads/models/cycle_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

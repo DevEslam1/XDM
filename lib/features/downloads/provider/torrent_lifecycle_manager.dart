@@ -12,6 +12,7 @@ class TorrentLifecycleManager {
         _latestTorrentStats = latestTorrentStats;
 
   Future<void> startSeeding(DownloadTask task) async {
+    if (task.pausedByUser || task.pauseReason == PauseReason.user) return;
     final torrentId = _torrentIds[task.id];
     if (torrentId != null) {
       TorrentService.resumeTorrent(torrentId);

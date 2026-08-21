@@ -621,7 +621,8 @@ class AppDatabase extends _$AppDatabase {
         onUpgrade: (m, from, to) async {
           debugPrint('AppDatabase: Upgrading schema from $from to $to');
           if (from < 2) {
-            await m.addColumn(downloadTasks, downloadTasks.notes);
+            await _addColumnIfMissing('download_tasks', 'notes',
+                'ALTER TABLE download_tasks ADD COLUMN notes TEXT');
           }
           if (from < 3) {
             try {
@@ -747,15 +748,20 @@ class AppDatabase extends _$AppDatabase {
             }
           }
           if (from < 4) {
-            await m.addColumn(downloadTasks, downloadTasks.playlistId);
-            await m.addColumn(downloadTasks, downloadTasks.playlistTitle);
+            await _addColumnIfMissing('download_tasks', 'playlist_id',
+                'ALTER TABLE download_tasks ADD COLUMN playlist_id TEXT');
+            await _addColumnIfMissing('download_tasks', 'playlist_title',
+                'ALTER TABLE download_tasks ADD COLUMN playlist_title TEXT');
           }
           if (from < 5) {
-            await m.addColumn(downloadTasks, downloadTasks.isAppUpdate);
+            await _addColumnIfMissing('download_tasks', 'is_app_update',
+                'ALTER TABLE download_tasks ADD COLUMN is_app_update INTEGER NOT NULL DEFAULT 0');
           }
           if (from < 6) {
-            await m.addColumn(downloadTasks, downloadTasks.priority);
-            await m.addColumn(downloadTasks, downloadTasks.expectedSha256);
+            await _addColumnIfMissing('download_tasks', 'priority',
+                'ALTER TABLE download_tasks ADD COLUMN priority INTEGER NOT NULL DEFAULT 0');
+            await _addColumnIfMissing('download_tasks', 'expected_sha256',
+                'ALTER TABLE download_tasks ADD COLUMN expected_sha256 TEXT');
           }
           if (from < 7) {
             await customStatement('''

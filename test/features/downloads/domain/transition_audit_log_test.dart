@@ -1,7 +1,5 @@
 import 'package:dmx/features/downloads/domain/commands/download_commands.dart';
-import 'package:dmx/features/downloads/domain/models/domain_download_state.dart';
 import 'package:dmx/features/downloads/domain/state_machine/domain_state_machine.dart';
-import 'package:dmx/features/downloads/domain/state_machine/transition_audit_log.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -27,14 +25,14 @@ void main() {
       });
 
       // 1. Task Enqueued
-      await sm.transition(
+      sm.transition(
         DomainDownloadState.queued,
         command: const StartTask(taskId),
         caller: 'UI_AddDialog',
       );
 
       // 2. Queue Engine Starts Task
-      await sm.transition(
+      sm.transition(
         DomainDownloadState.starting,
         command: const StartTask(taskId),
         caller: 'DownloadQueueEngine',
@@ -42,7 +40,7 @@ void main() {
       );
 
       // 3. Engine confirms connection and begins downloading
-      await sm.transition(
+      sm.transition(
         DomainDownloadState.downloading,
         command: 'EngineConnectSuccess',
         caller: 'HttpDownloadEngine',
@@ -50,7 +48,7 @@ void main() {
       );
 
       // 4. User Pauses Task
-      await sm.transition(
+      sm.transition(
         DomainDownloadState.paused,
         command: const PauseTask(taskId, reason: 'userRequested'),
         reason: 'userRequested',
@@ -58,26 +56,26 @@ void main() {
       );
 
       // 5. User Resumes Task
-      await sm.transition(
+      sm.transition(
         DomainDownloadState.queued,
         command: const ResumeTask(taskId),
         caller: 'UI_DownloadCard',
       );
 
       // 6. Started again
-      await sm.transition(
+      sm.transition(
         DomainDownloadState.starting,
         command: const StartTask(taskId),
         caller: 'DownloadQueueEngine',
       );
-      await sm.transition(
+      sm.transition(
         DomainDownloadState.downloading,
         command: 'EngineConnectSuccess',
         caller: 'HttpDownloadEngine',
       );
 
       // 7. Video stream completes, moves to merging
-      await sm.transition(
+      sm.transition(
         DomainDownloadState.merging,
         command: 'MuxBegin',
         caller: 'FFmpegMuxService',
@@ -85,14 +83,14 @@ void main() {
       );
 
       // 8. Completing
-      await sm.transition(
+      sm.transition(
         DomainDownloadState.completing,
         command: 'MuxSuccess',
         caller: 'FFmpegMuxService',
       );
 
       // 9. Completed
-      await sm.transition(
+      sm.transition(
         DomainDownloadState.completed,
         command: 'FinalizeSnapshot',
         caller: 'TaskExecutor',

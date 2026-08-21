@@ -4,6 +4,10 @@ import 'package:dmx/core/services/permission_service.dart';
 import 'package:dmx/features/browser/models/bookmark.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 
+export 'fake_download_engine.dart';
+export 'fake_torrent_service.dart';
+export 'scriptable_http_server.dart';
+
 class FakeDatabaseService extends DatabaseService {
   final List<DownloadTask> _tasks = [];
   final List<Bookmark> _bookmarks = [];

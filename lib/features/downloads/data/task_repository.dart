@@ -13,6 +13,7 @@ abstract class TaskRepository {
   Future<void> deleteMany(List<String> ids);
   Stream<DownloadTask> watchTask(String id);
   Stream<List<DownloadTask>> watchAll();
+  void dispose();
 }
 
 class InMemoryTaskRepository implements TaskRepository {
@@ -75,5 +76,6 @@ class InMemoryTaskRepository implements TaskRepository {
     yield await getAll();
   }
 
+  @override
   void dispose() {}
 }

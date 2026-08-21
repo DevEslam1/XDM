@@ -1,4 +1,4 @@
-import 'package:dmx/features/downloads/models/cycle_state.dart';
+import 'package:dmx/core/domain/cycle_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

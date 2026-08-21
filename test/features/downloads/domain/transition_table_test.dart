@@ -1,7 +1,4 @@
-import 'package:dmx/features/downloads/domain/models/domain_download_state.dart';
 import 'package:dmx/features/downloads/domain/state_machine/domain_state_machine.dart';
-import 'package:dmx/features/downloads/domain/state_machine/invalid_transition_error.dart';
-import 'package:dmx/features/downloads/domain/state_machine/transition_audit_log.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -112,7 +109,7 @@ void main() {
 
           if (isAllowed) {
             final entryCountBefore = auditLog.entries.length;
-            await sm.transition(
+            sm.transition(
               toState,
               command: 'test-command',
               caller: 'test-caller',

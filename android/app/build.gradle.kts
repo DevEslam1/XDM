@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "com.xdm.downloadmanager"
-    compileSdk = 37
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
