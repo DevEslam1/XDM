@@ -41,6 +41,7 @@ const Map<String, String> deTranslations = {
   'browser_add_bookmark': 'Lesezeichen hinzufügen',
   'browser_add_script': 'Skript hinzufügen',
   'browser_already_completed': 'Dieser Download ist bereits abgeschlossen.',
+  'browser_restoring_tabs': 'Tabs werden wiederhergestellt...',
   'browser_already_in_progress': 'Dieser Download wird bereits ausgeführt.',
   'browser_alternative_stream': 'Alternativer Stream',
   'browser_apply_uppercase': 'ANWENDEN',

@@ -43,10 +43,10 @@ const int kJournalScreenOffWriteDelta = 2 * 1024 * 1024; // 2MB
 const int kJournalMaxBgRecordedEntries = 256;
 
 /// State-save debounce interval while in the background.
-const Duration kStateSaveBgInterval = Duration(seconds: 30);
+const Duration kStateSaveBgInterval = Duration(seconds: 15);
 
 /// State-save debounce interval while in the foreground.
-const Duration kStateSaveFgInterval = Duration(seconds: 10);
+const Duration kStateSaveFgInterval = Duration(seconds: 5);
 
 /// Minimum background state-save delta.
 const int kStateSaveBgDelta = 2 * 1024 * 1024; // 2MB

@@ -175,10 +175,9 @@ Future<int> actualDownloadedBytes(String tempFilePath,
     return math.min<int>(stateBytes, fileLen);
   }
   // When state file is missing, fall back to actual file length on disk
-  // ONLY for single-threaded downloads. For multi-threaded downloads,
-  // files are pre-allocated with zeros, so return 0 to prevent over-reporting.
+  // as lower bound instead of dropping to 0.
   if (threadCount > 1) {
-    return 0;
+    return fileLen;
   }
   return fileLen;
 }

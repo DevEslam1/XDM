@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:libtorrent_flutter/libtorrent_flutter.dart' as lt;
 
 import '../../interfaces/i_torrent_native.dart';
+import '../diagnostic_service.dart';
 
 /// Concrete implementation of [ITorrentNative] backed by the vendored `libtorrent_flutter`.
 class LibtorrentNativeImpl implements ITorrentNative {
@@ -126,12 +127,46 @@ class LibtorrentNativeImpl implements ITorrentNative {
 
   @override
   Future<void> pauseTorrent(int id, {bool graceful = true}) async {
+    if (graceful) {
+      try {
+        final alertFuture = alertStream
+            .firstWhere(
+              (a) =>
+                  a.torrentId == id &&
+                  (a.type == TorrentAlertType.saveResumeDataCompleted ||
+                      a.type == TorrentAlertType.saveResumeDataFailed),
+            )
+            .timeout(const Duration(seconds: 5));
+        await saveResumeData(id, timeout: const Duration(seconds: 5));
+        final alert = await alertFuture;
+        if (alert.type == TorrentAlertType.saveResumeDataFailed) {
+          DiagnosticService.instance
+              .recordTelemetryAlert('resume_data_missing', taskId: '$id');
+        }
+      } catch (_) {
+        DiagnosticService.instance
+            .recordTelemetryAlert('resume_data_missing', taskId: '$id');
+      }
+    }
     lt.LibtorrentFlutter.instance.pauseTorrent(id, graceful: graceful);
   }
 
   @override
-  void resumeTorrent(int id) {
+  Future<void> resumeTorrent(int id) async {
     lt.LibtorrentFlutter.instance.resumeTorrent(id);
+    try {
+      await statusStream.firstWhere((map) {
+        final st = map[id];
+        return st != null && !st.isPaused;
+      }).timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      DiagnosticService.instance.record(
+        'diagnostic',
+        'torrent_resume_retry',
+        details: 'torrentId=$id',
+      );
+      lt.LibtorrentFlutter.instance.resumeTorrent(id);
+    } catch (_) {}
   }
 
   @override

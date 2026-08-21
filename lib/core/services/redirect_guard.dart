@@ -143,6 +143,10 @@ class RedirectGuard {
     if (_tabs.length > 50) {
       _tabs.remove(_tabs.keys.first);
     }
+    // Ignore non-web URLs (e.g. magnet:, tel:, mailto:, intent:)
+    if (!navigatingTo.startsWith('http://') && !navigatingTo.startsWith('https://')) {
+      return RedirectResult.ignored;
+    }
     final st = _tabs.putIfAbsent(tabId, () => _TabState());
     st.currentUrl = navigatingTo;
     st.isAdBridge = _looksLikeAdBridge(navigatingTo);

@@ -7,6 +7,7 @@ import '../../../../core/utils/localization.dart';
 import '../../../shared/mixins/pausable_loop_animation.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
+import '../provider/download_provider.dart';
 
 class StatusChip extends StatelessWidget {
   final DownloadTask task;
@@ -15,6 +16,7 @@ class StatusChip extends StatelessWidget {
 
   bool _shouldPulse(DownloadTask task) {
     if (PowerMonitor.screenOff || !BackgroundGate.shouldAnimate) return false;
+    if (task.cycleState == CycleState.fetchingMetadata) return true;
     return task.status == DownloadStatus.downloading ||
         task.status == DownloadStatus.merging ||
         (task.status == DownloadStatus.completed &&
@@ -32,7 +34,25 @@ class StatusChip extends StatelessWidget {
         task.isTorrent &&
         task.seedingEnabled;
 
-    if (isSeeding) {
+    if (task.cycleState == CycleState.verifying) {
+      color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+      label = 'Re-verifying';
+    } else if (task.cycleState == CycleState.resuming) {
+      color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+      label = 'Resuming…';
+    } else if (task.cycleState == CycleState.updatingLinks) {
+      color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+      label = 'Refreshing link…';
+    } else if (task.cycleState == CycleState.fetchingMetadata) {
+      color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+      label = 'Fetching Metadata';
+    } else if (task.pauseReason == PauseReason.diskFull) {
+      color = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+      label = 'Paused — disk full';
+    } else if (task.pauseReason == PauseReason.urlExpired) {
+      color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+      label = 'Link expired — tap to refresh';
+    } else if (isSeeding) {
       color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
       label = L10n.of(context, 'status_seeding');
     } else {
@@ -78,18 +98,37 @@ class StatusChip extends StatelessWidget {
     }
 
     final isPulsing = _shouldPulse(task) && modernAnimationsAllowed(context);
-    final textWidget = Text(
-      label,
-      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: color,
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.0,
+    final isFetchingMeta = task.cycleState == CycleState.fetchingMetadata;
+    final isDiskFull = task.pauseReason == PauseReason.diskFull;
+
+    final textWidget = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (isFetchingMeta)
+          Container(
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.only(right: 6),
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
           ),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: color,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+              ),
+        ),
+      ],
     );
 
+    Widget chipWidget;
     if (!isPulsing) {
-      return RepaintBoundary(
+      chipWidget = RepaintBoundary(
         child: _buildChipContent(
           context,
           color: color,
@@ -98,25 +137,69 @@ class StatusChip extends StatelessWidget {
           child: textWidget,
         ),
       );
+    } else {
+      chipWidget = RepaintBoundary(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.4, end: 1.0),
+          duration: const Duration(milliseconds: 1500),
+          curve: Curves.easeInOut,
+          builder: (context, value, child) {
+            return _buildChipContent(
+              context,
+              color: color,
+              pulseValue: value,
+              isPulsing: true,
+              child: child!,
+            );
+          },
+          child: textWidget,
+        ),
+      );
     }
 
-    return RepaintBoundary(
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0.4, end: 1.0),
-        duration: const Duration(milliseconds: 1500),
-        curve: Curves.easeInOut,
-        builder: (context, value, child) {
-          return _buildChipContent(
-            context,
-            color: color,
-            pulseValue: value,
-            isPulsing: true,
-            child: child!,
-          );
-        },
-        child: textWidget,
-      ),
-    );
+    if (isDiskFull) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          chipWidget,
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: () {
+              try {
+                final provider = context.read<DownloadProvider>();
+                provider.resumeTask(task.id);
+              } catch (_) {}
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: AppTheme.chipDecoration(
+                color: AppTheme.neonRed,
+                isDark: isDark,
+                radius: 8,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.refresh_rounded, size: 10, color: AppTheme.neonRed),
+                  const SizedBox(width: 2),
+                  Text(
+                    'Retry',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return chipWidget;
   }
 
   Widget _buildChipContent(

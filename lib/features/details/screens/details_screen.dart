@@ -585,7 +585,7 @@ class _TelemetryHero extends StatelessWidget {
                                             ? '$completed/$total FILES'
                                             : '$total FILES';
                                       }
-                                      return '0 FILES';
+                                      return '—';
                                     })()
                                   : '${task.threadCount} CH',
                               style: AppTheme.microLabel(
@@ -611,30 +611,78 @@ class _TelemetryHero extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Status chip
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: statusColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: statusColor.withValues(alpha: 0.35),
-                            width: 0.8,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: statusColor.withValues(alpha: 0.35),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              L10n.translateStatusName(
+                                context,
+                                task.status,
+                              ).toUpperCase(),
+                              style: AppTheme.microLabel(
+                                isDark: isDark,
+                                color: statusColor,
+                                size: 9,
+                              ),
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          L10n.translateStatusName(
-                            context,
-                            task.status,
-                          ).toUpperCase(),
-                          style: AppTheme.microLabel(
-                            isDark: isDark,
-                            color: statusColor,
-                            size: 9,
-                          ),
-                        ),
+                          if (task.isTorrent &&
+                              task.status == DownloadStatus.paused) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: (isDark
+                                        ? AppTheme.neonGreen
+                                        : AppTheme.lightNeonGreen)
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: (isDark
+                                          ? AppTheme.neonGreen
+                                          : AppTheme.lightNeonGreen)
+                                      .withValues(alpha: 0.35),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle_outline_rounded,
+                                      size: 10,
+                                      color: isDark
+                                          ? AppTheme.neonGreen
+                                          : AppTheme.lightNeonGreen),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Resume data saved',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark
+                                          ? AppTheme.neonGreen
+                                          : AppTheme.lightNeonGreen,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 6),
 
@@ -2667,6 +2715,7 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
           isDark: isDark,
           isRtl: isRtl,
           isDownloading: isDownloading,
+          cycleState: currentTask.cycleState,
           onSelectAll: () {
             triggerHaptic(settings);
             final updatedFiles = List<Map<String, dynamic>>.from(files);

@@ -62,7 +62,7 @@ abstract class ITorrentService {
   /// pauses/removes it from the session with verification, and clears all
   /// in-memory bookkeeping so the engine fully releases the handle.
   Future<void> forceStopTorrent(int id);
-  void resumeTorrent(int id);
+  Future<void> resumeTorrent(int id);
   bool loadResumeData(int id, List<int> data);
   bool isTorrentAlive(int id);
   void recheckTorrent(int id);

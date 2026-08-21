@@ -221,6 +221,10 @@ class NetworkMonitor {
         reason: 'networkLost',
         caller: 'NetworkMonitor',
       );
+      await _setTask(task.copyWith(
+        status: DownloadStatus.paused,
+        errorMessage: DownloadStatusMessages.waitingNetwork,
+      ));
     }));
   }
 
@@ -229,7 +233,8 @@ class NetworkMonitor {
 
     final waiting = _tasks().where(
       (task) =>
-          _tasksPausedDueToDisconnect.contains(task.id) &&
+          (_tasksPausedDueToDisconnect.contains(task.id) ||
+              task.errorMessage == DownloadStatusMessages.waitingNetwork) &&
           task.status == DownloadStatus.paused,
     );
     for (final task in waiting.toList()) {
@@ -245,6 +250,10 @@ class NetworkMonitor {
         DomainDownloadState.queued,
         caller: 'NetworkMonitor',
       );
+      await _setTask(task.copyWith(
+        status: DownloadStatus.queued,
+        errorMessage: null,
+      ));
     }
     _tasksPausedDueToDisconnect.clear();
     if (!skipPump) _pumpQueue();
@@ -277,6 +286,10 @@ class NetworkMonitor {
         reason: 'networkLost',
         caller: 'NetworkMonitor',
       );
+      await _setTask(task.copyWith(
+        status: DownloadStatus.paused,
+        errorMessage: DownloadStatusMessages.waitingWifi,
+      ));
     }));
   }
 
@@ -300,6 +313,10 @@ class NetworkMonitor {
         DomainDownloadState.queued,
         caller: 'NetworkMonitor',
       );
+      await _setTask(task.copyWith(
+        status: DownloadStatus.queued,
+        errorMessage: null,
+      ));
     }
     _tasksPausedDueToWifiOnly.clear();
     if (!skipPump) _pumpQueue();

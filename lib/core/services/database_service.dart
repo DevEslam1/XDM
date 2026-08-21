@@ -226,6 +226,12 @@ class DatabaseService {
   int get pendingProgressSavesCount => _pendingProgressSaves.length;
 
   Future<void> saveTaskDebounced(DownloadTask task) async {
+    if (task.status == DownloadStatus.paused ||
+        task.status == DownloadStatus.failed) {
+      await saveTask(task);
+      return;
+    }
+
     bool shouldFlushImmediately = false;
     await _pendingSavesLock.synchronized(() {
       _pendingProgressSaves[task.id] = task;
@@ -316,6 +322,16 @@ class DatabaseService {
 
     if (toSave.isEmpty) return;
     await saveTasks(toSave);
+  }
+
+  /// Synchronously drains _pendingProgressSaves without awaiting a timer.
+  void flushPendingSavesSync() {
+    _dbBatchTimer?.cancel();
+    _dbBatchTimer = null;
+    if (_pendingProgressSaves.isEmpty) return;
+    final toSave = List<DownloadTask>.from(_pendingProgressSaves.values);
+    _pendingProgressSaves.clear();
+    unawaited(saveTasks(toSave));
   }
 
   Future<void> saveTask(DownloadTask task) async {
@@ -492,6 +508,7 @@ class DatabaseService {
 
   Future<void> dispose() async {
     // Force flush on dispose
+    flushPendingSavesSync();
     await flushPendingSaves();
     await flushPendingHistory();
 

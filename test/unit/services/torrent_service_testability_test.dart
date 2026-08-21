@@ -20,7 +20,7 @@ class MockTorrentService extends TorrentServiceStub {
   }
 
   @override
-  void resumeTorrent(int id) {
+  Future<void> resumeTorrent(int id) async {
     resumeCalled = true;
     aliveMap[id] = true;
   }

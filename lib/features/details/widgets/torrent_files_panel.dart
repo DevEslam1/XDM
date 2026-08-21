@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/domain/engine_types.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/design/dmx_design.dart';
@@ -12,6 +13,7 @@ class TorrentFilesPanel extends StatefulWidget {
   final bool? isDark;
   final bool? isRtl;
   final bool isDownloading;
+  final CycleState? cycleState;
   final void Function(int index, bool selected)? onFileToggle;
   final void Function(int index, int priority)? onPriorityChanged;
   final void Function(int index, String name)? onDeleteFile;
@@ -24,6 +26,7 @@ class TorrentFilesPanel extends StatefulWidget {
     this.isDark,
     this.isRtl,
     this.isDownloading = false,
+    this.cycleState,
     this.onFileToggle,
     this.onPriorityChanged,
     this.onDeleteFile,
@@ -293,7 +296,32 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                if (isEstimated) ...[
+                                 if (widget.cycleState == CycleState.verifying) ...[
+                                   const SizedBox(width: 6),
+                                   Container(
+                                     padding: const EdgeInsets.symmetric(
+                                       horizontal: 5,
+                                       vertical: 1.5,
+                                     ),
+                                     decoration: BoxDecoration(
+                                       color: amberClr.withValues(alpha: 0.15),
+                                       borderRadius: BorderRadius.circular(4),
+                                       border: Border.all(
+                                         color: amberClr.withValues(alpha: 0.4),
+                                         width: 0.6,
+                                       ),
+                                     ),
+                                     child: Text(
+                                       isRtl ? 'إعادة الفحص' : 'Re-checking',
+                                       style: TextStyle(
+                                         fontSize: 8,
+                                         fontWeight: FontWeight.bold,
+                                         color: amberClr,
+                                       ),
+                                     ),
+                                   ),
+                                 ],
+                                 if (isEstimated) ...[
                                   const SizedBox(width: 6),
                                   Container(
                                     padding: const EdgeInsets.symmetric(

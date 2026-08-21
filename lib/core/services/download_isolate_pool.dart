@@ -479,6 +479,9 @@ class DownloadIsolatePool implements MemoryPressureListener {
   }
 
   void _cancelJob(PoolJob job, [PauseReason? reason]) {
+    try {
+      DownloadJournal.flushAndSyncForFile(job.command.tempFilePath);
+    } catch (_) {}
     job._worker?.commandPort?.send({
       't': 'cancel',
       'jobId': job.command.taskId,
@@ -497,6 +500,13 @@ class DownloadIsolatePool implements MemoryPressureListener {
     if (worker != null) {
       debugPrint(
           '[DMX-Pool] forceCancelJob: killing worker isolate for task $taskId');
+      final targetJobs =
+          worker.pending.where((j) => j.command.taskId == taskId).toList();
+      for (final j in targetJobs) {
+        try {
+          DownloadJournal.flushAndSyncForFile(j.command.tempFilePath);
+        } catch (_) {}
+      }
       worker.dead = true;
       final jobs = List<PoolJob>.from(worker.pending);
       worker.pending.clear();
@@ -575,6 +585,16 @@ class DownloadIsolatePool implements MemoryPressureListener {
       w.commandPort?.send({'t': 'shutdown'});
       await Future<void>.delayed(const Duration(milliseconds: 50));
       w.disposeResources(killPriority: Isolate.beforeNextEvent);
+    }
+    _workers.clear();
+  }
+
+  void forceKillAll() {
+    _shuttingDown = true;
+    _queue.clear();
+    for (final w in _workers) {
+      w.dead = true;
+      w.disposeResources(killPriority: Isolate.immediate);
     }
     _workers.clear();
   }

@@ -41,6 +41,7 @@ const Map<String, String> arTranslations = {
   'browser_add_bookmark': 'إضافة إشارة مرجعية',
   'browser_add_script': 'إضافة سكريبت',
   'browser_already_completed': 'هذا التنزيل مكتمل بالفعل.',
+  'browser_restoring_tabs': 'جارٍ استعادة علامات التبويب...',
   'browser_already_in_progress': 'هذا التنزيل قيد التشغيل بالفعل.',
   'browser_alternative_stream': 'بث بديل',
   'browser_apply_uppercase': 'تطبيق',

@@ -281,7 +281,7 @@ class DownloadProvider extends ChangeNotifier
   bool isTaskOperationPending(String taskId) => false;
   bool get isLoadingTasks => false;
   bool get isReconciling => false;
-  void setActiveTabIndex(int index) {}
+  void setActiveTabIndex(int index) => setMixinActiveTabIndex(index);
   DownloadMetrics? getMetrics(String taskId) => _downloadMetrics[taskId];
   List<double> getSpeedHistory(String taskId) => _speedHistories[taskId]?.toList() ?? const [];
   List<double> getUploadSpeedHistory(String taskId) => const [];
@@ -354,10 +354,10 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> _setTask(DownloadTask task) async {
+    await _databaseService.saveTask(task);
     final idx = _tasks.indexWhere((t) => t.id == task.id);
     if (idx != -1) { _tasks[idx] = task; } else { _tasks.add(task); }
     filteredTasksDirty = true;
-    await _databaseService.saveTask(task);
     if (!DownloadEngine.isInBackground || !PowerMonitor.screenOff) notifyListeners();
   }
 
@@ -471,7 +471,14 @@ class DownloadProvider extends ChangeNotifier
     String? thumbnailUrl, String? savePath, String? expectedSha256, List<String>? mirrorUrls, String? siteType,
     String? siteDisplayName, String? contentHint,
   }) async {
-    final effectiveSavePath = savePath ?? _settingsProvider.customDownloadPath ?? '';
+    var effectiveSavePath = (savePath != null && savePath.isNotEmpty)
+        ? savePath
+        : (_settingsProvider.customDownloadPath != null && _settingsProvider.customDownloadPath!.isNotEmpty)
+            ? _settingsProvider.customDownloadPath!
+            : '';
+    if (effectiveSavePath.isEmpty) {
+      effectiveSavePath = await _permissionService.defaultDownloadDirectory();
+    }
     final taskName = name ?? (url.split('/').lastOrNull ?? 'download');
     final threads = threadCount ?? _settingsProvider.defaultThreadCount;
     final task = DownloadTask(
@@ -564,19 +571,29 @@ class DownloadProvider extends ChangeNotifier
 
   Future<void> cancelDownload(String taskId) => cancelTask(taskId);
 
+  final Set<String> _deletingTaskIds = {};
+
   Future<void> deleteTask(String id, {bool deleteFiles = false}) async {
-    final task = _findTask(id);
-    if (task != null) {
-      _cancelTokens.remove(id)?.cancel('deleted');
-      _notifications.cancelForTask(id);
-      if (deleteFiles) {
-        await _deleteFileSafely(task.localFilePath);
-        await _deleteFileSafely(task.tempFilePath);
+    if (_deletingTaskIds.contains(id)) return;
+    _deletingTaskIds.add(id);
+    try {
+      final task = _findTask(id);
+      if (task != null) {
+        _cancelTokens.remove(id)?.cancel('deleted');
+        _notifications.cancelForTask(id);
+        if (deleteFiles) {
+          await _deleteFileSafely(task.localFilePath);
+          await _deleteFileSafely(task.tempFilePath);
+        }
+        await _databaseService.deleteTask(id);
+        _tasks.removeWhere((t) => t.id == id);
+        _speedHistories.remove(id);
+        _lastProgressUpdateTimes.remove(id);
+        filteredTasksDirty = true;
+        notifyListeners();
       }
-      _tasks.removeWhere((t) => t.id == id);
-      await _databaseService.deleteTask(id);
-      filteredTasksDirty = true;
-      notifyListeners();
+    } finally {
+      _deletingTaskIds.remove(id);
     }
   }
 

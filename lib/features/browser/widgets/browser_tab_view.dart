@@ -364,15 +364,6 @@ class _BrowserTabViewState extends State<BrowserTabView>
               return NavigationActionPolicy.ALLOW;
             }
 
-            // Check redirect guard
-            final res = await widget.controller.redirectGuard.evaluate(
-              tabId: tab.id,
-              navigatingTo: url,
-            );
-            if (res.decision == RedirectDecision.block) {
-              return NavigationActionPolicy.CANCEL;
-            }
-
             // Scheme check for external apps and downloads
             final uri = Uri.tryParse(url);
             final scheme = uri?.scheme.toLowerCase() ?? '';
@@ -391,6 +382,15 @@ class _BrowserTabViewState extends State<BrowserTabView>
                     mode: LaunchMode.externalApplication);
                 return NavigationActionPolicy.CANCEL;
               } catch (_) {}
+            }
+
+            // Check redirect guard
+            final res = await widget.controller.redirectGuard.evaluate(
+              tabId: tab.id,
+              navigatingTo: url,
+            );
+            if (res.decision == RedirectDecision.block) {
+              return NavigationActionPolicy.CANCEL;
             }
 
             // Ad-block navigation check

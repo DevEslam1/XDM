@@ -995,6 +995,38 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                 ),
                 onPressed: () async {
                   triggerHaptic(settings);
+                  final confirmed = await showDialog<bool>(
+                    context: dialogContext,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                      title: Text(
+                        isRtl ? 'تأكيد البدء من جديد' : 'Confirm Restart',
+                        style: TextStyle(color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
+                      ),
+                      content: Text(
+                        isRtl
+                            ? 'سيتم حذف التقدم الحالي والبدء من الصفر. هل أنت متأكد؟'
+                            : 'This will clear all existing progress and restart from zero. Are you sure?',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.2),
+                          ),
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: Text(
+                            isRtl ? 'نعم، ابدأ من جديد' : 'Yes, Start Over',
+                            style: TextStyle(color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed != true) return;
                   Navigator.pop(dialogContext);
                   try {
                     await provider.startOverTask(duplicateTask!.id, singleUrl);

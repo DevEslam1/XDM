@@ -10,6 +10,7 @@ class TorrentService {
   static bool get isInitialized => false;
   static Future<void> get ready => Future.value();
   static final ValueNotifier<bool> isAvailable = ValueNotifier(false);
+  static Stream<TorrentAlertEvent> get alertUpdates => const Stream.empty();
   static Set<int> get activeTorrentIds => const <int>{};
   static double progressFor(int id) => 0.0;
   static Uint8List? fetchResumeBytes(int id) => null;
@@ -51,7 +52,7 @@ class TorrentService {
       {bool deleteFiles = false, bool deleteResumeData = false}) {}
   static Future<void> pauseTorrent(int id) async {}
   static Future<void> forceStopTorrent(int id) async {}
-  static void resumeTorrent(int id) {}
+  static Future<void> resumeTorrent(int id) async {}
   static bool loadResumeData(int id, List<int> data) => false;
   static bool isTorrentAlive(int id) => false;
   static void recheckTorrent(int id) {}
@@ -215,7 +216,7 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   Future<void> forceStopTorrent(int id) async {}
   @override
-  void resumeTorrent(int id) {}
+  Future<void> resumeTorrent(int id) async {}
   @override
   bool loadResumeData(int id, List<int> data) => false;
   @override

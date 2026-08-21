@@ -41,6 +41,7 @@ const Map<String, String> esTranslations = {
   'browser_add_bookmark': 'Añadir marcador',
   'browser_add_script': 'Añadir script',
   'browser_already_completed': 'Esta descarga ya se ha completado.',
+  'browser_restoring_tabs': 'Restaurando pestañas...',
   'browser_already_in_progress': 'Esta descarga ya está en curso.',
   'browser_alternative_stream': 'Transmisión alternativa',
   'browser_apply_uppercase': 'APLICAR',

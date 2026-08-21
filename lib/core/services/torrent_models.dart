@@ -1,3 +1,5 @@
+import '../domain/engine_types.dart';
+
 class TorrentFileItem {
   final int index;
   final String name;
@@ -199,7 +201,9 @@ class SeedingPolicy {
     required int uploadedBytes,
     required bool isCharging,
     required bool isOnWifi,
+    CycleState? cycleState,
   }) {
+    if (cycleState == CycleState.paused) return false;
     if (seedDuration.inMinutes < minSeedTimeMinutes) return false;
     if (seedOnlyWhenCharging && !isCharging) return true;
     if (seedOnlyOnWifi && !isOnWifi) return true;

@@ -51,6 +51,7 @@ class BackgroundService {
   static final Set<String> _activeTaskIds = <String>{};
   static int _activeDownloadCount = 0;
   static int Function()? _activeDownloadCountQuery;
+  static bool _isStarting = false;
 
   @visibleForTesting
   static int get activeDownloadCountForTesting => _activeDownloadCount;
@@ -505,16 +506,44 @@ class BackgroundService {
     _dataSyncSessionStartTime = null;
 
     try {
+      // 1. Save all torrent fast-resume data first
+      try {
+        await TorrentService.saveAllResumeData();
+      } catch (e) {
+        _log.warning(
+            'Failed to save torrent resume data on dataSync timeout: $e');
+      }
+
+      // 2. Pause active tasks with PauseReason.scheduled
+      try {
+        final allTasks = await DatabaseService.instance.loadTasks();
+        final activeTasks = allTasks.where((t) =>
+            t.status == DownloadStatus.downloading ||
+            t.status == DownloadStatus.queued ||
+            t.status == DownloadStatus.merging);
+        for (final t in activeTasks) {
+          await DatabaseService.instance.saveTask(t.copyWith(
+            status: DownloadStatus.paused,
+            pauseReason: PauseReason.scheduled,
+          ));
+        }
+      } catch (e) {
+        _log.warning(
+            'Failed to update active tasks with PauseReason.scheduled: $e');
+      }
+
       if (onDataSyncTimeout != null) {
         await onDataSyncTimeout!();
       }
       DownloadEngine.markBackground();
+      DatabaseService.instance.flushPendingSavesSync();
       await Future.wait([
         DatabaseService.instance.flushPendingSaves(),
         DatabaseService.instance.checkpointWal(truncate: false),
       ]).timeout(const Duration(seconds: 3));
     } catch (e, st) {
-      _log.warning('Error pausing tasks or flushing DB during dataSync timeout', e, st);
+      _log.warning(
+          'Error pausing tasks or flushing DB during dataSync timeout', e, st);
     }
 
     try {
@@ -560,10 +589,18 @@ class BackgroundService {
 
     if (_testMode) return;
 
-    final service = FlutterBackgroundService();
-    final isRunning = await service.isRunning();
-    if (!isRunning) {
-      await service.startService();
+    if (_isStarting) return;
+    _isStarting = true;
+    try {
+      final service = FlutterBackgroundService();
+      final isRunning = await service.isRunning();
+      if (!isRunning) {
+        await service.startService();
+      }
+    } catch (e, st) {
+      _log.warning('Failed to start FlutterBackgroundService: $e', e, st);
+    } finally {
+      _isStarting = false;
     }
   }
 

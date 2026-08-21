@@ -227,5 +227,17 @@ void main() {
       final filtered = host.filteredTasks;
       expect(filtered.first.id, equals('1')); // Small first in ascending
     });
+
+    test('9. setMixinActiveTabIndex updates activeTabIndex and shows navbar', () {
+      final host = TestFilterHost();
+      expect(host.activeTabIndex, equals(0));
+
+      host.setMixinActiveTabIndex(1);
+      expect(host.activeTabIndex, equals(1));
+      expect(host.isNavbarVisible, isTrue);
+
+      host.setMixinActiveTabIndex(2);
+      expect(host.activeTabIndex, equals(2));
+    });
   });
 }

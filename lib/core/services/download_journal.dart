@@ -416,23 +416,37 @@ class StateStoreInstance {
       adjusted = true;
     }
 
-    final limit = state.totalSize > 0 ? len.clamp(0, state.totalSize) : len;
-    for (final c in state.chunks) {
-      final chunkStart = c.start;
-      final chunkEnd = c.start + c.downloaded;
-      if (chunkEnd > len) {
-        final available = len - chunkStart;
-        final cap = c.size >= 0 ? c.size : (available < 0 ? 0 : available);
-        final newDownloaded = available < 0 ? 0 : available.clamp(0, cap);
-        if (c.downloaded != newDownloaded) {
-          c.downloaded = newDownloaded;
-          adjusted = true;
+    if (state.threadCount <= 1 && state.chunks.length <= 1) {
+      // Single-thread: file length is authoritative
+      for (final c in state.chunks) {
+        if (c.start + c.downloaded > len) {
+          final newDownloaded = max(0, len - c.start);
+          if (c.downloaded != newDownloaded) {
+            c.downloaded = newDownloaded;
+            adjusted = true;
+          }
         }
       }
-      final maxForChunk = (limit - c.start).clamp(0, 1 << 62);
-      if (c.downloaded > maxForChunk) {
-        c.downloaded = maxForChunk;
-        adjusted = true;
+    } else {
+      // Multi-thread: state file is authoritative because files are pre-allocated.
+      // Only cap if file is physically smaller than chunk start or downloaded offset.
+      if (len < state.totalSize && len < state.downloadedBytes) {
+        for (final c in state.chunks) {
+          if (c.start >= len) {
+            if (c.downloaded > 0) {
+              c.downloaded = 0;
+              adjusted = true;
+            }
+          } else if (c.start + c.downloaded > len) {
+            final available = len - c.start;
+            final cap = c.size >= 0 ? c.size : (available < 0 ? 0 : available);
+            final newDownloaded = available < 0 ? 0 : available.clamp(0, cap);
+            if (c.downloaded != newDownloaded) {
+              c.downloaded = newDownloaded;
+              adjusted = true;
+            }
+          }
+        }
       }
     }
 
@@ -534,11 +548,12 @@ class StateStoreInstance {
             }
           }
 
-          // Screen-off threshold: always write when status changed or durable
-          if (isScreenOff &&
-              !isDurable &&
-              bytesSinceLastWrite < 5 * 1024 * 1024) {
-            return; // skip small deltas when screen off (< 5MB)
+          // Screen-off threshold: always write when paused or status changed or durable
+          if (state.status == DmxStateStatus.paused || isDurable) {
+            // Never skip when paused or durable
+          } else if (isScreenOff &&
+              bytesSinceLastWrite < 1 * 1024 * 1024) {
+            return; // skip small deltas when screen off (< 1MB)
           }
 
           // Lightweight structural deduplication: skips redundant writes in O(N) without jsonEncode or SHA-256
@@ -836,6 +851,28 @@ class JournalRecoveryData {
 
 class DownloadJournal {
   static final Set<DownloadJournal> _activeJournals = {};
+
+  /// Flushes and fsyncs the journal corresponding to [tempFilePath].
+  static Future<void> flushAndSyncForFile(String tempFilePath) async {
+    final active = _activeJournals
+        .where((j) => j.path.startsWith(tempFilePath))
+        .firstOrNull;
+    if (active != null) {
+      await active.flushAndSync();
+    } else {
+      final journalFile = File('$tempFilePath.journal');
+      if (await journalFile.exists()) {
+        try {
+          final jRaf = await journalFile.open(mode: FileMode.writeOnlyAppend);
+          try {
+            await jRaf.flush();
+          } finally {
+            await jRaf.close();
+          }
+        } catch (_) {}
+      }
+    }
+  }
 
   /// Flushes and fsyncs all currently active/open download journals to disk immediately.
   static Future<void> flushAllActive() async {

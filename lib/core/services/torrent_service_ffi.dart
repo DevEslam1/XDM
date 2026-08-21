@@ -624,63 +624,80 @@ class TorrentService {
     }
   }
 
+  static Future<void> _saveResumeDataAfterPause(int id) async {
+    List<Map<String, dynamic>>? torrentFiles;
+    try {
+      final items = getFiles(id);
+      if (items.isNotEmpty) {
+        torrentFiles = items
+            .map((f) => {
+                  'name': f.name,
+                  'size': f.size,
+                  'priority': f.priority,
+                  'selected': f.selected,
+                  'downloadedBytes': f.safeDownloadedBytes,
+                })
+            .toList();
+      }
+    } catch (e) {
+      _log.warning('getFiles snapshot failed for id $id: $e');
+    }
+
+    try {
+      final source = _torrentSources[id];
+      if (source != null) {
+        final resumeBytes = await _native.saveResumeData(id);
+        if (resumeBytes != null && resumeBytes.isNotEmpty) {
+          final uint8 = Uint8List.fromList(resumeBytes);
+          await TorrentResumeStore.saveAndWait(
+            torrentId: id,
+            sourceUrl: source,
+            fetchResumeData: () => uint8,
+            files: torrentFiles,
+          );
+        }
+      }
+    } catch (e) {
+      _log.warning('saveResumeData failed for id $id: $e');
+    }
+  }
+
   static Future<void> pauseTorrent(int id) async {
     if (!isPluginAvailable || !isInitialized || !isTorrentAlive(id)) return;
     if (id >= 0) {
       await _libtorrentLock.synchronized(() async {
         try {
-          await _native.pauseTorrent(id, graceful: true);
+          var confirmed = false;
+          for (var attempt = 1; attempt <= 3; attempt++) {
+            try {
+              await _native.pauseTorrent(id, graceful: attempt < 3);
+              await torrentUpdates.firstWhere((updateMap) {
+                final stats = updateMap[id];
+                if (stats == null) return false;
+                final label = stats.stateLabel.toLowerCase();
+                return label.contains('paused') || label.contains('stopped');
+              }).timeout(const Duration(seconds: 5));
+              confirmed = true;
+              break;
+            } on TimeoutException {
+              _log.warning('Pause attempt $attempt/3 timed out for torrent $id');
+            } catch (e) {
+              _log.fine('Pause verification check attempt $attempt caught: $e');
+            }
+          }
 
-          try {
-            await torrentUpdates.firstWhere((updateMap) {
-              final stats = updateMap[id];
-              if (stats == null) return false;
-              final label = stats.stateLabel.toLowerCase();
-              return label.contains('paused') || label.contains('stopped');
-            }).timeout(const Duration(seconds: 2));
-          } on TimeoutException {
-            _log.warning(
-              'Pause verification timed out (2s) for id $id. Native pause was issued; keeping state paused.',
+          if (!confirmed) {
+            _log.severe(
+              'Force-stopping torrent $id after 3 failed pause attempts',
             );
-          } catch (e) {
-            _log.fine('Pause verification check caught: $e');
+            try {
+              await _native.pauseTorrent(id, graceful: false);
+            } catch (e) {
+              _log.severe('Force-pause call failed for torrent $id: $e');
+            }
           }
 
-          List<Map<String, dynamic>>? torrentFiles;
-          try {
-            final items = getFiles(id);
-            if (items.isNotEmpty) {
-              torrentFiles = items
-                  .map((f) => {
-                        'name': f.name,
-                        'size': f.size,
-                        'priority': f.priority,
-                        'selected': f.selected,
-                        'downloadedBytes': f.safeDownloadedBytes,
-                      })
-                  .toList();
-            }
-          } catch (e) {
-            _log.warning('getFiles snapshot failed for id $id: $e');
-          }
-
-          try {
-            final source = _torrentSources[id];
-            if (source != null) {
-              final resumeBytes = await _native.saveResumeData(id);
-              if (resumeBytes != null && resumeBytes.isNotEmpty) {
-                final uint8 = Uint8List.fromList(resumeBytes);
-                await TorrentResumeStore.saveAndWait(
-                  torrentId: id,
-                  sourceUrl: source,
-                  fetchResumeData: () => uint8,
-                  files: torrentFiles,
-                );
-              }
-            }
-          } catch (e) {
-            _log.warning('saveResumeData failed for id $id: $e');
-          }
+          await _saveResumeDataAfterPause(id);
         } catch (e) {
           _log.warning('pauseTorrent failed for id $id: $e');
         }
@@ -688,11 +705,11 @@ class TorrentService {
     }
   }
 
-  static void resumeTorrent(int id) {
+  static Future<void> resumeTorrent(int id) async {
     if (!isInitialized || !isTorrentAlive(id)) return;
     if (id >= 0) {
       try {
-        _native.resumeTorrent(id);
+        await _native.resumeTorrent(id);
       } catch (e) {
         _log.warning('resumeTorrent failed for id $id: $e');
       }
@@ -1208,7 +1225,7 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   Future<void> forceStopTorrent(int id) => TorrentService.forceStopTorrent(id);
   @override
-  void resumeTorrent(int id) => TorrentService.resumeTorrent(id);
+  Future<void> resumeTorrent(int id) => TorrentService.resumeTorrent(id);
   @override
   bool loadResumeData(int id, List<int> data) =>
       TorrentService.loadResumeData(id, data);
@@ -1458,7 +1475,7 @@ class TorrentServiceStub implements ITorrentService {
   @override
   Future<void> forceStopTorrent(int id) async {}
   @override
-  void resumeTorrent(int id) {}
+  Future<void> resumeTorrent(int id) async {}
   @override
   bool loadResumeData(int id, List<int> data) => false;
   @override

@@ -5,6 +5,8 @@ library;
 
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
+import '../domain/engine_types.dart';
+import '../domain/resume_identity.dart';
 
 enum DmxStateStatus { active, paused, complete, failed }
 
@@ -64,6 +66,7 @@ class TransferState {
     this.lastModified,
     this.status = DmxStateStatus.active,
     this.cycleState,
+    this.pauseReason,
     DateTime? updatedAt,
     this.migrationNote,
   }) : updatedAt = updatedAt ?? DateTime.now();
@@ -78,8 +81,22 @@ class TransferState {
   String? lastModified;
   DmxStateStatus status;
   String? cycleState;
+  PauseReason? pauseReason;
   DateTime updatedAt;
   String? migrationNote;
+
+  ResumeIdentity? get resumeIdentity {
+    if (url == null && etag == null && lastModified == null && totalSize <= 0) {
+      return null;
+    }
+    return ResumeIdentity(
+      normalizedUrl: ResumeIdentity.normalizeUrl(url ?? ''),
+      etag: etag,
+      lastModified: lastModified,
+      contentLength: totalSize > 0 ? totalSize : null,
+      supportsRanges: true,
+    );
+  }
 
   int get downloadedBytes {
     var sum = 0;
@@ -109,6 +126,7 @@ class TransferState {
         'updatedAt': updatedAt.millisecondsSinceEpoch,
         'chunks': List<ChunkState>.from(chunks).map((c) => c.toJson()).toList(),
         if (cycleState != null) 'cycleState': cycleState,
+        if (pauseReason != null) 'pauseReason': pauseReason!.name,
         if (migrationNote != null) 'migrationNote': migrationNote,
       };
 
@@ -127,6 +145,7 @@ class TransferState {
         lastModified: lastModified,
         status: status,
         cycleState: cycleState,
+        pauseReason: pauseReason,
         updatedAt: updatedAt,
         migrationNote: migrationNote,
       );
@@ -158,6 +177,7 @@ class TransferState {
           orElse: () => DmxStateStatus.active,
         ),
         cycleState: json['cycleState'] as String?,
+        pauseReason: PauseReason.fromName(json['pauseReason'] as String?),
         updatedAt: json['updatedAt'] is int
             ? DateTime.fromMillisecondsSinceEpoch(json['updatedAt'] as int)
             : DateTime.now(),

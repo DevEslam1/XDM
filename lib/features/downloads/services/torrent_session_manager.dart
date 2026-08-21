@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../../../core/di/injection.dart';
 import '../../../core/interfaces/i_torrent_service.dart';
@@ -85,6 +86,47 @@ class TorrentSessionManager {
       debugPrint(
           '[TorrentSessionManager] Failed to save resume data on pause: $e');
     }
+  }
+
+  /// Resumes a torrent task. If forceStopTorrent was called or the handle is dead/removed,
+  /// re-adds the torrent via addMagnet/addTorrentFile with the saved infoHash + loadResumeData.
+  /// Does not call resumeTorrent on a removed handle.
+  Future<int?> resumeTorrentTask(DownloadTask task) async {
+    final tid = _torrentIds[task.id];
+    if (tid != null && _torrentService.isTorrentAlive(tid)) {
+      await _torrentService.resumeTorrent(tid);
+      return tid;
+    }
+
+    // Handle was removed / dead (e.g. after forceStopTorrent): re-add with saved infoHash & resume data
+    _torrentIds.remove(task.id);
+    final saveDir = task.savePath.isNotEmpty
+        ? task.savePath
+        : (task.localFilePath.isNotEmpty
+            ? File(task.localFilePath).parent.path
+            : '');
+    int newId = -1;
+    if (task.url.startsWith('magnet:')) {
+      newId = _torrentService.addMagnet(task.url, saveDir);
+    } else {
+      newId = _torrentService.addTorrentFile(task.url, saveDir, sourceKey: task.url);
+    }
+
+    if (newId >= 0) {
+      _torrentIds[task.id] = newId;
+      try {
+        final resumeBytes =
+            await TorrentResumeStore.loadResumeDataForSource(task.url);
+        if (resumeBytes != null && resumeBytes.isNotEmpty) {
+          _torrentService.loadResumeData(newId, resumeBytes);
+        }
+      } catch (e) {
+        debugPrint('[TorrentSessionManager] Failed to load resume data on re-add: $e');
+      }
+      await _torrentService.resumeTorrent(newId);
+      return newId;
+    }
+    return null;
   }
 
   /// Starts or resumes seeding for a completed torrent task.

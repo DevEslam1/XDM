@@ -244,11 +244,23 @@ class HttpTransferJob {
   PauseReason get effectivePauseReason =>
       _pendingPauseReason ?? PauseReason.userRequested;
 
-  void requestCancel([PauseReason? reason]) {
+  Future<void> requestCancel([PauseReason? reason]) async {
     if (reason != null) {
       _pendingPauseReason = reason;
     }
     _abortAllDelays();
+    final st = _state;
+    if (st != null) {
+      st.status = DmxStateStatus.paused;
+      st.pauseReason = effectivePauseReason;
+      try {
+        await DownloadJournal.flushAndSyncForFile(cmd.tempFilePath);
+      } catch (_) {}
+      try {
+        await StateStore.save(cmd.tempFilePath, st,
+            durable: true, taskId: cmd.taskId);
+      } catch (_) {}
+    }
     if (!_cancelToken.isCancelled) {
       _cancelToken.cancel('paused:${effectivePauseReason.name}');
     }
@@ -822,6 +834,19 @@ class HttpTransferJob {
         } catch (flushErr, flushSt) {
           _log.fine(
               'Writer flush on pause failed: $flushErr', flushErr, flushSt);
+        }
+        try {
+          final actualLen = await File(cmd.tempFilePath).length();
+          if (actualLen < st.downloadedBytes) {
+            var remaining = actualLen;
+            for (final c in st.chunks) {
+              final chunkOnDisk = min(c.downloaded, max(0, remaining - c.start));
+              c.downloaded = chunkOnDisk.clamp(0, c.size >= 0 ? c.size : 0);
+              remaining -= chunkOnDisk;
+            }
+          }
+        } catch (e, stLog) {
+          _log.fine('Reconcile with disk on cancel failed', e, stLog);
         }
         _stateSavedInCatch = true;
         await StateStore.save(cmd.tempFilePath, st, durable: true, taskId: cmd.taskId);
@@ -2073,9 +2098,9 @@ class HttpTransferJob {
     final isBackground =
         DownloadEngine.isInBackground || PowerMonitor.screenOff;
     final saveInterval = isBackground
-        ? const Duration(seconds: 60).inMilliseconds
-        : const Duration(seconds: 30).inMilliseconds;
-    const saveByteThreshold = 8 * 1024 * 1024;
+        ? const Duration(seconds: 15).inMilliseconds
+        : const Duration(seconds: 5).inMilliseconds;
+    const saveByteThreshold = 2 * 1024 * 1024;
     final dueSave = nowMs - _lastStateSaveMs >= saveInterval ||
         _bytesSinceSave >= saveByteThreshold;
     final reportInterval = isBackground ? 15000 : 750;

@@ -41,6 +41,7 @@ const Map<String, String> frTranslations = {
   'browser_add_bookmark': 'Ajouter un favori',
   'browser_add_script': 'Ajouter un script',
   'browser_already_completed': 'Ce téléchargement est déjà terminé.',
+  'browser_restoring_tabs': 'Restauration des onglets...',
   'browser_already_in_progress': 'Ce téléchargement est déjà en cours.',
   'browser_alternative_stream': 'Flux alternatif',
   'browser_apply_uppercase': 'APPLIQUER',

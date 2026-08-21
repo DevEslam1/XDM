@@ -12,6 +12,7 @@ import 'download_journal.dart';
 import 'frame_watchdog.dart';
 import 'performance_monitor.dart';
 import 'power_monitor.dart';
+import 'torrent_service.dart';
 import 'widget_data_bridge.dart';
 
 /// Central coordinator for application lifecycle events (BG-01/BG-02/BG-03/BG-08).
@@ -134,5 +135,17 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
       LoggingService.logger('AppLifecycleCoordinator')
           .warning('Database / Journal flush on background failed', e, st);
     }
+
+    // Torrent & Worker Isolate Hard Deadline on Pause
+    try {
+      unawaited(Future(() async {
+        try {
+          await TorrentService.saveAllResumeData()
+              .timeout(const Duration(milliseconds: 500));
+        } catch (_) {
+          DownloadEngine.forceKillAllIsolates();
+        }
+      }));
+    } catch (_) {}
   }
 }

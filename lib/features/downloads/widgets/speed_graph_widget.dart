@@ -87,6 +87,16 @@ class _SpeedGraphWidgetState extends State<SpeedGraphWidget> {
   DateTime _lastRenderTime = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
+  void didUpdateWidget(SpeedGraphWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.status != oldWidget.status ||
+        widget.speedHistory.length < oldWidget.speedHistory.length) {
+      _lastRenderTime = DateTime.fromMillisecondsSinceEpoch(0);
+      _lastSpeedHistory = null;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final now = DateTime.now();

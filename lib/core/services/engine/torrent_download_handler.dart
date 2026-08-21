@@ -292,7 +292,10 @@ class TorrentDownloadHandler {
     }
 
     if (!savedSuccessfully) {
-      _log.warning('saveResumeData failed after retries for torrent $id. Taking snapshot fallback.');
+      _log.severe(
+        'CRITICAL: saveResumeData failed for torrent $id after retries. '
+        'Torrent may restart from scratch or have degraded resume on next launch.',
+      );
       try {
         final files = _torrentService.getFiles(id);
         final torrentFiles = files.isNotEmpty
@@ -328,8 +331,7 @@ class TorrentDownloadHandler {
           fetchResumeData: () async {
             final blob = _torrentService.resumeBlobFor(id);
             if (blob != null && blob.isNotEmpty) return blob;
-            await Future.delayed(const Duration(milliseconds: 500));
-            return _torrentService.resumeBlobFor(id);
+            return null;
           },
           files: torrentFiles,
           pieceBitfield: pieceBitfield,
@@ -1661,13 +1663,13 @@ class TorrentDownloadHandler {
             .fold<int>(0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0)) ??
         0;
 
-    final totalSize = selectedFilesSum > 0
-        ? selectedFilesSum
-        : (allFilesSum > 0
-            ? allFilesSum
-            : (torrent.totalWanted > 0
-                ? torrent.totalWanted
-                : (knownFileSize > 0 ? knownFileSize : selectedFilesSum)));
+    final totalSize = (torrent.totalWanted > 0)
+        ? torrent.totalWanted
+        : (selectedFilesSum > 0
+            ? selectedFilesSum
+            : (allFilesSum > 0
+                ? allFilesSum
+                : (knownFileSize > 0 ? knownFileSize : 0)));
     tracker.currentTotalSize = totalSize;
     final bool hasReliableTotalSize =
         selectedFilesSum > 0 || allFilesSum > 0 || torrent.totalWanted > 0;
@@ -1724,11 +1726,51 @@ class TorrentDownloadHandler {
       }
     }
 
-    final rawDownloaded = torrent.totalWantedDone > 0
-        ? torrent.totalWantedDone
-        : (torrent.totalDone > 0
-            ? torrent.totalDone
-            : 0);
+    final rawDownloaded = torrent.totalWantedDone;
+
+    int? selectiveDownloadedBytes;
+    bool? hasEstimatedFileProgress;
+    final bool hasSelectiveFiles = effectiveFiles != null &&
+        effectiveFiles.any((f) =>
+            (f['selected'] as bool?) == false ||
+            (f['priority'] as int? ?? 4) == 0);
+    if (torrent.fileProgress.isNotEmpty && hasSelectiveFiles) {
+      int selectiveSum = 0;
+      for (var i = 0; i < torrent.fileProgress.length; i++) {
+        if (i < effectiveFiles.length) {
+          final isSelected = (effectiveFiles[i]['selected'] as bool?) ?? true;
+          final prio = effectiveFiles[i]['priority'] as int? ?? 4;
+          if (isSelected && prio > 0) {
+            selectiveSum += torrent.fileProgress[i];
+          }
+        }
+      }
+      selectiveDownloadedBytes = selectiveSum;
+      hasEstimatedFileProgress = false;
+    }
+
+    if (totalSize <= 0) {
+      final downloadedBytes = rawDownloaded;
+      final speed = torrent.downloadPayloadRate.toDouble();
+      tracker.lastTorrentSpeed = speed;
+      tracker.lastTorrentPeerCount = torrent.numPeers;
+      emitProgress(DownloadProgress(
+        downloadedBytes: downloadedBytes,
+        fileSize: 0,
+        speed: speed,
+        eta: null,
+        fileName: (torrent.hasMetadata && torrent.name.isNotEmpty) ? torrent.name : null,
+        torrentFiles: resolvedFiles ?? cachedAccurateFiles,
+        cycleState: CycleState.fetchingMetadata,
+        totalPieces: torrent.piecesTotal,
+        completedPieces: torrent.piecesHave,
+        statusMessage: (torrent.hasMetadata) ? 'Preparing torrent…' : 'Fetching metadata…',
+        torrentId: id,
+        downloadedFileBytes: selectiveDownloadedBytes,
+        hasEstimatedFileProgress: hasEstimatedFileProgress,
+      ));
+      return;
+    }
 
     final bool isProgressValid = (torrent.hasMetadata || torrent.totalDone > 0) &&
         (torrent.totalWanted > 0 ||
@@ -1833,6 +1875,8 @@ class TorrentDownloadHandler {
         completedPieces: torrent.piecesHave,
         statusMessage: 'Retrying torrent…',
         torrentId: id,
+        downloadedFileBytes: selectiveDownloadedBytes,
+        hasEstimatedFileProgress: hasEstimatedFileProgress,
       ));
     }
     if (tracker.lastRecoveryEmit == null ||
@@ -1852,6 +1896,8 @@ class TorrentDownloadHandler {
         completedPieces: torrent.piecesHave,
         statusMessage: resolvedStatusMessage,
         torrentId: id,
+        downloadedFileBytes: selectiveDownloadedBytes,
+        hasEstimatedFileProgress: hasEstimatedFileProgress,
       ));
     }
 

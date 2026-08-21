@@ -54,6 +54,12 @@ class DownloadEngine implements IDownloadEngine {
   static void setActiveDownloadsCount(int count) =>
       _activeDownloadsCount = count;
 
+  static DownloadEngine? _latestInstance;
+
+  static void forceKillAllIsolates() {
+    _latestInstance?._pool?.forceKillAll();
+  }
+
   static const int _isolatePoolSize = 4;
 
   late final HttpDownloadOrchestrator _httpOrchestrator;
@@ -102,6 +108,7 @@ class DownloadEngine implements IDownloadEngine {
         );
     _torrentOrchestrator = torrentOrchestrator ??
         TorrentDownloadOrchestrator(sharedPool, sharedTorrentHandler);
+    _latestInstance = this;
   }
 
   String buildLocalFilePath(String dir, String fileName) =>

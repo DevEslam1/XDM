@@ -258,8 +258,10 @@ Future<void> main(List<String> args) async {
               initialUrl = extracted;
             }
           }
+        } on TimeoutException {
+          // Fast timeout when no share intent is waiting - normal startup path.
         } catch (e, st) {
-          Logger('main').warning('[main] operation failed', e, st);
+          Logger('main').fine('[main] share intent query error: $e', e, st);
         }
       }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:logging/logging.dart';
+import '../../features/downloads/models/download_task.dart';
 import '../../features/downloads/provider/network_monitor.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../di/injection.dart';
@@ -115,6 +116,52 @@ class TorrentSeedingManager {
         clearSeedStart(id);
       }
     }
+  }
+
+  /// Checks whether seeding should stop for a specific task.
+  /// Strictly returns false if the task is currently paused.
+  bool shouldStopSeedingForTask(
+    DownloadTask task, {
+    required double currentRatio,
+    required Duration seedDuration,
+    required int uploadedBytes,
+    required bool isCharging,
+    required bool isOnWifi,
+    SettingsProvider? settingsProvider,
+  }) {
+    if (task.cycleState == CycleState.paused ||
+        task.status == DownloadStatus.paused) {
+      return false;
+    }
+    final s = settingsProvider ?? SettingsProvider.instance;
+    final policy = SeedingPolicy(
+      maxRatio: s.shareRatioLimit,
+      maxSeedTime: Duration(minutes: s.maxSeedingTimeMinutes),
+      seedOnlyWhenCharging: s.seedOnlyWhenCharging,
+      seedOnlyOnWifi: s.seedOnlyOnWifi,
+      minSeedTimeMinutes: s.minSeedTimeMinutes,
+    );
+    return policy.shouldStopSeeding(
+      currentRatio: currentRatio,
+      seedDuration: seedDuration,
+      uploadedBytes: uploadedBytes,
+      isCharging: isCharging,
+      isOnWifi: isOnWifi,
+      cycleState: task.cycleState,
+    );
+  }
+
+  /// Checks whether a seeding torrent can be auto-resumed.
+  /// If the task is paused, returns false immediately.
+  bool shouldAutoResumeSeeding(DownloadTask task) {
+    if (task.cycleState == CycleState.paused ||
+        task.status == DownloadStatus.paused ||
+        task.pausedByUser == true) {
+      return false;
+    }
+    return task.isTorrent &&
+        task.status == DownloadStatus.completed &&
+        task.seedingEnabled;
   }
 
   /// Calculates optimal upload rate limit in bytes/second based on thermal and battery state.

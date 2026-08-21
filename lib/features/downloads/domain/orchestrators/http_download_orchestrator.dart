@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:dmx/core/domain/resume_identity.dart';
 import 'package:dmx/core/domain/transfer_result.dart';
+import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/download_journal.dart';
 import 'package:dmx/core/services/engine/download_progress_handler.dart';
@@ -11,6 +13,7 @@ import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/core/services/site_intelligence/site_intelligence_service.dart';
 import 'package:dmx/core/services/yt_counterpart_coordinator.dart';
 import 'package:dmx/core/utils/url_utils.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
@@ -81,6 +84,9 @@ class HttpDownloadOrchestrator {
     }
 
     int alreadyOnDisk = 0;
+    String activeDownloadUrl = url;
+    List<String>? effectiveMirrors = mirrorUrls;
+
     if (resolvedFileSize > 0) {
       try {
         final state = await StateStore.loadOrCreate(
@@ -90,18 +96,81 @@ class HttpDownloadOrchestrator {
           knownFileSize: resolvedFileSize,
         );
         alreadyOnDisk = state.state.downloadedBytes;
+
+        // Resume identity validation against fresh probe
+        final storedIdentity = state.state.resumeIdentity;
+        if (alreadyOnDisk > 0 && storedIdentity != null) {
+          final candidateMirrors = [url, ...?mirrorUrls];
+          bool identityMatched = false;
+          String? matchingUrl;
+          final validMirrors = <String>[];
+
+          for (final candidate in candidateMirrors) {
+            try {
+              final headMeta = await _metadataService.resolveMetadata(
+                url: candidate,
+                customUserAgent: customUserAgent,
+                referer: referer,
+                cookies: cookies,
+                oauthToken: oauthToken,
+                cancelToken: cancelToken,
+              );
+              final candidateIdentity = ResumeIdentity(
+                normalizedUrl: ResumeIdentity.normalizeUrl(candidate),
+                etag: headMeta.etag,
+                lastModified: headMeta.lastModified,
+                contentLength:
+                    headMeta.fileSize > 0 ? headMeta.fileSize : null,
+                supportsRanges: headMeta.supportsResume,
+              );
+              final valResult =
+                  storedIdentity.validateAgainst(candidateIdentity);
+              if (valResult.isValid) {
+                if (!identityMatched) {
+                  identityMatched = true;
+                  matchingUrl = candidate;
+                } else {
+                  validMirrors.add(candidate);
+                }
+              } else {
+                _log.warning(
+                    'Resume identity mismatch on $candidate: ${valResult.mismatchReason}');
+              }
+            } catch (e) {
+              _log.fine('Candidate mirror probe failed for $candidate: $e');
+            }
+          }
+
+          if (!identityMatched) {
+            onProgress(DownloadProgress(
+              downloadedBytes: alreadyOnDisk,
+              fileSize: resolvedFileSize,
+              speed: 0,
+              eta: null,
+              statusMessage: 'Refreshing link…',
+              cycleState: CycleState.updatingLinks,
+              pauseReason: PauseReason.urlExpired,
+            ));
+            throw const UrlExpiredException(
+                'Remote resource changed or URL expired for resume.');
+          } else {
+            activeDownloadUrl = matchingUrl!;
+            effectiveMirrors = validMirrors;
+          }
+        }
       } catch (e, st) {
+        if (e is UrlExpiredException) rethrow;
         LoggingService.logger('HttpDownloadOrchestrator')
-            .warning('Operation failed', e, st);
+            .warning('Resume check failed', e, st);
       }
     }
 
-    final punyUrl = convertIdnToPunycode(url);
+    final punyUrl = convertIdnToPunycode(activeDownloadUrl);
     bool urlExpiresHint = false;
     try {
       if (GetIt.instance.isRegistered<SiteIntelligenceService>()) {
-        final analysis =
-            GetIt.instance<SiteIntelligenceService>().analyzeUrl(url);
+        final analysis = GetIt.instance<SiteIntelligenceService>()
+            .analyzeUrl(activeDownloadUrl);
         urlExpiresHint = analysis.isExpiredOrSigned ||
             (analysis.profile?.urlsExpire == true);
       }
@@ -111,7 +180,7 @@ class HttpDownloadOrchestrator {
 
     final command = DownloadCommand(
       taskId: taskId,
-      url: url,
+      url: activeDownloadUrl,
       punyUrl: punyUrl,
       tempFilePath: tempFilePath,
       localFilePath: localFilePath,
@@ -126,7 +195,7 @@ class HttpDownloadOrchestrator {
           resolvedFileName != null ? false : isNameAutoGenerated,
       initialSpeedLimit: 0,
       initialActiveCount: 1,
-      mirrorUrls: mirrorUrls,
+      mirrorUrls: effectiveMirrors,
       adaptiveThreads: adaptiveThreads,
       speedLimitKbps: speedLimitKbps,
       resolvedFileName: resolvedFileName,
@@ -165,7 +234,11 @@ class HttpDownloadOrchestrator {
     }
 
     if (cancelToken.isCancelled) {
-      job.cancel(getStructuredPauseReason());
+      final reason = getStructuredPauseReason();
+      try {
+        DownloadJournal.flushAndSyncForFile(tempFilePath);
+      } catch (_) {}
+      job.cancel(reason);
       throw DioException(
         requestOptions: RequestOptions(path: punyUrl),
         type: DioExceptionType.cancel,
@@ -173,9 +246,24 @@ class HttpDownloadOrchestrator {
       );
     }
 
-    unawaited(cancelToken.whenCancel.then((_) {
+    unawaited(cancelToken.whenCancel.then((_) async {
       if (!completer.isCompleted) {
-        job.cancel(getStructuredPauseReason());
+        final reason = getStructuredPauseReason();
+        try {
+          await DownloadJournal.flushAndSyncForFile(tempFilePath);
+          final existing = await StateStore.loadOrCreate(
+            tempFilePath,
+            url: activeDownloadUrl,
+            threadCount: effectiveThreadCount,
+            knownFileSize: resolvedFileSize,
+          );
+          existing.state.status = DmxStateStatus.paused;
+          existing.state.pauseReason = reason;
+          await StateStore.save(tempFilePath, existing.state,
+              durable: true, taskId: taskId);
+        } catch (_) {}
+
+        job.cancel(reason);
         if (ytStreamKind != null) _ytCoordinator.unregister(taskId);
         completer.completeError(
           DioException(
@@ -213,6 +301,23 @@ class HttpDownloadOrchestrator {
         case EngineMessageType.error:
           if (ytStreamKind != null) _ytCoordinator.unregister(taskId);
           final errData = message.data;
+          final dlBytes = (errData['downloadedBytes'] as num?)?.toInt() ??
+              progressHandler.lastDownloadedBytes;
+          final pReason =
+              PauseReason.fromName(errData['errorType'] as String?) ??
+                  PauseReason.networkLost;
+
+          // Immediately persist failure state without debounce
+          unawaited(DatabaseService.instance.getTask(taskId).then((t) {
+            if (t != null) {
+              return DatabaseService.instance.saveTask(t.copyWith(
+                status: DownloadStatus.failed,
+                downloadedBytes: dlBytes,
+                pauseReason: pReason,
+              ));
+            }
+          }).catchError((_) {}));
+
           if (!completer.isCompleted) {
             completer.completeError(_mapWorkerError(errData, punyUrl));
           }

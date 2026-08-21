@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../../interfaces/i_torrent_native.dart';
+import '../diagnostic_service.dart';
 
 /// Deterministic, scriptable implementation of [ITorrentNative] for unit and contract tests.
 class FakeTorrentNative implements ITorrentNative {
@@ -236,6 +237,17 @@ class FakeTorrentNative implements ITorrentNative {
     if (status == null) return;
 
     if (graceful && !simulateGracefulPauseTimeout) {
+      try {
+        final resumeData =
+            await saveResumeData(id, timeout: const Duration(seconds: 5));
+        if (resumeData == null) {
+          DiagnosticService.instance
+              .recordTelemetryAlert('resume_data_missing', taskId: '$id');
+        }
+      } catch (_) {
+        DiagnosticService.instance
+            .recordTelemetryAlert('resume_data_missing', taskId: '$id');
+      }
       if (gracefulPauseDelay > Duration.zero) {
         await Future.delayed(gracefulPauseDelay);
       }
@@ -256,6 +268,9 @@ class FakeTorrentNative implements ITorrentNative {
         message: 'Torrent paused gracefully',
         timestamp: DateTime.now(),
       ));
+    } else if (graceful && simulateGracefulPauseTimeout) {
+      DiagnosticService.instance
+          .recordTelemetryAlert('resume_data_missing', taskId: '$id');
     }
 
     if (!simulateGracefulPauseTimeout) {
@@ -270,7 +285,7 @@ class FakeTorrentNative implements ITorrentNative {
   }
 
   @override
-  void resumeTorrent(int id) {
+  Future<void> resumeTorrent(int id) async {
     final status = _statuses[id];
     if (status == null) return;
 
@@ -278,6 +293,7 @@ class FakeTorrentNative implements ITorrentNative {
       isPaused: false,
       stateLabel: 'Downloading',
       downloadRate: 500 * 1024,
+      uploadRate: 0,
     );
     _statusCtrl.add(Map.unmodifiable(_statuses));
 
@@ -359,11 +375,14 @@ class FakeTorrentNative implements ITorrentNative {
   List<int> getFileProgress(int id) =>
       List.unmodifiable(_fileProgress[id] ?? const []);
 
+  int saveResumeDataCallCount = 0;
+
   @override
   Future<List<int>?> saveResumeData(
     int id, {
     Duration timeout = const Duration(seconds: 5),
   }) async {
+    saveResumeDataCallCount++;
     final data = [0x64, 0x31, 0x30, 0x3a, 0x66, 0x61, 0x73, 0x74, 0x65]; // bencoded blob
     _savedResumeData[id] = data;
 

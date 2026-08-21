@@ -283,7 +283,7 @@ class FakeITorrentService implements ITorrentService {
   }
 
   @override
-  void resumeTorrent(int id) {
+  Future<void> resumeTorrent(int id) async {
     resumedTorrents.add(id);
     _isPausedMap[id] = false;
     final st = _latestStats[id];

@@ -43,17 +43,19 @@ class FrameWatchdog {
       final previousHandler = PlatformDispatcher.instance.onMetricsChanged;
       PlatformDispatcher.instance.onMetricsChanged = () {
         previousHandler?.call();
-        _cachedRefreshRate = null;
-        detectRefreshRate(force: true);
+        detectRefreshRate(force: false);
       };
     }
     try {
       final display = await getDisplayRefreshRate();
       if (display > 0) {
+        final rateChanged = (_refreshRate - display).abs() > 0.05 || _cachedRefreshRate == null;
         _refreshRate = display;
         _cachedRefreshRate = display;
-        _log.info('[FrameWatchdog] Detected refresh rate: ${display}Hz '
-            '(frame budget: ${frameBudgetMs.toStringAsFixed(2)}ms)');
+        if (rateChanged) {
+          _log.info('[FrameWatchdog] Detected refresh rate: ${display}Hz '
+              '(frame budget: ${frameBudgetMs.toStringAsFixed(2)}ms)');
+        }
       }
     } catch (e) {
       // Always fall back to 60Hz if detection fails

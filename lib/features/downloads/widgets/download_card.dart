@@ -570,14 +570,42 @@ class _StatusChipState extends State<_StatusChip> {
     final isWifiWaiting = task.status == DownloadStatus.paused &&
         task.errorMessage != null &&
         task.errorMessage!.contains('WiFi');
-    final color = isWifiWaiting
-        ? (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber)
-        : getEffectiveCardAccent(task, provider, isDark,
-            filterColor: filterColor);
-    final label = overrideLabel ??
-        (isWifiWaiting
-            ? L10n.of(context, 'waiting_wifi')
-            : L10n.translateStatusName(context, task.status));
+
+    Color color;
+    String label;
+    if (overrideLabel != null) {
+      label = overrideLabel;
+      color = isWifiWaiting
+          ? (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber)
+          : getEffectiveCardAccent(task, provider, isDark,
+              filterColor: filterColor);
+    } else if (task.cycleState == CycleState.verifying) {
+      color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+      label = 'Re-verifying';
+    } else if (task.cycleState == CycleState.resuming) {
+      color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+      label = 'Resuming…';
+    } else if (task.cycleState == CycleState.updatingLinks) {
+      color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+      label = 'Refreshing link…';
+    } else if (task.cycleState == CycleState.fetchingMetadata) {
+      color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+      label = 'Fetching Metadata';
+    } else if (task.pauseReason == PauseReason.diskFull) {
+      color = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+      label = 'Paused — disk full';
+    } else if (task.pauseReason == PauseReason.urlExpired) {
+      color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+      label = 'Link expired — tap to refresh';
+    } else {
+      color = isWifiWaiting
+          ? (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber)
+          : getEffectiveCardAccent(task, provider, isDark,
+              filterColor: filterColor);
+      label = isWifiWaiting
+          ? L10n.of(context, 'waiting_wifi')
+          : L10n.translateStatusName(context, task.status);
+    }
 
     final isScheduled = task.status == DownloadStatus.paused &&
         task.scheduledAt != null &&
@@ -585,6 +613,7 @@ class _StatusChipState extends State<_StatusChip> {
 
     final isPulseActive =
         _shouldPulse(task) && modernAnimationsAllowed(context);
+    final isFetchingMeta = task.cycleState == CycleState.fetchingMetadata;
 
     Widget buildChipContainer(double pulseVal) {
       return Container(
@@ -607,8 +636,20 @@ class _StatusChipState extends State<_StatusChip> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(_icon, size: 14, color: color),
-            const SizedBox(width: 4),
+            if (isFetchingMeta) ...[
+              Container(
+                width: 6,
+                height: 6,
+                margin: const EdgeInsets.only(right: 6),
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ] else ...[
+              Icon(_icon, size: 14, color: color),
+              const SizedBox(width: 4),
+            ],
             Text(
               label,
               maxLines: 1,

@@ -41,6 +41,7 @@ const Map<String, String> enTranslations = {
   'browser_add_bookmark': 'Add bookmark',
   'browser_add_script': 'Add script',
   'browser_already_completed': 'This download is already completed.',
+  'browser_restoring_tabs': 'Restoring tabs...',
   'browser_already_in_progress': 'This download is already in progress.',
   'browser_alternative_stream': 'Alternative Stream',
   'browser_apply_uppercase': 'APPLY',

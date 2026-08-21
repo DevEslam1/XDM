@@ -482,14 +482,19 @@ class AppDatabase extends _$AppDatabase {
   /// Checkpoints the WAL file back into the main database file.
   Future<int> checkpointWal({bool truncate = true}) async {
     final beforeSize = getWalFileSize();
+    if (beforeSize == 0 && truncate) {
+      return 0;
+    }
     try {
       final mode = truncate ? 'TRUNCATE' : 'PASSIVE';
       final result = await customSelect('PRAGMA wal_checkpoint($mode);')
           .get()
           .timeout(const Duration(seconds: 3));
       final afterSize = getWalFileSize();
-      _dbLog.info(
-          'WAL checkpoint ($mode) completed. Size: ${beforeSize}B -> ${afterSize}B');
+      if (beforeSize > 0 || afterSize > 0) {
+        _dbLog.info(
+            'WAL checkpoint ($mode) completed. Size: ${beforeSize}B -> ${afterSize}B');
+      }
       return result.isNotEmpty
           ? (result.first.data.values.first as int? ?? 0)
           : 0;

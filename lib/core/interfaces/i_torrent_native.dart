@@ -280,7 +280,7 @@ abstract class ITorrentNative {
   int addTorrentFile(String filePath, String savePath, {bool streamOnly = false});
   void removeTorrent(int id, {bool deleteFiles = false});
   Future<void> pauseTorrent(int id, {bool graceful = true});
-  void resumeTorrent(int id);
+  Future<void> resumeTorrent(int id);
   void recheckTorrent(int id);
 
   NativeTorrentStatus? getTorrentStatus(int id);
