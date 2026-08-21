@@ -668,7 +668,19 @@ class DownloadProvider extends ChangeNotifier
   @override int effectiveSpeedLimit() => 0;
   @override List<double> buildChunks(int count, int size, int bytes) => count <= 0 ? const [] : size <= 0 ? List.filled(count, 0.0) : List.filled(count, (bytes / size).clamp(0.0, 1.0));
   @override ({int total, List<Map<String, dynamic>>? files}) scanExistingTorrentData(String p, List<Map<String, dynamic>>? f) => (total: 0, files: f);
-  @override Future<void> updateTaskUrlAndResume(String id, String url, {String? newAudioUrl}) async { if (_findTask(id) != null) await resumeTask(id); }
+  @override
+  Future<void> updateTaskUrlAndResume(String id, String url, {String? newAudioUrl}) async {
+    final task = _findTask(id);
+    if (task == null) return;
+    final updated = task.copyWith(
+      url: url,
+      mergedAudioUrl: newAudioUrl ?? task.mergedAudioUrl,
+      updatedAt: DateTime.now(),
+      errorMessage: null,
+    );
+    await _setTask(updated);
+    await resumeTask(id);
+  }
   Future<void> updateTaskUrl(String id, String url, {String? newAudioUrl}) => updateTaskUrlAndResume(id, url, newAudioUrl: newAudioUrl);
   @override void updateTelemetryWidget() {}
   @override void providerStartWidgetTimer() {}
@@ -684,10 +696,41 @@ class DownloadProvider extends ChangeNotifier
   }
   @override List<Map<String, dynamic>> markTorrentFilesCompleted(List<Map<String, dynamic>> files) => files.map((m) => {...m, 'downloadedBytes': m['length'] ?? 0, 'progress': 1.0}).toList();
   @override Future<void> cleanupPartFiles(DownloadTask t, {bool preserveParts = false}) async { if (!preserveParts) await _deleteFileSafely(t.tempFilePath); }
-  @override Future<void> startOverTask(String id, String url, {String? newAudioUrl, bool clearAudioUrl = false, bool fromError = false, int? newFileSize, int? newAudioSize, bool deleteTempFiles = false}) async {
+  @override
+  Future<void> startOverTask(
+    String id,
+    String url, {
+    String? newAudioUrl,
+    bool clearAudioUrl = false,
+    bool fromError = false,
+    int? newFileSize,
+    int? newAudioSize,
+    bool deleteTempFiles = false,
+  }) async {
     final t = _findTask(id);
     if (t == null) return;
-    if (deleteTempFiles) await _deleteFileSafely(t.tempFilePath);
+    if (deleteTempFiles) {
+      await _deleteFileSafely(t.tempFilePath);
+      await _deleteFileSafely('${t.tempFilePath}.dmxstate');
+      await _deleteFileSafely('${t.tempFilePath}.journal');
+      await _deleteFileSafely('${t.tempFilePath}.audio');
+      await _deleteFileSafely('${t.tempFilePath}.audio.dmxstate');
+      await _deleteFileSafely('${t.tempFilePath}.audio.journal');
+    }
+    final updated = t.copyWith(
+      url: url,
+      mergedAudioUrl: clearAudioUrl ? null : (newAudioUrl ?? t.mergedAudioUrl),
+      fileSize: newFileSize ?? (deleteTempFiles ? 0 : t.fileSize),
+      audioSize: newAudioSize ?? (deleteTempFiles ? 0 : t.audioSize),
+      downloadedBytes: deleteTempFiles ? 0 : t.downloadedBytes,
+      audioDownloadedBytes: deleteTempFiles ? 0 : t.audioDownloadedBytes,
+      audioProgress: deleteTempFiles ? 0.0 : t.audioProgress,
+      chunks: deleteTempFiles ? List.filled(t.threadCount, 0.0) : t.chunks,
+      status: DownloadStatus.queued,
+      errorMessage: null,
+      updatedAt: DateTime.now(),
+    );
+    await _setTask(updated);
     await resumeTask(id);
   }
 

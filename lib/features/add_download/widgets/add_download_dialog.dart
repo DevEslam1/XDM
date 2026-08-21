@@ -1027,6 +1027,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                     ),
                   );
                   if (confirmed != true) return;
+                  if (!dialogContext.mounted) return;
                   Navigator.pop(dialogContext);
                   try {
                     await provider.startOverTask(duplicateTask!.id, singleUrl);
