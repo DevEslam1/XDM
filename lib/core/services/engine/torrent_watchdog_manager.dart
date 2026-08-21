@@ -7,7 +7,7 @@ class TorrentWatchdogManager {
   final ITorrentService _torrentService;
   final int _torrentId;
   final Duration _watchdogInterval;
-
+  bool _active = false;
   Timer? _stallTimer;
   Timer? _alivenessTimer;
 
@@ -17,22 +17,26 @@ class TorrentWatchdogManager {
     this._watchdogInterval,
   );
 
-  bool get isActive => _stallTimer != null || _alivenessTimer != null;
+  bool get isActive => _active;
 
   void start({
     required VoidCallback onStalled,
     required VoidCallback onAlivenessLost,
   }) {
     stop();
-    _stallTimer = Timer.periodic(_watchdogInterval, (_) => onStalled());
+    _active = true;
+    _stallTimer = Timer.periodic(_watchdogInterval, (_) {
+      if (_active) onStalled();
+    });
     _alivenessTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (!_torrentService.isTorrentAlive(_torrentId)) {
+      if (_active && !_torrentService.isTorrentAlive(_torrentId)) {
         onAlivenessLost();
       }
     });
   }
 
   void stop() {
+    _active = false;
     _stallTimer?.cancel();
     _stallTimer = null;
     _alivenessTimer?.cancel();

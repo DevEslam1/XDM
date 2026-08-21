@@ -6,6 +6,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import '../logging_service.dart';
+import '../tick_manager.dart';
 
 part 'app_database.g.dart';
 
@@ -337,6 +338,7 @@ class DownloadTasks extends Table {
   IntColumn get httpPartsTotal => integer().nullable()();
   TextColumn get previousCycleState => text().nullable()();
   TextColumn get infoHash => text().nullable()();
+  BoolColumn get isCancelled => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -440,23 +442,30 @@ class AppDatabase extends _$AppDatabase {
   void startPeriodicWalCheckpointer(
       {Duration interval = const Duration(minutes: 5)}) {
     _checkpointTimer?.cancel();
-    _checkpointTimer = Timer.periodic(interval, (_) async {
-      try {
-        final walSize = getWalFileSize();
-        if (walSize > 0) {
-          _dbLog.fine('Periodic checkpoint check: current WAL size is ${walSize}B');
+    _checkpointTimer = null;
+    TickManager.instance.registerTick(
+      id: 'sqlite_wal_checkpointer',
+      interval: interval,
+      priority: TickPriority.normal,
+      callback: (_) async {
+        try {
+          final walSize = getWalFileSize();
+          if (walSize > 0) {
+            _dbLog.fine('Periodic checkpoint check: current WAL size is ${walSize}B');
+          }
+          await checkpointWal();
+        } catch (e, st) {
+          _dbLog.warning('Periodic WAL checkpoint error: $e', e, st);
         }
-        await checkpointWal();
-      } catch (e, st) {
-        _dbLog.warning('Periodic WAL checkpoint error: $e', e, st);
-      }
-    });
+      },
+    );
   }
 
   /// Cancels the periodic WAL checkpointer.
   void stopPeriodicWalCheckpointer() {
     _checkpointTimer?.cancel();
     _checkpointTimer = null;
+    TickManager.instance.unregisterTick('sqlite_wal_checkpointer');
   }
 
   /// Returns current size in bytes of the SQLite WAL file.
@@ -538,7 +547,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 27;
 
   @visibleForTesting
   Future<void> addColumnIfMissingForTesting(
@@ -585,6 +594,14 @@ class AppDatabase extends _$AppDatabase {
               'CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)');
           await customStatement(
               'CREATE INDEX idx_download_tasks_playlist_id ON download_tasks (playlist_id)');
+          await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_download_tasks_queue_order ON download_tasks (queue_order)');
+          await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_download_tasks_scheduled_at ON download_tasks (scheduled_at)');
+          await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_download_tasks_priority ON download_tasks (priority)');
+          await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_download_tasks_updated_at ON download_tasks (updated_at)');
           await customStatement(
               'CREATE INDEX idx_browser_history_visited_at ON browser_history (visited_at)');
           await customStatement(
@@ -977,9 +994,28 @@ class AppDatabase extends _$AppDatabase {
                 'ALTER TABLE download_tasks ADD COLUMN info_hash TEXT');
           }
 
-          if (to > 25) {
+          if (from < 26) {
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_download_tasks_queue_order ON download_tasks (queue_order)');
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_download_tasks_scheduled_at ON download_tasks (scheduled_at)');
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_download_tasks_priority ON download_tasks (priority)');
+            await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_download_tasks_updated_at ON download_tasks (updated_at)');
+          }
+
+          if (from < 27) {
+            await _addColumnIfMissing('download_tasks', 'is_cancelled',
+                'ALTER TABLE download_tasks ADD COLUMN is_cancelled INTEGER NOT NULL DEFAULT 0');
+            // One-time legacy migration for historical cancelled tasks
+            await customStatement(
+                "UPDATE download_tasks SET is_cancelled = 1 WHERE error_message = 'Transfer cancelled.'");
+          }
+
+          if (to > 27) {
             _dbLog.warning(
-                'AppDatabase: Upgrade target version $to is higher than version 25, no specific migrations defined!');
+                'AppDatabase: Upgrade target version $to is higher than version 27, no specific migrations defined!');
           }
         },
       );

@@ -102,6 +102,12 @@ class TorrentFileSelection {
   }
 }
 
+enum TorrentUriKind {
+  torrentFile,
+  magnet,
+  notTorrent,
+}
+
 /// Domain URL specifications & validation utilities.
 class UrlSpecifications {
   const UrlSpecifications._();
@@ -113,10 +119,12 @@ class UrlSpecifications {
         uri.host.isNotEmpty;
   }
 
-  static bool isMagnetUrl(String value) {
+  static bool isMagnetUrl(String value, {bool strict = true}) {
     final clean = value.trim();
     if (!clean.toLowerCase().startsWith('magnet:')) return false;
-    if (clean.contains('tr=') && !clean.contains('xt=')) return true;
+    
+    // In lenient/non-strict mode, accept tracker-only magnets
+    if (!strict && clean.contains('tr=') && !clean.contains('xt=')) return true;
 
     final parsed = parseMagnetUrl(clean);
     final infoHash = parsed['infoHash'] as String?;
@@ -125,16 +133,47 @@ class UrlSpecifications {
     final isHex40 = RegExp(r'^[A-Fa-f0-9]{40}$').hasMatch(infoHash);
     final isBase32 = RegExp(r'^[A-Z2-7]{32}$').hasMatch(infoHash);
     final isHex64 = RegExp(r'^[A-Fa-f0-9]{64}$').hasMatch(infoHash);
-    return isHex40 || isBase32 || isHex64;
+    // Multihash prefix format (e.g. 1220 followed by 64 hex chars for sha256)
+    final isBtmh = RegExp(r'^(1220)?[A-Fa-f0-9]{64}$').hasMatch(infoHash);
+    return isHex40 || isBase32 || isHex64 || isBtmh;
   }
 
-  static bool isTorrentFileUrl(String value) {
+  static bool isTorrentFileUrl(String value, {String? mimeType}) {
+    if (mimeType != null && mimeType.trim().toLowerCase() == 'application/x-bittorrent') {
+      return true;
+    }
     final clean = value.trim().toLowerCase();
-    return clean.startsWith('file://') ||
-        clean.startsWith('content://') ||
+    final uri = Uri.tryParse(clean);
+    final path = uri?.path.toLowerCase() ?? clean;
+
+    if (clean.startsWith('content://')) {
+      return path.endsWith('.torrent') ||
+          clean.contains('.torrent?') ||
+          clean.contains('.torrent#') ||
+          clean.endsWith('.torrent');
+    }
+
+    if (clean.startsWith('file://')) {
+      return path.endsWith('.torrent') ||
+          clean.contains('.torrent?') ||
+          clean.contains('.torrent#');
+    }
+
+    return path.endsWith('.torrent') ||
         clean.endsWith('.torrent') ||
         clean.contains('.torrent?') ||
         clean.contains('.torrent#');
+  }
+
+  static TorrentUriKind resolveTorrentUriKind(Uri uri, {String? mimeType}) {
+    final uriStr = uri.toString();
+    if (uri.scheme.toLowerCase() == 'magnet') {
+      return isMagnetUrl(uriStr) ? TorrentUriKind.magnet : TorrentUriKind.notTorrent;
+    }
+    if (isTorrentFileUrl(uriStr, mimeType: mimeType)) {
+      return TorrentUriKind.torrentFile;
+    }
+    return TorrentUriKind.notTorrent;
   }
 
   static bool isValidTransmissionUrl(String value) {

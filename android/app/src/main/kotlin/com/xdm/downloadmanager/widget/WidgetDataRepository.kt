@@ -19,16 +19,54 @@ object WidgetDataRepository {
     const val TAB_DOWNLOADING = "downloading"
     const val TAB_COMPLETED = "completed"
 
-    fun save(context: Context, json: String) {
+    private var lastBroadcastTime = 0L
+    private var lastTotalProgress = 0.0
+    private var lastTotalDownloaded = 0L
+    private var lastActiveCount = -1
+
+    fun save(context: Context, json: String, force: Boolean = false) {
+        var cappedJson = json
+        try {
+            val obj = org.json.JSONObject(json)
+            val arr = obj.optJSONArray("tasks")
+            if (arr != null && arr.length() > 20) {
+                val newArr = org.json.JSONArray()
+                for (i in 0 until 20) {
+                    newArr.put(arr.getJSONObject(i))
+                }
+                obj.put("tasks", newArr)
+                cappedJson = obj.toString()
+            }
+        } catch (_: Exception) {}
+
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
-            .putString(KEY_DASHBOARD, json)
+            .putString(KEY_DASHBOARD, cappedJson)
             .apply()
 
-        // Wake all placed widgets so they re-render with fresh data.
-        val intent = Intent(DMXWidgetProvider.ACTION_UPDATE_WIDGETS)
-        intent.setPackage(context.packageName)
-        context.sendBroadcast(intent)
+        val dashboard = WidgetDashboard.fromJson(cappedJson)
+        val now = System.currentTimeMillis()
+        val totalProgress = dashboard?.tasks?.sumOf { it.progress } ?: 0.0
+        val totalDownloaded = dashboard?.totalDownloadedBytes ?: 0L
+        val activeCount = dashboard?.totalActiveCount ?: 0
+
+        val progressDelta = Math.abs(totalProgress - lastTotalProgress)
+        val bytesDelta = Math.abs(totalDownloaded - lastTotalDownloaded)
+        val stateChanged = activeCount != lastActiveCount || (dashboard?.hasFailures == true)
+
+        val shouldBroadcast = force || stateChanged || (now - lastBroadcastTime >= 1000L && (progressDelta >= 0.01 || bytesDelta >= 64 * 1024))
+
+        if (shouldBroadcast) {
+            lastBroadcastTime = now
+            lastTotalProgress = totalProgress
+            lastTotalDownloaded = totalDownloaded
+            lastActiveCount = activeCount
+
+            // Wake all placed widgets so they re-render with fresh data.
+            val intent = Intent(DMXWidgetProvider.ACTION_UPDATE_WIDGETS)
+            intent.setPackage(context.packageName)
+            context.sendBroadcast(intent)
+        }
     }
 
     fun load(context: Context): WidgetDashboard? {

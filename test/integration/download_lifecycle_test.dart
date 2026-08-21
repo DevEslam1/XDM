@@ -59,7 +59,7 @@ void main() {
       final list = DownloadListProvider(InMemoryTaskRepository());
       var task = createMockTask(id: 'task_1', fileName: 'file1.bin');
 
-      list.addTask(task);
+      await list.addTask(task);
       expect(task.status, equals(DownloadStatus.queued));
 
       // Simulate progress update
@@ -67,7 +67,7 @@ void main() {
         status: DownloadStatus.downloading,
         downloadedBytes: 512,
       );
-      list.updateTask(task);
+      await list.updateTask(task);
       expect(list.getTask('task_1')?.progress, equals(0.5));
 
       // Simulate completion
@@ -75,7 +75,7 @@ void main() {
         status: DownloadStatus.completed,
         downloadedBytes: 1024,
       );
-      list.updateTask(task);
+      await list.updateTask(task);
       expect(list.getTask('task_1')?.status, equals(DownloadStatus.completed));
     });
 
@@ -83,20 +83,20 @@ void main() {
       final list = DownloadListProvider(InMemoryTaskRepository());
       var task = createMockTask(id: 'task_2', fileName: 'file2.bin');
 
-      list.addTask(task);
+      await list.addTask(task);
       task = task.copyWith(status: DownloadStatus.paused, downloadedBytes: 300);
-      list.updateTask(task);
+      await list.updateTask(task);
       expect(list.getTask('task_2')?.status, equals(DownloadStatus.paused));
 
       task = task.copyWith(
           status: DownloadStatus.downloading, downloadedBytes: 600);
-      list.updateTask(task);
+      await list.updateTask(task);
       expect(
           list.getTask('task_2')?.status, equals(DownloadStatus.downloading));
 
       task = task.copyWith(
           status: DownloadStatus.completed, downloadedBytes: 1024);
-      list.updateTask(task);
+      await list.updateTask(task);
       expect(list.getTask('task_2')?.status, equals(DownloadStatus.completed));
     });
 
@@ -106,7 +106,7 @@ void main() {
       await taskFile.writeAsString('partial_data');
 
       final task = createMockTask(id: 'task_3', fileName: 'cancel_file.bin');
-      list.addTask(task);
+      await list.addTask(task);
 
       if (await taskFile.exists()) {
         await taskFile.delete();
@@ -120,21 +120,21 @@ void main() {
     test('4. Download fails -> retry -> success', () async {
       final list = DownloadListProvider(InMemoryTaskRepository());
       var task = createMockTask(id: 'task_4', fileName: 'file4.bin');
-      list.addTask(task);
+      await list.addTask(task);
 
       // Failure
       task =
           task.copyWith(status: DownloadStatus.failed, errorMessage: 'Timeout');
-      list.updateTask(task);
+      await list.updateTask(task);
       expect(list.getTask('task_4')?.status, equals(DownloadStatus.failed));
 
       // Retry -> Success
       task =
           task.copyWith(status: DownloadStatus.downloading, errorMessage: null);
-      list.updateTask(task);
+      await list.updateTask(task);
       task = task.copyWith(
           status: DownloadStatus.completed, downloadedBytes: 1024);
-      list.updateTask(task);
+      await list.updateTask(task);
 
       expect(list.getTask('task_4')?.status, equals(DownloadStatus.completed));
     });
@@ -142,13 +142,13 @@ void main() {
     test('5. Download fails permanently -> error state', () async {
       final list = DownloadListProvider(InMemoryTaskRepository());
       var task = createMockTask(id: 'task_5', fileName: 'file5.bin');
-      list.addTask(task);
+      await list.addTask(task);
 
       task = task.copyWith(
         status: DownloadStatus.failed,
         errorMessage: '404 Not Found',
       );
-      list.updateTask(task);
+      await list.updateTask(task);
 
       expect(list.getTask('task_5')?.status, equals(DownloadStatus.failed));
       expect(list.getTask('task_5')?.errorMessage, contains('404'));
@@ -193,18 +193,18 @@ void main() {
         () async {
       final list = DownloadListProvider(InMemoryTaskRepository());
       var task = createMockTask(id: 'task_9', fileName: 'file9.bin');
-      list.addTask(task);
+      await list.addTask(task);
 
       // Disconnect
       task = task.copyWith(
           status: DownloadStatus.paused, statusMessage: 'Network disconnected');
-      list.updateTask(task);
+      await list.updateTask(task);
       expect(list.getTask('task_9')?.statusMessage, contains('disconnected'));
 
       // Reconnect
       task = task.copyWith(
           status: DownloadStatus.downloading, statusMessage: 'Downloading...');
-      list.updateTask(task);
+      await list.updateTask(task);
       expect(
           list.getTask('task_9')?.status, equals(DownloadStatus.downloading));
     });

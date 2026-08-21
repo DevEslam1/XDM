@@ -34,7 +34,7 @@ class DownloadWidgetSync {
     final summaries = <WidgetTaskSummary>[];
     for (final task in args.allTasks) {
       var status = task.status.name;
-      if (status == 'completed' && task.isTorrent && task.seedingEnabled) {
+      if (task.isActivelySeeding) {
         status = 'seeding';
       }
       final history = args.speedHistories[task.id] ?? const <double>[];

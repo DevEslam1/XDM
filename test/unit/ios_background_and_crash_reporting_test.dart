@@ -87,6 +87,7 @@ void main() {
       expect(resError, isFalse);
 
       // 3. When channel returns true
+      BackgroundService.resetIosCooldownForTesting();
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (methodCall) async {
         return true;

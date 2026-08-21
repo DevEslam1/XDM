@@ -389,6 +389,16 @@ class $DownloadTasksTable extends DownloadTasks
   late final GeneratedColumn<String> infoHash = GeneratedColumn<String>(
       'info_hash', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _isCancelledMeta =
+      const VerificationMeta('isCancelled');
+  @override
+  late final GeneratedColumn<bool> isCancelled = GeneratedColumn<bool>(
+      'is_cancelled', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("is_cancelled" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -447,7 +457,8 @@ class $DownloadTasksTable extends DownloadTasks
         httpPartsCompleted,
         httpPartsTotal,
         previousCycleState,
-        infoHash
+        infoHash,
+        isCancelled
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -767,6 +778,12 @@ class $DownloadTasksTable extends DownloadTasks
       context.handle(_infoHashMeta,
           infoHash.isAcceptableOrUnknown(data['info_hash']!, _infoHashMeta));
     }
+    if (data.containsKey('is_cancelled')) {
+      context.handle(
+          _isCancelledMeta,
+          isCancelled.isAcceptableOrUnknown(
+              data['is_cancelled']!, _isCancelledMeta));
+    }
     return context;
   }
 
@@ -897,6 +914,8 @@ class $DownloadTasksTable extends DownloadTasks
           DriftSqlType.string, data['${effectivePrefix}previous_cycle_state']),
       infoHash: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}info_hash']),
+      isCancelled: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_cancelled'])!,
     );
   }
 
@@ -974,6 +993,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final int? httpPartsTotal;
   final String? previousCycleState;
   final String? infoHash;
+  final bool isCancelled;
   const DbDownloadTask(
       {required this.id,
       required this.fileName,
@@ -1031,7 +1051,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       this.httpPartsCompleted,
       this.httpPartsTotal,
       this.previousCycleState,
-      this.infoHash});
+      this.infoHash,
+      required this.isCancelled});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1155,6 +1176,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     if (!nullToAbsent || infoHash != null) {
       map['info_hash'] = Variable<String>(infoHash);
     }
+    map['is_cancelled'] = Variable<bool>(isCancelled);
     return map;
   }
 
@@ -1272,6 +1294,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       infoHash: infoHash == null && nullToAbsent
           ? const Value.absent()
           : Value(infoHash),
+      isCancelled: Value(isCancelled),
     );
   }
 
@@ -1343,6 +1366,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       previousCycleState:
           serializer.fromJson<String?>(json['previousCycleState']),
       infoHash: serializer.fromJson<String?>(json['infoHash']),
+      isCancelled: serializer.fromJson<bool>(json['isCancelled']),
     );
   }
   @override
@@ -1408,6 +1432,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'httpPartsTotal': serializer.toJson<int?>(httpPartsTotal),
       'previousCycleState': serializer.toJson<String?>(previousCycleState),
       'infoHash': serializer.toJson<String?>(infoHash),
+      'isCancelled': serializer.toJson<bool>(isCancelled),
     };
   }
 
@@ -1469,7 +1494,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           Value<int?> httpPartsCompleted = const Value.absent(),
           Value<int?> httpPartsTotal = const Value.absent(),
           Value<String?> previousCycleState = const Value.absent(),
-          Value<String?> infoHash = const Value.absent()}) =>
+          Value<String?> infoHash = const Value.absent(),
+          bool? isCancelled}) =>
       DbDownloadTask(
         id: id ?? this.id,
         fileName: fileName ?? this.fileName,
@@ -1553,6 +1579,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
             ? previousCycleState.value
             : this.previousCycleState,
         infoHash: infoHash.present ? infoHash.value : this.infoHash,
+        isCancelled: isCancelled ?? this.isCancelled,
       );
   DbDownloadTask copyWithCompanion(DownloadTasksCompanion data) {
     return DbDownloadTask(
@@ -1682,6 +1709,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ? data.previousCycleState.value
           : this.previousCycleState,
       infoHash: data.infoHash.present ? data.infoHash.value : this.infoHash,
+      isCancelled:
+          data.isCancelled.present ? data.isCancelled.value : this.isCancelled,
     );
   }
 
@@ -1745,7 +1774,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('httpPartsCompleted: $httpPartsCompleted, ')
           ..write('httpPartsTotal: $httpPartsTotal, ')
           ..write('previousCycleState: $previousCycleState, ')
-          ..write('infoHash: $infoHash')
+          ..write('infoHash: $infoHash, ')
+          ..write('isCancelled: $isCancelled')
           ..write(')'))
         .toString();
   }
@@ -1808,7 +1838,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         httpPartsCompleted,
         httpPartsTotal,
         previousCycleState,
-        infoHash
+        infoHash,
+        isCancelled
       ]);
   @override
   bool operator ==(Object other) =>
@@ -1871,7 +1902,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.httpPartsCompleted == this.httpPartsCompleted &&
           other.httpPartsTotal == this.httpPartsTotal &&
           other.previousCycleState == this.previousCycleState &&
-          other.infoHash == this.infoHash);
+          other.infoHash == this.infoHash &&
+          other.isCancelled == this.isCancelled);
 }
 
 class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
@@ -1932,6 +1964,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<int?> httpPartsTotal;
   final Value<String?> previousCycleState;
   final Value<String?> infoHash;
+  final Value<bool> isCancelled;
   final Value<int> rowid;
   const DownloadTasksCompanion({
     this.id = const Value.absent(),
@@ -1991,6 +2024,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.httpPartsTotal = const Value.absent(),
     this.previousCycleState = const Value.absent(),
     this.infoHash = const Value.absent(),
+    this.isCancelled = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadTasksCompanion.insert({
@@ -2051,6 +2085,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.httpPartsTotal = const Value.absent(),
     this.previousCycleState = const Value.absent(),
     this.infoHash = const Value.absent(),
+    this.isCancelled = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         fileName = Value(fileName),
@@ -2121,6 +2156,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<int>? httpPartsTotal,
     Expression<String>? previousCycleState,
     Expression<String>? infoHash,
+    Expression<bool>? isCancelled,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2188,6 +2224,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (previousCycleState != null)
         'previous_cycle_state': previousCycleState,
       if (infoHash != null) 'info_hash': infoHash,
+      if (isCancelled != null) 'is_cancelled': isCancelled,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2250,6 +2287,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       Value<int?>? httpPartsTotal,
       Value<String?>? previousCycleState,
       Value<String?>? infoHash,
+      Value<bool>? isCancelled,
       Value<int>? rowid}) {
     return DownloadTasksCompanion(
       id: id ?? this.id,
@@ -2310,6 +2348,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       httpPartsTotal: httpPartsTotal ?? this.httpPartsTotal,
       previousCycleState: previousCycleState ?? this.previousCycleState,
       infoHash: infoHash ?? this.infoHash,
+      isCancelled: isCancelled ?? this.isCancelled,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2495,6 +2534,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     if (infoHash.present) {
       map['info_hash'] = Variable<String>(infoHash.value);
     }
+    if (isCancelled.present) {
+      map['is_cancelled'] = Variable<bool>(isCancelled.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2562,6 +2604,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('httpPartsTotal: $httpPartsTotal, ')
           ..write('previousCycleState: $previousCycleState, ')
           ..write('infoHash: $infoHash, ')
+          ..write('isCancelled: $isCancelled, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4171,6 +4214,7 @@ typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
   Value<int?> httpPartsTotal,
   Value<String?> previousCycleState,
   Value<String?> infoHash,
+  Value<bool> isCancelled,
   Value<int> rowid,
 });
 typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
@@ -4232,6 +4276,7 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
   Value<int?> httpPartsTotal,
   Value<String?> previousCycleState,
   Value<String?> infoHash,
+  Value<bool> isCancelled,
   Value<int> rowid,
 });
 
@@ -4443,6 +4488,9 @@ class $$DownloadTasksTableFilterComposer
 
   ColumnFilters<String> get infoHash => $composableBuilder(
       column: $table.infoHash, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isCancelled => $composableBuilder(
+      column: $table.isCancelled, builder: (column) => ColumnFilters(column));
 }
 
 class $$DownloadTasksTableOrderingComposer
@@ -4653,6 +4701,9 @@ class $$DownloadTasksTableOrderingComposer
 
   ColumnOrderings<String> get infoHash => $composableBuilder(
       column: $table.infoHash, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isCancelled => $composableBuilder(
+      column: $table.isCancelled, builder: (column) => ColumnOrderings(column));
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -4837,6 +4888,9 @@ class $$DownloadTasksTableAnnotationComposer
 
   GeneratedColumn<String> get infoHash =>
       $composableBuilder(column: $table.infoHash, builder: (column) => column);
+
+  GeneratedColumn<bool> get isCancelled => $composableBuilder(
+      column: $table.isCancelled, builder: (column) => column);
 }
 
 class $$DownloadTasksTableTableManager extends RootTableManager<
@@ -4923,6 +4977,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<int?> httpPartsTotal = const Value.absent(),
             Value<String?> previousCycleState = const Value.absent(),
             Value<String?> infoHash = const Value.absent(),
+            Value<bool> isCancelled = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               DownloadTasksCompanion(
@@ -4983,6 +5038,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             httpPartsTotal: httpPartsTotal,
             previousCycleState: previousCycleState,
             infoHash: infoHash,
+            isCancelled: isCancelled,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -5044,6 +5100,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             Value<int?> httpPartsTotal = const Value.absent(),
             Value<String?> previousCycleState = const Value.absent(),
             Value<String?> infoHash = const Value.absent(),
+            Value<bool> isCancelled = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               DownloadTasksCompanion.insert(
@@ -5104,6 +5161,7 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
             httpPartsTotal: httpPartsTotal,
             previousCycleState: previousCycleState,
             infoHash: infoHash,
+            isCancelled: isCancelled,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

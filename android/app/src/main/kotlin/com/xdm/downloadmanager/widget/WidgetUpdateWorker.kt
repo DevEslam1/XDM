@@ -14,6 +14,16 @@ class WidgetUpdateWorker(context: Context, params: WorkerParameters) :
     CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        val dashboard = WidgetDataRepository.load(applicationContext)
+        if (dashboard != null) {
+            val lastUpdatedMillis = try {
+                if (dashboard.lastUpdated.isNotEmpty()) java.time.Instant.parse(dashboard.lastUpdated).toEpochMilli() else null
+            } catch (_: Exception) { null }
+            val isStale24h = lastUpdatedMillis != null && (System.currentTimeMillis() - lastUpdatedMillis > 24 * 60 * 60 * 1000)
+            if (isStale24h && !dashboard.hasActiveDownloads) {
+                return Result.success()
+            }
+        }
         refreshAllWidgets(applicationContext)
         return Result.success()
     }

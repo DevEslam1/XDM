@@ -63,33 +63,17 @@ class TorrentSessionManager {
     return _torrentService.isTorrentAlive(tid);
   }
 
-  /// Pauses a torrent and waits for confirmation up to [timeout] (FIX T-5).
-  Future<bool> pauseTorrentWithConfirmation(String taskId,
-      {Duration timeout = const Duration(seconds: 3)}) async {
+  /// Pauses a torrent for the given task.
+  Future<void> pauseTorrent(String taskId) async {
     final tid = _torrentIds[taskId];
-    if (tid == null) return true;
+    if (tid == null) return;
 
     if (!_torrentService.isTorrentAlive(tid)) {
       _torrentIds.remove(taskId);
-      return true;
+      return;
     }
 
     await _torrentService.pauseTorrent(tid);
-
-    final deadline = DateTime.now().add(timeout);
-    bool isPaused = false;
-    while (!isPaused && DateTime.now().isBefore(deadline)) {
-      await Future.delayed(const Duration(milliseconds: 50));
-      try {
-        final stats = _latestStats[tid] ?? _torrentService.latestStats[tid];
-        final stateLabel = stats?.stateLabel.toLowerCase() ?? '';
-        isPaused = stateLabel.contains('paused') ||
-            stateLabel.contains('stopped') ||
-            !_torrentService.isTorrentAlive(tid);
-      } catch (_) {
-        isPaused = true;
-      }
-    }
 
     // Save fast-resume data
     try {
@@ -101,8 +85,6 @@ class TorrentSessionManager {
       debugPrint(
           '[TorrentSessionManager] Failed to save resume data on pause: $e');
     }
-
-    return isPaused;
   }
 
   /// Starts or resumes seeding for a completed torrent task.

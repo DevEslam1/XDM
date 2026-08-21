@@ -93,7 +93,7 @@ void main() {
     final app = (await tester.runAsync(() => _buildTestApp()))!;
     await tester.pumpWidget(app);
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.textContaining('XDM'), findsWidgets);
   });

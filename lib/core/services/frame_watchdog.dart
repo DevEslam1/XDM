@@ -181,7 +181,8 @@ class FrameWatchdog {
     _total = total;
     if (total > 0) {
       final rate = dropped / total;
-      final threshold = isHeavy ? 0.15 : _alertThreshold;
+      final threshold =
+          (isHeavy && !alwaysObserveHeavyDownloads) ? 0.15 : _alertThreshold;
       if (rate > threshold) {
         onJankDetected?.call(rate);
       }

@@ -3,12 +3,16 @@ import 'package:dmx/features/downloads/models/download_task.dart';
 
 abstract class TaskRepository {
   Future<List<DownloadTask>> getAll();
+  Future<List<DownloadTask>> loadAll();
   Future<DownloadTask?> getById(String id);
   Future<void> save(DownloadTask task);
+  Future<void> saveDebounced(DownloadTask task);
   Future<void> saveAll(List<DownloadTask> tasks);
   Future<void> delete(String id);
   Future<void> deleteAll(List<String> ids);
+  Future<void> deleteMany(List<String> ids);
   Stream<DownloadTask> watchTask(String id);
+  Stream<List<DownloadTask>> watchAll();
 }
 
 class InMemoryTaskRepository implements TaskRepository {
@@ -16,6 +20,9 @@ class InMemoryTaskRepository implements TaskRepository {
 
   @override
   Future<List<DownloadTask>> getAll() async => List.unmodifiable(_storage);
+
+  @override
+  Future<List<DownloadTask>> loadAll() async => getAll();
 
   @override
   Future<DownloadTask?> getById(String id) async {
@@ -35,6 +42,9 @@ class InMemoryTaskRepository implements TaskRepository {
   }
 
   @override
+  Future<void> saveDebounced(DownloadTask task) async => save(task);
+
+  @override
   Future<void> saveAll(List<DownloadTask> tasks) async {
     for (final t in tasks) {
       await save(t);
@@ -52,11 +62,18 @@ class InMemoryTaskRepository implements TaskRepository {
   }
 
   @override
+  Future<void> deleteMany(List<String> ids) async => deleteAll(ids);
+
+  @override
   Stream<DownloadTask> watchTask(String id) async* {
     final task = await getById(id);
     if (task != null) yield task;
   }
 
-  Future<List<DownloadTask>> loadAll() => getAll();
+  @override
+  Stream<List<DownloadTask>> watchAll() async* {
+    yield await getAll();
+  }
+
   void dispose() {}
 }

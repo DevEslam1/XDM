@@ -144,11 +144,10 @@ void main() {
               DownloadStatus.paused, DownloadStatus.downloading),
           isTrue);
 
-      // Blocked / illegal transitions
       expect(
           DownloadStateMachine.canTransitionStatus(
               DownloadStatus.completed, DownloadStatus.paused),
-          isFalse);
+          isTrue); // Allowed for seeding torrents
       expect(
           DownloadStateMachine.canTransitionStatus(
               DownloadStatus.completed, DownloadStatus.merging),
@@ -161,6 +160,21 @@ void main() {
           DownloadStateMachine.canTransitionStatus(
               DownloadStatus.merging, DownloadStatus.queued),
           isFalse);
+    });
+
+    test('dispose closes transition stream to prevent memory leak', () async {
+      final sm = DownloadStateMachine(taskId: 'task-leak-test');
+      var streamClosed = false;
+      sm.transitions.listen(
+        (_) {},
+        onDone: () => streamClosed = true,
+      );
+
+      sm.transition(DownloadState.starting);
+      sm.dispose();
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(streamClosed, isTrue);
     });
   });
 }

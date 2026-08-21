@@ -548,6 +548,7 @@ const Map<String, String> enTranslations = {
   'stats_downloading': 'Downloading',
   'stats_failed': 'Failed',
   'stats_failed_short': 'FAILED',
+  'stats_cancelled_short': 'CANCELLED',
   'stats_paused_short': 'PAUSED',
   'stats_queued_short': 'QUEUED',
   'stats_total_speed': 'TOTAL DOWNLOAD SPEED',

@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
-import '../services/download_engine.dart';
+import '../domain/engine_types.dart';
 
 /// Abstract interface for Download Engines (M-ARCH-04).
 abstract class IDownloadEngine {
+  /// Primary execution method using the [DownloadRequest] parameter object.
+  Future<void> downloadRequest(DownloadRequest request);
+
   Future<void> download({
     required String taskId,
     required String url,
@@ -46,4 +49,10 @@ abstract class IDownloadEngine {
   Future<void> close();
 
   void forceCancelJob(String taskId);
+
+  Future<bool> hasEnoughDiskSpace(String targetDirectory, int requiredBytes);
+
+  String buildTempFilePath(String savePath, String fileName);
+
+  void updateSpeedLimit(int bytesPerSecond, int activeCount);
 }

@@ -293,7 +293,15 @@ class DatabaseService {
     _historyRepo.dispose();
   }
 
-  Future<void> flushImmediately() => flushPendingSaves();
+  Future<void> flushImmediately() => flush();
+
+  /// FIX-1: Flushes all pending writes and checkpoints WAL to disk.
+  Future<void> flush() async {
+    await flushPendingSaves();
+    try {
+      await _db.customStatement('PRAGMA wal_checkpoint(PASSIVE)');
+    } catch (_) {}
+  }
 
   Future<void> flushPendingSaves() async {
     _dbBatchTimer?.cancel();
@@ -347,6 +355,36 @@ class DatabaseService {
     }
   }
 
+  /// Transactionally upserts only modified tasks using INSERT OR REPLACE / conflict updates.
+  /// This prevents full table rewrites and protects against race conditions.
+  Future<void> upsertTasks(Iterable<DownloadTask> changedTasks) async {
+    final list = changedTasks.toList();
+    if (list.isEmpty) return;
+    final comps = list.map(_taskToCompanion).toList();
+    try {
+      await _db.transaction(() async {
+        for (final comp in comps) {
+          await _db.into(_db.downloadTasks).insertOnConflictUpdate(comp);
+        }
+      });
+    } catch (e, st) {
+      _log.warning(
+          'upsertTasks transaction failed, falling back to individual upserts: $e',
+          e,
+          st);
+      for (final comp in comps) {
+        try {
+          await _db.into(_db.downloadTasks).insertOnConflictUpdate(comp);
+        } catch (inner, innerSt) {
+          _log.severe(
+              'Per-task upsert fallback failed for ${comp.id.value}: $inner',
+              inner,
+              innerSt);
+        }
+      }
+    }
+  }
+
   Future<void> saveTasks(Iterable<DownloadTask> tasks) async {
     final comps = tasks.map(_taskToCompanion).toList();
     if (comps.isEmpty) return;
@@ -378,7 +416,7 @@ class DatabaseService {
 
   /// Batch upserts tasks, falling back to primary key conflict resolution on collision.
   Future<void> batchUpsertTasks(Iterable<DownloadTask> tasks) =>
-      saveTasks(tasks);
+      upsertTasks(tasks);
 
   Future<void> deleteTask(String id) {
     return (_db.delete(_db.downloadTasks)..where((t) => t.id.equals(id))).go();

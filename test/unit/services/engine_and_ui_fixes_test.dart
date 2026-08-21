@@ -118,6 +118,7 @@ void main() {
         uploadedBytes: 0,
         priority: 0,
         queueOrder: 0,
+        isCancelled: false,
       );
 
       final stalledRow = DbDownloadTask(
@@ -150,6 +151,7 @@ void main() {
         uploadedBytes: 0,
         priority: 0,
         queueOrder: 0,
+        isCancelled: false,
       );
 
       final taskAlloc = dbService.rowToTaskForTesting(allocatingRow);

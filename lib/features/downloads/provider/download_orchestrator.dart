@@ -14,6 +14,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../core/interfaces/i_download_engine.dart';
 import '../../../core/services/background_service.dart';
 import '../../../core/services/checksum_service.dart';
 import '../../../core/services/database_service.dart';
@@ -74,7 +75,7 @@ abstract class DownloadOrchestratorHost {
   // Collaborators.
   SettingsProvider get providerSettingsProvider;
   DatabaseService get providerDatabaseService;
-  DownloadEngine get downloadEngine;
+  IDownloadEngine get downloadEngine;
   NotificationCoordinator get notifications;
   NetworkMonitor get networkMonitor;
 
@@ -1488,47 +1489,96 @@ class DownloadOrchestrator {
       }
     }
 
-    // FIX-16: Post-download file size integrity check for HTTP downloads
-    if (!current.isTorrent && current.fileSize > 0) {
+    // P0-7: Completion Integrity Gate
+    // 1. Verify destination file exists and is not missing for non-torrent tasks
+    if (!current.isTorrent) {
       final file = File(current.localFilePath);
-      if (await file.exists()) {
-        final actualSize = await file.length();
-        if (!current.hasMergedAudio && actualSize < current.fileSize) {
+      if (!await file.exists()) {
+        debugPrint('[CompletionGate] Final file missing at ${current.localFilePath}');
+        await _host.setTaskState(
+          current.copyWith(
+            status: DownloadStatus.failed,
+            errorMessage:
+                'Final file not found on disk at ${current.localFilePath}',
+            failureCategory: FailureCategory.unknown,
+            recoveryHint:
+                'The completed file could not be found. Check storage permissions and retry.',
+          ),
+        );
+        return;
+      }
+
+      final actualSize = await file.length();
+      // 2. Non-merged download size check
+      if (current.fileSize > 0 && !current.hasMergedAudio) {
+        if (actualSize < current.fileSize) {
+          debugPrint(
+            '[CompletionGate] File size mismatch: expected ${current.fileSize} bytes, got $actualSize bytes',
+          );
           await _host.setTaskState(
             current.copyWith(
               status: DownloadStatus.failed,
               errorMessage:
                   'Download incomplete: expected ${current.fileSize} bytes, '
-                  'got $actualSize bytes. File: ${current.localFilePath}',
+                  'got $actualSize bytes.',
+              failureCategory: FailureCategory.integrityError,
+              recoveryHint:
+                  'The downloaded payload is smaller than expected. Tap resume to complete the remaining bytes.',
             ),
           );
           return;
         }
       }
-    }
 
-    // Record checksum metrics
-    if (metrics != null && current.expectedSha256 != null) {
-      metrics.checksumAlgorithm = 'SHA-256';
-      metrics.checksumVerified = true;
-      metrics.checksumPassed = current.status != DownloadStatus.failed;
-    }
-
-    // FIX-09: Verify merged file size
-    if (!current.isTorrent && current.hasMergedAudio && current.fileSize > 0) {
-      final finalFile = File(current.localFilePath);
-      if (await finalFile.exists()) {
-        final actualSize = await finalFile.length();
-        final expectedMin = (current.fileSize * 0.95).round(); // 5% tolerance
+      // 3. Merged stream size check (5% tolerance for container/codec differences)
+      if (current.hasMergedAudio && current.fileSize > 0) {
+        final expectedMin = (current.fileSize * 0.95).round();
         if (actualSize < expectedMin) {
           debugPrint(
-            '[DMX] FIX-09: Merged file too small: $actualSize < $expectedMin',
+            '[CompletionGate] Merged file too small: $actualSize < $expectedMin',
           );
           await _host.setTaskState(
             current.copyWith(
               status: DownloadStatus.failed,
               errorMessage:
                   'Merged file size mismatch: expected ~${current.fileSize}, got $actualSize',
+              failureCategory: FailureCategory.mergeFailed,
+              recoveryHint:
+                  'The merged media file was smaller than expected. Tap Retry to remux.',
+            ),
+          );
+          return;
+        }
+      }
+
+      // 4. SHA-256 Checksum validation gate
+      if (current.expectedSha256 != null &&
+          current.expectedSha256!.trim().isNotEmpty) {
+        final expectedHash = current.expectedSha256!.trim();
+        final matches = await ChecksumService.verify(
+          current.localFilePath,
+          expectedHash,
+          'sha256',
+        );
+
+        if (metrics != null) {
+          metrics.checksumAlgorithm = 'SHA-256';
+          metrics.checksumVerified = true;
+          metrics.checksumPassed = matches;
+        }
+
+        if (!matches) {
+          debugPrint(
+            '[CompletionGate] SHA-256 mismatch for task ${current.id} at ${current.localFilePath}',
+          );
+          await _host.setTaskState(
+            current.copyWith(
+              status: DownloadStatus.failed,
+              errorMessage:
+                  'Integrity verification failed: computed checksum does not match expected SHA-256 hash.',
+              failureCategory: FailureCategory.integrityError,
+              recoveryHint:
+                  'The downloaded file failed SHA-256 verification. Tap Restart Download to re-fetch from the source.',
             ),
           );
           return;
@@ -4108,9 +4158,27 @@ class DownloadOrchestrator {
         await _host.flushPendingProgress(task.id);
         final current = _host.findTaskById(task.id);
         if (current == null) return;
-        // FIX-04: Do not overwrite user-paused or completed status on error catch
-        if (current.status == DownloadStatus.paused ||
-            current.status == DownloadStatus.completed) {
+        final isUserCancelled = (realError is DioException &&
+            realError.type == DioExceptionType.cancel);
+        final isCancelledOrPaused = isUserCancelled ||
+            current.status == DownloadStatus.paused ||
+            current.status == DownloadStatus.completed ||
+            current.pausedByUser;
+
+        if (isCancelledOrPaused) {
+          _host.retryCounts.remove(task.id);
+          _host.retryTimers.remove(task.id)?.cancel();
+          if (current.status == DownloadStatus.downloading) {
+            await _host.setTaskState(
+              current.copyWith(
+                status: DownloadStatus.paused,
+                pausedByUser: true,
+                speed: 0,
+                clearEta: true,
+              ),
+            );
+          }
+          _host.notifications.cancelNotification(notificationId);
           return;
         }
 

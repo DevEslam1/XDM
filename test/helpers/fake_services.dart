@@ -102,8 +102,18 @@ class FakePermissionService extends PermissionService {
   bool storageGranted = true;
   bool notificationGranted = true;
 
-  Future<bool> hasStoragePermission() async => storageGranted;
-  Future<bool> requestStoragePermission() async => storageGranted;
-  Future<bool> hasNotificationPermission() async => notificationGranted;
-  Future<bool> requestNotificationPermission() async => notificationGranted;
+  @override
+  Future<String> defaultDownloadDirectory() async => 'build/test_downloads';
+
+  @override
+  Future<bool> ensureStorageAccess() async => storageGranted;
+
+  @override
+  Future<bool> isStoragePermissionValid() async => storageGranted;
+
+  @override
+  Future<bool> isBatteryOptimizationExempt() async => true;
+
+  @override
+  Future<bool> requestBatteryOptimizationExemption() async => true;
 }

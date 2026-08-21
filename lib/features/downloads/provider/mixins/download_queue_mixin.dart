@@ -174,6 +174,7 @@ mixin DownloadQueueMixin {
   // Queue pump
   // ---------------------------------------------------------------------------
   static const int _maxConsecutivePumps = 8;
+  bool _pumpScheduled = false;
 
   void pumpQueue({
     bool skipPump = false,
@@ -184,8 +185,12 @@ mixin DownloadQueueMixin {
       _pendingMaxConcurrentOverride = maxConcurrentOverride;
     }
 
+    if (_pumpScheduled) return;
+    _pumpScheduled = true;
+
     _pumpDebounceTimer?.cancel();
     _pumpDebounceTimer = Timer(const Duration(milliseconds: 50), () {
+      _pumpScheduled = false;
       _executePumpLocked();
     });
   }

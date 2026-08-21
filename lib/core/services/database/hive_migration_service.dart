@@ -42,10 +42,8 @@ Future<bool> _migrateIsolate(_MigratePayload payload) async {
     isolateDb = AppDatabase.forTesting(NativeDatabase.memory());
   }
 
-  final isolatePrefs = await SharedPreferences.getInstance();
-
   try {
-    final service = HiveMigrationService._direct(isolateDb, isolatePrefs);
+    final service = HiveMigrationService(isolateDb);
     const boxes = [
       HiveMigrationService.downloadsBoxName,
       HiveMigrationService.bookmarksBoxName,
@@ -72,11 +70,9 @@ Future<bool> _migrateIsolate(_MigratePayload payload) async {
 /// Service responsible for one-time migration of legacy Hive data boxes into SQLite (Drift).
 class HiveMigrationService {
   final AppDatabase db;
-  final SharedPreferences prefs;
+  final SharedPreferences? prefs;
 
-  HiveMigrationService(this.db, this.prefs);
-
-  HiveMigrationService._direct(this.db, this.prefs);
+  HiveMigrationService(this.db, [this.prefs]);
 
   static const String downloadsBoxName = 'downloads';
   static const String bookmarksBoxName = 'browser_bookmarks';
@@ -86,7 +82,7 @@ class HiveMigrationService {
 
   /// Migrates Hive boxes using a single global completion flag (DB-03).
   Future<void> migrate() async {
-    if (prefs.getBool(migrationKey) == true) return;
+    if (prefs != null && prefs!.getBool(migrationKey) == true) return;
 
     if (db.dbPath == null) {
       const boxes = [
@@ -108,7 +104,7 @@ class HiveMigrationService {
       }
 
       if (allSuccessful) {
-        await prefs.setBool(migrationKey, true);
+        await prefs?.setBool(migrationKey, true);
       }
       return;
     }
@@ -118,8 +114,8 @@ class HiveMigrationService {
       _MigratePayload(db),
     );
 
-    if (allSuccessful) {
-      await prefs.setBool(migrationKey, true);
+    if (allSuccessful && prefs != null) {
+      await prefs!.setBool(migrationKey, true);
     }
   }
 

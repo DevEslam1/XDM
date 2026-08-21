@@ -167,18 +167,25 @@ class LoggingService {
     );
     result = result.replaceAllMapped(
       RegExp(
-        r'[?&](api[_-]?key|apikey|token|access[_-]?token|secret|password|'
-        r'signature|sig|auth|api_key|access_key|secret_key|x-amz-signature|x-amz-credential|'
-        r'x-amz-security-token|awsaccesskeyid|googleaccessid|credential|'
-        r'hdnts|hdnea|st|exp|auth_code|verify_code|session_token)='
-        r'[^&\s]+',
+        r'(?:[?&\s]|^)(api[_-]?key|apikey|token|access[_-]?token|refresh[_-]?token|id[_-]?token|'
+        r'secret|client[_-]?secret|password|passwd|pwd|signature|sig|auth|api_key|access_key|'
+        r'secret_key|x-amz-signature|x-amz-credential|x-amz-security-token|awsaccesskeyid|'
+        r'googleaccessid|credential|hdnts|hdnea|st|exp|auth_code|verify_code|session_token|'
+        r'sessionid|private[_-]?key)=([^\s&]+)',
         caseSensitive: false,
       ),
-      (m) => '${m.group(0)!.split('=').first}=[REDACTED]',
+      (m) {
+        final prefix = m.group(0)!.startsWith(RegExp(r'[?&\s]')) ? m.group(0)![0] : '';
+        return '$prefix${m.group(1)}=[REDACTED]';
+      },
     );
     result = result.replaceAll(
       RegExp(r'[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}'),
       '[JWT REDACTED]',
+    );
+    result = result.replaceAllMapped(
+      RegExp(r'Cookie:\s*[^;\r\n]+', caseSensitive: false),
+      (_) => 'Cookie: [REDACTED]',
     );
     result = result.replaceAllMapped(
       RegExp(r'://[^:]+:[^@]+@'),
@@ -186,6 +193,9 @@ class LoggingService {
     );
     return result;
   }
+
+  /// Redacts sensitive authentication headers and query parameters from a URL or string.
+  static String redactUrl(String url) => sanitize(url);
 
   static pkg_logging.Logger log(String name) => logger(name);
 

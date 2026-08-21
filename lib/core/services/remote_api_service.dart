@@ -93,12 +93,20 @@ class RemoteApiService {
     return false;
   }
 
+  /// Whether the remote API is enabled. Disabled by default for zero attack surface.
+  static bool enabled = false;
+
   static Future<void> start({
     required Future<List<Map<String, dynamic>>> Function() getTasks,
     required Future<void> Function(String id) pauseTask,
     required Future<void> Function(String id) resumeTask,
     required Future<void> Function(String id) deleteTask,
   }) async {
+    if (!enabled) {
+      LoggingService.logger('RemoteApiService')
+          .info('Remote API server is disabled by default.');
+      return;
+    }
     if (kIsWeb ||
         (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS)) {
       return;

@@ -8,6 +8,7 @@ import '../di/injection.dart';
 import 'background_timer_manager.dart';
 import 'database_service.dart';
 import 'download_engine.dart';
+import 'download_journal.dart';
 import 'frame_watchdog.dart';
 import 'performance_monitor.dart';
 import 'power_monitor.dart';
@@ -76,6 +77,9 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
 
       // Restart ONLY if screen is on
       if (!PowerMonitor.screenOff) {
+        if (getIt.isRegistered<BackgroundTimerManager>()) {
+          getIt<BackgroundTimerManager>().resumeAll();
+        }
         FrameWatchdog.start();
         PerformanceMonitor.instance.start();
         if (getIt.isRegistered<AmbientAnimationController>()) {
@@ -111,7 +115,7 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
 
     // STOP ALL TIMERS
     if (getIt.isRegistered<BackgroundTimerManager>()) {
-      getIt<BackgroundTimerManager>().cancelAll();
+      getIt<BackgroundTimerManager>().pauseAll();
     }
 
     // Suspend all ambient work
@@ -123,11 +127,12 @@ class AppLifecycleCoordinator with WidgetsBindingObserver {
 
     // Task 4.3: Flush database saves and checkpoint WAL on backgrounding/detaching
     try {
+      DownloadJournal.flushAllActive();
       DatabaseService.instance.flushPendingSaves();
       DatabaseService.instance.checkpointWal(truncate: true);
     } catch (e, st) {
       LoggingService.logger('AppLifecycleCoordinator')
-          .warning('Database flush/checkpoint on background failed', e, st);
+          .warning('Database / Journal flush on background failed', e, st);
     }
   }
 }

@@ -104,4 +104,11 @@ class DownloadQueueProvider extends ChangeNotifier {
     _queuedIds.insert(newIndex, item);
     notifyListeners();
   }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+    super.dispose();
+  }
 }

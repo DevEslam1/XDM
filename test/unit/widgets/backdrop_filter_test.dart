@@ -1,19 +1,36 @@
+import 'package:battery_plus/battery_plus.dart';
+import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/power_monitor.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../helpers/test_helpers.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('DmxBackdropFilter Tests', () {
-    setUp(() {
+    setUp(() async {
+      setupTestPluginMocks();
+      SharedPreferences.setMockInitialValues({'classicUi': false, 'reduceVisuals': false});
+      await SettingsProvider.instance.load();
+      await SettingsProvider.instance.setClassicUi(false);
+      await SettingsProvider.instance.setReduceVisuals(false);
       DmxBackdropFilter.resetActiveCount();
+      DmxBackdropFilter.disabled = false;
+      DownloadEngine.appInForeground = true;
+      PowerMonitor.screenOff = false;
+      PowerMonitor.isLowEndDevice = false;
+      PowerMonitor.setBatteryForTesting(level: 100, state: BatteryState.charging);
+      PowerMonitor.setThermalForTesting(ThermalStatus.none);
     });
 
     tearDown(() {
       DmxBackdropFilter.resetActiveCount();
+      DmxBackdropFilter.disabled = false;
     });
 
     testWidgets('renders solid Container when forceSolid is true',

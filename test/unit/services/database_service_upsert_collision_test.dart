@@ -93,7 +93,7 @@ void main() {
 
       final loadedT1 = allTasks.firstWhere((t) => t.id == 'task_t1');
       expect(loadedT1.fileName, equals('file_renamed.zip'));
-      expect(loadedT1.downloadedBytes, equals(50000));
+      expect(loadedT1.downloadedBytes, equals(100000));
       expect(loadedT1.status, equals(DownloadStatus.completed));
       expect(loadedT1.cycleState, equals(CycleState.completed));
 

@@ -9,12 +9,22 @@ import android.view.View
 import android.widget.RemoteViews
 import com.xdm.downloadmanager.MainActivity
 import com.xdm.downloadmanager.R
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 object DMXRemoteViewsFactory {
     const val SIZE_MINI = "mini"
     const val SIZE_WIDE = "wide"
     const val SIZE_LIST = "list"
     const val SIZE_DASHBOARD = "dashboard"
+
+    private val requestCodeMap = ConcurrentHashMap<String, Int>()
+    private val nextRequestCode = AtomicInteger(1000)
+
+    private fun getOrCreateRequestCode(key: String): Int {
+        return requestCodeMap.computeIfAbsent(key) { nextRequestCode.getAndIncrement() }
+    }
 
     // ── Enhanced palette ──
     const val COLOR_BG = 0xFF0F1117.toInt()
@@ -88,7 +98,11 @@ object DMXRemoteViewsFactory {
         tasks: List<WidgetTaskSummary>,
         selectedTab: String,
     ) {
-        val top = tasks.firstOrNull() ?: dashboard.tasks.first()
+        val top = tasks.firstOrNull()
+        if (top == null) {
+            applyAllClear(views, SIZE_WIDE, dashboard)
+            return
+        }
 
         views.setViewVisibility(R.id.widget_wide_clear, View.GONE)
         views.setViewVisibility(R.id.widget_wide_name, View.VISIBLE)
@@ -147,7 +161,7 @@ object DMXRemoteViewsFactory {
         views.setViewVisibility(R.id.widget_dash_clear, View.GONE)
         views.setViewVisibility(R.id.widget_dash_rows, View.VISIBLE)
         views.setViewVisibility(R.id.widget_dash_actions, View.VISIBLE)
-        bindTabsHeader(context, widgetId, views, dashboard, selectedTab)
+        bindTabsHeader(context, widgetId, views, dashboard, selectedTab, SIZE_DASHBOARD)
 
         val visible = tasks.take(5)
         for (index in 0 until 5) {
@@ -287,6 +301,7 @@ object DMXRemoteViewsFactory {
         views: RemoteViews,
         dashboard: WidgetDashboard,
         selectedTab: String,
+        size: String = SIZE_LIST,
     ) {
         val activeCount = dashboard.tasks.count { it.status != "completed" }
         val completedCount = dashboard.tasks.count { it.status == "completed" }
@@ -318,9 +333,12 @@ object DMXRemoteViewsFactory {
         // Speed with trend icon
         val speedText = formatSpeed(dashboard.totalSpeedBytesPerSec)
         val speedIcon = if (dashboard.totalSpeedBytesPerSec > 0) "↓" else "→"
-        views.setTextViewText(R.id.widget_dash_speed, speedText)
-        views.setTextViewText(R.id.widget_dash_speed_icon, speedIcon)
-        views.setTextViewText(R.id.widget_list_speed, speedText)
+        if (size == SIZE_LIST) {
+            views.setTextViewText(R.id.widget_list_speed, speedText)
+        } else if (size == SIZE_DASHBOARD) {
+            views.setTextViewText(R.id.widget_dash_speed, speedText)
+            views.setTextViewText(R.id.widget_dash_speed_icon, speedIcon)
+        }
     }
 
     private fun bindRowActionButton(
@@ -449,7 +467,7 @@ object DMXRemoteViewsFactory {
             unit++
         }
         return if (unit == 0) "${value.toInt()} ${units[unit]}"
-        else String.format("%.1f %s", value, units[unit])
+        else String.format(Locale.US, "%.1f %s", value, units[unit])
     }
 
     fun formatBytes(bytes: Long): String {
@@ -462,7 +480,7 @@ object DMXRemoteViewsFactory {
             unit++
         }
         return if (unit == 0) "${value.toInt()} ${units[unit]}"
-        else String.format("%.1f %s", value, units[unit])
+        else String.format(Locale.US, "%.1f %s", value, units[unit])
     }
 
     // ── Row ID helpers (dashboard) ──
@@ -543,9 +561,10 @@ object DMXRemoteViewsFactory {
             data = Uri.parse(uri)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
+        val reqCode = getOrCreateRequestCode("act_$uri")
         return PendingIntent.getActivity(
             context,
-            uri.hashCode(),
+            reqCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -553,9 +572,10 @@ object DMXRemoteViewsFactory {
 
     private fun broadcastIntent(context: Context, action: String): PendingIntent {
         val intent = Intent(context, WidgetActionReceiver::class.java).setAction(action)
+        val reqCode = getOrCreateRequestCode("bcast_$action")
         return PendingIntent.getBroadcast(
             context,
-            action.hashCode(),
+            reqCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -567,9 +587,10 @@ object DMXRemoteViewsFactory {
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
             putExtra(WidgetActionReceiver.EXTRA_TAB, tab)
         }
+        val reqCode = getOrCreateRequestCode("tab_${widgetId}_$tab")
         return PendingIntent.getBroadcast(
             context,
-            (widgetId.toString() + "_" + tab).hashCode(),
+            reqCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -580,9 +601,10 @@ object DMXRemoteViewsFactory {
             this.action = action
             putExtra(WidgetActionReceiver.EXTRA_TASK_ID, taskId)
         }
+        val reqCode = getOrCreateRequestCode("action_${action}_$taskId")
         return PendingIntent.getBroadcast(
             context,
-            (action + "_" + taskId).hashCode(),
+            reqCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -596,7 +618,11 @@ object DMXRemoteViewsFactory {
         tasks: List<WidgetTaskSummary>,
         selectedTab: String,
     ) {
-        val top = tasks.firstOrNull() ?: dashboard.tasks.first()
+        val top = tasks.firstOrNull()
+        if (top == null) {
+            applyAllClear(views, SIZE_MINI, dashboard)
+            return
+        }
         views.setViewVisibility(R.id.widget_mini_name, View.VISIBLE)
         views.setViewVisibility(R.id.widget_mini_stats, View.VISIBLE)
         applyCategoryTag(views, R.id.widget_mini_tag, top)
@@ -637,7 +663,7 @@ object DMXRemoteViewsFactory {
         views.setViewVisibility(R.id.widget_list_clear, View.GONE)
         views.setViewVisibility(R.id.widget_list_rows, View.VISIBLE)
         views.setViewVisibility(R.id.widget_list_footer, View.VISIBLE)
-        bindTabsHeader(context, widgetId, views, dashboard, selectedTab)
+        bindTabsHeader(context, widgetId, views, dashboard, selectedTab, SIZE_LIST)
 
         val visible = tasks.take(3)
         for (index in 0 until 3) {
@@ -677,6 +703,15 @@ object DMXRemoteViewsFactory {
         if (dashboard.availableStorageBytes >= 0) {
             parts.add("${formatBytes(dashboard.availableStorageBytes)} free")
         }
+        try {
+            if (dashboard.lastUpdated.isNotEmpty()) {
+                val lastUpdatedMillis = java.time.Instant.parse(dashboard.lastUpdated).toEpochMilli()
+                if (System.currentTimeMillis() - lastUpdatedMillis > 30 * 60 * 1000) {
+                    val sdf = java.text.SimpleDateFormat("HH:mm", Locale.US)
+                    parts.add("· as of " + sdf.format(java.util.Date(lastUpdatedMillis)))
+                }
+            }
+        } catch (_: Exception) {}
         return parts.joinToString(" · ")
     }
 

@@ -1,4 +1,6 @@
 const Map<String, String> deTranslations = {
+  'waiting_wifi': 'Warten auf WLAN',
+  'waiting_for_slot': 'Warten auf freien Platz ({active}/{max} aktiv)',
   'active_connections': 'Aktive Verbindungen',
   'active_on_completion': 'Nach Fertigstellung seeden',
   'active_tab': 'Aktiv',
@@ -550,6 +552,7 @@ const Map<String, String> deTranslations = {
   'stats_downloading': 'Herunterladen',
   'stats_failed': 'Fehlgeschlagen',
   'stats_failed_short': 'FEHLGESCHLAGEN',
+  'stats_cancelled_short': 'ABGEBROCHEN',
   'stats_paused_short': 'PAUSIERT',
   'stats_queued_short': 'IN WARTESCHLANGE',
   'stats_total_speed': 'GESAMT-DOWNLOADGESCHWINDIGKEIT',

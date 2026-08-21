@@ -20,8 +20,10 @@ void main() {
       YoutubeService.resetClientCooldowns();
     });
 
-    test('getStreams honors 45s total retry budget cap', () async {
-      final sw = Stopwatch()..start();
+    test(
+      'getStreams honors 45s total retry budget cap',
+      () async {
+        final sw = Stopwatch()..start();
 
       try {
         await YoutubeService.getStreams(
@@ -33,6 +35,6 @@ void main() {
       sw.stop();
       // Total elapsed time must not exceed 45 seconds + small overhead
       expect(sw.elapsed.inSeconds, lessThanOrEqualTo(46));
-    });
+    }, timeout: const Timeout(Duration(seconds: 60)));
   });
 }

@@ -38,3 +38,8 @@
 -dontwarn org.mozilla.javascript.**
 -dontwarn java.beans.**
 -dontwarn javax.script.**
+
+# XDM Widget Models and Native Bridge
+-keep class com.xdm.downloadmanager.widget.** { *; }
+-keep class com.xdm.downloadmanager.MainActivity { *; }
+-keep class com.xdm.downloadmanager.YoutubeExtractor { *; }

@@ -76,15 +76,12 @@ class WidgetDeepLinkHandler {
     if (trimmed.isEmpty) return false;
     if (isMagnetUrl(trimmed) ||
         isTorrentFileUrl(trimmed) ||
-        trimmed.startsWith('magnet:')) {
+        trimmed.startsWith('magnet:?')) {
       return true;
     }
     final uri = Uri.tryParse(trimmed);
     if (uri == null) return false;
     final scheme = uri.scheme.toLowerCase();
-    if (scheme == 'magnet' || scheme == 'file' || scheme == 'content') {
-      return true;
-    }
     if (scheme != 'dmx' && scheme != 'xdm') return false;
     final host = uri.host.toLowerCase();
     return validRoutes.contains(host);

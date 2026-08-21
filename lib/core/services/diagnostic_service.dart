@@ -9,33 +9,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../domain/repositories/diagnostic_repository.dart';
 import 'error_taxonomy.dart';
 
-/// One recorded diagnostic entry.
-class DiagnosticEntry {
-  final DateTime timestamp;
-  final String area;
-  final String message;
-  final ErrorFamily? family;
-  final String? details;
-
-  const DiagnosticEntry({
-    required this.timestamp,
-    required this.area,
-    required this.message,
-    this.family,
-    this.details,
-  });
-
-  String get formatted {
-    final time = '${timestamp.hour.toString().padLeft(2, '0')}:'
-        '${timestamp.minute.toString().padLeft(2, '0')}:'
-        '${timestamp.second.toString().padLeft(2, '0')}';
-    final family = this.family == null ? '' : '[${this.family!.name}] ';
-    final details = this.details == null || this.details!.isEmpty
-        ? ''
-        : ' — ${this.details}';
-    return '$time $area: $family$message$details';
-  }
-}
+export '../domain/repositories/diagnostic_repository.dart' show DiagnosticEntry;
 
 /// Bounded in-memory diagnostic log plus a system-info snapshot, used for
 /// support/debugging screens without leaking sensitive data.
@@ -58,13 +32,16 @@ class DiagnosticService implements DiagnosticRepository {
     Object? error,
     String? details,
   }) {
+    final safeMessage = LoggingService.sanitize(message);
+    final safeDetails =
+        details != null ? LoggingService.sanitize(details) : null;
     _entries.add(
       DiagnosticEntry(
         timestamp: DateTime.now(),
         area: area,
-        message: message,
+        message: safeMessage,
         family: error == null ? null : ErrorTaxonomy.classify(error).family,
-        details: details,
+        details: safeDetails,
       ),
     );
     if (_entries.length > _maxEntries) {

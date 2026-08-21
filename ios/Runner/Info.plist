@@ -148,8 +148,6 @@
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
-		<false/>
-		<key>NSAllowsArbitraryLoadsWebContentOnly</key>
 		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>

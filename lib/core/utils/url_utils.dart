@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:dmx/core/services/logging_service.dart';
 
+import '../domain/utils/url_specifications.dart';
 import '../services/site_intelligence/site_intelligence_service.dart';
 import 'file_utils.dart';
 
@@ -94,13 +95,8 @@ bool isMagnetUrl(String value) {
   return isHex40 || isBase32 || isHex64;
 }
 
-bool isTorrentFileUrl(String value) {
-  final clean = value.trim().toLowerCase();
-  return clean.startsWith('file://') ||
-      clean.startsWith('content://') ||
-      clean.endsWith('.torrent') ||
-      clean.contains('.torrent?');
-}
+bool isTorrentFileUrl(String value) =>
+    UrlSpecifications.isTorrentFileUrl(value);
 
 bool isTorrentUrl(String url, {String? fileName}) {
   final urlLower = url.trim().toLowerCase();

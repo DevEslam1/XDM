@@ -119,7 +119,7 @@ class TransferState {
     try {
       final v =
           (json['v'] as num?)?.toInt() ?? (json['version'] as num?)?.toInt();
-      if (v != currentVersion) return null;
+      if (v != null && v != currentVersion) return null;
       final rawChunks = json['chunks'];
       if (rawChunks is! List || rawChunks.isEmpty) return null;
       final chunks = rawChunks

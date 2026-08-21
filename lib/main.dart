@@ -37,7 +37,6 @@ import 'core/services/xdm_backend_client.dart';
 import 'core/services/youtube_service.dart';
 import 'core/utils/constants.dart';
 import 'core/utils/url_utils.dart';
-import 'features/downloads/provider/download_coordinator.dart';
 import 'features/downloads/provider/download_filter_provider.dart';
 import 'features/downloads/provider/download_list_provider.dart';
 import 'features/downloads/provider/download_provider.dart';
@@ -489,8 +488,6 @@ class DmxApp extends StatelessWidget {
             create: (_) => getIt<DownloadFilterProvider>()),
         ChangeNotifierProvider<TorrentProvider>(
             create: (_) => getIt<TorrentProvider>()),
-        ChangeNotifierProvider<DownloadCoordinator>(
-            create: (_) => getIt<DownloadCoordinator>()),
       ],
       child: Selector<
           SettingsProvider,

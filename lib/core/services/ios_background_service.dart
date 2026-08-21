@@ -79,6 +79,9 @@ class IosBackgroundService {
     });
   }
 
+  static String? _lastNativeError;
+  static String? get lastNativeError => _lastNativeError;
+
   /// Starts a native iOS URLSession background download.
   static Future<bool> startNativeDownload({
     required String taskId,
@@ -94,9 +97,16 @@ class IosBackgroundService {
                 'destinationPath': destinationPath,
               }) ??
               false;
+      if (!success) {
+        _lastNativeError =
+            'Native URLSession background download returned false for $taskId';
+      }
       return success;
-    } catch (e) {
-      debugPrint('Failed to start native iOS background download: $e');
+    } catch (e, st) {
+      _lastNativeError =
+          'Failed to start native iOS background download for $taskId: $e';
+      LoggingService.logger('IosBackgroundService')
+          .warning(_lastNativeError!, e, st);
       return false;
     }
   }

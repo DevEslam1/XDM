@@ -27,14 +27,17 @@ void main() {
   }
 
   group('DownloadTask Model', () {
-    test('== and hashCode are id-based', () {
+    test('== and hashCode reflect task state value equality', () {
       final taskA =
           createTestTask(id: 'id-123', fileSize: 1000, downloadedBytes: 200);
       final taskB =
+          createTestTask(id: 'id-123', fileSize: 1000, downloadedBytes: 200);
+      final taskC =
           createTestTask(id: 'id-123', fileSize: 5000, downloadedBytes: 800);
 
       expect(taskA == taskB, isTrue);
       expect(taskA.hashCode, equals(taskB.hashCode));
+      expect(taskA == taskC, isFalse);
     });
 
     test('progress is clamped to range 0.0 - 1.0 or -1.0 for unknown size', () {

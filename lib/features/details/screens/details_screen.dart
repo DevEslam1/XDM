@@ -564,7 +564,29 @@ class _TelemetryHero extends StatelessWidget {
                             const SizedBox(height: 2),
                             Text(
                               task.isTorrent
-                                  ? '${task.torrentFiles?.length ?? 0} FILES'
+                                  ? (() {
+                                      final files = task.torrentFiles;
+                                      if (files != null && files.isNotEmpty) {
+                                        final total = files.length;
+                                        final completed = files.where((f) {
+                                          final isComp = (f['isComplete'] as bool?) ?? false;
+                                          final len = (f['length'] as num?)?.toInt() ?? 0;
+                                          final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+                                          return isComp || (len > 0 && dl >= len);
+                                        }).length;
+                                        return completed > 0
+                                            ? '$completed/$total FILES'
+                                            : '$total FILES';
+                                      }
+                                      final total = task.totalFiles ?? 0;
+                                      final completed = task.completedFiles ?? 0;
+                                      if (total > 0) {
+                                        return completed > 0
+                                            ? '$completed/$total FILES'
+                                            : '$total FILES';
+                                      }
+                                      return '0 FILES';
+                                    })()
                                   : '${task.threadCount} CH',
                               style: AppTheme.microLabel(
                                 isDark: isDark,
@@ -2624,7 +2646,8 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
               p['selected'] != n['selected'] ||
               p['priority'] != n['priority'] ||
               p['length'] != n['length'] ||
-              p['name'] != n['name']) {
+              p['name'] != n['name'] ||
+              p['isComplete'] != n['isComplete']) {
             return true;
           }
         }

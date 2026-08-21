@@ -211,19 +211,31 @@ class DownloadIsolatePool implements MemoryPressureListener {
 
   void _startCrashCountSweepTimer() {
     _sweepCrashCountsTimer?.cancel();
-    _sweepCrashCountsTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      _jobCrashCounts.removeWhere((taskId, _) => !_isJobActiveOrQueued(taskId));
-    });
+    _sweepCrashCountsTimer = null;
+    TickManager.instance.registerTick(
+      id: 'isolate_pool_crash_sweep',
+      interval: const Duration(minutes: 5),
+      priority: TickPriority.critical,
+      callback: (_) {
+        _jobCrashCounts.removeWhere((taskId, _) => !_isJobActiveOrQueued(taskId));
+      },
+    );
   }
 
   void _startIdleCheckTimer() {
     _idleCheckTimer?.cancel();
+    _idleCheckTimer = null;
     final interval = (DownloadEngine.isInBackground || PowerMonitor.screenOff)
         ? const Duration(seconds: 60)
         : const Duration(seconds: 15);
-    _idleCheckTimer = Timer.periodic(interval, (_) {
-      _checkIdleWorkers();
-    });
+    TickManager.instance.registerTick(
+      id: 'isolate_pool_idle_check',
+      interval: interval,
+      priority: TickPriority.normal,
+      callback: (_) {
+        _checkIdleWorkers();
+      },
+    );
   }
 
   void _checkIdleWorkers() {
@@ -551,6 +563,8 @@ class DownloadIsolatePool implements MemoryPressureListener {
     _sweepCrashCountsTimer = null;
     _bgIdleReaper?.cancel();
     _bgIdleReaper = null;
+    TickManager.instance.unregisterTick('isolate_pool_crash_sweep');
+    TickManager.instance.unregisterTick('isolate_pool_idle_check');
     if (_foregroundListenerAttached) {
       DownloadEngine.appInForegroundNotifier
           .removeListener(_onForegroundChanged);

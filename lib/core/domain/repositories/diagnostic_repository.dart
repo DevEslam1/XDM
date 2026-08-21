@@ -1,4 +1,32 @@
-import '../../services/diagnostic_service.dart';
+import '../../services/error_taxonomy.dart' show ErrorFamily;
+
+/// One recorded diagnostic entry (pure domain value).
+class DiagnosticEntry {
+  final DateTime timestamp;
+  final String area;
+  final String message;
+  final ErrorFamily? family;
+  final String? details;
+
+  const DiagnosticEntry({
+    required this.timestamp,
+    required this.area,
+    required this.message,
+    this.family,
+    this.details,
+  });
+
+  String get formatted {
+    final time = '${timestamp.hour.toString().padLeft(2, '0')}:'
+        '${timestamp.minute.toString().padLeft(2, '0')}:'
+        '${timestamp.second.toString().padLeft(2, '0')}';
+    final family = this.family == null ? '' : '[${this.family!.name}] ';
+    final details = this.details == null || this.details!.isEmpty
+        ? ''
+        : ' — ${this.details}';
+    return '$time $area: $family$message$details';
+  }
+}
 
 /// Clean Architecture interface for diagnostic & telemetry operations.
 abstract class DiagnosticRepository {

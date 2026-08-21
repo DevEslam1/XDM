@@ -221,3 +221,50 @@ class CircuitBreakerRegistry {
     }
   }
 }
+
+/// FIX-23: Circuit breaker helper specifically for URLs/hosts
+class UrlCircuitBreaker {
+  UrlCircuitBreaker._();
+  static final UrlCircuitBreaker instance = UrlCircuitBreaker._();
+
+  final Map<String, int> _urlFailures = {};
+  final Map<String, DateTime> _lastFailures = {};
+
+  bool shouldBlock(String url) {
+    try {
+      final uri = Uri.tryParse(url);
+      final host = uri?.host ?? url;
+      final failures = _urlFailures[host] ?? 0;
+      final last = _lastFailures[host];
+      if (failures >= 5 &&
+          last != null &&
+          DateTime.now().difference(last) < const Duration(minutes: 30)) {
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  void recordFailure(String url) {
+    try {
+      final uri = Uri.tryParse(url);
+      final host = uri?.host ?? url;
+      _urlFailures[host] = (_urlFailures[host] ?? 0) + 1;
+      _lastFailures[host] = DateTime.now();
+    } catch (_) {}
+  }
+
+  void recordSuccess(String url) {
+    try {
+      final uri = Uri.tryParse(url);
+      final host = uri?.host ?? url;
+      _urlFailures.remove(host);
+      _lastFailures.remove(host);
+    } catch (_) {}
+  }
+
+  void reset() {
+    _urlFailures.clear();
+    _lastFailures.clear();
+  }
+}

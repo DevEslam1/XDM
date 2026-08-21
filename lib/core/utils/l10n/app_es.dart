@@ -1,4 +1,6 @@
 const Map<String, String> esTranslations = {
+  'waiting_wifi': 'Esperando Wi-Fi',
+  'waiting_for_slot': 'Esperando turno ({active}/{max} activos)',
   'active_connections': 'Conexiones activas',
   'active_on_completion': 'Compartir al completar',
   'active_tab': 'Activo',
@@ -547,6 +549,7 @@ const Map<String, String> esTranslations = {
   'stats_downloading': 'Descargando',
   'stats_failed': 'Fallido',
   'stats_failed_short': 'FALLIDO',
+  'stats_cancelled_short': 'CANCELADO',
   'stats_paused_short': 'PAUSADO',
   'stats_queued_short': 'EN COLA',
   'stats_total_speed': 'VELOCIDAD TOTAL DE DESCARGA',

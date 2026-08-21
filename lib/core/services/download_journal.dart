@@ -506,8 +506,8 @@ class StateStoreInstance {
           if (isScreenOff &&
               !durable &&
               !statusChanged &&
-              bytesSinceLastWrite < kStateSaveFgDelta) {
-            return; // skip small deltas when screen off
+              bytesSinceLastWrite < 5 * 1024 * 1024) {
+            return; // skip small deltas when screen off (< 5MB)
           }
 
           // Lightweight structural deduplication: skips redundant writes in O(N) without jsonEncode or SHA-256
@@ -643,6 +643,8 @@ class StateStoreInstance {
           LoggingService.logger('DownloadJournal')
               .warning('Failed to delete tmp state file on remove', e, st);
         }
+        // J1: Centrally delete .journal when state is removed
+        await DownloadJournal.deleteJournalFor(tempFilePath);
         if (taskId != null && taskId.isNotEmpty) {
           final legacyPath = _legacyPathFor(tempFilePath);
           _lock.synchronized(() {
@@ -747,6 +749,21 @@ abstract class StateStore {
 }
 
 class DownloadJournal {
+  static final Set<DownloadJournal> _activeJournals = {};
+
+  /// Flushes and fsyncs all currently active/open download journals to disk immediately.
+  static Future<void> flushAllActive() async {
+    final active = _activeJournals.toList();
+    for (final j in active) {
+      try {
+        await j.flushAndSync();
+      } catch (e, st) {
+        LoggingService.logger('DownloadJournal')
+            .warning('flushAllActive failed for ${j.path}', e, st);
+      }
+    }
+  }
+
   final String path;
   IOSink? _sink;
   bool _isOpen = false;
@@ -777,6 +794,18 @@ class DownloadJournal {
       }
       _sink = file.openWrite(mode: FileMode.append);
       _isOpen = true;
+      _activeJournals.add(this);
+    });
+  }
+
+  /// Forces an immediate flush and fsync of all unwritten journal buffers to disk.
+  Future<void> flushAndSync() async {
+    await _lock.synchronized(() async {
+      if (!_isOpen || _sink == null) return;
+      await _sink!.flush();
+      await _fsyncLocked();
+      _bytesSinceLastFsync = 0;
+      _lastFlushRecordCount = _flushCounter;
     });
   }
 
@@ -1001,6 +1030,7 @@ class DownloadJournal {
   /// from a `finally` block or before deleting the journal file.
   void dispose() {
     _lastRecordedChunkBytes.clear();
+    _activeJournals.remove(this);
     if (!_isOpen) return;
     _isOpen = false;
     final sink = _sink;
@@ -1037,7 +1067,62 @@ class DownloadJournal {
     }
   }
 
+  /// Safely deletes the journal for [tempFilePath], closing any active journal sink first (J1).
+  static Future<void> deleteJournalFor(String tempFilePath) async {
+    final journalPath = tempFilePath.endsWith('.journal')
+        ? tempFilePath
+        : '$tempFilePath.journal';
+    final active = _activeJournals.where((j) => j.path == journalPath).toList();
+    for (final j in active) {
+      try {
+        await j.close();
+      } catch (e, st) {
+        LoggingService.logger('DownloadJournal')
+            .warning('Failed to close active journal before deletion: $journalPath', e, st);
+      }
+    }
+    try {
+      final file = File(journalPath);
+      if (await file.exists()) {
+        await file.delete();
+        LoggingService.logger('DownloadJournal')
+            .info('[Journal-J1] Deleted journal file: $journalPath');
+      }
+    } catch (e, st) {
+      LoggingService.logger('DownloadJournal')
+          .warning('[Journal-J1] Failed to delete journal file $journalPath: $e', e, st);
+    }
+  }
+
+  /// Clears the journal for [tempFilePath] after state replay (J2).
+  static Future<void> clearJournalFor(String tempFilePath) async {
+    final journalPath = tempFilePath.endsWith('.journal')
+        ? tempFilePath
+        : '$tempFilePath.journal';
+    final active = _activeJournals.where((j) => j.path == journalPath).toList();
+    for (final j in active) {
+      try {
+        await j.close();
+      } catch (e, st) {
+        LoggingService.logger('DownloadJournal')
+            .warning('Failed to close active journal before clearing: $journalPath', e, st);
+      }
+    }
+    try {
+      final file = File(journalPath);
+      if (await file.exists()) {
+        await file.delete();
+        LoggingService.logger('DownloadJournal')
+            .info('[Journal-J2] Cleared journal after state replay: $journalPath');
+      }
+    } catch (e, st) {
+      LoggingService.logger('DownloadJournal')
+          .warning('[Journal-J2] Failed to clear journal $journalPath: $e', e, st);
+    }
+  }
+
   Future<void> _closeLocked() async {
+    _activeJournals.remove(this);
     if (!_isOpen) return;
     _isOpen = false;
     try {

@@ -187,7 +187,9 @@ class MirrorHealthStore implements DisposableService {
             }
           }
         } catch (_) {}
-        await prefs.remove(_storeKey);
+        if (repo != null) {
+          await prefs.remove(_storeKey);
+        }
       }
 
       if (migratedStates.isNotEmpty) {
@@ -429,6 +431,11 @@ class MirrorHealthStore implements DisposableService {
             await repo.upsertAll(rowsToUpsert);
           }
         }
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        final rawMap = <String, dynamic>{};
+        _cache?.forEach((k, v) => rawMap[k] = v.toJson());
+        await prefs.setString(_storeKey, jsonEncode(rawMap));
       }
 
       _dirty = false;

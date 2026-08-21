@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/permission_service.dart';
+import 'package:dmx/core/services/transfer_state.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
@@ -92,14 +93,20 @@ class FakeDownloadEngine extends DownloadEngine {
       try {
         final f = File(path);
         f.createSync(recursive: true);
-        f.writeAsBytesSync(List.filled(size > 0 ? size : 10, 0));
-        File('$path.dmxstate').writeAsStringSync(
-          jsonEncode({
-            'chunks': [
-              {'downloaded': size > 0 ? size : 10},
-            ],
-          }),
+        final actualBytes = size > 0 ? size : 10;
+        f.writeAsBytesSync(List.filled(actualBytes, 0));
+        final state = TransferState(
+          totalSize: actualBytes,
+          threadCount: 1,
+          chunks: [
+            ChunkState(
+              start: 0,
+              end: actualBytes - 1,
+              downloaded: actualBytes,
+            ),
+          ],
         );
+        File('$path.dmxstate').writeAsStringSync(jsonEncode(state.toJson()));
       } catch (_) {}
     }
 
@@ -325,7 +332,7 @@ void main() {
     expect(provider.tasks.first.status, DownloadStatus.failed);
     expect(provider.tasks.first.errorMessage,
         contains(DownloadStatusMessages.ffmpegMergeFailed));
-    expect(engine.knownFileSizes['https://example.com/video'], 50,
+    expect(engine.knownFileSizes['https://example.com/video'], 100,
         reason: 'Combined tasks must request only the video stream length.');
   });
 }

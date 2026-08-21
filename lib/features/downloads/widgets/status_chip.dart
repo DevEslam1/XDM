@@ -66,7 +66,9 @@ class StatusChip extends StatelessWidget {
           break;
         case DownloadStatus.failed:
           color = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-          label = L10n.of(context, 'stats_failed_short');
+          label = task.isCancelled
+              ? L10n.of(context, 'stats_cancelled_short')
+              : L10n.of(context, 'stats_failed_short');
           break;
         case DownloadStatus.merging:
           color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;

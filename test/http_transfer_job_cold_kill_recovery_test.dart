@@ -67,7 +67,7 @@ void main() { // FIX-P0-1
     // Create the actual temp file with corresponding bytes // FIX-P0-1
     final f = File(tempFilePath); // FIX-P0-1
     final raf = await f.open(mode: FileMode.write); // FIX-P0-1
-    await raf.truncate(30 * 1024 * 1024); // FIX-P0-1
+    await raf.truncate(totalSize); // FIX-P0-1
     await raf.close(); // FIX-P0-1
  // FIX-P0-1
     // 2. Simulate progressive chunk downloads logged in journal before sudden SIGKILL // FIX-P0-1

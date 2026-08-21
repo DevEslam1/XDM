@@ -87,9 +87,6 @@ enum CycleState {
     if (s.contains('finished') || s.contains('completed')) {
       return CycleState.completed;
     }
-    if (s.contains('seeding')) {
-      return CycleState.seeding;
-    }
     if (s.contains('paused') || s.contains('stopped')) {
       return CycleState.paused;
     }
@@ -114,7 +111,11 @@ enum CycleState {
     if (s.contains('starting') || s.contains('queued')) {
       return CycleState.starting;
     }
-    return CycleState.downloading; // default
+    if (s.contains('download')) {
+      return CycleState.downloading;
+    }
+    // Unknown libtorrent state: treat as stalled so failures/stuck tasks are visible
+    return CycleState.stalled;
   }
 
   /// Parses [CycleState] by name (camelCase or snake_case), falling back to [fallback].

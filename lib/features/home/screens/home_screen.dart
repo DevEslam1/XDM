@@ -24,11 +24,9 @@ import '../../downloads/widgets/filter_chips_bar.dart';
 import '../../settings/provider/settings_provider.dart';
 
 bool _isActiveTask(DownloadTask t) {
-  final isSeeding =
-      t.status == DownloadStatus.completed && t.isTorrent && t.seedingEnabled;
   return (t.status != DownloadStatus.completed &&
           t.status != DownloadStatus.failed) ||
-      isSeeding;
+      t.isActivelySeeding;
 }
 
 class HomeScreen extends StatefulWidget {
@@ -1739,12 +1737,12 @@ class _DownloadTaskList extends StatelessWidget {
                       shouldRebuild: (prev, next) {
                         if (prev == null || next == null) return prev != next;
                         return prev.status != next.status ||
-                            prev.progress != next.progress ||
-                            prev.speed != next.speed ||
+                            (prev.progress - next.progress).abs() > 0.005 ||
+                            (prev.speed - next.speed).abs() > 1024 ||
                             prev.errorMessage != next.errorMessage ||
                             prev.statusMessage != next.statusMessage ||
                             prev.fileSize != next.fileSize ||
-                            prev.downloadedBytes != next.downloadedBytes;
+                            (prev.downloadedBytes - next.downloadedBytes).abs() > 65536;
                       },
                       builder: (_, liveTask, __) {
                         final effectiveTask = liveTask ?? item.task!;
@@ -1823,12 +1821,12 @@ class _DownloadTaskList extends StatelessWidget {
                         shouldRebuild: (prev, next) {
                           if (prev == null || next == null) return prev != next;
                           return prev.status != next.status ||
-                              prev.progress != next.progress ||
-                              prev.speed != next.speed ||
+                              (prev.progress - next.progress).abs() > 0.005 ||
+                              (prev.speed - next.speed).abs() > 1024 ||
                               prev.errorMessage != next.errorMessage ||
                               prev.statusMessage != next.statusMessage ||
                               prev.fileSize != next.fileSize ||
-                              prev.downloadedBytes != next.downloadedBytes;
+                              (prev.downloadedBytes - next.downloadedBytes).abs() > 65536;
                         },
                         builder: (_, liveTask, __) {
                           final effectiveTask = liveTask ?? item.task!;
@@ -1895,12 +1893,12 @@ class _DownloadTaskList extends StatelessWidget {
                         shouldRebuild: (prev, next) {
                           if (prev == null || next == null) return prev != next;
                           return prev.status != next.status ||
-                              prev.progress != next.progress ||
-                              prev.speed != next.speed ||
+                              (prev.progress - next.progress).abs() > 0.005 ||
+                              (prev.speed - next.speed).abs() > 1024 ||
                               prev.errorMessage != next.errorMessage ||
                               prev.statusMessage != next.statusMessage ||
                               prev.fileSize != next.fileSize ||
-                              prev.downloadedBytes != next.downloadedBytes;
+                              (prev.downloadedBytes - next.downloadedBytes).abs() > 65536;
                         },
                         builder: (_, liveTask, __) {
                           final effectiveTask = liveTask ?? item.task!;
@@ -1925,9 +1923,28 @@ class _DownloadTaskList extends StatelessWidget {
               );
             }
           }
+          final Widget bodyWithReconcileIndicator;
+          if (provider.isReconciling) {
+            bodyWithReconcileIndicator = Column(
+              children: [
+                const SizedBox(
+                  height: 3,
+                  child: LinearProgressIndicator(
+                    value: null,
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppTheme.neonGreen),
+                  ),
+                ),
+                Expanded(child: contentWidget),
+              ],
+            );
+          } else {
+            bodyWithReconcileIndicator = contentWidget;
+          }
+
           return Directionality(
             textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-            child: contentWidget,
+            child: bodyWithReconcileIndicator,
           );
         },
       );

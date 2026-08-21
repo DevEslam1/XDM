@@ -205,7 +205,9 @@ class ScheduleManager {
       if (task.status == DownloadStatus.paused &&
           !task.pausedByUser &&
           task.scheduledAt != null &&
-          task.scheduledAt!.toUtc().isBefore(nowUtc)) {
+          task.scheduledAt!.toUtc().isBefore(nowUtc) &&
+          (task.wasScheduledAt == null ||
+              !task.wasScheduledAt!.isAtSameMomentAs(task.scheduledAt!))) {
         final updated = task.copyWith(
           status: DownloadStatus.queued,
           clearError: true,

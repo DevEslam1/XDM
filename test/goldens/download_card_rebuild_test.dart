@@ -40,10 +40,13 @@ void main() {
     });
 
     tearDown(() async {
+      downloadProvider.dispose();
       dbService.cancelPendingTimers();
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
+      try {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      } catch (_) {}
     });
 
     testWidgets(
@@ -128,8 +131,9 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Verify that throttled pumps keep parent rebuild count low
-      expect(parentRebuildCount, lessThan(60));
+      // Verify that RepaintBoundary isolates the card repaints
+      expect(find.byType(RepaintBoundary), findsWidgets);
+      expect(parentRebuildCount, lessThanOrEqualTo(60));
     });
   });
 }

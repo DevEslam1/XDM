@@ -51,6 +51,11 @@ class _SpeedGraphWidgetState extends State<SpeedGraphWidget> {
   }
 
   void _updateCache(bool isDark) {
+    if (listEquals(_lastSpeedHistory, widget.speedHistory) &&
+        _lastStatus == widget.status &&
+        _lastIsDark == isDark) {
+      return;
+    }
     _lastIsDark = isDark;
     _lastStatus = widget.status;
     _lastSpeedHistory = List<int>.from(widget.speedHistory);

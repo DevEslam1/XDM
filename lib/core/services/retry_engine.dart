@@ -56,7 +56,8 @@ class RetryEngine {
   Duration getDelayForAttempt(int attempt) {
     final exponent = max(0, attempt);
     final rawMs = baseDelay.inMilliseconds * pow(backoffMultiplier, exponent);
-    final jitterMs = _random.nextInt(501);
+    final maxJitter = min(500, max(1, (rawMs * 0.2).toInt()));
+    final jitterMs = _random.nextInt(maxJitter + 1);
     final totalMs =
         (rawMs + jitterMs).round().clamp(0, maxDelay.inMilliseconds);
     return Duration(milliseconds: totalMs);

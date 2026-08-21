@@ -150,6 +150,10 @@ class FFmpegMuxService {
             : Platform.isMacOS
                 ? 'h264_videotoolbox'
                 : 'libx264';
+        final isHwEncoder = videoCodec != 'libx264';
+        final qualityArgs = isHwEncoder
+            ? ['-b:v', '8M', '-maxrate', '12M', '-bufsize', '16M']
+            : ['-crf', '23', '-preset', 'fast'];
         return [
           '-i',
           videoPath,
@@ -157,8 +161,7 @@ class FFmpegMuxService {
           audioPath,
           '-c:v',
           videoCodec,
-          '-b:v',
-          '5M',
+          ...qualityArgs,
           '-c:a',
           'aac',
           '-b:a',
@@ -392,11 +395,12 @@ class FFmpegMuxService {
             MergeStrategy.swFallback,
           ];
 
+    final tempOutputPath = '$outputPath.part';
     for (final strategy in strategies) {
       final args = _buildArgs(
         videoPath: videoPath,
         audioPath: audioPath,
-        outputPath: outputPath,
+        outputPath: tempOutputPath,
         strategy: strategy,
       );
       _log.info('Running merge strategy $strategy with args: $args');
@@ -434,8 +438,21 @@ class FFmpegMuxService {
         final returnCode = await session.getReturnCode();
         if (ReturnCode.isSuccess(returnCode)) {
           final targetExpectedDuration = expectedDuration ?? totalDuration;
-          if (await _validateOutput(outputPath,
+          if (await _validateOutput(tempOutputPath,
               expectedDuration: targetExpectedDuration)) {
+            final tempFile = File(tempOutputPath);
+            final targetFile = File(outputPath);
+            if (await targetFile.exists()) {
+              try {
+                await targetFile.delete();
+              } catch (_) {}
+            }
+            try {
+              await tempFile.rename(outputPath);
+            } catch (_) {
+              await tempFile.copy(outputPath);
+              await tempFile.delete();
+            }
             _log.info('Merge strategy $strategy succeeded: $outputPath');
             await cleanUpInputs();
             return true;
@@ -447,12 +464,12 @@ class FFmpegMuxService {
     }
 
     try {
-      final outFile = File(outputPath);
+      final outFile = File(tempOutputPath);
       if (await outFile.exists()) await outFile.delete();
     } catch (e) {
       _log.info('[FFmpegMuxService] deleting partial output failed: $e');
     }
-    await cleanUpInputs();
+    // FIX Task 3: Retain video and audio input parts on merge failure for seamless Retry Merge
     return false;
   }
 }

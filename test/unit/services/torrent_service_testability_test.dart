@@ -62,9 +62,7 @@ void main() {
       expect(sessionManager.getTorrentId('task-1'), 42);
       expect(sessionManager.isTorrentAlive('task-1'), isTrue);
 
-      final paused =
-          await sessionManager.pauseTorrentWithConfirmation('task-1');
-      expect(paused, isTrue);
+      await sessionManager.pauseTorrent('task-1');
       expect(mock.pauseCalled, isTrue);
 
       sessionManager.removeTorrent(42);

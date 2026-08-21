@@ -38,6 +38,7 @@ void main() {
         uploadedBytes: 0,
         priority: 0,
         queueOrder: 0,
+        isCancelled: false,
       );
 
       final task = dbService.rowToTaskForTesting(fakeRow);
@@ -75,6 +76,7 @@ void main() {
         uploadedBytes: 0,
         priority: 0,
         queueOrder: 0,
+        isCancelled: false,
         torrentFiles: [
           {
             'name': 'f1.mp4',

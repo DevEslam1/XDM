@@ -10,7 +10,6 @@ import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:synchronized/synchronized.dart';
-import '../../features/settings/provider/settings_provider.dart';
 import '../interfaces/i_torrent_service.dart';
 import 'download_engine.dart';
 import 'power_monitor.dart';
@@ -369,6 +368,8 @@ class TorrentService {
   // FIX-22: Latest full update info per torrent, used to poll engine state
   // after pausing so resume data is captured only once truly paused/flushed.
   static final Map<int, TorrentUpdateInfo> _latestStats = {};
+  static final Map<int, ({int totalWanted, int prioritiesHash, String stateLabel})> _monotonicFloorKeys = {};
+  static final Map<int, int> _monotonicFloors = {};
 
   // FIX-H2: Throttling fields
   static DateTime? _lastEmitTime;
@@ -500,10 +501,9 @@ class TorrentService {
     'dht.libtorrent.org:25401',
   ];
 
-  static void _injectDhtNodes() {
+  static void _injectDhtNodes({bool enableDht = true}) {
     try {
-      final s = SettingsProvider.instance;
-      if (!s.enableDht) return;
+      if (!enableDht) return;
       for (final node in _dhtBootstrapNodes) {
         final parts = node.split(':');
         // ignore: avoid_dynamic_calls
@@ -515,21 +515,19 @@ class TorrentService {
     }
   }
 
-  static void configureSession([SettingsProvider? settings]) {
+  static void configureSession([TorrentSessionSettings? settings]) {
     try {
-      final s = settings ?? SettingsProvider.instance;
+      final s = settings ?? const TorrentSessionSettings();
       final config = LibtorrentFlutter.instance.getDefaultConfig().copyWith(
             disableDht: !s.enableDht,
             disableUpnp: !s.enableUpnp,
             forceEncrypt: s.forceEncrypt,
             connectionsLimit: s.torrentConnectionsLimit,
-            downloadRateLimit: s.effectiveSpeedLimitBytesPerSecond ~/ 1024,
-            uploadRateLimit: s.globalTorrentSeedingLimited
-                ? s.globalTorrentSeedingLimitKbps
-                : 0,
+            downloadRateLimit: s.downloadRateLimitKbps,
+            uploadRateLimit: s.uploadRateLimitKbps,
           );
       LibtorrentFlutter.instance.configureSession(config);
-      _injectDhtNodes();
+      _injectDhtNodes(enableDht: s.enableDht);
 
       _sequentialDownload = s.sequentialDownload;
       _shareRatioLimit = s.shareRatioLimit;
@@ -572,12 +570,46 @@ class TorrentService {
               _latestStats.remove(removedId); // FIX-22
               _torrentSources.remove(removedId);
               _cachedPrioritiesSnapshot.remove(removedId);
+              _monotonicFloorKeys.remove(removedId);
+              _monotonicFloors.remove(removedId);
             }
             final mapped = torrents.map((key, value) {
               _latestProgress[value.id] = value.progress;
               final safeProgress = value.progress.isFinite
                   ? value.progress.clamp(0.0, 1.0)
                   : 0.0;
+              final int synthesizedWantedDone;
+              if (!value.hasMetadata) {
+                // 1. No metadata yet -> 0 ('fetching metadata' state)
+                synthesizedWantedDone = 0;
+                _monotonicFloorKeys.remove(value.id);
+                _monotonicFloors.remove(value.id);
+              } else if (value.totalWanted == 0) {
+                // 2. Metadata present but zero total wanted -> 0
+                synthesizedWantedDone = 0;
+                _monotonicFloorKeys.remove(value.id);
+                _monotonicFloors.remove(value.id);
+              } else {
+                // 3. Has metadata and wanted data -> synthesized safe progress
+                final calculated = (safeProgress * value.totalWanted).toInt().clamp(0, value.totalWanted);
+                final prioritiesHash = _cachedPrioritiesSnapshot[value.id]?.fold<int>(0, (acc, p) => acc * 31 + p) ?? 0;
+                final currentKey = (totalWanted: value.totalWanted, prioritiesHash: prioritiesHash, stateLabel: value.state.label);
+                final prevKey = _monotonicFloorKeys[value.id];
+
+                final isStateChecking = value.state.label.toLowerCase().contains('check');
+                if (prevKey == null || prevKey != currentKey || isStateChecking) {
+                  // Legitimate change in wanted size, priorities, or rechecking -> reset floor
+                  _monotonicFloorKeys[value.id] = currentKey;
+                  _monotonicFloors[value.id] = calculated;
+                  synthesizedWantedDone = calculated;
+                } else {
+                  // Monotonically non-decreasing during stable transfer
+                  final floor = math.max(_monotonicFloors[value.id] ?? 0, calculated);
+                  _monotonicFloors[value.id] = floor;
+                  synthesizedWantedDone = floor;
+                }
+              }
+
               final info = TorrentUpdateInfo(
                 id: value.id,
                 name: value.name,
@@ -586,12 +618,7 @@ class TorrentService {
                 uploadRate: value.uploadRate,
                 totalDone: value.totalDone,
                 totalWanted: value.totalWanted,
-                // FIX-PCTG: When totalWanted is 0 (not yet reported by engine),
-                // fall back to totalDone (actual bytes received) so the percentage
-                // is non-zero during early download phase.
-                totalWantedDone: value.totalWanted > 0
-                    ? (safeProgress * value.totalWanted).toInt()
-                    : value.totalDone,
+                totalWantedDone: synthesizedWantedDone,
                 hasMetadata: value.hasMetadata,
                 stateLabel: value.state.label,
                 numSeeds: value.numSeeds,
@@ -819,6 +846,8 @@ class TorrentService {
     _torrentSources.clear();
     _latestProgress.clear();
     _cachedPrioritiesSnapshot.clear();
+    _monotonicFloorKeys.clear();
+    _monotonicFloors.clear();
 
     try {
       await LibtorrentFlutter.instance.dispose();
@@ -1003,15 +1032,21 @@ class TorrentService {
       await _libtorrentLock.synchronized(() async {
         try {
           LibtorrentFlutter.instance.pauseTorrent(id);
-          // FIX-H3: Replace polling loop with Completer / stream listener with 2s timeout
+          // FIX-H3 / D4: Pause verification with 2s timeout and non-null stats check
           try {
             await torrentUpdates.firstWhere((updateMap) {
               final stats = updateMap[id];
-              return stats == null ||
-                  stats.stateLabel.toLowerCase().contains('paused') ||
-                  stats.stateLabel.toLowerCase().contains('stopped');
+              if (stats == null) return false;
+              final label = stats.stateLabel.toLowerCase();
+              return label.contains('paused') || label.contains('stopped');
             }).timeout(const Duration(seconds: 2));
-          } catch (_) {}
+          } on TimeoutException {
+            _log.warning(
+              '[Torrent-D4] Pause verification timed out (2s) for id $id. Native pause was issued; keeping state paused.',
+            );
+          } catch (e) {
+            _log.fine('Pause verification check caught: $e');
+          }
 
           // FIX T-9: Snapshot files AFTER pause-poll, not before
           List<Map<String, dynamic>>? torrentFiles;
@@ -1107,12 +1142,16 @@ class TorrentService {
       _latestStats.remove(id);
       _torrentSources.remove(id);
       _cachedPrioritiesSnapshot.remove(id);
+      _monotonicFloorKeys.remove(id);
+      _monotonicFloors.remove(id);
       return false;
     }
   }
 
   static void recheckTorrent(int id) {
     if (!isInitialized) return;
+    _monotonicFloorKeys.remove(id);
+    _monotonicFloors.remove(id);
     if (id >= 0) {
       _CapabilityGate.instance.forceRecheck(id);
     }
@@ -1707,7 +1746,7 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   String get nativeVersion => '1.9.2';
   @override
-  void configureSession([SettingsProvider? settings]) =>
+  void configureSession([TorrentSessionSettings? settings]) =>
       TorrentService.configureSession(settings);
   @override
   void reconfigureSession() => TorrentService.reconfigureSession();
@@ -1955,7 +1994,7 @@ class TorrentServiceStub implements ITorrentService {
   @override
   String get nativeVersion => 'stub';
   @override
-  void configureSession([SettingsProvider? settings]) {}
+  void configureSession([TorrentSessionSettings? settings]) {}
   @override
   void reconfigureSession() {}
   @override

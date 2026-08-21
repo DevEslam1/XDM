@@ -138,4 +138,22 @@ class TorrentSeedingManager {
     }
     return 0; // Unlimited
   }
+
+  /// FIX-25: Enforces a global upload budget divided fairly across all actively seeding tasks.
+  static int computePerTaskUploadLimit({
+    required SettingsProvider settings,
+    required int activeSeedingCount,
+    required BatterySaverMode batteryMode,
+    required ThermalStatus thermalStatus,
+  }) {
+    final globalLimit = computeAdaptiveUploadLimit(
+      settings: settings,
+      batteryMode: batteryMode,
+      thermalStatus: thermalStatus,
+    );
+    if (globalLimit <= 0 || activeSeedingCount <= 1) {
+      return globalLimit;
+    }
+    return (globalLimit ~/ activeSeedingCount).clamp(1024, globalLimit);
+  }
 }

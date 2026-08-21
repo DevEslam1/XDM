@@ -159,8 +159,11 @@ class XdmBackendClient {
       _log.fine('Settings not available, using health-service URL: $e');
     }
 
-    // SEC-1: Force HTTPS for backend communication
-    if (baseUrl.startsWith('http://')) {
+    // SEC-1: Force HTTPS for non-local backend communication
+    final parsedUri = Uri.tryParse(baseUrl);
+    final isLocalhost = parsedUri != null &&
+        (parsedUri.host == '127.0.0.1' || parsedUri.host == 'localhost');
+    if (baseUrl.startsWith('http://') && !isLocalhost) {
       _log.severe('HTTP backend URL rejected. HTTPS is required.');
       baseUrl = baseUrl.replaceFirst('http://', 'https://');
     }

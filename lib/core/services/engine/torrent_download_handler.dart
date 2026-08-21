@@ -306,6 +306,22 @@ class TorrentDownloadHandler {
                     })
                 .toList()
             : null;
+
+        List<bool>? pieceBitfield;
+        try {
+          final pieceProgress = await _torrentService.getPieceProgress(id);
+          if (pieceProgress != null && pieceProgress.isNotEmpty) {
+            final rawPieces = pieceProgress['pieces'];
+            if (rawPieces is List) {
+              pieceBitfield = rawPieces
+                  .map((p) => p == true || p == 1 || (p is num && p >= 1.0))
+                  .toList();
+            }
+          }
+        } catch (e) {
+          _log.fine('Could not extract piece progress for fallback snapshot: $e');
+        }
+
         await TorrentResumeStore.saveAndWait(
           torrentId: id,
           sourceUrl: sourceUrl,
@@ -316,6 +332,8 @@ class TorrentDownloadHandler {
             return _torrentService.resumeBlobFor(id);
           },
           files: torrentFiles,
+          pieceBitfield: pieceBitfield,
+          degradedFallback: true,
         ).timeout(
           const Duration(seconds: 15),
           onTimeout: () {
@@ -703,14 +721,19 @@ class TorrentDownloadHandler {
       }
       if (url.startsWith('magnet:')) {
         onProgress(DownloadProgress(
-          downloadedBytes: 0,
-          fileSize: knownFileSize,
+          downloadedBytes: initSummary.downloaded,
+          fileSize: initSummary.bytes > 0 ? initSummary.bytes : knownFileSize,
           speed: 0,
           eta: null,
           supportsResume: true,
+          torrentFiles: initFiles,
           statusMessage: 'Fetching metadata…',
           cycleState: CycleState.fetchingMetadata,
           torrentId: torrentId,
+          totalFiles: initSummary.total > 0 ? initSummary.total : null,
+          completedFiles: initSummary.total > 0 ? initSummary.done : null,
+          totalFileBytes: initSummary.bytes > 0 ? initSummary.bytes : null,
+          downloadedFileBytes: initSummary.bytes > 0 ? initSummary.downloaded : null,
         ));
         try {
           id = await TorrentService.addMagnetWithMetadataTimeout(
@@ -718,28 +741,38 @@ class TorrentDownloadHandler {
             saveDir,
             onStatusUpdate: (message) {
               onProgress(DownloadProgress(
-                downloadedBytes: 0,
-                fileSize: knownFileSize,
+                downloadedBytes: initSummary.downloaded,
+                fileSize: initSummary.bytes > 0 ? initSummary.bytes : knownFileSize,
                 speed: 0,
                 eta: null,
                 supportsResume: true,
+                torrentFiles: initFiles,
                 statusMessage: message,
                 cycleState: CycleState.fetchingMetadata,
                 torrentId: torrentId,
+                totalFiles: initSummary.total > 0 ? initSummary.total : null,
+                completedFiles: initSummary.total > 0 ? initSummary.done : null,
+                totalFileBytes: initSummary.bytes > 0 ? initSummary.bytes : null,
+                downloadedFileBytes: initSummary.bytes > 0 ? initSummary.downloaded : null,
               ));
             },
           );
         } catch (e, st) {
           _log.fine('Metadata fetch probe failed', e, st);
           onProgress(DownloadProgress(
-            downloadedBytes: 0,
-            fileSize: knownFileSize,
+            downloadedBytes: initSummary.downloaded,
+            fileSize: initSummary.bytes > 0 ? initSummary.bytes : knownFileSize,
             speed: 0,
             eta: null,
             supportsResume: true,
+            torrentFiles: initFiles,
             statusMessage: 'Failed: Metadata fetch timeout',
             cycleState: CycleState.failed,
             torrentId: torrentId,
+            totalFiles: initSummary.total > 0 ? initSummary.total : null,
+            completedFiles: initSummary.total > 0 ? initSummary.done : null,
+            totalFileBytes: initSummary.bytes > 0 ? initSummary.bytes : null,
+            downloadedFileBytes: initSummary.bytes > 0 ? initSummary.downloaded : null,
           ));
           rethrow;
         }
@@ -1656,19 +1689,19 @@ class TorrentDownloadHandler {
               await _torrentService.getAccurateFileProgress(id, saveDir);
           if (accurate.isNotEmpty) {
             String normKey(String n) => n.toLowerCase().replaceAll('\\', '/');
-            final previousSelectedMap = <String, bool>{
-              if (effectiveFiles != null)
-                for (final f in effectiveFiles)
-                  if (f['name'] != null)
-                    normKey(f['name'] as String):
-                        (f['selected'] as bool?) ?? true
-            };
-            final previousPriorityMap = <String, int>{
-              if (effectiveFiles != null)
-                for (final f in effectiveFiles)
-                  if (f['name'] != null && f['priority'] is int)
-                    normKey(f['name'] as String): f['priority'] as int
-            };
+            final previousSelectedMap = <String, bool>{};
+            final previousPriorityMap = <String, int>{};
+            if (effectiveFiles != null) {
+              for (final f in effectiveFiles) {
+                final name = f['name'];
+                if (name is String) {
+                  final k = normKey(name);
+                  previousSelectedMap[k] = (f['selected'] as bool?) ?? true;
+                  final prio = f['priority'];
+                  if (prio is int) previousPriorityMap[k] = prio;
+                }
+              }
+            }
             resolvedFiles = [
               for (final f in accurate)
                 {
@@ -1693,19 +1726,21 @@ class TorrentDownloadHandler {
 
     final rawDownloaded = torrent.totalWantedDone > 0
         ? torrent.totalWantedDone
-        : (torrent.hasMetadata && torrent.totalDone > 0
+        : (torrent.totalDone > 0
             ? torrent.totalDone
             : 0);
 
-    final bool isProgressValid = torrent.hasMetadata &&
+    final bool isProgressValid = (torrent.hasMetadata || torrent.totalDone > 0) &&
         (torrent.totalWanted > 0 ||
             rawDownloaded > 0 ||
             stateLabel == 'seeding');
-    final safeProgress = (isProgressValid && torrent.progress.isFinite)
+    final safeProgress = (isProgressValid && torrent.progress.isFinite && torrent.progress > 0)
         ? torrent.progress.clamp(0.0, 1.0)
         : (rawDownloaded > 0 && totalSize > 0
             ? (rawDownloaded / totalSize).clamp(0.0, 1.0)
-            : 0.0);
+            : (torrent.totalDone > 0 && torrent.totalWanted > 0
+                ? (torrent.totalDone / torrent.totalWanted).clamp(0.0, 1.0)
+                : 0.0));
     final filesToUpdate = resolvedFiles ?? cachedAccurateFiles;
     if (filesToUpdate != null && filesToUpdate.isNotEmpty) {
       bool pieceMapped = false;

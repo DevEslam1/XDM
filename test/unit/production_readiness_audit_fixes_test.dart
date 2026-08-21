@@ -91,8 +91,8 @@ void main() {
     test('P2-11: Thresholds are hardened to low loss windows', () {
       expect(kJournalBackgroundWriteDelta, equals(1 * 1024 * 1024));
       expect(kJournalScreenOffWriteDelta, equals(2 * 1024 * 1024));
-      expect(kStateSaveBgDelta, equals(8 * 1024 * 1024));
-      expect(kStateSaveFgDelta, equals(2 * 1024 * 1024));
+      expect(kStateSaveBgDelta, equals(2 * 1024 * 1024));
+      expect(kStateSaveFgDelta, equals(512 * 1024));
     });
 
     test(

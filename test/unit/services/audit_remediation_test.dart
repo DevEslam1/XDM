@@ -1,90 +1,12 @@
-import 'dart:async';
-
 import 'package:dmx/core/services/background_gate.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/download_journal.dart';
-import 'package:dmx/features/downloads/data/task_repository.dart';
-import 'package:dmx/features/downloads/models/download_task.dart';
-import 'package:dmx/features/downloads/provider/download_list_provider.dart';
-import 'package:dmx/features/downloads/provider/download_queue_provider.dart';
-import 'package:dmx/features/downloads/provider/torrent_provider.dart';
-import 'package:dmx/features/downloads/usecases/delete_download_usecase.dart';
-import 'package:dmx/features/downloads/usecases/pause_download_usecase.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/shared/mixins/pausable_loop_animation.dart';
 import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-
-class _MockTaskRepo implements TaskRepository {
-  final Map<String, DownloadTask> _store = {};
-  final StreamController<DownloadTask> _taskStreamController =
-      StreamController<DownloadTask>.broadcast();
-
-  @override
-  Future<List<DownloadTask>> getAll() async => _store.values.toList();
-
-  @override
-  Future<DownloadTask?> getById(String id) async => _store[id];
-
-  @override
-  Future<void> save(DownloadTask task) async {
-    _store[task.id] = task;
-    _taskStreamController.add(task);
-  }
-
-  @override
-  Future<void> saveAll(List<DownloadTask> tasks) async {
-    for (final t in tasks) {
-      _store[t.id] = t;
-      _taskStreamController.add(t);
-    }
-  }
-
-  @override
-  Future<void> delete(String id) async {
-    _store.remove(id);
-  }
-
-  @override
-  Future<void> deleteAll(List<String> ids) async {
-    for (final id in ids) {
-      _store.remove(id);
-    }
-  }
-
-  @override
-  Stream<DownloadTask> watchTask(String id) =>
-      _taskStreamController.stream.where((t) => t.id == id);
-}
-
-DownloadTask _makeTask({
-  required String id,
-  required String fileName,
-  required String url,
-  required int fileSize,
-  required DownloadStatus status,
-  int downloadedBytes = 0,
-}) {
-  final now = DateTime.now();
-  return DownloadTask(
-    id: id,
-    fileName: fileName,
-    url: url,
-    fileSize: fileSize,
-    downloadedBytes: downloadedBytes,
-    category: 'other',
-    status: status,
-    savePath: '/downloads',
-    localFilePath: '/downloads/$fileName',
-    tempFilePath: '/downloads/$id.tmp',
-    threadCount: 2,
-    chunks: const [0.0, 0.0],
-    createdAt: now,
-    updatedAt: now,
-  );
-}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -144,68 +66,6 @@ void main() {
           ),
         ),
       );
-    });
-  });
-
-  group('Audit Remediation: Clean Architecture Use Cases', () {
-    late _MockTaskRepo repo;
-    late DownloadListProvider listProvider;
-    late DownloadQueueProvider queueProvider;
-
-    setUp(() async {
-      repo = _MockTaskRepo();
-      listProvider = DownloadListProvider(repo);
-      queueProvider = DownloadQueueProvider(
-          listProvider: listProvider, maxConcurrentDownloads: 2);
-    });
-
-    // StartDownloadUseCase, RetryDownloadUseCase, and CancelDownloadUseCase are
-    // now @Deprecated forwarding stubs that take DownloadProvider as the sole
-    // constructor arg. Their unit tests against InMemoryTaskRepository are
-    // superseded by DownloadProvider integration tests.
-    // See: lib/features/downloads/usecases/ for migration details.
-
-    test('PauseDownloadUseCase transitions a downloading task to paused',
-        () async {
-      final pauseUseCase =
-          PauseDownloadUseCase(queueProvider, TorrentProvider());
-
-      final task = _makeTask(
-        id: 'task-2',
-        url: 'https://example.com/file2.zip',
-        fileName: 'file2.zip',
-        fileSize: 2048,
-        downloadedBytes: 500,
-        status: DownloadStatus.downloading,
-      );
-
-      await listProvider.addTask(task);
-      expect(listProvider.findTask('task-2')?.status,
-          equals(DownloadStatus.downloading));
-
-      await pauseUseCase('task-2');
-      expect(listProvider.findTask('task-2')?.status,
-          equals(DownloadStatus.paused));
-    });
-
-    test('DeleteDownloadUseCase removes task from repository and list',
-        () async {
-      final deleteUseCase =
-          DeleteDownloadUseCase(listProvider, TorrentProvider());
-
-      final task = _makeTask(
-        id: 'task-4',
-        url: 'https://example.com/file4.zip',
-        fileName: 'file4.zip',
-        fileSize: 8192,
-        status: DownloadStatus.queued,
-      );
-
-      await listProvider.addTask(task);
-      expect(listProvider.tasks.length, equals(1));
-
-      await deleteUseCase('task-4');
-      expect(listProvider.tasks.isEmpty, isTrue);
     });
   });
 

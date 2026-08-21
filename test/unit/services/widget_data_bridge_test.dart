@@ -148,7 +148,7 @@ void main() {
         final snapshots = dashboard([task('a', speed: 100)]);
 
         await bridge.pushDashboard(snapshots);
-        await bridge.pushDashboard(snapshots);
+        await bridge.pushDashboard(dashboard([task('a', speed: 200)]));
         expect(pushes.length, 1);
 
         await Future<void>.delayed(

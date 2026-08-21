@@ -159,7 +159,7 @@ class ErrorTaxonomy {
         family: ErrorFamily.disk,
         message: isSpace
             ? 'Not enough storage space'
-            : 'Disk write error: ${error.message}',
+            : 'Disk write error. Check storage permissions and free space.',
         severe: true,
         recoveryAction: RecoveryAction.showSettings,
       );
@@ -175,11 +175,9 @@ class ErrorTaxonomy {
     }
 
     if (error is DownloadIntegrityException) {
-      return ErrorClassification(
+      return const ErrorClassification(
         family: ErrorFamily.integrity,
-        message: error.message.isEmpty
-            ? 'File integrity check failed'
-            : 'File integrity check failed: ${error.message}',
+        message: 'File integrity verification failed',
         recoveryAction: RecoveryAction.restartDownload,
       );
     }

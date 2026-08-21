@@ -8,6 +8,7 @@ import '../../features/downloads/provider/download_provider.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../../shared/widgets/themed_snackbar.dart';
 import '../app_theme.dart';
+import '../domain/utils/url_specifications.dart';
 import '../utils/localization.dart';
 import '../utils/url_utils.dart';
 import 'logging_service.dart';
@@ -22,23 +23,26 @@ class ShareUrlHandler {
     required bool isShareLaunch,
     String? prefilledName,
   }) async {
-    // Validate URL scheme to reject malicious URLs (e.g., file://)
+    // Validate URL scheme to reject malicious URLs (e.g., unauthorized file://)
     final trimmedUrl = url.trim();
     final uri = Uri.tryParse(trimmedUrl);
     final scheme = uri?.scheme.toLowerCase() ?? '';
     final allowedSchemes = {'http', 'https', 'magnet', 'file'};
     if (uri == null || !allowedSchemes.contains(scheme)) {
       _log.warning(
-          '[ShareUrlHandler] Rejected URL with unsupported scheme "$scheme": $trimmedUrl');
+          '[ShareUrlHandler] Rejected URL with unsupported scheme "$scheme": ${LoggingService.redactUrl(trimmedUrl)}');
       debugPrint('[ShareUrlHandler] Rejected URL with scheme: ${uri?.scheme}');
       return;
     }
-    // Reject file:// URLs from share intent for security
-    if (uri.isScheme('file') && isShareLaunch) {
-      _log.warning(
-          '[ShareUrlHandler] Rejected file:// URL from share intent: $trimmedUrl');
-      debugPrint('[ShareUrlHandler] Rejected file:// URL from share intent');
-      return;
+    // Reject file:// URLs unless they point to a valid .torrent file
+    if (uri.isScheme('file')) {
+      final isTorrent = UrlSpecifications.isTorrentFileUrl(trimmedUrl);
+      if (!isTorrent) {
+        _log.warning(
+            '[ShareUrlHandler] Rejected non-torrent file:// URL: ${LoggingService.redactUrl(trimmedUrl)}');
+        debugPrint('[ShareUrlHandler] Rejected non-torrent file:// URL');
+        return;
+      }
     }
 
     if (YoutubeService.isPlaylistUrl(trimmedUrl)) {

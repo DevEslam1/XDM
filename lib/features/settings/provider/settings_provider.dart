@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/domain/torrent_session_settings.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/power_monitor.dart';
 import '../../../core/services/quiet_hours.dart';
@@ -1520,6 +1521,20 @@ class SettingsProvider extends ChangeNotifier
     XdmBackendClient().refreshConfig();
     notifyListeners();
   }
+
+  /// Maps SettingsProvider state to a decoupled domain [TorrentSessionSettings] value object.
+  TorrentSessionSettings toTorrentSessionSettings() => TorrentSessionSettings(
+        enableDht: enableDht,
+        enableUpnp: enableUpnp,
+        forceEncrypt: forceEncrypt,
+        torrentConnectionsLimit: torrentConnectionsLimit,
+        downloadRateLimitKbps: effectiveSpeedLimitBytesPerSecond ~/ 1024,
+        uploadRateLimitKbps:
+            globalTorrentSeedingLimited ? globalTorrentSeedingLimitKbps : 0,
+        sequentialDownload: sequentialDownload,
+        shareRatioLimit: shareRatioLimit,
+        maxSeedingTimeMinutes: maxSeedingTimeMinutes,
+      );
 
   @override
   void dispose() {

@@ -88,11 +88,20 @@ class ClipboardService {
     _initialized = true;
   }
 
+  bool? _cachedMonitoringEnabled;
+  DateTime _lastPrefRead = DateTime.fromMillisecondsSinceEpoch(0);
+
   Future<String?> checkClipboardForUrl() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final enabled = prefs.getBool('clipboard_monitoring_enabled') ?? false;
-      if (!enabled) return null;
+      final now = DateTime.now();
+      if (_cachedMonitoringEnabled == null ||
+          now.difference(_lastPrefRead).inSeconds >= 60) {
+        final prefs = await SharedPreferences.getInstance();
+        _cachedMonitoringEnabled =
+            prefs.getBool('clipboard_monitoring_enabled') ?? false;
+        _lastPrefRead = now;
+      }
+      if (!(_cachedMonitoringEnabled ?? false)) return null;
 
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       final text = data?.text?.trim();

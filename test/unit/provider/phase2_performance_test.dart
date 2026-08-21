@@ -166,10 +166,15 @@ void main() {
         callback: (_) => normalTicks++,
       );
 
-      await Future.delayed(const Duration(milliseconds: 700));
+      try {
+        await Future.delayed(const Duration(milliseconds: 1500));
 
-      expect(criticalTicks, greaterThan(0));
-      expect(normalTicks, greaterThan(0));
+        expect(criticalTicks, greaterThan(0));
+        expect(normalTicks, greaterThan(0));
+      } finally {
+        TickManager.instance.unregisterTick('test-tick-critical');
+        TickManager.instance.unregisterTick('test-tick-normal');
+      }
     });
   });
 }

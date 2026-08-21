@@ -3802,7 +3802,10 @@ class _SparklinePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SparklinePainter oldDelegate) => true;
+  bool shouldRepaint(covariant _SparklinePainter oldDelegate) {
+    if (oldDelegate.color != color) return true;
+    return !listEquals(oldDelegate.history, history);
+  }
 }
 
 class _SiteBadge extends StatelessWidget {

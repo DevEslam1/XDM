@@ -57,6 +57,7 @@ class TaskCompanionConverter {
       cycleState: drift.Value(task.cycleState?.name),
       previousCycleState: drift.Value(task.previousCycleState?.name),
       infoHash: drift.Value(task.infoHash),
+      isCancelled: drift.Value(task.isCancelled),
     );
   }
 
@@ -196,6 +197,7 @@ class TaskCompanionConverter {
       downloadedFileBytes:
           files != null && files.isNotEmpty ? downloadedFileBytes : null,
       infoHash: row.infoHash,
+      isCancelled: row.isCancelled,
     );
   }
 

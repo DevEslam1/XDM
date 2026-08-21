@@ -46,13 +46,13 @@ const int kJournalMaxBgRecordedEntries = 256;
 const Duration kStateSaveBgInterval = Duration(seconds: 30);
 
 /// State-save debounce interval while in the foreground.
-const Duration kStateSaveFgInterval = Duration(seconds: 30);
+const Duration kStateSaveFgInterval = Duration(seconds: 10);
 
 /// Minimum background state-save delta.
 const int kStateSaveBgDelta = 2 * 1024 * 1024; // 2MB
 
 /// Minimum foreground state-save delta.
-const int kStateSaveFgDelta = 2 * 1024 * 1024; // 2MB
+const int kStateSaveFgDelta = 512 * 1024; // 512KB
 
 /// Max cached state payloads kept for fast-fingerprint dedup.
 const int kStateCacheMaxPayloads = 16;
@@ -75,5 +75,5 @@ const int kPositionalWriterFlushThreshold = 4 * 1024 * 1024;
 /// Memory-pressure threshold below which the pool evicts idle clients.
 const int kMemoryPressureEvictBytes = 100 * 1024 * 1024;
 
-/// Session of download history retained by default.
-const int kHistoryRetentionDays = 7;
+/// Default days of download history retained (0 = keep forever, user-configurable).
+const int kHistoryRetentionDays = 0;

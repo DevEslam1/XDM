@@ -114,7 +114,7 @@ DownloadTask createTestTask({
   DownloadStatus status = DownloadStatus.downloading,
   double progress = 0.45,
   int fileSize = 104857600, // 100 MB
-  int downloadedBytes = 47185920, // ~45 MB
+  int? downloadedBytes,
   double speed = 5242880.0, // 5 MB/s
   int eta = 11,
   int threadCount = 8,
@@ -136,7 +136,7 @@ DownloadTask createTestTask({
     url: effectiveUrl,
     status: status,
     fileSize: fileSize,
-    downloadedBytes: (fileSize * progress).round(),
+    downloadedBytes: downloadedBytes ?? (fileSize * progress).round(),
     speed: speed,
     eta: eta,
     threadCount: threadCount,

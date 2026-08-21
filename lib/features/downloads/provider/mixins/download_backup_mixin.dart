@@ -306,8 +306,16 @@ mixin DownloadBackupMixin {
       }
 
       if (newTasks.isNotEmpty) {
-        // C5: Save new tasks first before pruning old tasks so DB failures don't wipe existing tasks
-        await providerDatabaseService.saveTasks(newTasks);
+        // NEW-4: Chunk DB writes in batches of 200 to prevent SQLite statement size overflow and RAM spikes
+        const batchSize = 200;
+        for (var i = 0; i < newTasks.length; i += batchSize) {
+          final end = (i + batchSize < newTasks.length) ? i + batchSize : newTasks.length;
+          final chunk = newTasks.sublist(i, end);
+          await providerDatabaseService.saveTasks(chunk);
+          if (newTasks.length > 500) {
+            await Future<void>.delayed(Duration.zero); // yield event loop for UI fluidity
+          }
+        }
 
         if (replace) {
           final oldTaskIds = providerTasks.map((t) => t.id).toSet();

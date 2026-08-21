@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 import 'package:synchronized/synchronized.dart';
 
 import '../../../core/di/injection.dart';
+import '../../../core/interfaces/i_download_engine.dart';
 import '../../../core/services/app_lifecycle_coordinator.dart';
 import '../../../core/services/background_gate.dart';
 import '../../../core/services/background_service.dart';
@@ -124,7 +125,7 @@ class DownloadProvider extends ChangeNotifier
   DownloadProvider({
     required DatabaseService databaseService,
     required SettingsProvider settingsProvider,
-    DownloadEngine? downloadEngine,
+    IDownloadEngine? downloadEngine,
     PermissionService? permissionService,
     NotificationService? notificationService,
     bool enableBackgroundTimers = true,
@@ -188,7 +189,7 @@ class DownloadProvider extends ChangeNotifier
     _orchestrator = DownloadOrchestrator(this);
 
     // Initialize modular split services
-    _taskRepository = DownloadTaskRepository(databaseService: _databaseService);
+    _taskRepository = DriftTaskRepository(_databaseService);
     _torrentSessionManager = TorrentSessionManager();
     _notificationBridge =
         DownloadNotificationBridge(coordinator: _notifications);
@@ -219,14 +220,14 @@ class DownloadProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  late final DownloadTaskRepository _taskRepository;
+  late final DriftTaskRepository _taskRepository;
   late final TorrentSessionManager _torrentSessionManager;
   late final DownloadNotificationBridge _notificationBridge;
   late final DownloadWidgetSync _downloadWidgetSync;
   late final DownloadQueueService _queueService;
   late final DownloadExecutionService _executionService;
 
-  DownloadTaskRepository get taskRepository => _taskRepository;
+  TaskRepository get taskRepository => _taskRepository;
   TorrentSessionManager get torrentSessionManager => _torrentSessionManager;
   DownloadNotificationBridge get notificationBridge => _notificationBridge;
   DownloadWidgetSync get downloadWidgetSync => _downloadWidgetSync;
@@ -247,7 +248,7 @@ class DownloadProvider extends ChangeNotifier
   Future<void> updateTaskOrder(List<DownloadTask> orderedTasks) async {
     _tasks.clear();
     _tasks.addAll(orderedTasks);
-    await _databaseService.saveTasks(orderedTasks);
+    await _databaseService.upsertTasks(orderedTasks);
     notifyListeners();
   }
 
@@ -639,7 +640,7 @@ class DownloadProvider extends ChangeNotifier
 
   final DatabaseService _databaseService;
   final SettingsProvider _settingsProvider;
-  final DownloadEngine _downloadEngine;
+  final IDownloadEngine _downloadEngine;
   final PermissionService _permissionService;
   final NotificationService _notificationService;
 
@@ -712,14 +713,20 @@ class DownloadProvider extends ChangeNotifier
     _lastDbSaveBytes.removeWhere((id, _) => !allTaskIds.contains(id));
     _retryCounts.removeWhere((id, _) => !allTaskIds.contains(id));
     _dbRetryCounts.removeWhere((id, _) => !allTaskIds.contains(id));
+    _resumeRejectionRestarts.removeWhere((id, _) => !allTaskIds.contains(id));
+    _ytLowSpeedCounts.removeWhere((id, _) => !allTaskIds.contains(id));
+    _torrentIds.removeWhere((id, _) => !allTaskIds.contains(id));
+    _retryTimers.removeWhere((id, timer) {
+      if (!allTaskIds.contains(id)) {
+        timer.cancel();
+        return true;
+      }
+      return false;
+    });
     effectiveThreadOverrides.removeWhere((id, _) => !allTaskIds.contains(id));
 
     final activeIds = _tasks
-        .where((t) =>
-            t.status == DownloadStatus.downloading ||
-            (t.status == DownloadStatus.completed &&
-                t.isTorrent &&
-                t.seedingEnabled))
+        .where((t) => t.status == DownloadStatus.downloading || t.isActivelySeeding)
         .map((t) => t.id)
         .toSet();
     _speedHistories.removeWhere((id, _) => !activeIds.contains(id));
@@ -767,6 +774,8 @@ class DownloadProvider extends ChangeNotifier
   ValueNotifier<double> speedNotifier(String taskId) =>
       _speedNotifiers.putIfAbsent(taskId, () => ValueNotifier(0.0));
 
+  bool _isDisposed = false;
+
   /// Monotonically increasing revision number updated on progress ticks.
   /// Isolates high-frequency progress rebuilds from structural notifyListeners().
   final ValueNotifier<int> progressRevision = ValueNotifier<int>(0);
@@ -782,7 +791,7 @@ class DownloadProvider extends ChangeNotifier
       _progressNotifiers.length + _speedNotifiers.length;
 
   void _pushTick(String taskId, double progress, double speed) {
-    if (!DownloadEngine.appInForeground || PowerMonitor.screenOff) {
+    if (_isDisposed || !DownloadEngine.appInForeground || PowerMonitor.screenOff) {
       return;
     }
 
@@ -841,6 +850,8 @@ class DownloadProvider extends ChangeNotifier
 
   int _generation = 0;
   bool _disposed = false;
+  bool _isReconciling = false;
+  bool get isReconciling => _isReconciling;
 
   @override
   final bool enableBackgroundTimers;
@@ -989,7 +1000,7 @@ class DownloadProvider extends ChangeNotifier
   Map<String, DownloadMetrics> get downloadMetrics => _downloadMetrics;
 
   @override
-  DownloadEngine get downloadEngine => _downloadEngine;
+  IDownloadEngine get downloadEngine => _downloadEngine;
 
   @override
   NotificationCoordinator get notifications => _notifications;
@@ -1524,7 +1535,8 @@ class DownloadProvider extends ChangeNotifier
 
         // When the app starts, mark any non-completed and non-failed download (downloading, queued, merging) as paused/queued depending on autoStart.
         final hasActiveStream = _cancelTokens.containsKey(task.id);
-        if (!hasActiveStream &&
+        if (pauseOrphanDownloads &&
+            !hasActiveStream &&
             task.status != DownloadStatus.completed &&
             task.status != DownloadStatus.failed) {
           final wasAlreadyPaused = task.status == DownloadStatus.paused;
@@ -1585,7 +1597,12 @@ class DownloadProvider extends ChangeNotifier
         await cleanupPartFiles(task);
       }
 
-      await _databaseService.saveTasks(_tasks);
+      final modifiedOnStartup = _tasks
+          .where((t) => t.status == DownloadStatus.paused && !t.pausedByUser)
+          .toList();
+      if (modifiedOnStartup.isNotEmpty) {
+        await _databaseService.upsertTasks(modifiedOnStartup);
+      }
 
       // In load(), after loading tasks:
       if (Platform.isIOS && !kIsWeb) {
@@ -1711,65 +1728,73 @@ class DownloadProvider extends ChangeNotifier
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (_disposed || _generation != loadGen) return;
 
-        final reconciled = <DownloadTask>[];
-
-        // Run all per-task file-stat calls in parallel. Each call already
-        // offloads to a background isolate via _statPartialFileIsolate, so
-        // awaiting them sequentially wastes the parallelism opportunity.
-        // FIX(C3): Batch reconciliation to avoid spawning N isolates
-        // simultaneously. Process in batches of 4 to limit memory usage.
-        const batchSize = 4;
-        final pendingTasks = <DownloadTask>[];
-        for (final task in _tasks) {
-          final hasActiveStream = _cancelTokens.containsKey(task.id);
-
-          if (hasActiveStream) {
-            final memoryTask = _findTask(task.id);
-            if (memoryTask != null) {
-              reconciled.add(memoryTask);
-              continue;
-            }
-          }
-
-          pendingTasks.add(task);
-        }
-
-        for (var i = 0; i < pendingTasks.length; i += batchSize) {
-          if (_disposed || _generation != loadGen) break;
-          final batch = pendingTasks.skip(i).take(batchSize);
-          final batchResults = await Future.wait(
-            batch.map((task) async {
-              try {
-                return await _reconcilePartialProgress(task);
-              } catch (e) {
-                debugPrint(
-                    'Failed to reconcile partial file for ${task.id}: $e');
-                return task;
-              }
-            }),
-          );
-          reconciled.addAll(batchResults);
-        }
-
-        for (final task in reconciled) {
-          final idx = _tasks.indexWhere((t) => t.id == task.id);
-          if (idx != -1) {
-            // If the task was deleted or status in memory transitioned during the async gap, do NOT overwrite or recreate in DB!
-            if (_tasks[idx].status != task.status &&
-                _tasks[idx].status != DownloadStatus.paused) {
-              continue;
-            }
-            if (_tasks[idx].status != task.status ||
-                _tasks[idx].downloadedBytes != task.downloadedBytes) {
-              _tasks[idx] = task;
-              await _databaseService.saveTask(task);
-            } else {
-              _tasks[idx] = task;
-            }
-          }
-        }
-
+        _isReconciling = true;
         notifyListeners();
+
+        try {
+          final reconciled = <DownloadTask>[];
+
+          // Run all per-task file-stat calls in parallel. Each call already
+          // offloads to a background isolate via _statPartialFileIsolate, so
+          // awaiting them sequentially wastes the parallelism opportunity.
+          // FIX(C3): Batch reconciliation to avoid spawning N isolates
+          // simultaneously. Process in batches of 4 to limit memory usage.
+          const batchSize = 4;
+          final pendingTasks = <DownloadTask>[];
+          for (final task in _tasks) {
+            final hasActiveStream = _cancelTokens.containsKey(task.id);
+
+            if (hasActiveStream) {
+              final memoryTask = _findTask(task.id);
+              if (memoryTask != null) {
+                reconciled.add(memoryTask);
+                continue;
+              }
+            }
+
+            pendingTasks.add(task);
+          }
+
+          for (var i = 0; i < pendingTasks.length; i += batchSize) {
+            if (_disposed || _generation != loadGen) break;
+            final batch = pendingTasks.skip(i).take(batchSize);
+            final batchResults = await Future.wait(
+              batch.map((task) async {
+                try {
+                  return await _reconcilePartialProgress(task);
+                } catch (e) {
+                  debugPrint(
+                      'Failed to reconcile partial file for ${task.id}: $e');
+                  return task;
+                }
+              }),
+            );
+            reconciled.addAll(batchResults);
+          }
+
+          for (final task in reconciled) {
+            final idx = _tasks.indexWhere((t) => t.id == task.id);
+            if (idx != -1) {
+              // If the task was deleted or status in memory transitioned during the async gap, do NOT overwrite or recreate in DB!
+              if (_tasks[idx].status != task.status &&
+                  _tasks[idx].status != DownloadStatus.paused) {
+                continue;
+              }
+              if (_tasks[idx].status != task.status ||
+                  _tasks[idx].downloadedBytes != task.downloadedBytes) {
+                _tasks[idx] = task;
+                await _databaseService.saveTask(task);
+              } else {
+                _tasks[idx] = task;
+              }
+            }
+          }
+        } finally {
+          _isReconciling = false;
+          if (!_disposed) {
+            notifyListeners();
+          }
+        }
       });
 
       _isLoaded = true;
@@ -1869,7 +1894,7 @@ class DownloadProvider extends ChangeNotifier
 
     // 2. Persist in a single batch write.
     try {
-      await _databaseService.saveTasks(safeTasks);
+      await _databaseService.upsertTasks(safeTasks);
     } catch (e) {
       debugPrint('[DMX] batch save failed: $e');
     }
@@ -2368,8 +2393,21 @@ class DownloadProvider extends ChangeNotifier
         final expected = (fileList?.isNotEmpty == true)
             ? ((fileList!.first['length'] as num?)?.toInt() ?? 0)
             : 0;
-        // FIX(5): Pre-allocation guard: a full-size file is not proof of completion.
-        final trusted = (expected > 0 && len >= expected) ? 0 : len;
+        final storedDownloaded = (fileList?.isNotEmpty == true)
+            ? ((fileList!.first['downloadedBytes'] as num?)?.toInt() ?? 0)
+            : 0;
+
+        // FIX: Preserve stored downloaded bytes if present (> 0).
+        // Only default to 0 for pre-allocated files if storedDownloaded is 0.
+        int trusted;
+        if (storedDownloaded > 0) {
+          trusted = storedDownloaded;
+        } else if (expected > 0 && len >= expected) {
+          trusted = 0;
+        } else {
+          trusted = len;
+        }
+
         List<Map<String, dynamic>>? files = fileList;
         if (fileList != null && fileList.length == 1) {
           files = [
@@ -3570,9 +3608,8 @@ class DownloadProvider extends ChangeNotifier
           speed: 0,
           clearEta: true,
           errorMessage: 'Transfer cancelled.',
-          // FIX-2: Set isCancelled: true so auto-resume skips cancelled tasks
+          // Set isCancelled: true so auto-resume skips cancelled tasks
           isCancelled: true,
-          pausedByUser: true,
         ),
       );
 
@@ -4681,25 +4718,19 @@ class DownloadProvider extends ChangeNotifier
   /// structural update (status change, URL edit, metadata save) carries
   /// stale progress values captured before the update was enqueued.
   DownloadTask _mergeTaskUpdate(DownloadTask live, DownloadTask incoming) {
-    // Rule 1: Completed / Failed tasks are immutable unless explicitly enqueued for retry
+    // Rule 1: Completed / Failed tasks cannot transition to other active states unless explicitly enqueued for retry (queued)
     if ((live.status == DownloadStatus.completed ||
             live.status == DownloadStatus.failed) &&
         incoming.status != live.status &&
-        incoming.status != DownloadStatus.queued &&
-        incoming.status != DownloadStatus.downloading) {
-      if (incoming.downloadedBytes > live.downloadedBytes &&
-          incoming.status == live.status) {
-        return incoming;
-      }
+        incoming.status != DownloadStatus.queued) {
       return live;
     }
 
-    // Rule 2: Automatic state updates cannot un-pause a task if incoming still has pausedByUser == true
+    // Rule 2: Automatic state updates cannot un-pause a task if live has pausedByUser == true
     if (live.pausedByUser &&
-        incoming.pausedByUser &&
         live.status == DownloadStatus.paused &&
         incoming.status != DownloadStatus.paused &&
-        incoming.status != DownloadStatus.downloading) {
+        incoming.status != DownloadStatus.queued) {
       if (incoming.downloadedBytes > live.downloadedBytes) {
         return incoming.copyWith(
           status: DownloadStatus.paused,
@@ -4709,9 +4740,9 @@ class DownloadProvider extends ChangeNotifier
       return live;
     }
 
-    // Rule 3: Protect merging status from stale downloading snapshots
-    if ((live.status == DownloadStatus.paused ||
-            live.status == DownloadStatus.failed ||
+    // Rule 3: Protect failed / completed / merging status from stale downloading snapshots
+    if ((live.status == DownloadStatus.failed ||
+            live.status == DownloadStatus.completed ||
             live.status == DownloadStatus.merging) &&
         incoming.status == DownloadStatus.downloading) {
       return live;
@@ -4831,6 +4862,12 @@ class DownloadProvider extends ChangeNotifier
       if (index == -1) return;
 
       final prev = _tasks[index];
+
+      // Merge structural fields from `updated` into the live in-memory task,
+      // preserving progress fields (downloadedBytes, speed, eta, chunks,
+      // audioProgress) to prevent state regression during active downloads.
+      updated = _mergeTaskUpdate(prev, updated);
+
       if (prev.status == DownloadStatus.completed &&
           updated.status != DownloadStatus.completed) {
         // Allow completed → paused ONLY for seeding torrents being paused
@@ -4904,20 +4941,15 @@ class DownloadProvider extends ChangeNotifier
         debugPrint(
             '[LIFECYCLE] [$protocol] [${updated.id}] status: ${prev.status.name} -> ${updated.status.name} (msg: "${updated.statusMessage ?? ''}")');
       }
-      // Merge structural fields from `updated` into the live in-memory task,
-      // preserving progress fields (downloadedBytes, speed, eta, chunks,
-      // audioProgress) to prevent state regression during active downloads.
-      _tasks[index] = _mergeTaskUpdate(prev, updated);
 
       // ═══ FIX H-6: Clamp downloadedBytes to fileSize ═══
-      final currentTask = _tasks[index];
-      if (currentTask.fileSize > 0 &&
-          currentTask.downloadedBytes > currentTask.fileSize) {
+      if (updated.fileSize > 0 &&
+          updated.downloadedBytes > updated.fileSize) {
         debugPrint('[DMX] H-6 FIX: Clamping downloadedBytes from '
-            '${currentTask.downloadedBytes} to ${currentTask.fileSize}');
-        _tasks[index] =
-            currentTask.copyWith(downloadedBytes: currentTask.fileSize);
+            '${updated.downloadedBytes} to ${updated.fileSize}');
+        updated = updated.copyWith(downloadedBytes: updated.fileSize);
       }
+      _tasks[index] = updated;
 
       // Task 1.6: Clean up maps on terminal states (completed, failed)
       if (updated.status == DownloadStatus.completed ||
@@ -4966,10 +4998,17 @@ class DownloadProvider extends ChangeNotifier
           prev.scheduledAt != updated.scheduledAt;
 
       if (!isStructuralChange) {
-        // Task 1.6: Cap _pendingProgressUpdates at 50 entries
+        // FIX-5: Cap _pendingProgressUpdates at 50 entries, flushing oldest to DB instead of silently dropping
         if (_pendingProgressUpdates.length >= 50 &&
             !_pendingProgressUpdates.contains(updated.id)) {
-          _pendingProgressUpdates.remove(_pendingProgressUpdates.first);
+          final oldest = _pendingProgressUpdates.first;
+          _pendingProgressUpdates.remove(oldest);
+          final oldestTask = _findTask(oldest);
+          if (oldestTask != null) {
+            unawaited(_databaseService.saveTask(oldestTask).catchError((e) {
+              _log.warning('Flush oldest pending progress task failed for $oldest: $e');
+            }));
+          }
         }
         _pendingProgressUpdates.add(updated.id);
         _notifyPending = true;
@@ -5120,7 +5159,7 @@ class DownloadProvider extends ChangeNotifier
 
     updateActualTorrentUploadLimit();
 
-    TorrentService.configureSession(_settingsProvider);
+    TorrentService.configureSession(_settingsProvider.toTorrentSessionSettings());
     checkTorrentRatioLimits();
     enforceTorrentQueue();
 
@@ -5299,11 +5338,7 @@ class DownloadProvider extends ChangeNotifier
     FrameWatchdog.setDownloadingTasksCount(downloadingTasksCount);
     BackgroundService.reconcileActiveTaskIds(
       _tasks
-          .where((t) =>
-              t.status == DownloadStatus.downloading ||
-              (t.status == DownloadStatus.completed &&
-                  t.isTorrent &&
-                  t.seedingEnabled))
+          .where((t) => t.status == DownloadStatus.downloading || t.isActivelySeeding)
           .map((t) => t.id)
           .toSet(),
     );
@@ -5323,20 +5358,13 @@ class DownloadProvider extends ChangeNotifier
                 const Duration(seconds: 5),
               ).inSeconds;
 
-    _widgetTimer = Timer.periodic(Duration(seconds: timerIntervalSec), (timer) {
+    _widgetTimer = Timer.periodic(Duration(seconds: timerIntervalSec), (timer) async {
       if (_disposed || !BackgroundGate.shouldWriteState) {
         timer.cancel();
         return;
       }
 
-      unawaited(_pushWidgetData().catchError((e) {
-        _log.warning('Failed to push widget data', e);
-      }));
-
-      unawaited(BackgroundService.sendHeartbeat().catchError((e, st) {
-        _log.warning('[download_provider] operation failed', e, st);
-      }));
-
+      // Phase 1: Collect dirty tasks
       final tasksToSave = <DownloadTask>[];
 
       for (var i = 0; i < _tasks.length; i++) {
@@ -5350,8 +5378,6 @@ class DownloadProvider extends ChangeNotifier
             tasksToSave.add(t);
           }
         }
-
-        // Do NOT save queued tasks here — they have no meaningful progress
       }
 
       // Also persist any tasks that went through _setTask with progress-only
@@ -5360,33 +5386,46 @@ class DownloadProvider extends ChangeNotifier
         final idx = _tasks.indexWhere((t) => t.id == id);
         if (idx != -1 && !tasksToSave.contains(_tasks[idx])) {
           tasksToSave.add(_tasks[idx]);
-          // Keep _lastDbSaveBytes in sync so the byte-change loop on the
-          // next tick doesn't re-detect the same delta and save redundantly.
           _lastDbSaveBytes[id] = _tasks[idx].downloadedBytes;
         }
       }
       _pendingProgressUpdates.clear();
 
+      // Phase 2: Single DB batch write
       if (tasksToSave.isNotEmpty) {
-        _databaseService.saveTasks(tasksToSave).catchError((e) {
+        try {
+          await _databaseService.upsertTasks(tasksToSave);
+        } catch (e) {
           debugPrint('Batch DB save failed: $e');
-        });
+        }
       }
 
-      // ERR-RESILIENCE-2.3: Periodic state-file integrity check (~60s).
-      // Verifies every active download's .dmxstate is parseable; unrecoverable
-      // corrupt states are reported and the task paused rather than silently
-      // resumed against a broken state file.
+      // Phase 3: Widget push (uses current snapshot)
+      try {
+        await _pushWidgetData();
+      } catch (e) {
+        _log.warning('Failed to push widget data', e);
+      }
+
+      // Phase 4: Background heartbeat
+      try {
+        await BackgroundService.sendHeartbeat();
+      } catch (e, st) {
+        _log.warning('[download_provider] heartbeat failed', e, st);
+      }
+
+      // Phase 5: Periodic state-file integrity check (~60s)
       final nowMs = DateTime.now().millisecondsSinceEpoch;
       if (nowMs - _lastIntegrityCheckMs >= 60000) {
         _lastIntegrityCheckMs = nowMs;
-        unawaited(_verifyActiveStatesIntegrity().catchError((e) {
+        try {
+          await _verifyActiveStatesIntegrity();
+        } catch (e) {
           _log.warning('Integrity check failed', e);
-        }));
+        }
       }
 
-      // Coalesce notifyListeners() calls from _setTask progress-only updates
-      // so widgets rebuild at most once per timer tick instead of on every tick.
+      // Phase 6: Throttled notify
       final shouldNotify = _notifyPending || updateSeedingSpeeds();
       _notifyPending = false;
       if (shouldNotify && DownloadEngine.appInForeground) {
@@ -5447,6 +5486,24 @@ class DownloadProvider extends ChangeNotifier
           _log.warning(
               'Failed to save task during integrity check recovery', e);
         }));
+      }
+    }
+
+    // FIX-4: Periodic verification of active torrent resume data
+    for (var i = 0; i < _tasks.length; i++) {
+      final task = _tasks[i];
+      if (task.status != DownloadStatus.downloading || !task.isTorrent) continue;
+      final torrentId = _torrentIds[task.id];
+      if (torrentId == null) continue;
+      try {
+        final resumeValid = await TorrentResumeStore.verify(torrentId);
+        if (!resumeValid && task.downloadedBytes > 0) {
+          _log.warning(
+            'Active torrent ${task.id} ($torrentId) resume verification failed on disk',
+          );
+        }
+      } catch (e, st) {
+        _log.fine('Torrent resume integrity sweep error: $e', e, st);
       }
     }
   }
@@ -6617,6 +6674,7 @@ class DownloadProvider extends ChangeNotifier
       unawaited(closeFn());
     }
 
+    _isDisposed = true;
     _latestTorrentStats.clear();
     for (final notifier in _progressNotifiers.values) {
       notifier.dispose();

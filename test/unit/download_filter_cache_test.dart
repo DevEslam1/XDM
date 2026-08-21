@@ -22,10 +22,12 @@ class _TestFilterHost with DownloadFilterMixin {
   void notifyListeners() {}
 }
 
-class _FakeTaskRepo implements TaskRepository {
+class _FakeTaskRepo extends InMemoryTaskRepository {
   final List<DownloadTask> tasks = [];
   @override
   Future<List<DownloadTask>> getAll() async => tasks;
+  @override
+  Future<List<DownloadTask>> loadAll() async => tasks;
   @override
   Future<DownloadTask?> getById(String id) async {
     final idx = tasks.indexWhere((t) => t.id == id);
@@ -43,6 +45,9 @@ class _FakeTaskRepo implements TaskRepository {
   }
 
   @override
+  Future<void> saveDebounced(DownloadTask task) async => save(task);
+
+  @override
   Future<void> saveAll(List<DownloadTask> newTasks) async {
     for (final task in newTasks) {
       await save(task);
@@ -55,7 +60,13 @@ class _FakeTaskRepo implements TaskRepository {
   Future<void> deleteAll(List<String> ids) async =>
       tasks.removeWhere((t) => ids.contains(t.id));
   @override
+  Future<void> deleteMany(List<String> ids) async => deleteAll(ids);
+  @override
   Stream<DownloadTask> watchTask(String id) => const Stream.empty();
+  @override
+  Stream<List<DownloadTask>> watchAll() async* {
+    yield tasks;
+  }
 }
 
 DownloadTask _buildTask(String id, {int queueOrder = 0, String name = ''}) {

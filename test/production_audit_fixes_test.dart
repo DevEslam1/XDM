@@ -98,6 +98,7 @@ void main() {
         audioProgress: 0,
         pausedByUser: false,
         isAppUpdate: false,
+        isCancelled: false,
       );
       expect(TaskCompanionConverter.isInterruptedActiveRow(runningRow), isTrue);
 
@@ -130,6 +131,7 @@ void main() {
         audioProgress: 0,
         pausedByUser: true,
         isAppUpdate: false,
+        isCancelled: false,
       );
       expect(TaskCompanionConverter.isInterruptedActiveRow(pausedRow), isFalse);
     });

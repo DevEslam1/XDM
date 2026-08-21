@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show ValueNotifier;
 
-import '../../features/settings/provider/settings_provider.dart';
+import '../domain/torrent_session_settings.dart';
 import '../services/torrent_models.dart';
 
 /// Abstract interface contract for Torrent client operations.
@@ -79,7 +79,7 @@ abstract class ITorrentService {
 
   /// FIX-D: Best-effort native libtorrent version string.
   String get nativeVersion;
-  void configureSession([SettingsProvider? settings]);
+  void configureSession([TorrentSessionSettings? settings]);
   void reconfigureSession();
   void autoEnableSequentialForVideo(int torrentId);
   Future<void> autoSaveResumeData();

@@ -223,7 +223,11 @@ void main() {
         category: 'Compressed',
         savePath: 'build/test_merge_downloads',
       );
-      await pumpEventQueue();
+      for (var i = 0; i < 20; i++) {
+        final current = provider.tasks.firstWhere((t) => t.fileName == 'merge.bin');
+        if (current.status == DownloadStatus.downloading) break;
+        await Future.delayed(const Duration(milliseconds: 20));
+      }
 
       final live = provider.tasks.singleWhere((t) => t.fileName == 'merge.bin');
       expect(live.status, DownloadStatus.downloading);

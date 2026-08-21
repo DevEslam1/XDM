@@ -172,9 +172,20 @@ class AppLockService {
       _monotonicLockoutStartMs = startElapsed;
       _totalLockoutDurationMs = totalDurationMs;
       return Duration(milliseconds: remainingMs);
+    } else {
+      // Monotonic clock reset (e.g. device reboot): fallback to wall-clock deadline
+      final rawLockedUntil = await _storage.read(key: _lockedUntilKey);
+      final lockedUntilWall = int.tryParse(rawLockedUntil ?? '');
+      if (lockedUntilWall != null) {
+        final wallRemaining =
+            lockedUntilWall - DateTime.now().millisecondsSinceEpoch;
+        if (wallRemaining > 0) {
+          return Duration(milliseconds: wallRemaining);
+        }
+      }
+      await resetFailedAttempts();
+      return Duration.zero;
     }
-
-    return Duration.zero;
   }
 
   static int _lockoutSecondsForLevel(int level) {
@@ -218,6 +229,7 @@ class AppLockService {
     final durationMs = seconds * 1000;
     final monoNow = await getMonotonicTimeMs();
     final lockedUntilMonotonic = monoNow + durationMs;
+    final lockedUntilWall = DateTime.now().millisecondsSinceEpoch + durationMs;
 
     _monotonicLockoutStartMs = monoNow;
     _totalLockoutDurationMs = durationMs;
@@ -235,6 +247,10 @@ class AppLockService {
     await _storage.write(
       key: _lockedUntilMonotonicKey,
       value: lockedUntilMonotonic.toString(),
+    );
+    await _storage.write(
+      key: _lockedUntilKey,
+      value: lockedUntilWall.toString(),
     );
   }
 

@@ -8,6 +8,7 @@ import 'package:logging/logging.dart';
 
 import 'download_engine.dart';
 import 'power_monitor.dart';
+import 'resource_probe.dart';
 
 /// Data model for a single download task consumed by the launcher widgets.
 ///
@@ -267,13 +268,20 @@ class WidgetDataBridge {
       return;
     }
 
-    await _doPush(dashboard);
+    await _doPush(dashboard, force: force);
   }
 
-  Future<void> _doPush(WidgetDashboard dashboard) async {
+  String? _lastPushedPayload;
+
+  Future<void> _doPush(WidgetDashboard dashboard, {bool force = false}) async {
     _lastPush = DateTime.now();
     try {
       final payload = jsonEncode(dashboard.toJson());
+      if (!force && payload == _lastPushedPayload) {
+        return; // FIX-21: Skip duplicate payload write
+      }
+      _lastPushedPayload = payload;
+      ResourceProbe.instance.recordWidgetPush();
       final test = testSink;
       if (test != null) {
         await test(dashboard);
@@ -286,18 +294,30 @@ class WidgetDataBridge {
     }
   }
 
+  int _cachedFreeSpace = -1;
+  DateTime _lastDiskCheck = DateTime.fromMillisecondsSinceEpoch(0);
+
   /// Free disk space in bytes, or `-1` when the platform can't report it.
-  Future<int> fetchFreeDiskSpace() async {
+  /// FIX-7: Cached with a 5-minute TTL to avoid continuous platform channel polling.
+  Future<int> fetchFreeDiskSpace({bool force = false}) async {
     if (kIsWeb) return -1;
+    final now = DateTime.now();
+    if (!force &&
+        _cachedFreeSpace >= 0 &&
+        now.difference(_lastDiskCheck).inMinutes < 5) {
+      return _cachedFreeSpace;
+    }
     try {
       final test = testSink;
       if (test != null) return -1;
       final value = await channel.invokeMethod<int>('getFreeDiskSpace');
-      return value ?? -1;
+      _cachedFreeSpace = value ?? -1;
+      _lastDiskCheck = now;
+      return _cachedFreeSpace;
     } catch (e, st) {
       LoggingService.logger('WidgetDataBridge')
           .warning('Operation failed with fallback', e, st);
-      return -1;
+      return _cachedFreeSpace >= 0 ? _cachedFreeSpace : -1;
     }
   }
 

@@ -98,8 +98,10 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
     double calcFileProgress(Map<String, dynamic> f) {
+      if ((f['isComplete'] as bool?) == true) return 1.0;
       final length = (f['length'] as num?)?.toInt() ?? 0;
       final downloadedBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+      if (length > 0 && downloadedBytes >= length) return 1.0;
       if (f['progress'] != null) {
         return ((f['progress'] as num).toDouble()).clamp(0.0, 1.0);
       } else if (length > 0 && downloadedBytes > 0) {
@@ -221,10 +223,14 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
 
                   final isComplete =
                       (f['isComplete'] as bool?) == true || progress >= 1.0;
-                  final progressPercent = (progress * 100).clamp(0.0, 100.0);
-                  final progressText = isEstimated
-                      ? '≈${progressPercent.toStringAsFixed(0)}%'
-                      : '${progressPercent.toStringAsFixed(1)}%';
+                  final displayDownloadedBytes =
+                      isComplete && length > 0 ? length : downloadedBytes;
+                  final progressPercent = (isComplete ? 1.0 : progress) * 100.0;
+                  final progressText = isComplete
+                      ? '100.0%'
+                      : (isEstimated
+                          ? '≈${progressPercent.toStringAsFixed(0)}%'
+                          : '${progressPercent.toStringAsFixed(1)}%');
 
                   return RepaintBoundary(
                     key: ValueKey('$name:$downloadedBytes:$selected'),
@@ -387,7 +393,7 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    '${formatBytes(downloadedBytes)} / ${formatBytes(length)}',
+                                    '${formatBytes(displayDownloadedBytes)} / ${formatBytes(length)}',
                                     style: AppTheme.dataStyle(
                                       isDark: isDark,
                                       size: 10,

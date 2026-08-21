@@ -4,6 +4,7 @@ import 'package:logging/logging.dart';
 import '../../background_gate.dart';
 import '../../logging_service.dart';
 import '../../power_monitor.dart';
+import '../../tick_manager.dart';
 import '../app_database.dart';
 
 class DatabaseMaintenanceService {
@@ -27,10 +28,16 @@ class DatabaseMaintenanceService {
 
   void _scheduleMaintenanceTimer() {
     _maintenanceTimer?.cancel();
+    _maintenanceTimer = null;
     final interval = BackgroundGate.adaptInterval(const Duration(minutes: 30));
-    _maintenanceTimer = Timer.periodic(interval, (_) async {
-      await _runPeriodicMaintenance();
-    });
+    TickManager.instance.registerTick(
+      id: 'database_periodic_maintenance',
+      interval: interval,
+      priority: TickPriority.normal,
+      callback: (_) async {
+        await _runPeriodicMaintenance();
+      },
+    );
   }
 
   Future<void> runPeriodicMaintenanceForTesting() => _runPeriodicMaintenance();
@@ -104,6 +111,16 @@ class DatabaseMaintenanceService {
           LoggingService.logger('DatabaseMaintenanceService')
               .warning('PRAGMA foreign_key_check failed', e, st);
         }
+        // FIX-20: Periodic full VACUUM and ANALYZE every ~2.5 days (720 runs)
+        if (maintenanceRuns % 720 == 0) {
+          try {
+            await _db.customStatement('VACUUM');
+            await _db.customStatement('ANALYZE');
+          } catch (e, st) {
+            LoggingService.logger('DatabaseMaintenanceService')
+                .warning('Full VACUUM/ANALYZE failed', e, st);
+          }
+        }
         swVacuum.stop();
         if (swVacuum.elapsedMilliseconds > 500) {
           _log.info(
@@ -119,6 +136,7 @@ class DatabaseMaintenanceService {
   void dispose() {
     _maintenanceTimer?.cancel();
     _maintenanceTimer = null;
+    TickManager.instance.unregisterTick('database_periodic_maintenance');
     if (_throttleFactorListener != null) {
       PowerMonitor.throttleFactorNotifier
           .removeListener(_throttleFactorListener!);

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:dmx/core/services/background_gate.dart';
+import 'package:dmx/core/services/download_journal.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
@@ -113,13 +114,13 @@ class PowerMonitor {
 
   /// Thermal and battery-aware thread limiter.
   static int get maxAllowedThreads {
-    if (batterySaverMode == BatterySaverMode.aggressive) {
-      return 1;
-    }
     if (thermalThreadLimitingEnabled &&
         (_thermal == ThermalStatus.severe ||
             _thermal == ThermalStatus.critical)) {
       return kThermalLimitedMaxThreads;
+    }
+    if (batterySaverMode == BatterySaverMode.aggressive) {
+      return 1;
     }
     return 16;
   }
@@ -139,6 +140,9 @@ class PowerMonitor {
       _screenStateController.add(on);
       _notifyThrottleFactor();
       _startThermalTimer();
+      if (!on) {
+        DownloadJournal.flushAllActive();
+      }
     }
   }
 

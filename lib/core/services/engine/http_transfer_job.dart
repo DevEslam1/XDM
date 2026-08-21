@@ -445,25 +445,46 @@ class HttpTransferJob {
     await StateStore.save(cmd.tempFilePath, _state!);
 
     final tempFile = File(cmd.tempFilePath);
-    final diskFileLength = await tempFile.exists() ? await tempFile.length() : 0;
+    final tempFileExists = await tempFile.exists();
+    final diskFileLength = tempFileExists ? await tempFile.length() : 0;
 
-    if (await File('${cmd.tempFilePath}.journal').exists()) {
+    // NOTE: PositionalFileWriter pre-extends the temp file to full totalSize via
+    // truncate(totalSize). Therefore, the primary defense against stale journal
+    // replay after server-side payload/ETag changes is J1 (explicit journal deletion
+    // in _verifyServerIdentity) and J2 (post-replay journal clear). J3 and J4 serve
+    // as defense-in-depth against missing, unallocated, or externally truncated temp files.
+    // J3: If temp file is missing entirely or 0 bytes on disk, skip journal replay and zero all chunk progress
+    if (!tempFileExists || diskFileLength == 0) {
+      if (_state!.chunks.isNotEmpty) {
+        for (final c in _state!.chunks) {
+          c.downloaded = 0;
+        }
+      }
+      await DownloadJournal.deleteJournalFor(cmd.tempFilePath);
+      _log.info('[Journal-J3] Temp file missing/empty ($diskFileLength bytes); zeroed progress and wiped journal');
+    } else if (await File('${cmd.tempFilePath}.journal').exists()) {
       final journalBytes = await DownloadJournal.replay(cmd.tempFilePath);
       if (journalBytes != null && journalBytes.isNotEmpty && _state!.chunks.isNotEmpty) {
         for (var i = 0; i < min(_state!.chunks.length, journalBytes.length); i++) {
-          if (journalBytes[i] > _state!.chunks[i].downloaded) {
-            final cap = _state!.chunks[i].size >= 0 ? _state!.chunks[i].size : journalBytes[i];
-            var clamped = journalBytes[i].clamp(0, cap);
-            if (diskFileLength > 0 && _state!.chunks.length == 1) {
-              clamped = min(clamped, diskFileLength);
-            }
-            _state!.chunks[i].downloaded = clamped;
+          final chunk = _state!.chunks[i];
+          final onDiskChunkBytes = max(0, diskFileLength - chunk.start);
+          final maxPossibleBytes = chunk.size >= 0
+              ? min(chunk.size, onDiskChunkBytes)
+              : onDiskChunkBytes;
+          if (journalBytes[i] > chunk.downloaded) {
+            final clamped = journalBytes[i].clamp(0, maxPossibleBytes);
+            chunk.downloaded = clamped;
+          } else if (chunk.downloaded > maxPossibleBytes) {
+            chunk.downloaded = maxPossibleBytes;
           }
         }
         _emitProgress(0,
             statusMessage: 'Verifying resume data…',
             cycleStateOverride: CycleState.verifying);
       }
+      // J2: After journal replay into state + durable state save, clear the journal
+      await StateStore.save(cmd.tempFilePath, _state!, durable: true);
+      await DownloadJournal.clearJournalFor(cmd.tempFilePath);
     }
 
     if (_state!.downloadedBytes > 0) {
@@ -555,11 +576,11 @@ class HttpTransferJob {
   @visibleForTesting
   static Duration computeHardTimeoutForSize(
     int totalSize, {
-    Duration minTimeout = const Duration(minutes: 15),
+    Duration minTimeout = const Duration(minutes: 30),
     Duration maxTimeout = const Duration(hours: 24),
   }) {
     if (totalSize <= 0) return maxTimeout;
-    final computed = Duration(seconds: totalSize ~/ (50 * 1024));
+    final computed = Duration(seconds: totalSize ~/ (100 * 1024));
     if (computed < minTimeout) return minTimeout;
     if (computed > maxTimeout) return maxTimeout;
     return computed;
@@ -642,7 +663,9 @@ class HttpTransferJob {
               _log.fine(
                   'Failed to delete temp file on server size change', e, st);
             }
-            await StateStore.save(cmd.tempFilePath, _state!);
+            await DownloadJournal.deleteJournalFor(cmd.tempFilePath);
+            _log.info('[Journal-J1] Server size changed ($serverTotal vs ${_state!.totalSize}); wiped journal');
+            await StateStore.save(cmd.tempFilePath, _state!, durable: true);
             throw FileChangedOnServerException();
           }
         }
@@ -662,11 +685,13 @@ class HttpTransferJob {
           } catch (e, st) {
             _log.fine('Failed to delete temp file on identity change', e, st);
           }
+          await DownloadJournal.deleteJournalFor(cmd.tempFilePath);
+          _log.info('[Journal-J1] Server identity changed ($oldIdentity -> $newIdentity); wiped journal');
           _state!.etag = newEtag;
           _state!.lastModified = newLm;
           _state!.migrationNote =
               '${_state!.migrationNote ?? ''} identity_restart'.trim();
-          await StateStore.save(cmd.tempFilePath, _state!);
+          await StateStore.save(cmd.tempFilePath, _state!, durable: true);
           _emitProgress(0,
               statusMessage: 'Source changed on server — restarting');
         } else {
@@ -971,7 +996,19 @@ class HttpTransferJob {
             'Max total mirror attempts ($maxTotalAttempts) exceeded for chunk $chunkIndex');
       }
       try {
-        final resumeFrom = chunk.downloaded;
+        var resumeFrom = chunk.downloaded;
+        final tempFile = File(cmd.tempFilePath);
+        final currentDiskLen = tempFile.existsSync() ? tempFile.lengthSync() : 0;
+        // J4: Pre-flight assert before any Range request to prevent sparse holes
+        if (resumeFrom > 0 && chunk.start + resumeFrom > currentDiskLen) {
+          _log.warning(
+            '[DMX-Job-J4] Pre-flight violation on chunk $chunkIndex: '
+            'offset ${chunk.start + resumeFrom} > disk length $currentDiskLen. Zeroing chunk progress.',
+          );
+          chunk.downloaded = 0;
+          resumeFrom = 0;
+        }
+
         final absStart = chunk.start + resumeFrom;
         final headers = <String, dynamic>{
           'Range': chunk.end < 0

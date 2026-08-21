@@ -471,6 +471,11 @@ class BackgroundService {
   }
 
   @visibleForTesting
+  static void resetIosCooldownForTesting() {
+    _iosBgCooldownUntil = null;
+  }
+
+  @visibleForTesting
   static Future<bool> onIosBackgroundForTesting([ServiceInstance? service]) =>
       _onIosBackground(service);
 

@@ -381,6 +381,10 @@ class DownloadTask {
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
 
+  /// True when the torrent download is completed and actively seeding.
+  bool get isActivelySeeding =>
+      status == DownloadStatus.completed && isTorrent && seedingEnabled;
+
   bool get isPlaylistItem => playlistId != null && playlistId!.isNotEmpty;
 
   /// Total size with fallbacks: stored [fileSize] first, then the sum of the
@@ -459,8 +463,13 @@ class DownloadTask {
       if (isTorrentFileSelected(f)) {
         final len = (f['length'] as num?)?.toInt() ?? 0;
         final d = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+        final isComp = (f['isComplete'] as bool?) == true;
         total += len;
-        if (d >= 0) dl += d;
+        if (isComp && len > 0) {
+          dl += len;
+        } else if (d >= 0) {
+          dl += (len > 0 ? d.clamp(0, len) : d);
+        }
       }
     }
     return (totalFileBytes: total, downloadedFileBytes: dl);
@@ -703,6 +712,21 @@ class DownloadTask {
   String get audioProgressPercentString =>
       '${(audioProgressPercent * 100).toStringAsFixed(1)}%';
 
+  /// Clean, user-facing error message sanitized against internal exception leakage.
+  String get userFacingError {
+    if (failureCategory != null) {
+      return RecoveryHints.hintFor(failureCategory!);
+    }
+    if (errorMessage != null &&
+        errorMessage!.isNotEmpty &&
+        errorMessage!.length < 200 &&
+        !errorMessage!.contains('\n') &&
+        !errorMessage!.toLowerCase().contains('exception:')) {
+      return errorMessage!;
+    }
+    return 'Download failed. Tap to retry.';
+  }
+
   /// Transitions the task to [newStatus], validating legality against [DownloadStateMachine].
   /// In debug mode, invalid transitions assert false. In release mode, invalid transitions log a warning (Task 2.3).
   DownloadTask transitionTo(
@@ -722,20 +746,19 @@ class DownloadTask {
     bool? pausedByUser,
     CycleState? cycleState,
   }) {
+    DownloadStatus targetStatus = newStatus;
     if (status != newStatus) {
       final isValid = DownloadStateMachine.canTransitionStatus(status, newStatus);
       if (!isValid) {
-        assert(
-          false,
-          'Invalid state transition attempted for task $id: $status -> $newStatus (reason: $reason)',
-        );
         debugPrint(
-          '[DownloadTask] Invalid state transition attempted for task $id: $status -> $newStatus (reason: $reason)',
+          '[DownloadTask] Illegal state transition rejected for task $id: $status -> $newStatus (reason: $reason)',
         );
+        // Reject transition to corrupted/impossible target status.
+        targetStatus = status;
       }
     }
     return copyWith(
-      status: newStatus,
+      status: targetStatus,
       statusMessage: statusMessage,
       clearStatusMessage: clearStatusMessage,
       errorMessage: errorMessage,
@@ -837,7 +860,9 @@ class DownloadTask {
     bool clearInfoHash = false,
   }) {
     final effectiveFileSize = clearFileSize
-        ? 0
+        ? (this.status == DownloadStatus.downloading && this.fileSize > 0
+            ? this.fileSize
+            : 0)
         : (fileSize != null ? max(0, fileSize) : this.fileSize);
     final rawDownloadedBytes = max(0, downloadedBytes ?? this.downloadedBytes);
 
@@ -1126,14 +1151,17 @@ class DownloadTask {
       completedFiles ??= selected.where((f) {
         final len = (f['length'] as num?)?.toInt() ?? 0;
         final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-        return len == 0 || dl >= len;
+        final isComp = (f['isComplete'] as bool?) == true;
+        return isComp || (len > 0 && dl >= len) || len == 0;
       }).length;
       totalFileBytes ??= selected.fold<int>(
           0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
       downloadedFileBytes ??= selected.fold<int>(0, (sum, f) {
         final len = (f['length'] as num?)?.toInt() ?? 0;
         final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-        return sum + (len > 0 ? dl.clamp(0, len) : 0);
+        final isComp = (f['isComplete'] as bool?) == true;
+        if (isComp && len > 0) return sum + len;
+        return sum + (len > 0 ? dl.clamp(0, len) : (dl > 0 ? dl : 0));
       });
     }
 

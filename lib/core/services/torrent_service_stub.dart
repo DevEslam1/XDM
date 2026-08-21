@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show ValueNotifier;
-import '../../features/settings/provider/settings_provider.dart';
+import '../domain/torrent_session_settings.dart';
 import '../interfaces/i_torrent_service.dart';
 import 'torrent_models.dart';
 
@@ -63,7 +63,7 @@ class TorrentService {
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
       const Stream.empty();
   static Map<int, TorrentUpdateInfo> get latestStats => const {};
-  static void configureSession([SettingsProvider? settings]) {}
+  static void configureSession([TorrentSessionSettings? settings]) {}
   static void reconfigureSession() {}
 
   static List<TrackerInfo> getTrackers(int torrentId) => [];
@@ -242,7 +242,7 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   String get nativeVersion => 'stub';
   @override
-  void configureSession([SettingsProvider? settings]) {}
+  void configureSession([TorrentSessionSettings? settings]) {}
   @override
   void reconfigureSession() {}
   @override

@@ -29,13 +29,12 @@ void main() {
               'BGTaskSchedulerPermittedIdentifiers must include com.dmx.app.torrent.refresh');
     });
 
-    test('NSAllowsArbitraryLoads is false (ATS compliant)', () {
+    test('NSAllowsArbitraryLoads is true (supports downloading from arbitrary HTTP/HTTPS URLs)', () {
       if (content.isEmpty) {
         markTestSkipped(
             'ios/Runner/Info.plist not found; skipping on non-iOS builds');
         return;
       }
-      // Verify NSAllowsArbitraryLoads is immediately followed by <false/>
       final pattern = RegExp(
         r'<key>NSAllowsArbitraryLoads</key>\s*<(true|false)/>',
         dotAll: true,
@@ -45,24 +44,8 @@ void main() {
           reason: 'NSAllowsArbitraryLoads must be declared');
       expect(
         match!.group(1),
-        equals('false'),
-        reason: 'NSAllowsArbitraryLoads must be false, not true',
-      );
-    });
-
-    test(
-        'NSAllowsArbitraryLoadsWebContentOnly is true (in-app browser allowed)',
-        () {
-      if (content.isEmpty) {
-        markTestSkipped(
-            'ios/Runner/Info.plist not found; skipping on non-iOS builds');
-        return;
-      }
-      expect(
-        content,
-        contains('<key>NSAllowsArbitraryLoadsWebContentOnly</key>'),
-        reason:
-            'NSAllowsArbitraryLoadsWebContentOnly must be declared for in-app browser',
+        equals('true'),
+        reason: 'NSAllowsArbitraryLoads must be true for download manager file transfers',
       );
     });
 

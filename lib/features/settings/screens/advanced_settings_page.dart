@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/services/app_lock_service.dart';
+import '../../../core/services/diagnostic_service.dart';
 import '../../../core/services/xdm_backend_client.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/haptic_helper.dart';
@@ -212,6 +214,35 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
                     : 'Protect XDM with a passcode PIN upon launch',
                 value: _appLockEnabled,
                 onChanged: (val) => _setAppLock(val),
+              ),
+              ActionSettingTile(
+                accentColor: accent,
+                title: isRtl ? 'تصدير بيانات التشخيص' : 'Export Diagnostics',
+                subtitle: isRtl
+                    ? 'نسخ تقرير تشخيص النظام وسجلات الأداء'
+                    : 'Copy system diagnostics, memory, and engine telemetry snapshot',
+                buttonText: isRtl ? 'تصدير' : 'Export',
+                onTap: () async {
+                  triggerHaptic(settings);
+                  final sys = await DiagnosticService.instance.systemInfo();
+                  final snap = DiagnosticService.instance.snapshot();
+                  final text = '=== XDM DIAGNOSTIC REPORT ===\n'
+                      'System: $sys\n\n'
+                      'Logs & Snapshots:\n$snap\n'
+                      '============================';
+                  await Clipboard.setData(ClipboardData(text: text));
+                  if (context.mounted) {
+                    ThemedSnackbar.show(
+                      context,
+                      message: isRtl
+                          ? 'تم نسخ بيانات التشخيص إلى الحافظة'
+                          : 'Diagnostics copied to clipboard',
+                      color: AppTheme.neonGreen,
+                      icon: Icons.check_circle_outline,
+                      isDarkMode: isDark,
+                    );
+                  }
+                },
               ),
             ],
           ),

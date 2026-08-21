@@ -46,4 +46,13 @@ mixin DownloadSettingsMixin on ChangeNotifier {
       notifyListeners();
     }
   }
+
+  bool _keepPartsAfterFailedMerge = true;
+  bool get keepPartsAfterFailedMerge => _keepPartsAfterFailedMerge;
+  set keepPartsAfterFailedMerge(bool value) {
+    if (_keepPartsAfterFailedMerge != value) {
+      _keepPartsAfterFailedMerge = value;
+      notifyListeners();
+    }
+  }
 }

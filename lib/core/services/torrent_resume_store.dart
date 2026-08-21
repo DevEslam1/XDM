@@ -113,6 +113,8 @@ class TorrentResumeStore {
     required String sourceUrl,
     required FutureOr<Uint8List?> Function() fetchResumeData,
     List<Map<String, dynamic>>? files,
+    List<bool>? pieceBitfield,
+    bool degradedFallback = false,
   }) async {
     try {
       if (sourceUrl.trim().isEmpty) return false;
@@ -143,6 +145,8 @@ class TorrentResumeStore {
         'savedAt': DateTime.now().millisecondsSinceEpoch,
         'bytes': blob.length,
         if (files != null) 'files': files,
+        if (pieceBitfield != null) 'pieceBitfield': pieceBitfield,
+        if (degradedFallback) 'degradedFallback': true,
       });
 
       // FIX-M12: Write metadata JSON first, then binary resume blob
@@ -247,18 +251,45 @@ class TorrentResumeStore {
     FutureOr<Uint8List?> Function(int) progressFor, [
     List<Map<String, dynamic>>? Function(int)? filesFor,
   ]) async {
-    for (final id in torrentIds) {
-      final source = _sourceByTorrentId[id];
-      if (source == null) {
-        debugPrint('[TorrentResumeStore] no source registered for id $id');
-        continue;
+    final ids = List<int>.from(torrentIds);
+    try {
+      for (final id in ids) {
+        final source = _sourceByTorrentId[id];
+        if (source == null) {
+          debugPrint('[TorrentResumeStore] no source registered for id $id');
+          continue;
+        }
+        await saveAndWait(
+          torrentId: id,
+          sourceUrl: source,
+          fetchResumeData: () => progressFor(id),
+          files: filesFor?.call(id),
+        );
       }
-      await saveAndWait(
-        torrentId: id,
-        sourceUrl: source,
-        fetchResumeData: () => progressFor(id),
-        files: filesFor?.call(id),
-      );
+    } catch (e, st) {
+      debugPrint('[TorrentResumeStore] saveAll failed, scheduling retry: $e\n$st');
+      // FIX-2: Retry once after 5s if batch save fails
+      Timer(const Duration(seconds: 5), () async {
+        try {
+          for (final id in ids) {
+            final source = _sourceByTorrentId[id];
+            if (source != null) {
+              await saveAndWait(
+                torrentId: id,
+                sourceUrl: source,
+                fetchResumeData: () => progressFor(id),
+                files: filesFor?.call(id),
+              );
+            }
+          }
+        } catch (e2) {
+          debugPrint('[TorrentResumeStore] saveAll retry failed: $e2');
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('torrent_resume_stale', true);
+          } catch (_) {}
+        }
+      });
     }
   }
 
@@ -374,5 +405,22 @@ class TorrentResumeStore {
   static bool validateResumeData(Uint8List blob) {
     if (blob.isEmpty || blob.length > 1024 * 1024) return false;
     return true;
+  }
+
+  /// FIX-4: Verify on-disk resume data validity for a given torrent ID.
+  static Future<bool> verify(int torrentId) async {
+    final source = _sourceByTorrentId[torrentId];
+    if (source == null) return false;
+    return verifySource(source);
+  }
+
+  /// FIX-4: Verify on-disk resume data validity for a given source URL.
+  static Future<bool> verifySource(String sourceUrl) async {
+    try {
+      final data = await loadResumeDataForSource(sourceUrl);
+      return data != null && validateResumeData(data);
+    } catch (_) {
+      return false;
+    }
   }
 }
