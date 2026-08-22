@@ -582,7 +582,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     });
     try {
       final settings = context.read<SettingsProvider>();
-      if (url.toLowerCase().startsWith('magnet:')) {
+      if (url.toLowerCase().startsWith('magnet:') || isMagnetUrl(url)) {
         final parsed = parseMagnetUrl(url);
         final rawDnName = parsed['name'] ?? 'Torrent Download';
         final dnName = safeFileName(rawDnName);
@@ -595,8 +595,11 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             if (_categories.contains(_resolvedCategory)) {
               _selectedCategory = _resolvedCategory;
             }
+            _isMetadataResolved = true;
+            _isResolvingLink = false;
           });
         }
+        return;
       }
       String? localFilePath;
       if (url.toLowerCase().startsWith('file://')) {
@@ -1165,47 +1168,62 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         },
       );
     } else {
-      await provider.addDownload(
-        name: finalFileName,
-        url: singleUrl,
-        size: finalSize,
-        category: _selectedCategory == 'Auto' ? '' : _selectedCategory,
-        savePath: _pathController.text.trim(),
-        threadCount: _selectedThreads,
-        scheduledAt: _isScheduled ? _scheduledDateTime : null,
-        torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
-        downloadPageUrl:
-            widget.downloadPageUrl ?? _referrerController.text.trim(),
-        youtubeQualityPreset: _resolvedYoutubeQualityPreset,
-        torrentId: _resolvedTorrentId,
-        mergedAudioUrl: _resolvedAudioUrl,
-        audioSize: _resolvedAudioSize ?? 0,
-        thumbnailUrl: _resolvedThumbnailUrl,
-      );
-      if (!mounted) return;
-      if (!context.mounted) return;
-      if (provider.lastError != null) {
+      try {
+        await provider.addDownload(
+          name: finalFileName,
+          url: singleUrl,
+          size: finalSize,
+          category: _selectedCategory == 'Auto' ? '' : _selectedCategory,
+          savePath: _pathController.text.trim(),
+          threadCount: _selectedThreads,
+          scheduledAt: _isScheduled ? _scheduledDateTime : null,
+          torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
+          downloadPageUrl:
+              widget.downloadPageUrl ?? _referrerController.text.trim(),
+          youtubeQualityPreset: _resolvedYoutubeQualityPreset,
+          torrentId: _resolvedTorrentId,
+          mergedAudioUrl: _resolvedAudioUrl,
+          audioSize: _resolvedAudioSize ?? 0,
+          thumbnailUrl: _resolvedThumbnailUrl,
+        );
+        if (!mounted) return;
+        if (!context.mounted) return;
+        if (provider.lastError != null) {
+          ThemedSnackbar.show(
+            context,
+            message: provider.lastError!,
+            color: redClr,
+            icon: Icons.error_outline,
+            isDarkMode: isDark,
+          );
+          if (mounted) setState(() => _isSubmitting = false);
+          return;
+        }
+        AddDownloadDialog.recordAddedUrl(singleUrl);
         ThemedSnackbar.show(
           context,
-          message: provider.lastError!,
-          color: redClr,
-          icon: Icons.error_outline,
+          message: isRtl ? 'تم إنشاء الاتصال' : 'TRANSMISSION ESTABLISHED',
+          color: blueClr,
+          icon: Icons.rocket_launch_outlined,
           isDarkMode: isDark,
         );
-        return;
+        if (mounted) setState(() => _isSubmitting = false);
+        Navigator.pop(context);
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isSubmitting = false);
+          ThemedSnackbar.show(
+            context,
+            message: e.toString(),
+            color: redClr,
+            icon: Icons.error_outline,
+            isDarkMode: isDark,
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isSubmitting = false);
       }
-      AddDownloadDialog.recordAddedUrl(singleUrl);
-      ThemedSnackbar.show(
-        context,
-        message: isRtl ? 'تم إنشاء الاتصال' : 'TRANSMISSION ESTABLISHED',
-        color: blueClr,
-        icon: Icons.rocket_launch_outlined,
-        isDarkMode: isDark,
-      );
-      if (mounted) setState(() => _isSubmitting = false);
-      Navigator.pop(context);
     }
-    if (mounted) setState(() => _isSubmitting = false);
   }
 
   bool get _urlValid {

@@ -1,7 +1,8 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:dmx/core/services/logging_service.dart';
 import '../../../core/interfaces/i_download_engine.dart';
 import '../../../core/services/torrent_service.dart';
+import '../../../core/utils/torrent_id_resolver.dart';
 import '../domain/ports/task_engine_port.dart';
 import '../models/download_task.dart';
 
@@ -11,6 +12,7 @@ class DownloadEngineAdapter implements TaskEnginePort {
   // ignore: unused_field
   final IDownloadEngine _downloadEngine;
   final DownloadTask? Function(String id) _findTask;
+  final int? Function(String taskId)? _torrentIdForTask;
   // ignore: unused_field
   final Future<void> Function(DownloadTask task) _saveTask;
   final void Function() _pumpQueueCallback;
@@ -20,10 +22,18 @@ class DownloadEngineAdapter implements TaskEnginePort {
     required DownloadTask? Function(String id) findTask,
     required Future<void> Function(DownloadTask task) saveTask,
     required void Function() pumpQueueCallback,
+    int? Function(String taskId)? torrentIdForTask,
   })  : _downloadEngine = downloadEngine,
         _findTask = findTask,
         _saveTask = saveTask,
-        _pumpQueueCallback = pumpQueueCallback;
+        _pumpQueueCallback = pumpQueueCallback,
+        _torrentIdForTask = torrentIdForTask;
+
+  int? _nativeTorrentId(DownloadTask task) {
+    final mapped = _torrentIdForTask?.call(task.id);
+    if (mapped != null && mapped >= 0) return mapped;
+    return TorrentIdResolver.resolve(task);
+  }
 
   @override
   Future<void> startEngineTask(String taskId, {bool ignoreQueueLimit = false}) async {
@@ -32,7 +42,7 @@ class DownloadEngineAdapter implements TaskEnginePort {
     try {
       _pumpQueueCallback();
     } catch (e, st) {
-      LoggingService.logger('DownloadEngineAdapter').warning('startEngineTask failed for $taskId', e, st);
+      LoggingService.logger('DownloadEngineAdapter').warning('startEngineTask failed for ', e, st);
     }
   }
 
@@ -44,15 +54,17 @@ class DownloadEngineAdapter implements TaskEnginePort {
   }) async {
     final task = _findTask(taskId);
     if (task == null) return;
-    if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+    // A magnet has no torrentFiles until metadata arrives. Use the source
+    // type instead of the file list so pause works during metadata fetching.
+    if (task.isTorrent) {
       // Torrent task pause
       try {
-        final torrentId = int.tryParse(task.id);
+        final torrentId = _nativeTorrentId(task);
         if (torrentId != null) {
-          TorrentService.pauseTorrent(torrentId);
+          await TorrentService.pauseTorrent(torrentId);
         }
       } catch (e, st) {
-        LoggingService.logger('DownloadEngineAdapter').warning('Torrent pause failed for $taskId', e, st);
+        LoggingService.logger('DownloadEngineAdapter').warning('Torrent pause failed for ', e, st);
       }
     }
   }
@@ -61,14 +73,15 @@ class DownloadEngineAdapter implements TaskEnginePort {
   Future<void> cancelEngineTask(String taskId, {bool deleteFiles = false}) async {
     final task = _findTask(taskId);
     if (task == null) return;
-    if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+    // The same applies to cancel/delete while a magnet is still resolving.
+    if (task.isTorrent) {
       try {
-        final torrentId = int.tryParse(task.id);
+        final torrentId = _nativeTorrentId(task);
         if (torrentId != null) {
           TorrentService.removeTorrent(torrentId, deleteFiles: deleteFiles);
         }
       } catch (e, st) {
-        LoggingService.logger('DownloadEngineAdapter').warning('Torrent cancel failed for $taskId', e, st);
+        LoggingService.logger('DownloadEngineAdapter').warning('Torrent cancel failed for ', e, st);
       }
     }
   }
@@ -103,6 +116,6 @@ class DownloadEngineAdapter implements TaskEnginePort {
 
   @override
   Future<void> handleTorrentStats(String taskId, dynamic stats) async {
-    // Periodic stats update
+    // Torrent stats update handler
   }
 }

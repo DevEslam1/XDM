@@ -50,12 +50,14 @@ class TorrentSessionManager {
 
   int getSeeds(String taskId) {
     final stats = getStats(taskId);
-    return stats?.numSeeds ?? 0;
+    final seeds = stats?.numSeeds ?? 0;
+    return seeds < 0 ? 0 : seeds;
   }
 
   int getPeers(String taskId) {
     final stats = getStats(taskId);
-    return stats?.numPeers ?? 0;
+    final peers = stats?.numPeers ?? 0;
+    return peers < 0 ? 0 : peers;
   }
 
   bool isTorrentAlive(String taskId) {

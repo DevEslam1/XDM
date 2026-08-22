@@ -20,6 +20,7 @@ import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/intl_formatters.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/utils/torrent_id_resolver.dart';
 import '../../../shared/design/dmx_design.dart';
 import '../../../shared/mixins/pausable_loop_animation.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
@@ -34,6 +35,34 @@ import '../widgets/torrent_files_panel.dart';
 import '../widgets/torrent_health_indicator.dart';
 import '../widgets/torrent_stats_dashboard.dart';
 import '../widgets/tracker_panel.dart';
+
+final Map<int, List<TorrentFileItem>> _detailsNativeFilesCache = {};
+final Map<int, DateTime> _detailsNativeFilesCacheAt = {};
+
+List<TorrentFileItem> _cachedDetailsNativeFiles(int torrentId) {
+  final now = DateTime.now();
+  final fetchedAt = _detailsNativeFilesCacheAt[torrentId];
+  final cached = _detailsNativeFilesCache[torrentId];
+  if (cached != null &&
+      fetchedAt != null &&
+      now.difference(fetchedAt) < const Duration(seconds: 10)) {
+    return cached;
+  }
+  final fresh = TorrentService.getFiles(torrentId);
+  _detailsNativeFilesCache[torrentId] = fresh;
+  _detailsNativeFilesCacheAt[torrentId] = now;
+  if (_detailsNativeFilesCache.length > 32) {
+    final staleIds = _detailsNativeFilesCacheAt.entries
+        .where((entry) => now.difference(entry.value) > const Duration(minutes: 2))
+        .map((entry) => entry.key)
+        .toList();
+    for (final staleId in staleIds) {
+      _detailsNativeFilesCache.remove(staleId);
+      _detailsNativeFilesCacheAt.remove(staleId);
+    }
+  }
+  return fresh;
+}
 
 class DetailsScreen extends StatefulWidget {
   final String taskId;
@@ -1691,11 +1720,26 @@ class _SpeedGraphPanelState extends State<_SpeedGraphPanel> {
   List<FlSpot> _cachedDownloadSpots = const [];
   List<FlSpot> _cachedUploadSpots = const [];
   int _cachedMaxLen = 1;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _updateSpotsIfNeeded();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {
+          _updateSpotsIfNeeded(force: true);
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+    super.dispose();
   }
 
   @override
@@ -1707,9 +1751,10 @@ class _SpeedGraphPanelState extends State<_SpeedGraphPanel> {
     }
   }
 
-  void _updateSpotsIfNeeded() {
+  void _updateSpotsIfNeeded({bool force = false}) {
     final now = DateTime.now();
-    if (now.difference(_lastUpdateTime) >= const Duration(milliseconds: 1000) ||
+    if (force ||
+        now.difference(_lastUpdateTime) >= const Duration(milliseconds: 900) ||
         _cachedDownloadSpots.isEmpty) {
       _lastUpdateTime = now;
       final speedHistory = widget.provider.getSpeedHistory(widget.task.id);
@@ -2338,11 +2383,11 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
     final dlSpeed = task.speed;
     final ulSpeed = task.isTorrent ? provider.getTorrentUploadSpeed(task.id) : 0.0;
 
-    final torrentId = provider.providerTorrentIds[task.id] ??
-        int.tryParse(task.id) ??
-        TorrentService.idForSource(task.url) ??
-        0;
-    final stats = provider.providerLatestTorrentStats[torrentId];
+    final torrentId = task.torrentId ??
+        TorrentIdResolver.resolve(task, providerMap: provider.providerTorrentIds);
+    final stats = torrentId != null
+        ? provider.providerLatestTorrentStats[torrentId]
+        : null;
 
     return DmxCardShell(
       accent: violetClr,
@@ -2464,7 +2509,9 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
                     icon: Icons.storage_outlined,
                     color: mutedClr,
                     label: isRtl ? 'المنقول' : 'XFER',
-                    value: task.downloadedSizeFormatted,
+                    value: (stats != null && stats.totalDone > 0)
+                        ? formatBytes(stats.totalDone)
+                        : task.downloadedSizeFormatted,
                     isDark: isDark,
                   ),
                 ),
@@ -2529,44 +2576,46 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () =>
-                    TorrentAdvancedSettingsSheet.show(context, torrentId),
-                icon:
-                    const Icon(Icons.tune, size: 14, color: AppTheme.neonCyan),
-                label: Text(
-                  isRtl
-                      ? 'إعدادات متقدمة (Web Seeds / Proxy / SSL)'
-                      : 'Advanced Controls (Web Seeds / Proxy / SSL)',
-                  style:
-                      const TextStyle(fontSize: 11, color: AppTheme.neonCyan),
-                ),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(
-                      color: AppTheme.neonCyan.withValues(alpha: 0.3)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+            if (torrentId != null) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () =>
+                      TorrentAdvancedSettingsSheet.show(context, torrentId),
+                  icon:
+                      const Icon(Icons.tune, size: 14, color: AppTheme.neonCyan),
+                  label: Text(
+                    isRtl
+                        ? 'إعدادات متقدمة (Web Seeds / Proxy / SSL)'
+                        : 'Advanced Controls (Web Seeds / Proxy / SSL)',
+                    style:
+                        const TextStyle(fontSize: 11, color: AppTheme.neonCyan),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                        color: AppTheme.neonCyan.withValues(alpha: 0.3)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ),
-            ),
-            if (_showTrackers) ...[
-              const SizedBox(height: 12),
-              TrackerPanel(
-                torrentId: torrentId,
-                trackerManager: _trackerManager,
-              ),
-            ],
-            if (_showPeers) ...[
-              const SizedBox(height: 12),
-              PeerPanel(
-                torrentId: torrentId,
-                isDark: isDark,
-                peers: const [],
-              ),
+              if (_showTrackers) ...[
+                const SizedBox(height: 12),
+                TrackerPanel(
+                  torrentId: torrentId,
+                  trackerManager: _trackerManager,
+                ),
+              ],
+              if (_showPeers) ...[
+                const SizedBox(height: 12),
+                PeerPanel(
+                  torrentId: torrentId,
+                  isDark: isDark,
+                  peers: const [],
+                ),
+              ],
             ],
           ],
         ),
@@ -2776,7 +2825,51 @@ class _TorrentFilesPanel extends StatelessWidget with HapticHelper {
         if (!currentTask.isTorrent) {
           return const SizedBox.shrink();
         }
-        final files = dynamicTorrentFiles ?? currentTask.torrentFiles ?? [];
+        final List<Map<String, dynamic>> files = List<Map<String, dynamic>>.from(
+          dynamicTorrentFiles ?? currentTask.torrentFiles ?? const [],
+        );
+        final bool hasNoRealLengths = files.isEmpty ||
+            files.every((f) =>
+                ((f['length'] as num?)?.toInt() ??
+                    (f['size'] as num?)?.toInt() ??
+                    0) <=
+                0);
+        if (hasNoRealLengths) {
+          final tid = task.torrentId ??
+              TorrentIdResolver.resolve(task, providerMap: provider.providerTorrentIds);
+          if (tid != null) {
+            try {
+              // Keep the build path out of the synchronous native query. The
+              // local cache is refreshed at most once per 10 seconds and the
+              // torrent update pipeline will replace this fallback with the
+              // live file snapshot.
+              final nativeFiles = _cachedDetailsNativeFiles(tid);
+              if (nativeFiles.isNotEmpty) {
+                files
+                  ..clear()
+                  ..addAll(
+                    nativeFiles.map((f) {
+                      final dl = f.safeDownloadedBytes < 0
+                          ? 0
+                          : f.safeDownloadedBytes;
+                      return <String, dynamic>{
+                        'name': f.name,
+                        'length': f.size,
+                        'downloadedBytes': dl,
+                        'selected': f.selected,
+                        'priority': f.priority,
+                        'progress': f.size > 0
+                            ? (dl / f.size).clamp(0.0, 1.0)
+                            : 0.0,
+                        'isComplete': f.size > 0 && dl >= f.size,
+                        'progressEstimated': false,
+                      };
+                    }),
+                  );
+              }
+            } catch (_) {}
+          }
+        }
         final isDark = settings.isDarkMode;
         final isRtl = L10n.isRtl(context);
         final isDownloading = currentTask.status == DownloadStatus.downloading;

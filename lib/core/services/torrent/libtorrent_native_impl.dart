@@ -11,9 +11,9 @@ class LibtorrentNativeImpl implements ITorrentNative {
   StreamSubscription<lt.LtAlert>? _alertSub;
   StreamSubscription<Map<int, lt.TorrentInfo>>? _statusSub;
 
-  final StreamController<NativeAlertEvent> _alertStreamCtrl =
+  StreamController<NativeAlertEvent> _alertStreamCtrl =
       StreamController<NativeAlertEvent>.broadcast();
-  final StreamController<Map<int, NativeTorrentStatus>> _statusStreamCtrl =
+  StreamController<Map<int, NativeTorrentStatus>> _statusStreamCtrl =
       StreamController<Map<int, NativeTorrentStatus>>.broadcast();
 
   @override
@@ -106,6 +106,16 @@ class LibtorrentNativeImpl implements ITorrentNative {
     bool fetchTrackers = true,
     String? defaultSavePath,
   }) async {
+    // The adapter can be reused after a full engine dispose. Its controllers
+    // are intentionally closed during dispose, so recreate them before
+    // subscribing to the next native session.
+    if (_alertStreamCtrl.isClosed) {
+      _alertStreamCtrl = StreamController<NativeAlertEvent>.broadcast();
+    }
+    if (_statusStreamCtrl.isClosed) {
+      _statusStreamCtrl =
+          StreamController<Map<int, NativeTorrentStatus>>.broadcast();
+    }
     if (!lt.LibtorrentFlutter.isInitialized) {
       await lt.LibtorrentFlutter.init(
         listenInterface: listenInterface,
@@ -141,8 +151,10 @@ class LibtorrentNativeImpl implements ITorrentNative {
   }
 
   @override
-  int addMagnet(String magnetUri, String savePath, {bool streamOnly = false}) {
-    return lt.LibtorrentFlutter.instance.addMagnet(magnetUri, savePath, streamOnly);
+  int addMagnet(String magnetUri, String savePath,
+      {bool streamOnly = false, List<int>? resumeData}) {
+    return lt.LibtorrentFlutter.instance
+        .addMagnet(magnetUri, savePath, streamOnly, resumeData);
   }
 
   @override

@@ -58,8 +58,9 @@ class TrackerManager {
 TorrentInfo _toTorrentInfo(LtTorrentStatus s, [LibtorrentFlutter? engine]) {
   final id = s.id;
   final progress = s.progress.clamp(0.0, 1.0);
-  final totalWanted = s.totalWanted;
-  final totalWantedDone = (totalWanted * progress).round();
+  final totalWantedDone = s.totalWanted > 0
+      ? (s.totalWanted * progress).toInt()
+      : s.totalDone;
   final numPieces = s.numPieces;
   final piecesDone = s.piecesDone;
   final pieces = <bool>[];
@@ -81,8 +82,8 @@ TorrentInfo _toTorrentInfo(LtTorrentStatus s, [LibtorrentFlutter? engine]) {
     totalWanted:   s.totalWanted,
     totalWantedDone: totalWantedDone,
     totalUploaded: s.totalUploaded,
-    numPeers:      s.numPeers,
-    numSeeds:      s.numSeeds,
+    numPeers:      s.numPeers < 0 ? 0 : s.numPeers,
+    numSeeds:      s.numSeeds < 0 ? 0 : s.numSeeds,
     numPieces:     numPieces,
     piecesDone:    piecesDone,
     pieces:        pieces,
@@ -237,16 +238,23 @@ class LibtorrentFlutter {
   ///
   /// Returns the torrent ID. [savePath] defaults to the path set in init().
   /// Set [streamOnly] to true to prevent background downloading.
-  int addMagnet(String magnetUri, [String? savePath, bool streamOnly = false]) {
+  int addMagnet(String magnetUri, [String? savePath, bool streamOnly = false, List<int>? resumeData]) {
     final enhanced = TrackerManager.injectTrackers(magnetUri);
     final m = enhanced.toNativeUtf8();
     final s = (savePath ?? _defaultSavePath).toNativeUtf8();
+    Pointer<Uint8> r = nullptr;
+    if (resumeData != null && resumeData.isNotEmpty && _b.addMagnetResume != null) {
+      r = calloc<Uint8>(resumeData.length)..asTypedList(resumeData.length).setAll(0, resumeData);
+    }
     try {
-      final id = _b.addMagnet(_session, m, s, streamOnly ? 1 : 0);
+      final id = (r == nullptr || _b.addMagnetResume == null)
+          ? _b.addMagnet(_session, m, s, streamOnly ? 1 : 0)
+          : _b.addMagnetResume!(_session, m, s, streamOnly ? 1 : 0, r, resumeData!.length);
       if (id < 0) throw Exception(_b.lastError().toDartString());
       return id;
     } finally {
       malloc.free(m); malloc.free(s);
+      if (r != nullptr) calloc.free(r);
     }
   }
 
@@ -265,8 +273,16 @@ class LibtorrentFlutter {
 
   /// Remove a torrent. Optionally delete downloaded files.
   void removeTorrent(int id, {bool deleteFiles = false}) {
+    stopAllStreamsForTorrent(id);
     _b.removeTorrent(_session, id, deleteFiles ? 1 : 0);
     _torrents.remove(id);
+    _cachedFileProgress.remove(id);
+    _cachedFilePriorities.remove(id);
+    _cachedTrackers.remove(id);
+    _cachedWebSeeds.remove(id);
+    _sequentialDownload.remove(id);
+    _superSeeding.remove(id);
+    _saveResumeCompleters.remove(id);
     _torrentsCtrl.add(Map.unmodifiable(_torrents));
   }
 
@@ -289,14 +305,25 @@ class LibtorrentFlutter {
   Future<List<int>?> saveResumeData(int torrentId, {Duration timeout = const Duration(seconds: 5)}) async {
     final completer = Completer<List<int>?>();
     _saveResumeCompleters.putIfAbsent(torrentId, () => []).add(completer);
-    // Pause will flush and trigger save_resume_data_alert in native engine
-    _b.pauseTorrent(_session, torrentId);
+    final saveResume = _b.saveResumeData;
+    if (saveResume != null) {
+      saveResume(_session, torrentId);
+    }
     return completer.future.timeout(timeout, onTimeout: () => null);
   }
 
   /// Load fastresume blob data into native session.
   bool loadResumeData(int id, List<int> data) {
-    return true;
+    if (data.isEmpty || id < 0) return false;
+    final fn = _b.loadResumeData;
+    if (fn == null) return false;
+    final buf = malloc<Uint8>(data.length);
+    try {
+      buf.asTypedList(data.length).setAll(0, data);
+      return fn(_session, id, buf, data.length) != 0;
+    } finally {
+      malloc.free(buf);
+    }
   }
 
   // ─── File Enumeration ───────────────────────────────────────────────────────
@@ -316,6 +343,23 @@ class LibtorrentFlutter {
 
   /// Get per-file download progress in bytes.
   List<int> getFileProgress(int torrentId) {
+    final fn = _b.getFileProgress;
+    if (fn != null) {
+      final count = _b.getFileCount(_session, torrentId);
+      if (count > 0) {
+        final buf = calloc<Int64>(count);
+        try {
+          final n = fn(_session, torrentId, buf, count);
+          if (n > 0) {
+            final result = List<int>.generate(n, (i) => buf[i]);
+            _cachedFileProgress[torrentId] = result;
+            return result;
+          }
+        } finally {
+          calloc.free(buf);
+        }
+      }
+    }
     final cached = _cachedFileProgress[torrentId];
     if (cached != null) return List.unmodifiable(cached);
     final files = getFiles(torrentId);
@@ -329,6 +373,23 @@ class LibtorrentFlutter {
 
   /// Get per-file download priorities.
   List<int> getFilePriorities(int torrentId) {
+    final fn = _b.getFilePriorities;
+    if (fn != null) {
+      final count = _b.getFileCount(_session, torrentId);
+      if (count > 0) {
+        final buf = calloc<Int32>(count);
+        try {
+          final n = fn(_session, torrentId, buf, count);
+          if (n > 0) {
+            final result = List<int>.generate(n, (i) => buf[i]);
+            _cachedFilePriorities[torrentId] = result;
+            return result;
+          }
+        } finally {
+          calloc.free(buf);
+        }
+      }
+    }
     final cached = _cachedFilePriorities[torrentId];
     if (cached != null) return List.unmodifiable(cached);
     final files = getFiles(torrentId);
@@ -352,11 +413,55 @@ class LibtorrentFlutter {
 
   /// Get trackers for a torrent.
   List<TrackerInfoItem> getTrackers(int torrentId) {
+    final fn = _b.getTrackers;
+    if (fn != null) {
+      final count = fn(_session, torrentId, nullptr, 0);
+      if (count > 0) {
+        final buf = calloc<LtTrackerInfo>(count);
+        try {
+          final n = fn(_session, torrentId, buf, count);
+          if (n > 0) {
+            final result = <TrackerInfoItem>[];
+            for (var i = 0; i < n; i++) {
+              final t = buf[i];
+              final statusStr = switch (t.status) {
+                0 => 'working',
+                1 => 'updating',
+                2 => 'notWorking',
+                _ => 'disabled',
+              };
+              result.add(TrackerInfoItem(
+                url: readCharArray(t.url, 512),
+                tier: t.tier,
+                status: statusStr,
+                seeds: t.seeds,
+                peers: t.peers,
+                downloaded: t.downloaded,
+                message: readCharArray(t.message, 256),
+              ));
+            }
+            _cachedTrackers[torrentId] = result;
+            return List.unmodifiable(result);
+          }
+        } finally {
+          calloc.free(buf);
+        }
+      }
+    }
     return List.unmodifiable(_cachedTrackers[torrentId] ?? const []);
   }
 
   /// Add a tracker to a torrent.
   void addTracker(int torrentId, String trackerUrl, {int tier = 0}) {
+    final addFn = _b.addTracker;
+    if (addFn != null) {
+      final u = trackerUrl.toNativeUtf8();
+      try {
+        addFn(_session, torrentId, u, tier);
+      } finally {
+        malloc.free(u);
+      }
+    }
     final list = _cachedTrackers.putIfAbsent(torrentId, () => []);
     if (!list.any((t) => t.url == trackerUrl)) {
       list.add(TrackerInfoItem(
@@ -372,27 +477,49 @@ class LibtorrentFlutter {
 
   /// Remove a tracker from a torrent.
   void removeTracker(int torrentId, String trackerUrl) {
+    final remFn = _b.removeTracker;
+    if (remFn != null) {
+      final u = trackerUrl.toNativeUtf8();
+      try {
+        remFn(_session, torrentId, u);
+      } finally {
+        malloc.free(u);
+      }
+    }
     final list = _cachedTrackers[torrentId];
     if (list != null) {
       list.removeWhere((t) => t.url == trackerUrl);
     }
   }
 
-  /// Force an immediate tracker announce.
-  void announceNow(int torrentId) {}
+  /// Force an immediate tracker and DHT announce.
+  void announceNow(int torrentId) {
+    final forceReannounce = _b.forceReannounce;
+    if (forceReannounce != null) {
+      forceReannounce(_session, torrentId);
+    }
+    final forceDhtAnnounce = _b.forceDhtAnnounce;
+    if (forceDhtAnnounce != null) {
+      forceDhtAnnounce(_session, torrentId);
+    }
+  }
 
   /// Toggle sequential download mode.
   void setSequentialDownload(int torrentId, bool enabled) {
     _sequentialDownload[torrentId] = enabled;
+    _b.setSequentialDownload?.call(_session, torrentId, enabled ? 1 : 0);
   }
 
   /// Toggle super seeding mode.
   void setSuperSeeding(int torrentId, bool enabled) {
     _superSeeding[torrentId] = enabled;
+    _b.setSuperSeeding?.call(_session, torrentId, enabled ? 1 : 0);
   }
 
   /// Set deadline for a specific piece.
-  void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) {}
+  void setPieceDeadline(int torrentId, int pieceIndex, int deadlineMs) {
+    _b.setPieceDeadline?.call(_session, torrentId, pieceIndex, deadlineMs);
+  }
 
   /// Create a .torrent file.
   Future<String?> createTorrent({
@@ -609,9 +736,11 @@ class LibtorrentFlutter {
   }
 
   void _poll() {
-    _pollTorrents();
-    _pollStreams();
-    _pollAlerts();
+    // A native query can fail while a torrent is being removed. Never let one
+    // transient native exception kill the periodic polling loop.
+    try { _pollTorrents(); } catch (_) {}
+    try { _pollStreams(); } catch (_) {}
+    try { _pollAlerts(); } catch (_) {}
   }
 
   void _pollAlerts() {
@@ -623,28 +752,66 @@ class LibtorrentFlutter {
     }
   }
 
-  static void _onAlert(int type, int torrentId, Pointer<Utf8> message, Pointer<Void> userData) {
+  static void _onAlert(
+      int type, int torrentId, Pointer<Utf8> message,
+      Pointer<Uint8> data, int dataLen, Pointer<Void> userData) {
     final msg = message != nullptr ? message.toDartString() : '';
+    final bytes = (data != nullptr && dataLen > 0)
+        ? data.asTypedList(dataLen).toList()
+        : null;
+
     final alert = LtAlert(
       type: type,
       torrentId: torrentId,
       message: msg,
       timestamp: DateTime.now(),
+      data: bytes,
     );
     final inst = _instance;
     if (inst != null) {
       inst._alertsCtrl.add(alert);
 
-      // Alert types: 30 = save_resume_data_alert, 31 = save_resume_data_failed_alert
-      if (type == 30 || type == 31) {
+      // Alert types:
+      // 30 = save_resume_data_alert
+      // 31 = save_resume_data_failed_alert
+      // 38 = metadata_received_alert
+      if (type == 30) {
+        List<int>? resumeBlob = bytes;
+        if (resumeBlob == null || resumeBlob.isEmpty) {
+          final take = inst._b.takeSavedResumeData;
+          if (take != null) {
+            final size = take(inst._session, torrentId, nullptr, 0);
+            if (size > 0) {
+              final buf = calloc<Uint8>(size);
+              try {
+                final n = take(inst._session, torrentId, buf, size);
+                if (n > 0) resumeBlob = buf.asTypedList(n).toList();
+              } finally {
+                calloc.free(buf);
+              }
+            }
+          }
+        }
         final list = inst._saveResumeCompleters.remove(torrentId);
         if (list != null) {
           for (final c in list) {
             if (!c.isCompleted) {
-              c.complete(type == 30 ? <int>[] : null);
+              c.complete(resumeBlob ?? <int>[]);
             }
           }
         }
+      } else if (type == 31) {
+        final list = inst._saveResumeCompleters.remove(torrentId);
+        if (list != null) {
+          for (final c in list) {
+            if (!c.isCompleted) {
+              c.complete(null);
+            }
+          }
+        }
+      } else if (type == 38) {
+        inst._cachedFileProgress.remove(torrentId);
+        inst._cachedFilePriorities.remove(torrentId);
       }
     }
   }
@@ -658,11 +825,19 @@ class LibtorrentFlutter {
       final seen = <int>{};
 
       for (var i = 0; i < n; i++) {
-        final info = _toTorrentInfo(buf[i], this);
+        final raw = buf[i];
+        final info = _toTorrentInfo(raw, this);
         seen.add(info.id);
-        final old = _torrents[info.id];
-        if (old == null || _changed(old, info)) {
-          _torrents[info.id] = info;
+        // file_progress is not part of torrent_status. Populate its cache at
+        // the same boundary so every UI consumer gets complete snapshots.
+        if (raw.hasMetadata != 0) {
+          try { getFileProgress(info.id); } catch (_) {}
+          try { getFilePriorities(info.id); } catch (_) {}
+        }
+        final completeInfo = _toTorrentInfo(raw, this);
+        final old = _torrents[completeInfo.id];
+        if (old == null || _changed(old, completeInfo)) {
+          _torrents[completeInfo.id] = completeInfo;
           changed = true;
         }
       }
@@ -676,7 +851,6 @@ class LibtorrentFlutter {
   }
 
   void _pollStreams() {
-    if (_streams.isEmpty) return;
     final buf = calloc<LtStreamStatus>(_maxStreams);
     try {
       final n = _b.getAllStreamStatuses(_session, buf, _maxStreams);
@@ -701,16 +875,37 @@ class LibtorrentFlutter {
     } finally { calloc.free(buf); }
   }
 
-  bool _changed(TorrentInfo a, TorrentInfo b) =>
-      a.state       != b.state       ||
-      a.progress    != b.progress    ||
-      a.downloadRate!= b.downloadRate||
-      a.uploadRate  != b.uploadRate  ||
-      a.totalDone   != b.totalDone   ||
-      a.numPeers    != b.numPeers    ||
-      a.isPaused    != b.isPaused    ||
-      a.hasMetadata != b.hasMetadata ||
-      a.name        != b.name;
+  bool _changed(TorrentInfo a, TorrentInfo b) {
+    if (a.state != b.state ||
+        a.progress != b.progress ||
+        a.downloadRate != b.downloadRate ||
+        a.uploadRate != b.uploadRate ||
+        a.totalDone != b.totalDone ||
+        a.totalWanted != b.totalWanted ||
+        a.totalUploaded != b.totalUploaded ||
+        a.numPeers != b.numPeers ||
+        a.numSeeds != b.numSeeds ||
+        a.numPieces != b.numPieces ||
+        a.piecesDone != b.piecesDone ||
+        a.isPaused != b.isPaused ||
+        a.isFinished != b.isFinished ||
+        a.hasMetadata != b.hasMetadata ||
+        a.queuePosition != b.queuePosition ||
+        a.name != b.name ||
+        a.savePath != b.savePath ||
+        a.errorMsg != b.errorMsg) return true;
+    return !_sameList(a.fileProgress, b.fileProgress) ||
+        !_sameList(a.filePriorities, b.filePriorities);
+  }
+
+  bool _sameList<T>(List<T> a, List<T> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 
   // ─── Cleanup ───────────────────────────────────────────────────────────────
 
@@ -731,7 +926,7 @@ class LibtorrentFlutter {
 
   /// Clean up ALL torrents: stops every stream, removes every torrent,
   /// deletes all downloaded files. Call this on your exit button.
-  void disposeAll() {
+  void disposeAll({bool deleteFiles = true}) {
     // Stop all streams first
     for (final sid in _streams.keys.toList()) {
       try { stopStream(sid); } catch (_) {}
@@ -739,7 +934,7 @@ class LibtorrentFlutter {
 
     // Remove all torrents and delete their files
     for (final tid in _torrents.keys.toList()) {
-      try { removeTorrent(tid, deleteFiles: true); } catch (_) {}
+      try { removeTorrent(tid, deleteFiles: deleteFiles); } catch (_) {}
     }
   }
 
@@ -747,11 +942,23 @@ class LibtorrentFlutter {
   /// destroys the native session. After this, you'd need to call
   /// [init] again to use the engine.
   Future<void> dispose() async {
-    disposeAll();
+    // Engine shutdown must not delete the user's downloaded data.
+    disposeAll(deleteFiles: false);
     _pollTimer?.cancel();
+    for (final pending in _saveResumeCompleters.values) {
+      for (final c in pending) {
+        if (!c.isCompleted) c.complete(null);
+      }
+    }
+    _saveResumeCompleters.clear();
     _b.destroySession(_session);
     await _torrentsCtrl.close();
+    await _alertsCtrl.close();
     await _streamsCtrl.close();
+    _torrents.clear();
+    _streams.clear();
+    _cachedFileProgress.clear();
+    _cachedFilePriorities.clear();
     _instance = null;
   }
 }

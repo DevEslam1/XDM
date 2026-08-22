@@ -28,10 +28,11 @@ HealthLevel calculateHealth({
 }) {
   // If data is actively flowing, the torrent is NOT dead — there must be at
   // least one peer or web-seed connected even if the reported count is 0.
-  if (seeds == 0 && peers == 0 && downloadRate <= 0) return HealthLevel.dead;
-  if (availability < 1.0) return HealthLevel.poor;
-  if (distributedCopies < 1.0 || seeds < 3) return HealthLevel.fair;
+  if (seeds <= 0 && peers <= 0 && downloadRate <= 0) return HealthLevel.dead;
   if (seeds >= 10 && downloadRate > 100 * 1024) return HealthLevel.excellent;
+  if (seeds >= 3 || downloadRate > 20 * 1024) return HealthLevel.good;
+  if (seeds > 0 || peers > 0 || downloadRate > 0) return HealthLevel.fair;
+  if (availability < 1.0 && distributedCopies < 1.0) return HealthLevel.poor;
   return HealthLevel.good;
 }
 

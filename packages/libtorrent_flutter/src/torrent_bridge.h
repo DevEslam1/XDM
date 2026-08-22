@@ -21,15 +21,15 @@ typedef int64_t lt_torrent_id;
 typedef int64_t lt_stream_id;
 
 /* torrent states */
-#define LT_STATE_ERROR             -2
-#define LT_STATE_UNKNOWN           -1
-#define LT_STATE_ALLOCATING         0
-#define LT_STATE_CHECKING_FILES     1
-#define LT_STATE_DOWNLOADING_META   2
-#define LT_STATE_DOWNLOADING        3
-#define LT_STATE_FINISHED           4
-#define LT_STATE_SEEDING            5
-#define LT_STATE_CHECKING_RESUME    6
+#define LT_STATE_ERROR               -2
+#define LT_STATE_UNKNOWN             -1
+#define LT_STATE_CHECKING_FILES       0
+#define LT_STATE_DOWNLOADING_META     1
+#define LT_STATE_DOWNLOADING          2
+#define LT_STATE_FINISHED             3
+#define LT_STATE_SEEDING              4
+#define LT_STATE_ALLOCATING           5
+#define LT_STATE_CHECKING_RESUME      6
 
 /* stream states */
 #define LT_STREAM_IDLE       0
@@ -67,6 +67,17 @@ typedef struct {
     int64_t size;
     int32_t is_streamable;
 } lt_file_info;
+
+typedef struct {
+    char    url[512];
+    int32_t tier;
+    int32_t status; /* 0=working, 1=updating, 2=notWorking, 3=disabled */
+    int32_t seeds;
+    int32_t peers;
+    int32_t downloaded;
+    char    message[256];
+    int32_t next_announce;
+} lt_tracker_info;
 
 typedef struct {
     lt_stream_id  id;
@@ -109,7 +120,9 @@ typedef struct {
 } lt_bt_config;
 
 typedef void (*lt_alert_callback)(int alert_type, lt_torrent_id id,
-                                  const char* message, void* user_data);
+                                  const char* message,
+                                  const uint8_t* data, int32_t data_len,
+                                  void* user_data);
 
 /* session */
 TORRENT_API lt_session_t lt_create_session(const char* listen_interface,
@@ -133,6 +146,12 @@ TORRENT_API lt_torrent_id lt_add_magnet(lt_session_t session,
                                         const char* magnet_uri,
                                         const char* save_path,
                                         int stream_only);
+TORRENT_API lt_torrent_id lt_add_magnet_resume(lt_session_t session,
+                                               const char* magnet_uri,
+                                               const char* save_path,
+                                               int stream_only,
+                                               const uint8_t* resume_data,
+                                               int resume_data_len);
 TORRENT_API lt_torrent_id lt_add_torrent_file(lt_session_t session,
                                               const char* file_path,
                                               const char* save_path,
@@ -142,6 +161,13 @@ TORRENT_API void lt_remove_torrent(lt_session_t session,
 TORRENT_API void lt_pause_torrent(lt_session_t session, lt_torrent_id id);
 TORRENT_API void lt_resume_torrent(lt_session_t session, lt_torrent_id id);
 TORRENT_API void lt_recheck_torrent(lt_session_t session, lt_torrent_id id);
+TORRENT_API void lt_force_reannounce(lt_session_t session, lt_torrent_id id);
+TORRENT_API void lt_force_dht_announce(lt_session_t session, lt_torrent_id id);
+TORRENT_API void lt_save_resume_data(lt_session_t session, lt_torrent_id id);
+TORRENT_API int64_t lt_take_saved_resume_data(lt_session_t session, lt_torrent_id id,
+                                              uint8_t* out, int32_t max_bytes);
+TORRENT_API int  lt_load_resume_data(lt_session_t session, lt_torrent_id id,
+                                     const uint8_t* data, int dataLen);
 
 /* status queries */
 TORRENT_API int lt_get_torrent_count(lt_session_t session);
@@ -150,12 +176,29 @@ TORRENT_API int lt_get_all_statuses(lt_session_t session,
 TORRENT_API int lt_get_status(lt_session_t session, lt_torrent_id id,
                               lt_torrent_status* out);
 
-/* file queries */
+/* file queries & priorities */
 TORRENT_API int  lt_get_file_count(lt_session_t session, lt_torrent_id id);
 TORRENT_API int  lt_get_files(lt_session_t session, lt_torrent_id id,
                               lt_file_info* out, int max_count);
+TORRENT_API int  lt_get_file_progress(lt_session_t session, lt_torrent_id id,
+                                      int64_t* out, int max);
+TORRENT_API int  lt_get_file_priorities(lt_session_t session, lt_torrent_id id,
+                                        int32_t* out, int max);
 TORRENT_API void lt_set_file_priorities(lt_session_t session, lt_torrent_id id,
                                         const int32_t* priorities, int count);
+
+/* trackers */
+TORRENT_API int  lt_get_trackers(lt_session_t session, lt_torrent_id id,
+                                 lt_tracker_info* out, int max);
+TORRENT_API void lt_add_tracker(lt_session_t session, lt_torrent_id id,
+                                const char* url, int tier);
+TORRENT_API void lt_remove_tracker(lt_session_t session, lt_torrent_id id,
+                                   const char* url);
+
+/* feature flags & piece controls */
+TORRENT_API void lt_set_sequential_download(lt_session_t session, lt_torrent_id id, int enable);
+TORRENT_API void lt_set_super_seeding(lt_session_t session, lt_torrent_id id, int enable);
+TORRENT_API void lt_set_piece_deadline(lt_session_t session, lt_torrent_id id, int piece, int deadline_ms);
 
 /* streaming */
 TORRENT_API lt_stream_id lt_start_stream(lt_session_t session,

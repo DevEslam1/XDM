@@ -28,13 +28,15 @@ class TorrentLifecycleManager {
   int getSeeds(String taskId) {
     final torrentId = _torrentIds[taskId];
     if (torrentId == null) return 0;
-    return _latestTorrentStats[torrentId]?.numSeeds ?? 0;
+    final seeds = _latestTorrentStats[torrentId]?.numSeeds ?? 0;
+    return seeds < 0 ? 0 : seeds;
   }
 
   int getPeers(String taskId) {
     final torrentId = _torrentIds[taskId];
     if (torrentId == null) return 0;
-    return _latestTorrentStats[torrentId]?.numPeers ?? 0;
+    final peers = _latestTorrentStats[torrentId]?.numPeers ?? 0;
+    return peers < 0 ? 0 : peers;
   }
 
   void checkRatioLimits() {

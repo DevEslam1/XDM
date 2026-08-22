@@ -835,7 +835,7 @@ packages:
       path: "packages/libtorrent_flutter"
       relative: true
     source: path
-    version: "1.9.2"
+    version: "2.0.0"
   linked_scroll_controller:
     dependency: transitive
     description:

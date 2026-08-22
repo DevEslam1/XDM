@@ -1,4 +1,4 @@
-/// libtorrent_flutter — Native libtorrent 2.0 bindings for Flutter.
+/// libtorrent_flutter — Native libtorrent 2.1.1 bindings for Flutter.
 ///
 /// Provides torrent downloading, file selection, and a built-in HTTP streaming
 /// server for instant video playback from torrent sources.

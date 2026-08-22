@@ -1,9 +1,9 @@
 Pod::Spec.new do |s|
   s.name             = 'libtorrent_flutter'
-  s.version          = '1.7.0'
+  s.version          = '2.0.0'
   s.summary          = 'Flutter plugin for libtorrent with built-in streaming server.'
   s.description      = <<-DESC
-  Native libtorrent 2.0 bindings for Flutter with an integrated HTTP streaming server.
+  Native libtorrent 2.1.1 bindings for Flutter with an integrated HTTP streaming server.
                        DESC
   s.homepage         = 'https://github.com/ayman708-UX/libtorrent_flutter'
   s.license          = { :type => 'GPL-3.0', :file => '../LICENSE' }
@@ -73,7 +73,7 @@ Pod::Spec.new do |s|
     s.pod_target_xcconfig = {
       'DEFINES_MODULE' => 'YES',
       'HEADER_SEARCH_PATHS' => '"$(PODS_TARGET_SRCROOT)/../src"',
-      'OTHER_CPLUSPLUSFLAGS' => '-std=c++17 -DTORRENT_BRIDGE_EXPORTS -DTORRENT_NO_DEPRECATE -DTORRENT_USE_SSL=0',
+      'OTHER_CPLUSPLUSFLAGS' => '-std=c++17 -DTORRENT_BRIDGE_EXPORTS -DTORRENT_USE_SSL=0',
       'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
     }
   end

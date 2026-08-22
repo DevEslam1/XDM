@@ -11,7 +11,9 @@ plugins {
 android {
     namespace = "com.xdm.downloadmanager"
     compileSdk = 37
-    ndkVersion = flutter.ndkVersion
+    // Flutter's default NDK path is corrupted on this machine. Pin the
+    // project to the installed NDK that contains source.properties.
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -69,6 +71,14 @@ android {
             } else {
                 signingConfig = signingConfigs.getByName("debug")
             }
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // Keep native libraries uncompressed and let the linker-provided
+            // 16 KB PT_LOAD alignment remain intact in the APK.
+            useLegacyPackaging = false
         }
     }
 }

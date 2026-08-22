@@ -100,11 +100,18 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
+    int getFileLength(Map<String, dynamic> f) {
+      return (f['length'] as num?)?.toInt() ??
+          (f['size'] as num?)?.toInt() ??
+          (f['fileSize'] as num?)?.toInt() ??
+          0;
+    }
+
     double calcFileProgress(Map<String, dynamic> f) {
       if (!isTorrentFileSelected(f)) return 0.0;
       if ((f['isComplete'] as bool?) == true) return 1.0;
       final isEstimated = (f['progressEstimated'] as bool?) == true;
-      final length = (f['length'] as num?)?.toInt() ?? 0;
+      final length = getFileLength(f);
       final downloadedBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
       if (!isEstimated && length > 0 && downloadedBytes >= length) return 1.0;
       if (f['progress'] != null) {
@@ -120,7 +127,7 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
     final completedCount = selectedFiles.where((f) {
       final isEstimated = (f['progressEstimated'] as bool?) == true;
       final isComp = (f['isComplete'] as bool?) == true;
-      final len = (f['length'] as num?)?.toInt() ?? 0;
+      final len = getFileLength(f);
       final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
       return isComp || (!isEstimated && len > 0 && dl >= len);
     }).length;
@@ -222,7 +229,7 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                 itemBuilder: (context, index) {
                   final f = files[index];
                   final name = f['name'] as String? ?? 'file_${index + 1}';
-                  final length = (f['length'] as num?)?.toInt() ?? 0;
+                  final length = getFileLength(f);
                   final downloadedBytes =
                       (f['downloadedBytes'] as num?)?.toInt() ?? 0;
                   final selected = (f['selected'] as bool?) ?? true;

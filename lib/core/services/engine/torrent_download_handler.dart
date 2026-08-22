@@ -206,7 +206,8 @@ class TorrentRuntime {
     try {
       watchdogManager?.stop();
     } catch (_) {}
-    watchdogManager = null;
+    cachedAccurateFiles = null;
+    lastStateLabel = '';
     final err = StateError('Torrent runtime closed');
     if (completionGuard != null && !completionGuard!.isCompleted) {
       completionGuard!.future.catchError((_) {});
@@ -300,8 +301,7 @@ class TorrentDownloadHandler {
       : _torrentService = torrentService ??
             (getIt.isRegistered<ITorrentService>()
                 ? getIt<ITorrentService>()
-                : throw StateError(
-                    'ITorrentService must be registered in GetIt or provided to TorrentDownloadHandler.'));
+                : TorrentServiceImpl());
 
   @visibleForTesting
   static PauseReason inferPauseReasonForTesting([PauseReason? reason]) =>
@@ -340,6 +340,8 @@ class TorrentDownloadHandler {
   void removeActiveTorrent(int id) {
     final rt = _runtime.remove(id);
     rt?.close();
+    final def = _runtime.remove(-1);
+    def?.close();
     _activeTorrentIds.remove(id);
     TorrentSubscriptionRegistry.instance.unregister(id, this);
   }
@@ -349,6 +351,7 @@ class TorrentDownloadHandler {
     for (final rt in _runtime.values) {
       rt.close();
     }
+    _defaultRuntime.close();
     _runtime.clear();
     _activeTorrentIds.clear();
     TorrentSubscriptionRegistry.instance.unregisterAll(this);
@@ -393,13 +396,18 @@ class TorrentDownloadHandler {
         _log.warning('haltTorrent pause failed for $id', e, st);
       }
       pauseAttempts++;
-      if (await _isTransmissionStopped(id, deadline: deadline)) {
+      final attemptDeadline =
+          DateTime.now().add(const Duration(milliseconds: 600));
+      final checkDeadline =
+          attemptDeadline.isBefore(deadline) ? attemptDeadline : deadline;
+      if (await _isTransmissionStopped(id, deadline: checkDeadline)) {
         _log.info('haltTorrent confirmed pause for $id');
         _activeTorrentIds.remove(id);
         return;
       }
-      if (deadline.difference(DateTime.now()) > const Duration(milliseconds: 400)) {
-        await Future.delayed(const Duration(milliseconds: 400));
+      if (deadline.difference(DateTime.now()) >
+          const Duration(milliseconds: 100)) {
+        await Future.delayed(const Duration(milliseconds: 100));
       }
     }
     _log.warning('haltTorrent failed graceful pause for $id within budget — forcing stop');
@@ -1028,7 +1036,10 @@ class TorrentDownloadHandler {
       bool pauseInitiated = false;
 
       List<Map<String, dynamic>>? postMetadataFiles = initFiles;
-      if (id >= 0 && (initFiles == null || initFiles.isEmpty)) {
+      final bool hasNoRealFiles = initFiles == null ||
+          initFiles.isEmpty ||
+          initFiles.every((f) => ((f['length'] as num?)?.toInt() ?? 0) <= 0);
+      if (id >= 0 && hasNoRealFiles) {
         try {
           final nativeFiles = _torrentService.getFiles(id);
           if (nativeFiles.isNotEmpty) {
@@ -1700,7 +1711,6 @@ class TorrentDownloadHandler {
         final torrent = torrents[id];
         if (torrent == null) {
           streamMisses++;
-          if (streamMisses < 5) return;
           if (!_torrentService.isTorrentAlive(id)) {
             if (!completer.isCompleted) {
               completer.completeError(DioException(
@@ -1710,7 +1720,9 @@ class TorrentDownloadHandler {
               ));
             }
             unawaited(_cleanup(id, null));
+            return;
           }
+          if (streamMisses < 5) return;
           return;
         }
         streamMisses = 0;
@@ -1793,7 +1805,12 @@ class TorrentDownloadHandler {
         getTorrentFiles?.call() ?? rt.cachedAccurateFiles;
 
     final piecesDelta = torrent.piecesHave != rt.lastPiecesHave;
-    if (torrent.hasMetadata && (piecesDelta || rt.cachedAccurateFiles == null)) {
+    final bool cachedHasZeroLengths = rt.cachedAccurateFiles == null ||
+        rt.cachedAccurateFiles!.isEmpty ||
+        rt.cachedAccurateFiles!.every(
+            (f) => ((f['length'] as num?)?.toInt() ?? 0) <= 0);
+    if ((torrent.hasMetadata || torrent.piecesTotal > 0) &&
+        (piecesDelta || cachedHasZeroLengths)) {
       rt.lastPiecesHave = torrent.piecesHave;
       try {
         final nativeFiles = _torrentService.getFiles(id);
@@ -1841,13 +1858,26 @@ class TorrentDownloadHandler {
             .fold<int>(0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0)) ??
         0;
 
-    final totalSize = (torrent.totalWanted > 0)
+    int totalSize = (torrent.totalWanted > 0)
         ? torrent.totalWanted
         : (selectedFilesSum > 0
             ? selectedFilesSum
             : (allFilesSum > 0
                 ? allFilesSum
                 : (knownFileSize > 0 ? knownFileSize : 0)));
+    if (totalSize <= 0 && (torrent.hasMetadata || torrent.piecesTotal > 0)) {
+      try {
+        final nf = _torrentService.getFiles(id);
+        if (nf.isNotEmpty) {
+          totalSize = nf
+              .where((f) => f.selected)
+              .fold<int>(0, (s, f) => s + f.size);
+          if (totalSize <= 0) {
+            totalSize = nf.fold<int>(0, (s, f) => s + f.size);
+          }
+        }
+      } catch (_) {}
+    }
     tracker.currentTotalSize = totalSize;
     final bool hasReliableTotalSize =
         selectedFilesSum > 0 || allFilesSum > 0 || torrent.totalWanted > 0;
@@ -1928,7 +1958,7 @@ class TorrentDownloadHandler {
       hasEstimatedFileProgress = false;
     }
 
-    if (totalSize <= 0) {
+    if (totalSize <= 0 && !torrent.hasMetadata && torrent.piecesTotal <= 0) {
       final downloadedBytes = rawDownloaded;
       final speed = torrent.downloadPayloadRate.toDouble();
       tracker.lastTorrentSpeed = speed;
@@ -1943,7 +1973,7 @@ class TorrentDownloadHandler {
         cycleState: CycleState.fetchingMetadata,
         totalPieces: torrent.piecesTotal,
         completedPieces: torrent.piecesHave,
-        statusMessage: (torrent.hasMetadata) ? 'Preparing torrent…' : 'Fetching metadata…',
+        statusMessage: 'Fetching metadata…',
         torrentId: id,
         downloadedFileBytes: selectiveDownloadedBytes,
         hasEstimatedFileProgress: hasEstimatedFileProgress,

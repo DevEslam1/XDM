@@ -31,17 +31,23 @@ enum TorrentAlertType {
 
   /// Mappings pinned to libtorrent v1.2.x / v2.0.x alert codes.
   static const Map<int, TorrentAlertType> _nativeTypeMap = {
-    alertMetadataReceived: TorrentAlertType.metadataReceived, // metadata_received_alert
+    alertMetadataReceived:
+        TorrentAlertType.metadataReceived, // metadata_received_alert
     alertTorrentPaused: TorrentAlertType.torrentPaused, // torrent_paused_alert
-    alertTorrentResumed: TorrentAlertType.torrentResumed, // torrent_resumed_alert
+    alertTorrentResumed:
+        TorrentAlertType.torrentResumed, // torrent_resumed_alert
     alertPieceFinished: TorrentAlertType.pieceFinished, // piece_finished_alert
-    alertSaveResumeDataCompleted: TorrentAlertType.saveResumeDataCompleted, // save_resume_data_alert
-    alertSaveResumeDataFailed: TorrentAlertType.saveResumeDataFailed, // save_resume_data_failed_alert
+    alertSaveResumeDataCompleted:
+        TorrentAlertType.saveResumeDataCompleted, // save_resume_data_alert
+    alertSaveResumeDataFailed:
+        TorrentAlertType.saveResumeDataFailed, // save_resume_data_failed_alert
     alertTrackerReply: TorrentAlertType.trackerReply, // tracker_reply_alert
     alertTrackerError: TorrentAlertType.trackerError, // tracker_error_alert
-    alertFastresumeRejected: TorrentAlertType.fastresumeRejected, // fastresume_rejected_alert
+    alertFastresumeRejected:
+        TorrentAlertType.fastresumeRejected, // fastresume_rejected_alert
     alertTorrentError: TorrentAlertType.torrentError, // torrent_error_alert
-    alertStoppedAnnounce: TorrentAlertType.stoppedAnnounce, // tracker_announce_alert / stopped announce
+    alertStoppedAnnounce: TorrentAlertType
+        .stoppedAnnounce, // tracker_announce_alert / stopped announce
   };
 
   // FIX(M5): Replace magic switch ints with pinned const Map lookup.
@@ -162,7 +168,7 @@ class NativeTorrentStatus {
         id: id,
         name: name ?? this.name,
         savePath: savePath ?? this.savePath,
-        errorMsg: clearErrorMsg ? "" : (errorMsg ?? this.errorMsg),
+        errorMsg: clearErrorMsg ? '' : (errorMsg ?? this.errorMsg),
         state: state ?? this.state,
         stateLabel: stateLabel ?? this.stateLabel,
         progress: progress ?? this.progress,
@@ -280,8 +286,10 @@ abstract class ITorrentNative {
 
   Future<void> dispose();
 
-  int addMagnet(String magnetUri, String savePath, {bool streamOnly = false});
-  int addTorrentFile(String filePath, String savePath, {bool streamOnly = false});
+  int addMagnet(String magnetUri, String savePath,
+      {bool streamOnly = false, List<int>? resumeData});
+  int addTorrentFile(String filePath, String savePath,
+      {bool streamOnly = false});
   void removeTorrent(int id, {bool deleteFiles = false});
   Future<void> pauseTorrent(int id, {bool graceful = true});
   Future<void> resumeTorrent(int id);

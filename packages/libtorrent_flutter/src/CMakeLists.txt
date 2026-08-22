@@ -24,16 +24,21 @@ add_library(libtorrent_flutter SHARED
     torrent_bridge.h
 )
 
+# Android 15 devices may use 16 KB pages. Ensure every source-built ABI has
+# PT_LOAD alignment compatible with those devices (prebuilt release ABIs are
+# validated separately during packaging).
+if(ANDROID)
+    target_link_options(libtorrent_flutter PRIVATE "-Wl,-z,max-page-size=16384")
+endif()
+
 target_compile_definitions(libtorrent_flutter PRIVATE
     TORRENT_BRIDGE_EXPORTS
 )
 
-# TORRENT_NO_DEPRECATE changes ABI version (v2:: namespace).
-# Only use it when building libtorrent from source (Android).
-# System libraries (Homebrew, apt, vcpkg) use ABI v1 = no v2:: namespace.
-if(ANDROID)
-    target_compile_definitions(libtorrent_flutter PRIVATE TORRENT_NO_DEPRECATE)
-endif()
+# libtorrent 2.1.1 requires C++17 and uses the canonical `libtorrent` API
+# namespace. Do not enable TORRENT_NO_DEPRECATE: the v2 namespace mode is an
+# old compatibility ABI and does not match the libtorrent 2.1.1 release
+# binaries.
 
 # ── Platform-specific linking ──────────────────────────────────────────────────
 
@@ -64,8 +69,10 @@ elseif(ANDROID)
         target_include_directories(libtorrent_flutter PRIVATE ${LIBTORRENT_INCLUDE} ${BOOST_INCLUDE})
         target_link_libraries(libtorrent_flutter PRIVATE libtorrent_static log)
     else()
-        message(WARNING "No prebuilt libtorrent for ${ANDROID_ABI}. See README.")
-        target_link_libraries(libtorrent_flutter PRIVATE log)
+        message(FATAL_ERROR
+            "No prebuilt libtorrent-rasterbar.a for ${ANDROID_ABI} at "
+            "${PREBUILT_DIR}. Build/copy the prebuilt static lib for this "
+            "ABI before configuring — see README.")
     endif()
 
 elseif(APPLE)

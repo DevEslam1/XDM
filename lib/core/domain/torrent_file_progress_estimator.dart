@@ -85,7 +85,7 @@ class TorrentFileProgressEstimator {
       final dl = math.max(priorDl, calculatedDl).clamp(0, len);
       f['downloadedBytes'] = dl;
       f['progress'] = len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0;
-      f['isComplete'] = false;
+      f['isComplete'] = len > 0 && dl >= len;
       f['progressEstimated'] = true;
       remaining -= calculatedDl;
       if (remaining <= 0) remaining = 0;
@@ -138,7 +138,7 @@ class TorrentFileProgressEstimator {
         f['downloadedBytes'] = est;
         f['progressEstimated'] = true;
         f['progress'] = length > 0 ? (est / length).clamp(0.0, 1.0) : 0.0;
-        f['isComplete'] = false;
+        f['isComplete'] = length > 0 && est >= length;
       }
       reconcileEstimatedFiles(files, totalDownloadedBytes);
       return;
@@ -158,7 +158,7 @@ class TorrentFileProgressEstimator {
       f['downloadedBytes'] = est;
       f['progressEstimated'] = true;
       f['progress'] = length > 0 ? (est / length).clamp(0.0, 1.0) : 0.0;
-      f['isComplete'] = false;
+      f['isComplete'] = length > 0 && est >= length;
     }
     reconcileEstimatedFiles(files, totalDownloadedBytes);
   }
@@ -198,7 +198,7 @@ class TorrentFileProgressEstimator {
         final newDl = (dl + share).clamp(0, len);
         f['downloadedBytes'] = newDl;
         f['progress'] = len > 0 ? (newDl / len).clamp(0.0, 1.0) : 1.0;
-        f['isComplete'] = false;
+        f['isComplete'] = len > 0 && newDl >= len;
       }
     }
   }

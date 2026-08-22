@@ -47,6 +47,14 @@ class _FakeTorrentService implements ITorrentService {
   }
 
   @override
+  Future<void> forceStopTorrent(int id) async {
+    pauseCalls++;
+    if (autoRemoveOnPause) {
+      _alive.remove(id);
+    }
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

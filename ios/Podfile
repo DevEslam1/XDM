@@ -4,7 +4,8 @@ platform :ios, '15.0'
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-# Workaround: libtorrent_flutter 1.9.2 podspec hardcodes version 1.7.0.
+# Keep the local podspec aligned with the libtorrent_flutter 2.0.0 wrapper,
+# whose native binaries are built against libtorrent core 2.1.1.
 # We vendor a corrected copy in ios/LocalPodspecs/ so no runtime patching is needed.
 
 project 'Runner', {

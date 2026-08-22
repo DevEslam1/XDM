@@ -22,7 +22,7 @@ void main() {
       handler.lastStateLabel = 'Downloading (50%)';
 
       final dummySub = const Stream<void>.empty().listen((_) {});
-      handler.activeSubsForTesting[101] = dummySub;
+      TorrentSubscriptionRegistry.instance.register(101, handler, dummySub);
 
       expect(handler.cachedAccurateFiles, isNotNull);
       expect(handler.lastStateLabel, equals('Downloading (50%)'));

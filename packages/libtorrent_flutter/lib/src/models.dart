@@ -4,6 +4,7 @@
 enum TorrentState {
   error,
   unknown,
+  queuedForChecking,
   checkingFiles,
   downloadingMetadata,
   downloading,
@@ -37,12 +38,12 @@ StreamState streamStateFromInt(int v) {
 TorrentState stateFromInt(int v) {
   switch (v) {
     case -2: return TorrentState.error;
-    case  0: return TorrentState.allocating;
-    case  1: return TorrentState.checkingFiles;
-    case  2: return TorrentState.downloadingMetadata;
-    case  3: return TorrentState.downloading;
-    case  4: return TorrentState.finished;
-    case  5: return TorrentState.seeding;
+    case  0: return TorrentState.checkingFiles;
+    case  1: return TorrentState.downloadingMetadata;
+    case  2: return TorrentState.downloading;
+    case  3: return TorrentState.finished;
+    case  4: return TorrentState.seeding;
+    case  5: return TorrentState.allocating;
     case  6: return TorrentState.checkingResume;
     default: return TorrentState.unknown;
   }
@@ -53,6 +54,7 @@ extension TorrentStateX on TorrentState {
     switch (this) {
       case TorrentState.error:               return 'Error';
       case TorrentState.unknown:             return 'Unknown';
+      case TorrentState.queuedForChecking:   return 'Queued for checking';
       case TorrentState.checkingFiles:       return 'Checking files';
       case TorrentState.downloadingMetadata: return 'Getting metadata';
       case TorrentState.downloading:         return 'Downloading';
@@ -68,6 +70,7 @@ extension TorrentStateX on TorrentState {
       this == TorrentState.downloadingMetadata ||
       this == TorrentState.allocating ||
       this == TorrentState.checkingFiles ||
+      this == TorrentState.queuedForChecking ||
       this == TorrentState.checkingResume;
 
   bool get isDone =>
@@ -187,6 +190,7 @@ class TrackerInfoItem {
   final String status;
   final int seeds;
   final int peers;
+  final int downloaded;
   final String message;
 
   const TrackerInfoItem({
@@ -195,6 +199,7 @@ class TrackerInfoItem {
     required this.status,
     required this.seeds,
     required this.peers,
+    this.downloaded = 0,
     required this.message,
   });
 }

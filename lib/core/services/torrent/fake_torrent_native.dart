@@ -1,11 +1,11 @@
-import 'dart:async';
+﻿import 'dart:async';
 import '../../interfaces/i_torrent_native.dart';
 import '../diagnostic_service.dart';
 
 /// Deterministic, scriptable implementation of [ITorrentNative] for unit and contract tests.
 class FakeTorrentNative implements ITorrentNative {
   bool _initialized = true;
-  String _libraryVersion = 'libtorrent/2.0.9-fake';
+  String _libraryVersion = 'libtorrent/2.1.1-fake';
   int _nextId = 1;
 
   final StreamController<NativeAlertEvent> _alertCtrl =
@@ -88,7 +88,7 @@ class FakeTorrentNative implements ITorrentNative {
     final status = NativeTorrentStatus(
       id: id,
       name: name,
-      savePath: '/downloads/$name',
+      savePath: '/downloads/',
       errorMsg: '',
       state: 2, // downloading
       stateLabel: 'Downloading',
@@ -202,12 +202,16 @@ class FakeTorrentNative implements ITorrentNative {
   }
 
   @override
-  int addMagnet(String magnetUri, String savePath, {bool streamOnly = false}) {
+  int addMagnet(String magnetUri, String savePath,
+      {bool streamOnly = false, List<int>? resumeData}) {
     // FIX(N3): Monotonic ID assignment
     final id = _nextId++;
+    if (resumeData != null && resumeData.isNotEmpty) {
+      _savedResumeData[id] = List.from(resumeData);
+    }
     final status = NativeTorrentStatus(
       id: id,
-      name: 'Magnet_$id',
+      name: 'Magnet_',
       savePath: savePath,
       errorMsg: '',
       state: 1, // getting metadata
@@ -292,10 +296,10 @@ class FakeTorrentNative implements ITorrentNative {
         final resumeData =
             await saveResumeData(id, timeout: const Duration(seconds: 5));
         if (resumeData == null) {
-          _recordTelemetry('resume_data_missing', taskId: '$id');
+          _recordTelemetry('resume_data_missing', taskId: '');
         }
       } catch (_) {
-        _recordTelemetry('resume_data_missing', taskId: '$id');
+        _recordTelemetry('resume_data_missing', taskId: '');
       }
       if (gracefulPauseDelay > Duration.zero) {
         await Future.delayed(gracefulPauseDelay);
@@ -318,7 +322,7 @@ class FakeTorrentNative implements ITorrentNative {
         timestamp: DateTime.now(),
       ));
     } else if (graceful && simulateGracefulPauseTimeout) {
-      _recordTelemetry('resume_data_missing', taskId: '$id');
+      _recordTelemetry('resume_data_missing', taskId: '');
     }
 
     if (!simulateGracefulPauseTimeout) {

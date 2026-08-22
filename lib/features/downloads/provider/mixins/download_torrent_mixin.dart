@@ -8,6 +8,7 @@ import '../../../../core/services/logging_service.dart';
 import '../../../../core/services/retry_engine.dart';
 import '../../../../core/services/torrent_service.dart';
 import '../../../../core/utils/file_utils.dart';
+import '../../../../core/utils/torrent_id_resolver.dart';
 import '../../../../features/settings/provider/settings_provider.dart';
 import '../../models/download_task.dart';
 
@@ -126,6 +127,10 @@ mixin DownloadTorrentMixin {
         },
       );
       providerTorrentIds[task.id] = torrentId;
+      final tIdx = providerTasks.indexWhere((t) => t.id == task.id);
+      if (tIdx != -1) {
+        providerTasks[tIdx] = providerTasks[tIdx].copyWith(torrentId: torrentId);
+      }
       TorrentService.resumeTorrent(torrentId);
 
       if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
@@ -176,17 +181,16 @@ mixin DownloadTorrentMixin {
       .length;
 
   // ---------------------------------------------------------------------------
-  // Torrent stat queries
+  // Torrent stats queries — delegates to TorrentService / latest stats
   // ---------------------------------------------------------------------------
   int getTorrentSeeds(String taskId) {
     final task = findTaskById(taskId);
-    final torrentId = providerTorrentIds[taskId] ??
-        int.tryParse(taskId) ??
-        (task != null ? TorrentService.idForSource(task.url) : null);
+    final torrentId =
+        TorrentIdResolver.resolve(task, providerMap: providerTorrentIds);
     if (torrentId != null) {
       final stat = providerLatestTorrentStats[torrentId];
       if (stat != null) {
-        return stat.numSeeds;
+        return stat.numSeeds < 0 ? 0 : stat.numSeeds;
       }
     }
     return 0;
@@ -194,13 +198,12 @@ mixin DownloadTorrentMixin {
 
   int getTorrentPeers(String taskId) {
     final task = findTaskById(taskId);
-    final torrentId = providerTorrentIds[taskId] ??
-        int.tryParse(taskId) ??
-        (task != null ? TorrentService.idForSource(task.url) : null);
+    final torrentId =
+        TorrentIdResolver.resolve(task, providerMap: providerTorrentIds);
     if (torrentId != null) {
       final stat = providerLatestTorrentStats[torrentId];
       if (stat != null) {
-        return stat.numPeers;
+        return stat.numPeers < 0 ? 0 : stat.numPeers;
       }
     }
     return 0;
@@ -214,9 +217,8 @@ mixin DownloadTorrentMixin {
     if (task.status == DownloadStatus.completed && !task.seedingEnabled) {
       return 0.0;
     }
-    final torrentId = providerTorrentIds[taskId] ??
-        int.tryParse(taskId) ??
-        TorrentService.idForSource(task.url);
+    final torrentId =
+        TorrentIdResolver.resolve(task, providerMap: providerTorrentIds);
     if (torrentId != null) {
       final stat = providerLatestTorrentStats[torrentId];
       if (stat != null) {
@@ -229,9 +231,8 @@ mixin DownloadTorrentMixin {
   String getSeedingSummary(String taskId) {
     final task = findTaskById(taskId);
     if (task == null) return '';
-    final torrentId = providerTorrentIds[taskId] ??
-        int.tryParse(taskId) ??
-        TorrentService.idForSource(task.url);
+    final torrentId =
+        TorrentIdResolver.resolve(task, providerMap: providerTorrentIds);
     final stat = torrentId != null ? providerLatestTorrentStats[torrentId] : null;
     final totalUploaded = stat?.totalPayloadUpload ?? task.uploadedBytes;
     final totalDownloaded = stat?.totalPayloadDownload ?? task.downloadedBytes;
@@ -427,7 +428,8 @@ mixin DownloadTorrentMixin {
     await providerDatabaseService.saveTask(providerTasks[index]);
 
     if (oldTask.isTorrent) {
-      final torrentId = providerTorrentIds[taskId];
+      final torrentId =
+          TorrentIdResolver.resolve(oldTask, providerMap: providerTorrentIds);
       if (newEnabled) {
         if (torrentId != null) {
           TorrentService.resumeTorrent(torrentId);
@@ -435,13 +437,11 @@ mixin DownloadTorrentMixin {
           unawaited(startSeedingTorrent(providerTasks[index]));
         }
       } else {
-        // Only pause/remove the torrent session if the task has already
-        // finished downloading (status == completed).  Calling pauseTorrent
-        // while still downloading would abort the in-progress transfer.
+        // Only pause the torrent session if the task has already
+        // finished downloading (status == completed). Do NOT remove
+        // handle or evict ID so user can resume seeding anytime.
         if (torrentId != null && oldTask.status == DownloadStatus.completed) {
-          TorrentService.pauseTorrent(torrentId);
-          TorrentService.removeTorrent(torrentId, deleteFiles: false);
-          providerTorrentIds.remove(taskId);
+          await TorrentService.pauseTorrent(torrentId);
         }
         // Snap downloadedBytes to fileSize so the Completed tab shows 100%.
         final updatedIdx = providerTasks.indexWhere((t) => t.id == taskId);

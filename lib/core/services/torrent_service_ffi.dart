@@ -12,6 +12,7 @@ import 'package:synchronized/synchronized.dart';
 
 import '../interfaces/i_torrent_native.dart';
 import '../interfaces/i_torrent_service.dart';
+import '../utils/url_utils.dart';
 import 'download_engine.dart';
 import 'power_monitor.dart';
 import 'torrent/libtorrent_native_impl.dart';
@@ -85,6 +86,7 @@ class TorrentService {
     _activeTorrentIds.remove(id);
     _latestProgress.remove(id);
     _latestStats.remove(id);
+    _metadataProbeAt.remove(id);
     _torrentSources.remove(id);
     _cachedPrioritiesSnapshot.remove(id);
     try {
@@ -96,6 +98,9 @@ class TorrentService {
   static final Map<int, String> _torrentSources = {};
   static final Map<int, List<int>> _cachedPrioritiesSnapshot = {};
   static final Map<int, TorrentUpdateInfo> _latestStats = {};
+  // getFiles() is synchronous FFI; throttle compatibility metadata probes so
+  // they cannot starve Flutter's UI isolate on every status tick.
+  static final Map<int, DateTime> _metadataProbeAt = {};
 
   static DateTime? _lastEmitTime;
   static Map<int, TorrentUpdateInfo>? _pendingUpdate;
@@ -143,8 +148,25 @@ class TorrentService {
   }
 
   static int? idForSource(String source) {
+    if (source.isEmpty) return null;
     for (final entry in _torrentSources.entries) {
       if (entry.value == source) return entry.key;
+    }
+    if (source.startsWith('magnet:')) {
+      final info = parseMagnetUrl(source);
+      final hash = info['infoHash'] ?? info['infoHashV1'];
+      if (hash != null && hash.isNotEmpty) {
+        for (final entry in _torrentSources.entries) {
+          if (entry.value.startsWith('magnet:')) {
+            final entryInfo = parseMagnetUrl(entry.value);
+            final entryHash = entryInfo['infoHash'] ?? entryInfo['infoHashV1'];
+            if (entryHash != null &&
+                entryHash.toLowerCase() == hash.toLowerCase()) {
+              return entry.key;
+            }
+          }
+        }
+      }
     }
     return null;
   }
@@ -251,6 +273,17 @@ class TorrentService {
   static void _startTrackingAlerts() {
     _alertsSub?.cancel();
     _alertsSub = _native.alertStream.listen((event) {
+      if (event.alertCode == 19 ||
+          event.type == TorrentAlertType.fastresumeRejected) {
+        _log.warning(
+          'Fastresume rejected for torrent ${event.torrentId}, triggering integrity recheck',
+        );
+        try {
+          _native.recheckTorrent(event.torrentId);
+        } catch (e) {
+          _log.warning('Recheck failed after fastresume rejected: $e');
+        }
+      }
       _alertController.add(TorrentAlertEvent(
         type: event.alertCode,
         torrentId: event.torrentId,
@@ -295,25 +328,54 @@ class TorrentService {
             for (final removedId in removedIds) {
               _latestProgress.remove(removedId);
               _latestStats.remove(removedId);
+              _metadataProbeAt.remove(removedId);
               _torrentSources.remove(removedId);
               _cachedPrioritiesSnapshot.remove(removedId);
             }
             final mapped = torrents.map((key, value) {
+              // Some older prebuilt Android bridges reported metadata_received
+              // before updating torrent_status.has_metadata. The native file
+              // table is authoritative, so use it as a compatibility fallback
+              // until the matching rebuilt bridge is installed.
+              var hasMetadata = value.hasMetadata;
+              var name = value.name;
+              var totalWanted = value.totalWanted;
+              final lastMetadataProbe = _metadataProbeAt[value.id];
+              final shouldProbeMetadata = lastMetadataProbe == null ||
+                  DateTime.now().difference(lastMetadataProbe) >=
+                      const Duration(seconds: 2);
+              if (!hasMetadata && shouldProbeMetadata) {
+                _metadataProbeAt[value.id] = DateTime.now();
+                try {
+                  final nativeFiles = _native.getFiles(value.id);
+                  if (nativeFiles.isNotEmpty) {
+                    hasMetadata = true;
+                    if (name.isEmpty) name = nativeFiles.first.name;
+                    if (totalWanted <= 0) {
+                      totalWanted = nativeFiles.fold<int>(
+                        0,
+                        (sum, file) => sum + file.size,
+                      );
+                    }
+                  }
+                } catch (_) {}
+              }
+
               _latestProgress[value.id] = value.progress;
 
               final info = TorrentUpdateInfo(
                 id: value.id,
-                name: value.name,
+                name: name,
                 progress: value.progress,
                 downloadRate: value.downloadRate,
                 uploadRate: value.uploadRate,
                 totalDone: value.totalDone,
-                totalWanted: value.totalWanted,
+                totalWanted: totalWanted,
                 totalWantedDone: value.totalWantedDone,
-                hasMetadata: value.hasMetadata,
+                hasMetadata: hasMetadata,
                 stateLabel: value.stateLabel,
-                numSeeds: value.numSeeds,
-                numPeers: value.numPeers,
+                numSeeds: value.numSeeds < 0 ? 0 : value.numSeeds,
+                numPeers: value.numPeers < 0 ? 0 : value.numPeers,
                 piecesHave: value.piecesDone,
                 piecesTotal: value.numPieces,
                 downloadPayloadRate: value.downloadRate,
@@ -471,12 +533,21 @@ class TorrentService {
     _updatesSub = null;
     await _alertsSub?.cancel();
     _alertsSub = null;
+    _throttleTimer?.cancel();
+    _throttleTimer = null;
     await _updateController?.close();
     _updateController = null;
+    _pendingUpdate = null;
+    _lastEmitTime = null;
     _activeTorrentIds.clear();
     _torrentSources.clear();
     _latestProgress.clear();
+    _latestStats.clear();
+    _metadataProbeAt.clear();
     _cachedPrioritiesSnapshot.clear();
+    _filesCache.clear();
+    _latestResumeBlobs.clear();
+    _webSeeds.clear();
 
     try {
       await _native.dispose();
@@ -489,15 +560,20 @@ class TorrentService {
     _disposeCompleter = null;
   }
 
-  static int addMagnet(String magnetUri, String savePath) {
+  static int addMagnet(String magnetUri, String savePath,
+      {List<int>? resumeData}) {
     if (!isInitialized) return -1;
     _startTrackingUpdates();
     try {
-      final id = _native.addMagnet(magnetUri, savePath);
+      final id = _native.addMagnet(magnetUri, savePath, resumeData: resumeData);
       if (id >= 0) {
         _activeTorrentIds.add(id);
         _torrentSources[id] = magnetUri;
-        unawaited(_tryLoadFastResumeForSource(id, magnetUri));
+        if (resumeData != null && resumeData.isNotEmpty) {
+          _latestResumeBlobs[id] = Uint8List.fromList(resumeData);
+        } else {
+          unawaited(_tryLoadFastResumeForSource(id, magnetUri));
+        }
       }
       return id;
     } catch (e) {
@@ -523,7 +599,26 @@ class TorrentService {
       final stopwatch = Stopwatch()..start();
       final completer = Completer<int>();
       Timer? messageTimer;
+      Timer? metadataProbeTimer;
       StreamSubscription? sub;
+
+      void completeIfMetadataReady() {
+        if (completer.isCompleted) return;
+        try {
+          // The native status flag can lag behind metadata_received_alert.
+          // getFiles() is an authoritative native-side metadata check and
+          // also covers the prebuilt Android bridge's status timing.
+          if (_native.getFiles(id).isNotEmpty) {
+            messageTimer?.cancel();
+            metadataProbeTimer?.cancel();
+            sub?.cancel();
+            stopwatch.stop();
+            completer.complete(id);
+          }
+        } catch (_) {
+          // Metadata is still being resolved; the next probe will retry.
+        }
+      }
 
       messageTimer = Timer.periodic(const Duration(seconds: 5), (_) {
         final elapsedSec = stopwatch.elapsed.inSeconds;
@@ -536,16 +631,23 @@ class TorrentService {
         final info = updateMap[id];
         if (info != null && info.hasMetadata) {
           messageTimer?.cancel();
+          metadataProbeTimer?.cancel();
           sub?.cancel();
           stopwatch.stop();
           if (!completer.isCompleted) completer.complete(id);
         }
       });
+      // Poll the native file table as a fallback for status/alert races.
+      metadataProbeTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+        completeIfMetadataReady();
+      });
+      completeIfMetadataReady();
 
       try {
         return await completer.future.timeout(timeout);
       } on TimeoutException {
         messageTimer.cancel();
+        metadataProbeTimer.cancel();
         sub.cancel();
         stopwatch.stop();
         _log.warning(
@@ -575,6 +677,7 @@ class TorrentService {
         );
       } catch (e) {
         messageTimer.cancel();
+        metadataProbeTimer.cancel();
         sub.cancel();
         stopwatch.stop();
         try {
@@ -829,6 +932,7 @@ class TorrentService {
       _activeTorrentIds.remove(id);
       _latestProgress.remove(id);
       _latestStats.remove(id);
+      _metadataProbeAt.remove(id);
       _torrentSources.remove(id);
       _cachedPrioritiesSnapshot.remove(id);
       return false;
@@ -912,6 +1016,26 @@ class TorrentService {
       }
     }
     return [];
+  }
+
+  static NativeTorrentStatus? getTorrentStatus(int id) {
+    if (!isInitialized || id < 0) return null;
+    try {
+      return _native.getTorrentStatus(id);
+    } catch (e) {
+      _log.warning('getTorrentStatus failed for id $id: $e');
+      return null;
+    }
+  }
+
+  static List<int> getFileProgress(int id) {
+    if (!isInitialized || id < 0) return const [];
+    try {
+      return _native.getFileProgress(id);
+    } catch (e) {
+      _log.warning('getFileProgress failed for id $id: $e');
+      return const [];
+    }
   }
 
   static List<TorrentFileItem> getFilesCached(int id) {
@@ -1343,7 +1467,10 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   Map<String, dynamic>? getTorrentSnapshot(int id) => null;
   @override
-  String get nativeVersion => '1.9.2';
+
+  /// Native core version bundled by libtorrent_flutter 2.0.0.
+  /// The v2.0.0 release is built against libtorrent core 2.1.1.
+  String get nativeVersion => '2.1.1';
   @override
   void configureSession([TorrentSessionSettings? settings]) =>
       TorrentService.configureSession(settings);

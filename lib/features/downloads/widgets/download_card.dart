@@ -23,6 +23,7 @@ import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/intl_formatters.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/utils/torrent_id_resolver.dart';
 import '../../../shared/accessibility/xdm_semantics.dart';
 import '../../../shared/design/dmx_design.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
@@ -3394,7 +3395,8 @@ void _showTorrentProperties(
   final amberClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
 
   // Resolve live torrent stats.
-  final torrentId = provider.providerTorrentIds[task.id];
+  final torrentId =
+      TorrentIdResolver.resolve(task, providerMap: provider.providerTorrentIds);
   final TorrentUpdateInfo? stats =
       torrentId != null ? provider.providerLatestTorrentStats[torrentId] : null;
 

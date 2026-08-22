@@ -24,7 +24,7 @@
 
     <application
         android:label="XDM"
-        android:name="${applicationName}"
+        android:name=".DmxApplication"
         android:icon="@mipmap/ic_launcher"
         android:networkSecurityConfig="@xml/network_security_config">
         <activity
@@ -65,15 +65,16 @@
                 <data android:scheme="magnet" />
             </intent-filter>
 
-            <!-- .torrent File Intent Filter -->
+            <!-- .torrent files opened from SAF/file managers. Keep MIME and
+                 path matching in separate filters because Android combines
+                 data elements in one filter with AND semantics. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="file" />
                 <data android:scheme="content" />
+                <data android:scheme="file" />
                 <data android:mimeType="application/x-bittorrent" />
-                <data android:pathPattern=".*\\.torrent" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -83,6 +84,9 @@
                 <data android:scheme="content" />
                 <data android:host="*" />
                 <data android:pathPattern=".*\\.torrent" />
+                <data android:pathPattern=".*\\..*\\.torrent" />
+                <data android:pathPattern=".*\\..*\\..*\\.torrent" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.torrent" />
             </intent-filter>
             <!-- Smart launcher widget deep links -->
             <intent-filter>

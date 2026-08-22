@@ -26,7 +26,8 @@ android {
     namespace = "com.libtorrentflutter.libtorrent_flutter"
     compileSdk = 36
 
-    ndkVersion = android.ndkVersion
+    // Keep the plugin on the same valid NDK as the application module.
+    ndkVersion = "28.2.13676358"
 
     // ─────────────────────────────────────────────────────────────────────
     // Prebuilt JNI libs: not shipped via pub.dev (too big). Pull them from
@@ -41,14 +42,16 @@ android {
     // dropped your own .so files into prebuilt/android/<abi>/).
     // ─────────────────────────────────────────────────────────────────────
     def prebuiltDir = file("${projectDir}/../prebuilt/android")
+    def nativeVersionFile = file("${prebuiltDir}/.libtorrent_flutter_version")
     def skipDownload = (project.findProperty('libtorrentFlutterSkipDownload') ?: 'false').toString().toBoolean()
+    def forceSourceBuild = (project.findProperty('libtorrentFlutterBuildFromSource') ?: 'false').toString().toBoolean()
+    def pluginVersion = null
     def requestedAbis = (project.findProperty('libtorrentFlutterAbis') ?: 'arm64-v8a,armeabi-v7a,x86_64')
         .toString().split(',').collect { it.trim() }.findAll { it }
 
-    if (!skipDownload) {
+    if (!skipDownload && !forceSourceBuild) {
         // Resolve plugin version from pubspec.yaml (sibling of android/)
         def pubspecFile = file("${projectDir}/../pubspec.yaml")
-        def pluginVersion = null
         if (pubspecFile.exists()) {
             pubspecFile.eachLine { line ->
                 def m = (line =~ /^version:\s*(\S+)/)
@@ -61,7 +64,18 @@ android {
             def releaseBase = "https://github.com/ayman708-UX/libtorrent_flutter/releases/download/v${pluginVersion}"
             requestedAbis.each { abi ->
                 def soFile = file("${prebuiltDir}/${abi}/liblibtorrent_flutter.so")
-                if (soFile.exists()) return
+                // Existing binaries may belong to an older local plugin
+                // version. Never silently package those after upgrading the
+                // Flutter wrapper; v2.0.0 must use its matching native ABI.
+                def cachedVersion = nativeVersionFile.exists()
+                    ? nativeVersionFile.text.trim()
+                    : ''
+                if (soFile.exists() && cachedVersion == pluginVersion) return
+                if (soFile.exists() && cachedVersion != pluginVersion) {
+                    // Do not allow an older ABI to survive a failed/partial
+                    // upgrade and then be stamped as v2.0.0.
+                    soFile.delete()
+                }
                 def zipUrl  = "${releaseBase}/android-native-lib-${abi}.zip"
                 def zipFile = file("${buildDir}/libtorrent-flutter-cache/android-native-lib-${abi}.zip")
                 zipFile.parentFile.mkdirs()
@@ -84,10 +98,20 @@ android {
                     println "libtorrent_flutter: falling back to building ${abi} from source via CMake"
                 }
             }
+            if (requestedAbis.every { abi ->
+                file("${prebuiltDir}/${abi}/liblibtorrent_flutter.so").exists()
+            }) {
+                nativeVersionFile.text = pluginVersion
+            }
         }
     }
 
-    def hasPrebuilt = prebuiltDir.exists() && prebuiltDir.listFiles()?.any { it.isDirectory() && it.listFiles()?.any { f -> f.name.endsWith('.so') } }
+    def cachedNativeVersion = nativeVersionFile.exists()
+        ? nativeVersionFile.text.trim()
+        : ''
+    def hasPrebuilt = !forceSourceBuild && cachedNativeVersion == pluginVersion &&
+        prebuiltDir.exists() &&
+        prebuiltDir.listFiles()?.any { it.isDirectory() && it.listFiles()?.any { f -> f.name.endsWith('.so') } }
 
     if (hasPrebuilt) {
         // Use prebuilt .so files — no CMake compilation needed

@@ -275,6 +275,7 @@ class DownloadTask {
   final int? completedFiles;
   final int? totalFileBytes;
   final int? downloadedFileBytes;
+  final int? torrentId;
   final String? infoHash;
 
   final bool isMergeInProgress; // runtime only, not persisted
@@ -345,6 +346,7 @@ class DownloadTask {
     this.completedFiles,
     this.totalFileBytes,
     this.downloadedFileBytes,
+    this.torrentId,
     this.infoHash,
   });
 
@@ -856,6 +858,8 @@ class DownloadTask {
     int? completedFiles,
     int? totalFileBytes,
     int? downloadedFileBytes,
+    int? torrentId,
+    bool clearTorrentId = false,
     String? infoHash,
     bool clearInfoHash = false,
     bool? resumeDataSaved,
@@ -981,6 +985,7 @@ class DownloadTask {
       completedFiles: completedFiles ?? this.completedFiles,
       totalFileBytes: totalFileBytes ?? this.totalFileBytes,
       downloadedFileBytes: downloadedFileBytes ?? this.downloadedFileBytes,
+      torrentId: clearTorrentId ? null : (torrentId ?? this.torrentId),
       infoHash: clearInfoHash ? null : (infoHash ?? this.infoHash),
       resumeDataSaved: resumeDataSaved ?? this.resumeDataSaved,
     );
@@ -1054,6 +1059,7 @@ class DownloadTask {
       'completedFiles': completedFiles,
       'totalFileBytes': totalFileBytes,
       'downloadedFileBytes': downloadedFileBytes,
+      'torrentId': torrentId,
       'infoHash': infoHash,
     };
   }
@@ -1247,6 +1253,7 @@ class DownloadTask {
       completedFiles: completedFiles,
       totalFileBytes: totalFileBytes,
       downloadedFileBytes: downloadedFileBytes,
+      torrentId: (map['torrentId'] as num?)?.toInt(),
       infoHash: map['infoHash'] as String?,
     );
   }

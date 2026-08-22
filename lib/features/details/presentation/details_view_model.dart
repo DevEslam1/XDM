@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/widgets.dart';
@@ -16,11 +17,24 @@ class DetailsViewModel extends ChangeNotifier {
   List<FlSpot> _downloadSpots = const [];
   List<FlSpot> _uploadSpots = const [];
   int _maxGraphLen = 1;
+  Timer? _speedRefreshTimer;
 
   DetailsViewModel({
     required this.taskId,
     required this.downloadProvider,
-  });
+  }) {
+    updateSpeedSpots();
+    _speedRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      updateSpeedSpots();
+    });
+  }
+
+  @override
+  void dispose() {
+    _speedRefreshTimer?.cancel();
+    _speedRefreshTimer = null;
+    super.dispose();
+  }
 
   DownloadTask? get task {
     final matches = downloadProvider.tasks.where((t) => t.id == taskId);

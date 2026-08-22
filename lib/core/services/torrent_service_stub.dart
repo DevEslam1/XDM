@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show ValueNotifier;
 import '../domain/torrent_session_settings.dart';
+import '../interfaces/i_torrent_native.dart';
 import '../interfaces/i_torrent_service.dart';
 import 'torrent_models.dart';
 
@@ -61,6 +62,9 @@ class TorrentService {
   static void setUploadLimit(int bps) {}
   static void setDownloadLimit(int bps) {}
   static List<TorrentFileItem> getFiles(int id) => [];
+  static List<TorrentFileItem> getFilesCached(int id) => getFiles(id);
+  static NativeTorrentStatus? getTorrentStatus(int id) => null;
+  static List<int> getFileProgress(int id) => const [];
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
       const Stream.empty();
   static Map<int, TorrentUpdateInfo> get latestStats => const {};

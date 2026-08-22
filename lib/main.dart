@@ -316,7 +316,13 @@ Future<void> main(List<String> args) async {
                         'TorrentService.init timed out after 30s');
                   },
                 );
-                _mainLog.info('Torrent service initialized successfully');
+                if (TorrentService.isAvailable.value) {
+                  _mainLog.info('Torrent service initialized successfully');
+                } else {
+                  _mainLog.warning(
+                    'Torrent service initialization returned without an available native session',
+                  );
+                }
               } catch (e, s) {
                 _mainLog.severe(
                   'Torrent init failed, continuing without torrent support',

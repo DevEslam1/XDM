@@ -2,7 +2,7 @@ PODS:
   - Flutter (1.0.0)
   - flutter_background_service_ios (0.0.3):
     - Flutter
-  - libtorrent_flutter (1.9.2):
+  - libtorrent_flutter (2.0.0):
     - Flutter
   - open_filex (0.0.2):
     - Flutter

@@ -1918,7 +1918,8 @@ class DownloadOrchestrator {
                       0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
             }
             if (torrentDerivedSize == 0) {
-              final tid = _host.providerTorrentIds[task.id];
+              final tid = _host.providerTorrentIds[task.id] ??
+                  TorrentService.idForSource(task.url);
               if (tid != null) {
                 final stats = TorrentService.latestStats[tid];
                 if (stats != null && stats.totalWanted > 0) {
@@ -2641,6 +2642,8 @@ class DownloadOrchestrator {
                       downloadedBytes: progress.downloadedBytes,
                       torrentFiles: progress.torrentFiles ??
                           _host.providerTasks[idx].torrentFiles,
+                      torrentId: progress.torrentId ??
+                          _host.providerTasks[idx].torrentId,
                     );
                   }
 
@@ -3648,16 +3651,11 @@ class DownloadOrchestrator {
                 throw Exception('Torrent engine rejected the torrent.');
               }
               _host.providerTorrentIds[task.id] = torrentId;
-              // FIX-C4: Save resume data for magnet links so resume works across app restarts
-              if (task.url.startsWith('magnet:')) {
-                unawaited(TorrentService.saveResumeData(torrentId).catchError(
-                    (e) => debugPrint(
-                        '[DMX] saveResumeData failed for magnet: $e')));
-              }
             }
 
             // C-2 FIX: Set downloading immediately so UI reflects state
             await _host.setTaskState(task.copyWith(
+              torrentId: torrentId,
               status: DownloadStatus.downloading,
               statusMessage: torrentId == null
                   ? 'Acquiring torrent file...'
