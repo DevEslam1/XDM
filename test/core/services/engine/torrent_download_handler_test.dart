@@ -77,6 +77,7 @@ class ScriptableFakeTorrentService extends FakeITorrentService {
     void Function(String message)? onStatusUpdate,
     int maxRetries = 2,
     Duration retryDelay = const Duration(seconds: 10),
+    List<int>? resumeData,
   }) async {
     if (throwOnMetadataWait) {
       throw TimeoutException('Metadata wait timed out', timeout);

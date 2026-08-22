@@ -56,43 +56,42 @@ class TrackerManager {
 // ─── Status converters ──────────────────────────────────────────────────────
 
 TorrentInfo _toTorrentInfo(LtTorrentStatus s, [LibtorrentFlutter? engine]) {
-  final id = s.id;
-  final progress = s.progress.clamp(0.0, 1.0);
-  final totalWantedDone = s.totalWanted > 0
-      ? (s.totalWanted * progress).toInt()
-      : s.totalDone;
-  final numPieces = s.numPieces;
-  final piecesDone = s.piecesDone;
-  final pieces = <bool>[];
-  if (numPieces > 0) {
-    for (var i = 0; i < numPieces; i++) {
-      pieces.add(i < piecesDone);
-    }
+  var totalWanted = s.totalWanted < 0 ? 0 : s.totalWanted;
+  var totalWantedDone = s.totalWantedDone < 0 ? 0 : s.totalWantedDone;
+  if (totalWanted > 0 && totalWantedDone > totalWanted) {
+    totalWantedDone = totalWanted; // Clamp drift
   }
+
+  final progress = totalWanted > 0
+      ? (totalWantedDone / totalWanted).clamp(0.0, 1.0)
+      : 0.0;
+
   return TorrentInfo(
-    id:            s.id,
-    name:          readCharArray(s.name, 512),
-    savePath:      readCharArray(s.savePath, 1024),
-    errorMsg:      readCharArray(s.errorMsg, 256),
-    state:         stateFromInt(s.state),
-    progress:      progress,
-    downloadRate:  s.downloadRate,
-    uploadRate:    s.uploadRate,
-    totalDone:     s.totalDone,
-    totalWanted:   s.totalWanted,
+    id: s.id,
+    name: readCharArray(s.name, 512),
+    savePath: readCharArray(s.savePath, 1024),
+    errorMsg: readCharArray(s.errorMsg, 256),
+    state: stateFromInt(s.state),
+    progress: progress,
+    downloadRate: s.downloadRate < 0 ? 0 : s.downloadRate,
+    uploadRate: s.uploadRate < 0 ? 0 : s.uploadRate,
+    totalDone: totalWantedDone,
+    totalWanted: totalWanted,
     totalWantedDone: totalWantedDone,
-    totalUploaded: s.totalUploaded,
-    numPeers:      s.numPeers < 0 ? 0 : s.numPeers,
-    numSeeds:      s.numSeeds < 0 ? 0 : s.numSeeds,
-    numPieces:     numPieces,
-    piecesDone:    piecesDone,
-    pieces:        pieces,
-    isPaused:      s.isPaused != 0,
-    isFinished:    s.isFinished != 0,
-    hasMetadata:   s.hasMetadata != 0,
+    totalUploaded: s.totalUploaded < 0 ? 0 : s.totalUploaded,
+    numPeers: s.numPeers < 0 ? 0 : s.numPeers,
+    numSeeds: s.numSeeds < 0 ? 0 : s.numSeeds,
+    numComplete: s.numComplete < 0 ? null : s.numComplete,
+    numIncomplete: s.numIncomplete < 0 ? null : s.numIncomplete,
+    numPieces: s.numPieces < 0 ? 0 : s.numPieces,
+    piecesDone: s.piecesDone < 0 ? 0 : s.piecesDone,
+    pieces: const [], // Stop fabricating linear bitfields
+    isPaused: s.isPaused != 0,
+    isFinished: s.isFinished != 0,
+    hasMetadata: s.hasMetadata != 0,
     queuePosition: s.queuePosition,
-    fileProgress:  engine?._cachedFileProgress[id] ?? const [],
-    filePriorities: engine?._cachedFilePriorities[id] ?? const [],
+    fileProgress: engine?._cachedFileProgress[s.id] ?? const [],
+    filePriorities: engine?._cachedFilePriorities[s.id] ?? const [],
   );
 }
 
@@ -145,6 +144,7 @@ class LibtorrentFlutter {
   // Alerts
   final _alertsCtrl = StreamController<LtAlert>.broadcast();
   final Map<int, List<Completer<List<int>?>>> _saveResumeCompleters = {};
+  final Map<int, Set<int>> _completedPieces = {};
 
   // Per-torrent state cache
   final Map<int, List<int>> _cachedFileProgress = {};
@@ -157,6 +157,8 @@ class LibtorrentFlutter {
   // Stream status
   final _streamsCtrl = StreamController<Map<int, StreamInfo>>.broadcast();
   final Map<int, StreamInfo> _streams = {};
+
+  NativeCallable<LtAlertCallbackNative>? _alertCallback;
 
   static const _maxTorrents = 1024;
   static const _maxStreams  = 64;
@@ -259,15 +261,22 @@ class LibtorrentFlutter {
   }
 
   /// Add a torrent from a .torrent file path.
-  int addTorrentFile(String filePath, [String? savePath, bool streamOnly = false]) {
+  int addTorrentFile(String filePath, [String? savePath, bool streamOnly = false, List<int>? resumeData]) {
     final f = filePath.toNativeUtf8();
     final s = (savePath ?? _defaultSavePath).toNativeUtf8();
+    Pointer<Uint8> r = nullptr;
+    if (resumeData != null && resumeData.isNotEmpty && _b.addTorrentFileResume != null) {
+      r = calloc<Uint8>(resumeData.length)..asTypedList(resumeData.length).setAll(0, resumeData);
+    }
     try {
-      final id = _b.addTorrentFile(_session, f, s, streamOnly ? 1 : 0);
+      final id = (r == nullptr || _b.addTorrentFileResume == null)
+          ? _b.addTorrentFile(_session, f, s, streamOnly ? 1 : 0)
+          : _b.addTorrentFileResume!(_session, f, s, streamOnly ? 1 : 0, r, resumeData!.length);
       if (id < 0) throw Exception(_b.lastError().toDartString());
       return id;
     } finally {
       malloc.free(f); malloc.free(s);
+      if (r != nullptr) calloc.free(r);
     }
   }
 
@@ -275,16 +284,28 @@ class LibtorrentFlutter {
   void removeTorrent(int id, {bool deleteFiles = false}) {
     stopAllStreamsForTorrent(id);
     _b.removeTorrent(_session, id, deleteFiles ? 1 : 0);
+    
+    // F7: Unblock waiters instead of leaving them to timeout
+    final pending = _saveResumeCompleters.remove(id);
+    if (pending != null) {
+      for (final c in pending) {
+        if (!c.isCompleted) c.complete(null);
+      }
+    }
     _torrents.remove(id);
+    _completedPieces.remove(id);
     _cachedFileProgress.remove(id);
     _cachedFilePriorities.remove(id);
     _cachedTrackers.remove(id);
     _cachedWebSeeds.remove(id);
     _sequentialDownload.remove(id);
     _superSeeding.remove(id);
-    _saveResumeCompleters.remove(id);
     _torrentsCtrl.add(Map.unmodifiable(_torrents));
   }
+
+  /// Get the set of finished piece indices for a torrent.
+  Set<int> getCompletedPieces(int id) =>
+      Set.unmodifiable(_completedPieces[id] ?? const <int>{});
 
   /// Stream of all native alert events.
   Stream<LtAlert> get alertUpdates => _alertsCtrl.stream;
@@ -640,7 +661,6 @@ class LibtorrentFlutter {
   bool preloadStream(int streamId, {int preloadBytes = 0}) {
     return _b.preloadStream(_session, streamId, preloadBytes) != 0;
   }
-
   /// Configure the TorrServer-style cache for an active stream.
   /// Port of TorrServer's settings/btsets.go BTSets fields.
   ///
@@ -732,6 +752,8 @@ class LibtorrentFlutter {
   // ─── Polling ──────────────────────────────────────────────────────────────
 
   void _startPolling(Duration interval) {
+    _alertCallback ??=
+        NativeCallable<LtAlertCallbackNative>.isolateLocal(_onAlert);
     _pollTimer = Timer.periodic(interval, (_) => _poll());
   }
 
@@ -744,11 +766,8 @@ class LibtorrentFlutter {
   }
 
   void _pollAlerts() {
-    final callback = NativeCallable<LtAlertCallbackNative>.isolateLocal(_onAlert);
-    try {
-      _b.pollAlerts(_session, callback.nativeFunction, nullptr);
-    } finally {
-      callback.close();
+    if (_alertCallback != null) {
+      _b.pollAlerts(_session, _alertCallback!.nativeFunction, nullptr);
     }
   }
 
@@ -772,10 +791,17 @@ class LibtorrentFlutter {
       inst._alertsCtrl.add(alert);
 
       // Alert types:
+      // 26 = piece_finished_alert
       // 30 = save_resume_data_alert
       // 31 = save_resume_data_failed_alert
       // 38 = metadata_received_alert
-      if (type == 30) {
+      if (type == 26) {
+        final match = RegExp(r'piece:\s*(\d+)').firstMatch(msg);
+        final pieceIndex = match != null ? int.tryParse(match.group(1)!) : null;
+        if (pieceIndex != null) {
+          inst._completedPieces.putIfAbsent(torrentId, () => <int>{}).add(pieceIndex);
+        }
+      } else if (type == 30) {
         List<int>? resumeBlob = bytes;
         if (resumeBlob == null || resumeBlob.isEmpty) {
           final take = inst._b.takeSavedResumeData;
@@ -812,15 +838,24 @@ class LibtorrentFlutter {
       } else if (type == 38) {
         inst._cachedFileProgress.remove(torrentId);
         inst._cachedFilePriorities.remove(torrentId);
+        inst._completedPieces[torrentId]?.clear();
       }
     }
   }
 
   void _pollTorrents() {
     final count = _b.getTorrentCount(_session);
-    final buf   = calloc<LtTorrentStatus>(max(count, _maxTorrents));
+    if (count == 0) {
+      if (_torrents.isNotEmpty) {
+        _torrents.clear();
+        _torrentsCtrl.add(const {});
+      }
+      return;
+    }
+    final allocCount = max(count, 1);
+    final buf = calloc<LtTorrentStatus>(allocCount);
     try {
-      final n = _b.getAllStatuses(_session, buf, max(count, _maxTorrents));
+      final n = _b.getAllStatuses(_session, buf, allocCount);
       bool changed = false;
       final seen = <int>{};
 
@@ -945,6 +980,8 @@ class LibtorrentFlutter {
     // Engine shutdown must not delete the user's downloaded data.
     disposeAll(deleteFiles: false);
     _pollTimer?.cancel();
+    _alertCallback?.close();
+    _alertCallback = null;
     for (final pending in _saveResumeCompleters.values) {
       for (final c in pending) {
         if (!c.isCompleted) c.complete(null);

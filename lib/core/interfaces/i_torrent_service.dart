@@ -16,7 +16,7 @@ abstract class ITorrentLifecycle {
   Future<void> init();
   Future<void> dispose();
 
-  int addMagnet(String magnetUri, String savePath);
+  int addMagnet(String magnetUri, String savePath, {List<int>? resumeData});
   Future<int> addMagnetWithMetadataTimeout(
     String magnetUri,
     String savePath, {
@@ -24,11 +24,13 @@ abstract class ITorrentLifecycle {
     void Function(String message)? onStatusUpdate,
     int maxRetries = 2,
     Duration retryDelay = const Duration(seconds: 10),
+    List<int>? resumeData,
   });
   int addTorrentFile(
     String filePath,
     String savePath, {
     String? sourceKey,
+    List<int>? resumeData,
   });
 
   void removeTorrent(
@@ -59,6 +61,8 @@ abstract class ITorrentStats {
     String savePath,
   );
   Future<Map<String, dynamic>?> getPieceProgress(int torrentId);
+  // FIX: [Audit] Added getPeers to ITorrentStats to support PeerPanel
+  Future<List<PeerConnectionQuality>> getPeers(int torrentId);
 }
 
 /// Persistence and restoration operations for torrent fast-resume data.

@@ -93,6 +93,8 @@ class TorrentInfo {
   final int totalUploaded;
   final int numPeers;
   final int numSeeds;
+  final int? numComplete;     // Swarm seeds (null = unknown)
+  final int? numIncomplete;   // Swarm peers (null = unknown)
   final int numPieces;
   final int piecesDone;
   final List<bool> pieces;
@@ -103,6 +105,19 @@ class TorrentInfo {
   final List<int> fileProgress;
   final List<int> filePriorities;
 
+  bool get sizeKnown => hasMetadata && totalWanted > 0;
+  bool get isChecking =>
+      state == TorrentState.checkingFiles ||
+      state == TorrentState.checkingResume ||
+      state == TorrentState.queuedForChecking;
+  bool get isFetchingMetadata =>
+      state == TorrentState.downloadingMetadata && !hasMetadata;
+  bool get isQueued =>
+      queuePosition >= 0 &&
+      !isPaused &&
+      state != TorrentState.downloading &&
+      state != TorrentState.seeding;
+
   const TorrentInfo({
     required this.id, required this.name, required this.savePath,
     required this.errorMsg, required this.state, required this.progress,
@@ -111,6 +126,8 @@ class TorrentInfo {
     this.totalWantedDone = 0,
     required this.totalUploaded, required this.numPeers,
     required this.numSeeds,
+    this.numComplete,
+    this.numIncomplete,
     this.numPieces = 0,
     this.piecesDone = 0,
     this.pieces = const [],
@@ -126,7 +143,8 @@ class TorrentInfo {
     TorrentState? state, double? progress,
     int? downloadRate, int? uploadRate,
     int? totalDone, int? totalWanted, int? totalWantedDone, int? totalUploaded,
-    int? numPeers, int? numSeeds, int? numPieces, int? piecesDone, List<bool>? pieces,
+    int? numPeers, int? numSeeds, int? numComplete, int? numIncomplete,
+    int? numPieces, int? piecesDone, List<bool>? pieces,
     bool? isPaused, bool? isFinished, bool? hasMetadata, int? queuePosition,
     List<int>? fileProgress, List<int>? filePriorities,
   }) => TorrentInfo(
@@ -144,6 +162,8 @@ class TorrentInfo {
     totalUploaded: totalUploaded ?? this.totalUploaded,
     numPeers: numPeers ?? this.numPeers,
     numSeeds: numSeeds ?? this.numSeeds,
+    numComplete: numComplete ?? this.numComplete,
+    numIncomplete: numIncomplete ?? this.numIncomplete,
     numPieces: numPieces ?? this.numPieces,
     piecesDone: piecesDone ?? this.piecesDone,
     pieces: pieces ?? this.pieces,

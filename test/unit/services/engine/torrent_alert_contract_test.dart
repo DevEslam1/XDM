@@ -72,14 +72,6 @@ void main() {
       state = TorrentSessionState.reduce(state, trackerErrorEvent);
       expect(state.numPeers, 12); // unchanged
 
-      // 1e. stoppedAnnounce
-      final stoppedAnnounceEvent = StoppedAnnounceEvent(
-        torrentId: 1,
-        timestamp: DateTime.now(),
-      );
-      state = TorrentSessionState.reduce(state, stoppedAnnounceEvent);
-      expect(state.stoppedAnnounceReceived, isTrue);
-
       // 1f. torrentPaused
       final pausedEvent = TorrentPausedAlertEvent(
         torrentId: 1,
@@ -98,7 +90,6 @@ void main() {
       state = TorrentSessionState.reduce(state, resumedEvent);
       expect(state.isPaused, isFalse);
       expect(state.stateLabel, 'Downloading');
-      expect(state.stoppedAnnounceReceived, isFalse);
 
       // 1h. fastresumeRejected
       final fastresumeRejectedEvent = FastresumeRejectedEvent(

@@ -246,6 +246,21 @@ class MetadataProbeService {
         );
       }
 
+      // FIX: [Audit] Prevent double metadata fetch by checking TorrentResumeStore cache first
+      final cachedFiles = await TorrentResumeStore.loadFilesForSource(url);
+      if (cachedFiles != null && cachedFiles.isNotEmpty) {
+        final totalSize = cachedFiles.fold<int>(
+            0, (sum, f) => sum + ((f['length'] as int?) ?? 0));
+        return DownloadMetadata(
+          fileName: resolvedName,
+          category: categoryFromFileName(resolvedName),
+          fileSize: totalSize,
+          supportsResume: true,
+          torrentFiles: cachedFiles,
+          torrentId: null,
+        );
+      }
+
       try {
         await TorrentService.ready.timeout(const Duration(seconds: 10));
       } catch (e, st) {
@@ -291,20 +306,29 @@ class MetadataProbeService {
         final totalSize =
             resolvedFiles.fold<int>(0, (sum, f) => sum + (f['length'] as int));
 
+        final resolvedTitle =
+            initialStats.name.isNotEmpty ? initialStats.name : resolvedName;
+
+        // FIX: [Audit] Cache resolved metadata to prevent double metadata fetch
+        await TorrentResumeStore.saveMetadataSnapshot(
+          sourceUrl: url,
+          files: resolvedFiles,
+          name: resolvedTitle,
+        );
+
         try {
           TorrentService.pauseTorrent(torrentId);
           TorrentService.removeTorrent(torrentId, deleteFiles: false);
         } catch (_) {}
 
-        final resolvedTitle =
-            initialStats.name.isNotEmpty ? initialStats.name : resolvedName;
+        // FIX: [Audit] Do not return dead torrentId of removed handle
         return DownloadMetadata(
           fileName: resolvedTitle,
           category: categoryFromFileName(resolvedTitle),
           fileSize: totalSize,
           supportsResume: true,
           torrentFiles: resolvedFiles,
-          torrentId: torrentId,
+          torrentId: null,
         );
       }
 
@@ -357,14 +381,22 @@ class MetadataProbeService {
           final totalSize = resolvedFiles.fold<int>(
               0, (sum, f) => sum + (f['length'] as int));
 
+          // FIX: [Audit] Cache resolved metadata before cleanup
+          TorrentResumeStore.saveMetadataSnapshot(
+            sourceUrl: url,
+            files: resolvedFiles,
+            name: torrent.name,
+          );
+
           cleanup();
+          // FIX: [Audit] Return torrentId: null since torrent was cleanly removed
           completer.complete(DownloadMetadata(
             fileName: torrent.name,
             category: categoryFromFileName(torrent.name),
             fileSize: totalSize,
             supportsResume: true,
             torrentFiles: resolvedFiles,
-            torrentId: torrentId,
+            torrentId: null,
           ));
         }
       });
@@ -383,32 +415,59 @@ class MetadataProbeService {
       return completer.future;
     }
 
-    // Handle local .torrent file
+    // Handle .torrent file (local or remote HTTP/HTTPS)
     var fileName = requestedFileName?.trim().isNotEmpty == true
         ? safeFileName(requestedFileName!.trim())
         : 'torrent_download.zip';
     var fileSize = 0;
     List<Map<String, dynamic>>? torrentFiles;
 
+    Uint8List? torrentBytes;
     if (url.startsWith('file://')) {
       final file = File(Uri.parse(url).toFilePath());
       if (await file.exists()) {
-        final bytes = await file.readAsBytes();
-        final meta = await compute(BencodeDecoder.parseTorrentBytes, bytes);
-        if (meta != null) {
-          fileName = meta['name'] ?? fileName;
-          torrentFiles = (meta['files'] as List? ?? []).map((f) {
-            final map = f as Map;
-            return {
-              'name': map['name'] as String? ?? '',
-              'length': map['length'] as int? ?? 0,
-              'selected': true,
-              'priority': 4,
-            };
-          }).toList();
-          fileSize = meta['length'] ??
-              torrentFiles.fold<int>(0, (s, f) => s + (f['length'] as int));
+        torrentBytes = await file.readAsBytes();
+      }
+    } else if (url.startsWith('http://') || url.startsWith('https://')) {
+      try {
+        final client = _dioPool.acquireClient(url: url);
+        try {
+          final response = await client.get<List<int>>(
+            url,
+            options: Options(responseType: ResponseType.bytes),
+            cancelToken: cancelToken,
+          );
+          if (response.data != null && response.data!.isNotEmpty) {
+            torrentBytes = Uint8List.fromList(response.data!);
+          }
+        } finally {
+          _dioPool.releaseClient(client);
         }
+      } catch (e) {
+        debugPrint('[MetadataProbeService] Failed to fetch remote .torrent: $e');
+      }
+    } else {
+      final file = File(url);
+      if (await file.exists()) {
+        torrentBytes = await file.readAsBytes();
+      }
+    }
+
+    if (torrentBytes != null && torrentBytes.isNotEmpty) {
+      final meta = await compute(BencodeDecoder.parseTorrentBytes, torrentBytes);
+      if (meta != null) {
+        fileName = meta['name'] ?? fileName;
+        torrentFiles = (meta['files'] as List? ?? []).map((f) {
+          final map = f as Map;
+          return {
+            'name': map['name'] as String? ?? '',
+            'length': map['length'] as int? ?? 0,
+            'selected': true,
+            'priority': 4,
+          };
+        }).toList();
+        fileSize = meta['length'] ??
+            torrentFiles.fold<int>(0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
       }
     }
 

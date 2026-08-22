@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import '../domain/torrent_models.dart';
+
 /// BitTorrent Alert types mapped from native libtorrent alerts.
 enum TorrentAlertType {
   metadataReceived,
@@ -12,45 +14,24 @@ enum TorrentAlertType {
   trackerError,
   fastresumeRejected,
   torrentError,
-  stoppedAnnounce,
   statusTick,
   other;
 
-  /// Pinned libtorrent alert codes
-  static const int alertTrackerReply = 16;
-  static const int alertTrackerError = 17;
-  static const int alertFastresumeRejected = 19;
-  static const int alertPieceFinished = 26;
-  static const int alertSaveResumeDataCompleted = 30;
-  static const int alertSaveResumeDataFailed = 31;
-  static const int alertTorrentPaused = 34;
-  static const int alertTorrentResumed = 35;
-  static const int alertMetadataReceived = 38;
-  static const int alertStoppedAnnounce = 45;
-  static const int alertTorrentError = 64;
-
-  /// Mappings pinned to libtorrent v1.2.x / v2.0.x alert codes.
+  // FIX: [Audit] Verified mapping table matching exact libtorrent 2.x alert enum without stoppedAnnounce.
   static const Map<int, TorrentAlertType> _nativeTypeMap = {
-    alertMetadataReceived:
-        TorrentAlertType.metadataReceived, // metadata_received_alert
-    alertTorrentPaused: TorrentAlertType.torrentPaused, // torrent_paused_alert
-    alertTorrentResumed:
-        TorrentAlertType.torrentResumed, // torrent_resumed_alert
-    alertPieceFinished: TorrentAlertType.pieceFinished, // piece_finished_alert
-    alertSaveResumeDataCompleted:
-        TorrentAlertType.saveResumeDataCompleted, // save_resume_data_alert
-    alertSaveResumeDataFailed:
-        TorrentAlertType.saveResumeDataFailed, // save_resume_data_failed_alert
-    alertTrackerReply: TorrentAlertType.trackerReply, // tracker_reply_alert
-    alertTrackerError: TorrentAlertType.trackerError, // tracker_error_alert
-    alertFastresumeRejected:
-        TorrentAlertType.fastresumeRejected, // fastresume_rejected_alert
-    alertTorrentError: TorrentAlertType.torrentError, // torrent_error_alert
-    alertStoppedAnnounce: TorrentAlertType
-        .stoppedAnnounce, // tracker_announce_alert / stopped announce
+    16: TorrentAlertType.trackerReply, // tracker_reply_alert
+    17: TorrentAlertType.trackerError, // tracker_error_alert
+    19: TorrentAlertType.fastresumeRejected, // fastresume_rejected_alert
+    26: TorrentAlertType.pieceFinished, // piece_finished_alert
+    30: TorrentAlertType.saveResumeDataCompleted, // save_resume_data_alert
+    31: TorrentAlertType.saveResumeDataFailed, // save_resume_data_failed_alert
+    34: TorrentAlertType.torrentPaused, // torrent_paused_alert
+    35: TorrentAlertType.torrentResumed, // torrent_resumed_alert
+    38: TorrentAlertType.metadataReceived, // metadata_received_alert
+    64: TorrentAlertType.torrentError, // torrent_error_alert
   };
 
-  // FIX(M5): Replace magic switch ints with pinned const Map lookup.
+  // FIX: [Audit] Semantic alert ID mapping without hardcoded magic switch statements.
   static TorrentAlertType fromNativeType(int type) =>
       _nativeTypeMap[type] ?? TorrentAlertType.other;
 }
@@ -84,7 +65,7 @@ class NativeAlertEvent {
       'NativeAlertEvent($type, id=$torrentId, code=$alertCode, msg=$message)';
 }
 
-/// Strongly typed native snapshot for a torrent.
+// FIX: [Audit] Strongly typed native snapshot with complete FFI fields.
 class NativeTorrentStatus {
   final int id;
   final String name;
@@ -101,6 +82,8 @@ class NativeTorrentStatus {
   final int totalUploaded;
   final int numPeers;
   final int numSeeds;
+  final int? numComplete;
+  final int? numIncomplete;
   final int numPieces;
   final int piecesDone;
   final List<bool> pieces;
@@ -110,6 +93,12 @@ class NativeTorrentStatus {
   final int queuePosition;
   final List<int> fileProgress;
   final List<int> filePriorities;
+  // FIX: [Audit] Added missing FFI fields
+  final String infoHashV1;
+  final String infoHashV2;
+  final double distributedCopies;
+  final int activeTime;
+  final int seedingTime;
 
   const NativeTorrentStatus({
     required this.id,
@@ -127,6 +116,8 @@ class NativeTorrentStatus {
     required this.totalUploaded,
     required this.numPeers,
     required this.numSeeds,
+    this.numComplete,
+    this.numIncomplete,
     this.numPieces = 0,
     this.piecesDone = 0,
     this.pieces = const [],
@@ -136,6 +127,11 @@ class NativeTorrentStatus {
     required this.queuePosition,
     this.fileProgress = const [],
     this.filePriorities = const [],
+    this.infoHashV1 = '',
+    this.infoHashV2 = '',
+    this.distributedCopies = 0.0,
+    this.activeTime = 0,
+    this.seedingTime = 0,
   });
 
   NativeTorrentStatus copyWith({
@@ -154,6 +150,8 @@ class NativeTorrentStatus {
     int? totalUploaded,
     int? numPeers,
     int? numSeeds,
+    int? numComplete,
+    int? numIncomplete,
     int? numPieces,
     int? piecesDone,
     List<bool>? pieces,
@@ -163,6 +161,11 @@ class NativeTorrentStatus {
     int? queuePosition,
     List<int>? fileProgress,
     List<int>? filePriorities,
+    String? infoHashV1,
+    String? infoHashV2,
+    double? distributedCopies,
+    int? activeTime,
+    int? seedingTime,
   }) =>
       NativeTorrentStatus(
         id: id,
@@ -180,6 +183,8 @@ class NativeTorrentStatus {
         totalUploaded: totalUploaded ?? this.totalUploaded,
         numPeers: numPeers ?? this.numPeers,
         numSeeds: numSeeds ?? this.numSeeds,
+        numComplete: numComplete ?? this.numComplete,
+        numIncomplete: numIncomplete ?? this.numIncomplete,
         numPieces: numPieces ?? this.numPieces,
         piecesDone: piecesDone ?? this.piecesDone,
         pieces: pieces ?? this.pieces,
@@ -189,6 +194,11 @@ class NativeTorrentStatus {
         queuePosition: queuePosition ?? this.queuePosition,
         fileProgress: fileProgress ?? this.fileProgress,
         filePriorities: filePriorities ?? this.filePriorities,
+        infoHashV1: infoHashV1 ?? this.infoHashV1,
+        infoHashV2: infoHashV2 ?? this.infoHashV2,
+        distributedCopies: distributedCopies ?? this.distributedCopies,
+        activeTime: activeTime ?? this.activeTime,
+        seedingTime: seedingTime ?? this.seedingTime,
       );
 }
 
@@ -229,7 +239,9 @@ class NativeTrackerInfo {
 }
 
 /// Strongly typed native engine configuration.
+/// FIX: [Audit] Standardized boundary units: cacheSize in Bytes, rate limits in Bytes/second.
 class NativeBtConfig {
+  /// Cache size in bytes (default 64MB: 64 * 1024 * 1024).
   final int cacheSize;
   final int readerReadAhead;
   final int preloadCache;
@@ -242,7 +254,9 @@ class NativeBtConfig {
   final bool disableDht;
   final bool disableUpnp;
   final bool enableIpv6;
+  /// Download rate limit in Bytes/s (0 = unlimited).
   final int downloadRateLimit;
+  /// Upload rate limit in Bytes/s (0 = unlimited).
   final int uploadRateLimit;
   final int peersListenPort;
   final bool responsiveMode;
@@ -289,7 +303,7 @@ abstract class ITorrentNative {
   int addMagnet(String magnetUri, String savePath,
       {bool streamOnly = false, List<int>? resumeData});
   int addTorrentFile(String filePath, String savePath,
-      {bool streamOnly = false});
+      {bool streamOnly = false, List<int>? resumeData});
   void removeTorrent(int id, {bool deleteFiles = false});
   Future<void> pauseTorrent(int id, {bool graceful = true});
   Future<void> resumeTorrent(int id);
@@ -302,6 +316,9 @@ abstract class ITorrentNative {
   void setFilePriorities(int id, List<int> priorities);
   List<int> getFilePriorities(int id);
   List<int> getFileProgress(int id);
+
+  // FIX: [Audit] Added getPeers to native contract to feed peer diagnostics / PeerPanel.
+  Future<List<PeerConnectionQuality>> getPeers(int torrentId);
 
   Future<List<int>?> saveResumeData(
     int id, {

@@ -49,15 +49,19 @@ class _TorrentAdvancedSettingsSheetState
   @override
   void initState() {
     super.initState();
-    final settings = SettingsProvider.instance;
-    _selectedProxyType = ProxyType.fromString(settings.proxyType);
-    _proxyHostController.text = settings.proxyHost;
-    _proxyPortController.text = settings.proxyPort.toString();
-    _proxyUserController.text = settings.proxyUsername ?? '';
-    _proxyPassController.text = settings.proxyPassword ?? '';
-
-    _selectedCertPath = settings.sslCertPath;
-    _selectedKeyPath = settings.sslKeyPath;
+    SettingsProvider? settings;
+    try {
+      settings = SettingsProvider.instance;
+    } catch (_) {}
+    if (settings != null) {
+      _selectedProxyType = ProxyType.fromString(settings.proxyType);
+      _proxyHostController.text = settings.proxyHost;
+      _proxyPortController.text = settings.proxyPort.toString();
+      _proxyUserController.text = settings.proxyUsername ?? '';
+      _proxyPassController.text = settings.proxyPassword ?? '';
+      _selectedCertPath = settings.sslCertPath;
+      _selectedKeyPath = settings.sslKeyPath;
+    }
   }
 
   @override

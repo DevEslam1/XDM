@@ -26,7 +26,6 @@ class TorrentSessionState {
   final List<int> fileProgress;
   final List<int> filePriorities;
   final String? errorMessage;
-  final bool stoppedAnnounceReceived;
 
   const TorrentSessionState({
     required this.torrentId,
@@ -51,7 +50,6 @@ class TorrentSessionState {
     this.fileProgress = const [],
     this.filePriorities = const [],
     this.errorMessage,
-    this.stoppedAnnounceReceived = false,
   });
 
   TorrentSessionState copyWith({
@@ -76,7 +74,6 @@ class TorrentSessionState {
     List<int>? fileProgress,
     List<int>? filePriorities,
     String? errorMessage,
-    bool? stoppedAnnounceReceived,
   }) {
     return TorrentSessionState(
       torrentId: torrentId,
@@ -101,8 +98,6 @@ class TorrentSessionState {
       fileProgress: fileProgress ?? this.fileProgress,
       filePriorities: filePriorities ?? this.filePriorities,
       errorMessage: errorMessage ?? this.errorMessage,
-      stoppedAnnounceReceived:
-          stoppedAnnounceReceived ?? this.stoppedAnnounceReceived,
     );
   }
 
@@ -135,7 +130,6 @@ class TorrentSessionState {
         return state.copyWith(
           isPaused: false,
           stateLabel: state.isFinished ? 'Seeding' : 'Downloading',
-          stoppedAnnounceReceived: false,
         );
 
       case PieceFinishedEvent():
@@ -143,7 +137,9 @@ class TorrentSessionState {
         final newPiecesTotal = event.piecesTotal > 0 ? event.piecesTotal : state.piecesTotal;
         final newProgress = state.totalWanted > 0
             ? (event.totalWantedDone / state.totalWanted).clamp(0.0, 1.0)
-            : (newPiecesTotal > 0 ? (newPiecesHave / newPiecesTotal).clamp(0.0, 1.0) : state.progress);
+            : (newPiecesTotal > 0
+                ? (newPiecesHave / newPiecesTotal).clamp(0.0, 1.0)
+                : state.progress.clamp(0.0, 1.0));
         final isDone = newProgress >= 0.9999 || (newPiecesTotal > 0 && newPiecesHave >= newPiecesTotal);
 
         return state.copyWith(
@@ -176,11 +172,6 @@ class TorrentSessionState {
         return state.copyWith(
           errorMessage: event.error,
           stateLabel: 'Error',
-        );
-
-      case StoppedAnnounceEvent():
-        return state.copyWith(
-          stoppedAnnounceReceived: true,
         );
 
       case FilePrioritiesChangedEvent():

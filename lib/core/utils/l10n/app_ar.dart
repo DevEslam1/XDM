@@ -581,4 +581,15 @@ const Map<String, String> arTranslations = {
       'تنبيه: قم بتحميل المحتوى فقط إذا كنت تملكه أو لديك إذن صريح من صاحب حقوق النشر.',
   'yt_playlist': 'قائمة تشغيل يوتيوب',
   'yt_video_quality': 'جودة فيديو يوتيوب',
+  'torrent_meta_connecting': 'الاتصال بالأقران...',
+  'torrent_meta_adding_trackers': 'إضافة متتبعات...',
+  'torrent_meta_fetching': 'جلب بيانات التورنت...',
+  'torrent_meta_failed': 'فشل جلب البيانات الوصفية',
+  'torrent_meta_received': 'تم استلام البيانات الوصفية',
+  'torrent_meta_elapsed': 'الوقت المنقضي: {time}',
+  'torrent_meta_slow_warning':
+      'يستغرق جلب البيانات الوصفية وقتاً أطول من المتوقع. تحقق من الاتصال أو أجهزة التتبع.',
+  'torrent_meta_retry': 'إعادة محاولة جلب البيانات الوصفية',
+  'torrent_peers_label': 'الأقران',
+  'torrent_dht_nodes': 'عقد DHT',
 };

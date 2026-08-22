@@ -55,7 +55,7 @@ class TorrentResumeStore {
         filePath = Uri.parse(filePath).toFilePath();
       }
       final file = File(filePath);
-      if (file.existsSync()) {
+      if (file.existsSync() && file.lengthSync() < 2 * 1024 * 1024) {
         final bytes = file.readAsBytesSync();
         final parsed = BencodeDecoder.parseTorrentBytes(bytes);
         final infoHash = parsed?['infoHash'] as String?;
@@ -75,10 +75,17 @@ class TorrentResumeStore {
 
   static void unregisterTorrent(int torrentId) {
     _sourceByTorrentId.remove(torrentId);
+    _saveDebounceTimers.remove(torrentId)?.cancel();
   }
 
   static void unregisterSource(String sourceUrl) {
-    _sourceByTorrentId.removeWhere((_, url) => url == sourceUrl);
+    _sourceByTorrentId.removeWhere((id, url) {
+      if (url == sourceUrl) {
+        _saveDebounceTimers.remove(id)?.cancel();
+        return true;
+      }
+      return false;
+    });
   }
 
   static const String _indexKey = 'torrent_resume_index';
@@ -121,10 +128,10 @@ class TorrentResumeStore {
       final blob = await fetchResumeData();
       if (blob == null || blob.isEmpty) return false;
 
-      // Reject file > 1MB
-      if (blob.length > 1024 * 1024) {
+      // FIX: [Audit] Raised fast-resume blob cap to 16MB for large multi-piece torrents.
+      if (blob.length > 16 * 1024 * 1024) {
         debugPrint(
-            '[TorrentResumeStore] blob size > 1MB, rejecting as corrupt');
+            '[TorrentResumeStore] blob size > 16MB, rejecting as corrupt');
         return false;
       }
 
@@ -161,32 +168,44 @@ class TorrentResumeStore {
       await raf.close();
 
       Future<void> safeRename(File tempFile, String targetPath) async {
-        try {
-          await tempFile.rename(targetPath);
-        } catch (e) {
-          final tmp2 = File('$targetPath.tmp2');
+        for (var attempt = 1; attempt <= 3; attempt++) {
           try {
-            final bytes = await tempFile.readAsBytes();
-            await tmp2.writeAsBytes(bytes, flush: true);
             final targetFile = File(targetPath);
-            if (await targetFile.exists()) {
+            if (await targetFile.exists() && Platform.isWindows) {
               try {
                 await targetFile.delete();
               } catch (_) {}
             }
-            await tmp2.rename(targetPath);
-          } catch (e2) {
-            final bytes = await tempFile.readAsBytes();
-            await File(targetPath).writeAsBytes(bytes, flush: true);
+            await tempFile.rename(targetPath);
+            return;
+          } catch (e) {
+            if (attempt == 3) {
+              final tmp2 = File('$targetPath.tmp2');
+              try {
+                final bytes = await tempFile.readAsBytes();
+                await tmp2.writeAsBytes(bytes, flush: true);
+                final targetFile = File(targetPath);
+                if (await targetFile.exists()) {
+                  try {
+                    await targetFile.delete();
+                  } catch (_) {}
+                }
+                await tmp2.rename(targetPath);
+              } finally {
+                try {
+                  if (await tmp2.exists()) await tmp2.delete();
+                } catch (_) {}
+              }
+            } else {
+              await Future.delayed(Duration(milliseconds: 50 * attempt));
+            }
           } finally {
-            try {
-              if (await tmp2.exists()) await tmp2.delete();
-            } catch (_) {}
+            if (attempt == 3) {
+              try {
+                if (await tempFile.exists()) await tempFile.delete();
+              } catch (_) {}
+            }
           }
-        } finally {
-          try {
-            if (await tempFile.exists()) await tempFile.delete();
-          } catch (_) {}
         }
       }
 
@@ -311,7 +330,8 @@ class TorrentResumeStore {
       final expectedSha = meta['sha256'] as String?;
 
       final blob = await blobFile.readAsBytes();
-      if (blob.isEmpty || blob.length > 1024 * 1024) {
+      // FIX: [Audit] Cap at 16MB
+      if (blob.isEmpty || blob.length > 16 * 1024 * 1024) {
         debugPrint(
             '[TorrentResumeStore] invalid blob size (${blob.length} bytes), rejecting as corrupt');
         await deleteResumeDataForSource(sourceUrl);
@@ -333,6 +353,46 @@ class TorrentResumeStore {
       // FIX-M12: Delete corrupt resume data on load error
       await deleteResumeDataForSource(sourceUrl);
       return null;
+    }
+  }
+
+  // FIX: [Audit] Save metadata/files snapshot discovered by probe without requiring binary resume data.
+  static Future<bool> saveMetadataSnapshot({
+    required String sourceUrl,
+    required List<Map<String, dynamic>> files,
+    String? name,
+    int torrentId = -1,
+  }) async {
+    try {
+      if (sourceUrl.trim().isEmpty || files.isEmpty) return false;
+      final dir = await _dir();
+      final key = _stableKey(sourceUrl);
+      final metaFile = File('${dir.path}/$key.meta.json');
+      final metaTmp = File('${dir.path}/$key.meta.json.tmp');
+
+      final meta = jsonEncode({
+        'sourceUrl': sourceUrl,
+        'torrentId': torrentId,
+        'savedAt': DateTime.now().millisecondsSinceEpoch,
+        if (name != null && name.isNotEmpty) 'name': name,
+        'files': files,
+      });
+
+      await metaTmp.writeAsString(meta, flush: true);
+      final mraf = await metaTmp.open(mode: FileMode.append);
+      await mraf.flush();
+      await mraf.close();
+
+      if (await metaFile.exists() && Platform.isWindows) {
+        try {
+          await metaFile.delete();
+        } catch (_) {}
+      }
+      await metaTmp.rename(metaFile.path);
+      return true;
+    } catch (e) {
+      debugPrint('[TorrentResumeStore] saveMetadataSnapshot failed: $e');
+      return false;
     }
   }
 
@@ -376,6 +436,7 @@ class TorrentResumeStore {
 
   /// Delete by torrent id (resolves via the registry).
   static Future<void> delete(int torrentId) async {
+    _saveDebounceTimers.remove(torrentId)?.cancel();
     await _removeFromIndex(torrentId);
     final source = _sourceByTorrentId.remove(torrentId);
     if (source != null) await deleteResumeDataForSource(source);
@@ -403,7 +464,7 @@ class TorrentResumeStore {
   }
 
   static bool validateResumeData(Uint8List blob) {
-    if (blob.isEmpty || blob.length > 1024 * 1024) return false;
+    if (blob.isEmpty || blob.length > 16 * 1024 * 1024) return false;
     return true;
   }
 

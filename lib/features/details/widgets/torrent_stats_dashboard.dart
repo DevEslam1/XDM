@@ -41,7 +41,10 @@ class TorrentStatsDashboard extends StatelessWidget {
             stats!.totalPayloadUpload > 0)
         ? stats!.totalPayloadUpload
         : task.uploadedBytes;
-    final ratio = totalDownloaded > 0 ? totalUploaded / totalDownloaded : 0.0;
+    final totalSize = task.resolvedFileSize;
+    final ratio = totalDownloaded > 0
+        ? totalUploaded / totalDownloaded
+        : (totalSize > 0 ? totalUploaded / totalSize : 0.0);
     final seedingDuration = task.completedAt != null
         ? DateTime.now().difference(task.completedAt!)
         : Duration.zero;

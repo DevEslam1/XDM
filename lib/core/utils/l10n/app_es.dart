@@ -599,4 +599,15 @@ const Map<String, String> esTranslations = {
       'Aviso: Descarga contenido solo si tienes derecho a ello.',
   'yt_playlist': 'LISTA DE REPRODUCCIÓN DE YOUTUBE',
   'yt_video_quality': 'CALIDAD DE VÍDEO DE YOUTUBE',
+  'torrent_meta_connecting': 'Conectando con pares...',
+  'torrent_meta_adding_trackers': 'Añadiendo rastreadores...',
+  'torrent_meta_fetching': 'Obteniendo metadatos del torrent...',
+  'torrent_meta_failed': 'Error al obtener metadatos',
+  'torrent_meta_received': 'Metadatos recibidos',
+  'torrent_meta_elapsed': 'Tiempo transcurrido: {time}',
+  'torrent_meta_slow_warning':
+      'La obtención de metadatos está tardando más de lo esperado. Verifique la conexión o los rastreadores.',
+  'torrent_meta_retry': 'Reintentar obtención de metadatos',
+  'torrent_peers_label': 'Pares',
+  'torrent_dht_nodes': 'Nodos DHT',
 };

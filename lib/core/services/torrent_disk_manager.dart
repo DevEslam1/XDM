@@ -72,18 +72,25 @@ class TorrentDiskManager {
 
   /// Checks whether files in a torrent contain streaming video candidates.
   static bool hasStreamingVideo(List<TorrentFileItem> files) {
-    return files.any((f) =>
-        f.size > 50 * 1024 * 1024 && // > 50MB
-        (f.name.endsWith('.mp4') ||
-            f.name.endsWith('.mkv') ||
-            f.name.endsWith('.avi') ||
-            f.name.endsWith('.webm') ||
-            f.name.endsWith('.mov') ||
-            f.name.endsWith('.ts')));
+    return files.any((f) {
+      if (f.size <= 50 * 1024 * 1024) return false;
+      final name = f.name.toLowerCase();
+      return name.endsWith('.mp4') ||
+          name.endsWith('.mkv') ||
+          name.endsWith('.avi') ||
+          name.endsWith('.webm') ||
+          name.endsWith('.mov') ||
+          name.endsWith('.ts') ||
+          name.endsWith('.m4v') ||
+          name.endsWith('.flv');
+    });
   }
+
+  static int? _cachedTotalRamMb;
 
   /// Estimates available total RAM in MB across platforms.
   static int getTotalRamMb() {
+    if (_cachedTotalRamMb != null) return _cachedTotalRamMb!;
     try {
       if (Platform.isLinux || Platform.isAndroid) {
         final meminfo = File('/proc/meminfo');
@@ -94,16 +101,21 @@ class TorrentDiskManager {
               final parts = line.split(RegExp(r'\s+'));
               if (parts.length >= 2) {
                 final kb = int.tryParse(parts[1]);
-                if (kb != null) return kb ~/ 1024;
+                if (kb != null) {
+                  _cachedTotalRamMb = kb ~/ 1024;
+                  return _cachedTotalRamMb!;
+                }
               }
             }
           }
         }
       }
-      return 4096; // Fallback default: 4GB
+      _cachedTotalRamMb = 4096;
+      return _cachedTotalRamMb!;
     } catch (e, st) {
       LoggingService.logger('TorrentDiskManager')
           .warning('Operation failed with fallback', e, st);
+      _cachedTotalRamMb = 4096;
       return 4096;
     }
   }

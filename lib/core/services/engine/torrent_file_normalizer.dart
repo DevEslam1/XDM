@@ -162,4 +162,26 @@ class TorrentFileNormalizer {
     if (len <= 0) return 0.0;
     return (dl / len).clamp(0.0, 1.0);
   }
+
+  // FIX: [Audit] Centralized helper for formatting torrent files summary stats (e.g. "5/10 FILES").
+  static String formatFilesSummary({
+    required int totalFiles,
+    required int completedFiles,
+    int? selectedFiles,
+  }) {
+    if (totalFiles <= 0) return '—';
+    final done = completedFiles.clamp(0, totalFiles);
+    return '$done/$totalFiles FILES';
+  }
+
+  // FIX: [Audit] Convenience helper to extract summary directly from raw or normalized file list.
+  static String formatSummaryFromFiles(List<dynamic>? rawList) {
+    if (rawList == null || rawList.isEmpty) return '—';
+    final normalized = normalizeTorrentFileList(rawList);
+    if (normalized.total == 0) return '—';
+    return formatFilesSummary(
+      totalFiles: normalized.total,
+      completedFiles: normalized.done,
+    );
+  }
 }

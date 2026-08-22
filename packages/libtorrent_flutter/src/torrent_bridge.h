@@ -47,11 +47,13 @@ typedef struct {
     float         progress;
     int32_t       download_rate;
     int32_t       upload_rate;
-    int64_t       total_done;
+    int64_t       total_wanted_done;
     int64_t       total_wanted;
     int64_t       total_uploaded;
     int32_t       num_peers;
     int32_t       num_seeds;
+    int32_t       num_complete;
+    int32_t       num_incomplete;
     int32_t       num_pieces;
     int32_t       pieces_done;
     int32_t       is_paused;
@@ -156,6 +158,12 @@ TORRENT_API lt_torrent_id lt_add_torrent_file(lt_session_t session,
                                               const char* file_path,
                                               const char* save_path,
                                               int stream_only);
+TORRENT_API lt_torrent_id lt_add_torrent_file_resume(lt_session_t session,
+                                                      const char* file_path,
+                                                      const char* save_path,
+                                                      int stream_only,
+                                                      const uint8_t* resume_data,
+                                                      int resume_data_len);
 TORRENT_API void lt_remove_torrent(lt_session_t session,
                                    lt_torrent_id id, int delete_files);
 TORRENT_API void lt_pause_torrent(lt_session_t session, lt_torrent_id id);

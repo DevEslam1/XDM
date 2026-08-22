@@ -409,10 +409,11 @@ class DownloadInterceptor {
       }
       final resolvedOriginUrl =
           downloadPageUrl ?? (activeTab.isHome ? null : activeTab.url);
+      final isTorrent = isTorrentUrl(url, fileName: finalFileName);
       await downloadProvider.addDownload(
         name: finalFileName,
         url: url,
-        size: videoSize ?? contentLength ?? 0,
+        size: isTorrent ? 0 : (videoSize ?? contentLength ?? 0),
         category: resolvedCategory,
         savePath: '',
         downloadPageUrl: resolvedOriginUrl,

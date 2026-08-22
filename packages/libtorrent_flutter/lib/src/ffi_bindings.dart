@@ -18,17 +18,26 @@ final class LtTorrentStatus extends Struct {
   @Float()   external double progress;
   @Int32()   external int downloadRate;
   @Int32()   external int uploadRate;
-  @Int64()   external int totalDone;
+  @Int64()   external int totalWantedDone;   // Renamed from totalDone
   @Int64()   external int totalWanted;
   @Int64()   external int totalUploaded;
   @Int32()   external int numPeers;
   @Int32()   external int numSeeds;
+  @Int32()   external int numComplete;       // Swarm seeds (-1 = unknown)
+  @Int32()   external int numIncomplete;     // Swarm peers (-1 = unknown)
   @Int32()   external int numPieces;
   @Int32()   external int piecesDone;
   @Int32()   external int isPaused;
   @Int32()   external int isFinished;
   @Int32()   external int hasMetadata;
   @Int32()   external int queuePosition;
+}
+
+// Add ABI guard
+bool verifyStatusStructContract() {
+  final ok = sizeOf<LtTorrentStatus>() == 1880;
+  assert(ok, 'LtTorrentStatus drift: expected 1880 bytes');
+  return ok;
 }
 
 // ─── lt_file_info ─────────────────────────────────────────────────────────────
@@ -125,6 +134,11 @@ typedef LtAddTorrentFile = int Function(
 typedef _AddMagnetResumeN = Int64 Function(
     Pointer<LtSessionOpaque>, Pointer<Utf8>, Pointer<Utf8>, Int32, Pointer<Uint8>, Int32);
 typedef LtAddMagnetResume = int Function(
+    Pointer<LtSessionOpaque>, Pointer<Utf8>, Pointer<Utf8>, int, Pointer<Uint8>, int);
+
+typedef _AddTorrentFileResumeN = Int64 Function(
+    Pointer<LtSessionOpaque>, Pointer<Utf8>, Pointer<Utf8>, Int32, Pointer<Uint8>, Int32);
+typedef LtAddTorrentFileResume = int Function(
     Pointer<LtSessionOpaque>, Pointer<Utf8>, Pointer<Utf8>, int, Pointer<Uint8>, int);
 
 typedef _TakeSavedResumeDataN = Int64 Function(
@@ -342,6 +356,7 @@ class TorrentBridgeBindings {
   late final LtAddMagnet          addMagnet;
   late final LtAddMagnetResume?   addMagnetResume;
   late final LtAddTorrentFile     addTorrentFile;
+  late final LtAddTorrentFileResume? addTorrentFileResume;
   late final LtRemoveTorrent      removeTorrent;
   late final LtPauseTorrent       pauseTorrent;
   late final LtResumeTorrent      resumeTorrent;
@@ -393,6 +408,13 @@ class TorrentBridgeBindings {
       addMagnetResume = null;
     }
     addTorrentFile      = _lib.lookup<NativeFunction<_AddTorrentFileN>>('lt_add_torrent_file').asFunction<LtAddTorrentFile>();
+    try {
+      addTorrentFileResume = _lib.lookup<NativeFunction<_AddTorrentFileResumeN>>(
+        'lt_add_torrent_file_resume',
+      ).asFunction<LtAddTorrentFileResume>();
+    } catch (_) {
+      addTorrentFileResume = null;
+    }
     removeTorrent       = _lib.lookup<NativeFunction<_RemoveTorrentN>>('lt_remove_torrent').asFunction<LtRemoveTorrent>();
     pauseTorrent        = _lib.lookup<NativeFunction<_PauseTorrentN>>('lt_pause_torrent').asFunction<LtPauseTorrent>();
     resumeTorrent       = _lib.lookup<NativeFunction<_ResumeTorrentN>>('lt_resume_torrent').asFunction<LtResumeTorrent>();

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dmx/core/app_theme.dart';
+import 'package:dmx/core/utils/localization.dart';
 import 'package:dmx/shared/design/dmx_design.dart';
 import 'package:flutter/material.dart';
 
@@ -64,18 +65,19 @@ class _TorrentMetadataProgressState extends State<TorrentMetadataProgress> {
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  String _getStateLabel() {
+  // FIX: [Audit] Localized state labels via L10n
+  String _getStateLabel(BuildContext context) {
     switch (widget.state) {
       case TorrentMetadataState.connecting:
-        return 'Connecting to peers...';
+        return L10n.of(context, 'torrent_meta_connecting');
       case TorrentMetadataState.addingTrackers:
-        return 'Adding trackers...';
+        return L10n.of(context, 'torrent_meta_adding_trackers');
       case TorrentMetadataState.fetchingMetadata:
-        return 'Fetching torrent metadata...';
+        return L10n.of(context, 'torrent_meta_fetching');
       case TorrentMetadataState.failed:
-        return widget.errorMessage ?? 'Failed to fetch metadata';
+        return widget.errorMessage ?? L10n.of(context, 'torrent_meta_failed');
       case TorrentMetadataState.completed:
-        return 'Metadata received';
+        return L10n.of(context, 'torrent_meta_received');
     }
   }
 
@@ -113,7 +115,7 @@ class _TorrentMetadataProgressState extends State<TorrentMetadataProgress> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _getStateLabel(),
+                        _getStateLabel(context),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: isDark ? Colors.white : Colors.black87,
@@ -121,7 +123,8 @@ class _TorrentMetadataProgressState extends State<TorrentMetadataProgress> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Elapsed time: ${_formatElapsed()}',
+                        L10n.of(context, 'torrent_meta_elapsed')
+                            .replaceAll('{time}', _formatElapsed()),
                         style: TextStyle(
                           fontSize: 12,
                           color: isDark ? Colors.white60 : Colors.black54,
@@ -133,7 +136,7 @@ class _TorrentMetadataProgressState extends State<TorrentMetadataProgress> {
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
                           child: Text(
-                            'Fetching metadata is taking longer than expected. Check connection or trackers.',
+                            L10n.of(context, 'torrent_meta_slow_warning'),
                             style: TextStyle(
                               fontSize: 11,
                               color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
@@ -147,7 +150,7 @@ class _TorrentMetadataProgressState extends State<TorrentMetadataProgress> {
                   IconButton(
                     icon: const Icon(Icons.close_rounded),
                     onPressed: widget.onCancel,
-                    tooltip: 'Cancel',
+                    tooltip: L10n.of(context, 'browser_cancel_uppercase'),
                   ),
               ],
             ),
@@ -157,14 +160,14 @@ class _TorrentMetadataProgressState extends State<TorrentMetadataProgress> {
               children: [
                 _buildTelemetryChip(
                   icon: Icons.people_outline_rounded,
-                  label: 'Peers',
+                  label: L10n.of(context, 'torrent_peers_label'),
                   value: '${widget.peersCount}',
                   color: accentColor,
                   isDark: isDark,
                 ),
                 _buildTelemetryChip(
                   icon: Icons.hub_outlined,
-                  label: 'DHT Nodes',
+                  label: L10n.of(context, 'torrent_dht_nodes'),
                   value: '${widget.dhtNodes}',
                   color: accentColor,
                   isDark: isDark,
@@ -180,7 +183,7 @@ class _TorrentMetadataProgressState extends State<TorrentMetadataProgress> {
                 child: OutlinedButton.icon(
                   onPressed: widget.onRetry,
                   icon: const Icon(Icons.refresh_rounded, size: 18),
-                  label: const Text('Retry Fetching Metadata'),
+                  label: Text(L10n.of(context, 'torrent_meta_retry')),
                 ),
               ),
             ],

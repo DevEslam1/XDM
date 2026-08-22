@@ -22,7 +22,8 @@ class MockTorrentService extends TorrentServiceStub {
   bool isTorrentAlive(int id) => true;
 
   @override
-  int addMagnet(String magnetUri, String savePath) => 42;
+  int addMagnet(String magnetUri, String savePath, {List<int>? resumeData}) =>
+      42;
 
   @override
   Future<int> addMagnetWithMetadataTimeout(
@@ -32,7 +33,13 @@ class MockTorrentService extends TorrentServiceStub {
     void Function(String message)? onStatusUpdate,
     int maxRetries = 2,
     Duration retryDelay = const Duration(seconds: 10),
+    List<int>? resumeData,
   }) async =>
+      42;
+
+  @override
+  int addTorrentFile(String filePath, String savePath,
+          {String? sourceKey, List<int>? resumeData}) =>
       42;
 
   List<TorrentFileItem> mockFiles = [];

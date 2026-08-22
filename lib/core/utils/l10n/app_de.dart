@@ -604,4 +604,15 @@ const Map<String, String> deTranslations = {
       'Hinweis: Inhalte nur herunterladen, wenn Sie das Recht dazu haben.',
   'yt_playlist': 'YOUTUBE WIEDERGABELISTE',
   'yt_video_quality': 'YOUTUBE VIDEOQUALITÄT',
+  'torrent_meta_connecting': 'Verbinde mit Peers...',
+  'torrent_meta_adding_trackers': 'Trackers hinzufügen...',
+  'torrent_meta_fetching': 'Torrent-Metadaten abrufen...',
+  'torrent_meta_failed': 'Fehler beim Abrufen der Metadaten',
+  'torrent_meta_received': 'Metadaten empfangen',
+  'torrent_meta_elapsed': 'Verstrichene Zeit: {time}',
+  'torrent_meta_slow_warning':
+      'Das Abrufen von Metadaten dauert länger als erwartet. Überprüfen Sie Verbindung oder Tracker.',
+  'torrent_meta_retry': 'Metadaten erneut abrufen',
+  'torrent_peers_label': 'Peers',
+  'torrent_dht_nodes': 'DHT-Knoten',
 };

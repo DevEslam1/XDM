@@ -320,26 +320,31 @@ mixin DownloadTorrentMixin {
     }
 
     if (anySeedingEnabled) {
-      int? minLimitBytes;
+      int totalTaskLimitsBytes = 0;
+      bool hasSpecificTaskLimit = false;
       for (final taskId in List<String>.from(providerTorrentIds.keys)) {
         final task = findTaskById(taskId);
         if (task != null && task.seedingEnabled && task.seedingLimited) {
           final taskLimitBytes = (task.seedingLimitKbps * 1000) ~/ 8;
           if (taskLimitBytes > 0) {
-            if (minLimitBytes == null || taskLimitBytes < minLimitBytes) {
-              minLimitBytes = taskLimitBytes;
-            }
+            totalTaskLimitsBytes += taskLimitBytes;
+            hasSpecificTaskLimit = true;
           }
         }
       }
 
-      if (minLimitBytes != null) {
-        TorrentService.setUploadLimit(minLimitBytes);
-      } else if (providerSettingsProvider.globalTorrentSeedingLimited) {
-        final limitBytes =
-            (providerSettingsProvider.globalTorrentSeedingLimitKbps * 1000) ~/
-                8;
-        TorrentService.setUploadLimit(limitBytes > 0 ? limitBytes : 0);
+      final globalLimitBytes = providerSettingsProvider.globalTorrentSeedingLimited
+          ? (providerSettingsProvider.globalTorrentSeedingLimitKbps * 1000) ~/ 8
+          : 0;
+
+      // FIX: [Audit] Sum per-task limits rather than taking minimum to avoid throttling all torrents
+      if (hasSpecificTaskLimit) {
+        final effectiveLimit = (globalLimitBytes > 0 && totalTaskLimitsBytes > globalLimitBytes)
+            ? globalLimitBytes
+            : totalTaskLimitsBytes;
+        TorrentService.setUploadLimit(effectiveLimit);
+      } else if (globalLimitBytes > 0) {
+        TorrentService.setUploadLimit(globalLimitBytes);
       } else {
         TorrentService.setUploadLimit(0); // Unlimited
       }

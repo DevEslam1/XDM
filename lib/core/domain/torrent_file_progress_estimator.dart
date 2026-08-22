@@ -197,7 +197,8 @@ class TorrentFileProgressEstimator {
         applied += share;
         final newDl = (dl + share).clamp(0, len);
         f['downloadedBytes'] = newDl;
-        f['progress'] = len > 0 ? (newDl / len).clamp(0.0, 1.0) : 1.0;
+        // FIX: [Audit] Empty / zero-length files must have 0.0 progress, not 1.0
+        f['progress'] = len > 0 ? (newDl / len).clamp(0.0, 1.0) : 0.0;
         f['isComplete'] = len > 0 && newDl >= len;
       }
     }

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../../core/services/engine/torrent_file_normalizer.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/localization.dart';
 import '../../downloads/models/download_task.dart';
@@ -13,11 +14,14 @@ class DetailsViewModel extends ChangeNotifier {
   final String taskId;
   final DownloadProvider downloadProvider;
 
+  bool _disposed = false;
   DateTime _lastSpeedUpdate = DateTime.fromMillisecondsSinceEpoch(0);
   List<FlSpot> _downloadSpots = const [];
   List<FlSpot> _uploadSpots = const [];
   int _maxGraphLen = 1;
   Timer? _speedRefreshTimer;
+
+  bool get isDisposed => _disposed;
 
   DetailsViewModel({
     required this.taskId,
@@ -31,6 +35,8 @@ class DetailsViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     _speedRefreshTimer?.cancel();
     _speedRefreshTimer = null;
     super.dispose();
@@ -83,31 +89,35 @@ class DetailsViewModel extends ChangeNotifier {
     }
   }
 
+  // FIX: [Audit] Deduplicated filesLabel using centralized TorrentFileNormalizer helper
   String filesLabel() {
     final t = task;
     if (t == null) return '—';
     if (!t.isTorrent) return '${t.threadCount} CH';
     final files = t.torrentFiles;
     if (files != null && files.isNotEmpty) {
-      final selected =
-          files.where((f) => (f['selected'] as bool?) ?? true).toList();
-      if (selected.isEmpty) return '—';
-      final completed = selected.where((f) => f['isComplete'] == true).length;
-      return selected.length == files.length
-          ? (completed > 0
-              ? '$completed/${files.length} FILES'
-              : '${files.length} FILES')
-          : '$completed/${selected.length} FILES';
+      return TorrentFileNormalizer.formatSummaryFromFiles(files);
     }
     final total = t.totalFiles ?? 0;
     final completed = t.completedFiles ?? 0;
-    if (total > 0) {
-      return completed > 0 ? '$completed/$total FILES' : '$total FILES';
-    }
-    return '—';
+    return TorrentFileNormalizer.formatFilesSummary(
+      totalFiles: total,
+      completedFiles: completed,
+    );
   }
 
+  static bool _spotsEqual(List<FlSpot> a, List<FlSpot> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i].x != b[i].x || a[i].y != b[i].y) return false;
+    }
+    return true;
+  }
+
+  // FIX: [Audit] Optimize 1s timer: only notify listeners if speed history spots actually changed
   void updateSpeedSpots() {
+    if (_disposed) return;
     final now = DateTime.now();
     if (_downloadSpots.isNotEmpty &&
         now.difference(_lastSpeedUpdate) < const Duration(seconds: 1)) {
@@ -135,9 +145,12 @@ class DetailsViewModel extends ChangeNotifier {
         FlSpot(1, ulH.isNotEmpty ? ulH[0] : 0)
       ];
     }
+    final changed = !_spotsEqual(_downloadSpots, dl) || !_spotsEqual(_uploadSpots, ul);
     _downloadSpots = dl;
     _uploadSpots = ul;
     _maxGraphLen = math.max(len, 1);
-    notifyListeners();
+    if (changed) {
+      notifyListeners();
+    }
   }
 }

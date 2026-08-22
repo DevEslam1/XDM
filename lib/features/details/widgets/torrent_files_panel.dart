@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/domain/engine_types.dart';
+import '../../../core/services/engine/torrent_file_normalizer.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/design/dmx_design.dart';
@@ -123,14 +124,10 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
     }
 
     final files = widget.torrentFiles;
+    // FIX: [Audit] Deduplicated completed files count using TorrentFileNormalizer
+    final normalized = TorrentFileNormalizer.normalizeTorrentFileList(files);
     final selectedFiles = files.where(isTorrentFileSelected).toList();
-    final completedCount = selectedFiles.where((f) {
-      final isEstimated = (f['progressEstimated'] as bool?) == true;
-      final isComp = (f['isComplete'] as bool?) == true;
-      final len = getFileLength(f);
-      final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-      return isComp || (!isEstimated && len > 0 && dl >= len);
-    }).length;
+    final completedCount = normalized.done;
 
     return DmxCardShell(
       showRail: false,

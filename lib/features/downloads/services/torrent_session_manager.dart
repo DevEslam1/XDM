@@ -102,11 +102,12 @@ class TorrentSessionManager {
 
     // Handle was removed / dead (e.g. after forceStopTorrent): re-add with saved infoHash & resume data
     _torrentIds.remove(task.id);
-    final saveDir = task.savePath.isNotEmpty
+    final rawSaveDir = task.savePath.isNotEmpty
         ? task.savePath
         : (task.localFilePath.isNotEmpty
             ? File(task.localFilePath).parent.path
             : '');
+    final saveDir = rawSaveDir.isNotEmpty ? rawSaveDir : Directory.current.path;
     int newId = -1;
     if (task.url.startsWith('magnet:')) {
       newId = _torrentService.addMagnet(task.url, saveDir);

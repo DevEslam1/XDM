@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/services/engine/torrent_file_normalizer.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/services/tracker_manager.dart';
 import '../../../core/utils/constants.dart';
@@ -94,6 +95,7 @@ class _DetailsScreenState extends State<DetailsScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     _reveal = AnimationController(vsync: this, duration: AppTheme.motionReveal)
       ..forward();
@@ -108,6 +110,7 @@ class _DetailsScreenState extends State<DetailsScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     stopPausableLoop();
 
     _reveal.dispose();
@@ -612,36 +615,10 @@ class _TelemetryHero extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
+                              // FIX: [Audit] Deduplicated files label via TorrentFileNormalizer helper
                               task.isTorrent
-                                  ? (() {
-                                      final files = task.torrentFiles;
-                                      if (files != null && files.isNotEmpty) {
-                                        final selected = files
-                                            .where((f) =>
-                                                (f['selected'] as bool?) ??
-                                                true)
-                                            .toList();
-                                        if (selected.isEmpty) return '—';
-                                        final completed = selected
-                                            .where((f) =>
-                                                f['isComplete'] == true)
-                                            .length;
-                                        return selected.length == files.length
-                                            ? (completed > 0
-                                                ? '$completed/${files.length} FILES'
-                                                : '${files.length} FILES')
-                                            : '$completed/${selected.length} FILES';
-                                      }
-                                      final total = task.totalFiles ?? 0;
-                                      final completed =
-                                          task.completedFiles ?? 0;
-                                      if (total > 0) {
-                                        return completed > 0
-                                            ? '$completed/$total FILES'
-                                            : '$total FILES';
-                                      }
-                                      return '—';
-                                    })()
+                                  ? TorrentFileNormalizer.formatSummaryFromFiles(
+                                      task.torrentFiles)
                                   : '${task.threadCount} CH',
                               style: AppTheme.microLabel(
                                 isDark: isDark,
@@ -2610,10 +2587,31 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
               ],
               if (_showPeers) ...[
                 const SizedBox(height: 12),
-                PeerPanel(
-                  torrentId: torrentId,
-                  isDark: isDark,
-                  peers: const [],
+                // FIX: [Audit] Feed PeerPanel with live peer telemetry from TorrentService
+                FutureBuilder<List<PeerConnectionQuality>>(
+                  future: TorrentService.getPeers(torrentId),
+                  builder: (context, snapshot) {
+                    final rawPeers = snapshot.data ?? const [];
+                    final peerList = rawPeers.map((p) => PeerInfo(
+                      ip: p.ip,
+                      port: p.port,
+                      client: p.client,
+                      country: '',
+                      progress: p.progress,
+                      downloadSpeed: p.downloadSpeed.round(),
+                      uploadSpeed: p.uploadSpeed.round(),
+                      isSeed: p.isSeed,
+                      isEncrypted: p.isEncrypted,
+                      isOutgoing: p.isOutgoing,
+                      flags: '',
+                      relevance: p.relevance,
+                    )).toList();
+                    return PeerPanel(
+                      torrentId: torrentId,
+                      isDark: isDark,
+                      peers: peerList,
+                    );
+                  },
                 ),
               ],
             ],
@@ -3210,11 +3208,12 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
             if (task.isTorrent) ...[
               _MetaRow(
                 label: isRtl ? 'بروتوكول التورنت' : 'BITTORRENT PROTOCOL',
-                value: (task.url.contains('urn:btmh') ||
-                        (task.url.contains('urn:btih') &&
-                            task.url.contains('urn:btmh')))
-                    ? 'BitTorrent v2 (BEP 52 / Hybrid)'
-                    : 'BitTorrent v1 / v2 Compatible',
+                // FIX: [Audit] Accurately distinguish BitTorrent v1, v2, and Hybrid protocols
+                value: (task.url.contains('urn:btih') && task.url.contains('urn:btmh'))
+                    ? 'BitTorrent Hybrid (v1 + v2 / BEP 52)'
+                    : task.url.contains('urn:btmh')
+                        ? 'BitTorrent v2 (BEP 52)'
+                        : 'BitTorrent v1 (BEP 3 / Legacy)',
                 isDark: isDark,
               ),
             ],

@@ -1,4 +1,5 @@
-﻿import 'dart:async';
+import 'dart:async';
+import '../../domain/torrent_models.dart';
 import '../../interfaces/i_torrent_native.dart';
 import '../diagnostic_service.dart';
 
@@ -22,6 +23,7 @@ class FakeTorrentNative implements ITorrentNative {
   final Set<int> _sequential = {};
   final Set<int> _superSeeding = {};
   final Map<int, List<int>> _savedResumeData = {};
+  final Map<int, List<PeerConnectionQuality>> _peers = {};
 
   bool simulateGracefulPauseTimeout = false;
   Duration gracefulPauseDelay = Duration.zero;
@@ -116,6 +118,11 @@ class FakeTorrentNative implements ITorrentNative {
     if (!_statusCtrl.isClosed) {
       _statusCtrl.add(Map.unmodifiable(_statuses));
     }
+  }
+
+  /// Seed peers for a torrent to simulate swarm quality.
+  void seedPeers(int id, List<PeerConnectionQuality> peers) {
+    _peers[id] = List.from(peers);
   }
 
   /// Simulate progress advancing for a torrent.
@@ -238,7 +245,8 @@ class FakeTorrentNative implements ITorrentNative {
   }
 
   @override
-  int addTorrentFile(String filePath, String savePath, {bool streamOnly = false}) {
+  int addTorrentFile(String filePath, String savePath,
+      {bool streamOnly = false, List<int>? resumeData}) {
     // FIX(N3): Monotonic ID assignment
     final id = _nextId++;
     final status = NativeTorrentStatus(
@@ -304,14 +312,6 @@ class FakeTorrentNative implements ITorrentNative {
       if (gracefulPauseDelay > Duration.zero) {
         await Future.delayed(gracefulPauseDelay);
       }
-      // Emit stopped announce alert first
-      emitAlert(NativeAlertEvent(
-        type: TorrentAlertType.stoppedAnnounce,
-        alertCode: 45,
-        torrentId: id,
-        message: 'Stopped announce completed',
-        timestamp: DateTime.now(),
-      ));
 
       // Emit torrent paused alert
       emitAlert(NativeAlertEvent(
@@ -434,6 +434,10 @@ class FakeTorrentNative implements ITorrentNative {
   @override
   List<int> getFileProgress(int id) =>
       List.unmodifiable(_fileProgress[id] ?? const []);
+
+  @override
+  Future<List<PeerConnectionQuality>> getPeers(int id) async =>
+      List.unmodifiable(_peers[id] ?? const []);
 
   int saveResumeDataCallCount = 0;
 

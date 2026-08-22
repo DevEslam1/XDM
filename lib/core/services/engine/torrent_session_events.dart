@@ -123,14 +123,6 @@ class TorrentErrorAlertEvent extends TorrentSessionEvent {
   });
 }
 
-/// Emitted when stopped-announce completes before pause.
-class StoppedAnnounceEvent extends TorrentSessionEvent {
-  StoppedAnnounceEvent({
-    required super.torrentId,
-    required super.timestamp,
-  });
-}
-
 /// Emitted on coarse UI telemetry poll ticks.
 class StatusTickEvent extends TorrentSessionEvent {
   final double progress;

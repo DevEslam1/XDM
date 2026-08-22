@@ -187,10 +187,11 @@ class FakeITorrentService implements ITorrentService {
   }
 
   @override
-  int addMagnet(String magnetUri, String savePath) {
+  int addMagnet(String magnetUri, String savePath, {List<int>? resumeData}) {
     final id = _latestStats.length + 1;
     _activeTorrentIds.add(id);
     _isPausedMap[id] = false;
+    if (resumeData != null) _resumeBlobs[id] = Uint8List.fromList(resumeData);
     final info = TorrentUpdateInfo(
       id: id,
       name: 'Magnet_$id',
@@ -216,15 +217,18 @@ class FakeITorrentService implements ITorrentService {
     void Function(String message)? onStatusUpdate,
     int maxRetries = 2,
     Duration retryDelay = const Duration(seconds: 10),
+    List<int>? resumeData,
   }) async {
-    return addMagnet(magnetUri, savePath);
+    return addMagnet(magnetUri, savePath, resumeData: resumeData);
   }
 
   @override
-  int addTorrentFile(String filePath, String savePath, {String? sourceKey}) {
+  int addTorrentFile(String filePath, String savePath,
+      {String? sourceKey, List<int>? resumeData}) {
     final id = _latestStats.length + 1;
     _activeTorrentIds.add(id);
     _isPausedMap[id] = false;
+    if (resumeData != null) _resumeBlobs[id] = Uint8List.fromList(resumeData);
     final info = TorrentUpdateInfo(
       id: id,
       name: filePath.split('/').last,
@@ -465,6 +469,9 @@ class FakeITorrentService implements ITorrentService {
 
   @override
   Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async => null;
+
+  @override
+  Future<List<PeerConnectionQuality>> getPeers(int torrentId) async => const [];
 
   @override
   Future<void> setProxy({

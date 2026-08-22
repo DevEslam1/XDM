@@ -343,7 +343,11 @@ Future<void> deleteDownloadParts(String tempFilePath) async {
   }
 }
 
-bool isTorrentFileSelected(Map f) => f['selected'] != false;
+bool isTorrentFileSelected(Map f) {
+  final sel = f['selected'];
+  if (sel is bool) return sel;
+  return sel != false;
+}
 
 /// Sanitizes a file name, stripping path traversal sequences and illegal OS characters.
 String sanitizeFileName(String fileName) {

@@ -83,15 +83,18 @@ class TorrentService {
   static bool get pieceDeadlineSupported => true;
 
   static Future<void> forceStopTorrent(int id) async {
-    _activeTorrentIds.remove(id);
-    _latestProgress.remove(id);
-    _latestStats.remove(id);
-    _metadataProbeAt.remove(id);
-    _torrentSources.remove(id);
-    _cachedPrioritiesSnapshot.remove(id);
-    try {
-      await _native.pauseTorrent(id, graceful: false);
-    } catch (_) {}
+    await _libtorrentLock.synchronized(() async {
+      _activeTorrentIds.remove(id);
+      _latestProgress.remove(id);
+      _latestStats.remove(id);
+      _metadataProbeAt.remove(id);
+      _torrentSources.remove(id);
+      _cachedPrioritiesSnapshot.remove(id);
+      _latestResumeBlobs.remove(id);
+      try {
+        await _native.pauseTorrent(id, graceful: false);
+      } catch (_) {}
+    });
   }
 
   static final Map<int, double> _latestProgress = {};
@@ -212,7 +215,6 @@ class TorrentService {
         _state = TorrentSessionLifecycleState.uninitialized;
         isPluginAvailable = false;
         isAvailable.value = false;
-        return;
       } catch (nativeErr) {
         _log.warning(
           'Native libtorrent init failed (unsupported platform or native library missing): $nativeErr',
@@ -244,13 +246,14 @@ class TorrentService {
   static void configureSession([TorrentSessionSettings? settings]) {
     try {
       final s = settings ?? const TorrentSessionSettings();
+      // FIX: [Audit] Standardize FFI boundary to Bytes/sec by multiplying kbps * 1024
       final config = NativeBtConfig(
         disableDht: !s.enableDht,
         disableUpnp: !s.enableUpnp,
         forceEncrypt: s.forceEncrypt,
         connectionsLimit: s.torrentConnectionsLimit,
-        downloadRateLimit: s.downloadRateLimitKbps,
-        uploadRateLimit: s.uploadRateLimitKbps,
+        downloadRateLimit: s.downloadRateLimitKbps * 1024,
+        uploadRateLimit: s.uploadRateLimitKbps * 1024,
       );
       _native.configureSession(config);
 
@@ -273,8 +276,9 @@ class TorrentService {
   static void _startTrackingAlerts() {
     _alertsSub?.cancel();
     _alertsSub = _native.alertStream.listen((event) {
-      if (event.alertCode == 19 ||
-          event.type == TorrentAlertType.fastresumeRejected) {
+      // FIX: [Audit] Rely on semantic enum TorrentAlertType rather than magic int
+      if (event.type == TorrentAlertType.fastresumeRejected ||
+          event.alertCode == 19) {
         _log.warning(
           'Fastresume rejected for torrent ${event.torrentId}, triggering integrity recheck',
         );
@@ -363,6 +367,7 @@ class TorrentService {
 
               _latestProgress[value.id] = value.progress;
 
+              // FIX: [Audit] Populate all FFI fields and map numeric state to enum
               final info = TorrentUpdateInfo(
                 id: value.id,
                 name: name,
@@ -373,9 +378,12 @@ class TorrentService {
                 totalWanted: totalWanted,
                 totalWantedDone: value.totalWantedDone,
                 hasMetadata: hasMetadata,
+                state: stateFromInt(value.state),
                 stateLabel: value.stateLabel,
                 numSeeds: value.numSeeds < 0 ? 0 : value.numSeeds,
                 numPeers: value.numPeers < 0 ? 0 : value.numPeers,
+                numComplete: value.numComplete,
+                numIncomplete: value.numIncomplete,
                 piecesHave: value.piecesDone,
                 piecesTotal: value.numPieces,
                 downloadPayloadRate: value.downloadRate,
@@ -384,7 +392,11 @@ class TorrentService {
                 totalPayloadUpload: value.totalUploaded,
                 currentTracker: '',
                 nextAnnounceSeconds: 0,
-                distributedCopies: 0.0,
+                infoHashV1: value.infoHashV1,
+                infoHashV2: value.infoHashV2,
+                distributedCopies: value.distributedCopies,
+                activeTime: value.activeTime,
+                seedingTime: value.seedingTime,
                 fileProgress: value.fileProgress,
                 filePriorities: value.filePriorities,
               );
@@ -394,10 +406,14 @@ class TorrentService {
 
             _pendingUpdate = mapped;
             final now = DateTime.now();
-            final interval =
-                PowerMonitor.screenOff || !DownloadEngine.appInForeground
-                    ? const Duration(seconds: 2)
-                    : const Duration(milliseconds: 500);
+            Duration interval;
+            try {
+              interval = (PowerMonitor.screenOff || !DownloadEngine.appInForeground)
+                  ? const Duration(seconds: 2)
+                  : const Duration(milliseconds: 500);
+            } catch (_) {
+              interval = const Duration(milliseconds: 500);
+            }
             if (_lastEmitTime == null ||
                 now.difference(_lastEmitTime!) >= interval) {
               _lastEmitTime = now;
@@ -589,8 +605,9 @@ class TorrentService {
     void Function(String message)? onStatusUpdate,
     int maxRetries = 2,
     Duration retryDelay = const Duration(seconds: 10),
+    List<int>? resumeData,
   }) async {
-    final id = addMagnet(magnetUri, savePath);
+    final id = addMagnet(magnetUri, savePath, resumeData: resumeData);
     if (id < 0) return -1;
 
     int attempt = 0;
@@ -693,16 +710,21 @@ class TorrentService {
     String filePath,
     String savePath, {
     String? sourceKey,
+    List<int>? resumeData,
   }) {
     if (!isInitialized) return -1;
     _startTrackingUpdates();
     try {
       final source = sourceKey ?? filePath;
-      final id = _native.addTorrentFile(filePath, savePath);
+      final id = _native.addTorrentFile(filePath, savePath, resumeData: resumeData);
       if (id >= 0) {
         _activeTorrentIds.add(id);
         _torrentSources[id] = source;
-        unawaited(_tryLoadFastResumeForSource(id, source));
+        if (resumeData != null && resumeData.isNotEmpty) {
+          _latestResumeBlobs[id] = Uint8List.fromList(resumeData);
+        } else {
+          unawaited(_tryLoadFastResumeForSource(id, source));
+        }
       }
       return id;
     } catch (e) {
@@ -755,6 +777,9 @@ class TorrentService {
           _torrentSources.remove(id);
         }
         _latestProgress.remove(id);
+        _latestStats.remove(id);
+        _metadataProbeAt.remove(id);
+        _latestResumeBlobs.remove(id);
         _activeTorrentIds.remove(id);
         _cachedPrioritiesSnapshot.remove(id);
       } catch (e) {
@@ -1341,6 +1366,58 @@ class TorrentService {
       }
     }
   }
+
+  // FIX: [Audit] Expose getPieceProgress from native status for multi-file ratio estimation
+  static Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async {
+    final st = _native.getTorrentStatus(torrentId);
+    if (st == null) return null;
+    return {
+      'piecesHave': st.piecesDone,
+      'piecesTotal': st.numPieces,
+      'pieces': st.pieces,
+    };
+  }
+
+  // FIX: [Audit] Expose getPeers from native bridge
+  static Future<List<PeerConnectionQuality>> getPeers(int torrentId) async {
+    if (!isInitialized) return const [];
+    try {
+      return await _native.getPeers(torrentId);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  static void setSequentialDownload(int torrentId, bool enabled) =>
+      enableSequentialDownload(torrentId, enabled);
+
+  static void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) {
+    if (!isInitialized || torrentId < 0) return;
+    try {
+      final current = List<int>.from(_cachedPrioritiesSnapshot[torrentId] ?? const []);
+      if (fileIndex >= 0 && fileIndex < current.length) {
+        current[fileIndex] = priority;
+        setFilePriorities(torrentId, current);
+      }
+    } catch (_) {}
+  }
+
+  static void applySettingsPack(TorrentSettingsPack pack) {
+    if (!isInitialized) return;
+    try {
+      _native.configureSession(NativeBtConfig(
+        downloadRateLimit: pack.maxDownloadRate ?? 0,
+        uploadRateLimit: pack.maxUploadRate ?? 0,
+        connectionsLimit: pack.maxConnectionsGlobal ?? 200,
+        disableDht: !pack.enableDht,
+        disableUpnp: !pack.enableUpnp,
+        disableUtp: !pack.enableUtp,
+        disableTcp: !pack.enableTcp,
+        forceEncrypt: pack.forceEncrypt,
+        cacheSize: pack.cacheSize ?? 64 * 1024 * 1024,
+      ));
+    } catch (_) {}
+  }
 }
 
 class TorrentServiceImpl implements ITorrentService {
@@ -1404,8 +1481,8 @@ class TorrentServiceImpl implements ITorrentService {
   Future<void> dispose() => TorrentService.dispose();
 
   @override
-  int addMagnet(String magnetUri, String savePath) =>
-      TorrentService.addMagnet(magnetUri, savePath);
+  int addMagnet(String magnetUri, String savePath, {List<int>? resumeData}) =>
+      TorrentService.addMagnet(magnetUri, savePath, resumeData: resumeData);
   @override
   Future<int> addMagnetWithMetadataTimeout(
     String magnetUri,
@@ -1414,6 +1491,7 @@ class TorrentServiceImpl implements ITorrentService {
     void Function(String message)? onStatusUpdate,
     int maxRetries = 2,
     Duration retryDelay = const Duration(seconds: 10),
+    List<int>? resumeData,
   }) =>
       TorrentService.addMagnetWithMetadataTimeout(
         magnetUri,
@@ -1422,11 +1500,14 @@ class TorrentServiceImpl implements ITorrentService {
         onStatusUpdate: onStatusUpdate,
         maxRetries: maxRetries,
         retryDelay: retryDelay,
+        resumeData: resumeData,
       );
 
   @override
-  int addTorrentFile(String filePath, String savePath, {String? sourceKey}) =>
-      TorrentService.addTorrentFile(filePath, savePath, sourceKey: sourceKey);
+  int addTorrentFile(String filePath, String savePath,
+          {String? sourceKey, List<int>? resumeData}) =>
+      TorrentService.addTorrentFile(filePath, savePath,
+          sourceKey: sourceKey, resumeData: resumeData);
 
   @override
   void removeTorrent(int id,
@@ -1551,7 +1632,12 @@ class TorrentServiceImpl implements ITorrentService {
       TorrentService.getAccurateFileProgress(torrentId, savePath);
 
   @override
-  Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async => null;
+  Future<Map<String, dynamic>?> getPieceProgress(int torrentId) =>
+      TorrentService.getPieceProgress(torrentId);
+
+  @override
+  Future<List<PeerConnectionQuality>> getPeers(int torrentId) =>
+      TorrentService.getPeers(torrentId);
 
   @override
   Future<void> setProxy({
@@ -1672,7 +1758,8 @@ class TorrentServiceStub implements ITorrentService {
   Future<void> dispose() async {}
 
   @override
-  int addMagnet(String magnetUri, String savePath) => -1;
+  int addMagnet(String magnetUri, String savePath, {List<int>? resumeData}) =>
+      -1;
   @override
   Future<int> addMagnetWithMetadataTimeout(
     String magnetUri,
@@ -1681,10 +1768,12 @@ class TorrentServiceStub implements ITorrentService {
     void Function(String message)? onStatusUpdate,
     int maxRetries = 2,
     Duration retryDelay = const Duration(seconds: 10),
+    List<int>? resumeData,
   }) async =>
       -1;
   @override
-  int addTorrentFile(String filePath, String savePath, {String? sourceKey}) =>
+  int addTorrentFile(String filePath, String savePath,
+          {String? sourceKey, List<int>? resumeData}) =>
       -1;
 
   @override
@@ -1786,6 +1875,9 @@ class TorrentServiceStub implements ITorrentService {
 
   @override
   Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async => null;
+
+  @override
+  Future<List<PeerConnectionQuality>> getPeers(int torrentId) async => const [];
 
   @override
   Future<void> setProxy({

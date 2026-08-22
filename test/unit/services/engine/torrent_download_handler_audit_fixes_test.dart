@@ -43,6 +43,12 @@ class AuditMockTorrentService extends TorrentServiceStub {
   }
 
   @override
+  int addMagnet(String magnetUri, String savePath, {List<int>? resumeData}) {
+    sourceIdMap[magnetUri] = 101;
+    return 101;
+  }
+
+  @override
   Future<int> addMagnetWithMetadataTimeout(
     String magnetUri,
     String savePath, {
@@ -50,6 +56,7 @@ class AuditMockTorrentService extends TorrentServiceStub {
     void Function(String message)? onStatusUpdate,
     int maxRetries = 2,
     Duration retryDelay = const Duration(seconds: 10),
+    List<int>? resumeData,
   }) async {
     sourceIdMap[magnetUri] = 101;
     if (pendingMetadataCompleter != null) {
@@ -59,7 +66,8 @@ class AuditMockTorrentService extends TorrentServiceStub {
   }
 
   @override
-  int addTorrentFile(String filePath, String savePath, {String? sourceKey}) {
+  int addTorrentFile(String filePath, String savePath,
+      {String? sourceKey, List<int>? resumeData}) {
     sourceIdMap[filePath] = 202;
     if (sourceKey != null) sourceIdMap[sourceKey] = 202;
     return 202;
@@ -285,30 +293,29 @@ void main() {
       );
     });
 
-    test('H4: TorrentAlertType named constants map accurately', () {
+    test('H4: TorrentAlertType mapped accurately from native codes', () {
       expect(
-        TorrentAlertType.fromNativeType(TorrentAlertType.alertMetadataReceived),
+        TorrentAlertType.fromNativeType(38),
         equals(TorrentAlertType.metadataReceived),
       );
       expect(
-        TorrentAlertType.fromNativeType(TorrentAlertType.alertTorrentPaused),
+        TorrentAlertType.fromNativeType(34),
         equals(TorrentAlertType.torrentPaused),
       );
       expect(
-        TorrentAlertType.fromNativeType(TorrentAlertType.alertTorrentResumed),
+        TorrentAlertType.fromNativeType(35),
         equals(TorrentAlertType.torrentResumed),
       );
       expect(
-        TorrentAlertType.fromNativeType(TorrentAlertType.alertPieceFinished),
+        TorrentAlertType.fromNativeType(26),
         equals(TorrentAlertType.pieceFinished),
       );
       expect(
-        TorrentAlertType.fromNativeType(
-            TorrentAlertType.alertSaveResumeDataCompleted),
+        TorrentAlertType.fromNativeType(30),
         equals(TorrentAlertType.saveResumeDataCompleted),
       );
       expect(
-        TorrentAlertType.fromNativeType(TorrentAlertType.alertTorrentError),
+        TorrentAlertType.fromNativeType(64),
         equals(TorrentAlertType.torrentError),
       );
     });

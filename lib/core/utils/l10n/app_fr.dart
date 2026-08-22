@@ -610,4 +610,15 @@ const Map<String, String> frTranslations = {
       'Avis : Téléchargez du contenu uniquement si vous en avez le droit.',
   'yt_playlist': 'LISTE DE LECTURE YOUTUBE',
   'yt_video_quality': 'QUALITÉ VIDÉO YOUTUBE',
+  'torrent_meta_connecting': 'Connexion aux pairs...',
+  'torrent_meta_adding_trackers': 'Ajout de trackers...',
+  'torrent_meta_fetching': 'Récupération des métadonnées du torrent...',
+  'torrent_meta_failed': 'Échec de la récupération des métadonnées',
+  'torrent_meta_received': 'Métadonnées reçues',
+  'torrent_meta_elapsed': 'Temps écoulé : {time}',
+  'torrent_meta_slow_warning':
+      'La récupération des métadonnées prend plus de temps que prévu. Vérifiez la connexion ou les trackers.',
+  'torrent_meta_retry': 'Réessayer la récupération des métadonnées',
+  'torrent_peers_label': 'Pairs',
+  'torrent_dht_nodes': 'Nœuds DHT',
 };

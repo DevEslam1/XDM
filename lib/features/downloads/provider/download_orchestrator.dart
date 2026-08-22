@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../../../core/interfaces/i_download_engine.dart';
 import '../../../core/services/background_service.dart';
@@ -31,6 +32,7 @@ import '../../../core/services/site_intelligence/site_intelligence_service.dart'
 import '../../../core/services/torrent_resume_store.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/services/youtube_service.dart';
+import '../../../core/utils/bencode_decoder.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/semaphore.dart';
 import '../../../core/utils/url_utils.dart';
@@ -3634,17 +3636,65 @@ class DownloadOrchestrator {
             }
             if (task.url.startsWith('magnet:')) {
               torrentId = TorrentService.addMagnet(task.url, saveDir);
-            } else if (!task.url.startsWith('http://') &&
-                !task.url.startsWith('https://')) {
+            } else {
               String filePath = task.url;
               if (task.url.startsWith('file://')) {
                 filePath = Uri.parse(task.url).toFilePath();
+              } else if (task.url.startsWith('http://') ||
+                  task.url.startsWith('https://')) {
+                // Fetch remote .torrent file to local cache
+                final tempDir = await getTemporaryDirectory();
+                final localTorrentFile =
+                    File('${tempDir.path}/torrent_${task.id}.torrent');
+                if (!await localTorrentFile.exists()) {
+                  final dio = Dio();
+                  final response = await dio.get<List<int>>(
+                    task.url,
+                    options: Options(responseType: ResponseType.bytes),
+                  );
+                  if (response.data != null && response.data!.isNotEmpty) {
+                    await localTorrentFile.writeAsBytes(response.data!);
+                  }
+                }
+                filePath = localTorrentFile.path;
+                if (await localTorrentFile.exists()) {
+                  final bytes = await localTorrentFile.readAsBytes();
+                  final meta =
+                      await compute(BencodeDecoder.parseTorrentBytes, bytes);
+                  if (meta != null) {
+                    final resolvedFiles =
+                        (meta['files'] as List? ?? []).map((f) {
+                      final map = f as Map;
+                      return {
+                        'name': map['name'] as String? ?? '',
+                        'length': map['length'] as int? ?? 0,
+                        'selected': true,
+                        'priority': 4,
+                        'downloadedBytes': 0,
+                      };
+                    }).toList();
+                    final resolvedSize = meta['length'] as int? ??
+                        resolvedFiles.fold<int>(
+                            0, (s, f) => s + (f['length'] as int));
+                    task = task.copyWith(
+                      fileName: meta['name'] as String? ?? task.fileName,
+                      fileSize:
+                          resolvedSize > 0 ? resolvedSize : task.fileSize,
+                      torrentFiles: resolvedFiles.isNotEmpty
+                          ? resolvedFiles
+                          : task.torrentFiles,
+                    );
+                    await _host.setTaskState(task);
+                  }
+                }
               }
-              torrentId = TorrentService.addTorrentFile(
-                filePath,
-                saveDir,
-                sourceKey: task.url,
-              );
+              if (await File(filePath).exists()) {
+                torrentId = TorrentService.addTorrentFile(
+                  filePath,
+                  saveDir,
+                  sourceKey: task.url,
+                );
+              }
             }
             if (torrentId != null) {
               if (torrentId < 0) {

@@ -598,4 +598,15 @@ const Map<String, String> enTranslations = {
       'Notice: Download content only if you own it or have explicit authorization from the copyright holder.',
   'yt_playlist': 'YOUTUBE PLAYLIST',
   'yt_video_quality': 'YOUTUBE VIDEO QUALITY',
+  'torrent_meta_connecting': 'Connecting to peers...',
+  'torrent_meta_adding_trackers': 'Adding trackers...',
+  'torrent_meta_fetching': 'Fetching torrent metadata...',
+  'torrent_meta_failed': 'Failed to fetch metadata',
+  'torrent_meta_received': 'Metadata received',
+  'torrent_meta_elapsed': 'Elapsed time: {time}',
+  'torrent_meta_slow_warning':
+      'Fetching metadata is taking longer than expected. Check connection or trackers.',
+  'torrent_meta_retry': 'Retry Fetching Metadata',
+  'torrent_peers_label': 'Peers',
+  'torrent_dht_nodes': 'DHT Nodes',
 };

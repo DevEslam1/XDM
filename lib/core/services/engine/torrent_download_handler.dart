@@ -424,19 +424,16 @@ class TorrentDownloadHandler {
   Future<void> _saveResumeDataBeforePause(int id, String sourceUrl) async {
     // If the torrent has no metadata yet, libtorrent has nothing to serialize.
     // Skip the native save entirely to avoid spurious timeouts and CRITICAL logs.
+    final cachedBlob = _torrentService.resumeBlobFor(id);
     final hasMetadata =
-        _torrentService.latestStats[id]?.hasMetadata ?? false;
-    if (!hasMetadata) {
+        (_torrentService.latestStats[id]?.hasMetadata ?? false) ||
+        (cachedBlob != null && cachedBlob.isNotEmpty) ||
+        (_torrentService.getFiles(id).isNotEmpty);
+    if (!hasMetadata && (cachedBlob == null || cachedBlob.isEmpty)) {
       _log.fine(
           'Skipping saveResumeData for torrent $id — no metadata yet, nothing to save.');
       return;
     }
-
-    // Short-circuit: if the 30s periodic save has already captured a valid blob,
-    // persist it directly and skip the native round-trip. Under I/O load the
-    // save_resume_data_alert can take >2 s even for active torrents, so reusing
-    // the cached copy avoids all three timeout attempts.
-    final cachedBlob = _torrentService.resumeBlobFor(id);
     if (cachedBlob != null && cachedBlob.isNotEmpty) {
       _log.fine(
           'saveResumeData for $id: reusing cached blob (${cachedBlob.length} bytes).');
@@ -814,9 +811,14 @@ class TorrentDownloadHandler {
             }
 
             // FIX(C1, C2, C4): Injected service call and cancelToken race with safe cleanup
+            // Pass resume data at add-time (the only path libtorrent actually
+            // supports — see lt_add_magnet_resume) instead of relying solely
+            // on the post-add loadResumeData() fallback below, which
+            // libtorrent has no API to make work reliably.
             final metadataFuture = _torrentService.addMagnetWithMetadataTimeout(
               url,
               saveDir,
+              resumeData: preloadedResume?.toList(),
               onStatusUpdate: (message) {
                 onProgress(_torrentProgress(
                   cycleState: CycleState.fetchingMetadata,
@@ -938,6 +940,7 @@ class TorrentDownloadHandler {
         }
 
         final rt = _getRuntime(id);
+        final isMagnetSource = url.startsWith('magnet:');
         if (id >= 0 && preloadedResume != null) {
           final resumeBytes = preloadedResume;
           hasLoadedResume = true;
@@ -961,11 +964,27 @@ class TorrentDownloadHandler {
             torrentId: id,
             knownFileSize: knownFileSize,
           ));
-          // FIX(C4): Honor boolean from loadResumeData
-          if (!_torrentService.loadResumeData(id, resumeBytes.toList())) {
-            hasLoadedResume = false;
-            _log.warning('Native rejected resume data for $id; forcing recheck');
-            _torrentService.recheckTorrent(id);
+          if (isMagnetSource) {
+            // Resume data was already passed at add-time above, via
+            // addMagnetWithMetadataTimeout's resumeData param — the only
+            // path libtorrent actually supports (see lt_add_magnet_resume).
+            // Calling the post-add loadResumeData() here would be
+            // redundant: it's a guaranteed no-op (libtorrent has no API to
+            // hot-load resume data into an already-added torrent).
+          } else {
+            // File-based sources (.torrent file, local or HTTP-downloaded)
+            // have no add-time resume path wired up on the Dart side yet —
+            // lt_add_torrent_file_resume exists in the native bridge, but
+            // ITorrentNative / LibtorrentNativeImpl / ITorrentService don't
+            // expose it yet. Until that's wired, fall back to the post-add
+            // path, which correctly no-ops and forces a recheck instead of
+            // silently pretending to resume.
+            // FIX(C4): Honor boolean from loadResumeData
+            if (!_torrentService.loadResumeData(id, resumeBytes.toList())) {
+              hasLoadedResume = false;
+              _log.warning('Native rejected resume data for $id; forcing recheck');
+              _torrentService.recheckTorrent(id);
+            }
           }
         } else if (id >= 0) {
           try {
@@ -1405,16 +1424,20 @@ class TorrentDownloadHandler {
     final updated = List<Map<String, dynamic>>.from(currentList);
     for (int i = 0; i < nativeFiles.length; i++) {
       final f = nativeFiles[i];
-      final old = oldByName[normKey(f.name)] ?? currentList[i];
+      final old = oldByName[normKey(f.name)] ??
+          (i < currentList.length ? currentList[i] : null);
       final dl = f.safeDownloadedBytes < 0 ? 0 : f.safeDownloadedBytes;
       final isEst =
           f.downloadedBytes < 0 || (f.downloadedBytes == 0 && f.size > 0);
       final prog = f.size > 0 ? (dl / f.size).clamp(0.0, 1.0) : 0.0;
       final isDone = f.size > 0 && dl >= f.size;
-      final selected = (old['selected'] as bool?) ?? f.selected;
-      final priority = (old['priority'] as int?) ?? f.priority;
+      final selected =
+          old != null ? ((old['selected'] as bool?) ?? f.selected) : f.selected;
+      final priority =
+          old != null ? ((old['priority'] as int?) ?? f.priority) : f.priority;
 
-      if (old['downloadedBytes'] != dl ||
+      if (old == null ||
+          old['downloadedBytes'] != dl ||
           old['selected'] != selected ||
           old['priority'] != priority ||
           old['progress'] != prog ||
@@ -1423,7 +1446,7 @@ class TorrentDownloadHandler {
           old['length'] != f.size) {
         hasDiff = true;
         updated[i] = {
-          ...old,
+          if (old != null) ...old,
           'name': f.name,
           'length': f.size,
           'downloadedBytes': dl,
@@ -1528,7 +1551,6 @@ class TorrentDownloadHandler {
       emitProgress: emitProgress,
       completer: completer,
       cancelToken: cancelToken,
-      sub: sub,
     );
 
     sub = _subscribeToUpdates(
@@ -1575,7 +1597,6 @@ class TorrentDownloadHandler {
     required void Function(DownloadProgress) emitProgress,
     required Completer<void> completer,
     required CancelToken cancelToken,
-    required StreamSubscription? sub,
   }) {
     final rt = _getRuntime(id);
     final watchdogInterval = initialFileCount < 1000
@@ -1678,7 +1699,12 @@ class TorrentDownloadHandler {
         aliveMisses++;
         if (aliveMisses < 2) return;
         watchdog.stop();
-        sub?.cancel();
+        // NOTE: `sub` cannot be used here — see _setupWatchdogs' `sub`
+        // parameter, which is always null at call time (this method is
+        // invoked before `sub` is assigned in _listenForCompletion). Look
+        // the live subscription up via the registry instead, which is
+        // guaranteed current since register() runs after `sub` is assigned.
+        TorrentSubscriptionRegistry.instance.getSubscription(id)?.cancel();
         _activeTorrentIds.remove(id);
         TorrentSubscriptionRegistry.instance.unregister(id, this);
         if (!completer.isCompleted) {

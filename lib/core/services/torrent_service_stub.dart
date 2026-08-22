@@ -30,7 +30,9 @@ class TorrentService {
   static Future<void> saveAllResumeData() async {}
   static Future<void> dispose() async {}
 
-  static int addMagnet(String magnetUri, String savePath) => -1;
+  static int addMagnet(String magnetUri, String savePath,
+          {List<int>? resumeData}) =>
+      -1;
 
   static Future<int> addMagnetWithMetadataTimeout(
     String magnetUri,
@@ -39,6 +41,7 @@ class TorrentService {
     void Function(String message)? onStatusUpdate,
     int maxRetries = 2,
     Duration retryDelay = const Duration(seconds: 10),
+    List<int>? resumeData,
   }) async =>
       -1;
 
@@ -46,6 +49,7 @@ class TorrentService {
     String filePath,
     String savePath, {
     String? sourceKey,
+    List<int>? resumeData,
   }) =>
       -1;
 
@@ -140,6 +144,17 @@ class TorrentService {
     }
     return false;
   }
+
+  static Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async => null;
+  static Future<List<PeerConnectionQuality>> getPeers(int torrentId) async => const [];
+  static List<TorrentAlertEvent> getRecentAlerts([int? torrentId]) => const [];
+  static void applySettingsPack(TorrentSettingsPack pack) {}
+  static void setSequentialDownload(int torrentId, bool enabled) {}
+  static void prioritizeFile(int torrentId, int fileIndex, {int priority = 7}) {}
+  static void autoEnableSequentialForVideo(int torrentId) {}
+  static Future<void> autoSaveResumeData() async {}
+  static Map<String, dynamic>? getTorrentSnapshot(int id) => null;
+  static String get nativeVersion => 'stub';
 }
 
 class TorrentServiceImpl implements ITorrentService {
@@ -200,7 +215,8 @@ class TorrentServiceImpl implements ITorrentService {
   Future<void> dispose() async {}
 
   @override
-  int addMagnet(String magnetUri, String savePath) => -1;
+  int addMagnet(String magnetUri, String savePath, {List<int>? resumeData}) =>
+      -1;
   @override
   Future<int> addMagnetWithMetadataTimeout(
     String magnetUri,
@@ -209,10 +225,12 @@ class TorrentServiceImpl implements ITorrentService {
     void Function(String message)? onStatusUpdate,
     int maxRetries = 2,
     Duration retryDelay = const Duration(seconds: 10),
+    List<int>? resumeData,
   }) async =>
       -1;
   @override
-  int addTorrentFile(String filePath, String savePath, {String? sourceKey}) =>
+  int addTorrentFile(String filePath, String savePath,
+          {String? sourceKey, List<int>? resumeData}) =>
       -1;
 
   @override
@@ -314,6 +332,9 @@ class TorrentServiceImpl implements ITorrentService {
 
   @override
   Future<Map<String, dynamic>?> getPieceProgress(int torrentId) async => null;
+
+  @override
+  Future<List<PeerConnectionQuality>> getPeers(int torrentId) async => const [];
 
   @override
   Future<void> setProxy({

@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/domain/download_data_status.dart';
 import '../../../core/services/download_engine.dart';
 import '../../../core/services/performance_monitor.dart';
 import '../../../core/services/power_monitor.dart';
@@ -913,7 +914,10 @@ class _TelemetryStrip extends StatelessWidget {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
+                      sizeProgressLabel(
+                        received: task.downloadedBytes,
+                        total: task.resolvedFileSize,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTheme.dataStyle(
@@ -2199,13 +2203,18 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
 
                                   _PeerChip(
                                     icon: Icons.arrow_upward_rounded,
-                                    label: '${stats.seeds}',
+                                    label: seedsLabel(
+                                      connected: stats.seeds,
+                                    ),
                                     color: greenClr,
                                     isDark: isDark,
                                   ),
                                   _PeerChip(
                                     icon: Icons.arrow_downward_rounded,
-                                    label: '${stats.peers}',
+                                    label: peersLabel(
+                                      connected: stats.peers,
+                                      
+                                    ),
                                     color: violetClr,
                                     isDark: isDark,
                                   ),

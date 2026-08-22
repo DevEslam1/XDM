@@ -1,4 +1,7 @@
+import 'package:libtorrent_flutter/libtorrent_flutter.dart' show TorrentState;
 import 'engine_types.dart';
+
+export 'package:libtorrent_flutter/libtorrent_flutter.dart' show TorrentState;
 
 class TorrentFileItem {
   final int index;
@@ -24,6 +27,21 @@ class TorrentFileItem {
   int get safeDownloadedBytes => downloadedBytes >= 0 ? downloadedBytes : 0;
 }
 
+/// Convert native integer state code to [TorrentState].
+TorrentState stateFromInt(int v) {
+  switch (v) {
+    case -2: return TorrentState.error;
+    case  0: return TorrentState.checkingFiles;
+    case  1: return TorrentState.downloadingMetadata;
+    case  2: return TorrentState.downloading;
+    case  3: return TorrentState.finished;
+    case  4: return TorrentState.seeding;
+    case  5: return TorrentState.allocating;
+    case  6: return TorrentState.checkingResume;
+    default: return TorrentState.unknown;
+  }
+}
+
 class TorrentUpdateInfo {
   final int id;
   final String name;
@@ -35,8 +53,12 @@ class TorrentUpdateInfo {
   final int totalWantedDone;
   final bool hasMetadata;
   final String stateLabel;
+  // FIX: [Audit] Numeric state matching support
+  final TorrentState state;
   final int numSeeds;
   final int numPeers;
+  final int? numComplete;
+  final int? numIncomplete;
   final int piecesHave;
   final int piecesTotal;
   final int downloadPayloadRate;
@@ -46,11 +68,28 @@ class TorrentUpdateInfo {
   final String currentTracker;
   final int nextAnnounceSeconds;
   final String infoHash;
+  // FIX: [Audit] Added missing FFI fields
+  final String infoHashV1;
+  final String infoHashV2;
   final double distributedCopies;
+  final int activeTime;
+  final int seedingTime;
   final List<int> fileProgress;
   final List<int> filePriorities;
 
   int get peerCount => numPeers;
+  bool get sizeKnown => hasMetadata && totalWanted > 0;
+  // FIX: [Audit] Numeric state matching replacing fragile string matching
+  bool get isChecking =>
+      state == TorrentState.checkingFiles ||
+      state == TorrentState.checkingResume ||
+      state == TorrentState.queuedForChecking ||
+      stateLabel.toLowerCase().contains('checking');
+  bool get isFetchingMetadata =>
+      (state == TorrentState.downloadingMetadata ||
+       stateLabel.toLowerCase().contains('metadata') ||
+       stateLabel.toLowerCase().contains('getting')) &&
+      !hasMetadata;
 
   TorrentUpdateInfo({
     required this.id,
@@ -63,9 +102,14 @@ class TorrentUpdateInfo {
     required this.totalWantedDone,
     required this.hasMetadata,
     required this.stateLabel,
+    this.state = TorrentState.unknown,
     this.infoHash = '',
+    this.infoHashV1 = '',
+    this.infoHashV2 = '',
     this.numSeeds = 0,
     this.numPeers = 0,
+    this.numComplete,
+    this.numIncomplete,
     this.piecesHave = 0,
     this.piecesTotal = 0,
     this.downloadPayloadRate = 0,
@@ -75,6 +119,8 @@ class TorrentUpdateInfo {
     this.currentTracker = '',
     this.nextAnnounceSeconds = 0,
     this.distributedCopies = 0.0,
+    this.activeTime = 0,
+    this.seedingTime = 0,
     List<int> fileProgress = const [],
     List<int> filePriorities = const [],
   })  : fileProgress = List.unmodifiable(fileProgress),

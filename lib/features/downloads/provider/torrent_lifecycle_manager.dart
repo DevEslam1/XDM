@@ -1,3 +1,4 @@
+import '../../../core/services/torrent_seeding_manager.dart';
 import '../../../core/services/torrent_service.dart';
 import '../models/download_task.dart';
 
@@ -40,7 +41,7 @@ class TorrentLifecycleManager {
   }
 
   void checkRatioLimits() {
-    // Torrent ratio enforcement delegate
+    TorrentSeedingManager.instance.checkSeedingPolicies();
   }
 
   void enforceQueue() {

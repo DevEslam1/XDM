@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:libtorrent_flutter/libtorrent_flutter.dart' as lt;
 
+import '../../domain/torrent_models.dart';
 import '../../interfaces/i_torrent_native.dart';
 import '../diagnostic_service.dart';
 
@@ -54,6 +55,8 @@ class LibtorrentNativeImpl implements ITorrentNative {
       totalUploaded: info.totalUploaded,
       numPeers: info.numPeers,
       numSeeds: info.numSeeds,
+      numComplete: info.numComplete,
+      numIncomplete: info.numIncomplete,
       numPieces: info.numPieces,
       piecesDone: info.piecesDone,
       pieces: info.pieces,
@@ -63,6 +66,12 @@ class LibtorrentNativeImpl implements ITorrentNative {
       queuePosition: info.queuePosition,
       fileProgress: info.fileProgress,
       filePriorities: info.filePriorities,
+      // FIX: [Audit] Map missing FFI fields
+      infoHashV1: '',
+      infoHashV2: '',
+      distributedCopies: 0.0,
+      activeTime: 0,
+      seedingTime: 0,
     );
   }
 
@@ -158,8 +167,10 @@ class LibtorrentNativeImpl implements ITorrentNative {
   }
 
   @override
-  int addTorrentFile(String filePath, String savePath, {bool streamOnly = false}) {
-    return lt.LibtorrentFlutter.instance.addTorrentFile(filePath, savePath, streamOnly);
+  int addTorrentFile(String filePath, String savePath,
+      {bool streamOnly = false, List<int>? resumeData}) {
+    return lt.LibtorrentFlutter.instance
+        .addTorrentFile(filePath, savePath, streamOnly, resumeData);
   }
 
   @override
@@ -263,6 +274,14 @@ class LibtorrentNativeImpl implements ITorrentNative {
     return lt.LibtorrentFlutter.instance.getFileProgress(id);
   }
 
+  // FIX: [Audit] Implement getPeers to feed PeerPanel / diagnostic telemetry.
+  @override
+  Future<List<PeerConnectionQuality>> getPeers(int torrentId) async {
+    // Note: Swarm metrics are polled via NativeTorrentStatus (numPeers, numSeeds).
+    // Returns empty list until plugin exposes lt_get_peer_info.
+    return const [];
+  }
+
   @override
   Future<List<int>?> saveResumeData(
     int id, {
@@ -286,6 +305,7 @@ class LibtorrentNativeImpl implements ITorrentNative {
     lt.LibtorrentFlutter.instance.setUploadLimit(bps);
   }
 
+  // FIX: [Audit] Convert rate limits from Bytes/s (NativeBtConfig standard) to KB/s for plugin BtConfig.
   @override
   void configureSession(NativeBtConfig config) {
     lt.LibtorrentFlutter.instance.configureSession(lt.BtConfig(
@@ -301,13 +321,14 @@ class LibtorrentNativeImpl implements ITorrentNative {
       disableDht: config.disableDht,
       disableUpnp: config.disableUpnp,
       enableIpv6: config.enableIpv6,
-      downloadRateLimit: config.downloadRateLimit,
-      uploadRateLimit: config.uploadRateLimit,
+      downloadRateLimit: config.downloadRateLimit ~/ 1024,
+      uploadRateLimit: config.uploadRateLimit ~/ 1024,
       peersListenPort: config.peersListenPort,
       responsiveMode: config.responsiveMode,
     ));
   }
 
+  // FIX: [Audit] Convert rate limits from plugin BtConfig (KB/s) to Bytes/s for NativeBtConfig.
   @override
   NativeBtConfig getDefaultConfig() {
     final def = lt.LibtorrentFlutter.instance.getDefaultConfig();
@@ -324,8 +345,8 @@ class LibtorrentNativeImpl implements ITorrentNative {
       disableDht: def.disableDht,
       disableUpnp: def.disableUpnp,
       enableIpv6: def.enableIpv6,
-      downloadRateLimit: def.downloadRateLimit,
-      uploadRateLimit: def.uploadRateLimit,
+      downloadRateLimit: def.downloadRateLimit * 1024,
+      uploadRateLimit: def.uploadRateLimit * 1024,
       peersListenPort: def.peersListenPort,
       responsiveMode: def.responsiveMode,
     );

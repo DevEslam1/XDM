@@ -11,9 +11,10 @@ final _log = Logger('TorrentSeedingManager');
 
 /// Phase 5: Smart Seeding Manager & Adaptive Upload Regulation
 class TorrentSeedingManager {
-  TorrentSeedingManager();
+  TorrentSeedingManager._();
 
-  static final TorrentSeedingManager instance = TorrentSeedingManager();
+  static final TorrentSeedingManager instance = TorrentSeedingManager._();
+  factory TorrentSeedingManager() => instance;
 
   Timer? _seedingCheckTimer;
   final Map<int, DateTime> _seedStartTimes = {};
@@ -59,9 +60,17 @@ class TorrentSeedingManager {
 
   /// Checks all active torrents against seeding policies and pauses those that exceed limits.
   void checkSeedingPolicies({SettingsProvider? settingsProvider}) {
-    final s = settingsProvider ?? SettingsProvider.instance;
+    SettingsProvider? s = settingsProvider;
+    if (s == null) {
+      try {
+        s = SettingsProvider.instance;
+      } catch (_) {}
+    }
     final activeIds = TorrentService.activeTorrentIds;
     final statsMap = TorrentService.latestStats;
+
+    // Prune stale tracked IDs that are no longer active
+    _seedStartTimes.removeWhere((id, _) => !activeIds.contains(id));
 
     for (final id in activeIds) {
       final stats = statsMap[id];
@@ -79,11 +88,11 @@ class TorrentSeedingManager {
       recordSeedStart(id);
 
       final policy = SeedingPolicy(
-        maxRatio: s.shareRatioLimit,
-        maxSeedTime: Duration(minutes: s.maxSeedingTimeMinutes),
-        seedOnlyWhenCharging: s.seedOnlyWhenCharging,
-        seedOnlyOnWifi: s.seedOnlyOnWifi,
-        minSeedTimeMinutes: s.minSeedTimeMinutes,
+        maxRatio: s?.shareRatioLimit ?? 2.0,
+        maxSeedTime: Duration(minutes: s?.maxSeedingTimeMinutes ?? 0),
+        seedOnlyWhenCharging: s?.seedOnlyWhenCharging ?? false,
+        seedOnlyOnWifi: s?.seedOnlyOnWifi ?? false,
+        minSeedTimeMinutes: s?.minSeedTimeMinutes ?? 0,
       );
 
       final isCharging = PowerMonitor.isCharging;
@@ -133,13 +142,18 @@ class TorrentSeedingManager {
         task.status == DownloadStatus.paused) {
       return false;
     }
-    final s = settingsProvider ?? SettingsProvider.instance;
+    SettingsProvider? s = settingsProvider;
+    if (s == null) {
+      try {
+        s = SettingsProvider.instance;
+      } catch (_) {}
+    }
     final policy = SeedingPolicy(
-      maxRatio: s.shareRatioLimit,
-      maxSeedTime: Duration(minutes: s.maxSeedingTimeMinutes),
-      seedOnlyWhenCharging: s.seedOnlyWhenCharging,
-      seedOnlyOnWifi: s.seedOnlyOnWifi,
-      minSeedTimeMinutes: s.minSeedTimeMinutes,
+      maxRatio: s?.shareRatioLimit ?? 2.0,
+      maxSeedTime: Duration(minutes: s?.maxSeedingTimeMinutes ?? 0),
+      seedOnlyWhenCharging: s?.seedOnlyWhenCharging ?? false,
+      seedOnlyOnWifi: s?.seedOnlyOnWifi ?? false,
+      minSeedTimeMinutes: s?.minSeedTimeMinutes ?? 0,
     );
     return policy.shouldStopSeeding(
       currentRatio: currentRatio,

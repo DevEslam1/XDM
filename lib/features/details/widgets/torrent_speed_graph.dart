@@ -82,13 +82,19 @@ class TorrentSpeedGraph extends StatelessWidget {
         barWidth: 2,
       );
     }
+    final spots = data
+        .asMap()
+        .entries
+        .map((e) => FlSpot(
+            e.key.toDouble(),
+            (e.value.isFinite && e.value >= 0) ? e.value / 1024 : 0.0))
+        .toList();
+    if (spots.length == 1) {
+      spots.add(FlSpot(1, spots.first.y));
+    }
     return LineChartBarData(
-      spots: data
-          .asMap()
-          .entries
-          .map((e) => FlSpot(e.key.toDouble(), e.value / 1024))
-          .toList(),
-      isCurved: true,
+      spots: spots,
+      isCurved: spots.length > 2,
       color: color,
       barWidth: 2,
       dotData: const FlDotData(show: false),

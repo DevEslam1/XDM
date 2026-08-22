@@ -130,6 +130,13 @@ void main() {
 
       // Verify dispose can be safely invoked
       vm.dispose();
+      expect(vm.isDisposed, isTrue);
+
+      // Calling dispose again should be safe and idempotent
+      expect(() => vm.dispose(), returnsNormally);
+
+      // Calling updateSpeedSpots after dispose should be safe and not throw
+      expect(() => vm.updateSpeedSpots(), returnsNormally);
     });
   });
 
