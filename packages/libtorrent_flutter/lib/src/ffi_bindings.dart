@@ -33,11 +33,107 @@ final class LtTorrentStatus extends Struct {
   @Int32()   external int queuePosition;
 }
 
+/// Bridge ABI revision these bindings were written against.
+/// Must match `LT_BRIDGE_ABI` in `src/torrent_bridge.h`.
+const int kExpectedBridgeAbi = 2;
+
+/// Byte size of [LtTorrentStatus] as laid out by `src/torrent_bridge.h`.
+const int kExpectedStatusSize = 1880;
+
 // Add ABI guard
 bool verifyStatusStructContract() {
-  final ok = sizeOf<LtTorrentStatus>() == 1880;
-  assert(ok, 'LtTorrentStatus drift: expected 1880 bytes');
+  final ok = sizeOf<LtTorrentStatus>() == kExpectedStatusSize;
+  assert(ok, 'LtTorrentStatus drift: expected $kExpectedStatusSize bytes');
   return ok;
+}
+
+/// Result of handshaking these bindings against the loaded native binary.
+///
+/// A binary built from an older `torrent_bridge.h` writes a differently sized
+/// `lt_torrent_status`, which makes every field after the drift point decode as
+/// garbage. That failure is otherwise silent, so it is reported explicitly.
+class BridgeAbiReport {
+  const BridgeAbiReport({
+    required this.rawVersion,
+    required this.nativeAbi,
+    required this.nativeStatusSize,
+    required this.missingSymbols,
+  });
+
+  /// Raw string returned by `lt_version()`.
+  final String rawVersion;
+
+  /// `bridge_abi` reported by the binary, or null if it predates the marker.
+  final int? nativeAbi;
+
+  /// `sizeof(lt_torrent_status)` reported by the binary, or null if unreported.
+  final int? nativeStatusSize;
+
+  /// Exported functions declared by these bindings but absent from the binary.
+  final List<String> missingSymbols;
+
+  int get expectedAbi => kExpectedBridgeAbi;
+  int get expectedStatusSize => kExpectedStatusSize;
+
+  /// libtorrent version, with the bridge markers stripped.
+  String get libtorrentVersion => rawVersion.split(';').first;
+
+  /// A binary older than the ABI marker cannot be verified at all.
+  bool get reportsAbi => nativeAbi != null;
+
+  bool get abiMatches => nativeAbi == kExpectedBridgeAbi;
+
+  bool get statusSizeMatches => nativeStatusSize == kExpectedStatusSize;
+
+  /// True only when the binary is a safe match for these bindings.
+  bool get isCompatible =>
+      reportsAbi && abiMatches && statusSizeMatches && missingSymbols.isEmpty;
+
+  String describe() {
+    if (isCompatible) {
+      return 'libtorrent $libtorrentVersion, bridge ABI $nativeAbi — OK';
+    }
+    final problems = <String>[];
+    if (!reportsAbi) {
+      problems.add(
+        'binary reports no bridge_abi marker, so it predates ABI '
+        '$kExpectedBridgeAbi (raw version: "$rawVersion")',
+      );
+    } else if (!abiMatches) {
+      problems.add('bridge ABI $nativeAbi, expected $kExpectedBridgeAbi');
+    }
+    if (nativeStatusSize == null) {
+      problems.add(
+        'binary reports no status_size; these bindings read '
+        '$kExpectedStatusSize bytes per lt_torrent_status',
+      );
+    } else if (!statusSizeMatches) {
+      problems.add(
+        'lt_torrent_status is $nativeStatusSize bytes native but '
+        '$kExpectedStatusSize bytes in Dart — every field past the drift '
+        'point decodes as garbage, and lt_get_all_statuses strides mismatch',
+      );
+    }
+    if (missingSymbols.isNotEmpty) {
+      problems.add(
+        '${missingSymbols.length} missing exports: '
+        '${missingSymbols.join(', ')}',
+      );
+    }
+    return 'INCOMPATIBLE native bridge — ${problems.join('; ')}. '
+        'Rebuild liblibtorrent_flutter from src/torrent_bridge.cpp.';
+  }
+}
+
+/// Parse the `key=value` markers appended to `lt_version()` by ABI >= 2.
+int? _parseVersionMarker(String raw, String key) {
+  for (final part in raw.split(';')) {
+    final eq = part.indexOf('=');
+    if (eq <= 0) continue;
+    if (part.substring(0, eq).trim() != key) continue;
+    return int.tryParse(part.substring(eq + 1).trim());
+  }
+  return null;
 }
 
 // ─── lt_file_info ─────────────────────────────────────────────────────────────
@@ -394,128 +490,79 @@ class TorrentBridgeBindings {
   late final LtLastError          lastError;
   late final LtVersion            version;
 
+  final List<String> _missingSymbols = [];
+
+  /// Exports declared by these bindings but absent from the loaded binary.
+  List<String> get missingSymbols => List.unmodifiable(_missingSymbols);
+
+  /// Handshake the loaded binary against these bindings.
+  BridgeAbiReport abiReport() {
+    final raw = version().toDartString();
+    return BridgeAbiReport(
+      rawVersion: raw,
+      nativeAbi: _parseVersionMarker(raw, 'bridge_abi'),
+      nativeStatusSize: _parseVersionMarker(raw, 'status_size'),
+      missingSymbols: missingSymbols,
+    );
+  }
+
+  /// Bind an export that older binaries may not have, recording its absence.
+  T? _optional<T>(String symbol, T Function() bind) {
+    try {
+      return bind();
+    } catch (_) {
+      _missingSymbols.add(symbol);
+      return null;
+    }
+  }
+
   TorrentBridgeBindings(this._lib) {
     createSession       = _lib.lookup<NativeFunction<_CreateSessionN>>('lt_create_session').asFunction<LtCreateSession>();
     destroySession      = _lib.lookup<NativeFunction<_DestroySessionN>>('lt_destroy_session').asFunction<LtDestroySession>();
     pollAlerts          = _lib.lookup<NativeFunction<_PollAlertsN>>('lt_poll_alerts').asFunction<LtPollAlerts>();
     setAlertCallback    = _lib.lookup<NativeFunction<_SetAlertCallbackN>>('lt_set_alert_callback').asFunction<LtSetAlertCallback>();
     addMagnet           = _lib.lookup<NativeFunction<_AddMagnetN>>('lt_add_magnet').asFunction<LtAddMagnet>();
-    try {
-      addMagnetResume = _lib.lookup<NativeFunction<_AddMagnetResumeN>>(
-        'lt_add_magnet_resume',
-      ).asFunction<LtAddMagnetResume>();
-    } catch (_) {
-      addMagnetResume = null;
-    }
+    addMagnetResume = _optional('lt_add_magnet_resume', () =>
+        _lib.lookup<NativeFunction<_AddMagnetResumeN>>('lt_add_magnet_resume').asFunction<LtAddMagnetResume>());
     addTorrentFile      = _lib.lookup<NativeFunction<_AddTorrentFileN>>('lt_add_torrent_file').asFunction<LtAddTorrentFile>();
-    try {
-      addTorrentFileResume = _lib.lookup<NativeFunction<_AddTorrentFileResumeN>>(
-        'lt_add_torrent_file_resume',
-      ).asFunction<LtAddTorrentFileResume>();
-    } catch (_) {
-      addTorrentFileResume = null;
-    }
+    addTorrentFileResume = _optional('lt_add_torrent_file_resume', () =>
+        _lib.lookup<NativeFunction<_AddTorrentFileResumeN>>('lt_add_torrent_file_resume').asFunction<LtAddTorrentFileResume>());
     removeTorrent       = _lib.lookup<NativeFunction<_RemoveTorrentN>>('lt_remove_torrent').asFunction<LtRemoveTorrent>();
     pauseTorrent        = _lib.lookup<NativeFunction<_PauseTorrentN>>('lt_pause_torrent').asFunction<LtPauseTorrent>();
     resumeTorrent       = _lib.lookup<NativeFunction<_ResumeTorrentN>>('lt_resume_torrent').asFunction<LtResumeTorrent>();
     recheckTorrent      = _lib.lookup<NativeFunction<_RecheckTorrentN>>('lt_recheck_torrent').asFunction<LtRecheckTorrent>();
-    try {
-      forceReannounce = _lib.lookup<NativeFunction<_ForceReannounceN>>(
-        'lt_force_reannounce',
-      ).asFunction<LtForceReannounce>();
-    } catch (_) {
-      forceReannounce = null;
-    }
-    try {
-      forceDhtAnnounce = _lib.lookup<NativeFunction<_ForceDhtAnnounceN>>(
-        'lt_force_dht_announce',
-      ).asFunction<LtForceDhtAnnounce>();
-    } catch (_) {
-      forceDhtAnnounce = null;
-    }
-    try {
-      saveResumeData = _lib.lookup<NativeFunction<_SaveResumeDataN>>(
-        'lt_save_resume_data',
-      ).asFunction<LtSaveResumeData>();
-    } catch (_) {
-      saveResumeData = null;
-    }
-    try {
-      takeSavedResumeData = _lib.lookup<NativeFunction<_TakeSavedResumeDataN>>(
-        'lt_take_saved_resume_data',
-      ).asFunction<LtTakeSavedResumeData>();
-    } catch (_) {
-      takeSavedResumeData = null;
-    }
-    try {
-      loadResumeData = _lib.lookup<NativeFunction<_LoadResumeDataN>>(
-        'lt_load_resume_data',
-      ).asFunction<LtLoadResumeData>();
-    } catch (_) {
-      loadResumeData = null;
-    }
+    forceReannounce = _optional('lt_force_reannounce', () =>
+        _lib.lookup<NativeFunction<_ForceReannounceN>>('lt_force_reannounce').asFunction<LtForceReannounce>());
+    forceDhtAnnounce = _optional('lt_force_dht_announce', () =>
+        _lib.lookup<NativeFunction<_ForceDhtAnnounceN>>('lt_force_dht_announce').asFunction<LtForceDhtAnnounce>());
+    saveResumeData = _optional('lt_save_resume_data', () =>
+        _lib.lookup<NativeFunction<_SaveResumeDataN>>('lt_save_resume_data').asFunction<LtSaveResumeData>());
+    takeSavedResumeData = _optional('lt_take_saved_resume_data', () =>
+        _lib.lookup<NativeFunction<_TakeSavedResumeDataN>>('lt_take_saved_resume_data').asFunction<LtTakeSavedResumeData>());
+    loadResumeData = _optional('lt_load_resume_data', () =>
+        _lib.lookup<NativeFunction<_LoadResumeDataN>>('lt_load_resume_data').asFunction<LtLoadResumeData>());
     getTorrentCount     = _lib.lookup<NativeFunction<_GetTorrentCountN>>('lt_get_torrent_count').asFunction<LtGetTorrentCount>();
     getAllStatuses       = _lib.lookup<NativeFunction<_GetAllStatusesN>>('lt_get_all_statuses').asFunction<LtGetAllStatuses>();
     getStatus           = _lib.lookup<NativeFunction<_GetStatusN>>('lt_get_status').asFunction<LtGetStatus>();
     getFileCount        = _lib.lookup<NativeFunction<_GetFileCountN>>('lt_get_file_count').asFunction<LtGetFileCount>();
     getFiles            = _lib.lookup<NativeFunction<_GetFilesN>>('lt_get_files').asFunction<LtGetFiles>();
-    try {
-      getFileProgress = _lib.lookup<NativeFunction<_GetFileProgressN>>(
-        'lt_get_file_progress',
-      ).asFunction<LtGetFileProgress>();
-    } catch (_) {
-      getFileProgress = null;
-    }
-    try {
-      getFilePriorities = _lib.lookup<NativeFunction<_GetFilePrioritiesN>>(
-        'lt_get_file_priorities',
-      ).asFunction<LtGetFilePriorities>();
-    } catch (_) {
-      getFilePriorities = null;
-    }
+    getFileProgress = _optional('lt_get_file_progress', () =>
+        _lib.lookup<NativeFunction<_GetFileProgressN>>('lt_get_file_progress').asFunction<LtGetFileProgress>());
+    getFilePriorities = _optional('lt_get_file_priorities', () =>
+        _lib.lookup<NativeFunction<_GetFilePrioritiesN>>('lt_get_file_priorities').asFunction<LtGetFilePriorities>());
     setFilePriorities   = _lib.lookup<NativeFunction<_SetFilePrioritiesN>>('lt_set_file_priorities').asFunction<LtSetFilePriorities>();
-    try {
-      getTrackers = _lib.lookup<NativeFunction<_GetTrackersN>>(
-        'lt_get_trackers',
-      ).asFunction<LtGetTrackers>();
-    } catch (_) {
-      getTrackers = null;
-    }
-    try {
-      addTracker = _lib.lookup<NativeFunction<_AddTrackerN>>(
-        'lt_add_tracker',
-      ).asFunction<LtAddTracker>();
-    } catch (_) {
-      addTracker = null;
-    }
-    try {
-      removeTracker = _lib.lookup<NativeFunction<_RemoveTrackerN>>(
-        'lt_remove_tracker',
-      ).asFunction<LtRemoveTracker>();
-    } catch (_) {
-      removeTracker = null;
-    }
-    try {
-      setSequentialDownload = _lib.lookup<NativeFunction<_SetSequentialDownloadN>>(
-        'lt_set_sequential_download',
-      ).asFunction<LtSetSequentialDownload>();
-    } catch (_) {
-      setSequentialDownload = null;
-    }
-    try {
-      setSuperSeeding = _lib.lookup<NativeFunction<_SetSuperSeedingN>>(
-        'lt_set_super_seeding',
-      ).asFunction<LtSetSuperSeeding>();
-    } catch (_) {
-      setSuperSeeding = null;
-    }
-    try {
-      setPieceDeadline = _lib.lookup<NativeFunction<_SetPieceDeadlineN>>(
-        'lt_set_piece_deadline',
-      ).asFunction<LtSetPieceDeadline>();
-    } catch (_) {
-      setPieceDeadline = null;
-    }
+    getTrackers = _optional('lt_get_trackers', () =>
+        _lib.lookup<NativeFunction<_GetTrackersN>>('lt_get_trackers').asFunction<LtGetTrackers>());
+    addTracker = _optional('lt_add_tracker', () =>
+        _lib.lookup<NativeFunction<_AddTrackerN>>('lt_add_tracker').asFunction<LtAddTracker>());
+    removeTracker = _optional('lt_remove_tracker', () =>
+        _lib.lookup<NativeFunction<_RemoveTrackerN>>('lt_remove_tracker').asFunction<LtRemoveTracker>());
+    setSequentialDownload = _optional('lt_set_sequential_download', () =>
+        _lib.lookup<NativeFunction<_SetSequentialDownloadN>>('lt_set_sequential_download').asFunction<LtSetSequentialDownload>());
+    setSuperSeeding = _optional('lt_set_super_seeding', () =>
+        _lib.lookup<NativeFunction<_SetSuperSeedingN>>('lt_set_super_seeding').asFunction<LtSetSuperSeeding>());
+    setPieceDeadline = _optional('lt_set_piece_deadline', () =>
+        _lib.lookup<NativeFunction<_SetPieceDeadlineN>>('lt_set_piece_deadline').asFunction<LtSetPieceDeadline>());
     startStream         = _lib.lookup<NativeFunction<_StartStreamN>>('lt_start_stream').asFunction<LtStartStream>();
     stopStream          = _lib.lookup<NativeFunction<_StopStreamN>>('lt_stop_stream').asFunction<LtStopStream>();
     getStreamStatus     = _lib.lookup<NativeFunction<_GetStreamStatusN>>('lt_get_stream_status').asFunction<LtGetStreamStatus>();

@@ -3,6 +3,7 @@
 // status polling, and a built-in HTTP streaming server.
 
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
@@ -174,6 +175,15 @@ class LibtorrentFlutter {
   /// Whether the engine has been initialized.
   static bool get isInitialized => _instance != null;
 
+  static BridgeAbiReport? _abiReport;
+
+  /// Handshake result for the loaded native binary, available after [init].
+  ///
+  /// Check [BridgeAbiReport.isCompatible] before trusting torrent statistics:
+  /// a stale binary yields zeros for seeds, peers, and sizes rather than
+  /// erroring.
+  static BridgeAbiReport? get abiReport => _abiReport;
+
   /// Initialize the libtorrent engine.
   ///
   /// - [listenInterface] — network interface to listen on (empty = all).
@@ -199,6 +209,16 @@ class LibtorrentFlutter {
 
     final lib = TorrentBridgeBindings.open();
     engine._b = lib;
+
+    // Handshake the binary before trusting any struct it fills. A mismatched
+    // .so decodes as plausible-looking zeros rather than failing outright.
+    final report = lib.abiReport();
+    _abiReport = report;
+    developer.log(
+      report.describe(),
+      name: 'libtorrent_flutter',
+      level: report.isCompatible ? 800 : 1000,
+    );
 
     final iface = listenInterface.toNativeUtf8();
     try {
@@ -231,8 +251,8 @@ class LibtorrentFlutter {
   /// Current snapshot of all active streams.
   Map<int, StreamInfo> get streams => Map.unmodifiable(_streams);
 
-  /// libtorrent version string.
-  String get libraryVersion => _b.version().toDartString();
+  /// libtorrent version string. ABI markers are reported via [abiReport].
+  String get libraryVersion => _b.version().toDartString().split(';').first;
 
   // ─── Torrent Management ─────────────────────────────────────────────────────
 
@@ -383,8 +403,10 @@ class LibtorrentFlutter {
     }
     final cached = _cachedFileProgress[torrentId];
     if (cached != null) return List.unmodifiable(cached);
-    final files = getFiles(torrentId);
-    return List.filled(files.length, 0);
+    // No `lt_get_file_progress` export and nothing cached: report "unknown" by
+    // returning an empty list. Fabricating zeros here is indistinguishable from
+    // a real "0 bytes downloaded" reading and corrupts every consumer.
+    return const [];
   }
 
   /// Set cached file progress.

@@ -29,16 +29,68 @@ void main() {
       expect(normExcessive['isComplete'], isTrue);
     });
 
-    test('normalizeTorrentFile handles zero-length files correctly', () {
+    test('normalizeTorrentFile treats a verified empty file as complete', () {
       final zeroFile = {
         'name': 'empty.txt',
         'length': 0,
+        'lengthKnown': true,
         'downloadedBytes': 0,
       };
       final normZero = TorrentFileNormalizer.normalizeTorrentFile(zeroFile);
       expect(normZero['downloadedBytes'], equals(0));
       expect(normZero['progress'], equals(1.0));
       expect(normZero['isComplete'], isTrue);
+    });
+
+    test('normalizeTorrentFile treats an unresolved length as unknown', () {
+      // The engine reports 0 for a size it cannot determine (e.g. a native
+      // bridge that is not ABI-compatible). That must never read as complete.
+      final unknown = {
+        'name': 'ubuntu.iso',
+        'length': 0,
+        'downloadedBytes': 196608,
+      };
+      final norm = TorrentFileNormalizer.normalizeTorrentFile(unknown);
+      expect(norm['lengthKnown'], isFalse);
+      expect(norm['progress'], equals(0.0));
+      expect(norm['isComplete'], isFalse);
+      // The transferred bytes are real and are kept.
+      expect(norm['downloadedBytes'], equals(196608));
+    });
+
+    test('normalizeTorrentFile honours isComplete only with a known length',
+        () {
+      final stale = {
+        'name': 'ubuntu.iso',
+        'length': 0,
+        'downloadedBytes': 0,
+        'isComplete': true,
+      };
+      final norm = TorrentFileNormalizer.normalizeTorrentFile(stale);
+      expect(norm['isComplete'], isFalse);
+    });
+
+    test('resolveFileLength never lets a zero clobber a known length', () {
+      expect(
+        TorrentFileNormalizer.resolveFileLength(0, previousLength: 6100000000),
+        equals(6100000000),
+      );
+      expect(
+        TorrentFileNormalizer.resolveFileLength(2048, previousLength: 1024),
+        equals(2048),
+      );
+      expect(TorrentFileNormalizer.resolveFileLength(0), equals(0));
+    });
+
+    test('normalizeTorrentFileList reports 0 done for all-unknown lengths', () {
+      // Regression: a stale native file list (names only, sizes all 0) used to
+      // aggregate as "every file complete".
+      final result = TorrentFileNormalizer.normalizeTorrentFileList([
+        {'name': 'ubuntu.iso', 'length': 0, 'downloadedBytes': 0},
+      ]);
+      expect(result.total, equals(1));
+      expect(result.done, equals(0));
+      expect(result.bytes, equals(0));
     });
 
     test('normalizeTorrentFile sets sensible defaults', () {
@@ -82,6 +134,8 @@ void main() {
         {
           'name': 'file4.zero',
           'length': 0,
+          // Verified empty by the torrent metadata, so it counts as done.
+          'lengthKnown': true,
           'downloadedBytes': 0,
           'selected': true,
         },

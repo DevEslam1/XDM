@@ -204,11 +204,14 @@ class TorrentService {
       try {
         await _native.init().timeout(const Duration(seconds: 10));
         isPluginAvailable = true;
+        _logBridgeHealth();
         _configureSessionFromSettings();
+        // Must precede the _startTracking* calls: they bail out unless
+        // isInitialized is already true, which requires this state.
+        _state = TorrentSessionLifecycleState.ready;
         _startTrackingUpdates();
         _startTrackingAlerts();
         _startPeriodicResumeSave();
-        _state = TorrentSessionLifecycleState.ready;
         isAvailable.value = true;
       } on TimeoutException {
         _log.severe('libtorrent init timed out');
@@ -238,6 +241,34 @@ class TorrentService {
   static bool _sequentialDownload = false;
   static double _shareRatioLimit = 2.0;
   static int _maxSeedingTimeMinutes = 0;
+
+  /// Whether the loaded native bridge matches the Dart FFI bindings.
+  ///
+  /// False means the bundled `liblibtorrent_flutter` binary is stale: struct
+  /// fields past the drift point read as zero (file sizes come back as 0) and
+  /// exports such as `lt_get_file_progress`, `lt_get_trackers` and the resume
+  /// data functions are missing, so per-file progress, swarm counters and fast
+  /// resume are all unavailable until it is rebuilt from `src/torrent_bridge.cpp`.
+  static bool bridgeCompatible = true;
+
+  /// Last bridge health report, or null when the platform has no native bridge.
+  static String? bridgeDiagnostics;
+
+  static void _logBridgeHealth() {
+    try {
+      final report = _native.bridgeDiagnostics;
+      bridgeDiagnostics = report;
+      bridgeCompatible = _native.isBridgeCompatible;
+      if (report == null) return;
+      if (bridgeCompatible) {
+        _log.info('Native bridge: $report');
+      } else {
+        _log.severe('Native bridge: $report');
+      }
+    } catch (e, st) {
+      _log.fine('Bridge health probe failed: $e', e, st);
+    }
+  }
 
   static bool get sequentialDownloadEnabled => _sequentialDownload;
   static double get shareRatioLimit => _shareRatioLimit;
@@ -271,8 +302,6 @@ class TorrentService {
 
   static void _configureSessionFromSettings() => configureSession();
 
-  static Completer<void>? _trackingCompleter;
-
   static void _startTrackingAlerts() {
     _alertsSub?.cancel();
     _alertsSub = _native.alertStream.listen((event) {
@@ -303,8 +332,6 @@ class TorrentService {
       return;
     }
     if (_updatesSub != null) return;
-    if (_trackingCompleter != null) return;
-    _trackingCompleter = Completer<void>();
     StreamController<Map<int, TorrentUpdateInfo>>? controller;
     StreamSubscription? sub;
     try {
@@ -379,6 +406,7 @@ class TorrentService {
                 totalWantedDone: value.totalWantedDone,
                 hasMetadata: hasMetadata,
                 state: stateFromInt(value.state),
+                isPaused: value.isPaused,
                 stateLabel: value.stateLabel,
                 numSeeds: value.numSeeds < 0 ? 0 : value.numSeeds,
                 numPeers: value.numPeers < 0 ? 0 : value.numPeers,
@@ -451,14 +479,10 @@ class TorrentService {
       );
       _updatesSub = sub;
       _updateController = controller;
-      _trackingCompleter?.complete();
     } catch (e) {
       sub?.cancel();
       controller?.close();
-      if (_trackingCompleter != null && !_trackingCompleter!.isCompleted) {
-        _trackingCompleter!.completeError(e);
-      }
-      _trackingCompleter = null;
+      _log.severe('Failed to establish torrent status tracking', e);
     }
   }
 
@@ -1019,7 +1043,10 @@ class TorrentService {
           if (i < progress.length) {
             final rawBytes = progress[i];
             if (rawBytes >= 0) {
-              resolvedDownloadedBytes = rawBytes.clamp(0, f.size);
+              // Only clamp against a real size. A zero size means the engine
+              // could not report one, and clamping would erase real bytes.
+              resolvedDownloadedBytes =
+                  f.size > 0 ? rawBytes.clamp(0, f.size) : rawBytes;
             } else {
               resolvedDownloadedBytes = -1;
             }
@@ -1183,10 +1210,17 @@ class TorrentService {
     _native.setSuperSeeding(torrentId, enabled);
   }
 
+  /// Reads on-disk progress for each file of [torrentId].
+  ///
+  /// [knownSizes] maps a file index to a length the caller already trusts
+  /// (parsed from the torrent metadata). It is used whenever the engine reports
+  /// a size of `0`, which means "unknown" rather than "empty" — without it a
+  /// bridge that cannot report sizes would report every file as 100% complete.
   static Future<List<TorrentFileProgress>> getAccurateFileProgress(
     int torrentId,
-    String savePath,
-  ) async {
+    String savePath, {
+    Map<int, int>? knownSizes,
+  }) async {
     if (!isInitialized || torrentId < 0) return [];
     try {
       final nativeFiles = _native.getFiles(torrentId);
@@ -1194,6 +1228,9 @@ class TorrentService {
 
       for (var i = 0; i < nativeFiles.length; i++) {
         final native = nativeFiles[i];
+        final resolvedSize = native.size > 0
+            ? native.size
+            : ((knownSizes?[i] ?? 0) > 0 ? knownSizes![i]! : 0);
         final filePath = p.join(savePath, native.name);
         final file = File(filePath);
 
@@ -1202,7 +1239,7 @@ class TorrentService {
         if (await file.exists()) {
           exists = true;
           diskBytes = await file.length();
-          if (diskBytes > 0 && diskBytes >= native.size) {
+          if (diskBytes > 0 && resolvedSize > 0 && diskBytes >= resolvedSize) {
             final raf = await file.open(mode: FileMode.read);
             final probe = await raf.read(math.min(4096, diskBytes));
             final hasContent = probe.any((b) => b != 0);
@@ -1214,12 +1251,15 @@ class TorrentService {
         progress.add(TorrentFileProgress(
           index: i,
           name: native.name,
-          size: native.size,
-          downloadedBytes: diskBytes,
+          size: resolvedSize,
+          downloadedBytes:
+              resolvedSize > 0 ? diskBytes.clamp(0, resolvedSize) : diskBytes,
+          // With no resolved size there is nothing to measure against, so the
+          // file is reported as 0% and incomplete rather than falsely done.
           progress:
-              native.size > 0 ? (diskBytes / native.size).clamp(0.0, 1.0) : 1.0,
+              resolvedSize > 0 ? (diskBytes / resolvedSize).clamp(0.0, 1.0) : 0.0,
           exists: exists,
-          isComplete: diskBytes >= native.size,
+          isComplete: resolvedSize > 0 && diskBytes >= resolvedSize,
         ));
       }
       return progress;
@@ -1627,9 +1667,11 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
     int torrentId,
-    String savePath,
-  ) =>
-      TorrentService.getAccurateFileProgress(torrentId, savePath);
+    String savePath, {
+    Map<int, int>? knownSizes,
+  }) =>
+      TorrentService.getAccurateFileProgress(torrentId, savePath,
+          knownSizes: knownSizes);
 
   @override
   Future<Map<String, dynamic>?> getPieceProgress(int torrentId) =>
@@ -1869,8 +1911,9 @@ class TorrentServiceStub implements ITorrentService {
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
     int torrentId,
-    String savePath,
-  ) async =>
+    String savePath, {
+    Map<int, int>? knownSizes,
+  }) async =>
       [];
 
   @override

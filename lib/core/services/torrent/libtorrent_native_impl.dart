@@ -30,6 +30,25 @@ class LibtorrentNativeImpl implements ITorrentNative {
     }
   }
 
+  @override
+  String? get bridgeDiagnostics {
+    try {
+      return lt.LibtorrentFlutter.abiReport?.describe();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  bool get isBridgeCompatible {
+    try {
+      // No report yet (not initialized) is not evidence of a mismatch.
+      return lt.LibtorrentFlutter.abiReport?.isCompatible ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
   // FIX(N1): statusStream backed by broadcast StreamController
   @override
   Stream<NativeAlertEvent> get alertStream => _alertStreamCtrl.stream;
@@ -44,7 +63,7 @@ class LibtorrentNativeImpl implements ITorrentNative {
       name: info.name,
       savePath: info.savePath,
       errorMsg: info.errorMsg,
-      state: info.state.index,
+      state: info.state.nativeCode,
       stateLabel: info.state.label,
       progress: info.progress,
       downloadRate: info.downloadRate,

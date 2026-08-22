@@ -38,8 +38,9 @@ class MockPhase2TorrentService extends TorrentServiceStub {
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
     int torrentId,
-    String savePath,
-  ) async =>
+    String savePath, {
+    Map<int, int>? knownSizes,
+  }) async =>
       [];
 
   @override

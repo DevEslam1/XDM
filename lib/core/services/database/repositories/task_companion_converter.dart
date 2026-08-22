@@ -132,9 +132,12 @@ class TaskCompanionConverter {
         if (!selected) continue;
         final len = (f['length'] as num?)?.toInt() ?? 0;
         final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+        // A 0 length only counts as complete when the source vouched for it;
+        // an unresolved length is not evidence that the file is done.
+        final lengthKnown = len > 0 || (f['lengthKnown'] as bool?) == true;
         totalFiles++;
         totalFileBytes += len;
-        if (len == 0 || dl >= len) {
+        if (lengthKnown && dl >= len) {
           completedFiles++;
         }
         downloadedFileBytes += len > 0 ? dl.clamp(0, len) : 0;

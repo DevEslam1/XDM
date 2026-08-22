@@ -286,6 +286,17 @@ abstract class ITorrentNative {
   bool get isInitialized;
   String get libraryVersion;
 
+  /// One-line health report of the loaded native bridge, or `null` when the
+  /// implementation has no native binary to report on.
+  ///
+  /// Non-null with [isBridgeCompatible] false means the loaded binary does not
+  /// match these bindings — struct fields read as zero and exports are missing,
+  /// so sizes, per-file progress, trackers and resume data are unreliable.
+  String? get bridgeDiagnostics => null;
+
+  /// Whether the loaded native bridge matches the ABI these bindings expect.
+  bool get isBridgeCompatible => true;
+
   Stream<NativeAlertEvent> get alertStream;
   Stream<Map<int, NativeTorrentStatus>> get statusStream;
 

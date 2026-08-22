@@ -309,12 +309,16 @@ class MetadataProbeService {
         final resolvedTitle =
             initialStats.name.isNotEmpty ? initialStats.name : resolvedName;
 
-        // FIX: [Audit] Cache resolved metadata to prevent double metadata fetch
-        await TorrentResumeStore.saveMetadataSnapshot(
-          sourceUrl: url,
-          files: resolvedFiles,
-          name: resolvedTitle,
-        );
+        // FIX: [Audit] Cache resolved metadata to prevent double metadata fetch.
+        // A snapshot with no usable lengths is not metadata — persisting it
+        // would later overwrite real lengths with zeros, so skip the cache.
+        if (totalSize > 0) {
+          await TorrentResumeStore.saveMetadataSnapshot(
+            sourceUrl: url,
+            files: resolvedFiles,
+            name: resolvedTitle,
+          );
+        }
 
         try {
           TorrentService.pauseTorrent(torrentId);
@@ -381,12 +385,15 @@ class MetadataProbeService {
           final totalSize = resolvedFiles.fold<int>(
               0, (sum, f) => sum + (f['length'] as int));
 
-          // FIX: [Audit] Cache resolved metadata before cleanup
-          TorrentResumeStore.saveMetadataSnapshot(
-            sourceUrl: url,
-            files: resolvedFiles,
-            name: torrent.name,
-          );
+          // FIX: [Audit] Cache resolved metadata before cleanup. Skip the cache
+          // when no length could be resolved (see above).
+          if (totalSize > 0) {
+            TorrentResumeStore.saveMetadataSnapshot(
+              sourceUrl: url,
+              files: resolvedFiles,
+              name: torrent.name,
+            );
+          }
 
           cleanup();
           // FIX: [Audit] Return torrentId: null since torrent was cleanly removed

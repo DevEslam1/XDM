@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat packages/libtorrent_flutter/prebuilt/android/.libtorrent_flutter_version)",
+      "Bash(git check-ignore *)",
+      "Bash(python -c ' *)",
+      "Bash(ls -a .github/workflows)",
+      "Bash(ls -a packages/libtorrent_flutter/.github/workflows)",
+      "Bash(cat .gitmodules)",
+      "Bash(flutter analyze *)",
+      "Bash(flutter test *)"
+    ]
+  }
+}

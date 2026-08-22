@@ -110,7 +110,10 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
 
     double calcFileProgress(Map<String, dynamic> f) {
       if (!isTorrentFileSelected(f)) return 0.0;
-      if ((f['isComplete'] as bool?) == true) return 1.0;
+      // Completion is only trustworthy against a known length; a stale entry
+      // whose length was never resolved must not read as 100%.
+      final lengthKnown = TorrentFileNormalizer.isLengthKnown(f);
+      if ((f['isComplete'] as bool?) == true && lengthKnown) return 1.0;
       final isEstimated = (f['progressEstimated'] as bool?) == true;
       final length = getFileLength(f);
       final downloadedBytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
@@ -227,6 +230,7 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                   final f = files[index];
                   final name = f['name'] as String? ?? 'file_${index + 1}';
                   final length = getFileLength(f);
+                  final lengthKnown = TorrentFileNormalizer.isLengthKnown(f);
                   final downloadedBytes =
                       (f['downloadedBytes'] as num?)?.toInt() ?? 0;
                   final selected = (f['selected'] as bool?) ?? true;
@@ -236,6 +240,7 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                   final progress = calcFileProgress(f);
 
                   final isComplete = selected &&
+                      lengthKnown &&
                       ((f['isComplete'] as bool?) == true ||
                           (!isEstimated &&
                               length > 0 &&
@@ -440,7 +445,7 @@ class _TorrentFilesPanelState extends State<TorrentFilesPanel> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    '${formatBytes(displayDownloadedBytes)} / ${formatBytes(length)}',
+                                    '${formatBytes(displayDownloadedBytes)} / ${lengthKnown ? formatBytes(length) : '—'}',
                                     style: AppTheme.dataStyle(
                                       isDark: isDark,
                                       size: 10,

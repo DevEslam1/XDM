@@ -50,6 +50,26 @@ TorrentState stateFromInt(int v) {
 }
 
 extension TorrentStateX on TorrentState {
+  /// Native `LT_STATE_*` code for this state — the inverse of [stateFromInt].
+  ///
+  /// [TorrentState.queuedForChecking] maps to `LT_STATE_UNKNOWN` because the
+  /// bridge collapses libtorrent's deprecated `queued_for_checking` into that
+  /// code, so it never round-trips.
+  int get nativeCode {
+    switch (this) {
+      case TorrentState.error:               return -2;
+      case TorrentState.unknown:             return -1;
+      case TorrentState.queuedForChecking:   return -1;
+      case TorrentState.checkingFiles:       return 0;
+      case TorrentState.downloadingMetadata: return 1;
+      case TorrentState.downloading:         return 2;
+      case TorrentState.finished:            return 3;
+      case TorrentState.seeding:             return 4;
+      case TorrentState.allocating:          return 5;
+      case TorrentState.checkingResume:      return 6;
+    }
+  }
+
   String get label {
     switch (this) {
       case TorrentState.error:               return 'Error';

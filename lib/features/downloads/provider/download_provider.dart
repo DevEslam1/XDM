@@ -566,8 +566,12 @@ class DownloadProvider extends ChangeNotifier
                       hasSelectedFileProgress = true;
                     }
                   }
-                  final bool isComp =
-                      (len > 0 && dl >= len) || f['isComplete'] == true;
+                  // A stale `isComplete` from a run where the length could not
+                  // be resolved must not survive; completion needs a length.
+                  final bool lengthKnown =
+                      len > 0 || f['lengthKnown'] == true;
+                  final bool isComp = lengthKnown &&
+                      ((dl >= len) || f['isComplete'] == true);
                   f['isComplete'] = isComp;
                   f['progress'] = len > 0
                       ? (dl / len).clamp(0.0, 1.0)

@@ -684,10 +684,14 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
           // FIX-T1: Persist per-file progress
           try {
             final files = TorrentService.getFiles(tid);
+            // Do not persist a list with no usable lengths — it would overwrite
+            // the real lengths already stored for this torrent with zeros.
+            if (!files.any((f) => f.size > 0)) return null;
             return files
                 .map((f) => {
                       'name': f.name,
                       'length': f.size,
+                      'lengthKnown': f.size > 0,
                       'downloadedBytes': f.downloadedBytes,
                       'selected': f.selected,
                       'priority': f.priority,

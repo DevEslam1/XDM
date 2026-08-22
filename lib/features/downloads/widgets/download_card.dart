@@ -2726,6 +2726,9 @@ class _TorrentFileRow extends StatelessWidget {
     final selected = isTorrentFileSelected(file);
     final length = (file['length'] as num?)?.toInt() ?? 0;
     final safeLength = length < 0 ? 0 : length;
+    // A length of 0 is only real when the source vouched for it; otherwise the
+    // total is unknown and must not be rendered as "0 B".
+    final lengthKnown = safeLength > 0 || file['lengthKnown'] == true;
     final rawBytes = (file['downloadedBytes'] as num?)?.toInt() ?? 0;
     // -1 means "engine has no progress data" — fall back to 0 but keep
     // the estimated flag so the UI can show a hint instead of a hard 0.
@@ -2883,10 +2886,10 @@ class _TorrentFileRow extends StatelessWidget {
             SizedBox(
               child: Text(
                 !selected
-                    ? formatBytes(length.toDouble())
+                    ? (lengthKnown ? formatBytes(length.toDouble()) : '—')
                     : (rawBytes <= 0 && !done
-                        ? '… / ${formatBytes(length.toDouble())}'
-                        : '${formatBytes(downloaded.toDouble())} / ${formatBytes(length.toDouble())}'),
+                        ? '… / ${lengthKnown ? formatBytes(length.toDouble()) : '—'}'
+                        : '${formatBytes(downloaded.toDouble())} / ${lengthKnown ? formatBytes(length.toDouble()) : '—'}'),
                 textAlign: TextAlign.end,
                 style: AppTheme.dataStyle(
                   isDark: isDark,

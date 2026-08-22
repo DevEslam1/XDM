@@ -502,11 +502,16 @@ class TorrentDownloadHandler {
       bool degradedSuccess = false;
       try {
         final files = _torrentService.getFiles(id);
-        final torrentFiles = files.isNotEmpty
+        // A file list whose every length is 0 carries no usable metadata (the
+        // engine could not report sizes). Persisting it would overwrite the
+        // real lengths already in the resume store, so omit it entirely.
+        final hasUsableLengths = files.any((f) => f.size > 0);
+        final torrentFiles = files.isNotEmpty && hasUsableLengths
             ? files
                 .map((f) => {
                       'name': f.name,
                       'length': f.size,
+                      'lengthKnown': f.size > 0,
                       'priority': f.priority,
                       'selected': f.selected,
                       'downloadedBytes': f.safeDownloadedBytes,
@@ -1167,25 +1172,52 @@ class TorrentDownloadHandler {
                 if (f['name'] != null && f['priority'] is int)
                   normKey(f['name'] as String): f['priority'] as int
           };
+          final previousLengthMap = <String, int>{
+            if (pauseFiles != null)
+              for (final f in pauseFiles)
+                if (f['name'] != null &&
+                    ((f['length'] as num?)?.toInt() ?? 0) > 0)
+                  normKey(f['name'] as String): (f['length'] as num).toInt()
+          };
+          final previousLengthByIndex = <int, int>{
+            if (pauseFiles != null)
+              for (var i = 0; i < pauseFiles.length; i++)
+                if (((pauseFiles[i]['length'] as num?)?.toInt() ?? 0) > 0)
+                  i: (pauseFiles[i]['length'] as num).toInt()
+          };
           try {
-            final accurateFiles =
-                await _torrentService.getAccurateFileProgress(id, saveDir);
+            final accurateFiles = await _torrentService.getAccurateFileProgress(
+              id,
+              saveDir,
+              knownSizes: previousLengthByIndex,
+            );
             if (accurateFiles.isNotEmpty) {
               pauseFiles = [
                 for (var i = 0; i < accurateFiles.length; i++)
-                  {
-                    'name': accurateFiles[i].name,
-                    'length': accurateFiles[i].size,
-                    'downloadedBytes': accurateFiles[i].downloadedBytes,
-                    'selected':
-                        previousSelectedMap[normKey(accurateFiles[i].name)] ??
-                            true,
-                    'priority':
-                        previousPriorityMap[normKey(accurateFiles[i].name)] ?? 4,
-                    'progress': accurateFiles[i].progress,
-                    'isComplete': accurateFiles[i].isComplete,
-                    'progressEstimated': false,
-                  }
+                  () {
+                    final af = accurateFiles[i];
+                    // Never let an unreported size erase a length we already
+                    // know from the torrent metadata.
+                    final len = TorrentFileNormalizer.resolveFileLength(
+                      af.size,
+                      previousLength: previousLengthMap[normKey(af.name)] ??
+                          previousLengthByIndex[i],
+                    );
+                    final dl =
+                        len > 0 ? af.downloadedBytes.clamp(0, len) : af.downloadedBytes;
+                    return <String, dynamic>{
+                      'name': af.name,
+                      'length': len,
+                      'downloadedBytes': dl,
+                      'selected':
+                          previousSelectedMap[normKey(af.name)] ?? true,
+                      'priority': previousPriorityMap[normKey(af.name)] ?? 4,
+                      'progress':
+                          len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0,
+                      'isComplete': len > 0 && dl >= len,
+                      'progressEstimated': false,
+                    };
+                  }()
               ];
             }
           } catch (e, st) {
@@ -1398,9 +1430,19 @@ class TorrentDownloadHandler {
         final f = entry.value;
         final old = oldByName[normKey(f.name)] ??
             (i < currentList.length ? currentList[i] : null);
-        final bool isEstimated = f.downloadedBytes < 0 ||
-            (f.downloadedBytes == 0 && f.size > 0);
-        final dl = f.safeDownloadedBytes < 0 ? 0 : f.safeDownloadedBytes;
+        // The engine reports 0 for a size it cannot determine; the length we
+        // already parsed from the torrent metadata stays authoritative.
+        final len = TorrentFileNormalizer.resolveFileLength(
+          f.size,
+          previousLength: (old?['length'] as num?)?.toInt(),
+        );
+        final bool isEstimated =
+            f.downloadedBytes < 0 || (f.downloadedBytes == 0 && len > 0);
+        // No engine reading (< 0) is not "nothing downloaded" — keep the bytes
+        // we already knew about rather than resetting the row to zero.
+        final dl = f.downloadedBytes < 0
+            ? ((old?['downloadedBytes'] as num?)?.toInt() ?? 0)
+            : f.safeDownloadedBytes;
         final selected = old != null
             ? ((old['selected'] as bool?) ?? f.selected)
             : f.selected;
@@ -1409,13 +1451,15 @@ class TorrentDownloadHandler {
             : f.priority;
         return {
           'name': f.name,
-          'length': f.size,
+          'length': len,
           'downloadedBytes': dl,
           'selected': selected,
           'priority': priority,
-          'progress': f.size > 0 ? (dl / f.size).clamp(0.0, 1.0) : 0.0,
-          'isComplete': f.size > 0 && dl >= f.size,
+          'progress': len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0,
+          'isComplete': len > 0 && dl >= len,
           'progressEstimated': isEstimated,
+          if (len > 0 || (old?['lengthKnown'] as bool?) == true)
+            'lengthKnown': true,
         };
       }).toList();
     }
@@ -1426,11 +1470,17 @@ class TorrentDownloadHandler {
       final f = nativeFiles[i];
       final old = oldByName[normKey(f.name)] ??
           (i < currentList.length ? currentList[i] : null);
-      final dl = f.safeDownloadedBytes < 0 ? 0 : f.safeDownloadedBytes;
+      final len = TorrentFileNormalizer.resolveFileLength(
+        f.size,
+        previousLength: (old?['length'] as num?)?.toInt(),
+      );
+      final dl = f.downloadedBytes < 0
+          ? ((old?['downloadedBytes'] as num?)?.toInt() ?? 0)
+          : f.safeDownloadedBytes;
       final isEst =
-          f.downloadedBytes < 0 || (f.downloadedBytes == 0 && f.size > 0);
-      final prog = f.size > 0 ? (dl / f.size).clamp(0.0, 1.0) : 0.0;
-      final isDone = f.size > 0 && dl >= f.size;
+          f.downloadedBytes < 0 || (f.downloadedBytes == 0 && len > 0);
+      final prog = len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0;
+      final isDone = len > 0 && dl >= len;
       final selected =
           old != null ? ((old['selected'] as bool?) ?? f.selected) : f.selected;
       final priority =
@@ -1443,18 +1493,19 @@ class TorrentDownloadHandler {
           old['progress'] != prog ||
           old['isComplete'] != isDone ||
           old['name'] != f.name ||
-          old['length'] != f.size) {
+          old['length'] != len) {
         hasDiff = true;
         updated[i] = {
           if (old != null) ...old,
           'name': f.name,
-          'length': f.size,
+          'length': len,
           'downloadedBytes': dl,
           'selected': selected,
           'priority': priority,
           'progress': prog,
           'isComplete': isDone,
           'progressEstimated': isEst,
+          if (len > 0) 'lengthKnown': true,
         };
       }
     }
@@ -1503,16 +1554,38 @@ class TorrentDownloadHandler {
       if (latest?.hasMetadata == true) {
         final nativeFiles = _torrentService.getFiles(id);
         if (nativeFiles.isNotEmpty) {
-          rt.cachedAccurateFiles = nativeFiles.map((f) {
+          // Lengths already known for this task (parsed from the .torrent) are
+          // the fallback whenever the engine reports a size of 0.
+          final known = getTorrentFiles?.call();
+          String normKey(String name) =>
+              name.toLowerCase().replaceAll('\\', '/');
+          final knownByName = <String, int>{
+            if (known != null)
+              for (final f in known)
+                if (f['name'] is String &&
+                    ((f['length'] as num?)?.toInt() ?? 0) > 0)
+                  normKey(f['name'] as String): (f['length'] as num).toInt()
+          };
+          rt.cachedAccurateFiles =
+              nativeFiles.asMap().entries.map((entry) {
+            final i = entry.key;
+            final f = entry.value;
             final dl = f.safeDownloadedBytes < 0 ? 0 : f.safeDownloadedBytes;
+            final len = TorrentFileNormalizer.resolveFileLength(
+              f.size,
+              previousLength: knownByName[normKey(f.name)] ??
+                  (known != null && i < known.length
+                      ? (known[i]['length'] as num?)?.toInt()
+                      : null),
+            );
             return <String, dynamic>{
               'name': f.name,
-              'length': f.size,
+              'length': len,
               'downloadedBytes': dl,
               'selected': f.selected,
               'priority': f.priority,
-              'progress': f.size > 0 ? (dl / f.size).clamp(0.0, 1.0) : 0.0,
-              'isComplete': f.size > 0 && dl >= f.size,
+              'progress': len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0,
+              'isComplete': len > 0 && dl >= len,
               'progressEstimated': false,
             };
           }).toList();
@@ -1795,10 +1868,9 @@ class TorrentDownloadHandler {
     final rt = _getRuntime(id);
     final stateLabel = torrent.stateLabel.toLowerCase();
     final isStateChange = stateLabel != rt.lastStateLabel;
-    final isTerminal = stateLabel == 'seeding' ||
-        stateLabel == 'paused' ||
-        stateLabel == 'stopped' ||
-        stateLabel == 'error';
+    final isTerminal = torrent.isPaused ||
+        torrent.state == TorrentState.seeding ||
+        torrent.state == TorrentState.error;
     final now = DateTime.now();
 
     if (!isTerminal &&
@@ -1920,10 +1992,24 @@ class TorrentDownloadHandler {
         rt.lastAccurateSync = now;
         try {
           final saveDir = File(localFilePath).parent.path;
-          final accurate =
-              await _torrentService.getAccurateFileProgress(id, saveDir);
+          String normKey(String n) => n.toLowerCase().replaceAll('\\', '/');
+          final previousLengthMap = <String, int>{};
+          final previousLengthByIndex = <int, int>{};
+          if (effectiveFiles != null) {
+            for (var i = 0; i < effectiveFiles.length; i++) {
+              final len = (effectiveFiles[i]['length'] as num?)?.toInt() ?? 0;
+              if (len <= 0) continue;
+              previousLengthByIndex[i] = len;
+              final name = effectiveFiles[i]['name'];
+              if (name is String) previousLengthMap[normKey(name)] = len;
+            }
+          }
+          final accurate = await _torrentService.getAccurateFileProgress(
+            id,
+            saveDir,
+            knownSizes: previousLengthByIndex,
+          );
           if (accurate.isNotEmpty) {
-            String normKey(String n) => n.toLowerCase().replaceAll('\\', '/');
             final previousSelectedMap = <String, bool>{};
             final previousPriorityMap = <String, int>{};
             if (effectiveFiles != null) {
@@ -1938,18 +2024,28 @@ class TorrentDownloadHandler {
               }
             }
             resolvedFiles = [
-              for (final f in accurate)
-                {
-                  'name': f.name,
-                  'length': f.size,
-                  'downloadedBytes': f.downloadedBytes,
-                  'selected':
-                      previousSelectedMap[normKey(f.name)] ?? true,
-                  'priority': previousPriorityMap[normKey(f.name)] ?? 4,
-                  'progress': f.progress,
-                  'isComplete': f.isComplete,
-                  'progressEstimated': false,
-                }
+              for (var i = 0; i < accurate.length; i++)
+                () {
+                  final f = accurate[i];
+                  final len = TorrentFileNormalizer.resolveFileLength(
+                    f.size,
+                    previousLength: previousLengthMap[normKey(f.name)] ??
+                        previousLengthByIndex[i],
+                  );
+                  final dl = len > 0
+                      ? f.downloadedBytes.clamp(0, len)
+                      : f.downloadedBytes;
+                  return <String, dynamic>{
+                    'name': f.name,
+                    'length': len,
+                    'downloadedBytes': dl,
+                    'selected': previousSelectedMap[normKey(f.name)] ?? true,
+                    'priority': previousPriorityMap[normKey(f.name)] ?? 4,
+                    'progress': len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0,
+                    'isComplete': len > 0 && dl >= len,
+                    'progressEstimated': false,
+                  };
+                }()
             ];
             rt.cachedAccurateFiles = resolvedFiles;
           }
@@ -2101,16 +2197,16 @@ class TorrentDownloadHandler {
     } else if (speed == 0) {
       final elapsed =
           DateTime.now().difference(tracker.lastTorrentProgressTime);
-      final isNonDownloadPhase = stateLabel.contains('checking') ||
-          stateLabel.contains('downloading_metadata') ||
-          stateLabel.contains('allocating');
-      if (stateLabel != 'seeding' &&
-          stateLabel != 'paused' &&
-          stateLabel != 'stopped' &&
-          stateLabel != 'error' &&
+      final isNonDownloadPhase = torrent.isChecking ||
+          torrent.state == TorrentState.downloadingMetadata ||
+          torrent.state == TorrentState.allocating;
+      if (!torrent.isPaused &&
+          torrent.state != TorrentState.seeding &&
+          torrent.state != TorrentState.error &&
           !isNonDownloadPhase) {
         if (elapsed >= const Duration(minutes: 5)) {
-          if (stateLabel == 'downloading' && torrent.peerCount == 0) {
+          if (torrent.state == TorrentState.downloading &&
+              torrent.peerCount == 0) {
             resolvedStatusMessage = 'Stalled (no peers)';
             resolvedCycleState = CycleState.stalled;
           }
@@ -2123,10 +2219,9 @@ class TorrentDownloadHandler {
 
     final isRecovering =
         (previousState == 'stalled' || previousState == 'error') &&
-            (stateLabel == 'downloading' ||
-                stateLabel == 'downloading_metadata' ||
-                stateLabel == 'checking_files' ||
-                stateLabel == 'checking_resume_data');
+            (torrent.state == TorrentState.downloading ||
+                torrent.state == TorrentState.downloadingMetadata ||
+                torrent.isChecking);
     final String? resolvedTorrentName =
         (torrent.hasMetadata && torrent.name.isNotEmpty)
             ? torrent.name

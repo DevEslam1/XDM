@@ -20,6 +20,11 @@ typedef void*   lt_session_t;
 typedef int64_t lt_torrent_id;
 typedef int64_t lt_stream_id;
 
+/* Bridge ABI revision. Bump whenever a struct layout or an exported signature
+   changes. lt_version() reports it so Dart can refuse a mismatched binary
+   instead of silently reading misaligned fields. */
+#define LT_BRIDGE_ABI 2
+
 /* torrent states */
 #define LT_STATE_ERROR               -2
 #define LT_STATE_UNKNOWN             -1

@@ -50,6 +50,16 @@ class FakeTorrentNative implements ITorrentNative {
 
   set libraryVersion(String v) => _libraryVersion = v;
 
+  /// Scriptable bridge health, so tests can exercise the incompatible path.
+  String? fakeBridgeDiagnostics;
+  bool fakeBridgeCompatible = true;
+
+  @override
+  String? get bridgeDiagnostics => fakeBridgeDiagnostics;
+
+  @override
+  bool get isBridgeCompatible => fakeBridgeCompatible;
+
   @override
   Stream<NativeAlertEvent> get alertStream => _alertCtrl.stream;
 

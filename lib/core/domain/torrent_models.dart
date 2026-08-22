@@ -55,6 +55,9 @@ class TorrentUpdateInfo {
   final String stateLabel;
   // FIX: [Audit] Numeric state matching support
   final TorrentState state;
+  /// libtorrent reports pause as a flag orthogonal to [state], so a paused
+  /// torrent still carries its underlying state (e.g. downloading).
+  final bool isPaused;
   final int numSeeds;
   final int numPeers;
   final int? numComplete;
@@ -103,6 +106,7 @@ class TorrentUpdateInfo {
     required this.hasMetadata,
     required this.stateLabel,
     this.state = TorrentState.unknown,
+    this.isPaused = false,
     this.infoHash = '',
     this.infoHashV1 = '',
     this.infoHashV2 = '',

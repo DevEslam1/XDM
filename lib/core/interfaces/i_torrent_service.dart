@@ -56,10 +56,14 @@ abstract class ITorrentStats {
   String get nativeVersion;
   Stream<TorrentAlertEvent> get alertUpdates;
   List<TorrentAlertEvent> getRecentAlerts([int? torrentId]);
+  /// Per-file on-disk progress. [knownSizes] maps a file index to a length the
+  /// caller already trusts, used when the engine reports a size of `0`
+  /// (unknown) so files are not mistaken for complete.
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
     int torrentId,
-    String savePath,
-  );
+    String savePath, {
+    Map<int, int>? knownSizes,
+  });
   Future<Map<String, dynamic>?> getPieceProgress(int torrentId);
   // FIX: [Audit] Added getPeers to ITorrentStats to support PeerPanel
   Future<List<PeerConnectionQuality>> getPeers(int torrentId);

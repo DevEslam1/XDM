@@ -4,5 +4,7 @@
 /// server for instant video playback from torrent sources.
 library;
 
+export 'src/ffi_bindings.dart'
+    show BridgeAbiReport, kExpectedBridgeAbi, kExpectedStatusSize;
 export 'src/libtorrent_flutter_base.dart';
 export 'src/models.dart';

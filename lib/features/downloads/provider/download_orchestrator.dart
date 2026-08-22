@@ -1890,6 +1890,7 @@ class DownloadOrchestrator {
       String? tempFilePathOverride,
       String? categoryOverride,
       String? statusMessageOverride,
+      CycleState? cycleStateOverride,
     }) {
       // FIX-BG-08: When backgrounded, still update the in-memory task model so
       // stats are current the moment the app returns to foreground. Only skip
@@ -2033,6 +2034,9 @@ class DownloadOrchestrator {
             ),
             supportsResume: supportsResumeOverride ?? base.supportsResume,
             torrentFiles: torrentFilesOverride ?? base.torrentFiles,
+            // Merge owns the cycle state once it starts, so a trailing engine
+            // tick must not reset it back to downloading.
+            cycleState: base.isMergeInProgress ? null : cycleStateOverride,
             statusMessage: (statusMessageOverride == 'Completed' &&
                     hasAudio &&
                     audioBytesSoFar < audioContribution)
@@ -2846,6 +2850,7 @@ class DownloadOrchestrator {
                     tempFilePathOverride: newTempPath,
                     categoryOverride: newCategory,
                     statusMessageOverride: progress.statusMessage,
+                    cycleStateOverride: progress.cycleState,
                   );
 
                   if (base.isTorrent &&
@@ -3789,9 +3794,19 @@ class DownloadOrchestrator {
       if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
         if (torrentId != null) {
           try {
+            // Feed the lengths we already trust so the disk scan can tell a
+            // fully-allocated file apart from one whose size the engine cannot
+            // report (a 0 there means unknown, not empty).
+            final knownSizes = <int, int>{};
+            for (var i = 0; i < task.torrentFiles!.length; i++) {
+              final len =
+                  (task.torrentFiles![i]['length'] as num?)?.toInt() ?? 0;
+              if (len > 0) knownSizes[i] = len;
+            }
             final accurateFiles = await TorrentService.getAccurateFileProgress(
               torrentId,
               task.savePath,
+              knownSizes: knownSizes,
             );
             if (accurateFiles.isNotEmpty) {
               final accurateByIndex = {

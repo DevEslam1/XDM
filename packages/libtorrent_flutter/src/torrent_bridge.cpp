@@ -3029,7 +3029,13 @@ TORRENT_API void lt_set_upload_limit(lt_session_t session, int bps) {
 // ── utility ─────────────────────────────────────────────────────────────────────
 
 TORRENT_API const char* lt_last_error(void) { return g_last_error.c_str(); }
-TORRENT_API const char* lt_version(void)    { return LIBTORRENT_VERSION; }
+TORRENT_API const char* lt_version(void) {
+    static const std::string v = std::string(LIBTORRENT_VERSION)
+        + ";bridge_abi=" + std::to_string(LT_BRIDGE_ABI)
+        + ";status_size=" + std::to_string(sizeof(lt_torrent_status))
+        + ";stream_status_size=" + std::to_string(sizeof(lt_stream_status));
+    return v.c_str();
+}
 
 // ── preload ─────────────────────────────────────────────────────────────────────
 

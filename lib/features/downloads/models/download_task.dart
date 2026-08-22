@@ -472,8 +472,10 @@ class DownloadTask {
         total += len;
         if (isComp && len > 0) {
           dl += len;
-        } else if (d >= 0) {
-          dl += (len > 0 ? d.clamp(0, len) : d);
+        } else if (d >= 0 && len > 0) {
+          // Unknown-length entries add to neither total nor downloaded, so the
+          // ratio stays meaningful.
+          dl += d.clamp(0, len);
         }
       }
     }
@@ -1160,7 +1162,11 @@ class DownloadTask {
         final len = (f['length'] as num?)?.toInt() ?? 0;
         final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
         final isComp = (f['isComplete'] as bool?) == true;
-        return isComp || (len > 0 && dl >= len) || len == 0;
+        // A 0 length only means "complete" when the source vouched for it;
+        // an unresolved length is not evidence of completion.
+        final lengthKnown = len > 0 || (f['lengthKnown'] as bool?) == true;
+        if (!lengthKnown) return false;
+        return isComp || dl >= len;
       }).length;
       totalFileBytes ??= selected.fold<int>(
           0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
@@ -1169,7 +1175,9 @@ class DownloadTask {
         final dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
         final isComp = (f['isComplete'] as bool?) == true;
         if (isComp && len > 0) return sum + len;
-        return sum + (len > 0 ? dl.clamp(0, len) : (dl > 0 ? dl : 0));
+        // Keep this in step with totalFileBytes: entries with no known length
+        // contribute to neither side of the ratio.
+        return sum + (len > 0 ? dl.clamp(0, len) : 0);
       });
     }
 
@@ -1273,6 +1281,21 @@ class DownloadTask {
     return null;
   }
 
+  /// [copyWith] rebuilds `torrentFiles` as fresh lists of fresh maps, so
+  /// identity comparison would report a change on every poll tick. `listEquals`
+  /// alone is not enough either: it compares elements with `Map.==`, which is
+  /// also identity-based. Hence the per-entry [mapEquals].
+  static bool _torrentFilesEqual(
+      List<Map<String, dynamic>>? a, List<Map<String, dynamic>>? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return false;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!mapEquals(a[i], b[i])) return false;
+    }
+    return true;
+  }
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1287,7 +1310,23 @@ class DownloadTask {
           other.errorMessage == errorMessage &&
           other.category == category &&
           other.threadCount == threadCount &&
-          other.isMergeInProgress == isMergeInProgress);
+          other.isMergeInProgress == isMergeInProgress &&
+          other.statusMessage == statusMessage &&
+          other.cycleState == cycleState &&
+          other.pauseReason == pauseReason &&
+          other.torrentId == torrentId &&
+          other.uploadedBytes == uploadedBytes &&
+          other.totalPieces == totalPieces &&
+          other.completedPieces == completedPieces &&
+          other.totalFiles == totalFiles &&
+          other.completedFiles == completedFiles &&
+          other.totalFileBytes == totalFileBytes &&
+          other.downloadedFileBytes == downloadedFileBytes &&
+          other.seedingEnabled == seedingEnabled &&
+          other.audioDownloadedBytes == audioDownloadedBytes &&
+          other.audioProgress == audioProgress &&
+          listEquals(other.chunks, chunks) &&
+          _torrentFilesEqual(other.torrentFiles, torrentFiles));
 
   @override
   int get hashCode => Object.hash(
@@ -1300,5 +1339,12 @@ class DownloadTask {
         updatedAt,
         errorMessage,
         isMergeInProgress,
+        statusMessage,
+        cycleState,
+        torrentId,
+        uploadedBytes,
+        totalPieces,
+        completedPieces,
+        downloadedFileBytes,
       );
 }

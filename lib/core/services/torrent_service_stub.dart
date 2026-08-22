@@ -23,6 +23,10 @@ class TorrentService {
   static double get shareRatioLimit => 2.0;
   static int get maxSeedingTimeMinutes => 0;
 
+  /// No native bridge on this platform, so nothing to be incompatible with.
+  static bool bridgeCompatible = true;
+  static String? bridgeDiagnostics;
+
   static Future<bool> hasResumeData(String source) async => false;
 
   static Future<void> init() async {}
@@ -102,8 +106,9 @@ class TorrentService {
 
   static Future<List<TorrentFileProgress>> getAccurateFileProgress(
     int torrentId,
-    String savePath,
-  ) async =>
+    String savePath, {
+    Map<int, int>? knownSizes,
+  }) async =>
       [];
 
   static void addWebSeed(int torrentId, String url) {}
@@ -326,8 +331,9 @@ class TorrentServiceImpl implements ITorrentService {
   @override
   Future<List<TorrentFileProgress>> getAccurateFileProgress(
     int torrentId,
-    String savePath,
-  ) async =>
+    String savePath, {
+    Map<int, int>? knownSizes,
+  }) async =>
       [];
 
   @override

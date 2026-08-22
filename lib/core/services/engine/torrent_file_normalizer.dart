@@ -9,30 +9,69 @@ class TorrentFileNormalizer {
   static bool isTorrentFileSelected(Map<String, dynamic> f) =>
       (f['selected'] as bool?) ?? true;
 
+  /// Resolves the byte length of a file entry from a fresh engine reading.
+  ///
+  /// A native size of `0` means *unknown* — the metadata is not parsed yet, or
+  /// the loaded native bridge is not ABI-compatible with these bindings and is
+  /// handing back a zeroed struct tail. It never means "this file is empty", so
+  /// a length that is already known (e.g. parsed from the `.torrent` bencode)
+  /// always wins over a zero.
+  static int resolveFileLength(int nativeSize, {int? previousLength}) {
+    if (nativeSize > 0) return nativeSize;
+    if (previousLength != null && previousLength > 0) return previousLength;
+    return 0;
+  }
+
+  /// Whether a file entry carries a trustworthy byte length.
+  ///
+  /// Sources that genuinely know a file is zero bytes long (the torrent's own
+  /// metadata) mark the entry with `lengthKnown: true`; everything else leaves
+  /// a `0` length as unverified.
+  static bool isLengthKnown(Map<String, dynamic> f) {
+    final len = (f['length'] as num?)?.toInt() ?? 0;
+    if (len > 0) return true;
+    return (f['lengthKnown'] as bool?) == true;
+  }
+
   /// Normalizes a single torrent file entry, ensuring all fields are present
   /// and properly typed. Mutates and returns the normalized map.
   static Map<String, dynamic> normalizeTorrentFile(Map<String, dynamic> f) {
     final len = (f['length'] as num?)?.toInt() ?? 0;
     final selected = isTorrentFileSelected(f);
+    final lengthKnown = isLengthKnown(f);
     var dl = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
     if (!selected) {
       dl = 0;
+    } else if (len > 0) {
+      dl = dl.clamp(0, len);
     } else {
-      dl = len > 0 ? dl.clamp(0, len) : 0;
+      // Unknown total: keep the transferred bytes we do know, they are real.
+      dl = dl < 0 ? 0 : dl;
     }
-    final progress = selected
-        ? (len > 0 ? (dl / len).clamp(0.0, 1.0) : (len == 0 ? 1.0 : 0.0))
-        : 0.0;
+    final double progress;
+    if (!selected) {
+      progress = 0.0;
+    } else if (len > 0) {
+      progress = (dl / len).clamp(0.0, 1.0);
+    } else {
+      // A verified empty file is trivially complete; an unknown size is not.
+      progress = lengthKnown ? 1.0 : 0.0;
+    }
     final isEstimated = (f['progressEstimated'] as bool?) ?? false;
     final isExplicitlyComplete = (f['isComplete'] as bool?) == true;
     f['name'] = f['name'] as String? ?? 'file';
     f['length'] = len;
+    f['lengthKnown'] = lengthKnown;
     f['downloadedBytes'] = dl;
     f['selected'] = selected;
     f['priority'] = (f['priority'] as num?)?.toInt() ?? (selected ? 4 : 0);
     f['speed'] = (f['speed'] as num?)?.toDouble() ?? 0.0;
     f['progress'] = progress;
-    f['isComplete'] = selected && (isExplicitlyComplete || (!isEstimated && (len == 0 || (len > 0 && dl >= len))));
+    // Completion can only be asserted against a known length. An unverified
+    // zero length used to satisfy `dl >= len` and reported every file as done.
+    f['isComplete'] = selected &&
+        lengthKnown &&
+        (isExplicitlyComplete || (!isEstimated && dl >= len));
     f['progressEstimated'] = isEstimated;
     return f;
   }
@@ -87,7 +126,9 @@ class TorrentFileNormalizer {
         final dl = (map['downloadedBytes'] as num?)?.toInt() ?? 0;
         total++;
         bytes += len;
-        downloaded += dl;
+        // Skip bytes for unknown-length entries so `downloaded / bytes` cannot
+        // exceed 1.0 when a file's total is not resolved yet.
+        downloaded += len > 0 ? dl.clamp(0, len) : 0;
         if (map['isComplete'] == true) {
           done++;
         }
@@ -102,8 +143,10 @@ class TorrentFileNormalizer {
         final dl = (map['downloadedBytes'] as num?)?.toInt() ?? 0;
         total++;
         bytes += len;
-        downloaded += dl;
-        if (len == 0 || dl >= len) {
+        downloaded += len > 0 ? dl.clamp(0, len) : 0;
+        // Reuse the normalized verdict instead of re-deriving it from a length
+        // that may be unknown (`len == 0` is not evidence of completion).
+        if (isLengthKnown(map) && dl >= len) {
           done++;
         }
       }
