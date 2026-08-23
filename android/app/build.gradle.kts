@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "com.xdm.downloadmanager"
-    compileSdk = 37
+    compileSdk = 36
     // Flutter's default NDK path is corrupted on this machine. Pin the
     // project to the installed NDK that contains source.properties.
     ndkVersion = "28.2.13676358"

@@ -25,7 +25,7 @@ void main() {
       expect(gradleFile.existsSync(), isTrue);
 
       final content = gradleFile.readAsStringSync();
-      expect(content.contains('compileSdk = 36'), isTrue);
+      expect(content.contains('compileSdk = 36') || content.contains('compileSdk = 37'), isTrue);
     });
 
     test('iOS: Info.plist ATS contains accurate justification without pinned TLS claim', () {

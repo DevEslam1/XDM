@@ -534,6 +534,7 @@ class DownloadTask {
           : (fileSize > 0
               ? fileSize
               : (downloadedBytes > 0 ? downloadedBytes : 0));
+      if (videoSize <= 0) return 0;
       final resolvedAudioSize = audioSize > 0
           ? audioSize
           : (audioDownloadedBytes > 0 ? audioDownloadedBytes : 0);
