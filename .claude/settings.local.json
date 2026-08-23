@@ -8,7 +8,9 @@
       "Bash(ls -a packages/libtorrent_flutter/.github/workflows)",
       "Bash(cat .gitmodules)",
       "Bash(flutter analyze *)",
-      "Bash(flutter test *)"
+      "Bash(flutter test *)",
+      "Bash(flutter build *)",
+      "Bash(python -c 'import zipfile *)"
     ]
   }
 }
