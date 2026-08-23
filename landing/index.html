@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cyber">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XDM — Extreme Download Manager | Fast, Multi-Threaded, Open Source</title>
+    <meta name="description" content="XDM is a next-generation multi-threaded download manager, BitTorrent client & smart browser for Windows, Android, macOS, Linux, and iOS. Download at Maximum Velocity.">
+    <meta name="keywords" content="download manager, XDM, torrent client, video downloader, youtube 4k downloader, multi-threaded downloader, fast downloader, flutter download manager, open source idm alternative">
+    <meta name="author" content="DevEslam1">
+    <meta name="theme-color" content="#0B0D13">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://deveslam1.github.io/XDM/">
+    <meta property="og:title" content="XDM — Extreme Download Manager">
+    <meta property="og:description" content="Download at Maximum Velocity. 16-segment isolate engine, built-in browser, media sniffer, YouTube 4K extraction, full BitTorrent support. Free & Open Source.">
+    <meta property="og:image" content="assets/icon.png">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="XDM — Extreme Download Manager">
+    <meta name="twitter:description" content="Download at Maximum Velocity. 16-segment isolate engine, built-in browser, media sniffer, YouTube 4K, and BitTorrent client. Free & Open Source.">
+    <meta name="twitter:image" content="assets/icon.png">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="assets/icon.png">
+    <link rel="apple-touch-icon" href="assets/icon.png">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <a href="#main" class="skip-link">Skip to Content</a>
+
+    <!-- Ambient Background Lighting -->
+    <div class="ambient-bg" aria-hidden="true">
+        <div class="cyber-grid"></div>
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+        <div class="glow-orb orb-3"></div>
+    </div>
+
+    <!-- Navigation Bar -->
+    <header class="nav-header" id="navHeader">
+        <nav class="nav" id="nav">
+            <div class="nav-left">
+                <a href="#main" class="nav-logo" aria-label="XDM Home">
+                    <div class="logo-badge">
+                        <img src="assets/icon.png" alt="XDM Logo" class="logo-img" width="28" height="28">
+                    </div>
+                    <div class="logo-text-group">
+                        <span class="logo-text">XDM</span>
+                        <span class="logo-version" id="navVersionTag">v3.0</span>
+                    </div>
+                </a>
+            </div>
+
+            <div class="nav-center" id="navLinks">
+                <a href="#features" class="nav-link active">Features</a>
+                <a href="#simulator" class="nav-link">Engine</a>
+                <a href="#browser" class="nav-link">Browser</a>
+                <a href="#torrent" class="nav-link">Torrents</a>
+                <a href="#comparison" class="nav-link">Compare</a>
+                <a href="#download" class="nav-link">Downloads</a>
+                <a href="#faq" class="nav-link">FAQ</a>
+            </div>
+
+            <div class="nav-right">
+                <!-- Theme Switcher -->
+                <div class="theme-menu-wrapper">
+                    <button class="theme-btn" id="themeToggle" aria-label="Change Theme" title="Switch UI Theme">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="4"></circle>
+                            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+                        </svg>
+                    </button>
+                    <div class="theme-dropdown" id="themeDropdown">
+                        <button class="theme-opt active" data-theme-val="cyber">
+                            <span class="theme-dot dot-cyber"></span> Cyber Blue
+                        </button>
+                        <button class="theme-opt" data-theme-val="amoled">
+                            <span class="theme-dot dot-amoled"></span> Pure AMOLED
+                        </button>
+                        <button class="theme-opt" data-theme-val="emerald">
+                            <span class="theme-dot dot-emerald"></span> Emerald Matrix
+                        </button>
+                        <button class="theme-opt" data-theme-val="violet">
+                            <span class="theme-dot dot-violet"></span> Aurora Violet
+                        </button>
+                        <button class="theme-opt" data-theme-val="light">
+                            <span class="theme-dot dot-light"></span> Light Deck
+                        </button>
+                    </div>
+                </div>
+
+                <!-- GitHub Stars Pill -->
+                <a href="https://github.com/DevEslam1/XDM" class="btn btn-github" target="_blank" rel="noopener" aria-label="GitHub Repository">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2A10 10 0 002 12c0 4.42 2.87 8.17 6.84 9.5.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.56 9.56 0 015 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85V21c0 .27.18.58.69.48A10 10 0 0022 12 10 10 0 0012 2z"/>
+                    </svg>
+                    <span>Star</span>
+                    <span class="gh-star-count" id="githubStars">★ 1.2k</span>
+                </a>
+
+                <!-- Share App Trigger -->
+                <button class="btn btn-share" id="openShareModal" aria-label="Share XDM" title="Share XDM">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="18" cy="5" r="3"></circle>
+                        <circle cx="6" cy="12" r="3"></circle>
+                        <circle cx="18" cy="19" r="3"></circle>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                    </svg>
+                    <span class="share-btn-text">Share</span>
+                </button>
+
+                <div class="nav-divider"></div>
+
+                <!-- Primary Download Link -->
+                <a href="#download" class="btn btn-primary btn-sm nav-download-btn">
+                    <span>Download</span>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 5v14M19 12l-7 7-7-7"/>
+                    </svg>
+                </a>
+
+                <!-- Mobile Hamburger Button -->
+                <button class="nav-mobile-toggle" id="mobileToggle" aria-label="Toggle mobile menu" aria-expanded="false">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Mobile Menu Drawer -->
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="#features" class="mobile-link">⚡ Features</a>
+        <a href="#simulator" class="mobile-link">🚀 Velocity Engine</a>
+        <a href="#browser" class="mobile-link">🌐 Browser &amp; Sniffer</a>
+        <a href="#torrent" class="mobile-link">🧲 BitTorrent</a>
+        <a href="#comparison" class="mobile-link">⚖️ Compare</a>
+        <a href="#download" class="mobile-link">📦 Platform Downloads</a>
+        <a href="#faq" class="mobile-link">❓ FAQ</a>
+        <div class="mobile-actions">
+            <button class="btn btn-share btn-block" id="mobileShareBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                </svg>
+                Share App with Friends
+            </button>
+            <a href="#download" class="btn btn-primary btn-block">Download for Free</a>
+        </div>
+    </div>
+
+    <main id="main">
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <div class="container hero-grid">
+                <div class="hero-content">
+                    <div class="hero-badge reveal">
+                        <span class="badge-pulsing-dot"></span>
+                        <span class="badge-tag">XDM v3.0 // ANDROID RELEASE</span>
+                        <span class="badge-sep">|</span>
+                        <span class="badge-info">HTTP/3 QUIC &amp; BitTorrent</span>
+                    </div>
+
+                    <h1 class="hero-title reveal">
+                        Download at <br>
+                        <span class="gradient-text">Maximum Velocity.</span>
+                    </h1>
+
+                    <p class="hero-description reveal">
+                        A multi-threaded Flutter download engine with pooled background isolates, CRC32 journal recovery, a built-in media sniffing browser, YouTube 4K extraction, and full BitTorrent seeding for Android.
+                    </p>
+
+                    <div class="hero-cta-group reveal">
+                        <a href="https://github.com/DevEslam1/XDM/releases/latest" class="btn btn-primary btn-lg hero-main-btn" id="heroAutoDownloadBtn" target="_blank" rel="noopener">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M6 18h12v-5.5a6 6 0 00-12 0V18zM8.5 9.5L7 7M15.5 9.5L17 7"/>
+                                <circle cx="9.5" cy="13" r="1"/>
+                                <circle cx="14.5" cy="13" r="1"/>
+                            </svg>
+                            <span id="heroDetectedText">Download Android APK</span>
+                        </a>
+
+                        <a href="#simulator" class="btn btn-secondary btn-lg">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                            </svg>
+                            Test Velocity Simulator
+                        </a>
+                    </div>
+
+                    <div class="hero-os-detector reveal">
+                        <span class="os-detect-dot"></span>
+                        <span class="os-detect-text" id="osDetectorLabel">✓ Stable Build: Android (8.0+) • Free &amp; Open Source • 100% Ad-Free</span>
+                    </div>
+
+                    <!-- Live Highlight Stats -->
+                    <div class="hero-stats reveal">
+                        <div class="stat-card">
+                            <div class="stat-num"><span data-count="16">16</span>x</div>
+                            <div class="stat-title">Parallel Segments</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-num"><span data-count="200">200</span>+</div>
+                            <div class="stat-title">Media Sites Sniffed</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-num">Android</div>
+                            <div class="stat-title">Live Build (v3.0)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-num">0%</div>
+                            <div class="stat-title">Telemetry / Ads</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hero Interactive Cockpit Preview -->
+                <div class="hero-visual reveal">
+                    <div class="cockpit-card">
+                        <div class="cockpit-header">
+                            <div class="window-controls">
+                                <span class="win-btn win-close"></span>
+                                <span class="win-btn win-min"></span>
+                                <span class="win-btn win-max"></span>
+                            </div>
+                            <div class="cockpit-title">XDM Cockpit — Signal Deck</div>
+                            <div class="cockpit-meter">
+                                <span class="meter-live-indicator"></span>
+                                <span id="heroLiveSpeed">148.6 MB/s</span>
+                            </div>
+                        </div>
+
+                        <div class="cockpit-body">
+                            <!-- Task 1: ISO Download -->
+                            <div class="task-row active-task">
+                                <div class="task-icon task-icon-iso">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                                    </svg>
+                                </div>
+                                <div class="task-details">
+                                    <div class="task-name-row">
+                                        <span class="task-name">archlinux-2026.iso</span>
+                                        <span class="task-percentage" id="task1Percent">84%</span>
+                                    </div>
+                                    <div class="task-subtext">3.8 GB / 4.5 GB • 16 Streams • <span id="task1Speed" class="text-neon-cyan">88.4 MB/s</span> • ETA: 8s</div>
+                                    
+                                    <!-- 16-Segment Chunk Bar -->
+                                    <div class="chunk-bar">
+                                        <div class="chunk c-100"></div><div class="chunk c-100"></div>
+                                        <div class="chunk c-100"></div><div class="chunk c-100"></div>
+                                        <div class="chunk c-90"></div><div class="chunk c-85"></div>
+                                        <div class="chunk c-95"></div><div class="chunk c-80"></div>
+                                        <div class="chunk c-75"></div><div class="chunk c-70"></div>
+                                        <div class="chunk c-80"></div><div class="chunk c-85"></div>
+                                        <div class="chunk c-60"></div><div class="chunk c-65"></div>
+                                        <div class="chunk c-50"></div><div class="chunk c-45"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Task 2: 4K Video Extract -->
+                            <div class="task-row">
+                                <div class="task-icon task-icon-video">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                                    </svg>
+                                </div>
+                                <div class="task-details">
+                                    <div class="task-name-row">
+                                        <span class="task-name">Cyberpunk_Cinematic_4K.mkv</span>
+                                        <span class="task-percentage">92%</span>
+                                    </div>
+                                    <div class="task-subtext">1.2 GB / 1.3 GB • Muxing Video + Audio (FFmpeg) • <span class="text-neon-emerald">Done</span></div>
+                                    <div class="progress-track">
+                                        <div class="progress-fill" style="width: 92%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Task 3: Torrent Magnet -->
+                            <div class="task-row">
+                                <div class="task-icon task-icon-torrent">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M6 18h12v-5.5a6 6 0 00-12 0V18z"/>
+                                        <circle cx="12" cy="9" r="2"/>
+                                    </svg>
+                                </div>
+                                <div class="task-details">
+                                    <div class="task-name-row">
+                                        <span class="task-name">BigBuckBunny_4K_60fps.torrent</span>
+                                        <span class="task-percentage">Seeding (2.4x)</span>
+                                    </div>
+                                    <div class="task-subtext">DHT: 184 Peers • ↑ 14.2 MB/s • ↓ 0 KB/s • Health: Excellent</div>
+                                </div>
+                            </div>
+
+                            <!-- Live Throughput Sparkline Graph -->
+                            <div class="cockpit-graph-box">
+                                <div class="graph-top-label">
+                                    <span>Real-Time Pooled Isolate Throughput</span>
+                                    <span class="graph-stat-badge">CRC32 Journal: Active</span>
+                                </div>
+                                <svg class="hero-sparkline-svg" viewBox="0 0 360 70" preserveAspectRatio="none">
+                                    <defs>
+                                        <linearGradient id="heroGradient" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stop-color="var(--primary-color)" stop-opacity="0.35"/>
+                                            <stop offset="100%" stop-color="var(--primary-color)" stop-opacity="0"/>
+                                        </linearGradient>
+                                    </defs>
+                                    <path id="heroSparkArea" fill="url(#heroGradient)"></path>
+                                    <path id="heroSparkLine" fill="none" stroke="var(--primary-color)" stroke-width="2.5" stroke-linecap="round"></path>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Protocol & Feature Marquee -->
+        <section class="marquee-strip" aria-hidden="true">
+            <div class="marquee-track">
+                <div class="marquee-group">
+                    <span class="marquee-item">⚡ 16-Segment Isolate Engine</span>
+                    <span class="marquee-item">🧲 BitTorrent v1 &amp; v2 + DHT</span>
+                    <span class="marquee-item">🌐 Built-in Media Sniffer</span>
+                    <span class="marquee-item">📺 YouTube 4K &amp; Playlists</span>
+                    <span class="marquee-item">🛡️ Dynamic Ad-Blocker</span>
+                    <span class="marquee-item">🚀 HTTP/3 QUIC Probing</span>
+                    <span class="marquee-item">📱 iOS Dynamic Island &amp; Widgets</span>
+                    <span class="marquee-item">🤖 Android Background Service</span>
+                    <span class="marquee-item">💻 Windows / macOS / Linux</span>
+                </div>
+                <div class="marquee-group">
+                    <span class="marquee-item">⚡ 16-Segment Isolate Engine</span>
+                    <span class="marquee-item">🧲 BitTorrent v1 &amp; v2 + DHT</span>
+                    <span class="marquee-item">🌐 Built-in Media Sniffer</span>
+                    <span class="marquee-item">📺 YouTube 4K &amp; Playlists</span>
+                    <span class="marquee-item">🛡️ Dynamic Ad-Blocker</span>
+                    <span class="marquee-item">🚀 HTTP/3 QUIC Probing</span>
+                    <span class="marquee-item">📱 iOS Dynamic Island &amp; Widgets</span>
+                    <span class="marquee-item">🤖 Android Background Service</span>
+                    <span class="marquee-item">💻 Windows / macOS / Linux</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Core Features Grid -->
+        <section class="section" id="features">
+            <div class="container">
+                <div class="section-header reveal">
+                    <span class="section-tag">Core Architecture</span>
+                    <h2 class="section-title">Engineered For <span class="gradient-text">Pure Throughput</span></h2>
+                    <p class="section-subtitle">No bloatware, no browser hijackers, no paywalls. Built from the ground up on Flutter 3 &amp; custom Dart Isolate workers.</p>
+                </div>
+
+                <div class="features-grid">
+                    <!-- Feature 1 -->
+                    <div class="feature-card feature-highlight reveal">
+                        <div class="feature-card-glow"></div>
+                        <div class="feature-icon feature-icon-cyan">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                            </svg>
+                        </div>
+                        <h3 class="feature-title">Pooled Isolate Multi-Segmenting</h3>
+                        <p class="feature-desc">Breaks files into up to 16 dynamic byte ranges. All HTTP streaming and disk I/O are isolated on background CPU threads to guarantee 60/120 FPS UI smoothness.</p>
+                        <div class="feature-mini-visual">
+                            <div class="threads-visual-bar">
+                                <span>Thread Workers (16x):</span>
+                                <div class="thread-bars-grid">
+                                    <div class="t-bar tb-1"></div><div class="t-bar tb-2"></div>
+                                    <div class="t-bar tb-3"></div><div class="t-bar tb-4"></div>
+                                    <div class="t-bar tb-5"></div><div class="t-bar tb-6"></div>
+                                    <div class="t-bar tb-7"></div><div class="t-bar tb-8"></div>
+                                    <div class="t-bar tb-9"></div><div class="t-bar tb-10"></div>
+                                    <div class="t-bar tb-11"></div><div class="t-bar tb-12"></div>
+                                    <div class="t-bar tb-13"></div><div class="t-bar tb-14"></div>
+                                    <div class="t-bar tb-15"></div><div class="t-bar tb-16"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature 2 -->
+                    <div class="feature-card reveal">
+                        <div class="feature-icon feature-icon-emerald">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                                <path d="M9 12l2 2 4-4"/>
+                            </svg>
+                        </div>
+                        <h3 class="feature-title">CRC32 Journal &amp; Spot Check</h3>
+                        <p class="feature-desc">Append-only journal file writes protect against sudden crashes or power cuts. Before resume, 64KB boundary spot-checking auto-heals corrupted segments.</p>
+                    </div>
+
+                    <!-- Feature 3 -->
+                    <div class="feature-card reveal">
+                        <div class="feature-icon feature-icon-violet">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="2" y1="12" x2="22" y2="12"/>
+                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                            </svg>
+                        </div>
+                        <h3 class="feature-title">HTTP/2 &amp; HTTP/3 QUIC Probing</h3>
+                        <p class="feature-desc">Intelligent host connection prober negotiates modern protocols via Cronet (Android) and Cupertino HTTP (iOS/macOS) for sub-millisecond TLS handshakes.</p>
+                    </div>
+
+                    <!-- Feature 4 -->
+                    <div class="feature-card reveal">
+                        <div class="feature-icon feature-icon-amber">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="9"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                        </div>
+                        <h3 class="feature-title">Bandwidth Governor &amp; Schedules</h3>
+                        <p class="feature-desc">Token-bucket rate limiter with per-domain limits, global download/upload caps, and automated overnight time-window scheduling.</p>
+                    </div>
+
+                    <!-- Feature 5 -->
+                    <div class="feature-card reveal">
+                        <div class="feature-icon feature-icon-red">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                            </svg>
+                        </div>
+                        <h3 class="feature-title">Mirror Circuit Breakers</h3>
+                        <p class="feature-desc">Supply multiple mirror URLs for a single file. XDM runs live latency checks and automatically fails over to the fastest healthy node.</p>
+                    </div>
+
+                    <!-- Feature 6 -->
+                    <div class="feature-card reveal">
+                        <div class="feature-icon feature-icon-pink">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                            </svg>
+                        </div>
+                        <h3 class="feature-title">App Lock &amp; AES-256 Backups</h3>
+                        <p class="feature-desc">Biometric &amp; PIN lock, keychain credentials encryption, anti-fingerprinting automation cloak, and encrypted backup portability.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Interactive Velocity Engine Simulator -->
+        <section class="section section-simulator" id="simulator">
+            <div class="container">
+                <div class="simulator-wrapper reveal">
+                    <div class="simulator-intro">
+                        <span class="section-tag">Interactive Demo</span>
+                        <h2 class="section-title">Test the <span class="gradient-text">Velocity Engine</span></h2>
+                        <p class="section-subtitle">Experience how XDM’s isolate pool balances 16 concurrent HTTP streams, dynamic segment chunk allocation, and CRC32 verification in real time.</p>
+                    </div>
+
+                    <div class="simulator-console">
+                        <div class="sim-topbar">
+                            <div class="sim-url-input-wrap">
+                                <span class="sim-protocol">https://</span>
+                                <input type="text" id="simUrlInput" value="mirror.fastcdn.org/releases/v3.0.0/bigfile_payload_4k.iso" class="sim-url-input" spellcheck="false">
+                            </div>
+                            <div class="sim-controls">
+                                <label for="simThreadSelect" class="sim-label">Threads:</label>
+                                <select id="simThreadSelect" class="sim-select">
+                                    <option value="4">4 Segments</option>
+                                    <option value="8">8 Segments</option>
+                                    <option value="16" selected>16 Segments (Max)</option>
+                                </select>
+                                <button class="btn btn-primary btn-sm" id="simStartBtn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                    </svg>
+                                    <span id="simBtnText">Start Velocity Test</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="sim-dash-grid">
+                            <!-- Left: Gauges -->
+                            <div class="sim-gauge-panel">
+                                <div class="sim-speed-meter">
+                                    <div class="meter-num" id="simSpeedVal">0.0</div>
+                                    <div class="meter-unit">MB/s Throughput</div>
+                                    <div class="meter-sub" id="simEtaVal">Idle • Ready to Stream</div>
+                                </div>
+
+                                <div class="sim-stats-list">
+                                    <div class="sim-stat-row">
+                                        <span>Allocated Workers</span>
+                                        <strong id="simWorkerCount">16 Isolates</strong>
+                                    </div>
+                                    <div class="sim-stat-row">
+                                        <span>Journal CRC32</span>
+                                        <strong class="text-neon-emerald" id="simCrcStatus">0x8F94D2E1 (Verified)</strong>
+                                    </div>
+                                    <div class="sim-stat-row">
+                                        <span>Downloaded</span>
+                                        <strong id="simBytesTransferred">0 MB / 4.2 GB</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right: Live Segment Matrix -->
+                            <div class="sim-matrix-panel">
+                                <div class="matrix-header">
+                                    <span>Concurrent Segment Byte Map</span>
+                                    <span id="simTotalPercent">0%</span>
+                                </div>
+
+                                <div class="segments-grid" id="simSegmentsGrid">
+                                    <!-- Populated by JS -->
+                                </div>
+
+                                <div class="sim-terminal-log" id="simTerminalLog">
+                                    <div class="log-line text-muted">[System] Ready to benchmark connection to server.</div>
+                                    <div class="log-line text-muted">[IsolatePool] 16 worker isolates idle in background memory.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Smart Browser & Media Sniffer Section -->
+        <section class="section" id="browser">
+            <div class="container">
+                <div class="split-layout">
+                    <div class="split-text reveal">
+                        <span class="section-tag">Integrated Engine</span>
+                        <h2 class="section-title">Smart Browser &amp; <span class="gradient-text">AI Sniffer</span></h2>
+                        <p class="section-subtitle">Browse any website without ads or trackers. The moment a video, audio, HLS manifest, or direct download link appears, XDM sniffs it instantly for 1-tap download.</p>
+                        
+                        <div class="bullet-features">
+                            <div class="bullet-item">
+                                <div class="bullet-icon">🛡️</div>
+                                <div>
+                                    <h4>Built-in Dynamic Ad-Blocker</h4>
+                                    <p>Blocks invasive popups, redirects, and trackers before they load.</p>
+                                </div>
+                            </div>
+                            <div class="bullet-item">
+                                <div class="bullet-icon">🎯</div>
+                                <div>
+                                    <h4>HLS (.m3u8) &amp; DASH (.mpd) Sniffer</h4>
+                                    <p>Captures live and protected video streaming segments directly.</p>
+                                </div>
+                            </div>
+                            <div class="bullet-item">
+                                <div class="bullet-icon">🕶️</div>
+                                <div>
+                                    <h4>True Incognito &amp; Dark Mode</h4>
+                                    <p>Zero cookie persistence, media-preserving high contrast dark styling.</p>
+                                </div>
+                            </div>
+                            <div class="bullet-item">
+                                <div class="bullet-icon">🧩</div>
+                                <div>
+                                    <h4>Firefox Android Extension</h4>
+                                    <p>Send links from your favorite mobile browser right into XDM.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="split-visual reveal">
+                        <div class="browser-mockup">
+                            <div class="browser-tab-strip">
+                                <div class="b-tab active">
+                                    <span class="b-tab-icon">▶</span>
+                                    <span class="b-tab-name">4K Video Stream</span>
+                                    <span class="b-tab-x">×</span>
+                                </div>
+                                <div class="b-tab">
+                                    <span class="b-tab-name">Archive ISO</span>
+                                </div>
+                                <div class="b-tab-new">+</div>
+                            </div>
+                            <div class="browser-address-bar">
+                                <span class="badge-https">HTTPS</span>
+                                <span class="b-url">streamhub.video/watch?v=ultra4k</span>
+                                <span class="adblock-shield" title="24 Trackers Blocked">🛡️ 24</span>
+                            </div>
+                            <div class="browser-viewport">
+                                <div class="browser-video-preview">
+                                    <div class="video-play-ring">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                        </svg>
+                                    </div>
+                                    <span class="video-length">4K Ultra HD • 60 FPS</span>
+                                </div>
+
+                                <!-- Sniffer Floating Card -->
+                                <div class="sniff-pill-card">
+                                    <div class="sniff-left">
+                                        <span class="sniff-pulse"></span>
+                                        <div>
+                                            <div class="sniff-title">Media Sniffed: 2160p Master</div>
+                                            <div class="sniff-meta">MP4 • 1.84 GB • Multi-Segment Ready</div>
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-primary btn-sm sniff-action-btn">
+                                        Download (16x)
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- BitTorrent & Seeding Section -->
+        <section class="section section-dark" id="torrent">
+            <div class="container">
+                <div class="split-layout reverse-layout">
+                    <div class="split-text reveal">
+                        <span class="section-tag">BitTorrent v1 / v2</span>
+                        <h2 class="section-title">Full BitTorrent &amp; <span class="gradient-text-green">DHT Client</span></h2>
+                        <p class="section-subtitle">No separate torrent client needed. XDM handles .torrent files and magnet links with full DHT bootstrap, peer exchange, encryption, and custom seeding guardrails.</p>
+                        
+                        <div class="torrent-tags-cloud">
+                            <span class="tag-pill">Magnet v1 &amp; v2</span>
+                            <span class="tag-pill">DHT Node Boost</span>
+                            <span class="tag-pill">UPnP / NAT-PMP</span>
+                            <span class="tag-pill">PEX &amp; LPD</span>
+                            <span class="tag-pill">Protocol Encryption</span>
+                            <span class="tag-pill">Per-File Priority</span>
+                            <span class="tag-pill">Torrent Creation</span>
+                            <span class="tag-pill">Wi-Fi Only Seeding</span>
+                        </div>
+
+                        <div class="torrent-feature-bullets">
+                            <div class="t-bullet">
+                                <strong>⚡ Sequential Streaming:</strong> Watch movies or listen to music while the torrent is actively downloading.
+                            </div>
+                            <div class="t-bullet">
+                                <strong>🔋 Smart Battery Guard:</strong> Automatically pause seeding when battery is low or charging disconnects.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="split-visual reveal">
+                        <div class="torrent-card">
+                            <div class="torrent-card-head">
+                                <span class="torrent-tag-live">P2P Network Active</span>
+                                <span class="torrent-nodes">DHT: 284 Nodes Connected</span>
+                            </div>
+                            <div class="torrent-details-box">
+                                <div class="torrent-file-name">Ubuntu-26.04-LTS-Desktop-x86_64.iso</div>
+                                <div class="torrent-speed-row">
+                                    <span class="t-down">↓ 52.4 MB/s</span>
+                                    <span class="t-up">↑ 18.2 MB/s</span>
+                                    <span class="t-ratio">Ratio: 3.48</span>
+                                </div>
+                                <div class="torrent-piece-bar">
+                                    <!-- Visual Pieces -->
+                                    <div class="t-piece tp-done"></div><div class="t-piece tp-done"></div>
+                                    <div class="t-piece tp-done"></div><div class="t-piece tp-done"></div>
+                                    <div class="t-piece tp-done"></div><div class="t-piece tp-prog"></div>
+                                    <div class="t-piece tp-prog"></div><div class="t-piece tp-done"></div>
+                                    <div class="t-piece tp-done"></div><div class="t-piece tp-done"></div>
+                                    <div class="t-piece tp-done"></div><div class="t-piece tp-empty"></div>
+                                </div>
+                                <div class="torrent-peers-table">
+                                    <div class="peer-row"><span>🇩🇪 185.12.94.*</span><span>12.4 MB/s</span><span>Encrypted (uTP)</span></div>
+                                    <div class="peer-row"><span>🇺🇸 104.28.18.*</span><span>9.8 MB/s</span><span>Encrypted (TCP)</span></div>
+                                    <div class="peer-row"><span>🇯🇵 133.242.1.*</span><span>8.1 MB/s</span><span>Encrypted (uTP)</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Feature Comparison Matrix -->
+        <section class="section" id="comparison">
+            <div class="container">
+                <div class="section-header reveal">
+                    <span class="section-tag">Direct Comparison</span>
+                    <h2 class="section-title">Why Power Users Choose <span class="gradient-text">XDM</span></h2>
+                    <p class="section-subtitle">See how XDM stacks up against traditional legacy and modern download managers.</p>
+                </div>
+
+                <div class="comparison-table-wrapper reveal">
+                    <table class="comparison-table">
+                        <thead>
+                            <tr>
+                                <th>Feature</th>
+                                <th class="col-highlight">XDM (v3.0)</th>
+                                <th>IDM (Legacy)</th>
+                                <th>FDM</th>
+                                <th>Motrix</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Price &amp; License</strong></td>
+                                <td class="col-highlight"><span class="badge-win">100% Free &amp; Open Source</span></td>
+                                <td>Paid ($25+ License)</td>
+                                <td>Proprietary Free</td>
+                                <td>Open Source</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Multi-Segment Engine</strong></td>
+                                <td class="col-highlight">✅ Up to 16 Isolate Streams</td>
+                                <td>✅ 16-32 Threads</td>
+                                <td>✅ 10 Threads</td>
+                                <td>✅ Aria2 16 Threads</td>
+                            </tr>
+                            <tr>
+                                <td><strong>BitTorrent &amp; DHT Client</strong></td>
+                                <td class="col-highlight">✅ Built-in Native P2P</td>
+                                <td>❌ No Torrent Support</td>
+                                <td>✅ Built-in</td>
+                                <td>✅ Built-in</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Built-in AdBlock Browser</strong></td>
+                                <td class="col-highlight">✅ Full Multi-Tab + Sniffer</td>
+                                <td>❌ External Extension Only</td>
+                                <td>❌ No Browser</td>
+                                <td>❌ No Browser</td>
+                            </tr>
+                            <tr>
+                                <td><strong>YouTube 4K &amp; Playlists</strong></td>
+                                <td class="col-highlight">✅ Native + FFmpeg Muxing</td>
+                                <td>⚠️ Browser Grabber Only</td>
+                                <td>⚠️ Basic</td>
+                                <td>❌ Manual URL</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Platform Support</strong></td>
+                                <td class="col-highlight">✅ Android Live (Desktop in Roadmap)</td>
+                                <td>❌ Windows Only</td>
+                                <td>⚠️ Android / Windows</td>
+                                <td>❌ Desktop Only</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Telemetry / Ads / Trackers</strong></td>
+                                <td class="col-highlight"><span class="badge-win">Zero (0%)</span></td>
+                                <td>⚠️ Telemetry</td>
+                                <td>⚠️ Analytics</td>
+                                <td>Zero</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Modern Cockpit UI</strong></td>
+                                <td class="col-highlight">✅ 5 Themes + AMOLED</td>
+                                <td>❌ Windows 98 Era UI</td>
+                                <td>⚠️ Basic Dark</td>
+                                <td>✅ Clean UI</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Platform Download Command Center -->
+        <section class="section section-downloads" id="download">
+            <div class="container">
+                <div class="section-header reveal">
+                    <span class="section-tag">Cross-Platform Builds</span>
+                    <h2 class="section-title">Get XDM for <span class="gradient-text">Your Device</span></h2>
+                    <p class="section-subtitle">Official binaries, packages, and stores. Clean, verified SHA-256 checksums.</p>
+                </div>
+
+                <!-- Platform Tabs -->
+                <div class="platform-tabs-nav reveal">
+                    <button class="plat-tab active" data-platform="android">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18h12v-5.5a6 6 0 00-12 0V18zM8.5 9.5L7 7M15.5 9.5L17 7"/><circle cx="9.5" cy="13" r="1"/><circle cx="14.5" cy="13" r="1"/></svg>
+                        <span>Android (Live)</span>
+                    </button>
+                    <button class="plat-tab" data-platform="windows">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg>
+                        <span>Windows (Roadmap)</span>
+                    </button>
+                    <button class="plat-tab" data-platform="macos">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8 0.93-2.85-.9.04-1.99.6-2.64 1.35-.57.65-1.06 1.7-0.93 2.71 1 .08 2.02-.46 2.64-1.21z"/></svg>
+                        <span>macOS (Roadmap)</span>
+                    </button>
+                    <button class="plat-tab" data-platform="linux">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7z"/></svg>
+                        <span>Linux (Roadmap)</span>
+                    </button>
+                    <button class="plat-tab" data-platform="ios">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="2" width="10" height="20" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="11" y1="18" x2="13" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        <span>iOS (Roadmap)</span>
+                    </button>
+                </div>
+
+                <!-- Platform Panels -->
+                <div class="platform-panels-container reveal">
+                    <!-- Android Panel (LIVE) -->
+                    <div class="plat-panel active" id="panel-android">
+                        <div class="plat-card-grid">
+                            <div class="plat-main-download">
+                                <div class="badge-live-release mb-3">✓ Official Stable Release</div>
+                                <h3>Android (8.0+)</h3>
+                                <p>Full isolate acceleration with foreground wake lock, home screen widgets, and media sniffer.</p>
+                                <div class="dl-buttons-row">
+                                    <a href="https://github.com/DevEslam1/XDM/releases/latest" class="btn btn-primary btn-lg" target="_blank" rel="noopener">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                        Download Android APK (Direct)
+                                    </a>
+                                    <a href="https://github.com/DevEslam1/XDM/releases" class="btn btn-secondary btn-lg" target="_blank" rel="noopener">
+                                        All Release Builds
+                                    </a>
+                                </div>
+                                <div class="mobile-qr-notice">
+                                    <span>Scan with phone camera to download APK directly:</span>
+                                    <div class="qr-placeholder" id="androidQr">
+                                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=https://github.com/DevEslam1/XDM/releases/latest&color=3B82F6&bgcolor=11141D" alt="QR Code for Android APK" width="110" height="110">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="plat-cli-box">
+                                <h4>Firefox Android Companion</h4>
+                                <p class="text-sm text-secondary mb-3">Install companion addon to intercept all media downloads and streams directly into XDM.</p>
+                                <a href="https://github.com/DevEslam1/XDM/tree/main/xdm-firefox" class="btn btn-ghost btn-sm" target="_blank" rel="noopener">
+                                    View Firefox Addon Code →
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Windows Panel (Roadmap) -->
+                    <div class="plat-panel" id="panel-windows">
+                        <div class="plat-card-grid">
+                            <div class="plat-main-download">
+                                <div class="badge-roadmap mb-3">⏳ In Active Development</div>
+                                <h3>Windows 10 / 11 (64-bit)</h3>
+                                <p>Desktop port with system tray integration and background isolate engine is in progress.</p>
+                                <div class="dl-buttons-row">
+                                    <a href="https://github.com/DevEslam1/XDM" class="btn btn-primary btn-lg" target="_blank" rel="noopener">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2A10 10 0 002 12c0 4.42 2.87 8.17 6.84 9.5.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.56 9.56 0 015 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85V21c0 .27.18.58.69.48A10 10 0 0022 12 10 10 0 0012 2z"/></svg>
+                                        Star on GitHub for Release Notification
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="plat-cli-box">
+                                <h4>Planned Package Managers</h4>
+                                <div class="cli-command-row">
+                                    <code>winget install DevEslam.XDM (Coming Soon)</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- macOS Panel (Roadmap) -->
+                    <div class="plat-panel" id="panel-macos">
+                        <div class="plat-card-grid">
+                            <div class="plat-main-download">
+                                <div class="badge-roadmap mb-3">⏳ In Active Development</div>
+                                <h3>macOS (Apple Silicon &amp; Intel)</h3>
+                                <p>Native macOS DMG with menu bar companion is being ported with Flutter Desktop.</p>
+                                <div class="dl-buttons-row">
+                                    <a href="https://github.com/DevEslam1/XDM" class="btn btn-primary btn-lg" target="_blank" rel="noopener">
+                                        Watch GitHub Releases
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="plat-cli-box">
+                                <h4>Planned Homebrew Cask</h4>
+                                <div class="cli-command-row">
+                                    <code>brew install --cask xdm (Coming Soon)</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Linux Panel (Roadmap) -->
+                    <div class="plat-panel" id="panel-linux">
+                        <div class="plat-card-grid">
+                            <div class="plat-main-download">
+                                <div class="badge-roadmap mb-3">⏳ In Active Development</div>
+                                <h3>Linux (AppImage &amp; Debian)</h3>
+                                <p>Standalone AppImage &amp; Flatpak packaging is currently being prepared.</p>
+                                <div class="dl-buttons-row">
+                                    <a href="https://github.com/DevEslam1/XDM" class="btn btn-primary btn-lg" target="_blank" rel="noopener">
+                                        Follow Linux Progress
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="plat-cli-box">
+                                <h4>Planned Flatpak</h4>
+                                <div class="cli-command-row">
+                                    <code>flatpak install flathub org.xdm.XDM (Coming Soon)</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- iOS Panel (Roadmap) -->
+                    <div class="plat-panel" id="panel-ios">
+                        <div class="plat-card-grid">
+                            <div class="plat-main-download">
+                                <div class="badge-roadmap mb-3">⏳ TestFlight Beta in Preparation</div>
+                                <h3>iOS &amp; iPadOS</h3>
+                                <p>URLSession background downloads and Dynamic Island live activities in development.</p>
+                                <div class="dl-buttons-row">
+                                    <a href="https://github.com/DevEslam1/XDM" class="btn btn-primary btn-lg" target="_blank" rel="noopener">
+                                        Sign up for TestFlight Beta
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="plat-cli-box">
+                                <h4>Apple Shortcuts</h4>
+                                <p class="text-sm text-secondary">Will support 1-tap clipboard download interception via iOS Share Sheet.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- FAQ Section -->
+        <section class="section" id="faq">
+            <div class="container">
+                <div class="section-header reveal">
+                    <span class="section-tag">Frequently Asked Questions</span>
+                    <h2 class="section-title">Got Questions? <span class="gradient-text">We Have Answers</span></h2>
+                    <p class="section-subtitle">Everything you need to know about XDM's architecture, security, and features.</p>
+                </div>
+
+                <div class="faq-accordion-list reveal">
+                    <div class="faq-item">
+                        <button class="faq-question">
+                            <span>Which platforms are currently supported?</span>
+                            <span class="faq-chevron">+</span>
+                        </button>
+                        <div class="faq-answer">
+                            <p><strong>XDM is currently available as a full stable release for Android (8.0+)</strong> with APK downloads available right here. Native ports for <strong>Windows, macOS, Linux, and iOS</strong> are actively being developed in Flutter and will be published to GitHub releases as they reach beta milestones.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-question">
+                            <span>How does XDM achieve faster download speeds than browsers?</span>
+                            <span class="faq-chevron">+</span>
+                        </button>
+                        <div class="faq-answer">
+                            <p>Standard web browsers download files using a single TCP connection. XDM divides the file into up to 16 parallel segments, opening multiple concurrent streams across worker threads. This overcomes bandwidth throttling imposed by servers and maximizes your internet pipe.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-question">
+                            <span>Is XDM completely free? Are there any hidden ads or crypto miners?</span>
+                            <span class="faq-chevron">+</span>
+                        </button>
+                        <div class="faq-answer">
+                            <p>XDM is 100% Free and Open Source software licensed under MIT. There are zero ads, zero trackers, zero bundled adware, and zero mining scripts. You can inspect every line of source code on our public GitHub repository.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-question">
+                            <span>Can XDM download YouTube videos in 4K with audio?</span>
+                            <span class="faq-chevron">+</span>
+                        </button>
+                        <div class="faq-answer">
+                            <p>Yes! YouTube serves separate 4K video and high-bitrate audio streams. XDM automatically extracts both parallel streams and uses its integrated FFmpeg multiplexer to combine them into a pristine MKV/MP4 file without quality loss.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-question">
+                            <span>What happens if my connection drops during a 50 GB download?</span>
+                            <span class="faq-chevron">+</span>
+                        </button>
+                        <div class="faq-answer">
+                            <p>XDM features append-only CRC32 journal state tracking. When connection is lost, XDM cleanly suspends the workers. Upon reconnecting, it spot-checks segment boundaries and resumes exactly where it left off without re-downloading finished chunks.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item">
+                        <button class="faq-question">
+                            <span>Does XDM work with Firefox and Chrome?</span>
+                            <span class="faq-chevron">+</span>
+                        </button>
+                        <div class="faq-answer">
+                            <p>Yes. XDM includes a built-in full browser, but also provides companion browser extensions for Firefox (Desktop &amp; Android) and Chromium to automatically redirect all download triggers and media sniffs into XDM.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Final Viral Share & CTA Banner -->
+        <section class="section section-cta-banner">
+            <div class="container">
+                <div class="cta-banner-card reveal">
+                    <div class="cta-banner-glow"></div>
+                    <div class="cta-banner-content">
+                        <h2 class="cta-banner-title">Upgrade Your Download Experience Today</h2>
+                        <p class="cta-banner-desc">Say goodbye to slow browser downloads and dated 1990s interfaces. Download XDM now for free.</p>
+                        
+                        <div class="cta-banner-actions">
+                            <a href="#download" class="btn btn-primary btn-xl">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
+                                Download XDM Free
+                            </a>
+                            <button class="btn btn-secondary btn-xl" id="ctaShareBtn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
+                                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                                </svg>
+                                Share XDM With Others
+                            </button>
+                        </div>
+
+                        <div class="cta-trust-tags">
+                            <span>✓ MIT Open Source</span>
+                            <span>✓ 100% Ad-Free</span>
+                            <span>✓ No Registration Required</span>
+                            <span>✓ Cross-Platform</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container footer-grid">
+            <div class="footer-brand">
+                <div class="footer-logo">
+                    <img src="assets/icon.png" alt="XDM Icon" width="28" height="28">
+                    <span class="footer-brand-name">XDM</span>
+                </div>
+                <p class="footer-desc">Extreme Download Manager — the next-generation multi-threaded download engine and BitTorrent client built with Flutter.</p>
+                <div class="footer-social-links">
+                    <a href="https://github.com/DevEslam1/XDM" target="_blank" rel="noopener" aria-label="GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2A10 10 0 002 12c0 4.42 2.87 8.17 6.84 9.5.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.56 9.56 0 015 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85V21c0 .27.18.58.69.48A10 10 0 0022 12 10 10 0 0012 2z"/></svg>
+                    </a>
+                </div>
+            </div>
+
+            <div class="footer-links-col">
+                <h4>Engine</h4>
+                <a href="#features">16-Segment Isolate</a>
+                <a href="#simulator">Velocity Simulator</a>
+                <a href="#browser">Media Sniffer</a>
+                <a href="#torrent">BitTorrent &amp; DHT</a>
+            </div>
+
+            <div class="footer-links-col">
+                <h4>Platforms</h4>
+                <a href="#download">Windows 10 / 11</a>
+                <a href="#download">Android APK</a>
+                <a href="#download">macOS Universal</a>
+                <a href="#download">Linux AppImage</a>
+                <a href="#download">iOS TestFlight</a>
+            </div>
+
+            <div class="footer-links-col">
+                <h4>Open Source</h4>
+                <a href="https://github.com/DevEslam1/XDM" target="_blank" rel="noopener">GitHub Repository</a>
+                <a href="https://github.com/DevEslam1/XDM/releases" target="_blank" rel="noopener">Release Notes</a>
+                <a href="https://github.com/DevEslam1/XDM/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+                <a href="https://github.com/DevEslam1" target="_blank" rel="noopener">DevEslam1 Profile</a>
+            </div>
+        </div>
+
+        <div class="footer-bottom-bar">
+            <div class="container footer-bottom-inner">
+                <span>© 2026 XDM Project. Crafted with precision for high-speed power users.</span>
+                <span>Open Source • Built with Flutter &amp; Dart</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Floating Share Modal -->
+    <div class="modal-backdrop" id="shareModalBackdrop" aria-hidden="true">
+        <div class="modal-card" role="dialog" aria-labelledby="modalTitle" aria-modal="true">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <span class="modal-icon">🚀</span>
+                    <h3 id="modalTitle">Share XDM</h3>
+                </div>
+                <button class="modal-close-btn" id="closeShareModal" aria-label="Close modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-desc">Share Xtreme Download Manager with friends, communities, and power users:</p>
+                
+                <div class="social-share-grid">
+                    <a href="https://twitter.com/intent/tweet?text=Check%20out%20XDM%20%E2%80%94%20a%20blazing%20fast%2C%2016-segment%20multi-threaded%20download%20manager%20and%20BitTorrent%20client!&url=https%3A%2F%2Fdeveslam1.github.io%2FXDM%2F" target="_blank" rel="noopener" class="social-share-btn share-twitter">
+                        <span>Twitter / X</span>
+                    </a>
+                    <a href="https://reddit.com/submit?url=https%3A%2F%2Fdeveslam1.github.io%2FXDM%2F&title=XDM%20-%20Free%20Multi-Threaded%20Download%20Manager%20%26%20BitTorrent%20Client" target="_blank" rel="noopener" class="social-share-btn share-reddit">
+                        <span>Reddit</span>
+                    </a>
+                    <a href="https://t.me/share/url?url=https%3A%2F%2Fdeveslam1.github.io%2FXDM%2F&text=XDM%20-%20Extreme%20Download%20Manager" target="_blank" rel="noopener" class="social-share-btn share-telegram">
+                        <span>Telegram</span>
+                    </a>
+                    <a href="https://api.whatsapp.com/send?text=Check%20out%20XDM%20Download%20Manager%3A%20https%3A%2F%2Fdeveslam1.github.io%2FXDM%2F" target="_blank" rel="noopener" class="social-share-btn share-whatsapp">
+                        <span>WhatsApp</span>
+                    </a>
+                    <a href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fdeveslam1.github.io%2FXDM%2F" target="_blank" rel="noopener" class="social-share-btn share-linkedin">
+                        <span>LinkedIn</span>
+                    </a>
+                    <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fdeveslam1.github.io%2FXDM%2F" target="_blank" rel="noopener" class="social-share-btn share-facebook">
+                        <span>Facebook</span>
+                    </a>
+                </div>
+
+                <div class="share-copy-box">
+                    <input type="text" id="shareUrlInput" value="https://deveslam1.github.io/XDM/" readonly>
+                    <button class="btn btn-primary btn-sm" id="copyShareUrlBtn">Copy Link</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast-bubble" id="toastBubble" aria-live="polite">
+        <span class="toast-icon">✓</span>
+        <span class="toast-message" id="toastMessage">Link copied to clipboard!</span>
+    </div>
+
+    <!-- Back to Top Floating Button -->
+    <button class="back-to-top" id="backToTop" aria-label="Back to top">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="18 15 12 9 6 15"></polyline>
+        </svg>
+    </button>
+
+    <script src="script.js"></script>
+</body>
+</html>
