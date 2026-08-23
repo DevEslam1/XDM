@@ -1988,15 +1988,30 @@ class DownloadOrchestrator {
               ? speedQueue.reduce((a, b) => a + b) / speedQueue.length
               : instantSpeed;
 
+          // An ETA is only meaningful while the speed behind it is. Past a sane
+          // horizon it stops being an estimate and becomes noise dressed up as
+          // one: a single near-zero sample is what rendered "390024h 6m".
+          const maxSaneEtaSeconds = 30 * 24 * 60 * 60;
           int? calculatedEta;
           if (combinedSpeed.isFinite &&
               combinedSpeed > 0 &&
               totalSize > totalDownloaded) {
             final remainingBytes = max(0, totalSize - totalDownloaded);
-            final rawEta = (remainingBytes / combinedSpeed).round();
-            if (rawEta > 0 && rawEta.isFinite) {
+            final rawEtaSeconds = remainingBytes / combinedSpeed;
+            if (rawEtaSeconds.isFinite &&
+                rawEtaSeconds >= 1 &&
+                rawEtaSeconds <= maxSaneEtaSeconds) {
+              final rawEta = rawEtaSeconds.round();
               final prevEta = base.eta;
-              if (prevEta != null && prevEta > 0) {
+              // Smooth only while the new and previous estimates agree to within
+              // a factor of four. Beyond that the rate has genuinely changed, and
+              // blending 70% of the stale value in would let one bad sample
+              // dominate the readout for hundreds of ticks.
+              if (prevEta != null &&
+                  prevEta > 0 &&
+                  prevEta <= maxSaneEtaSeconds &&
+                  rawEta < prevEta * 4 &&
+                  prevEta < rawEta * 4) {
                 calculatedEta = ((0.3 * rawEta) + (0.7 * prevEta)).round();
               } else {
                 calculatedEta = rawEta;
@@ -3794,9 +3809,9 @@ class DownloadOrchestrator {
       if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
         if (torrentId != null) {
           try {
-            // Feed the lengths we already trust so the disk scan can tell a
-            // fully-allocated file apart from one whose size the engine cannot
-            // report (a 0 there means unknown, not empty).
+            // Feed the lengths we already trust so a file whose size the engine
+            // cannot report still gets a denominator (a 0 from the engine means
+            // unknown, not empty).
             final knownSizes = <int, int>{};
             for (var i = 0; i < task.torrentFiles!.length; i++) {
               final len =
@@ -3820,7 +3835,20 @@ class DownloadOrchestrator {
                 final accurate = (idx != null ? accurateByIndex[idx] : null) ??
                     accurateByName[f['name'] as String? ?? ''];
                 if (accurate != null) {
-                  return {
+                  // `isEstimated` means the engine could not report this file's
+                  // bytes, so `downloadedBytes` is 0 as a placeholder rather than
+                  // as a measurement. Writing that 0 through with
+                  // `progressEstimated: false` would assert the file is empty and
+                  // discard the count this task already carries — a torrent that
+                  // was half finished would restart from 0 B on every resume.
+                  // Keep the stored figure and pass the flag along instead.
+                  if (accurate.isEstimated) {
+                    return <String, dynamic>{
+                      ...f,
+                      'progressEstimated': true,
+                    };
+                  }
+                  return <String, dynamic>{
                     ...f,
                     'downloadedBytes': accurate.downloadedBytes,
                     'progressEstimated': false,
@@ -3851,16 +3879,26 @@ class DownloadOrchestrator {
 
       // Recompute aggregate from verified per-file data so the task-level
       // total can never exceed the sum of its files.
+      //
+      // Rows flagged `progressEstimated` hold no measurement, so a list made up
+      // entirely of them sums to zero. That zero is not a byte count, and
+      // persisting it would report a part-finished torrent as starting from
+      // nothing every time it resumes — fall back to the stored total instead.
+      int? summedTotalDownloaded;
+      if (verifiedTorrentFiles != null && verifiedTorrentFiles.isNotEmpty) {
+        int sum = 0;
+        bool anyMeasured = false;
+        for (final f in verifiedTorrentFiles) {
+          if (!isTorrentFileSelected(f)) continue;
+          if (f['progressEstimated'] != true) anyMeasured = true;
+          final bytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+          if (bytes > 0) sum += bytes;
+        }
+        // Only trust a total of zero when at least one row actually measured it.
+        if (anyMeasured || sum > 0) summedTotalDownloaded = sum;
+      }
       final int realTotalDownloaded =
-          (verifiedTorrentFiles != null && verifiedTorrentFiles.isNotEmpty)
-              ? verifiedTorrentFiles.fold<int>(0, (sum, f) {
-                  if (isTorrentFileSelected(f)) {
-                    final bytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-                    return sum + (bytes > 0 ? bytes : 0);
-                  }
-                  return sum;
-                })
-              : task.downloadedBytes;
+          summedTotalDownloaded ?? task.downloadedBytes;
 
       task = task.copyWith(
         status: DownloadStatus.downloading,

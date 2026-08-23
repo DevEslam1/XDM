@@ -293,11 +293,17 @@ class LibtorrentNativeImpl implements ITorrentNative {
     return lt.LibtorrentFlutter.instance.getFileProgress(id);
   }
 
-  // FIX: [Audit] Implement getPeers to feed PeerPanel / diagnostic telemetry.
+  /// Per-peer enumeration is not available on this backend.
+  ///
+  /// libtorrent's `torrent_handle::get_peer_info` is not exported by the C++
+  /// bridge (there is no `lt_get_peer_info` symbol), so there is nothing to
+  /// read: the FFI status struct carries only aggregate swarm counts
+  /// (`numSeeds` / `numPeers` / `numComplete` / `numIncomplete`), which callers
+  /// consume through the status stream instead. Returning an empty list here is
+  /// the honest answer — synthesising placeholder rows from the aggregate counts
+  /// would put fabricated addresses and speeds in front of the user.
   @override
   Future<List<PeerConnectionQuality>> getPeers(int torrentId) async {
-    // Note: Swarm metrics are polled via NativeTorrentStatus (numPeers, numSeeds).
-    // Returns empty list until plugin exposes lt_get_peer_info.
     return const [];
   }
 

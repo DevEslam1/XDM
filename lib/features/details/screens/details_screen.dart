@@ -2349,8 +2349,11 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
     final amberClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
-    final seeds = provider.getTorrentSeeds(task.id);
-    final peers = provider.getTorrentPeers(task.id);
+    // One swarm read feeds the health indicator, the stat cells and the peer
+    // panel, so they can never disagree within a single frame.
+    final swarm = provider.getTorrentSwarm(task.id);
+    final seeds = swarm.connectedSeeds;
+    final peers = swarm.connectedPeers;
 
     final isActive = task.status == DownloadStatus.downloading;
     final isSeeding = task.status == DownloadStatus.completed &&
@@ -2360,7 +2363,10 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
     final dlSpeed = task.speed;
     final ulSpeed = task.isTorrent ? provider.getTorrentUploadSpeed(task.id) : 0.0;
 
-    final torrentId = task.torrentId ??
+    // Resolve through TorrentIdResolver alone: it already prefers task.torrentId
+    // but validates it against the live session first, so short-circuiting on
+    // task.torrentId here would reintroduce the stale-handle bug.
+    final torrentId =
         TorrentIdResolver.resolve(task, providerMap: provider.providerTorrentIds);
     final stats = torrentId != null
         ? provider.providerLatestTorrentStats[torrentId]
@@ -2384,8 +2390,14 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
                 TorrentHealthIndicator(
                   seeds: seeds,
                   peers: peers,
-                  availability: stats?.distributedCopies ?? 1.0,
-                  distributedCopies: stats?.distributedCopies ?? 1.0,
+                  // The retained swarm snapshot outlives a dropped stats entry,
+                  // so prefer it before falling back to the live stats row.
+                  availability: swarm.availability > 0
+                      ? swarm.availability
+                      : (stats?.distributedCopies ?? 1.0),
+                  distributedCopies: swarm.availability > 0
+                      ? swarm.availability
+                      : (stats?.distributedCopies ?? 1.0),
                   downloadRate: dlSpeed,
                   isDark: isDark,
                 ),
@@ -2587,31 +2599,16 @@ class _TorrentStatsPanelState extends State<_TorrentStatsPanel> {
               ],
               if (_showPeers) ...[
                 const SizedBox(height: 12),
-                // FIX: [Audit] Feed PeerPanel with live peer telemetry from TorrentService
-                FutureBuilder<List<PeerConnectionQuality>>(
-                  future: TorrentService.getPeers(torrentId),
-                  builder: (context, snapshot) {
-                    final rawPeers = snapshot.data ?? const [];
-                    final peerList = rawPeers.map((p) => PeerInfo(
-                      ip: p.ip,
-                      port: p.port,
-                      client: p.client,
-                      country: '',
-                      progress: p.progress,
-                      downloadSpeed: p.downloadSpeed.round(),
-                      uploadSpeed: p.uploadSpeed.round(),
-                      isSeed: p.isSeed,
-                      isEncrypted: p.isEncrypted,
-                      isOutgoing: p.isOutgoing,
-                      flags: '',
-                      relevance: p.relevance,
-                    )).toList();
-                    return PeerPanel(
-                      torrentId: torrentId,
-                      isDark: isDark,
-                      peers: peerList,
-                    );
-                  },
+                // The libtorrent bridge exposes no per-peer enumeration
+                // (lt_get_peer_info is not an export), so the old
+                // FutureBuilder<List<PeerConnectionQuality>> could only ever
+                // render "No peer connections" while re-issuing its future on
+                // every rebuild. Feed the panel the aggregate swarm snapshot
+                // that does cross the FFI instead.
+                PeerPanel(
+                  torrentId: torrentId,
+                  isDark: isDark,
+                  swarm: swarm,
                 ),
               ],
             ],

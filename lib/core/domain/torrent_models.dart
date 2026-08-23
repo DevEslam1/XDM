@@ -131,6 +131,49 @@ class TorrentUpdateInfo {
         filePriorities = List.unmodifiable(filePriorities);
 }
 
+/// Swarm counts for a single torrent, split into the two things libtorrent
+/// actually measures.
+///
+/// [connectedSeeds] / [connectedPeers] are peers this session currently holds a
+/// connection to. [swarmSeeds] / [swarmPeers] are the tracker's scrape totals
+/// for the whole swarm and are `null` until a scrape lands — a freshly added
+/// torrent legitimately reports zero connections while the swarm is large, so
+/// the two must not be conflated.
+class TorrentSwarmSnapshot {
+  final int connectedSeeds;
+  final int connectedPeers;
+  final int? swarmSeeds;
+  final int? swarmPeers;
+
+  /// libtorrent's distributed-copies estimate: how many complete copies of the
+  /// torrent are reachable through the connected swarm.
+  final double availability;
+
+  const TorrentSwarmSnapshot({
+    this.connectedSeeds = 0,
+    this.connectedPeers = 0,
+    this.swarmSeeds,
+    this.swarmPeers,
+    this.availability = 0.0,
+  });
+
+  static const TorrentSwarmSnapshot empty = TorrentSwarmSnapshot();
+
+  /// True when nothing in this snapshot carries usable information, so callers
+  /// can tell "no data yet" apart from "a real swarm of zero".
+  bool get isEmpty =>
+      connectedSeeds == 0 &&
+      connectedPeers == 0 &&
+      swarmSeeds == null &&
+      swarmPeers == null &&
+      availability <= 0.0;
+
+  bool get hasSwarmScrape => swarmSeeds != null || swarmPeers != null;
+
+  /// Total connections in use, seeds included.
+  int get totalConnections => connectedSeeds + connectedPeers;
+}
+
 enum TrackerStatus {
   working,
   updating,
@@ -187,6 +230,15 @@ class TorrentFileProgress {
   final bool exists;
   final bool isComplete;
 
+  /// True when [downloadedBytes] is not a measurement.
+  ///
+  /// The file is present on disk but the engine could not report how much of it
+  /// has actually been written, and disk length cannot answer that question for
+  /// a torrent (libtorrent allocates every file to its full length up front).
+  /// [downloadedBytes] is reported as `0` in that case, so consumers must treat
+  /// it as "unknown" rather than "nothing downloaded".
+  final bool isEstimated;
+
   const TorrentFileProgress({
     required this.index,
     required this.name,
@@ -195,6 +247,7 @@ class TorrentFileProgress {
     required this.progress,
     required this.exists,
     required this.isComplete,
+    this.isEstimated = false,
   });
 }
 

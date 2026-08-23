@@ -129,7 +129,8 @@ mixin DownloadTorrentMixin {
       providerTorrentIds[task.id] = torrentId;
       final tIdx = providerTasks.indexWhere((t) => t.id == task.id);
       if (tIdx != -1) {
-        providerTasks[tIdx] = providerTasks[tIdx].copyWith(torrentId: torrentId);
+        providerTasks[tIdx] =
+            providerTasks[tIdx].copyWith(torrentId: torrentId);
       }
       TorrentService.resumeTorrent(torrentId);
 
@@ -183,31 +184,63 @@ mixin DownloadTorrentMixin {
   // ---------------------------------------------------------------------------
   // Torrent stats queries — delegates to TorrentService / latest stats
   // ---------------------------------------------------------------------------
-  int getTorrentSeeds(String taskId) {
+
+  /// Last swarm snapshot seen for a task, keyed by task id. The native status
+  /// stream omits quiet torrents from some ticks and drops a torrent entirely
+  /// once its handle goes away, so the last known counts are retained to keep
+  /// the details screen from falling back to a bare `0`.
+  static final Map<String, TorrentSwarmSnapshot> _lastSwarmByTask = {};
+
+  /// Resolves the live swarm snapshot for [taskId], falling back to the last
+  /// snapshot observed for that task when the torrent is no longer reachable in
+  /// the current session.
+  TorrentSwarmSnapshot getTorrentSwarm(String taskId) {
     final task = findTaskById(taskId);
+    if (task == null) return TorrentSwarmSnapshot.empty;
+
+    // A native binary that does not match the FFI bindings decodes the status
+    // struct as unrelated memory, so its swarm counters are noise rather than
+    // data. Report nothing instead of inventing peers.
+    if (!TorrentService.bridgeCompatible) return TorrentSwarmSnapshot.empty;
+
     final torrentId =
         TorrentIdResolver.resolve(task, providerMap: providerTorrentIds);
-    if (torrentId != null) {
-      final stat = providerLatestTorrentStats[torrentId];
-      if (stat != null) {
-        return stat.numSeeds < 0 ? 0 : stat.numSeeds;
+    final stat =
+        torrentId != null ? providerLatestTorrentStats[torrentId] : null;
+    if (stat != null) {
+      final complete = stat.numComplete;
+      final incomplete = stat.numIncomplete;
+      final snapshot = TorrentSwarmSnapshot(
+        connectedSeeds: stat.numSeeds < 0 ? 0 : stat.numSeeds,
+        connectedPeers: stat.numPeers < 0 ? 0 : stat.numPeers,
+        // numComplete / numIncomplete are tracker-scrape swarm totals; they stay
+        // null (or negative) until a scrape lands, which is a different thing
+        // from a swarm that really holds zero peers.
+        swarmSeeds: (complete == null || complete < 0) ? null : complete,
+        swarmPeers: (incomplete == null || incomplete < 0) ? null : incomplete,
+        availability:
+            stat.distributedCopies.isFinite && stat.distributedCopies > 0
+                ? stat.distributedCopies
+                : 0.0,
+      );
+      if (!snapshot.isEmpty) {
+        _lastSwarmByTask[taskId] = snapshot;
+        return snapshot;
       }
+      // An all-zero live tick carries less information than the last real one,
+      // so a single quiet tick during startup or teardown does not blank the UI.
+      return _lastSwarmByTask[taskId] ?? snapshot;
     }
-    return 0;
+    return _lastSwarmByTask[taskId] ?? TorrentSwarmSnapshot.empty;
   }
 
-  int getTorrentPeers(String taskId) {
-    final task = findTaskById(taskId);
-    final torrentId =
-        TorrentIdResolver.resolve(task, providerMap: providerTorrentIds);
-    if (torrentId != null) {
-      final stat = providerLatestTorrentStats[torrentId];
-      if (stat != null) {
-        return stat.numPeers < 0 ? 0 : stat.numPeers;
-      }
-    }
-    return 0;
-  }
+  int getTorrentSeeds(String taskId) => getTorrentSwarm(taskId).connectedSeeds;
+
+  int getTorrentPeers(String taskId) => getTorrentSwarm(taskId).connectedPeers;
+
+  /// Drops the retained swarm snapshot for [taskId]. Called when a task is
+  /// deleted so the cache cannot outlive the task it describes.
+  void forgetTorrentSwarm(String taskId) => _lastSwarmByTask.remove(taskId);
 
   double getTorrentUploadSpeed(String taskId) {
     final task = findTaskById(taskId);
@@ -233,7 +266,8 @@ mixin DownloadTorrentMixin {
     if (task == null) return '';
     final torrentId =
         TorrentIdResolver.resolve(task, providerMap: providerTorrentIds);
-    final stat = torrentId != null ? providerLatestTorrentStats[torrentId] : null;
+    final stat =
+        torrentId != null ? providerLatestTorrentStats[torrentId] : null;
     final totalUploaded = stat?.totalPayloadUpload ?? task.uploadedBytes;
     final totalDownloaded = stat?.totalPayloadDownload ?? task.downloadedBytes;
     final ratio = totalDownloaded > 0 ? (totalUploaded / totalDownloaded) : 0.0;
@@ -333,15 +367,17 @@ mixin DownloadTorrentMixin {
         }
       }
 
-      final globalLimitBytes = providerSettingsProvider.globalTorrentSeedingLimited
+      final globalLimitBytes = providerSettingsProvider
+              .globalTorrentSeedingLimited
           ? (providerSettingsProvider.globalTorrentSeedingLimitKbps * 1000) ~/ 8
           : 0;
 
       // FIX: [Audit] Sum per-task limits rather than taking minimum to avoid throttling all torrents
       if (hasSpecificTaskLimit) {
-        final effectiveLimit = (globalLimitBytes > 0 && totalTaskLimitsBytes > globalLimitBytes)
-            ? globalLimitBytes
-            : totalTaskLimitsBytes;
+        final effectiveLimit =
+            (globalLimitBytes > 0 && totalTaskLimitsBytes > globalLimitBytes)
+                ? globalLimitBytes
+                : totalTaskLimitsBytes;
         TorrentService.setUploadLimit(effectiveLimit);
       } else if (globalLimitBytes > 0) {
         TorrentService.setUploadLimit(globalLimitBytes);

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
@@ -244,11 +243,18 @@ class TorrentService {
 
   /// Whether the loaded native bridge matches the Dart FFI bindings.
   ///
-  /// False means the bundled `liblibtorrent_flutter` binary is stale: struct
-  /// fields past the drift point read as zero (file sizes come back as 0) and
-  /// exports such as `lt_get_file_progress`, `lt_get_trackers` and the resume
-  /// data functions are missing, so per-file progress, swarm counters and fast
-  /// resume are all unavailable until it is rebuilt from `src/torrent_bridge.cpp`.
+  /// False means the bundled `liblibtorrent_flutter` binary is stale. The
+  /// failure mode is worse than missing data: because the bindings read a
+  /// fixed-size `lt_torrent_status` (see `kExpectedStatusSize`), a binary that
+  /// lays the struct out differently makes every field past the drift point
+  /// decode as unrelated memory — a freshly added torrent can report 100%
+  /// progress with zero bytes done and invented transfer rates. Exports such as
+  /// `lt_get_file_progress`, `lt_get_trackers` and the resume-data functions are
+  /// also missing, so per-file progress, swarm counters and fast resume are all
+  /// unavailable until the binary is rebuilt from `src/torrent_bridge.cpp`.
+  ///
+  /// Callers must not present anything derived from the status struct as fact
+  /// while this is false.
   static bool bridgeCompatible = true;
 
   /// Last bridge health report, or null when the platform has no native bridge.
@@ -1210,7 +1216,21 @@ class TorrentService {
     _native.setSuperSeeding(torrentId, enabled);
   }
 
-  /// Reads on-disk progress for each file of [torrentId].
+  /// Reads per-file download progress for [torrentId].
+  ///
+  /// The engine's own per-file byte counter (`lt_get_file_progress`) is the only
+  /// exact measure of how much of each file has been downloaded, so it is used
+  /// whenever it is available. **On-disk file length is not a substitute:**
+  /// libtorrent allocates every file to its full length the moment a torrent is
+  /// added — sparsely by default, fully under `storage_mode_allocate` — and
+  /// `File.length()` reports the full logical size in both cases. Treating it as
+  /// a byte count made a torrent added seconds ago read as ~100% complete.
+  ///
+  /// When the engine cannot report per-file bytes, disk is used only to tell an
+  /// absent file (genuinely 0 bytes) from a present one, and the present one is
+  /// reported as unknown — `downloadedBytes: 0` with [TorrentFileProgress
+  /// .isEstimated] set — rather than having its allocated length passed off as
+  /// downloaded data.
   ///
   /// [knownSizes] maps a file index to a length the caller already trusts
   /// (parsed from the torrent metadata). It is used whenever the engine reports
@@ -1224,42 +1244,60 @@ class TorrentService {
     if (!isInitialized || torrentId < 0) return [];
     try {
       final nativeFiles = _native.getFiles(torrentId);
-      final progress = <TorrentFileProgress>[];
+      if (nativeFiles.isEmpty) return [];
 
+      // A bridge that does not match these FFI bindings returns noise from every
+      // status/progress call, so do not ask it for byte counts at all.
+      List<int> engineBytes = const [];
+      if (bridgeCompatible) {
+        try {
+          engineBytes = _native.getFileProgress(torrentId);
+        } catch (e) {
+          _log.fine('getFileProgress unavailable for torrent $torrentId: $e');
+        }
+      }
+      final bool engineBytesUsable = engineBytes.length == nativeFiles.length;
+
+      final progress = <TorrentFileProgress>[];
       for (var i = 0; i < nativeFiles.length; i++) {
         final native = nativeFiles[i];
         final resolvedSize = native.size > 0
             ? native.size
             : ((knownSizes?[i] ?? 0) > 0 ? knownSizes![i]! : 0);
-        final filePath = p.join(savePath, native.name);
-        final file = File(filePath);
+        final file = File(p.join(savePath, native.name));
+        final exists = await file.exists();
 
-        int diskBytes = 0;
-        bool exists = false;
-        if (await file.exists()) {
-          exists = true;
-          diskBytes = await file.length();
-          if (diskBytes > 0 && resolvedSize > 0 && diskBytes >= resolvedSize) {
-            final raf = await file.open(mode: FileMode.read);
-            final probe = await raf.read(math.min(4096, diskBytes));
-            final hasContent = probe.any((b) => b != 0);
-            await raf.close();
-            if (!hasContent) diskBytes = 0;
-          }
+        int downloaded;
+        bool estimated;
+        if (engineBytesUsable && engineBytes[i] >= 0) {
+          downloaded = engineBytes[i];
+          estimated = false;
+        } else if (!exists) {
+          // Nothing allocated yet: this zero is a measurement, not a guess.
+          downloaded = 0;
+          estimated = false;
+        } else {
+          downloaded = 0;
+          estimated = true;
         }
 
+        final resolved =
+            resolvedSize > 0 ? downloaded.clamp(0, resolvedSize) : downloaded;
         progress.add(TorrentFileProgress(
           index: i,
           name: native.name,
           size: resolvedSize,
-          downloadedBytes:
-              resolvedSize > 0 ? diskBytes.clamp(0, resolvedSize) : diskBytes,
+          downloadedBytes: resolved,
           // With no resolved size there is nothing to measure against, so the
           // file is reported as 0% and incomplete rather than falsely done.
-          progress:
-              resolvedSize > 0 ? (diskBytes / resolvedSize).clamp(0.0, 1.0) : 0.0,
+          progress: resolvedSize > 0
+              ? (resolved / resolvedSize).clamp(0.0, 1.0)
+              : 0.0,
           exists: exists,
-          isComplete: resolvedSize > 0 && diskBytes >= resolvedSize,
+          // Completeness must come from a real byte count; an unknown file is
+          // never complete.
+          isComplete: !estimated && resolvedSize > 0 && resolved >= resolvedSize,
+          isEstimated: estimated,
         ));
       }
       return progress;

@@ -197,6 +197,24 @@ class TorrentRuntime {
   int lastSnapshotHash = 0;
   bool corruptSizeLogged = false;
 
+  /// Last byte count the engine reported outside a checking phase. While
+  /// libtorrent is checking files, `progress`/`totalWantedDone` describe
+  /// verification, not download, so this value is reported instead of letting
+  /// a verification percentage surface as download progress.
+  int lastConfirmedDownloadedBytes = 0;
+
+  /// Bytes the resume store claimed at add-time, used to detect a native
+  /// binary that silently dropped the add-time resume blob.
+  int resumeExpectedBytes = 0;
+
+  /// Set once the add-time-resume recovery recheck has been issued, so it
+  /// never fires more than once per handle.
+  bool resumeRecheckIssued = false;
+
+  /// Set once the stale-native-bridge warning has been logged for this handle,
+  /// so an incompatible binary does not flood the log on every status tick.
+  bool bridgeMismatchLogged = false;
+
   bool _closed = false;
   bool get isClosed => _closed;
 
@@ -885,10 +903,16 @@ class TorrentDownloadHandler {
             rethrow;
           }
         } else {
+          // Resume data is handed to libtorrent at add-time via
+          // lt_add_torrent_file_resume. This is the only path libtorrent
+          // supports: it lets the engine trust the stored piece bitfield and
+          // skip re-hashing the whole file from disk.
+          final addTimeResume = preloadedResume?.toList();
           String filePath = url;
           if (url.startsWith('file://')) {
             filePath = Uri.parse(url).toFilePath();
-            id = _torrentService.addTorrentFile(filePath, saveDir, sourceKey: url);
+            id = _torrentService.addTorrentFile(filePath, saveDir,
+                sourceKey: url, resumeData: addTimeResume);
           } else if (url.startsWith('http://') || url.startsWith('https://')) {
             final tempTorrentPath = p.join(
               Directory.systemTemp.path,
@@ -923,7 +947,7 @@ class TorrentDownloadHandler {
               filePath = tempTorrentPath;
               // FIX(C4): Use _torrentService.addTorrentFile
               id = _torrentService.addTorrentFile(filePath, saveDir,
-                  sourceKey: url);
+                  sourceKey: url, resumeData: addTimeResume);
             } finally {
               clientReleaser(torrentDio);
               try {
@@ -935,7 +959,8 @@ class TorrentDownloadHandler {
               }
             }
           } else if (File(url).existsSync()) {
-            id = _torrentService.addTorrentFile(url, saveDir, sourceKey: url);
+            id = _torrentService.addTorrentFile(url, saveDir,
+                sourceKey: url, resumeData: addTimeResume);
           } else {
             throw TorrentSourceException(
               'Unsupported or inaccessible URL scheme for torrent: $url',
@@ -945,78 +970,41 @@ class TorrentDownloadHandler {
         }
 
         final rt = _getRuntime(id);
-        final isMagnetSource = url.startsWith('magnet:');
         if (id >= 0 && preloadedResume != null) {
-          final resumeBytes = preloadedResume;
           hasLoadedResume = true;
           if (preloadedFiles != null && preloadedFiles.isNotEmpty) {
             rt.cachedAccurateFiles = preloadedFiles;
           }
           final activeFiles = preloadedFiles ?? initFiles;
           final activeSummary = normalizeTorrentFiles(activeFiles);
+          final resumeSummary = (
+            total: activeSummary.total > 0 ? activeSummary.total : initSummary.total,
+            done: activeSummary.total > 0 ? activeSummary.done : initSummary.done,
+            bytes: activeSummary.bytes > 0 ? activeSummary.bytes : initSummary.bytes,
+            downloaded: activeSummary.downloaded > 0
+                ? activeSummary.downloaded
+                : initSummary.downloaded,
+          );
+          // Resume data was handed to the engine at add-time for both magnet
+          // (lt_add_magnet_resume) and file (lt_add_torrent_file_resume)
+          // sources — the only paths libtorrent supports. A post-add
+          // loadResumeData() is a guaranteed no-op, and the recheckTorrent()
+          // that used to follow it re-hashed every piece on disk, which is
+          // what made resume appear to hang for minutes on large torrents.
+          //
+          // Seed the last-confirmed byte count from the resume store so the
+          // brief checking phase reports the previously known progress instead
+          // of the engine's verification percentage.
+          rt.lastConfirmedDownloadedBytes = resumeSummary.downloaded;
+          rt.resumeExpectedBytes = resumeSummary.downloaded;
           onProgress(_torrentProgress(
             cycleState: CycleState.verifying,
             statusMessage: 'Verifying resume data…',
-            summary: (
-              total: activeSummary.total > 0 ? activeSummary.total : initSummary.total,
-              done: activeSummary.total > 0 ? activeSummary.done : initSummary.done,
-              bytes: activeSummary.bytes > 0 ? activeSummary.bytes : initSummary.bytes,
-              downloaded: activeSummary.downloaded > 0
-                  ? activeSummary.downloaded
-                  : initSummary.downloaded,
-            ),
+            summary: resumeSummary,
             files: activeFiles,
             torrentId: id,
             knownFileSize: knownFileSize,
           ));
-          if (isMagnetSource) {
-            // Resume data was already passed at add-time above, via
-            // addMagnetWithMetadataTimeout's resumeData param — the only
-            // path libtorrent actually supports (see lt_add_magnet_resume).
-            // Calling the post-add loadResumeData() here would be
-            // redundant: it's a guaranteed no-op (libtorrent has no API to
-            // hot-load resume data into an already-added torrent).
-          } else {
-            // File-based sources (.torrent file, local or HTTP-downloaded)
-            // have no add-time resume path wired up on the Dart side yet —
-            // lt_add_torrent_file_resume exists in the native bridge, but
-            // ITorrentNative / LibtorrentNativeImpl / ITorrentService don't
-            // expose it yet. Until that's wired, fall back to the post-add
-            // path, which correctly no-ops and forces a recheck instead of
-            // silently pretending to resume.
-            // FIX(C4): Honor boolean from loadResumeData
-            if (!_torrentService.loadResumeData(id, resumeBytes.toList())) {
-              hasLoadedResume = false;
-              _log.warning('Native rejected resume data for $id; forcing recheck');
-              _torrentService.recheckTorrent(id);
-            }
-          }
-        } else if (id >= 0) {
-          try {
-            if (await _torrentService.hasResumeData(url)) {
-              final fallbackBytes =
-                  await TorrentResumeStore.loadResumeDataForSource(url);
-              if (fallbackBytes != null) {
-                hasLoadedResume = true;
-                onProgress(_torrentProgress(
-                  cycleState: CycleState.verifying,
-                  statusMessage: 'Verifying resume data…',
-                  summary: initSummary,
-                  files: initFiles,
-                  torrentId: id,
-                  knownFileSize: knownFileSize,
-                ));
-                // FIX(C4): Honor boolean from loadResumeData
-                if (!_torrentService.loadResumeData(id, fallbackBytes.toList())) {
-                  hasLoadedResume = false;
-                  _log.warning('Native rejected resume data for $id; forcing recheck');
-                  _torrentService.recheckTorrent(id);
-                }
-              }
-            }
-          } catch (e, st) {
-            _log.fine('Fallback resume data load failed: $e', e, st);
-          }
         }
       } catch (e, st) {
         if (e is! DioException || e.type != DioExceptionType.cancel) {
@@ -1185,6 +1173,17 @@ class TorrentDownloadHandler {
                 if (((pauseFiles[i]['length'] as num?)?.toInt() ?? 0) > 0)
                   i: (pauseFiles[i]['length'] as num).toInt()
           };
+          // Byte counts already recorded for each file. A fresh reading that the
+          // engine cannot supply must fall back to these rather than reset the
+          // row to zero — this list is what gets persisted for the paused task.
+          final previousDownloadedMap = <String, int>{
+            if (pauseFiles != null)
+              for (final f in pauseFiles)
+                if (f['name'] != null &&
+                    ((f['downloadedBytes'] as num?)?.toInt() ?? 0) > 0)
+                  normKey(f['name'] as String):
+                      (f['downloadedBytes'] as num).toInt()
+          };
           try {
             final accurateFiles = await _torrentService.getAccurateFileProgress(
               id,
@@ -1205,17 +1204,25 @@ class TorrentDownloadHandler {
                     );
                     final dl =
                         len > 0 ? af.downloadedBytes.clamp(0, len) : af.downloadedBytes;
+                    // An unmeasurable reading is not "nothing downloaded": keep
+                    // the count this file already had so pausing cannot erase it.
+                    final resolvedDl = af.isEstimated
+                        ? (previousDownloadedMap[normKey(af.name)] ?? dl)
+                        : dl;
+                    final clampedDl =
+                        len > 0 ? resolvedDl.clamp(0, len) : resolvedDl;
                     return <String, dynamic>{
                       'name': af.name,
                       'length': len,
-                      'downloadedBytes': dl,
+                      'downloadedBytes': clampedDl,
                       'selected':
                           previousSelectedMap[normKey(af.name)] ?? true,
                       'priority': previousPriorityMap[normKey(af.name)] ?? 4,
                       'progress':
-                          len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0,
-                      'isComplete': len > 0 && dl >= len,
-                      'progressEstimated': false,
+                          len > 0 ? (clampedDl / len).clamp(0.0, 1.0) : 0.0,
+                      'isComplete':
+                          !af.isEstimated && len > 0 && clampedDl >= len,
+                      'progressEstimated': af.isEstimated,
                     };
                   }()
               ];
@@ -1694,7 +1701,9 @@ class TorrentDownloadHandler {
               fileSize: tracker.currentTotalSize,
               speed: 0,
               eta: null,
-              torrentFiles: rt.cachedAccurateFiles,
+              torrentFiles: TorrentService.bridgeCompatible
+                  ? rt.cachedAccurateFiles
+                  : null,
               cycleState: CycleState.paused,
               pauseReason: PauseReason.networkLost,
               statusMessage: 'Waiting for network…',
@@ -1703,6 +1712,14 @@ class TorrentDownloadHandler {
             return;
           }
         }
+        // Every stall signal below — byte deltas, transfer rate, peer count,
+        // state label — comes from the status struct. When the native bridge
+        // does not match these FFI bindings all of them are noise, so the
+        // 5-minute branch would fail a perfectly healthy transfer with a
+        // TorrentStallException on the strength of garbage. Sit the rest of the
+        // watchdog out rather than act on data that means nothing; the
+        // connectivity check above is independent of the struct, so it stays.
+        if (!TorrentService.bridgeCompatible) return;
         final elapsed =
             DateTime.now().difference(tracker.lastTorrentProgressTime);
         final isTerminal = rt.lastStateLabel == 'seeding' ||
@@ -2042,8 +2059,8 @@ class TorrentDownloadHandler {
                     'selected': previousSelectedMap[normKey(f.name)] ?? true,
                     'priority': previousPriorityMap[normKey(f.name)] ?? 4,
                     'progress': len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0,
-                    'isComplete': len > 0 && dl >= len,
-                    'progressEstimated': false,
+                    'isComplete': !f.isEstimated && len > 0 && dl >= len,
+                    'progressEstimated': f.isEstimated,
                   };
                 }()
             ];
@@ -2059,13 +2076,66 @@ class TorrentDownloadHandler {
         ? torrent.totalWantedDone
         : torrent.totalDone;
 
+    // While libtorrent is in checking_files / checking_resume_data /
+    // queued_for_checking, `progress` and `totalWantedDone` describe how much
+    // of the file has been hash-verified so far — not how much has been
+    // downloaded. Treating them as download progress makes a resumed torrent
+    // ramp 0% → n% as verification walks the file, which reads as a fake
+    // percentage. Keep the two meanings apart.
+    final bool isChecking = torrent.isChecking;
+    final double verificationProgress = isChecking && torrent.progress.isFinite
+        ? torrent.progress.clamp(0.0, 1.0)
+        : 0.0;
+
+    // A stale native binary lays out `lt_torrent_status` differently from these
+    // FFI bindings, so every field past the drift point decodes as unrelated
+    // memory rather than as zero: a torrent added seconds ago reports 100%
+    // with 0 bytes done, 0/1 pieces, and invented transfer rates. None of the
+    // struct is trustworthy in that state, so publish nothing derived from it
+    // instead of fiction — and above all never let a fabricated 100% reach
+    // _detectCompletion, which would mark an empty file as finished.
+    final bool bridgeUntrusted = !TorrentService.bridgeCompatible;
+    // `isChecking`, `rawDownloaded` and `hasMetadata` are all struct reads, so
+    // an untrusted bridge must not be allowed to bank a byte count as
+    // "confirmed" — nor to trip the recovery recheck below, which would put a
+    // healthy torrent through a full re-hash of every piece on the strength of
+    // a garbage zero.
+    if (!isChecking && !bridgeUntrusted) {
+      rt.lastConfirmedDownloadedBytes = rawDownloaded;
+      if (rt.resumeExpectedBytes > 0 && torrent.hasMetadata) {
+        // The engine finished checking with nothing on disk while the resume
+        // store claimed real progress: this build's native binary silently
+        // dropped the add-time resume blob (no lt_add_torrent_file_resume /
+        // lt_add_magnet_resume export). Recover the on-disk data with a
+        // one-shot recheck rather than re-downloading from scratch.
+        if (rawDownloaded <= 0 && !rt.resumeRecheckIssued) {
+          rt.resumeRecheckIssued = true;
+          _log.warning(
+            'Add-time resume data did not take effect for torrent $id '
+            '(expected ${rt.resumeExpectedBytes} bytes, engine reports 0); '
+            'issuing one recovery recheck',
+          );
+          try {
+            _torrentService.recheckTorrent(id);
+          } catch (e, st) {
+            _log.warning('Recovery recheck failed for $id', e, st);
+          }
+        } else if (rawDownloaded > 0) {
+          rt.resumeExpectedBytes = 0;
+        }
+      }
+    }
+
     int? selectiveDownloadedBytes;
     bool? hasEstimatedFileProgress;
     final bool hasSelectiveFiles = effectiveFiles != null &&
         effectiveFiles.any((f) =>
             (f['selected'] as bool?) == false ||
             (f['priority'] as int? ?? 4) == 0);
-    if (torrent.fileProgress.isNotEmpty && hasSelectiveFiles) {
+    if (torrent.fileProgress.isNotEmpty &&
+        hasSelectiveFiles &&
+        !isChecking &&
+        !bridgeUntrusted) {
       int selectiveSum = 0;
       for (var i = 0; i < torrent.fileProgress.length; i++) {
         if (i < effectiveFiles.length) {
@@ -2081,21 +2151,26 @@ class TorrentDownloadHandler {
     }
 
     if (totalSize <= 0 && !torrent.hasMetadata && torrent.piecesTotal <= 0) {
-      final downloadedBytes = rawDownloaded;
-      final speed = torrent.downloadPayloadRate.toDouble();
+      // Same rule as the main path below: nothing read out of the status struct
+      // may be published while the bridge is untrusted.
+      final downloadedBytes = bridgeUntrusted ? 0 : rawDownloaded;
+      final speed =
+          bridgeUntrusted ? 0.0 : torrent.downloadPayloadRate.toDouble();
       tracker.lastTorrentSpeed = speed;
-      tracker.lastTorrentPeerCount = torrent.numPeers;
+      tracker.lastTorrentPeerCount = bridgeUntrusted ? 0 : torrent.numPeers;
       emitProgress(DownloadProgress(
         downloadedBytes: downloadedBytes,
         fileSize: 0,
         speed: speed,
         eta: null,
         fileName: (torrent.hasMetadata && torrent.name.isNotEmpty) ? torrent.name : null,
-        torrentFiles: resolvedFiles ?? rt.cachedAccurateFiles,
+        torrentFiles: bridgeUntrusted ? null : (resolvedFiles ?? rt.cachedAccurateFiles),
         cycleState: CycleState.fetchingMetadata,
-        totalPieces: torrent.piecesTotal,
-        completedPieces: torrent.piecesHave,
-        statusMessage: 'Fetching metadata…',
+        totalPieces: bridgeUntrusted ? 0 : torrent.piecesTotal,
+        completedPieces: bridgeUntrusted ? null : torrent.piecesHave,
+        statusMessage: bridgeUntrusted
+            ? 'Torrent engine out of date — progress unavailable'
+            : 'Fetching metadata…',
         torrentId: id,
         downloadedFileBytes: selectiveDownloadedBytes,
         hasEstimatedFileProgress: hasEstimatedFileProgress,
@@ -2107,15 +2182,33 @@ class TorrentDownloadHandler {
         (torrent.totalWanted > 0 ||
             rawDownloaded > 0 ||
             stateLabel == 'seeding');
-    final safeProgress = (isProgressValid && torrent.progress.isFinite && torrent.progress > 0)
-        ? torrent.progress.clamp(0.0, 1.0)
-        : (rawDownloaded > 0 && totalSize > 0
-            ? (rawDownloaded / totalSize).clamp(0.0, 1.0)
-            : (torrent.totalDone > 0 && torrent.totalWanted > 0
-                ? (torrent.totalDone / torrent.totalWanted).clamp(0.0, 1.0)
-                : 0.0));
+    // `torrent.progress` is only download progress outside a checking phase.
+    // While checking, fall back to the last confirmed byte count so the bar
+    // holds its previous position instead of tracking verification.
+    final safeProgress = bridgeUntrusted
+        ? 0.0
+        : isChecking
+            ? (totalSize > 0
+                ? (rt.lastConfirmedDownloadedBytes / totalSize).clamp(0.0, 1.0)
+                : 0.0)
+            : (isProgressValid &&
+                    torrent.progress.isFinite &&
+                    torrent.progress > 0)
+                ? torrent.progress.clamp(0.0, 1.0)
+                : (rawDownloaded > 0 && totalSize > 0
+                    ? (rawDownloaded / totalSize).clamp(0.0, 1.0)
+                    : (torrent.totalDone > 0 && torrent.totalWanted > 0
+                        ? (torrent.totalDone / torrent.totalWanted)
+                            .clamp(0.0, 1.0)
+                        : 0.0));
     final filesToUpdate = resolvedFiles ?? rt.cachedAccurateFiles;
-    if (filesToUpdate != null && filesToUpdate.isNotEmpty) {
+    // Per-file byte counts reported during a checking phase are verification
+    // counters, so leave the cached file list untouched until checking ends.
+    // An untrusted bridge reports garbage per-file bytes for the same reason.
+    if (filesToUpdate != null &&
+        filesToUpdate.isNotEmpty &&
+        !isChecking &&
+        !bridgeUntrusted) {
       bool pieceMapped = false;
 
       if (torrent.fileProgress.isNotEmpty &&
@@ -2181,20 +2274,57 @@ class TorrentDownloadHandler {
       rt.cachedAccurateFiles = filesToUpdate;
     }
 
-    final downloadedBytes = rawDownloaded;
+    final downloadedBytes =
+        isChecking ? rt.lastConfirmedDownloadedBytes : rawDownloaded;
     final speed = torrent.downloadPayloadRate.toDouble();
-    tracker.lastTorrentSpeed = speed;
-    tracker.lastTorrentPeerCount = torrent.numPeers;
+    // The stall watchdog reads these back, so an untrusted bridge must not seed
+    // them with struct noise.
+    tracker.lastTorrentSpeed = bridgeUntrusted ? 0.0 : speed;
+    tracker.lastTorrentPeerCount = bridgeUntrusted ? 0 : torrent.numPeers;
     var resolvedCycleState = CycleState.fromLibtorrent(
       torrent.stateLabel,
       seedingEnabled: _torrentService.seedingEnabled,
     );
     var resolvedStatusMessage = torrent.stateLabel;
-    if (speed > 0 ||
-        downloadedBytes != tracker.lastTorrentDownloadedBytes) {
+    if (isChecking) {
+      // Surface verification as its own phase with its own percentage, so the
+      // UI shows "Verifying files… 43%" instead of a frozen or fake download
+      // percentage.
+      resolvedCycleState = CycleState.verifying;
+      resolvedStatusMessage =
+          'Verifying files… ${(verificationProgress * 100).toStringAsFixed(0)}%';
+    }
+    if (bridgeUntrusted) {
+      // The transfer itself may well be running; it is only the reporting that
+      // is unreadable. Say that plainly instead of showing invented figures.
+      //
+      // `stateLabel` comes out of the same garbage struct, so the state derived
+      // from it is fiction too — it is what put a "Re-verifying" chip on a
+      // torrent that was actually downloading. Report the phase the task is
+      // genuinely in from the app's own point of view instead of the engine's.
+      resolvedCycleState = CycleState.downloading;
+      resolvedStatusMessage =
+          'Torrent engine out of date — progress unavailable';
+      if (!rt.bridgeMismatchLogged) {
+        rt.bridgeMismatchLogged = true;
+        _log.severe(
+          'Suppressing torrent stats for $id: the native bridge does not match '
+          'these FFI bindings, so lt_torrent_status decodes as garbage. '
+          'Rebuild liblibtorrent_flutter from src/torrent_bridge.cpp. '
+          '${TorrentService.bridgeDiagnostics ?? ''}',
+        );
+      }
+    }
+    // Stall detection compares byte counts and rates across ticks. Both are
+    // struct noise while the bridge is untrusted, so there is no way to tell a
+    // stalled torrent from a healthy one — and guessing "stalled" would put a
+    // false label on a download that is in fact running.
+    if (!bridgeUntrusted &&
+        (speed > 0 ||
+            downloadedBytes != tracker.lastTorrentDownloadedBytes)) {
       tracker.lastTorrentDownloadedBytes = downloadedBytes;
       tracker.lastTorrentProgressTime = DateTime.now();
-    } else if (speed == 0) {
+    } else if (!bridgeUntrusted && speed == 0) {
       final elapsed =
           DateTime.now().difference(tracker.lastTorrentProgressTime);
       final isNonDownloadPhase = torrent.isChecking ||
@@ -2227,22 +2357,56 @@ class TorrentDownloadHandler {
             ? torrent.name
             : null;
 
+    // `piecesHave` counts verified pieces while checking, so withholding it
+    // keeps a piece-based progress bar on its last real value.
+    final int? emittedCompletedPieces =
+        (isChecking || bridgeUntrusted) ? null : torrent.piecesHave;
+
+    // Byte counts, rates and piece totals all come out of the status struct, so
+    // an untrusted bridge must report none of them. `totalSize` is kept: it is
+    // derived from the parsed torrent metadata / resume store, not the struct.
+    final int emittedDownloadedBytes = bridgeUntrusted ? 0 : downloadedBytes;
+    final double emittedSpeed = bridgeUntrusted ? 0.0 : speed;
+    final int emittedTotalPieces = bridgeUntrusted ? 0 : torrent.piecesTotal;
+
+    // Per-file rows carry their own byte counts, and those are measurements too.
+    // Withholding the list entirely would leave whatever a previous session
+    // persisted on screen — which is exactly how a just-added torrent kept
+    // showing "99%  6.0 GB / 6.1 GB". Publish the rows instead with their names
+    // and lengths (parsed from metadata, trustworthy) and their measurements
+    // cleared and flagged, so the stale figures get overwritten.
+    var emittedTorrentFiles = resolvedFiles ?? rt.cachedAccurateFiles;
+    if (bridgeUntrusted && emittedTorrentFiles != null) {
+      emittedTorrentFiles = [
+        for (final f in emittedTorrentFiles)
+          <String, dynamic>{
+            ...f,
+            'downloadedBytes': 0,
+            'progress': 0.0,
+            'isComplete': false,
+            'progressEstimated': true,
+          }
+      ];
+    }
+    final bool? emittedHasEstimatedFileProgress =
+        bridgeUntrusted ? true : hasEstimatedFileProgress;
+
     if (isRecovering) {
       tracker.lastRecoveryEmit = DateTime.now();
       emitProgress(DownloadProgress(
-        downloadedBytes: downloadedBytes,
+        downloadedBytes: emittedDownloadedBytes,
         fileSize: totalSize,
-        speed: speed,
+        speed: emittedSpeed,
         eta: null,
         fileName: resolvedTorrentName,
-        torrentFiles: resolvedFiles ?? rt.cachedAccurateFiles,
+        torrentFiles: emittedTorrentFiles,
         cycleState: CycleState.retrying,
-        totalPieces: torrent.piecesTotal,
-        completedPieces: torrent.piecesHave,
+        totalPieces: emittedTotalPieces,
+        completedPieces: emittedCompletedPieces,
         statusMessage: 'Retrying torrent…',
         torrentId: id,
         downloadedFileBytes: selectiveDownloadedBytes,
-        hasEstimatedFileProgress: hasEstimatedFileProgress,
+        hasEstimatedFileProgress: emittedHasEstimatedFileProgress,
       ));
     }
     if (tracker.lastRecoveryEmit == null ||
@@ -2251,21 +2415,28 @@ class TorrentDownloadHandler {
                 .inMilliseconds >=
             2000) {
       emitProgress(DownloadProgress(
-        downloadedBytes: downloadedBytes,
+        downloadedBytes: emittedDownloadedBytes,
         fileSize: totalSize,
-        speed: speed,
+        speed: emittedSpeed,
         eta: null,
         fileName: resolvedTorrentName,
-        torrentFiles: resolvedFiles ?? rt.cachedAccurateFiles,
+        torrentFiles: emittedTorrentFiles,
         cycleState: resolvedCycleState,
-        totalPieces: torrent.piecesTotal,
-        completedPieces: torrent.piecesHave,
+        totalPieces: emittedTotalPieces,
+        completedPieces: emittedCompletedPieces,
         statusMessage: resolvedStatusMessage,
         torrentId: id,
         downloadedFileBytes: selectiveDownloadedBytes,
-        hasEstimatedFileProgress: hasEstimatedFileProgress,
+        hasEstimatedFileProgress: emittedHasEstimatedFileProgress,
       ));
     }
+
+    // A checking torrent has no trustworthy completion signal: `progress` and
+    // `totalWantedDone` are verification counters, so a torrent part-way
+    // through a recheck can momentarily look finished. An untrusted bridge is
+    // worse still — its garbage `progress` reads 1.0 on a torrent with zero
+    // bytes on disk, which would mark a brand-new download complete.
+    if (isChecking || bridgeUntrusted) return;
 
     _detectCompletion(
       id: id,
@@ -2296,6 +2467,9 @@ class TorrentDownloadHandler {
     required Completer<void> completer,
   }) {
     final rt = _getRuntime(id);
+    // Verification counters can transiently satisfy every completion predicate
+    // below, so a checking torrent is never treated as complete.
+    if (torrent.isChecking) return;
     final bool isProgressComplete = (torrent.progress >= 0.999 && totalSize > 0) ||
         (totalSize > 0 && downloadedBytes >= totalSize) ||
         (torrent.totalWanted > 0 &&

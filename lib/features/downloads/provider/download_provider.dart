@@ -1067,6 +1067,7 @@ class DownloadProvider extends ChangeNotifier
           );
           _latestTorrentStats.remove(torrentId);
         }
+        forgetTorrentSwarm(id);
         _cancelTokens.remove(id)?.cancel('deleted');
         _notifications.cancelForTask(id);
         if (deleteFiles) {

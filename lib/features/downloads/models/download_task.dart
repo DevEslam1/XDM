@@ -458,17 +458,25 @@ class DownloadTask {
 
   bool get hasTorrentFiles => torrentFiles != null && torrentFiles!.isNotEmpty;
 
-  ({int totalFileBytes, int downloadedFileBytes}) get torrentFileAggregates {
+  /// Byte totals across the selected torrent files.
+  ///
+  /// [anyMeasured] is true when at least one selected row carries a real byte
+  /// count rather than a `progressEstimated` placeholder, so callers can tell a
+  /// genuine "0 of 6.1 GB" apart from "6.1 GB whose progress is unknown".
+  ({int totalFileBytes, int downloadedFileBytes, bool anyMeasured})
+      get torrentFileAggregates {
     if (torrentFiles == null || torrentFiles!.isEmpty) {
-      return (totalFileBytes: 0, downloadedFileBytes: 0);
+      return (totalFileBytes: 0, downloadedFileBytes: 0, anyMeasured: false);
     }
     int total = 0;
     int dl = 0;
+    bool anyMeasured = false;
     for (final f in torrentFiles!) {
       if (isTorrentFileSelected(f)) {
         final len = (f['length'] as num?)?.toInt() ?? 0;
         final d = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
         final isComp = (f['isComplete'] as bool?) == true;
+        if ((f['progressEstimated'] as bool?) != true) anyMeasured = true;
         total += len;
         if (isComp && len > 0) {
           dl += len;
@@ -479,7 +487,11 @@ class DownloadTask {
         }
       }
     }
-    return (totalFileBytes: total, downloadedFileBytes: dl);
+    return (
+      totalFileBytes: total,
+      downloadedFileBytes: dl,
+      anyMeasured: anyMeasured,
+    );
   }
 
   double get torrentOverallPercent {
@@ -489,17 +501,24 @@ class DownloadTask {
     if (total > 0 && downloaded > 0) {
       return (downloaded / total).clamp(0.0, 1.0);
     }
-    // Cross-check with file aggregates if total or downloaded was 0
+    // The task-level counter reads zero, so fall back to the per-file rows — but
+    // only where those rows carry an actual measurement. A row flagged
+    // `progressEstimated` holds a placeholder, and letting placeholders outvote
+    // an authoritative zero is what made a freshly added torrent render at ~99%
+    // while the byte counter correctly read 0 B.
     final agg = torrentFileAggregates;
-    if (agg.totalFileBytes > 0 && agg.downloadedFileBytes > 0) {
+    if (agg.anyMeasured &&
+        agg.totalFileBytes > 0 &&
+        agg.downloadedFileBytes > 0) {
       return (agg.downloadedFileBytes.clamp(0, agg.totalFileBytes) /
               agg.totalFileBytes)
           .clamp(0.0, 1.0);
     }
-    if (total > 0 && downloaded == 0) {
+    // A known total with nothing measured against it is a real zero, not a gap.
+    if (total > 0) {
       return 0.0;
     }
-    if (agg.totalFileBytes > 0) {
+    if (agg.anyMeasured && agg.totalFileBytes > 0) {
       return (agg.downloadedFileBytes / agg.totalFileBytes).clamp(0.0, 1.0);
     }
     if (fileSize > 0) {
