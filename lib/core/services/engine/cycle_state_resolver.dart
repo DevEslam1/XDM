@@ -1,9 +1,12 @@
 import 'package:flutter/foundation.dart';
+import 'package:logging/logging.dart';
 import '../../domain/cycle_state.dart';
 import '../../utils/bounded_lru_cache.dart';
 
 class CycleStateResolver {
   const CycleStateResolver._();
+
+  static final _log = Logger('CycleStateResolver');
 
   static final BoundedLruCache<String, CycleState> _resolutionCache =
       BoundedLruCache<String, CycleState>(maxCapacity: 256);
@@ -59,6 +62,7 @@ class CycleStateResolver {
   static CycleState _resolveMessage(String sm) {
     final match = _compiledPattern.firstMatch(sm);
     if (match == null) {
+      _log.warning('Unrecognized cycle state label: "$sm". Falling back to default.');
       return CycleState.downloading;
     }
     if (match.namedGroup('metadata') != null) {
@@ -78,6 +82,8 @@ class CycleStateResolver {
     if (match.namedGroup('paused') != null) return CycleState.paused;
     if (match.namedGroup('stalled') != null) return CycleState.stalled;
     if (match.namedGroup('failed') != null) return CycleState.failed;
+    
+    _log.warning('Unrecognized cycle state label: "$sm". Falling back to default.');
     return CycleState.downloading;
   }
 

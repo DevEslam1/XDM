@@ -489,6 +489,7 @@ class TorrentService {
                   seedingTime: value.seedingTime,
                   fileProgress: value.fileProgress,
                   filePriorities: value.filePriorities,
+                  pieces: value.pieces,
                 );
                 _latestStats[value.id] = info;
                 return MapEntry(key, info);

@@ -34,7 +34,9 @@
       "Bash(grep -rniE \"api[_-]?key|secret|[a-z0-9]{32,}\" landing/index.html)",
       "Bash(sed 's/^[0-9:]* +[0-9]* -[0-9]*: //')",
       "Bash(echo \"EXIT=$?\")",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(grep -nE \"^\\\\s{0,4}\\(Future<[^>]*>|void|bool|String|int|double\\)\\\\s+_?[a-zA-Z]+\\\\\\(|^\\\\s{0,4}Future<void>\\\\s\" lib/features/downloads/provider/download_orchestrator.dart)",
+      "Bash(timeout 300 flutter test test/core/services/state_store_test.dart)"
     ]
   }
 }

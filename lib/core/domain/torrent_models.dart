@@ -92,6 +92,7 @@ class TorrentUpdateInfo {
   final int seedingTime;
   final List<int> fileProgress;
   final List<int> filePriorities;
+  final List<bool> pieces;
 
   int get peerCount => numPeers;
   bool get sizeKnown => hasMetadata && totalWanted > 0;
@@ -139,8 +140,10 @@ class TorrentUpdateInfo {
     this.seedingTime = 0,
     List<int> fileProgress = const [],
     List<int> filePriorities = const [],
+    List<bool> pieces = const [],
   })  : fileProgress = List.unmodifiable(fileProgress),
-        filePriorities = List.unmodifiable(filePriorities);
+        filePriorities = List.unmodifiable(filePriorities),
+        pieces = List.unmodifiable(pieces);
 }
 
 /// Swarm counts for a single torrent, split into the two things libtorrent

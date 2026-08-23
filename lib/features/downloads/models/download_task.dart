@@ -528,17 +528,16 @@ class DownloadTask {
   }
 
   int get combinedTotalSize {
-    if (hasMergedAudio && audioSize > 0) {
-      // fileSize is ALWAYS the video stream size (set in addDownload from stream size)
-      // videoStreamSize is an alternative field that may be set during progress updates
-      final videoSize = videoStreamSize > 0 ? videoStreamSize : fileSize;
-      if (videoSize > 0) return videoSize + audioSize;
-      // If video size unknown but we have downloaded bytes, use that
-      if (downloadedBytes > 0) return downloadedBytes + audioSize;
-      return 0;
-    }
-    if (hasMergedAudio && audioSize == 0 && fileSize > 0) {
-      return fileSize; // Audio URL present but size unknown
+    if (hasMergedAudio) {
+      final videoSize = videoStreamSize > 0
+          ? videoStreamSize
+          : (fileSize > 0
+              ? fileSize
+              : (downloadedBytes > 0 ? downloadedBytes : 0));
+      final resolvedAudioSize = audioSize > 0
+          ? audioSize
+          : (audioDownloadedBytes > 0 ? audioDownloadedBytes : 0);
+      return videoSize + resolvedAudioSize;
     }
     return resolvedFileSize;
   }

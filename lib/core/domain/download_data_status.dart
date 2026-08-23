@@ -19,6 +19,12 @@ class TorrentDataStatus extends DataStatus {
   final int? numComplete;
   final int? numIncomplete;
   final String state;
+  final int piecesTotal;
+  final int piecesDone;
+  final double distributedCopies;
+  final int activeTime;
+  final int seedingTime;
+  final bool piecesEstimated;
 
   const TorrentDataStatus({
     required this.totalWanted,
@@ -30,6 +36,12 @@ class TorrentDataStatus extends DataStatus {
     this.numComplete,
     this.numIncomplete,
     required this.state,
+    this.piecesTotal = 0,
+    this.piecesDone = 0,
+    this.distributedCopies = 0.0,
+    this.activeTime = 0,
+    this.seedingTime = 0,
+    this.piecesEstimated = true,
   });
 
   bool get sizeKnown => hasMetadata && totalWanted > 0;
@@ -51,7 +63,13 @@ class TorrentDataStatus extends DataStatus {
           numPeers == other.numPeers &&
           numComplete == other.numComplete &&
           numIncomplete == other.numIncomplete &&
-          state == other.state;
+          state == other.state &&
+          piecesTotal == other.piecesTotal &&
+          piecesDone == other.piecesDone &&
+          distributedCopies == other.distributedCopies &&
+          activeTime == other.activeTime &&
+          seedingTime == other.seedingTime &&
+          piecesEstimated == other.piecesEstimated;
 
   @override
   int get hashCode => Object.hash(
@@ -64,6 +82,12 @@ class TorrentDataStatus extends DataStatus {
         numComplete,
         numIncomplete,
         state,
+        piecesTotal,
+        piecesDone,
+        distributedCopies,
+        activeTime,
+        seedingTime,
+        piecesEstimated,
       );
 }
 
@@ -140,6 +164,7 @@ class TorrentFileStatus extends DataStatus {
   final int downloadedBytes;
   final int priority;
   final bool selected;
+  final bool progressEstimated;
 
   const TorrentFileStatus({
     required this.fileIndex,
@@ -148,6 +173,7 @@ class TorrentFileStatus extends DataStatus {
     required this.downloadedBytes,
     required this.priority,
     required this.selected,
+    this.progressEstimated = false,
   });
 
   double get progress =>
@@ -162,11 +188,12 @@ class TorrentFileStatus extends DataStatus {
           size == other.size &&
           downloadedBytes == other.downloadedBytes &&
           priority == other.priority &&
-          selected == other.selected;
+          selected == other.selected &&
+          progressEstimated == other.progressEstimated;
 
   @override
   int get hashCode =>
-      Object.hash(fileIndex, name, size, downloadedBytes, priority, selected);
+      Object.hash(fileIndex, name, size, downloadedBytes, priority, selected, progressEstimated);
 }
 
 /// Formats downloaded / total size into human-readable label.

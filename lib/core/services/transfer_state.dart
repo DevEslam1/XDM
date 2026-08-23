@@ -5,6 +5,7 @@ library;
 
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
+import '../domain/download_data_status.dart';
 import '../domain/engine_types.dart';
 import '../domain/resume_identity.dart';
 
@@ -112,6 +113,15 @@ class TransferState {
       List<ChunkState>.from(chunks).map((c) => c.ratio).toList();
   List<int> get progressCompat =>
       List<ChunkState>.from(chunks).map((c) => c.downloaded).toList();
+
+  List<HttpPartStatus> toHttpPartStatusList() {
+    return chunks.asMap().entries.map((e) => HttpPartStatus(
+      partIndex: e.key,
+      startByte: e.value.start,
+      endByte: e.value.end,
+      downloadedBytes: e.value.downloaded,
+    )).toList();
+  }
 
   Map<String, dynamic> toJson() => {
         'version': currentVersion,

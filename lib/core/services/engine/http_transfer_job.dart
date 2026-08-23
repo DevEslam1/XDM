@@ -1190,6 +1190,11 @@ class HttpTransferJob {
         );
 
         if (response.statusCode == 200) {
+          _send('telemetry', {
+            'event': 'range_not_supported_200',
+            'taskId': cmd.taskId,
+            'url': cmd.url,
+          });
           await response.data?.stream.listen((_) {}).cancel();
           if (resumeFrom > 0) {
             chunk.downloaded = 0;
@@ -2364,6 +2369,7 @@ class HttpTransferJob {
       'speed': speed,
       'eta': eta,
       'chunks': null,
+      // Note: chunkDetails provides per-chunk progress data equivalent to HttpPartStatus.
       'chunkDetails': chunkDetails,
       'chunkFingerprint': _chunkFingerprint,
       'fileName': cmd.resolvedFileName,

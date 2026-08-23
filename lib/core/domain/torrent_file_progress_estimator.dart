@@ -70,6 +70,41 @@ class TorrentFileProgressEstimator {
     }
   }
 
+  /// Applies native per-file downloaded bytes from the engine.
+  /// When native data is available, this provides exact progress
+  /// without estimation. Falls back to [updateFilesWithNativeProgress]
+  /// when [nativeFileProgress] is empty.
+  static void applyNativeFileProgress(
+    List<Map<String, dynamic>> files,
+    List<int> nativeFileProgress,
+    double overallProgress,
+    int totalDownloadedBytes, {
+    bool sequential = false,
+  }) {
+    // If native data is available and matches file count, use it directly
+    if (nativeFileProgress.isNotEmpty && nativeFileProgress.length >= files.length) {
+      for (var i = 0; i < files.length; i++) {
+        final f = files[i];
+        if (!TorrentFileNormalizer.isTorrentFileSelected(f)) {
+          f['downloadedBytes'] = 0;
+          f['progress'] = 0.0;
+          f['isComplete'] = false;
+          f['progressEstimated'] = false;
+          continue;
+        }
+        final len = (f['length'] as num?)?.toInt() ?? 0;
+        final dl = nativeFileProgress[i].clamp(0, len > 0 ? len : nativeFileProgress[i]);
+        f['downloadedBytes'] = dl;
+        f['progress'] = len > 0 ? (dl / len).clamp(0.0, 1.0) : 0.0;
+        f['isComplete'] = len > 0 && dl >= len;
+        f['progressEstimated'] = false;
+      }
+      return;
+    }
+    // Fall back to estimation
+    updateFilesWithNativeProgress(files, overallProgress, totalDownloadedBytes, sequential: sequential);
+  }
+
   /// Distributes estimated downloaded bytes sequentially (file-by-file).
   static void distributeEstimatedBytesSequential(
     List<Map<String, dynamic>> files,

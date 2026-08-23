@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:libtorrent_flutter/libtorrent_flutter.dart' as lt;
 
 import '../../domain/torrent_models.dart';
@@ -18,6 +19,7 @@ class LibtorrentNativeImpl implements ITorrentNative {
 
   final Map<int, lt.TorrentInfo> _previousTorrents = {};
   final Map<int, List<int>> _cachedPriorities = {};
+  final Set<String> _warnedStubs = {};
 
   @override
   bool get isInitialized => lt.LibtorrentFlutter.isInitialized;
@@ -33,10 +35,21 @@ class LibtorrentNativeImpl implements ITorrentNative {
   }
 
   @override
-  String? get bridgeDiagnostics => null;
+  String? get bridgeDiagnostics =>
+      'Running on libtorrent_flutter 1.9.2 which lacks support for piece bitfields, file progress, trackers management, resume data, and peer inspection.';
 
   @override
   bool get isBridgeCompatible => true;
+
+  void _logStubWarning(String method) {
+    if (_warnedStubs.add(method)) {
+      DiagnosticService.instance.record(
+        'diagnostic',
+        'unsupported_bridge_method',
+        details: 'Method $method is unsupported in libtorrent_flutter 1.9.2',
+      );
+    }
+  }
 
   @override
   Stream<NativeAlertEvent> get alertStream => _alertStreamCtrl.stream;
@@ -68,7 +81,20 @@ class LibtorrentNativeImpl implements ITorrentNative {
     }
   }
 
+  // Estimate piece size as 256KB (standard default in libtorrent)
+  static const int _estimatedPieceSize = 262144;
+
   NativeTorrentStatus _mapStatus(lt.TorrentInfo info) {
+    // Estimate pieces based on totalWanted and progress.
+    final int estimatedNumPieces = max(1, info.totalWanted ~/ _estimatedPieceSize);
+    final int estimatedPiecesDone = (estimatedNumPieces * info.progress).floor();
+    
+    // Generate a synthetic boolean bitfield for UI compatibility
+    final pieces = List<bool>.generate(
+      estimatedNumPieces,
+      (index) => index < estimatedPiecesDone,
+    );
+
     return NativeTorrentStatus(
       id: info.id,
       name: info.name,
@@ -87,9 +113,9 @@ class LibtorrentNativeImpl implements ITorrentNative {
       numSeeds: info.numSeeds,
       numComplete: null,
       numIncomplete: null,
-      numPieces: 0,
-      piecesDone: 0,
-      pieces: const [],
+      numPieces: estimatedNumPieces, // Estimated
+      piecesDone: estimatedPiecesDone, // Estimated
+      pieces: pieces, // Estimated
       isPaused: info.isPaused,
       isFinished: info.isFinished,
       hasMetadata: info.hasMetadata,
@@ -339,26 +365,34 @@ class LibtorrentNativeImpl implements ITorrentNative {
     return _cachedPriorities[id] ?? const [];
   }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
   List<int> getFileProgress(int id) {
+    _logStubWarning('getFileProgress');
     return const [];
   }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
   Future<List<PeerConnectionQuality>> getPeers(int torrentId) async {
+    _logStubWarning('getPeers');
     return const [];
   }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
   Future<List<int>?> saveResumeData(
     int id, {
     Duration timeout = const Duration(seconds: 5),
   }) async {
+    _logStubWarning('saveResumeData');
     return null;
   }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
   bool loadResumeData(int id, List<int> data) {
+    _logStubWarning('loadResumeData');
     return false;
   }
 
@@ -387,6 +421,8 @@ class LibtorrentNativeImpl implements ITorrentNative {
       disableDht: config.disableDht,
       disableUpnp: config.disableUpnp,
       enableIpv6: config.enableIpv6,
+      // Note: libtorrent_flutter 1.9.2 uses KB/s for rate limits, while NativeBtConfig uses Bytes/s.
+      // Dividing by 1024 converts from Bytes/s to KB/s.
       downloadRateLimit: config.downloadRateLimit ~/ 1024,
       uploadRateLimit: config.uploadRateLimit ~/ 1024,
       peersListenPort: config.peersListenPort,
@@ -410,6 +446,8 @@ class LibtorrentNativeImpl implements ITorrentNative {
       disableDht: def.disableDht,
       disableUpnp: def.disableUpnp,
       enableIpv6: def.enableIpv6,
+      // Note: libtorrent_flutter 1.9.2 uses KB/s for rate limits, while NativeBtConfig uses Bytes/s.
+      // Multiplying by 1024 converts from KB/s to Bytes/s.
       downloadRateLimit: def.downloadRateLimit * 1024,
       uploadRateLimit: def.uploadRateLimit * 1024,
       peersListenPort: def.peersListenPort,
@@ -417,29 +455,50 @@ class LibtorrentNativeImpl implements ITorrentNative {
     );
   }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
   List<NativeTrackerInfo> getTrackers(int id) {
+    _logStubWarning('getTrackers');
     return const [];
   }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
-  void addTracker(int id, String trackerUrl, {int tier = 0}) {}
+  void addTracker(int id, String trackerUrl, {int tier = 0}) {
+    _logStubWarning('addTracker');
+  }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
-  void removeTracker(int id, String trackerUrl) {}
+  void removeTracker(int id, String trackerUrl) {
+    _logStubWarning('removeTracker');
+  }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
-  void announceNow(int id) {}
+  void announceNow(int id) {
+    _logStubWarning('announceNow');
+  }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
-  void setSequentialDownload(int id, bool enabled) {}
+  void setSequentialDownload(int id, bool enabled) {
+    _logStubWarning('setSequentialDownload');
+  }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
-  void setSuperSeeding(int id, bool enabled) {}
+  void setSuperSeeding(int id, bool enabled) {
+    _logStubWarning('setSuperSeeding');
+  }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
-  void setPieceDeadline(int id, int pieceIndex, int deadlineMs) {}
+  void setPieceDeadline(int id, int pieceIndex, int deadlineMs) {
+    _logStubWarning('setPieceDeadline');
+  }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
   Future<String?> createTorrent({
     required String sourcePath,
@@ -449,14 +508,18 @@ class LibtorrentNativeImpl implements ITorrentNative {
     int pieceSize = 0,
     bool isPrivate = false,
   }) async {
+    _logStubWarning('createTorrent');
     return null;
   }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
   Future<bool> loadIpFilter(String filePath) async {
+    _logStubWarning('loadIpFilter');
     return false;
   }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
   Future<void> setProxy({
     required String host,
@@ -464,23 +527,36 @@ class LibtorrentNativeImpl implements ITorrentNative {
     required int type,
     String? username,
     String? password,
-  }) async {}
+  }) async {
+    _logStubWarning('setProxy');
+  }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
   Future<void> setSslCertificate({
     required String certPath,
     required String privateKeyPath,
     String? dhParamsPath,
-  }) async {}
+  }) async {
+    _logStubWarning('setSslCertificate');
+  }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
-  void addWebSeed(int id, String url) {}
+  void addWebSeed(int id, String url) {
+    _logStubWarning('addWebSeed');
+  }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
-  void removeWebSeed(int id, String url) {}
+  void removeWebSeed(int id, String url) {
+    _logStubWarning('removeWebSeed');
+  }
 
+  /// Unsupported in libtorrent_flutter 1.9.2
   @override
   List<String> getWebSeeds(int id) {
+    _logStubWarning('getWebSeeds');
     return const [];
   }
 }

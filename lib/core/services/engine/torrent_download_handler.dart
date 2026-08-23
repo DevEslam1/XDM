@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../features/downloads/models/download_task.dart';
 import '../../../features/downloads/provider/network_monitor.dart';
 import '../../di/injection.dart';
 import '../../domain/torrent_file_progress_estimator.dart';
@@ -1656,6 +1657,31 @@ class TorrentDownloadHandler {
 
     TorrentSubscriptionRegistry.instance.register(id, this, sub);
 
+    StreamSubscription? alertSub;
+    alertSub = _torrentService.alertUpdates.where((e) => e.torrentId == id).listen((event) {
+      if (cancelToken.isCancelled) return;
+      if (event.category.toLowerCase().contains('error')) {
+        final msg = event.message.toLowerCase();
+        FailureCategory category = FailureCategory.torrentError;
+        if (msg.contains('disk') || msg.contains('write') || msg.contains('no space')) {
+          category = FailureCategory.diskFull;
+        } else if (msg.contains('tracker')) {
+          category = FailureCategory.torrentError;
+        } else if (msg.contains('network') || msg.contains('connection')) {
+          category = FailureCategory.network;
+        }
+
+        if (!completer.isCompleted) {
+          completer.completeError(DioException(
+            requestOptions: RequestOptions(path: url),
+            type: DioExceptionType.unknown,
+            error: category,
+            message: event.message,
+          ));
+        }
+      }
+    });
+
     cancelToken.whenCancel.then((cancelError) {
       if (!completer.isCompleted) {
         completer.completeError(DioException(
@@ -1674,6 +1700,7 @@ class TorrentDownloadHandler {
       }
       rethrow;
     } finally {
+      await alertSub.cancel();
       await _cleanup(id, sub);
     }
   }
@@ -2331,8 +2358,10 @@ class TorrentDownloadHandler {
     // false label on a download that is in fact running.
     if (!bridgeUntrusted &&
         (speed > 0 ||
-            downloadedBytes != tracker.lastTorrentDownloadedBytes)) {
+            downloadedBytes != tracker.lastTorrentDownloadedBytes ||
+            torrent.piecesHave != tracker.lastTorrentPiecesDone)) {
       tracker.lastTorrentDownloadedBytes = downloadedBytes;
+      tracker.lastTorrentPiecesDone = torrent.piecesHave;
       tracker.lastTorrentProgressTime = DateTime.now();
     } else if (!bridgeUntrusted && speed == 0) {
       final elapsed =
@@ -2552,6 +2581,7 @@ class TorrentDownloadHandler {
 class _TorrentTrackerState {
   DateTime lastTorrentProgressTime = DateTime.now();
   int lastTorrentDownloadedBytes = 0;
+  int lastTorrentPiecesDone = 0;
   double lastTorrentSpeed = 0.0;
   int lastTorrentPeerCount = 0;
   int currentTotalSize = 0;

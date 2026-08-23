@@ -121,17 +121,25 @@ class TorrentResumeStore {
     required FutureOr<Uint8List?> Function() fetchResumeData,
     List<Map<String, dynamic>>? files,
     List<bool>? pieceBitfield,
+    List<int>? fileProgress,
+    int? piecesTotal,
+    int? piecesDone,
     bool degradedFallback = false,
   }) async {
     try {
       if (sourceUrl.trim().isEmpty) return false;
       final blob = await fetchResumeData();
-      if (blob == null || blob.isEmpty) return false;
+      final hasNativeResumeData = blob != null && blob.isNotEmpty;
 
       // FIX: [Audit] Raised fast-resume blob cap to 16MB for large multi-piece torrents.
-      if (blob.length > 16 * 1024 * 1024) {
+      if (hasNativeResumeData && blob.length > 16 * 1024 * 1024) {
         debugPrint(
             '[TorrentResumeStore] blob size > 16MB, rejecting as corrupt');
+        return false;
+      }
+
+      final actualBlob = blob ?? Uint8List(0);
+      if (actualBlob.isEmpty && !degradedFallback && files == null && pieceBitfield == null) {
         return false;
       }
 
@@ -143,16 +151,21 @@ class TorrentResumeStore {
       final blobTmp = File('${dir.path}/$fileName.tmp');
       final metaTmp = File('${dir.path}/$key.meta.json.tmp');
 
-      final digest = sha256.convert(blob).toString();
+      final digest = sha256.convert(actualBlob).toString();
 
       final meta = jsonEncode({
         'sourceUrl': sourceUrl,
         'torrentId': torrentId,
         'sha256': digest,
         'savedAt': DateTime.now().millisecondsSinceEpoch,
-        'bytes': blob.length,
+        'bytes': actualBlob.length,
+        'hasNativeResumeData': hasNativeResumeData,
+        if (hasNativeResumeData) 'nativeResumeBlob': base64Encode(actualBlob),
         if (files != null) 'files': files,
-        if (pieceBitfield != null) 'pieceBitfield': pieceBitfield,
+        if (pieceBitfield != null) 'piecesBitfield': pieceBitfield.map((b) => b ? 1 : 0).toList(),
+        if (fileProgress != null) 'fileProgress': fileProgress,
+        if (piecesTotal != null) 'piecesTotal': piecesTotal,
+        if (piecesDone != null) 'piecesDone': piecesDone,
         if (degradedFallback) 'degradedFallback': true,
       });
 
@@ -162,7 +175,7 @@ class TorrentResumeStore {
       await mraf.flush();
       await mraf.close();
 
-      await blobTmp.writeAsBytes(blob, flush: true);
+      await blobTmp.writeAsBytes(actualBlob, flush: true);
       final raf = await blobTmp.open(mode: FileMode.append);
       await raf.flush();
       await raf.close();
@@ -323,10 +336,14 @@ class TorrentResumeStore {
         blobFile = File('${dir.path}/$key.bin');
       }
       final metaFile = File('${dir.path}/$key.meta.json');
-      if (!await blobFile.exists() || !await metaFile.exists()) return null;
+      if (!await metaFile.exists()) return null;
 
-      final meta = jsonDecode(await metaFile.readAsString());
+      final metaStr = await metaFile.readAsString();
+      final meta = jsonDecode(metaStr);
       if (meta is! Map) return null;
+
+      if (!await blobFile.exists()) return null;
+
       final expectedSha = meta['sha256'] as String?;
 
       final blob = await blobFile.readAsBytes();
@@ -480,6 +497,32 @@ class TorrentResumeStore {
     try {
       final data = await loadResumeDataForSource(sourceUrl);
       return data != null && validateResumeData(data);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Parses saved pieces metadata. If a bitfield exists and [piecesTotal] > 0,
+  /// validates whether a recheck is needed by comparing stored [piecesDone]
+  /// with the native engine's actual pieces after resume.
+  static Future<bool> needsRecheckAfterResume(String sourceUrl, int actualPiecesDone) async {
+    try {
+      final dir = await _dir();
+      final key = _stableKey(sourceUrl);
+      final metaFile = File('${dir.path}/$key.meta.json');
+      if (!await metaFile.exists()) return false;
+      
+      final meta = jsonDecode(await metaFile.readAsString());
+      if (meta is! Map) return false;
+      
+      final bitfieldRaw = meta['piecesBitfield'];
+      final piecesTotal = meta['piecesTotal'];
+      final storedPiecesDone = meta['piecesDone'];
+      
+      if (bitfieldRaw != null && piecesTotal != null && (piecesTotal as num).toInt() > 0) {
+        return (storedPiecesDone as num?)?.toInt() != actualPiecesDone;
+      }
+      return false;
     } catch (_) {
       return false;
     }
